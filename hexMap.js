@@ -1,0 +1,422 @@
+// hexMap.js
+let mapCanvas, mapCtx;
+let hexSize = 30;
+const mapOffsetX = 50;
+const mapOffsetY = 50;
+let playerPos = { q: 0, r: 0 };
+let highlightedHexes = [];
+
+// Camera variables
+window.cameraX = 0;
+window.cameraY = 0;
+window.cameraZoom = 1.0;
+
+// Mouse tracking for panning
+let isDragging = false;
+let lastMouseX = 0;
+let lastMouseY = 0;
+window.totalDragDistance = 0;
+
+// Flat-top hexToPixel formula - UPDATED for camera
+function hexToPixel(q, r) {
+  const x = (hexSize * (3/2 * q) + mapOffsetX) * window.cameraZoom + window.cameraX;
+  const y = (hexSize * (Math.sqrt(3) * r + Math.sqrt(3)/2 * q) + mapOffsetY) * window.cameraZoom + window.cameraY;
+  return { x, y };
+}
+
+function drawHex(x, y, size, style = { stroke: "#555" }) {
+  const zoomedSize = size * window.cameraZoom;
+  mapCtx.beginPath();
+  for (let i=0; i<6; i++) {
+    const angle = Math.PI/180 * (60 * i);
+    const px = x + zoomedSize * Math.cos(angle);
+    const py = y + zoomedSize * Math.sin(angle);
+    if (i===0) mapCtx.moveTo(px, py);
+    else mapCtx.lineTo(px, py);
+  }
+  mapCtx.closePath();
+  mapCtx.strokeStyle = style.stroke;
+  mapCtx.lineWidth = style.lineWidth || 1;
+  mapCtx.stroke();
+  if (style.fill) {
+      mapCtx.fillStyle = style.fill;
+      mapCtx.fill();
+  }
+}
+
+function getVisibleHexes() {
+    const rect = mapCanvas.getBoundingClientRect();
+    const margin = 2 * hexSize * window.cameraZoom;
+    
+    // Corners of the screen in hex coords
+    const tl = screenToHex({x: rect.left - margin, y: rect.top - margin});
+    const br = screenToHex({x: rect.right + margin, y: rect.bottom + margin});
+    const tr = screenToHex({x: rect.right + margin, y: rect.top - margin});
+    const bl = screenToHex({x: rect.left - margin, y: rect.bottom + margin});
+
+    // Approximate range
+    const minQ = Math.min(tl.q, br.q, tr.q, bl.q);
+    const maxQ = Math.max(tl.q, br.q, tr.q, bl.q);
+    const minR = Math.min(tl.r, br.r, tr.r, bl.r);
+    const maxR = Math.max(tl.r, br.r, tr.r, bl.r);
+
+    return { minQ, maxQ, minR, maxR };
+}
+
+function drawMap() {
+  if (!mapCtx) return;
+  mapCtx.clearRect(0,0,mapCanvas.width,mapCanvas.height);
+  
+  const bounds = getVisibleHexes();
+
+  // Iterate over a slightly larger bounding box to ensure coverage
+  for (let q = bounds.minQ; q <= bounds.maxQ; q++) {
+      for (let r = bounds.minR; r <= bounds.maxR; r++) {
+          const visible = isVisibleToPlayer({q, r});
+          const explored = window.isHexExplored(q, r);
+
+          if (!visible && !explored) continue;
+
+          const {x, y} = hexToPixel(q, r);
+          const terrain = window.getTerrainAt(q, r);
+          drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
+
+          if (!visible) {
+              // Explored but not visible: dark overlay
+              drawHex(x, y, hexSize, { fill: "rgba(0,0,0,0.6)" });
+          }
+      }
+  }
+
+  highlightedHexes.forEach(hex => {
+      const {x,y} = hexToPixel(hex.q, hex.r);
+      if (hex.type === 'move') {
+          drawHex(x,y, hexSize, { stroke: '#00f', lineWidth: 2 * window.cameraZoom, fill: 'rgba(0,0,255,0.1)'});
+      } else if (hex.type === 'attack') {
+          drawHex(x,y, hexSize, { stroke: '#f00', lineWidth: 2 * window.cameraZoom, fill: 'rgba(255,0,0,0.1)'});
+      } else if (hex.type === 'turn') {
+          drawHex(x,y, hexSize, { stroke: '#ff0', lineWidth: 4 * window.cameraZoom });
+      }
+  });
+
+  // NIGHT FILTER
+  if (window.lightLevel < 1.0) {
+      mapCtx.fillStyle = `rgba(0,0,0,${(1.0 - window.lightLevel) * 0.7})`; // Max 70% dark
+      mapCtx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
+  }
+}
+
+function clearHighlights() {
+    window.highlightedHexes.length = 0;
+}
+
+// Corrected flat-top screenToHex formula - UPDATED for camera
+function screenToHex(pos){
+  const rect = mapCanvas.getBoundingClientRect();
+  const screenX = pos.x - rect.left;
+  const screenY = pos.y - rect.top;
+
+  // Adjust for camera and zoom
+  const x = (screenX - window.cameraX) / window.cameraZoom - mapOffsetX;
+  const y = (screenY - window.cameraY) / window.cameraZoom - mapOffsetY;
+
+  // Inverse of flat-top hexToPixel
+  const q_float = (x * 2/3) / hexSize;
+  const r_float = (-x / 3 + Math.sqrt(3)/3 * y) / hexSize;
+
+  return hexRound(q_float, r_float);
+}
+
+function hexRound(q,r){
+  let x=q,z=r,y=-x-z;
+  let rx=Math.round(x),ry=Math.round(y),rz=Math.round(z);
+  const xd=Math.abs(rx-x),yd=Math.abs(ry-y),zd=Math.abs(rz-z);
+  if (xd>yd && xd>zd) rx=-ry-rz;
+  else if (yd>zd) ry=-rx-rz;
+  else rz=-rx-ry;
+  return {q:rx,r:rz};
+}
+
+function distance(a,b){return (Math.abs(a.q-b.q)+Math.abs(a.q+a.r-b.q-b.r)+Math.abs(a.r-b.r))/2;}
+function areAdjacent(a,b){return distance(a,b)===1;}
+
+function getNeighbors(q, r) {
+    const dirs = [
+        {q:1, r:0}, {q:1, r:-1}, {q:0, r:-1},
+        {q:-1, r:0}, {q:-1, r:1}, {q:0, r:1}
+    ];
+    return dirs.map(d => ({q: q + d.q, r: r + d.r})).filter(h => window.isHexInBounds(h));
+}
+
+function findPath(start, target, availableTP, entity, ignoreTP = false, preferredPath = null) {
+    const queue = [{
+        hex: start,
+        path: [start],
+        cost: 0,
+        priority: distance(start, target)
+    }];
+    
+    const visited = new Map(); // Store min cost to each hex
+    visited.set(`${start.q},${start.r}`, 0);
+    
+    let iterations = 0;
+    while (queue.length > 0) {
+        if (iterations++ > 5000) return null; // Increased for larger map
+
+        // Sort by priority (A*)
+        queue.sort((a, b) => a.priority - b.priority);
+        const { hex: current, path, cost } = queue.shift();
+
+        if (current.q === target.q && current.r === target.r) return path;
+
+        const neighbors = getNeighbors(current.q, current.r);
+        for (let next of neighbors) {
+            const key = `${next.q},${next.r}`;
+            
+            // Check for ENEMY obstacles (Living enemies only)
+            // Friendlies DO NOT block movement
+            const isEnemyBlocked = window.entities.some(e => 
+                e.alive && e.side !== entity.side &&
+                e.getAllHexes().some(h => h.q === next.q && h.r === next.r)
+            );
+            
+            // Cannot path THROUGH enemies (unless it is the target hex - e.g. for attack range check)
+            if (isEnemyBlocked && !(next.q === target.q && next.r === target.r)) continue; 
+
+            // Calculate cost
+            let baseCost = 5;
+            if (entity.skills) {
+                if (entity.skills['fastMovement']) {
+                    const isLightOrNoArmor = !entity.equipped || !entity.equipped.armor || window.items[entity.equipped.armor].id === 'light_armor';
+                    if (isLightOrNoArmor) baseCost -= entity.skills['fastMovement'];
+                }
+                if (entity.skills['swift_step']) {
+                    const isUnarmored = (!entity.equipped || !entity.equipped.armor) && (!entity.equipped || !entity.equipped.offhand || window.items[entity.equipped.offhand].type !== 'shield');
+                    if (isUnarmored) baseCost -= 1;
+                }
+            }
+            baseCost = Math.max(1, baseCost); 
+
+            // PREFERRED PATH DISCOUNT (Stay Together)
+            if (preferredPath && preferredPath.includes(key)) {
+                baseCost = Math.max(1, baseCost - 2);
+            }
+
+            const terrain = window.getTerrainAt(next.q, next.r);
+            // Wall check
+            if (terrain.name === 'Wall' && !(next.q === target.q && next.r === target.r)) continue;
+
+            const nextCost = cost + (baseCost * terrain.moveCostMult);
+
+            if (!ignoreTP && availableTP !== undefined && nextCost > availableTP) continue;
+
+            if (!visited.has(key) || nextCost < visited.get(key)) {
+                visited.set(key, nextCost);
+                queue.push({
+                    hex: next,
+                    path: [...path, next],
+                    cost: nextCost,
+                    priority: nextCost + distance(next, target)
+                });
+            }
+        }
+    }
+    return null;
+}
+
+function lerp(a, b, t) {
+    return a + (b - a) * t;
+}
+
+function hexLerp(a, b, t) {
+    return {
+        q: lerp(a.q, b.q, t),
+        r: lerp(a.r, b.r, t)
+    };
+}
+
+function hasLineOfSight(start, end) {
+    const viewer = window.entities.find(e => e.hex.q === start.q && e.hex.r === start.r);
+    
+    let visionCap = 30;
+    let hasTorch = false;
+    let torchRadius = 0;
+
+    if (viewer) {
+        visionCap += (viewer.visionBonus || 0);
+        // Check for Torch
+        if (viewer.equipped) {
+            const items = [viewer.equipped.weapon, viewer.equipped.offhand];
+            items.forEach(iid => {
+                if (iid && window.items[iid] && window.items[iid].lightRadius) {
+                    hasTorch = true;
+                    torchRadius = Math.max(torchRadius, window.items[iid].lightRadius);
+                }
+            });
+        }
+    }
+
+    const d = distance(start, end);
+
+    // Light calculation: reduce visionCap at night unless torch covers it
+    const nightFactor = window.lightLevel || 1.0;
+    const effectiveVisionCap = Math.max(torchRadius, visionCap * nightFactor);
+
+    if (d > effectiveVisionCap) return false;
+
+    const startOnWall = window.getTerrainAt(start.q, start.r).name === 'Wall';
+    const endOnWall = window.getTerrainAt(end.q, end.r).name === 'Wall';
+
+    for (let i = 0; i <= d; i++) {
+        const t = d === 0 ? 0 : i / d;
+        const current = hexRound(hexLerp(start, end, t).q, hexLerp(start, end, t).r);
+        
+        if ((current.q === start.q && current.r === start.r) || (current.q === end.q && current.r === end.r)) continue;
+
+        const terrain = window.getTerrainAt(current.q, current.r);
+        if (terrain.name === 'Wall') {
+            const adjacentToStart = distance(start, current) === 1;
+            const adjacentToEnd = distance(end, current) === 1;
+
+            if (startOnWall && adjacentToStart) continue;
+            if (endOnWall && adjacentToEnd) continue;
+
+            return false;
+        }
+    }
+    return true;
+}
+
+function hasLineOfEffect(start, end) {
+    return hasLineOfSight(start, end);
+}
+
+function isVisibleToPlayer(targetHex) {
+    const friendlies = window.entities.filter(e => e.alive && e.side === 'player');
+    for (let f of friendlies) {
+        // Player entities are always seen
+        f.hasBeenSeenByPlayer = true;
+
+        const myHexes = f.getAllHexes();
+        for (let fh of myHexes) {
+            if (hasLineOfSight(fh, targetHex)) {
+                window.exploredHexes.add(`${targetHex.q},${targetHex.r}`);
+                
+                // Mark any entity at this hex as seen
+                const ent = window.entities.find(e => e.alive && e.hex.q === targetHex.q && e.hex.r === targetHex.r);
+                if (ent) ent.hasBeenSeenByPlayer = true;
+
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+function getHexBehind(origin, target) {
+    const dir = { q: target.q - origin.q, r: target.r - origin.r };
+    return { q: target.q + dir.q, r: target.r + dir.r };
+}
+
+function isHexInBounds(hex) {
+    // Infinite map!
+    return true;
+}
+
+function resizeCanvas() {
+    const container = document.getElementById("game-board");
+    if (container && mapCanvas) {
+        mapCanvas.width = container.clientWidth;
+        mapCanvas.height = container.clientHeight;
+        drawMap();
+        if (window.renderEntities) window.renderEntities();
+    }
+}
+
+function initHexMap() {
+  mapCanvas = document.getElementById("mapCanvas");
+  if (mapCanvas) {
+    mapCtx = mapCanvas.getContext("2d");
+    
+    resizeCanvas();
+
+    mapCanvas.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        lastMouseX = e.clientX;
+        lastMouseY = e.clientY;
+        totalDragDistance = 0; // Reset
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - lastMouseX;
+        const dy = e.clientY - lastMouseY;
+        window.cameraX += dx;
+        window.cameraY += dy;
+        totalDragDistance += Math.abs(dx) + Math.abs(dy); // Accumulate distance
+        lastMouseX = e.clientX;
+        lastMouseY = e.clientY;
+        drawMap();
+        window.renderEntities();
+    });
+
+    window.addEventListener('mouseup', () => {
+        isDragging = false;
+    });
+
+    mapCanvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const zoomSpeed = 0.1;
+        const delta = e.deltaY > 0 ? 0.9 : 1.1; // Multiplicative zoom for smoother feel
+        
+        const rect = mapCanvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        // Calculate world position under mouse before zoom
+        const worldX = (mouseX - window.cameraX) / window.cameraZoom;
+        const worldY = (mouseY - window.cameraY) / window.cameraZoom;
+
+        const newZoom = Math.min(Math.max(0.05, window.cameraZoom * delta), 5.0);
+        
+        window.cameraZoom = newZoom;
+
+        // Update camera offsets to keep world position under mouse
+        window.cameraX = mouseX - worldX * window.cameraZoom;
+        window.cameraY = mouseY - worldY * window.cameraZoom;
+        
+        drawMap();
+        window.renderEntities();
+    }, { passive: false });
+
+    drawMap();
+  }
+}
+
+window.mapCanvas = mapCanvas;
+window.mapCtx = mapCtx;
+window.hexSize = hexSize;
+window.mapOffsetX = mapOffsetX;
+window.mapOffsetY = mapOffsetY;
+window.cameraX = window.cameraX;
+window.cameraY = window.cameraY;
+window.cameraZoom = window.cameraZoom;
+window.playerPos = playerPos;
+window.highlightedHexes = highlightedHexes;
+window.hexToPixel = hexToPixel;
+window.drawHex = drawHex;
+window.drawMap = drawMap;
+window.resizeCanvas = resizeCanvas;
+window.clearHighlights = clearHighlights;
+window.screenToHex = screenToHex;
+window.hexRound = hexRound;
+window.distance = distance;
+window.areAdjacent = areAdjacent;
+window.getNeighbors = getNeighbors;
+window.findPath = findPath;
+window.hasLineOfSight = hasLineOfSight;
+window.hasLineOfEffect = hasLineOfEffect;
+window.isVisibleToPlayer = isVisibleToPlayer;
+window.getHexBehind = getHexBehind;
+window.isHexInBounds = isHexInBounds;
+window.initHexMap = initHexMap;

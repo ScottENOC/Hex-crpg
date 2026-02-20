@@ -1,0 +1,17 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Head -->
+  <path d="M22 20C22 14 26 10 32 10C38 10 42 14 42 20C42 24 40 28 32 28C24 28 22 24 22 20Z" fill="#F5F5DC" stroke="#333" stroke-width="2"/>
+  <!-- Eyes -->
+  <circle cx="28" cy="20" r="2" fill="#000"/>
+  <circle cx="36" cy="20" r="2" fill="#000"/>
+  <!-- Nose hole -->
+  <path d="M31 23L32 21L33 23Z" fill="#000"/>
+  <!-- Teeth -->
+  <rect x="28" y="25" width="8" height="2" fill="#000" opacity="0.3"/>
+  
+  <!-- Ribcage -->
+  <path d="M32 30V50" stroke="#F5F5DC" stroke-width="4" stroke-linecap="round"/>
+  <path d="M24 34C24 34 28 32 32 32C36 32 40 34 40 34" fill="none" stroke="#F5F5DC" stroke-width="3" stroke-linecap="round"/>
+  <path d="M22 40C22 40 28 38 32 38C36 38 42 40 42 40" fill="none" stroke="#F5F5DC" stroke-width="3" stroke-linecap="round"/>
+  <path d="M24 46C24 46 28 44 32 44C36 44 40 46 40 46" fill="none" stroke="#F5F5DC" stroke-width="3" stroke-linecap="round"/>
+</svg>

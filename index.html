@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hex RPG</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="turn-indicator-bar"></div>
+
+    <div id="top-menu" style="display: none;">
+        <span id="ui-version" style="color: #aaa; font-size: 0.8em; align-self: center;">v1.1</span>
+        <div id="world-time-display" style="color: #ffeb3b; font-family: monospace; font-size: 0.9em; margin-left: 10px; border-left: 1px solid #555; padding-left: 10px; align-self: center;"></div>
+        <div id="party-selection" style="display: flex; gap: 5px; margin-right: 15px; border-right: 1px solid #555; padding-right: 10px;">
+            <!-- Party member buttons will go here -->
+        </div>
+        <button id="character-screen-btn">Character Screen</button>
+        <button id="spell-menu-btn">Spell Menu</button>
+        <button id="inventory-btn">Inventory</button>
+        <button id="world-map-btn" style="background-color: #4CAF50;">World Map</button>
+        <button id="move-group-btn" style="background-color: #795548;">Move Group: OFF</button>
+        <button id="cancel-moves-btn" style="background-color: #d32f2f; color: white;">Cancel Move Orders</button>
+        <button id="rest-btn" style="background-color: #607d8b; color: white;">Rest until Restored</button>
+        <button id="sleep-btn" style="background-color: #3f51b5; color: white;">Sleep</button>
+        <button id="save-btn" style="background-color: #2196F3;">Save</button>
+        <button id="load-btn" style="background-color: #9C27B0;">Load</button>
+        <button id="cheat-jerry-btn" style="background-color: #ff5722; font-size: 0.7em;">Cheat: Add Jerry</button>
+        <button id="cheat-horse-btn" style="background-color: #8b4513; font-size: 0.7em; color: white;">Cheat: Spawn Horse</button>
+        <button id="cheat-all-equip-btn" style="background-color: #607d8b; font-size: 0.7em; color: white;">Cheat: Add All Equipment</button>
+    </div>
+
+    <div id="characterCreator">
+        <div class="creation-container">
+            <div style="text-align: right; margin-bottom: -30px;">
+                <button id="load-btn-initial" style="background-color: #9C27B0; font-size: 0.8em;">Load Save</button>
+            </div>
+            <h1>Create Your Character</h1>
+            <div class="form-group">
+                <label for="character-name">Name:</label>
+                <input type="text" id="character-name" placeholder="Enter name">
+            </div>
+            <div class="form-group">
+                <label for="race-select">Race:</label>
+                <select id="race-select">
+                    <option value="human">Human</option>
+                    <option value="dwarf">Dwarf</option>
+                    <option value="elf">Elf</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="gender-select">Gender:</label>
+                <select id="gender-select">
+                    <option value="female">Female</option>
+                    <option value="male">Male</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="class-select">Class:</label>
+                <select id="class-select">
+                    <option value="fighter">Fighter</option>
+                    <option value="rogue">Rogue</option>
+                    <option value="cleric">Cleric</option>
+                    <option value="wizard">Wizard</option>
+                    <option value="druid">Druid</option>
+                    <option value="monk">Monk</option>
+                </select>
+            </div>
+            <!-- Skill Point Allocation Section -->
+            <div class="skills-section">
+                <div id="skill-trees-container">
+                    <!-- Skill trees will be populated by JavaScript -->
+                </div>
+            </div>
+            <div class="button-group">
+                <button id="createCharacterButton">Create Character</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="gameContainer" style="display: none;">
+        <h1>Hex RPG</h1>
+        <div id="game-container">
+            <div id="game-board">
+                <canvas id="mapCanvas"></canvas>
+            </div>
+            <div id="ui-container">
+                <h2>Character</h2>
+                <div id="character-info"></div>
+                <h2>Inventory</h2>
+                <ul id="inventory-list"></ul>
+                <h2>Actions</h2>
+                <div id="actions">
+                </div>
+                <h2>Active Spells</h2>
+                <div id="active-spells-list" style="max-height: 100px; overflow-y: auto; background: #222; padding: 5px; border: 1px solid #444; font-size: 0.8em; color: #ccc; margin-bottom: 10px;"></div>
+                <h2>Log</h2>
+                <div id="message-log" style="height: 150px; overflow-y: auto; background: #111; padding: 10px; border: 1px solid #444; font-family: monospace; font-size: 0.9em; color: #ccc;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="character-screen-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close-btn" id="close-character-modal">&times;</span>
+            <h2>Skills & Attributes</h2>
+            <div id="character-screen-content"></div>
+        </div>
+    </div>
+
+    <div id="spell-menu-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close-btn" id="close-spell-modal">&times;</span>
+            <h2>Spell Customization</h2>
+            <div id="spell-menu-content">
+                <!-- Spell creation form will be here -->
+            </div>
+        </div>
+    </div>
+
+    <div id="inventory-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close-btn" id="close-inventory-modal">&times;</span>
+            <h2>Inventory</h2>
+            <div id="inventory-content"></div>
+        </div>
+    </div>
+
+    <div id="world-map-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="width: 90%; height: 90%; max-width: none;">
+            <span class="close-btn" id="close-world-map-modal">&times;</span>
+            <h2>World Map</h2>
+            <div id="world-map-container" style="width: 100%; height: 85%; overflow: auto; background: #222; padding: 10px; border-radius: 8px;">
+                <canvas id="worldMapCanvas"></canvas>
+            </div>
+            <div id="world-map-legend" style="margin-top: 10px; display: flex; gap: 20px; flex-wrap: wrap; font-size: 0.9em;">
+                <div><span style="display:inline-block; width:12px; height:12px; background:#ffd700; border-radius:50%; margin-right:5px;"></span>Dwarven Kingdom</div>
+                <div><span style="display:inline-block; width:12px; height:12px; background:#00ff00; border-radius:50%; margin-right:5px;"></span>Elven Realm</div>
+                <div><span style="display:inline-block; width:12px; height:12px; background:#ff4500; border-radius:50%; margin-right:5px;"></span>Orc Tribes</div>
+                <div><span style="display:inline-block; width:12px; height:12px; background:#9932cc; border-radius:50%; margin-right:5px;"></span>Goblin Hordes</div>
+                <div><span style="display:inline-block; width:12px; height:12px; background:#ffa500; border-radius:50%; margin-right:5px;"></span>Nomad Steppes</div>
+                <div><span style="display:inline-block; width:12px; height:12px; background:white; border-radius:50%; margin-right:5px;"></span>Human Lands</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="reaction-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h2 id="reaction-title">Reaction!</h2>
+            <p id="reaction-description"></p>
+            <div id="reaction-options"></div>
+        </div>
+    </div>
+
+    <script src="data.js"></script>
+    <script src="worldTime.js"></script>
+    <script src="world_map_data.js"></script>
+    <script src="worldMap.js"></script>
+    <script src="characterCreation.js"></script>
+    <script src="hexMap.js"></script>
+    <script src="terrain.js"></script>
+    <script src="entities.js"></script>
+    <script src="monsters.js"></script>
+    <script src="equipment.js"></script>
+    <script src="spells.js"></script>
+    <script src="skills.js"></script>
+    <script src="persistence.js"></script>
+    <script src="ui.js"></script>
+    <script src="gameEngine.js"></script>
+    <script src="main.js?v=2"></script>
+</body>
+</html>
