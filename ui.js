@@ -957,7 +957,14 @@ function updateTurnIndicator() {
                 }
             } else {
                 const baseImg = document.createElement('img');
-                baseImg.src = 'images/elf.png'; baseImg.classList.add('portrait-layer');
+                if (entity.race === 'elf') {
+                    baseImg.src = entity.gender === 'male' ? 'images/elfmale.png' : 'images/elffemale.png';
+                } else if (entity.race === 'dwarf') {
+                    baseImg.src = entity.gender === 'male' ? 'images/dwarfmale.png' : 'images/dwarffemale.png';
+                } else {
+                    baseImg.src = 'images/elf.png';
+                }
+                baseImg.classList.add('portrait-layer');
                 portraitDiv.appendChild(baseImg);
                 if (entity.equipped && entity.equipped.armor) {
                     const armorImg = document.createElement('img');

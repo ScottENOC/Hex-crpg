@@ -334,6 +334,10 @@ function startGameCore(isLoading = false) {
       horse: new Image(),
       nasal_helm: new Image(),
       humanMaleBase: new Image(),
+      elfMaleBase: new Image(),
+      elfFemaleBase: new Image(),
+      dwarfMaleBase: new Image(),
+      dwarfFemaleBase: new Image(),
       shield: new Image(),
       skeleton: new Image(),
       zombie: new Image(),
@@ -353,6 +357,10 @@ function startGameCore(isLoading = false) {
   visuals.horse.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.nasal_helm.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.humanMaleBase.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.elfMaleBase.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.elfFemaleBase.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.dwarfMaleBase.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.dwarfFemaleBase.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.shield.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.skeleton.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.zombie.onload = () => { window.drawMap(); window.renderEntities(); };
@@ -373,6 +381,10 @@ function startGameCore(isLoading = false) {
   visuals.horse.src = 'images/horse.png';
   visuals.nasal_helm.src = 'images/nasalHelm.png';
   visuals.humanMaleBase.src = 'images/humanmale.png';
+  visuals.elfMaleBase.src = 'images/elfmale.png';
+  visuals.elfFemaleBase.src = 'images/elffemale.png';
+  visuals.dwarfMaleBase.src = 'images/dwarfmale.png';
+  visuals.dwarfFemaleBase.src = 'images/dwarffemale.png';
   visuals.shield.src = 'images/shield.png';
   visuals.skeleton.src = 'images/skeleton.svg';
   visuals.zombie.src = 'images/zombie.svg';
@@ -494,10 +506,20 @@ function renderEntities() {
                 window.mapCtx.drawImage(window.gameVisuals.shield, x - humanSize/2, y - humanSize/2 + humanYOff, humanSize, humanSize + humanHeightAdd);
             }
         } else {
-            // LAYER: Non-human (Elf) Base
-            if (window.gameVisuals.playerBase.complete) {
-                window.mapCtx.drawImage(window.gameVisuals.playerBase, x - size/2, y - size/2 - (6 * z), size, (size + 12 * z));
+            // LAYER: Non-human (Elf/Dwarf) Base
+            let baseImg = null;
+            if (e.race === 'elf') {
+                baseImg = e.gender === 'male' ? window.gameVisuals.elfMaleBase : window.gameVisuals.elfFemaleBase;
+            } else if (e.race === 'dwarf') {
+                baseImg = e.gender === 'male' ? window.gameVisuals.dwarfMaleBase : window.gameVisuals.dwarfFemaleBase;
+            } else {
+                baseImg = window.gameVisuals.playerBase; // Fallback
             }
+
+            if (baseImg && baseImg.complete) {
+                window.mapCtx.drawImage(baseImg, x - size/2, y - size/2 - (6 * z), size, (size + 12 * z));
+            }
+
             // LAYER: Non-human Armour
             let armorImg = null;
             if (e.equipped && e.equipped.armor) {
@@ -508,7 +530,7 @@ function renderEntities() {
             if (armorImg && armorImg.complete) {
                 window.mapCtx.drawImage(armorImg, x - size/2, (y - size/2) + (15 * z), size, size);
             }
-            // LAYER: Shield (Elf Scale)
+            // LAYER: Shield (Elf/Dwarf Scale)
             if (e.equipped && e.equipped.offhand && window.items[e.equipped.offhand].type === 'shield' && window.gameVisuals.shield.complete) {
                 const shieldSize = window.hexSize * 2.0 * z;
                 window.mapCtx.drawImage(window.gameVisuals.shield, x - shieldSize/2, y - shieldSize/2 - (6 * z), shieldSize, shieldSize + (12 * z));
