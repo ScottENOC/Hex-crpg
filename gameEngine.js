@@ -336,6 +336,7 @@ function startGameCore(isLoading = false) {
       humanMaleBase: new Image(),
       elfMaleBase: new Image(),
       elfFemaleBase: new Image(),
+      elfFemaleHair: new Image(),
       dwarfMaleBase: new Image(),
       dwarfFemaleBase: new Image(),
       shield: new Image(),
@@ -359,6 +360,7 @@ function startGameCore(isLoading = false) {
   visuals.humanMaleBase.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.elfMaleBase.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.elfFemaleBase.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.elfFemaleHair.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.dwarfMaleBase.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.dwarfFemaleBase.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.shield.onload = () => { window.drawMap(); window.renderEntities(); };
@@ -383,6 +385,7 @@ function startGameCore(isLoading = false) {
   visuals.humanMaleBase.src = 'images/humanmale.png';
   visuals.elfMaleBase.src = 'images/elfmale.png';
   visuals.elfFemaleBase.src = 'images/elffemale.png';
+  visuals.elfFemaleHair.src = 'images/elffemalehair.png';
   visuals.dwarfMaleBase.src = 'images/dwarfmale.png';
   visuals.dwarfFemaleBase.src = 'images/dwarffemale.png';
   visuals.shield.src = 'images/shield.png';
@@ -402,6 +405,14 @@ function startGameCore(isLoading = false) {
   }
 
   // Terrain generation is now implicit in getTerrainAt
+
+  if (window.currentCampaign === "1") {
+      setupArenaLobby();
+      document.addEventListener("keydown", window.handleMovement);
+      window.mapCanvas.addEventListener("click", window.handleClick);
+      if (!window.tickInterval) window.tickInterval = setInterval(tick, 10);
+      return;
+  }
 
   const playerEntity = new window.Entity(window.party[0].name, "red", {q: window.playerPos.q, r: window.playerPos.r}, window.party[0].attributes.agility + 10);
   playerEntity.side = 'player';
@@ -508,16 +519,29 @@ function renderEntities() {
         } else {
             // LAYER: Non-human (Elf/Dwarf) Base
             let baseImg = null;
+            let currentSize = size;
+            let currentYOff = -6 * z;
+            let currentHeight = size + 12 * z;
+
             if (e.race === 'elf') {
                 baseImg = e.gender === 'male' ? window.gameVisuals.elfMaleBase : window.gameVisuals.elfFemaleBase;
             } else if (e.race === 'dwarf') {
                 baseImg = e.gender === 'male' ? window.gameVisuals.dwarfMaleBase : window.gameVisuals.dwarfFemaleBase;
+                // Dwarf 20% smaller
+                currentSize = size * 0.8;
+                currentHeight = (size + 12 * z) * 0.8;
+                currentYOff = -2 * z; 
             } else {
                 baseImg = window.gameVisuals.playerBase; // Fallback
             }
 
             if (baseImg && baseImg.complete) {
-                window.mapCtx.drawImage(baseImg, x - size/2, y - size/2 - (6 * z), size, (size + 12 * z));
+                window.mapCtx.drawImage(baseImg, x - currentSize/2, y - currentSize/2 + currentYOff, currentSize, currentHeight);
+            }
+
+            // LAYER: Elf Female Hair
+            if (e.race === 'elf' && e.gender === 'female' && window.gameVisuals.elfFemaleHair.complete) {
+                window.mapCtx.drawImage(window.gameVisuals.elfFemaleHair, x - currentSize/2, y - currentSize/2 + currentYOff, currentSize, currentHeight);
             }
 
             // LAYER: Non-human Armour
@@ -528,12 +552,12 @@ function renderEntities() {
                 else if (armorId === 'light_armor') armorImg = window.gameVisuals.leatherArmor;
             }
             if (armorImg && armorImg.complete) {
-                window.mapCtx.drawImage(armorImg, x - size/2, (y - size/2) + (15 * z), size, size);
+                window.mapCtx.drawImage(armorImg, x - currentSize/2, (y - currentSize/2) + (15 * z), currentSize, currentSize);
             }
             // LAYER: Shield (Elf/Dwarf Scale)
             if (e.equipped && e.equipped.offhand && window.items[e.equipped.offhand].type === 'shield' && window.gameVisuals.shield.complete) {
-                const shieldSize = window.hexSize * 2.0 * z;
-                window.mapCtx.drawImage(window.gameVisuals.shield, x - shieldSize/2, y - shieldSize/2 - (6 * z), shieldSize, shieldSize + (12 * z));
+                const shieldSize = currentSize;
+                window.mapCtx.drawImage(window.gameVisuals.shield, x - shieldSize/2, y - shieldSize/2 + currentYOff, shieldSize, currentHeight);
             }
         }
         if (e.equipped && e.equipped.weapon === 'sword' && window.gameVisuals.swordIcon.complete) {
@@ -1041,6 +1065,12 @@ function handleClick(e){
     const target = getEntityAtHex(clickedHex.q, clickedHex.r);
     let actionHandled = false;
 
+    // TALK TO NPC (Campaign 1)
+    if (target && target.isNPC && window.distance(player.hex, clickedHex) <= 1) {
+        talkToNPC(target);
+        return;
+    }
+
     if (window.playerAction) {
         const act = window.playerAction;
         if (act.type === 'skill') {
@@ -1461,10 +1491,18 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
 
 function checkCombatEnd() {
     // Only check for ACTIVE enemies
-    if (!window.entities.some(e => e.side === 'enemy' && e.alive && e.aiState === 'combat')) {
+    if (!window.entities.some(e => e.side === 'enemy' && e.alive)) {
+        if (window.currentCampaign === "1") {
+            window.showMessage("You have won the battle! Teleporting back to the lobby...");
+            setTimeout(() => {
+                setupArenaLobby();
+                window.drawMap();
+                window.renderEntities();
+            }, 2000);
+            return;
+        }
+
         // If all active enemies are dead, maybe we can relax?
-        // But in this new mode, combat doesn't fully "end", we just go back to waiting.
-        // However, we should probably reset TP for convenience if no one is aggressive.
         window.entities.forEach(e => { if (e.alive) e.timePoints = 0; });
         
         // Spawn more monsters far away to keep the world populated
@@ -1692,6 +1730,116 @@ window.renderEntities = renderEntities;
 window.handleClick = handleClick;
 window.tryAttack = tryAttack;
 window.cancelSpell = cancelSpell;
+
+function setupArenaLobby() {
+    window.gamePhase = 'WAITING';
+    window.entities = [];
+    window.mapItems = {};
+
+    // Create a 20x20 stone lobby
+    for (let q = -10; q <= 10; q++) {
+        for (let r = -10; r <= 10; r++) {
+            window.setTerrainAt(q, r, 'Wall'); // Surround with walls
+            if (q > -8 && q < 8 && r > -8 && r < 8) {
+                window.setTerrainAt(q, r, 'Cave Floor'); // Gritty stone lobby
+            }
+        }
+    }
+
+    // Spawn Player
+    const p = window.party[0];
+    const playerEntity = new window.Entity(p.name, "red", {q: 0, r: 0}, p.attributes.agility + 10);
+    playerEntity.side = 'player';
+    Object.assign(playerEntity, p);
+    window.entities.push(playerEntity);
+
+    // Spawn NPCs
+    const announcer = new window.Entity("Arena Announcer", "yellow", {q: 2, r: -2}, 10);
+    announcer.isNPC = true;
+    announcer.side = 'neutral';
+    announcer.gender = 'male';
+    announcer.race = 'human';
+    window.entities.push(announcer);
+
+    const shopkeeper = new window.Entity("Shopkeeper", "green", {q: -2, r: 2}, 10);
+    shopkeeper.isNPC = true;
+    shopkeeper.side = 'neutral';
+    shopkeeper.gender = 'female';
+    shopkeeper.race = 'dwarf';
+    window.entities.push(shopkeeper);
+
+    const recruiter = new window.Entity("Mercenary Recruiter", "cyan", {q: 3, r: 3}, 10);
+    recruiter.isNPC = true;
+    recruiter.side = 'neutral';
+    recruiter.gender = 'male';
+    recruiter.race = 'elf';
+    window.entities.push(recruiter);
+
+    // Decorative Horse
+    const horse = window.createMonster('horse', {q: -4, r: -4}, null, null, 'neutral');
+    window.entities.push(horse);
+
+    window.drawMap();
+    window.renderEntities();
+    window.showCharacter();
+}
+
+function startArenaFight() {
+    window.showMessage("The announcer teleports you to the arena!");
+    
+    // Create arena map (50x50 rectangle)
+    window.entities = window.entities.filter(e => e.side === 'player'); // Keep only players
+    const arenaSize = 25;
+    for (let q = -arenaSize; q <= arenaSize; q++) {
+        for (let r = -arenaSize; r <= arenaSize; r++) {
+            if (Math.abs(q) === arenaSize || Math.abs(r) === arenaSize || Math.abs(q+r) === arenaSize) {
+                 window.setTerrainAt(q, r, 'Wall');
+            } else {
+                 window.setTerrainAt(q, r, 'Cave Floor');
+            }
+        }
+    }
+
+    // Spawn players at one end
+    window.entities.forEach((e, i) => {
+        e.hex = { q: -arenaSize + 5, r: i - Math.floor(window.entities.length/2) };
+    });
+
+    // Spawn enemies
+    const enemyCount = 2 + Math.floor(Math.random() * 4);
+    const monsterTypes = ['goblin', 'orc', 'skeleton', 'zombie', 'imp'];
+    for (let i = 0; i < enemyCount; i++) {
+        const type = monsterTypes[Math.floor(Math.random() * monsterTypes.length)];
+        const spawnHex = { q: arenaSize - 5, r: i - Math.floor(enemyCount/2) };
+        const enemy = window.createMonster(type, spawnHex, null, null, 'enemy');
+        window.entities.push(enemy);
+    }
+
+    window.drawMap();
+    window.renderEntities();
+    window.gamePhase = 'WAITING'; // Redraw will trigger turns
+}
+
+function talkToNPC(npc) {
+    if (npc.name === "Arena Announcer") {
+        window.requestReaction(npc, [
+            { id: 'start_fight', label: 'I am ready to fight!' },
+            { id: 'not_ready', label: 'Not yet.' }
+        ], (choice) => {
+            if (choice === 'start_fight') startArenaFight();
+        }, "Welcome to the pits! Are you ready for your next match?");
+    } else if (npc.name === "Shopkeeper") {
+        window.showMessage("Shopkeeper: Take a look at my wares. (Shop not implemented yet)");
+    } else if (npc.name === "Mercenary Recruiter") {
+        window.showMessage("Recruiter: Looking for some extra muscle? (Mercenaries not implemented yet)");
+    } else {
+        window.showMessage(`You talk to ${npc.name}, but they have nothing to say.`);
+    }
+}
+
+window.talkToNPC = talkToNPC;
+window.setupArenaLobby = setupArenaLobby;
+window.startArenaFight = startArenaFight;
 window.tryStealth = tryStealth;
 window.breakStealth = breakStealth;
 window.lootItems = lootItems;

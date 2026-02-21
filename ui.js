@@ -957,20 +957,43 @@ function updateTurnIndicator() {
                 }
             } else {
                 const baseImg = document.createElement('img');
+                let scalingFactor = 1.0;
                 if (entity.race === 'elf') {
                     baseImg.src = entity.gender === 'male' ? 'images/elfmale.png' : 'images/elffemale.png';
                 } else if (entity.race === 'dwarf') {
                     baseImg.src = entity.gender === 'male' ? 'images/dwarfmale.png' : 'images/dwarffemale.png';
+                    scalingFactor = 0.8;
                 } else {
                     baseImg.src = 'images/elf.png';
                 }
                 baseImg.classList.add('portrait-layer');
+                if (scalingFactor !== 1.0) {
+                    baseImg.style.width = `${100 * scalingFactor}%`;
+                    baseImg.style.height = `${100 * scalingFactor}%`;
+                    baseImg.style.left = `${(100 - 100 * scalingFactor) / 2}%`;
+                    baseImg.style.top = `${(100 - 100 * scalingFactor) / 2}%`;
+                }
                 portraitDiv.appendChild(baseImg);
+
+                if (entity.race === 'elf' && entity.gender === 'female') {
+                    const hairImg = document.createElement('img');
+                    hairImg.src = 'images/elffemalehair.png';
+                    hairImg.classList.add('portrait-layer');
+                    portraitDiv.appendChild(hairImg);
+                }
+
                 if (entity.equipped && entity.equipped.armor) {
                     const armorImg = document.createElement('img');
                     const armorId = entity.equipped.armor;
                     armorImg.src = (armorId === 'medium_armor' || armorId === 'heavy_armor') ? 'images/elfchainarmour.png' : 'images/elfleatherarmour.png';
-                    armorImg.classList.add('portrait-layer'); portraitDiv.appendChild(armorImg);
+                    armorImg.classList.add('portrait-layer'); 
+                    if (scalingFactor !== 1.0) {
+                        armorImg.style.width = `${100 * scalingFactor}%`;
+                        armorImg.style.height = `${100 * scalingFactor}%`;
+                        armorImg.style.left = `${(100 - 100 * scalingFactor) / 2}%`;
+                        armorImg.style.top = `${(100 - 100 * scalingFactor) / 2}%`;
+                    }
+                    portraitDiv.appendChild(armorImg);
                 }
             }
             // SHIELD LAYER (Universal)

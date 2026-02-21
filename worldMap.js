@@ -36,6 +36,31 @@ const factionColors = {
 
 function loadWorldMap() {
     try {
+        if (window.currentCampaign === "1") {
+            window.worldMapData = [];
+            window.worldMapWidth = 0;
+            window.worldMapHeight = 0;
+            return;
+        }
+
+        if (window.currentCampaign === "2") {
+            window.worldMapWidth = 12;
+            window.worldMapHeight = 12;
+            window.worldMapData = [];
+            for (let y = 0; y < 12; y++) {
+                const row = [];
+                for (let x = 0; x < 12; x++) {
+                    row.push({ t: 'G', f: 'n', o: '', p: 0, n: '' });
+                }
+                window.worldMapData.push(row);
+            }
+            // Add a small city in the middle
+            window.worldMapData[6][6] = { t: 'G', f: 'h', o: 'C', p: 1, n: 'Small Town' };
+            window.playerWorldPos = { x: 6, y: 6 };
+            return;
+        }
+
+        // Campaign 3 (Default)
         const text = window.embeddedWorldMap || '';
         if (!text) {
             console.warn("embeddedWorldMap not found in window");

@@ -114,8 +114,9 @@ window.startGame = function() {
   const race = document.getElementById("race-select").value;
   const cls = document.getElementById("class-select").value;
   const gender = document.getElementById("gender-select").value;
+  const campaign = document.getElementById("campaign-select").value;
 
-  window.initializePlayer(race, cls, gender);
+  window.initializePlayer(race, cls, gender, campaign);
   window.updatePartyTabs();
 
   document.getElementById("characterCreator").style.display = "none";

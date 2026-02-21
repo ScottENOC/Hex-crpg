@@ -1,0 +1,8 @@
+- **Elf Female Hair Overlay**: Added `elffemalehair.png` overlay for female Elf characters in both the game map and turn indicator UI.
+- **Dwarf Character Shrinking**: Reduced Dwarf character size by 20% on the map and in the turn indicator for a more appropriate scale.
+- **Campaign System**:
+    - **Campaign Selection**: Added a campaign selection dropdown to the character creation screen.
+    - **Campaign 3 (Main)**: Uses the existing large world map.
+    - **Campaign 2 (Small World)**: Uses a compact 12x12 world map with a central town.
+    - **Campaign 1 (Arena)**: Implemented an arena-style lobby map with NPCs (Announcer, Shopkeeper, Recruiter) and an arena teleportation system for random battles. Players are teleported back to the lobby upon winning.
+- **NPC Interactions**: Added a "Talk" interaction for NPCs, specifically enabling the Arena Announcer to start fights in Campaign 1.

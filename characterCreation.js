@@ -1,7 +1,8 @@
 // characterCreation.js
-function initializePlayer(race, cls, gender) {
+function initializePlayer(race, cls, gender, campaign = "3") {
   window.party = [];
   window.selectedCharacterIndex = 0;
+  window.currentCampaign = campaign;
   
   const mainChar = createCharacterData(race, cls, "Player (Main)", gender);
   window.party.push(mainChar);
