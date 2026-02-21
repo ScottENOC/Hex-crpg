@@ -7,11 +7,13 @@ const terrainTypes = {
     'sand': { name: 'Sand', color: '#edc9af', moveCostMult: 1.5, hitBonus: 0, dodgeBonus: 0, stealthBonus: 0 },
     'swamp': { name: 'Swamp', color: '#4f7942', moveCostMult: 2, hitBonus: -5, dodgeBonus: 0, stealthBonus: 30 },
     'water': { name: 'Water', color: '#4169e1', moveCostMult: 2, hitBonus: -10, dodgeBonus: -5, stealthBonus: -20 },
-    'wall': { name: 'Wall', color: '#696969', moveCostMult: 2, hitBonus: 5, dodgeBonus: 5, stealthBonus: 0 }
+    'wall': { name: 'Wall', color: '#696969', moveCostMult: 2, hitBonus: 5, dodgeBonus: 5, stealthBonus: 0 },
+    'cave_floor': { name: 'Cave Floor', color: '#3e3e3e', moveCostMult: 1, hitBonus: 0, dodgeBonus: 0, stealthBonus: 0 }
 };
 
 window.mapItems = {}; // Key format: "q,r", Value: array of item IDs
 window.exploredHexes = new Set(); // Stores "q,r" strings
+window.overrideTerrain = {}; // Key format: "q,r", Value: terrain object
 
 // Deterministic Pseudo-Random Number Generator
 function pseudoRandom(x, y) {
@@ -44,7 +46,19 @@ function battleToWorld(q, r) {
     };
 }
 
+function setTerrainAt(q, r, typeName) {
+    const key = `${q},${r}`;
+    const typeKey = typeName.toLowerCase().replace(' ', '_');
+    if (terrainTypes[typeKey]) {
+        window.overrideTerrain[key] = terrainTypes[typeKey];
+    }
+}
+
 function getTerrainAt(q, r) {
+    // 0. Check overrides
+    const key = `${q},${r}`;
+    if (window.overrideTerrain[key]) return window.overrideTerrain[key];
+
     // 1. Determine World Biome
     const worldPos = battleToWorld(q, r);
     const biome = getBiomeAtWorldPos(worldPos.col, worldPos.row);

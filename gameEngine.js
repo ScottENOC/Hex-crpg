@@ -670,12 +670,14 @@ function tick() {
         if (window.isSleeping) {
             for(let i=0; i<50; i++) {
                 runTickInternal();
+                if (window.updateTime) window.updateTime(5.0); // 250s per tick fast forward
                 if (!window.isSleeping) break;
             }
         }
     }
 
     runTickInternal();
+    if (window.updateTime) window.updateTime(0.4);
 }
 
 function runTickInternal() {
@@ -739,8 +741,6 @@ function runTickInternal() {
                 }
             }
         });
-        // UPDATE WORLD TIME: 0.4s per tick
-        if (window.updateTime) window.updateTime(0.4);
     }
     window.updateTurnIndicator();
 }

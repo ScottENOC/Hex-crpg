@@ -6,3 +6,9 @@
     - **Campaign 2 (Small World)**: Uses a compact 12x12 world map with a central town.
     - **Campaign 1 (Arena)**: Implemented an arena-style lobby map with NPCs (Announcer, Shopkeeper, Recruiter) and an arena teleportation system for random battles. Players are teleported back to the lobby upon winning.
 - **NPC Interactions**: Added a "Talk" interaction for NPCs, specifically enabling the Arena Announcer to start fights in Campaign 1.
+- **Terrain Overrides & Bug Fixes**:
+    - **setTerrainAt Implementation**: Implemented `setTerrainAt` in `terrain.js` to allow manual terrain overrides, fixing a crash in Campaign 1 lobby generation.
+    - **Cave Floor Terrain**: Added a new `cave_floor` terrain type for arena and lobby maps.
+- **Time & Sleep Improvements**:
+    - **Consistent Time Progression**: Moved `updateTime` to the main `tick` loop to ensure time passes even when characters are not moving or acting.
+    - **Accelerated Sleep**: Modified the sleep logic to fast-forward world time significantly (250x faster) during the sleep cycle, making the 8-hour sleep period pass in seconds of real time.
