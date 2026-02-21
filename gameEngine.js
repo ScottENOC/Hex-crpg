@@ -339,6 +339,7 @@ function startGameCore(isLoading = false) {
       elfFemaleHair: new Image(),
       dwarfMaleBase: new Image(),
       dwarfFemaleBase: new Image(),
+      dwarfMaleHair: new Image(),
       shield: new Image(),
       skeleton: new Image(),
       zombie: new Image(),
@@ -365,6 +366,7 @@ function startGameCore(isLoading = false) {
   visuals.elfFemaleHair.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.dwarfMaleBase.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.dwarfFemaleBase.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.dwarfMaleHair.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.shield.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.skeleton.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.zombie.onload = () => { window.drawMap(); window.renderEntities(); };
@@ -392,6 +394,7 @@ function startGameCore(isLoading = false) {
   visuals.elfFemaleHair.src = 'images/elffemalehair.png';
   visuals.dwarfMaleBase.src = 'images/dwarfmale.png';
   visuals.dwarfFemaleBase.src = 'images/dwarffemale.png';
+  visuals.dwarfMaleHair.src = 'images/dwarfmalehair.png';
   visuals.shield.src = 'images/shield.png';
   visuals.skeleton.src = 'images/skeleton.svg';
   visuals.zombie.src = 'images/zombie.svg';
@@ -558,6 +561,11 @@ function renderEntities() {
                 window.mapCtx.drawImage(baseImg, x - currentSize/2, y - currentSize/2 + currentYOff, currentSize, currentHeight);
             }
 
+            // LAYER: Dwarf Male Hair
+            if (e.race === 'dwarf' && e.gender === 'male' && window.gameVisuals.dwarfMaleHair.complete) {
+                window.mapCtx.drawImage(window.gameVisuals.dwarfMaleHair, x - currentSize/2, y - currentSize/2 + currentYOff, currentSize, currentHeight);
+            }
+
             // LAYER: Elf Female Hair
             if (e.race === 'elf' && e.gender === 'female' && window.gameVisuals.elfFemaleHair.complete) {
                 window.mapCtx.drawImage(window.gameVisuals.elfFemaleHair, x - currentSize/2, y - currentSize/2 + currentYOff, currentSize, currentHeight);
@@ -697,16 +705,16 @@ function tick() {
 
         // FAST FORWARD SLEEP
         if (window.isSleeping) {
-            for(let i=0; i<50; i++) {
+            // Speed up sleep significantly: run many ticks per real tick
+            for(let i=0; i<500; i++) {
                 runTickInternal();
-                if (window.updateTime) window.updateTime(5.0); // 250s per tick fast forward
                 if (!window.isSleeping) break;
             }
+            return; // Don't run extra logic this tick
         }
     }
 
     runTickInternal();
-    if (window.updateTime) window.updateTime(0.4);
 }
 
 function runTickInternal() {
@@ -770,6 +778,7 @@ function runTickInternal() {
                 }
             }
         });
+        if (window.updateTime) window.updateTime(0.4);
     }
     window.updateTurnIndicator();
 }

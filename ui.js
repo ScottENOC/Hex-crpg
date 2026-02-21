@@ -1005,6 +1005,19 @@ function updateTurnIndicator() {
                     portraitDiv.appendChild(hairImg);
                 }
 
+                if (entity.race === 'dwarf' && entity.gender === 'male') {
+                    const hairImg = document.createElement('img');
+                    hairImg.src = 'images/dwarfmalehair.png';
+                    hairImg.classList.add('portrait-layer');
+                    if (scalingFactor !== 1.0) {
+                        hairImg.style.width = `${100 * scalingFactor}%`;
+                        hairImg.style.height = `${100 * scalingFactor}%`;
+                        hairImg.style.left = `${(100 - 100 * scalingFactor) / 2}%`;
+                        hairImg.style.top = `${(100 - 100 * scalingFactor) / 2}%`;
+                    }
+                    portraitDiv.appendChild(hairImg);
+                }
+
                 if (entity.equipped && entity.equipped.armor) {
                     const armorImg = document.createElement('img');
                     const armorId = entity.equipped.armor;

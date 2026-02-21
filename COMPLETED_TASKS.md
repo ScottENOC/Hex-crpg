@@ -28,6 +28,11 @@
 - **Character Naming**:
     - **Name Generation**: Created `name.js` with a database of 120 unique names (20 per race/gender combo).
     - **Automatic Naming**: The game now automatically generates a race-and-gender-appropriate name if the player leaves the name field blank during creation.
+- **Dwarf Male Hair Overlay**: Added `dwarfmalehair.png` overlay for male Dwarf characters in both the game map and turn indicator UI.
+- **World Time Overhaul**:
+    - **Action-Point-Based Time**: Tied world time progression directly to the distribution of Time Points (TP). The clock now ticks 0.4 seconds only when characters receive TP.
+    - **Input-Paused Time**: World time no longer passes while the game is waiting for player input, ensuring a more consistent and logical flow of time.
+    - **Fast-Forward Sleep**: Optimized sleep logic to rapidly cycle through TP distribution, allowing 8 hours of game time to pass quickly in real time.
 - **Bug Fixes**:
     - **Duplicate Stealth Buttons**: Fixed a bug where the stealth action button would duplicate every time the UI refreshed by properly clearing the action button container.
     - **setTerrainAt Implementation**: Fixed a crash in Campaign 1 by correctly implementing and exposing the terrain override function.
