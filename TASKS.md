@@ -3,3 +3,6 @@ add a skill to the druid tree: animal companion. whenever you summon an animal u
 plus have a druid skill that has animal companion as a prereq to add a strength skill point and an endurance skill point to any animal companion you summon. 
 plus have a druid skill that has animal companion as a prereq to add an agility skill point and an endurance skill point to any animal companion you summon. 
 there seems to be a bug that creates additional stealth buttons during the game
+we have codes up torches as an item that can go in your inventory. these increase the lighting in hexes near you and help you see. can you check how they work - they should help see things within their area of effect (improving vision distance up to normal daytime amounts. but you dont need to be within their area of wffect for them to help you see in their area of effect (ie they help others see you as well as helping you see others
+can you draw an imageof a lit torch, save it in our images folder and overlay the torch image on any character with a torch equipped
+also, develop a 'fireplace' as something we can out down on a tile. this should have the same effect as a torch, but not be moveable. place one of these in our arena lobby. can you draw an image of a fireplace to use for this tile
