@@ -342,7 +342,9 @@ function startGameCore(isLoading = false) {
       shield: new Image(),
       skeleton: new Image(),
       zombie: new Image(),
-      imp: new Image()
+      imp: new Image(),
+      torch_lit: new Image(),
+      fireplace: new Image()
   };
   visuals.playerBase.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.leatherArmor.onload = () => { window.drawMap(); window.renderEntities(); };
@@ -367,6 +369,8 @@ function startGameCore(isLoading = false) {
   visuals.skeleton.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.zombie.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.imp.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.torch_lit.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.fireplace.onload = () => { window.drawMap(); window.renderEntities(); };
 
   visuals.playerBase.src = 'images/elf.png';
   visuals.leatherArmor.src = 'images/elfleatherarmour.png';
@@ -392,6 +396,8 @@ function startGameCore(isLoading = false) {
   visuals.skeleton.src = 'images/skeleton.svg';
   visuals.zombie.src = 'images/zombie.svg';
   visuals.imp.src = 'images/imp.svg';
+  visuals.torch_lit.src = 'images/torch_lit.svg';
+  visuals.fireplace.src = 'images/fireplace.svg';
   
   window.gameVisuals = visuals;
 
@@ -458,6 +464,19 @@ function renderEntities() {
           const size = window.hexSize * 0.8 * z;
           if (window.gameVisuals.swordIcon.complete) {
               window.mapCtx.drawImage(window.gameVisuals.swordIcon, x - size/2, y - size/2, size, size);
+          }
+      }
+  }
+
+  // Render Tile Objects (Fireplaces etc.)
+  for (const key in window.tileObjects) {
+      const obj = window.tileObjects[key];
+      const [q, r] = key.split(',').map(Number);
+      if (window.isVisibleToPlayer({q, r})) {
+          const {x, y} = window.hexToPixel(q, r);
+          const size = window.hexSize * 1.5 * z;
+          if (obj.type === 'fireplace' && window.gameVisuals.fireplace.complete) {
+              window.mapCtx.drawImage(window.gameVisuals.fireplace, x - size/2, y - size/2, size, size);
           }
       }
   }
@@ -610,7 +629,7 @@ function renderEntities() {
             const weaponSize = window.hexSize * 0.8 * z;
             window.mapCtx.drawImage(window.gameVisuals.swordIcon, x - (window.hexSize/2 + 5) * z, y - weaponSize/2, weaponSize, weaponSize);
         }
-        
+
         // AI State Indicator
         if (e.aiState === 'combat') {
             window.mapCtx.fillStyle = "red";
@@ -624,6 +643,16 @@ function renderEntities() {
         window.mapCtx.fillStyle = e.color;
         window.mapCtx.fill();
     }
+
+    // UNIVERSAL LAYER: Torch
+    if (e.equipped && window.gameVisuals.torch_lit.complete) {
+        const hasTorch = (e.equipped.weapon === 'torch' || e.equipped.offhand === 'torch');
+        if (hasTorch) {
+            const tSize = window.hexSize * 1.0 * z;
+            window.mapCtx.drawImage(window.gameVisuals.torch_lit, x + (window.hexSize/3)*z, y - tSize, tSize, tSize);
+        }
+    }
+
     window.mapCtx.globalAlpha = 1.0;
   });
 }
@@ -856,6 +885,12 @@ function aiProcess(entity) {
         setTimeout(() => aiProcess(entity), 100);
         return;
     }
+    if (entity.side === 'neutral') {
+        entity.timePoints = 0;
+        window.currentTurnEntity = null;
+        window.gamePhase = 'WAITING';
+        return;
+    }
     let threshold = 80;
     if (entity.skills && entity.skills['quickRecovery']) threshold -= entity.skills['quickRecovery'];
     if (Math.floor(entity.timePoints) <= threshold || !entity.alive) {
@@ -1066,7 +1101,7 @@ function handleClick(e){
     let actionHandled = false;
 
     // TALK TO NPC (Campaign 1)
-    if (target && target.isNPC && window.distance(player.hex, clickedHex) <= 1) {
+    if (target && target.isNPC && window.distance(player.hex, clickedHex) <= 3) {
         talkToNPC(target);
         return;
     }
@@ -1156,17 +1191,38 @@ function handleClick(e){
                     if (!getEntityAtHex(clickedHex.q, clickedHex.r) && window.distance(player.hex, clickedHex) <= 1) {
                         const s = window.createMonster(spell.animalId, clickedHex, null, null, 'player');
                         s.maxTPAllowed = 0; // Ongoing!
-                        window.entities.push(s); 
                         
-                        // Track as active spell
-                        const instanceId = Date.now() + Math.random();
-                        window.activeSpells.push({
-                            spellInstanceId: instanceId,
-                            name: spell.name,
-                            casterName: player.name,
-                            coreManaCost: spell.coreManaCost || spell.manaCost,
-                            entityId: s.id
-                        });
+                        // ANIMAL COMPANION LOGIC
+                        if (player.skills?.animal_companion && !player.animalCompanion) {
+                            player.animalCompanion = s;
+                            s.isCompanion = true;
+                            
+                            // Apply bonuses
+                            if (player.skills.companion_str_end) {
+                                s.baseDamage += 1;
+                                s.maxHp += 10;
+                                s.hp += 10;
+                            }
+                            if (player.skills.companion_agi_end) {
+                                s.timePointsPerTick += 0.05;
+                                s.maxHp += 10;
+                                s.hp += 10;
+                            }
+                            
+                            window.entities.push(s);
+                            window.showMessage(`${player.name} summons a permanent companion: ${s.name}!`);
+                        } else {
+                            window.entities.push(s); 
+                            // Track as active spell (with upkeep)
+                            const instanceId = Date.now() + Math.random();
+                            window.activeSpells.push({
+                                spellInstanceId: instanceId,
+                                name: spell.name,
+                                casterName: player.name,
+                                coreManaCost: spell.coreManaCost || spell.manaCost,
+                                entityId: s.id
+                            });
+                        }
                         
                         actionHandled = true;
                     }
@@ -1263,6 +1319,10 @@ function handleClick(e){
 }
 
 function tryAttack(attacker, target, isFeint = false, isOffhand = false) {
+    if (target.side === 'neutral') {
+        if (attacker.side === 'player') window.showMessage("You cannot attack a neutral character!");
+        return;
+    }
     // Wake up target if attacked
     if (target.side === 'enemy' && target.aiState === 'idle') wakeUp(target);
 
@@ -1735,6 +1795,8 @@ function setupArenaLobby() {
     window.gamePhase = 'WAITING';
     window.entities = [];
     window.mapItems = {};
+    window.overrideTerrain = {};
+    window.tileObjects = {};
 
     // Create a 20x20 stone lobby
     for (let q = -10; q <= 10; q++) {
@@ -1746,12 +1808,14 @@ function setupArenaLobby() {
         }
     }
 
-    // Spawn Player
-    const p = window.party[0];
-    const playerEntity = new window.Entity(p.name, "red", {q: 0, r: 0}, p.attributes.agility + 10);
-    playerEntity.side = 'player';
-    Object.assign(playerEntity, p);
-    window.entities.push(playerEntity);
+    // Spawn Party
+    window.party.forEach((p, i) => {
+        const spawnHex = { q: -2 + i, r: 0 };
+        const playerEntity = new window.Entity(p.name, "red", spawnHex, p.attributes.agility + 10);
+        playerEntity.side = 'player';
+        Object.assign(playerEntity, p);
+        window.entities.push(playerEntity);
+    });
 
     // Spawn NPCs
     const announcer = new window.Entity("Arena Announcer", "yellow", {q: 2, r: -2}, 10);
@@ -1778,6 +1842,9 @@ function setupArenaLobby() {
     // Decorative Horse
     const horse = window.createMonster('horse', {q: -4, r: -4}, null, null, 'neutral');
     window.entities.push(horse);
+
+    // Fireplace in the center-ish
+    window.tileObjects["-1,-1"] = { type: 'fireplace', lightRadius: 12 };
 
     window.drawMap();
     window.renderEntities();
@@ -1822,18 +1889,22 @@ function startArenaFight() {
 
 function talkToNPC(npc) {
     if (npc.name === "Arena Announcer") {
-        window.requestReaction(npc, [
-            { id: 'start_fight', label: 'I am ready to fight!' },
-            { id: 'not_ready', label: 'Not yet.' }
-        ], (choice) => {
-            if (choice === 'start_fight') startArenaFight();
-        }, "Welcome to the pits! Are you ready for your next match?");
+        window.showDialogue(npc, "Welcome to the pits! Are you ready for your next match?", [
+            { label: "I am ready to fight!", action: () => startArenaFight() },
+            { label: "Not yet.", action: () => {} }
+        ]);
     } else if (npc.name === "Shopkeeper") {
-        window.showMessage("Shopkeeper: Take a look at my wares. (Shop not implemented yet)");
+        window.showDialogue(npc, "Got some coin? I've got the goods. Unlimited stock, best prices in the pits!", [
+            { label: "Let me see your wares.", action: () => window.openShop() },
+            { label: "Maybe later.", action: () => {} }
+        ]);
     } else if (npc.name === "Mercenary Recruiter") {
-        window.showMessage("Recruiter: Looking for some extra muscle? (Mercenaries not implemented yet)");
+        window.showDialogue(npc, "Looking for some extra muscle? 100 gold and I'll find you a capable fighter who matches your experience.", [
+            { label: "I'd like to hire someone (100g).", action: () => window.startMercenaryHire() },
+            { label: "Not right now.", action: () => {} }
+        ]);
     } else {
-        window.showMessage(`You talk to ${npc.name}, but they have nothing to say.`);
+        window.showDialogue(npc, `You talk to ${npc.name}, but they have nothing to say.`);
     }
 }
 

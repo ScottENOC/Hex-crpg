@@ -14,6 +14,7 @@ const terrainTypes = {
 window.mapItems = {}; // Key format: "q,r", Value: array of item IDs
 window.exploredHexes = new Set(); // Stores "q,r" strings
 window.overrideTerrain = {}; // Key format: "q,r", Value: terrain object
+window.tileObjects = {}; // Key format: "q,r", Value: { type, lightRadius, etc }
 
 // Deterministic Pseudo-Random Number Generator
 function pseudoRandom(x, y) {

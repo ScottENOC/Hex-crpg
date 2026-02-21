@@ -236,31 +236,51 @@ function hexLerp(a, b, t) {
 }
 
 function hasLineOfSight(start, end) {
-    const viewer = window.entities.find(e => e.hex.q === start.q && e.hex.r === start.r);
+    const d = distance(start, end);
+    const nightFactor = window.lightLevel || 1.0;
     
-    let visionCap = 30;
-    let hasTorch = false;
-    let torchRadius = 0;
-
+    let baseVisionCap = 30;
+    let viewerTorchRadius = 0;
+    
+    const viewer = window.entities.find(e => e.hex.q === start.q && e.hex.r === start.r);
     if (viewer) {
-        visionCap += (viewer.visionBonus || 0);
-        // Check for Torch
+        baseVisionCap += (viewer.visionBonus || 0);
         if (viewer.equipped) {
-            const items = [viewer.equipped.weapon, viewer.equipped.offhand];
-            items.forEach(iid => {
-                if (iid && window.items[iid] && window.items[iid].lightRadius) {
-                    hasTorch = true;
-                    torchRadius = Math.max(torchRadius, window.items[iid].lightRadius);
-                }
+            [viewer.equipped.weapon, viewer.equipped.offhand].forEach(iid => {
+                if (iid && window.items[iid]?.lightRadius) viewerTorchRadius = Math.max(viewerTorchRadius, window.items[iid].lightRadius);
             });
         }
     }
 
-    const d = distance(start, end);
+    // Is the target illuminated by ANY source?
+    let targetIsIlluminated = false;
+    
+    // Check entities for torches
+    window.entities.forEach(e => {
+        if (!e.alive || !e.equipped) return;
+        let r = 0;
+        [e.equipped.weapon, e.equipped.offhand].forEach(iid => {
+            if (iid && window.items[iid]?.lightRadius) r = Math.max(r, window.items[iid].lightRadius);
+        });
+        if (r > 0 && distance(e.hex, end) <= r) targetIsIlluminated = true;
+    });
 
-    // Light calculation: reduce visionCap at night unless torch covers it
-    const nightFactor = window.lightLevel || 1.0;
-    const effectiveVisionCap = Math.max(torchRadius, visionCap * nightFactor);
+    // Check stationary tile objects
+    for (const key in window.tileObjects) {
+        const obj = window.tileObjects[key];
+        if (obj.lightRadius > 0) {
+            const [oq, or] = key.split(',').map(Number);
+            if (distance({q:oq, r:or}, end) <= obj.lightRadius) targetIsIlluminated = true;
+        }
+    }
+
+    let effectiveVisionCap = baseVisionCap * nightFactor;
+    effectiveVisionCap = Math.max(effectiveVisionCap, viewerTorchRadius);
+    
+    if (targetIsIlluminated) {
+        // If target is lit up, we can see them up to our full potential vision range
+        effectiveVisionCap = Math.max(effectiveVisionCap, baseVisionCap);
+    }
 
     if (d > effectiveVisionCap) return false;
 

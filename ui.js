@@ -440,16 +440,7 @@ function updateActionButtons() {
     const buttonsDiv = document.getElementById('actions');
     if (!buttonsDiv) return;
     
-    const preservedButtons = [];
-    buttonsDiv.querySelectorAll('button').forEach(btn => {
-        if (!btn.id.startsWith('skill-btn-') && !btn.id.startsWith('spell-btn-') && 
-            btn.id !== 'cancel-action-btn' && btn.id !== 'wait-action-btn' && 
-            btn.id !== 'mount-action-btn' && btn.id !== 'dismount-action-btn') {
-            preservedButtons.push(btn.cloneNode(true));
-        }
-    });
     buttonsDiv.innerHTML = '';
-    preservedButtons.forEach(btn => buttonsDiv.appendChild(btn));
 
     if (window.currentTurnEntity && window.currentTurnEntity.side === "player") {
         const player = window.currentTurnEntity;
@@ -509,6 +500,22 @@ function updateActionButtons() {
                 window.finalizePlayerAction(player, true);
             };
             buttonsDiv.appendChild(breakBtn);
+        }
+
+        // DISMISS COMPANION BUTTON
+        if (player.animalCompanion) {
+            const dismissBtn = document.createElement('button');
+            dismissBtn.innerText = `Dismiss ${player.animalCompanion.name}`;
+            dismissBtn.style.backgroundColor = "#777";
+            dismissBtn.onclick = () => {
+                player.animalCompanion.alive = false;
+                player.animalCompanion = null;
+                showMessage("Animal companion dismissed.");
+                window.drawMap();
+                window.renderEntities();
+                updateActionButtons();
+            };
+            buttonsDiv.appendChild(dismissBtn);
         }
 
         const hasRiding = player.skills['riding'] || player.skills['riding_druid'] || player.skills['riding_paladin'];
@@ -849,22 +856,38 @@ function gainExp(amt) {
     if (document.getElementById("character-screen-modal").style.display === "block") showCharacterScreen();
 }
 
+function applyLevelUp(char, cls) {
+    char.level += 1;
+    const cb = window.classData[cls].bonus;
+    for (let key in cb) char.attributes[key] = (char.attributes[key] || 0) + cb[key];
+    
+    const rb = window.raceData[char.race].bonus;
+    for (let key in rb) char.attributes[key] = (char.attributes[key] || 0) + rb[key];
+}
+
 function doLevelUp() {
     const cls = document.getElementById("level-up-class-select").value;
     const expReq = window.player.level * 1000;
     if (window.player.exp < expReq) return;
     window.player.exp -= expReq;
-    window.player.level += 1;
-    const cb = window.classData[cls].bonus;
-    for (let key in cb) window.player.attributes[key] = (window.player.attributes[key] || 0) + cb[key];
     
-    const rb = window.raceData[window.player.race].bonus;
-    for (let key in rb) window.player.attributes[key] = (window.player.attributes[key] || 0) + rb[key];
+    applyLevelUp(window.player, cls);
 
     window.showMessage(`Level UP! You are now level ${window.player.level} ${cls}.`);
     showCharacter();
     showCharacterScreen();
 }
+
+function calculateTotalExp(level, exp) {
+    let total = exp;
+    for (let i = 1; i < level; i++) {
+        total += i * 1000;
+    }
+    return total;
+}
+
+window.calculateTotalExp = calculateTotalExp;
+window.applyLevelUp = applyLevelUp;
 
 function updateActiveSpellsUI() {
     const listDiv = document.getElementById("active-spells-list");
@@ -1067,6 +1090,114 @@ function requestReaction(entity, options, callback, customMsg = null) {
     noneBtn.style.backgroundColor = "#777";
     noneBtn.onclick = () => { modal.style.display = "none"; window.isPausedForReaction = false; callback(null); };
     optDiv.appendChild(noneBtn);
+    modal.style.display = "block";
+}
+
+function showDialogue(npc, message, options = []) {
+    window.isPausedForReaction = true;
+    const modal = document.getElementById("dialogue-modal");
+    const speaker = document.getElementById("dialogue-speaker");
+    const portrait = document.getElementById("dialogue-portrait");
+    const msg = document.getElementById("dialogue-message");
+    const optDiv = document.getElementById("dialogue-options");
+
+    speaker.innerText = npc.name;
+    msg.innerText = message;
+    optDiv.innerHTML = '';
+
+    // Create a mini portrait
+    portrait.innerHTML = '';
+    const baseImg = document.createElement('img');
+    if (npc.race === 'human') baseImg.src = npc.gender === 'male' ? 'images/humanmale.png' : 'images/humanfemale.png';
+    else if (npc.race === 'elf') baseImg.src = npc.gender === 'male' ? 'images/elfmale.png' : 'images/elffemale.png';
+    else if (npc.race === 'dwarf') baseImg.src = npc.gender === 'male' ? 'images/dwarfmale.png' : 'images/dwarffemale.png';
+    else baseImg.src = 'images/elf.png';
+    baseImg.classList.add('portrait-layer');
+    portrait.appendChild(baseImg);
+
+    if (options.length === 0) {
+        options.push({ label: "Goodbye", action: () => {} });
+    }
+
+    options.forEach(opt => {
+        const btn = document.createElement("button");
+        btn.innerText = opt.label;
+        btn.style.marginRight = "10px";
+        btn.onclick = () => {
+            modal.style.display = "none";
+            window.isPausedForReaction = false;
+            opt.action();
+        };
+        optDiv.appendChild(btn);
+    });
+
+    modal.style.display = "block";
+}
+
+function openShop() {
+    const modal = document.getElementById("shop-modal");
+    const buyList = document.getElementById("shop-buy-list");
+    const sellList = document.getElementById("shop-sell-list");
+    const goldDisplay = document.getElementById("shop-player-gold");
+
+    const player = window.party[0]; // Shop always uses main character's gold/inventory for now
+    goldDisplay.innerText = player.gold;
+
+    buyList.innerHTML = '';
+    for (const id in window.items) {
+        const item = window.items[id];
+        if (item.buyPrice === undefined) continue;
+        const div = document.createElement("div");
+        div.style.display = "flex";
+        div.style.justifyContent = "space-between";
+        div.style.marginBottom = "5px";
+        div.innerHTML = `<span>${item.name} (${item.buyPrice}g)</span>`;
+        const btn = document.createElement("button");
+        btn.innerText = "Buy";
+        btn.style.fontSize = "0.8em";
+        btn.disabled = player.gold < item.buyPrice;
+        btn.onclick = () => {
+            player.gold -= item.buyPrice;
+            player.inventory.push(id);
+            openShop(); // Refresh
+        };
+        div.appendChild(btn);
+        buyList.appendChild(div);
+    }
+
+    sellList.innerHTML = '';
+    const inventory = player.inventory || [];
+    const counts = {};
+    inventory.forEach(id => counts[id] = (counts[id] || 0) + 1);
+
+    for (const id in counts) {
+        const item = window.items[id];
+        const sellPrice = Math.floor((item.buyPrice || 0) * 0.5);
+        if (sellPrice <= 0) continue;
+
+        const div = document.createElement("div");
+        div.style.display = "flex";
+        div.style.justifyContent = "space-between";
+        div.style.marginBottom = "5px";
+        div.innerHTML = `<span>${item.name} x${counts[id]} (${sellPrice}g)</span>`;
+        const btn = document.createElement("button");
+        btn.innerText = "Sell";
+        btn.style.fontSize = "0.8em";
+        btn.onclick = () => {
+            player.gold += sellPrice;
+            const idx = player.inventory.indexOf(id);
+            if (idx > -1) player.inventory.splice(idx, 1);
+            openShop(); // Refresh
+        };
+        div.appendChild(btn);
+        sellList.appendChild(div);
+    }
+
+    modal.style.display = "block";
+}
+
+function startMercenaryHire() {
+    const modal = document.getElementById("mercenary-creation-modal");
     modal.style.display = "block";
 }
 

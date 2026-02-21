@@ -249,7 +249,31 @@ const skills = {
     ...generateMagicSkills('divine', 'Heal', 'heal'),
     ...generateMagicSkills('divine', 'Smite Evil', 'smite_evil'),
     ...generateMagicSkills('divine', 'Divine Protection', 'divine_protection'),
-    ...generateMagicSkills('nature', 'Summon Animal', 'summon_animal')
+    ...generateMagicSkills('nature', 'Summon Animal', 'summon_animal'),
+    'animal_companion': {
+        name: 'Animal Companion',
+        description: 'Passive: Your Nature summons become permanent animal companions. (Max 1)',
+        tree: 'nature',
+        maxRanks: 1,
+        prereq: 'learn_summon_animal',
+        apply: (player) => {}
+    },
+    'companion_str_end': {
+        name: 'Companion Brawn',
+        description: 'Grants +1 STR and +1 END to your animal companion.',
+        tree: 'nature',
+        maxRanks: 1,
+        prereq: 'animal_companion',
+        apply: (player) => {}
+    },
+    'companion_agi_end': {
+        name: 'Companion Grace',
+        description: 'Grants +1 AGI and +1 END to your animal companion.',
+        tree: 'nature',
+        maxRanks: 1,
+        prereq: 'animal_companion',
+        apply: (player) => {}
+    }
 };
 
 function generateWeaponSkills(id, label, maxDmgRanks = 1) {

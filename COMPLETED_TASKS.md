@@ -5,10 +5,29 @@
     - **Campaign 3 (Main)**: Uses the existing large world map.
     - **Campaign 2 (Small World)**: Uses a compact 12x12 world map with a central town.
     - **Campaign 1 (Arena)**: Implemented an arena-style lobby map with NPCs (Announcer, Shopkeeper, Recruiter) and an arena teleportation system for random battles. Players are teleported back to the lobby upon winning.
-- **NPC Interactions**: Added a "Talk" interaction for NPCs, specifically enabling the Arena Announcer to start fights in Campaign 1.
-- **Terrain Overrides & Bug Fixes**:
-    - **setTerrainAt Implementation**: Implemented `setTerrainAt` in `terrain.js` to allow manual terrain overrides, fixing a crash in Campaign 1 lobby generation.
-    - **Cave Floor Terrain**: Added a new `cave_floor` terrain type for arena and lobby maps.
-- **Time & Sleep Improvements**:
-    - **Consistent Time Progression**: Moved `updateTime` to the main `tick` loop to ensure time passes even when characters are not moving or acting.
-    - **Accelerated Sleep**: Modified the sleep logic to fast-forward world time significantly (250x faster) during the sleep cycle, making the 8-hour sleep period pass in seconds of real time.
+- **NPC & Dialogue System**:
+    - **Neutral NPCs**: Set lobby NPCs to a neutral side, ensuring they don't attack and cannot be attacked. They now properly skip their turns in the turn order.
+    - **Dialogue Modal**: Implemented a reusable dialogue system with portraits and choice buttons.
+    - **Proximity Interaction**: Players can now initiate dialogue by clicking on neutral NPCs within a 3-hex range.
+- **Economy & Hiring**:
+    - **Shopkeeper NPC**: Implemented a full shop system with unlimited stock. Added `buyPrice` to all equipment; selling returns 50% of the value.
+    - **Mercenary Recruiter**: Added ability to hire new party members for 100 gold.
+    - **Experience Sync**: Newly hired mercenaries automatically gain experience to match the main character's total accumulated EXP.
+- **Druid Enhancements**:
+    - **Animal Companion Skill**: Added a new Nature skill that makes summoned animals permanent.
+    - **Companion Buffs**: Added follow-up skills to grant Strength, Agility, and Endurance bonuses to permanent companions.
+    - **Dismiss Companion**: Added a dedicated button to dismiss animal companions.
+- **Vision & Lighting**:
+    - **Torch Illumination**: Overhauled Line of Sight logic to support mutual illumination. Torch-bearers are now visible to others in the dark, and they can see others near them.
+    - **Lit Torch Overlay**: Created and implemented a dynamic lit torch SVG overlay for any character with a torch equipped.
+    - **Fireplace Tile Object**: Developed a stationary "fireplace" tile object that provides permanent illumination. Placed a fireplace in the center of the Arena Lobby.
+- **Save/Load Overhaul**:
+    - **Manual Save Slots**: Replaced the single-slot quicksave with a named manual save system.
+    - **Menu Dropdown**: Consolidated UI buttons into a new "Menu" dropdown to declutter the top bar.
+    - **Recency Sorting**: The Load Game menu now lists saves sorted from newest to oldest.
+- **Character Naming**:
+    - **Name Generation**: Created `name.js` with a database of 120 unique names (20 per race/gender combo).
+    - **Automatic Naming**: The game now automatically generates a race-and-gender-appropriate name if the player leaves the name field blank during creation.
+- **Bug Fixes**:
+    - **Duplicate Stealth Buttons**: Fixed a bug where the stealth action button would duplicate every time the UI refreshed by properly clearing the action button container.
+    - **setTerrainAt Implementation**: Fixed a crash in Campaign 1 by correctly implementing and exposing the terrain override function.

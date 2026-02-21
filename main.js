@@ -46,11 +46,83 @@ document.addEventListener("DOMContentLoaded", () => {
             const btn = document.getElementById("move-group-btn");
             btn.innerText = `Move Group: ${window.groupMoveMode ? 'ON' : 'OFF'}`;
             btn.style.backgroundColor = window.groupMoveMode ? '#ff9800' : '#795548';
-        } else if (btnId === "save-btn") {
-            window.saveGame();
-            window.showMessage("Game Saved!");
-        } else if (btnId === "load-btn" || btnId === "load-btn-initial") {
-            window.loadGame();
+        } else if (btnId === "load-btn-initial") {
+            window.loadGame(); // Default load
+        } else if (btnId === "save-menu-btn") {
+            const modal = document.getElementById("save-game-modal");
+            if (modal) {
+                const charName = window.party[0].name;
+                // Default name: CharacterName + lowest available number
+                let i = 1;
+                while (localStorage.getItem(`rpg_save_${charName}_${i}`)) { i++; }
+                document.getElementById("save-name-input").value = `${charName}_${i}`;
+                modal.style.display = "block";
+            }
+        } else if (btnId === "load-menu-btn") {
+            const modal = document.getElementById("load-game-modal");
+            if (modal) {
+                window.updateSaveList();
+                modal.style.display = "block";
+            }
+        } else if (btnId === "confirm-save-btn") {
+            const saveName = document.getElementById("save-name-input").value || "ManualSave";
+            window.saveGame(saveName);
+            document.getElementById("save-game-modal").style.display = "none";
+        } else if (btnId === "quick-save-btn") {
+            window.saveGame("quick_save");
+        } else if (btnId === "quick-load-btn") {
+            window.loadGame("quick_save");
+        } else if (btnId === "confirm-hire-btn") {
+            const mainChar = window.party[0];
+            if (mainChar.gold < 100) {
+                window.showMessage("Not enough gold to hire a mercenary!");
+                return;
+            }
+            
+            const race = document.getElementById("merc-race").value;
+            const gender = document.getElementById("merc-gender").value;
+            const cls = document.getElementById("merc-class").value;
+            let name = document.getElementById("merc-name").value;
+            if (!name) name = window.getRandomName(race, gender);
+
+            mainChar.gold -= 100;
+            const merc = window.createCharacterData(race, cls, name, gender);
+            
+            // Sync EXP
+            const targetTotalExp = window.calculateTotalExp(mainChar.level, mainChar.exp);
+            let currentTotal = 0;
+            while (true) {
+                const req = merc.level * 1000;
+                if (currentTotal + req <= targetTotalExp) {
+                    window.applyLevelUp(merc, cls);
+                    currentTotal += req;
+                } else {
+                    merc.exp = targetTotalExp - currentTotal;
+                    break;
+                }
+            }
+
+            window.party.push(merc);
+            
+            // Spawn next to player
+            const pEnt = window.entities.find(e => e.name === mainChar.name);
+            const neighbors = window.getNeighbors(pEnt.hex.q, pEnt.hex.r);
+            const spawnHex = neighbors.find(n => !window.getEntityAtHex(n.q, n.r) && window.getTerrainAt(n.q, n.r).name !== 'Water') || pEnt.hex;
+            
+            const mercEnt = new window.Entity(merc.name, "blue", spawnHex, merc.attributes.agility + 10);
+            mercEnt.side = 'player';
+            Object.assign(mercEnt, merc);
+            mercEnt.skills = merc.skills;
+            window.entities.push(mercEnt);
+
+            window.showMessage(`${merc.name} the ${race} ${cls} joined the party!`);
+            document.getElementById("mercenary-creation-modal").style.display = "none";
+            window.updatePartyTabs();
+            window.renderEntities();
+        } else if (btnId === "cancel-hire-btn") {
+            document.getElementById("mercenary-creation-modal").style.display = "none";
+        } else if (btnId === "close-shop-modal") {
+            document.getElementById("shop-modal").style.display = "none";
         } else if (btnId === "cheat-jerry-btn") {
             window.addJerry();
         } else if (btnId === "cheat-horse-btn") {
@@ -115,8 +187,11 @@ window.startGame = function() {
   const cls = document.getElementById("class-select").value;
   const gender = document.getElementById("gender-select").value;
   const campaign = document.getElementById("campaign-select").value;
+  let name = document.getElementById("character-name").value;
+  if (!name) name = window.getRandomName(race, gender);
 
   window.initializePlayer(race, cls, gender, campaign);
+  window.party[0].name = name; // Update with generated name if needed
   window.updatePartyTabs();
 
   document.getElementById("characterCreator").style.display = "none";

@@ -1,6 +1,6 @@
 // persistence.js
 
-function saveGame() {
+function saveGame(saveName = "rpg_save_game") {
     if (!window.player) {
         window.showMessage("Nothing to save yet!");
         return;
@@ -9,8 +9,9 @@ function saveGame() {
     const gameState = {
         player: window.player,
         party: window.party,
+        currentCampaign: window.currentCampaign,
         selectedCharacterIndex: window.selectedCharacterIndex,
-        mapTerrain: window.mapTerrain,
+        overrideTerrain: window.overrideTerrain,
         exploredHexes: Array.from(window.exploredHexes),
         mapItems: window.mapItems,
         gamePhase: window.gamePhase,
@@ -29,6 +30,7 @@ function saveGame() {
             timePointsPerTick: e.timePointsPerTick,
             expValue: e.expValue,
             isEnemy: e instanceof window.Enemy,
+            isNPC: e.isNPC,
             alive: e.alive,
             equipped: e.equipped,
             skills: e.skills,
@@ -41,39 +43,51 @@ function saveGame() {
             gold: e.gold,
             inventory: e.inventory,
             side: e.side,
+            gender: e.gender,
+            race: e.race,
             lastSeenTargetHex: e.lastSeenTargetHex
         })),
-        saveDate: new Date().toISOString()
+        saveDate: new Date().toISOString(),
+        saveName: saveName
     };
 
+    const key = saveName.startsWith("rpg_save_") ? saveName : `rpg_save_${saveName}`;
+
     try {
-        localStorage.setItem('rpg_save_game', JSON.stringify(gameState));
-        window.showMessage("Game saved successfully!");
+        localStorage.setItem(key, JSON.stringify(gameState));
+        
+        // Update metadata list
+        let metadata = JSON.parse(localStorage.getItem('rpg_save_metadata') || "[]");
+        metadata = metadata.filter(m => m.key !== key);
+        metadata.push({ key: key, name: saveName, date: gameState.saveDate });
+        localStorage.setItem('rpg_save_metadata', JSON.stringify(metadata));
+
+        window.showMessage(`Game saved as "${saveName}"!`);
     } catch (e) {
         console.error("Save failed", e);
         window.showMessage("Failed to save game. Local storage might be full.");
     }
 }
 
-function loadGame() {
-    const savedData = localStorage.getItem('rpg_save_game');
+function loadGame(saveName = "rpg_save_game") {
+    const key = saveName.startsWith("rpg_save_") ? saveName : `rpg_save_${saveName}`;
+    const savedData = localStorage.getItem(key);
     if (!savedData) {
-        window.showMessage("No saved game found.");
+        window.showMessage(`No saved game found for "${saveName}".`);
         return;
     }
 
     try {
         const gameState = JSON.parse(savedData);
         
-        // 1. Restore Player, Party, and Terrain Data
+        // 1. Restore Player, Party, and Campaign Data
         window.player = gameState.player;
         window.party = gameState.party || [window.player];
+        window.currentCampaign = gameState.currentCampaign || "3";
         window.selectedCharacterIndex = gameState.selectedCharacterIndex || 0;
-        window.mapTerrain = gameState.mapTerrain;
+        window.overrideTerrain = gameState.overrideTerrain || {};
         window.exploredHexes = new Set(gameState.exploredHexes || []);
         window.mapItems = gameState.mapItems || {};
-        // Update the reference in terrain.js closure if needed, but since it's global:
-        Object.assign(window.mapTerrain, gameState.mapTerrain);
 
         // 2. Hide Creator, Show Game
         document.getElementById("characterCreator").style.display = "none";
@@ -100,7 +114,7 @@ function loadGame() {
 
         // Restore turn state
         window.gamePhase = gameState.gamePhase || 'WAITING';
-        if (gameState.currentTurnIndex !== -1) {
+        if (gameState.currentTurnIndex !== -1 && gameState.currentTurnIndex < window.entities.length) {
             window.currentTurnEntity = window.entities[gameState.currentTurnIndex];
         } else {
             window.currentTurnEntity = null;
@@ -121,12 +135,55 @@ function loadGame() {
         window.updateActionButtons();
         window.updateTurnIndicator();
         
-        window.showMessage("Game loaded successfully!");
+        // Close modals
+        document.getElementById("load-game-modal").style.display = "none";
+
+        window.showMessage(`Game "${gameState.saveName || saveName}" loaded successfully!`);
     } catch (e) {
         console.error("Load failed", e);
         window.showMessage("Failed to load game. Save data might be corrupted.");
     }
 }
+
+function updateSaveList() {
+    const listDiv = document.getElementById("save-list");
+    if (!listDiv) return;
+    listDiv.innerHTML = '';
+
+    const metadata = JSON.parse(localStorage.getItem('rpg_save_metadata') || "[]");
+    // Sort by date (newest first)
+    metadata.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    if (metadata.length === 0) {
+        listDiv.innerHTML = '<p style="color: #888;">No saves found.</p>';
+        return;
+    }
+
+    metadata.forEach(m => {
+        const div = document.createElement("div");
+        div.style.display = "flex";
+        div.style.justifyContent = "space-between";
+        div.style.alignItems = "center";
+        div.style.padding = "10px";
+        div.style.borderBottom = "1px solid #444";
+
+        const info = document.createElement("div");
+        const date = new Date(m.date).toLocaleString();
+        info.innerHTML = `<strong>${m.name}</strong><br><small style="color: #aaa;">${date}</small>`;
+        
+        const loadBtn = document.createElement("button");
+        loadBtn.innerText = "Load";
+        loadBtn.onclick = () => loadGame(m.key);
+
+        div.appendChild(info);
+        div.appendChild(loadBtn);
+        listDiv.appendChild(div);
+    });
+}
+
+window.saveGame = saveGame;
+window.loadGame = loadGame;
+window.updateSaveList = updateSaveList;
 
 window.saveGame = saveGame;
 window.loadGame = loadGame;
