@@ -1,2 +1,5 @@
-I've added elffemalehair.png to images. PLease overlay that for female elf characters
-the dwarf chatacters are roo big. can we shrink by 20%
+I've added elffemalehair.png to images. Please overlay that for female elf characters
+the dwarf characters are too big. can we shrink by 20%
+
+campaigns: ive defined a world map, and a series of more zoomed in maps that define my world. however, i now want three different campaigns, each of which have their own map system. you should be able to select whoch campaign you wish to olay, at the character creation screen. The current map set should be for campaign 3 - called main. campaign 2 should use a smaller, 12 by 12 world map. battle maps should be generated the same. campaign 1 is an arena battle system, like black pits from baldurs gate 1. there is no world map. we start in a lobby. please build a hex map for a libby, sufficient to hold an arena npc, a shopkeeper and someone whom i can hire mercenaries from. you will need to create some images to make this look good. use your imagination. the vibe is gritty fantasy arena. talking to the announcer lets you start a fight. this teleports you to a random battle map, shaped like a rectangle around 50 hexes across. fully surrounded by walls. winning the fight teleports you back to the start. spawn enemies in the battle map. they should be - small number of random enemies
+

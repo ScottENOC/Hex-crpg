@@ -1,43 +1,85 @@
 #!/bin/bash
 
-# Files
+set -e
+
+# -----------------------
+# Config
+# -----------------------
 TASK_FILE="TASKS.md"
 COMPLETED_FILE="COMPLETED_TASKS.md"
+BRANCH="agent-work"
+TIMESTAMP=$(date +"%Y-%m-%d %H:%M:%S")
 
-# Ensure COMPLETED_TASKS.md exists
-touch $COMPLETED_FILE
+# -----------------------
+# Ensure files exist
+# -----------------------
+touch "$COMPLETED_FILE"
 
-# Read tasks line by line
+# Ensure agent branch exists locally
+if ! git show-ref --verify --quiet refs/heads/$BRANCH; then
+  echo "Creating $BRANCH branch..."
+  git checkout -b $BRANCH
+  git push -u origin $BRANCH
+  git checkout main
+fi
+
+echo "Starting agent run..."
+
+# -----------------------
+# Process tasks
+# -----------------------
 while IFS= read -r TASK; do
-  # Skip empty lines
+
   [ -z "$TASK" ] && continue
 
-  # Skip tasks already completed
-  if grep -Fxq "$TASK" $COMPLETED_FILE; then
+  if grep -Fxq "$TASK" "$COMPLETED_FILE"; then
     echo "Skipping already completed task: $TASK"
     continue
   fi
 
+  echo "---------------------------------"
   echo "Executing task: $TASK"
+  echo "---------------------------------"
 
-  # Run Gemini with error handling
   OUTPUT=$(gemini -p "Read AGENT_CONTEXT.md. Task: $TASK. Modify project files accordingly. Summarize changes." 2>&1)
+  GEMINI_EXIT=$?
 
-  # Check if output contains quota error
+  # Detect quota issue
   if echo "$OUTPUT" | grep -iq "quota"; then
-    echo "Quota reached. Stopping agent."
+    echo "Quota reached. Stopping agent safely."
     break
   fi
 
-  # Optionally print Gemini output
+  # If Gemini failed for other reason
+  if [ $GEMINI_EXIT -ne 0 ]; then
+    echo "Gemini failed with exit code $GEMINI_EXIT. Stopping."
+    break
+  fi
+
   echo "$OUTPUT"
 
-  # Log completed task
-  echo "$TASK" >> $COMPLETED_FILE
+  # -----------------------
+  # Commit + Push (Safe)
+  # -----------------------
+  if [[ -n $(git status --porcelain) ]]; then
+    echo "Changes detected. Committing..."
 
-  # Ask user to commit changes
-  echo "Review changes with: git status"
-  echo "If satisfied, run: git add . && git commit -m 'Agent: $TASK' && git push"
+    git checkout $BRANCH
+
+    git add .
+    git commit -m "Agent: $TASK ($TIMESTAMP)"
+
+    git push origin $BRANCH
+
+    echo "Changes pushed to $BRANCH."
+
+    git checkout main
+  else
+    echo "No file changes detected."
+  fi
+
+  # Only mark task complete AFTER successful push
+  echo "$TASK" >> "$COMPLETED_FILE"
 
 done < "$TASK_FILE"
 
