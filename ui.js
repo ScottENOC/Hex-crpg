@@ -128,12 +128,11 @@ function toggleSleep() {
             return;
         }
         window.isSleeping = true;
+        window.startSleepTime = window.worldSeconds; // Record when we started
         // Initialize sleep timer for all player entities if needed
         window.entities.forEach(e => {
             if (e.side === 'player' && e.name !== 'Wolf' && e.name !== 'Horse') {
-                if (e.sleepRemainingSeconds <= 0) {
-                    e.sleepRemainingSeconds = 8 * 3600; // 8 hours
-                }
+                e.sleepRemainingSeconds = 8 * 3600; // 8 hours
             }
         });
         showMessage("Going to sleep...");

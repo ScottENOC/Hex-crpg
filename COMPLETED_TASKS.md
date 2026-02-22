@@ -1,3 +1,16 @@
+- **Arena Environment Overhaul**:
+    - **Indoor vs. Outdoor**: Arena matches now have a 50/50 chance of being indoors (windowless, pitch black) or outdoors (time-of-day lighting).
+    - **Lobby Lighting**: The Arena Lobby is now correctly 0% lit by the sun, relying entirely on internal light sources like the fireplace.
+    - **Dynamic Lighting**: Indoor arenas have a 50% chance to contain randomized campfires for illumination.
+- **Improved Alert System**:
+    - Implemented a recursive alert/wake-up system. When an enemy is alerted, they chain-alert all allies within 10 hexes.
+    - Standardized enemy alliances for the Arena campaign to ensure coordinated AI responses.
+- **Party & Companion Fixes**:
+    - **Mount Teleportation**: Ensured that horses and other mounts correctly join the party when teleporting to and from arena matches.
+- **Sleep & Time Mechanics**:
+    - **Sleep Functionality**: Fixed the sleep button to correctly pass exactly 8 hours of game time.
+    - **Fast-Forward**: Optimized sleep logic to process Time Point distribution 1000x faster, removing artificial delays.
+    - **Sleep Interrupts**: Sleep is now correctly interrupted by taking damage or spotting an enemy.
 - **Stealth Overhaul**:
     - Converted Stealth into a movement toggle rather than a one-time roll. Moving while stealthed adds a 4 TP penalty per hex.
     - Added **Speedy Stealth** Rogue skill to reduce the movement penalty by 2 TP.

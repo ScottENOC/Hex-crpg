@@ -766,8 +766,8 @@ function tick() {
         }
 
         if (window.isSleeping) {
-            const allRested = sentientAllies.every(e => e.sleepRemainingSeconds <= 0);
-            if (allRested) {
+            const secondsPassed = window.worldSeconds - (window.startSleepTime || 0);
+            if (secondsPassed >= 8 * 3600) {
                 window.isSleeping = false;
                 sentientAllies.forEach(e => e.awakeSeconds = 0);
                 window.showMessage("Sleep complete. Everyone is well rested.");
@@ -775,17 +775,20 @@ function tick() {
             }
         }
 
-        // CHECK INTERRUPT: Enemy seen (Common for both)
+        // CHECK INTERRUPT: Enemy seen or damage taken (Common for both)
         const enemySeen = window.entities.some(e => e.alive && e.side === 'enemy' && window.isVisibleToPlayer(e.hex));
-        if (enemySeen) {
-            if (window.isResting) { window.isResting = false; window.showMessage("Rest interrupted by enemy!"); window.updateRestButton(); }
-            if (window.isSleeping) { window.isSleeping = false; window.showMessage("Sleep interrupted by enemy!"); window.updateSleepButton(); }
+        const anyoneHurt = sentientAllies.some(e => e.hp < (e.lastHp || e.hp)); // Simple check if HP decreased
+        if (enemySeen || anyoneHurt) {
+            if (window.isResting) { window.isResting = false; window.showMessage("Rest interrupted!"); window.updateRestButton(); }
+            if (window.isSleeping) { window.isSleeping = false; window.showMessage("Sleep interrupted!"); window.updateSleepButton(); }
         }
+        sentientAllies.forEach(e => e.lastHp = e.hp);
 
         // FAST FORWARD SLEEP
         if (window.isSleeping) {
             // Speed up sleep significantly: run many ticks per real tick
-            for(let i=0; i<500; i++) {
+            // Run 1000 ticks per real tick, no extra delay
+            for(let i=0; i<1000; i++) {
                 runTickInternal();
                 if (!window.isSleeping) break;
             }
@@ -1177,17 +1180,20 @@ function wakeUp(entity) {
     if (entity.aiState === 'combat') return;
     entity.aiState = 'combat';
     
-    // Set all players to 0 TP when combat starts (surprise/reset)
-    window.entities.forEach(e => {
-        if (e.side === 'player') e.timePoints = 0;
-    });
+    // Reset players initiative if this is the start of combat
+    if (!window.entities.some(e => e.side !== 'player' && e.aiState === 'combat' && e !== entity)) {
+        window.entities.forEach(e => {
+            if (e.side === 'player') e.timePoints = 0;
+        });
+    }
 
-    // Chain reaction
-    const neighbors = window.entities.filter(e => e.side === entity.side && e !== entity && window.distance(e.hex, entity.hex) < 15);
-    neighbors.forEach(n => {
-        if (n.aiState === 'idle') {
-            n.aiState = 'combat';
-            window.showMessage(`${n.name} hears the commotion and wakes up!`);
+    // Chain reaction: Alert allies within 10 hexes
+    // In arena, all non-player/neutral side entities are allies
+    const allies = window.entities.filter(e => e.alive && e.side === entity.side && e !== entity && e.aiState !== 'combat');
+    allies.forEach(a => {
+        if (window.distance(a.hex, entity.hex) <= 10) {
+            window.showMessage(`${a.name} is alerted by ${entity.name}!`);
+            wakeUp(a); // Recursive chain
         }
     });
 }
@@ -2025,10 +2031,11 @@ function setupArenaLobby() {
     window.mapItems = {};
     window.overrideTerrain = {};
     window.tileObjects = {};
-    window.exploredHexes = new Set(); // Reset visibility for new 'level'
-    window.indoorLightMult = 0.0; // Lobby is indoor (no sun)
+    window.exploredHexes = new Set(); 
+    window.indoorLightMult = 0.0; // Lobby is 0% daylight
     window.lobbyTPSpent = 0;
     window.hasTriggeredImpatience = false;
+    window.startSleepTime = 0; // Track sleep start
 
     // Create a 20x20 stone lobby
     for (let q = -10; q <= 10; q++) {
@@ -2091,13 +2098,23 @@ function startArenaFight() {
     window.isInArena = true;
     window.triggerAmbientDialogue('arena_fight_start');
     
-    // 1. Clear Lobby / Level Transition
-    window.overrideTerrain = {}; // Remove lobby floor
-    window.tileObjects = {}; // Remove lobby fireplace
-    window.exploredHexes = new Set(); // Fog of war reset
-    window.indoorLightMult = 0.0; // Arena is also indoor/dark
-    window.entities = window.entities.filter(e => e.side === 'player'); // Only players/allies stay
-    window.entities.forEach(e => e.timePoints = 0); // Reset TP for fresh initiative
+    // 1. Level Transition
+    window.overrideTerrain = {}; 
+    window.tileObjects = {}; 
+    window.exploredHexes = new Set(); 
+    
+    // 50/50 Indoor vs Outdoor
+    const isIndoor = Math.random() < 0.5;
+    window.indoorLightMult = isIndoor ? 0.0 : 1.0;
+    if (isIndoor) {
+        window.showMessage("The air grows stale and cold... you are in an indoor pit.");
+    } else {
+        window.showMessage("The sun (or moon) shines down on the open arena.");
+    }
+
+    // Filter to keep players AND their mounts/allies
+    window.entities = window.entities.filter(e => e.side === 'player'); 
+    window.entities.forEach(e => e.timePoints = 0); 
 
     // 2. Create arena map (50x50 rectangle)
     const arenaSize = 25;
@@ -2107,13 +2124,19 @@ function startArenaFight() {
                  window.setTerrainAt(q, r, 'Wall');
             } else {
                  window.setTerrainAt(q, r, 'Cave Floor');
+                 // 50% chance for some campfires if indoor
+                 if (isIndoor && Math.random() < 0.02) {
+                     window.tileObjects[`${q},${r}`] = { type: 'fireplace', lightRadius: 10 };
+                 }
             }
         }
     }
 
     // 3. Spawn players at one end and center camera
     window.entities.forEach((e, i) => {
+        // Simple offset spawn
         e.hex = { q: -arenaSize + 5, r: i - Math.floor(window.entities.length/2) };
+        if (e.riding) e.riding.hex = { q: e.hex.q, r: e.hex.r };
     });
     if (window.entities.length > 0) {
         window.centerCameraOn(window.entities[0].hex);
