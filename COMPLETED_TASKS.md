@@ -2,10 +2,12 @@
 - **NPC Improvements**:
     - Assigned specific images to Arena NPCs: `arenaannouncer.png`, `arenashopkeeper.png`, and `arenamercenary.png`.
     - Implemented a dialogue system for these NPCs.
+    - **NPC Image Rendering**: Updated `renderEntities` to ensure neutral NPCs with custom images are correctly rendered using their assigned `.png` files instead of colored circles.
 - **Grishnak Encounter**: Added Grishnak, a custom Orc boss with arcane/wizard skills and 40 HP. He has a 10% chance to appear in arena fights until defeated.
 - **Arena Visuals**: 
     - Implemented floor randomization using `arenaHexFloor1-4.png` for Cave Floor tiles in Campaign 1.
     - Added 10% chance for `overlay blood.png` or `overlay skull.png` on these tiles.
+    - **Skull Overlay Adjustment**: Shrunk the skull overlay image to 25% of its original size and reduced its appearance frequency from 10% to 1% for a more subtle effect.
 - **New Spells**:
     - **Counterspell (Arcane)**: Dispel target summoned creature or random buff/debuff. Can also target hexes to remove AOE effects.
     - **Entangle (Nature)**: AOE debuff that marks hexes as 'Swamp' (visual representation), doubling movement cost.
@@ -18,6 +20,7 @@
 - **Ambient Dialogue**:
     - Created `dialogue.js` to store background flavor text.
     - Implemented triggers for the Announcer to comment on gladiator "cold feet" if spending too long in the lobby, and other combat-related lines.
+    - **Announcer Trigger Delay**: Increased the threshold for the Announcer's "cold feet" line from 50 to 150 timePoints to better reflect actual player inactivity.
 - **Campaign Level Caps**: Enforced level caps: Campaign 1 (50), Campaign 2 (5), Campaign 3 (50).
 - **Bug Fixes**:
     - Fixed a crash in the shop UI when inventory contained undefined items.

@@ -633,7 +633,7 @@ function renderEntities() {
             const weaponSize = window.hexSize * 1.0 * z; 
             window.mapCtx.drawImage(window.gameVisuals.swordIcon, x - (window.hexSize/2 + 5) * z, y - weaponSize/2, weaponSize, weaponSize);
         }
-    } else if (e instanceof window.Enemy && window.gameVisuals) {
+    } else if ((e instanceof window.Enemy || e.customImage) && window.gameVisuals) {
         let size = window.hexSize * 1.5 * z;
         let yOffset = 0;
 
@@ -839,7 +839,7 @@ function runTickInternal() {
         // AMBIENT DIALOGUE (Arena Lobby)
         if (window.currentCampaign === "1" && !window.isInArena) {
             window.lobbyTPSpent = (window.lobbyTPSpent || 0) + 1;
-            if (window.lobbyTPSpent > 50 && !window.hasTriggeredImpatience) {
+            if (window.lobbyTPSpent > 150 && !window.hasTriggeredImpatience) {
                 window.triggerAmbientDialogue('arena_lobby_1');
                 window.hasTriggeredImpatience = true;
             }

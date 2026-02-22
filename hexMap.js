@@ -93,11 +93,12 @@ function drawMap() {
                   drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
               }
 
-              // Overlays (10% Blood, 10% Skull)
+              // Overlays (10% Blood, 1% Skull)
               if (noise < 0.1 && window.gameVisuals.overlay_blood.complete) {
                   mapCtx.drawImage(window.gameVisuals.overlay_blood, x - zoomedSize/2, y - zoomedSize/2, zoomedSize, zoomedSize);
-              } else if (noise > 0.9 && window.gameVisuals.overlay_skull.complete) {
-                  mapCtx.drawImage(window.gameVisuals.overlay_skull, x - zoomedSize/2, y - zoomedSize/2, zoomedSize, zoomedSize);
+              } else if (noise > 0.99 && window.gameVisuals.overlay_skull.complete) {
+                  const skullSize = zoomedSize * 0.25;
+                  mapCtx.drawImage(window.gameVisuals.overlay_skull, x - skullSize/2, y - skullSize/2, skullSize, skullSize);
               }
           } else {
               drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
