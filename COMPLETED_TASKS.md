@@ -1,38 +1,24 @@
-- **Elf Female Hair Overlay**: Added `elffemalehair.png` overlay for female Elf characters in both the game map and turn indicator UI.
-- **Dwarf Character Shrinking**: Reduced Dwarf character size by 20% on the map and in the turn indicator for a more appropriate scale.
-- **Campaign System**:
-    - **Campaign Selection**: Added a campaign selection dropdown to the character creation screen.
-    - **Campaign 3 (Main)**: Uses the existing large world map.
-    - **Campaign 2 (Small World)**: Uses a compact 12x12 world map with a central town.
-    - **Campaign 1 (Arena)**: Implemented an arena-style lobby map with NPCs (Announcer, Shopkeeper, Recruiter) and an arena teleportation system for random battles. Players are teleported back to the lobby upon winning.
-- **NPC & Dialogue System**:
-    - **Neutral NPCs**: Set lobby NPCs to a neutral side, ensuring they don't attack and cannot be attacked. They now properly skip their turns in the turn order.
-    - **Dialogue Modal**: Implemented a reusable dialogue system with portraits and choice buttons.
-    - **Proximity Interaction**: Players can now initiate dialogue by clicking on neutral NPCs within a 3-hex range.
-- **Economy & Hiring**:
-    - **Shopkeeper NPC**: Implemented a full shop system with unlimited stock. Added `buyPrice` to all equipment; selling returns 50% of the value.
-    - **Mercenary Recruiter**: Added ability to hire new party members for 100 gold.
-    - **Experience Sync**: Newly hired mercenaries automatically gain experience to match the main character's total accumulated EXP.
-- **Druid Enhancements**:
-    - **Animal Companion Skill**: Added a new Nature skill that makes summoned animals permanent.
-    - **Companion Buffs**: Added follow-up skills to grant Strength, Agility, and Endurance bonuses to permanent companions.
-    - **Dismiss Companion**: Added a dedicated button to dismiss animal companions.
-- **Vision & Lighting**:
-    - **Torch Illumination**: Overhauled Line of Sight logic to support mutual illumination. Torch-bearers are now visible to others in the dark, and they can see others near them.
-    - **Lit Torch Overlay**: Created and implemented a dynamic lit torch SVG overlay for any character with a torch equipped.
-    - **Fireplace Tile Object**: Developed a stationary "fireplace" tile object that provides permanent illumination. Placed a fireplace in the center of the Arena Lobby.
-- **Save/Load Overhaul**:
-    - **Manual Save Slots**: Replaced the single-slot quicksave with a named manual save system.
-    - **Menu Dropdown**: Consolidated UI buttons into a new "Menu" dropdown to declutter the top bar.
-    - **Recency Sorting**: The Load Game menu now lists saves sorted from newest to oldest.
-- **Character Naming**:
-    - **Name Generation**: Created `name.js` with a database of 120 unique names (20 per race/gender combo).
-    - **Automatic Naming**: The game now automatically generates a race-and-gender-appropriate name if the player leaves the name field blank during creation.
-- **Dwarf Male Hair Overlay**: Added `dwarfmalehair.png` overlay for male Dwarf characters in both the game map and turn indicator UI.
-- **World Time Overhaul**:
-    - **Action-Point-Based Time**: Tied world time progression directly to the distribution of Time Points (TP). The clock now ticks 0.4 seconds only when characters receive TP.
-    - **Input-Paused Time**: World time no longer passes while the game is waiting for player input, ensuring a more consistent and logical flow of time.
-    - **Fast-Forward Sleep**: Optimized sleep logic to rapidly cycle through TP distribution, allowing 8 hours of game time to pass quickly in real time.
+- **Spider Monster**: Added a new spider monster with two random images (`spider1.png`, `spider2.png`). Implemented "Poison Bite" (50% chance, 2 dmg/tick for 10 ticks) and "Web Fling" (range 10, prevents movement for 40 TP spent, used once per spider with priority on non-webbed targets).
+- **NPC Improvements**:
+    - Assigned specific images to Arena NPCs: `arenaannouncer.png`, `arenashopkeeper.png`, and `arenamercenary.png`.
+    - Implemented a dialogue system for these NPCs.
+- **Grishnak Encounter**: Added Grishnak, a custom Orc boss with arcane/wizard skills and 40 HP. He has a 10% chance to appear in arena fights until defeated.
+- **Arena Visuals**: 
+    - Implemented floor randomization using `arenaHexFloor1-4.png` for Cave Floor tiles in Campaign 1.
+    - Added 10% chance for `overlay blood.png` or `overlay skull.png` on these tiles.
+- **New Spells**:
+    - **Counterspell (Arcane)**: Dispel target summoned creature or random buff/debuff. Can also target hexes to remove AOE effects.
+    - **Entangle (Nature)**: AOE debuff that marks hexes as 'Swamp' (visual representation), doubling movement cost.
+    - **Spell Expansion**: Added 'Arcane/Divine/Nature Expansion' skills (3 ranks) to increase AOE radius (+10 mana per rank).
+- **Magic Items**:
+    - **Sword of Arrow Deflection**: Allows parrying arrows using the sword parry skill.
+    - **Potion of Health**: Consumable that heals the player for 5 HP (uses 1 TP).
+    - **Glowing Ring**: Accessory that provides illumination equal to a torch without occupying a hand slot.
+    - Added accessory slot and 'Drink' button to the inventory UI.
+- **Ambient Dialogue**:
+    - Created `dialogue.js` to store background flavor text.
+    - Implemented triggers for the Announcer to comment on gladiator "cold feet" if spending too long in the lobby, and other combat-related lines.
+- **Campaign Level Caps**: Enforced level caps: Campaign 1 (50), Campaign 2 (5), Campaign 3 (50).
 - **Bug Fixes**:
-    - **Duplicate Stealth Buttons**: Fixed a bug where the stealth action button would duplicate every time the UI refreshed by properly clearing the action button container.
-    - **setTerrainAt Implementation**: Fixed a crash in Campaign 1 by correctly implementing and exposing the terrain override function.
+    - Fixed a crash in the shop UI when inventory contained undefined items.
+    - Resolved duplicate stealth button bug by clearing the action container properly.
