@@ -60,6 +60,11 @@ function playerMoveProcess(player, path) {
         
         const moveEntity = player.riding || player;
         let baseMoveCost = 5;
+        if (player.isStealthed) {
+            let stealthPenalty = 4;
+            if (player.skills?.speedy_stealth) stealthPenalty -= 2;
+            baseMoveCost += stealthPenalty;
+        }
         if (moveEntity.skills) {
             if (moveEntity.skills['fastMovement']) {
                 const isLightOrNoArmor = !moveEntity.equipped || !moveEntity.equipped.armor || window.items[moveEntity.equipped.armor].id === 'light_armor';
@@ -350,8 +355,11 @@ function startGameCore(isLoading = false) {
       skeleton: new Image(),
       zombie: new Image(),
       imp: new Image(),
+      wolf: new Image(),
       torch_lit: new Image(),
       fireplace: new Image(),
+      axe: new Image(),
+      troll: new Image(),
       spider1: new Image(),
       spider2: new Image(),
       arenaannouncer: new Image(),
@@ -389,8 +397,11 @@ function startGameCore(isLoading = false) {
   visuals.skeleton.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.zombie.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.imp.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.wolf.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.torch_lit.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.fireplace.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.axe.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.troll.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.spider1.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.spider2.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.arenaannouncer.onload = () => { window.drawMap(); window.renderEntities(); };
@@ -429,8 +440,11 @@ function startGameCore(isLoading = false) {
   visuals.skeleton.src = 'images/skeleton.svg';
   visuals.zombie.src = 'images/zombie.svg';
   visuals.imp.src = 'images/imp.svg';
+  visuals.wolf.src = 'images/wolf.png';
   visuals.torch_lit.src = 'images/torch_lit.svg';
   visuals.fireplace.src = 'images/fireplace.svg';
+  visuals.axe.src = 'images/axe.png';
+  visuals.troll.src = 'images/troll.png';
   visuals.spider1.src = 'images/spider1.png';
   visuals.spider2.src = 'images/spider2.png';
   visuals.arenaannouncer.src = 'images/arenaannouncer.png';
@@ -533,157 +547,177 @@ function renderEntities() {
       return az - bz;
   });
 
-  sorted.forEach(e => {
-    const {x,y} = window.hexToPixel(e.hex.q, e.hex.r);
-    // Basic off-screen culling for drawing
-    if (x < -100 || y < -100 || x > window.mapCanvas.width + 100 || y > window.mapCanvas.height + 100) return;
-
-    if (e.isStealthed) window.mapCtx.globalAlpha = 0.5;
-    
-    const isSentientAlly = e.side === 'player' && e.name !== 'Wolf' && e.name !== 'Horse';
-
-    if (isSentientAlly && window.gameVisuals) {
-        const size = window.hexSize * 2.0 * z;
-        
-        if (e.race === 'human') {
-            const humanSizeMult = e.gender === 'male' ? 1.8 : 1.6; // 10% vs 20% smaller than 2.0
-            const humanSize = window.hexSize * humanSizeMult * z;
-            const humanYOff = (humanSizeMult * -3) * z; // Proportional offset
-            const humanHeightAdd = (humanSizeMult * 6) * z;
-
-            // LAYER: Human Base (Gendered)
-            const baseImg = e.gender === 'male' ? window.gameVisuals.humanMaleBase : window.gameVisuals.humanBase;
-            if (baseImg.complete) {
-                window.mapCtx.drawImage(baseImg, x - humanSize/2, y - humanSize/2 + humanYOff, humanSize, (humanSize + humanHeightAdd));
-            }
-            // LAYER: Human Hair (ONLY FOR FEMALE, MOVED UP 3px * z)
-            if (e.gender !== 'male' && window.gameVisuals.humanHair.complete) {
-                window.mapCtx.drawImage(window.gameVisuals.humanHair, x - humanSize/2, y - humanSize/2 + humanYOff - (3 * z), humanSize, (humanSize + humanHeightAdd));
-            }
-            // LAYER: Human Helmet
-            if (e.equipped && e.equipped.helmet === 'nasal_helm' && window.gameVisuals.nasal_helm.complete) {
-                window.mapCtx.drawImage(window.gameVisuals.nasal_helm, x - humanSize/2, y - humanSize/2 + humanYOff, humanSize, (humanSize + humanHeightAdd));
-            }
-            // LAYER: Human Armour
-            let armorImg = null;
-            if (e.equipped && e.equipped.armor) {
-                const aid = e.equipped.armor;
-                if (aid === 'light_armor') armorImg = window.gameVisuals.humanLight;
-                else if (aid === 'medium_armor') armorImg = window.gameVisuals.humanMedium;
-                else if (aid === 'heavy_armor') armorImg = window.gameVisuals.humanHeavy;
-            }
-            if (armorImg && armorImg.complete) {
-                window.mapCtx.drawImage(armorImg, x - humanSize/2, y - humanSize/2 + humanYOff, humanSize, (humanSize + humanHeightAdd));
-            }
-            
-            // LAYER: Shield (Human Scale)
-            if (e.equipped && e.equipped.offhand && window.items[e.equipped.offhand].type === 'shield' && window.gameVisuals.shield.complete) {
-                window.mapCtx.drawImage(window.gameVisuals.shield, x - humanSize/2, y - humanSize/2 + humanYOff, humanSize, humanSize + humanHeightAdd);
-            }
-        } else {
-            // LAYER: Non-human (Elf/Dwarf) Base
-            let baseImg = null;
-            let currentSize = size;
-            let currentYOff = -6 * z;
-            let currentHeight = size + 12 * z;
-
-            if (e.race === 'elf') {
-                baseImg = e.gender === 'male' ? window.gameVisuals.elfMaleBase : window.gameVisuals.elfFemaleBase;
-            } else if (e.race === 'dwarf') {
-                baseImg = e.gender === 'male' ? window.gameVisuals.dwarfMaleBase : window.gameVisuals.dwarfFemaleBase;
-                // Dwarf 20% smaller
-                currentSize = size * 0.8;
-                currentHeight = (size + 12 * z) * 0.8;
-                currentYOff = -2 * z; 
-            } else {
-                baseImg = window.gameVisuals.playerBase; // Fallback
-            }
-
-            if (baseImg && baseImg.complete) {
-                window.mapCtx.drawImage(baseImg, x - currentSize/2, y - currentSize/2 + currentYOff, currentSize, currentHeight);
-            }
-
-            // LAYER: Dwarf Male Hair
-            if (e.race === 'dwarf' && e.gender === 'male' && window.gameVisuals.dwarfMaleHair.complete) {
-                window.mapCtx.drawImage(window.gameVisuals.dwarfMaleHair, x - currentSize/2, y - currentSize/2 + currentYOff, currentSize, currentHeight);
-            }
-
-            // LAYER: Elf Female Hair
-            if (e.race === 'elf' && e.gender === 'female' && window.gameVisuals.elfFemaleHair.complete) {
-                window.mapCtx.drawImage(window.gameVisuals.elfFemaleHair, x - currentSize/2, y - currentSize/2 + currentYOff, currentSize, currentHeight);
-            }
-
-            // LAYER: Non-human Armour
-            let armorImg = null;
-            if (e.equipped && e.equipped.armor) {
-                const armorId = e.equipped.armor;
-                if (armorId === 'medium_armor' || armorId === 'heavy_armor') armorImg = window.gameVisuals.chainArmor;
-                else if (armorId === 'light_armor') armorImg = window.gameVisuals.leatherArmor;
-            }
-            if (armorImg && armorImg.complete) {
-                window.mapCtx.drawImage(armorImg, x - currentSize/2, (y - currentSize/2) + (15 * z), currentSize, currentSize);
-            }
-            // LAYER: Shield (Elf/Dwarf Scale)
-            if (e.equipped && e.equipped.offhand && window.items[e.equipped.offhand].type === 'shield' && window.gameVisuals.shield.complete) {
-                const shieldSize = currentSize;
-                window.mapCtx.drawImage(window.gameVisuals.shield, x - shieldSize/2, y - shieldSize/2 + currentYOff, shieldSize, currentHeight);
-            }
-        }
-        if (e.equipped && e.equipped.weapon === 'sword' && window.gameVisuals.swordIcon.complete) {
-            const weaponSize = window.hexSize * 1.0 * z; 
-            window.mapCtx.drawImage(window.gameVisuals.swordIcon, x - (window.hexSize/2 + 5) * z, y - weaponSize/2, weaponSize, weaponSize);
-        }
-    } else if ((e instanceof window.Enemy || e.customImage) && window.gameVisuals) {
-        let size = window.hexSize * 1.5 * z;
-        let yOffset = 0;
-
-        if (e.name === 'Horse') {
-            size = window.hexSize * 4.5 * z; // 3x of 1.5
-            yOffset = (Math.sqrt(3) * window.hexSize / 2) * z;
-        }
-
-        let img = window.gameVisuals.monsterDefault;
-        if (e.name === 'Orc' && window.gameVisuals.orcBase.complete) img = window.gameVisuals.orcBase;
-        if (e.name === 'Grishnak' && window.gameVisuals.grishnak.complete) img = window.gameVisuals.grishnak;
-        if (e.name === 'Spider' && e.spiderImage && window.gameVisuals[e.spiderImage]?.complete) img = window.gameVisuals[e.spiderImage];
-        if (e.customImage && window.gameVisuals[e.customImage]?.complete) img = window.gameVisuals[e.customImage];
-        if (e.name === 'Horse' && window.gameVisuals.horse.complete) img = window.gameVisuals.horse;
-        if (e.name === 'Skeleton' && window.gameVisuals.skeleton.complete) img = window.gameVisuals.skeleton;
-        if (e.name === 'Zombie' && window.gameVisuals.zombie.complete) img = window.gameVisuals.zombie;
-        if (e.name === 'Imp' && window.gameVisuals.imp.complete) img = window.gameVisuals.imp;
-        
-        try {
-            if (img && img.complete) {
-                window.mapCtx.drawImage(img, x - size/2, y - size/2 + yOffset, size, size);
-            }
-        } catch (err) {}
-
-        if (e.mountSize > 0 && e.equipped && e.equipped.armor) {
-            const armorId = e.equipped.armor;
-            let armorImg = (armorId === 'medium_armor' || armorId === 'heavy_armor') ? window.gameVisuals.chainArmor : window.gameVisuals.leatherArmor;
-            if (armorImg && armorImg.complete) {
-                window.mapCtx.drawImage(armorImg, x - size/2, y - size/2 + (5 * z), size, size);
-            }
-        }
-
-        if (e.extraHexes.length > 0 && e.name !== 'Horse') {
-            const offsets = [{q:0, r:0}, ...e.extraHexes];
-            const labels = ['f', 'l', 'r'];
-            const prefix = 'T';
-            offsets.forEach((off, i) => {
-                const hp = window.hexToPixel(e.hex.q + off.q, e.hex.r + off.r);
-                window.mapCtx.fillStyle = "white";
-                window.mapCtx.font = `${12 * z}px Arial`;
-                window.mapCtx.fillText(prefix + labels[i], hp.x - 5*z, hp.y + 5*z);
-            });
-        }
-
-        if (e.equipped && e.equipped.weapon === 'sword' && window.gameVisuals.swordIcon.complete) {
-            const weaponSize = window.hexSize * 0.8 * z;
-            window.mapCtx.drawImage(window.gameVisuals.swordIcon, x - (window.hexSize/2 + 5) * z, y - weaponSize/2, weaponSize, weaponSize);
-        }
-
-        // AI State Indicator
+      sorted.forEach(e => {
+      const {x,y} = window.hexToPixel(e.hex.q, e.hex.r);
+      // Basic off-screen culling for drawing
+      if (x < -100 || y < -100 || x > window.mapCanvas.width + 100 || y > window.mapCanvas.height + 100) return;
+  
+      if (e.isStealthed) window.mapCtx.globalAlpha = 0.5;
+      
+      const isSentientAlly = e.side === 'player' && e.name !== 'Wolf' && e.name !== 'Horse';
+  
+      if (isSentientAlly && window.gameVisuals) {
+          const size = window.hexSize * 2.0 * z;
+          
+          if (e.race === 'human') {
+              const humanSizeMult = e.gender === 'male' ? 1.8 : 1.6; // 10% vs 20% smaller than 2.0
+              const humanSize = window.hexSize * humanSizeMult * z;
+              const humanYOff = (humanSizeMult * -3) * z; // Proportional offset
+              const humanHeightAdd = (humanSizeMult * 6) * z;
+  
+              // LAYER: Human Base (Gendered)
+              const baseImg = e.gender === 'male' ? window.gameVisuals.humanMaleBase : window.gameVisuals.humanBase;
+              if (baseImg.complete) {
+                  window.mapCtx.drawImage(baseImg, x - humanSize/2, y - humanSize/2 + humanYOff, humanSize, (humanSize + humanHeightAdd));
+              }
+              // LAYER: Human Hair (ONLY FOR FEMALE, MOVED UP 3px * z)
+              if (e.gender !== 'male' && window.gameVisuals.humanHair.complete) {
+                  window.mapCtx.drawImage(window.gameVisuals.humanHair, x - humanSize/2, y - humanSize/2 + humanYOff - (3 * z), humanSize, (humanSize + humanHeightAdd));
+              }
+              // LAYER: Human Helmet
+              if (e.equipped && e.equipped.helmet === 'nasal_helm' && window.gameVisuals.nasal_helm.complete) {
+                  window.mapCtx.drawImage(window.gameVisuals.nasal_helm, x - humanSize/2, y - humanSize/2 + humanYOff, humanSize, (humanSize + humanHeightAdd));
+              }
+              // LAYER: Human Armour
+              let armorImg = null;
+              if (e.equipped && e.equipped.armor) {
+                  const aid = e.equipped.armor;
+                  if (aid === 'light_armor') armorImg = window.gameVisuals.humanLight;
+                  else if (aid === 'medium_armor') armorImg = window.gameVisuals.humanMedium;
+                  else if (aid === 'heavy_armor') armorImg = window.gameVisuals.humanHeavy;
+              }
+              if (armorImg && armorImg.complete) {
+                  window.mapCtx.drawImage(armorImg, x - humanSize/2, y - humanSize/2 + humanYOff, humanSize, (humanSize + humanHeightAdd));
+              }
+              
+              // LAYER: Shield (Human Scale)
+              if (e.equipped && e.equipped.offhand && window.items[e.equipped.offhand].type === 'shield' && window.gameVisuals.shield.complete) {
+                  window.mapCtx.drawImage(window.gameVisuals.shield, x - humanSize/2, y - humanSize/2 + humanYOff, humanSize, humanSize + humanHeightAdd);
+              }
+          } else {
+              // LAYER: Non-human (Elf/Dwarf) Base
+              let baseImg = null;
+              let currentSize = size;
+              let currentYOff = -6 * z;
+              let currentHeight = size + 12 * z;
+  
+              if (e.race === 'elf') {
+                  baseImg = e.gender === 'male' ? window.gameVisuals.elfMaleBase : window.gameVisuals.elfFemaleBase;
+              } else if (e.race === 'dwarf') {
+                  baseImg = e.gender === 'male' ? window.gameVisuals.dwarfMaleBase : window.gameVisuals.dwarfFemaleBase;
+                  // Dwarf 20% smaller
+                  currentSize = size * 0.8;
+                  currentHeight = (size + 12 * z) * 0.8;
+                  currentYOff = -2 * z; 
+              } else {
+                  baseImg = window.gameVisuals.playerBase; // Fallback
+              }
+  
+              if (baseImg && baseImg.complete) {
+                  window.mapCtx.drawImage(baseImg, x - currentSize/2, y - currentSize/2 + currentYOff, currentSize, currentHeight);
+              }
+  
+              // LAYER: Dwarf Male Hair
+              if (e.race === 'dwarf' && e.gender === 'male' && window.gameVisuals.dwarfMaleHair.complete) {
+                  window.mapCtx.drawImage(window.gameVisuals.dwarfMaleHair, x - currentSize/2, y - currentSize/2 + currentYOff, currentSize, currentHeight);
+              }
+  
+              // LAYER: Elf Female Hair
+              if (e.race === 'elf' && e.gender === 'female' && window.gameVisuals.elfFemaleHair.complete) {
+                  window.mapCtx.drawImage(window.gameVisuals.elfFemaleHair, x - currentSize/2, y - currentSize/2 + currentYOff, currentSize, currentHeight);
+              }
+  
+              // LAYER: Non-human Armour
+              let armorImg = null;
+              if (e.equipped && e.equipped.armor) {
+                  const armorId = e.equipped.armor;
+                  if (armorId === 'medium_armor' || armorId === 'heavy_armor') armorImg = window.gameVisuals.chainArmor;
+                  else if (armorId === 'light_armor') armorImg = window.gameVisuals.leatherArmor;
+              }
+              if (armorImg && armorImg.complete) {
+                  window.mapCtx.drawImage(armorImg, x - currentSize/2, (y - currentSize/2) + (15 * z), currentSize, currentSize);
+              }
+              // LAYER: Shield (Elf/Dwarf Scale)
+              if (e.equipped && e.equipped.offhand && window.items[e.equipped.offhand].type === 'shield' && window.gameVisuals.shield.complete) {
+                  const shieldSize = currentSize;
+                  window.mapCtx.drawImage(window.gameVisuals.shield, x - shieldSize/2, y - shieldSize/2 + currentYOff, shieldSize, currentHeight);
+              }
+          }
+          
+          // WEAPON LAYER: Sword or Axe
+          let weaponImg = null;
+          if (e.equipped?.weapon === 'sword') weaponImg = window.gameVisuals.swordIcon;
+          else if (e.equipped?.weapon === 'axe') weaponImg = window.gameVisuals.axe;
+  
+          if (weaponImg && weaponImg.complete) {
+              const weaponSize = window.hexSize * 1.0 * z; 
+              window.mapCtx.drawImage(weaponImg, x - (window.hexSize/2 + 5) * z, y - weaponSize/2, weaponSize, weaponSize);
+          }
+      } else if ((e instanceof window.Enemy || e.customImage) && window.gameVisuals) {
+          let size = window.hexSize * 1.5 * z;
+          let yOffset = 0;
+          let widthMult = 1.0;
+  
+          if (e.name === 'Horse') {
+              size = window.hexSize * 4.5 * z; // 3x of 1.5
+              yOffset = (Math.sqrt(3) * window.hexSize / 2) * z;
+          } else if (e.name === 'Troll') {
+              size = window.hexSize * 4.5 * z;
+              yOffset = (Math.sqrt(3) * window.hexSize / 2) * z;
+          }
+  
+          if (e.customImage === 'arenamercenary') widthMult = 0.85;
+  
+          let img = window.gameVisuals.monsterDefault;
+          if (e.name === 'Orc' && window.gameVisuals.orcBase.complete) img = window.gameVisuals.orcBase;
+          if (e.name === 'Grishnak' && window.gameVisuals.grishnak.complete) img = window.gameVisuals.grishnak;
+          if (e.name === 'Spider' && e.spiderImage && window.gameVisuals[e.spiderImage]?.complete) img = window.gameVisuals[e.spiderImage];
+          if (e.customImage && window.gameVisuals[e.customImage]?.complete) img = window.gameVisuals[e.customImage];
+          if (e.name === 'Horse' && window.gameVisuals.horse.complete) img = window.gameVisuals.horse;
+          if (e.name === 'Wolf' && window.gameVisuals.horse.complete) img = window.gameVisuals.horse; // Temporarily horse until visuals.wolf assigned
+          if (e.name === 'Troll' && window.gameVisuals.troll.complete) img = window.gameVisuals.troll;
+          if (e.name === 'Skeleton' && window.gameVisuals.skeleton.complete) img = window.gameVisuals.skeleton;
+          if (e.name === 'Zombie' && window.gameVisuals.zombie.complete) img = window.gameVisuals.zombie;
+          if (e.name === 'Imp' && window.gameVisuals.imp.complete) img = window.gameVisuals.imp;
+          
+          try {
+              if (img && img.complete) {
+                  const finalWidth = size * widthMult;
+                  window.mapCtx.drawImage(img, x - finalWidth/2, y - size/2 + yOffset, finalWidth, size);
+              }
+          } catch (err) {}
+  
+          if (e.mountSize > 0 && e.equipped && e.equipped.armor) {
+              const armorId = e.equipped.armor;
+              let armorImg = (armorId === 'medium_armor' || armorId === 'heavy_armor') ? window.gameVisuals.chainArmor : window.gameVisuals.leatherArmor;
+              if (armorImg && armorImg.complete) {
+                  window.mapCtx.drawImage(armorImg, x - size/2, y - size/2 + (5 * z), size, size);
+              }
+          }
+  
+          if (e.extraHexes.length > 0 && e.name !== 'Horse' && e.name !== 'Troll') {
+              const offsets = [{q:0, r:0}, ...e.extraHexes];
+              const labels = ['f', 'l', 'r'];
+              const prefix = 'T';
+              offsets.forEach((off, i) => {
+                  const hp = window.hexToPixel(e.hex.q + off.q, e.hex.r + off.r);
+                  window.mapCtx.fillStyle = "white";
+                  window.mapCtx.font = `${12 * z}px Arial`;
+                  window.mapCtx.fillText(prefix + labels[i], hp.x - 5*z, hp.y + 5*z);
+              });
+          }
+  
+          // WEAPON LAYER: Axe
+          if (e.equipped?.weapon === 'axe' && window.gameVisuals.axe.complete) {
+              const weaponSize = window.hexSize * 0.8 * z;
+              window.mapCtx.drawImage(window.gameVisuals.axe, x - (window.hexSize/2 + 5) * z, y - weaponSize/2, weaponSize, weaponSize);
+          }
+  
+          if (e.equipped && e.equipped.weapon === 'sword' && window.gameVisuals.swordIcon.complete) {
+              const weaponSize = window.hexSize * 0.8 * z;
+              window.mapCtx.drawImage(window.gameVisuals.swordIcon, x - (window.hexSize/2 + 5) * z, y - weaponSize/2, weaponSize, weaponSize);
+          }
+          // AI State Indicator
         if (e.aiState === 'combat') {
             window.mapCtx.fillStyle = "red";
             window.mapCtx.beginPath();
@@ -1168,9 +1202,21 @@ function spendTP(entity, amount) {
     }
     
     // Stealth Penalty for movement/actions
-    if (entity.isStealthed && amount > 5) {
-        entity.stealthScore -= (amount * 2);
-        if (entity.stealthScore <= 0) breakStealth(entity);
+    if (entity.isStealthed && amount > 1) {
+        // Re-calculate stealth score at new position/state
+        let score = 50;
+        if (entity.skills?.stealth_agility) score += 5;
+        if (entity.skills?.stealth_rogue) score += 5;
+        const light = window.lightLevel || 1.0;
+        score -= (light * 40);
+        const terrain = window.getTerrainAt(entity.hex.q, entity.hex.r);
+        score += (terrain.stealthBonus || 0);
+        if (entity.equipped?.armor) {
+            const aid = entity.equipped.armor;
+            if (aid === 'heavy_armor') score -= 30;
+            else if (aid === 'medium_armor') score -= 15;
+        }
+        entity.stealthScore = score;
     }
 
     checkDisappearance(entity);
@@ -1621,27 +1667,39 @@ function canSee(viewer, target) {
     const d = window.distance(viewer.hex, target.hex);
     const visionCap = 30 + (viewer.visionBonus || 0);
     
-    // Line of sight check first
-    if (d > visionCap || !window.hasLineOfSight(viewer.hex, target.hex)) return false;
+    // Line of sight check first (Physical obstruction)
+    if (d > visionCap || !window.hasLineOfSight(viewer.hex, target.hex)) {
+        // If we lose LOS, we no longer 'see' them currently
+        if (target.isStealthed) {
+            if (viewer.knownStealthedTargets) viewer.knownStealthedTargets.delete(target.name);
+        }
+        return false;
+    }
 
     // Stealth check
     if (target.isStealthed) {
-        // Detection chance: 100 - stealthScore + distanceBonus
-        // Being close makes it much easier to see
+        if (!viewer.knownStealthedTargets) viewer.knownStealthedTargets = new Set();
+
+        // If already spotted this 'bout' of visibility, we keep seeing them
+        if (viewer.knownStealthedTargets.has(target.name)) return true;
+
+        // Spot chance: base on target's stealth score
+        // stealthScore is roughly 0-60 (higher is more stealthy)
+        // distance makes it easier: +5 per hex closer than 15
         const distBonus = Math.max(0, (15 - d) * 5); 
-        const detectionChance = Math.max(5, 100 - target.stealthScore + distBonus);
+        const spotChance = Math.max(5, 100 - target.stealthScore + distBonus);
         
-        // Check for torches
+        // Light source bonus for viewer
         let hasLight = false;
         if (viewer.equipped) {
-            const items = [viewer.equipped.weapon, viewer.equipped.offhand];
-            if (items.some(iid => iid && window.items[iid] && window.items[iid].lightRadius)) hasLight = true;
+            const items = [viewer.equipped.weapon, viewer.equipped.offhand, viewer.equipped.accessory];
+            if (items.some(iid => iid && window.items[iid]?.lightRadius)) hasLight = true;
         }
-        
-        const finalChance = hasLight ? detectionChance * 1.5 : detectionChance;
+        const finalChance = hasLight ? spotChance * 1.5 : spotChance;
         
         if (Math.random() * 100 < finalChance) {
-            // Spotted! (Does not necessarily break stealth for others, but this viewer sees them)
+            // Spotted!
+            viewer.knownStealthedTargets.add(target.name);
             return true;
         }
         return false;
@@ -1846,50 +1904,40 @@ function breakStealth(entity) {
 }
 
 function tryStealth(entity) {
+    if (entity.isStealthed) {
+        breakStealth(entity);
+        return false;
+    }
+
     // Cannot stealth if currently seen by ANY enemy (if player) or ANY player (if enemy)
     const opponentSide = entity.side === 'player' ? 'enemy' : 'player';
     const opponents = window.entities.filter(e => e.alive && e.side === opponentSide);
-    const isSeen = opponents.some(o => window.distance(o.hex, entity.hex) <= 30 && window.hasLineOfSight(o.hex, entity.hex));
+    const isSeen = opponents.some(o => canSee(o, entity));
     
     if (isSeen) {
         window.showMessage(`${entity.name} cannot stealth while seen!`);
         return false;
     }
 
-    // BASE CHANCE: 50%
-    let chance = 50;
-
-    // SKILLS: Max +10
-    if (entity.skills?.stealth_agility) chance += 5;
-    if (entity.skills?.stealth_rogue) chance += 5;
-
-    // ENVIRONMENT: Light
+    entity.isStealthed = true;
+    // Calculate initial stealth score for detection checks
+    let score = 50;
+    if (entity.skills?.stealth_agility) score += 5;
+    if (entity.skills?.stealth_rogue) score += 5;
     const light = window.lightLevel || 1.0;
-    // Bright light penalty: up to -40 at 1.0 light
-    chance -= (light * 40);
-
-    // ENVIRONMENT: Terrain
+    score -= (light * 40);
     const terrain = window.getTerrainAt(entity.hex.q, entity.hex.r);
-    chance += (terrain.stealthBonus || 0);
-
-    // ARMOR PENALTY: Heavy -30, Medium -15
+    score += (terrain.stealthBonus || 0);
     if (entity.equipped?.armor) {
         const aid = entity.equipped.armor;
-        if (aid === 'heavy_armor') chance -= 30;
-        else if (aid === 'medium_armor') chance -= 15;
+        if (aid === 'heavy_armor') score -= 30;
+        else if (aid === 'medium_armor') score -= 15;
     }
+    entity.stealthScore = score;
 
-    // Roll
-    const roll = Math.floor(Math.random() * 100);
-    if (roll < chance) {
-        entity.isStealthed = true;
-        entity.stealthScore = chance;
-        window.showMessage(`${entity.name} successfully stealthed! (Chance: ${Math.floor(chance)}%)`);
-        return true;
-    } else {
-        window.showMessage(`${entity.name} failed to stealth. (Chance: ${Math.floor(chance)}%)`);
-        return false;
-    }
+    window.showMessage(`${entity.name} is now moving stealthily.`);
+    window.updateActionButtons();
+    return true;
 }
 
 function tryShove(shover, target) {
@@ -1977,6 +2025,8 @@ function setupArenaLobby() {
     window.mapItems = {};
     window.overrideTerrain = {};
     window.tileObjects = {};
+    window.exploredHexes = new Set(); // Reset visibility for new 'level'
+    window.indoorLightMult = 0.0; // Lobby is indoor (no sun)
     window.lobbyTPSpent = 0;
     window.hasTriggeredImpatience = false;
 
@@ -2044,6 +2094,8 @@ function startArenaFight() {
     // 1. Clear Lobby / Level Transition
     window.overrideTerrain = {}; // Remove lobby floor
     window.tileObjects = {}; // Remove lobby fireplace
+    window.exploredHexes = new Set(); // Fog of war reset
+    window.indoorLightMult = 0.0; // Arena is also indoor/dark
     window.entities = window.entities.filter(e => e.side === 'player'); // Only players/allies stay
     window.entities.forEach(e => e.timePoints = 0); // Reset TP for fresh initiative
 

@@ -15,6 +15,7 @@ window.mapItems = {}; // Key format: "q,r", Value: array of item IDs
 window.exploredHexes = new Set(); // Stores "q,r" strings
 window.overrideTerrain = {}; // Key format: "q,r", Value: terrain object
 window.tileObjects = {}; // Key format: "q,r", Value: { type, lightRadius, etc }
+window.indoorLightMult = 1.0; // Default to outdoor (100% time-of-day lighting)
 
 // Deterministic Pseudo-Random Number Generator
 function pseudoRandom(x, y) {

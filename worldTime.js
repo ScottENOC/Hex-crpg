@@ -10,7 +10,7 @@ const MONTH_NAMES = [
 
 function updateTime(delta) {
     window.worldSeconds += delta;
-    window.lightLevel = getLightLevel();
+    window.lightLevel = getLightLevel() * (window.indoorLightMult !== undefined ? window.indoorLightMult : 1.0);
     
     // Fatigue tracking
     if (window.entities) {

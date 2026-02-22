@@ -191,6 +191,14 @@ const skills = {
         maxRanks: 1,
         apply: (player) => {}
     },
+    'speedy_stealth': {
+        name: 'Speedy Stealth',
+        description: 'Passive: Reduces the Time Point penalty of moving while stealthed by 2.',
+        tree: 'rogue',
+        maxRanks: 1,
+        prereq: 'quickRecovery', // Requires some rogue progression
+        apply: (player) => {}
+    },
 
     // WEAPON SKILLS
     ...generateWeaponSkills('sword', 'Sword'),

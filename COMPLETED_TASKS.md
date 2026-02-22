@@ -1,3 +1,18 @@
+- **Stealth Overhaul**:
+    - Converted Stealth into a movement toggle rather than a one-time roll. Moving while stealthed adds a 4 TP penalty per hex.
+    - Added **Speedy Stealth** Rogue skill to reduce the movement penalty by 2 TP.
+    - Implemented a more dynamic detection system: enemies roll a "spot chance" when a stealthed character enters LOS, based on the character's `stealthScore` (which accounts for terrain, light, and armor) and distance.
+    - Once spotted, a character remains known until LOS is broken.
+- **Lighting & Environment**:
+    - Added an `indoorLightMult` system. Indoor areas can now have independent lighting from the time-of-day cycle.
+    - Set the Arena Lobby and Battle Maps to 0% ambient light, making them reliant on fireplaces and torches.
+- **Arena Campaign Improvements**:
+    - **Fresh Level Starts**: Every teleport (to/from the lobby) now correctly resets the "Fog of War" (`exploredHexes`), ensuring players can't see the arena layout before exploring it.
+    - **Visual Assets**: Integrated `axe.png` for axe-wielding characters and `troll.png` for Troll monsters.
+    - **NPC Image Fix**: Rescaled the Arena Mercenary image to be 15% narrower for better proportions.
+- **Monster & Summons**:
+    - **Spider Update**: Spiders now correctly use `spider1.png` or `spider2.png`.
+    - **Wolf & Rider Layers**: Nature summons now use the updated `wolf.png`. Goblin Wolf Riders correctly layer the goblin and their equipment on top of the wolf base.
 - **Spider Monster**: Added a new spider monster with two random images (`spider1.png`, `spider2.png`). Implemented "Poison Bite" (50% chance, 2 dmg/tick for 10 ticks) and "Web Fling" (range 10, prevents movement for 40 TP spent, used once per spider with priority on non-webbed targets).
 - **NPC Improvements**:
     - Assigned specific images to Arena NPCs: `arenaannouncer.png`, `arenashopkeeper.png`, and `arenamercenary.png`.
