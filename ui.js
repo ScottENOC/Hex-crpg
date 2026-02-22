@@ -985,7 +985,7 @@ function updateTurnIndicator() {
     if (!indicatorBar) return;
     indicatorBar.innerHTML = '';
     const sortedEntities = [...window.entities]
-        .filter(e => e.alive && e.hasBeenSeenByPlayer && !e.rider)
+        .filter(e => e.alive && e.hasBeenSeenByPlayer && !e.rider && !e.isNPC)
         .sort((a, b) => b.timePoints - a.timePoints);
 
     sortedEntities.forEach(entity => {
@@ -1178,10 +1178,17 @@ function showDialogue(npc, message, options = []) {
     // Create a mini portrait
     portrait.innerHTML = '';
     const baseImg = document.createElement('img');
-    if (npc.race === 'human') baseImg.src = npc.gender === 'male' ? 'images/humanmale.png' : 'images/humanfemale.png';
-    else if (npc.race === 'elf') baseImg.src = npc.gender === 'male' ? 'images/elfmale.png' : 'images/elffemale.png';
-    else if (npc.race === 'dwarf') baseImg.src = npc.gender === 'male' ? 'images/dwarfmale.png' : 'images/dwarffemale.png';
-    else baseImg.src = 'images/elf.png';
+    if (npc.customImage && window.gameVisuals[npc.customImage]?.complete) {
+        baseImg.src = window.gameVisuals[npc.customImage].src;
+    } else if (npc.race === 'human') {
+        baseImg.src = npc.gender === 'male' ? 'images/humanmale.png' : 'images/humanfemale.png';
+    } else if (npc.race === 'elf') {
+        baseImg.src = npc.gender === 'male' ? 'images/elfmale.png' : 'images/elffemale.png';
+    } else if (npc.race === 'dwarf') {
+        baseImg.src = npc.gender === 'male' ? 'images/dwarfmale.png' : 'images/dwarffemale.png';
+    } else {
+        baseImg.src = 'images/elf.png';
+    }
     baseImg.classList.add('portrait-layer');
     portrait.appendChild(baseImg);
 

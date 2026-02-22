@@ -3,11 +3,18 @@
     - Assigned specific images to Arena NPCs: `arenaannouncer.png`, `arenashopkeeper.png`, and `arenamercenary.png`.
     - Implemented a dialogue system for these NPCs.
     - **NPC Image Rendering**: Updated `renderEntities` to ensure neutral NPCs with custom images are correctly rendered using their assigned `.png` files instead of colored circles.
+    - **Dialogue Portraits**: Updated `showDialogue` to use custom NPC images in the dialogue modal for a more immersive experience.
+    - **Initiative Filter**: NPCs are now excluded from the turn indicator/initiative bar.
 - **Grishnak Encounter**: Added Grishnak, a custom Orc boss with arcane/wizard skills and 40 HP. He has a 10% chance to appear in arena fights until defeated.
 - **Arena Visuals**: 
     - Implemented floor randomization using `arenaHexFloor1-4.png` for Cave Floor tiles in Campaign 1.
     - Added 10% chance for `overlay blood.png` or `overlay skull.png` on these tiles.
     - **Skull Overlay Adjustment**: Shrunk the skull overlay image to 25% of its original size and reduced its appearance frequency from 10% to 1% for a more subtle effect.
+- **Arena Campaign Overhaul**:
+    - **Level Loading Logic**: Teleporting to an arena fight now acts as loading a new level. The lobby is cleared, Time Points are reset, and the camera automatically centers on the player party.
+    - **Themed Encounters**: Implemented themed enemy groups (Spiders, Undead, Orcs/Goblins, Imps, Wolves) for arena matches.
+- **Camera System**:
+    - **centerCameraOn(hex)**: Implemented a new function to programmatically center the game camera on specific hex coordinates.
 - **New Spells**:
     - **Counterspell (Arcane)**: Dispel target summoned creature or random buff/debuff. Can also target hexes to remove AOE effects.
     - **Entangle (Nature)**: AOE debuff that marks hexes as 'Swamp' (visual representation), doubling movement cost.

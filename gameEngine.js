@@ -1727,6 +1727,9 @@ function checkCombatEnd() {
                 setupArenaLobby();
                 window.drawMap();
                 window.renderEntities();
+                if (window.entities.length > 0) {
+                    window.centerCameraOn(window.entities[0].hex);
+                }
             }, 2000);
             return;
         }
@@ -2038,8 +2041,13 @@ function startArenaFight() {
     window.isInArena = true;
     window.triggerAmbientDialogue('arena_fight_start');
     
-    // Create arena map (50x50 rectangle)
-    window.entities = window.entities.filter(e => e.side === 'player'); // Keep only players
+    // 1. Clear Lobby / Level Transition
+    window.overrideTerrain = {}; // Remove lobby floor
+    window.tileObjects = {}; // Remove lobby fireplace
+    window.entities = window.entities.filter(e => e.side === 'player'); // Only players/allies stay
+    window.entities.forEach(e => e.timePoints = 0); // Reset TP for fresh initiative
+
+    // 2. Create arena map (50x50 rectangle)
     const arenaSize = 25;
     for (let q = -arenaSize; q <= arenaSize; q++) {
         for (let r = -arenaSize; r <= arenaSize; r++) {
@@ -2051,21 +2059,20 @@ function startArenaFight() {
         }
     }
 
-    // Spawn players at one end
+    // 3. Spawn players at one end and center camera
     window.entities.forEach((e, i) => {
         e.hex = { q: -arenaSize + 5, r: i - Math.floor(window.entities.length/2) };
     });
+    if (window.entities.length > 0) {
+        window.centerCameraOn(window.entities[0].hex);
+    }
 
-    // Spawn enemies
-    let enemyCount = 2 + Math.floor(Math.random() * 4);
-    const monsterTypes = ['goblin', 'orc', 'skeleton', 'zombie', 'imp', 'spider'];
-    
+    // 4. Spawn enemies
     // GRISHNAK ENCOUNTER (10% chance if not defeated)
     if (!window.grishnakDefeated && Math.random() < 0.1) {
         window.showMessage("A champion enters the arena: Grishnak!");
         const grishnak = window.createMonster('orc', { q: arenaSize - 5, r: 0 }, null, null, 'enemy');
         grishnak.name = "Grishnak";
-        // 1 rank in each arcane and wizard skill
         const schools = ['arcane'];
         schools.forEach(s => {
             const keys = Object.keys(window.skills).filter(k => window.skills[k].tree === s || window.skills[k].tree === 'wizard');
@@ -2075,24 +2082,31 @@ function startArenaFight() {
         grishnak.maxHp = 40;
         grishnak.applySkills();
         window.entities.push(grishnak);
-        
-        // Plus 2 regular orcs
         for (let i = 0; i < 2; i++) {
             const spawnHex = { q: arenaSize - 5, r: (i === 0 ? -2 : 2) };
             window.entities.push(window.createMonster('orc', spawnHex, null, null, 'enemy'));
         }
     } else {
-        for (let i = 0; i < enemyCount; i++) {
-            const type = monsterTypes[Math.floor(Math.random() * monsterTypes.length)];
-            const spawnHex = { q: arenaSize - 5, r: i - Math.floor(enemyCount/2) };
+        // THEMED ENCOUNTERS
+        const themes = [
+            ['spider', 'spider', 'spider'],
+            ['skeleton', 'skeleton', 'zombie', 'zombie'],
+            ['orc', 'goblin', 'goblin'],
+            ['imp', 'imp', 'imp'],
+            ['wolf', 'wolf', 'wolf_rider_goblin']
+        ];
+        const theme = themes[Math.floor(Math.random() * themes.length)];
+        theme.forEach((type, i) => {
+            const spawnHex = { q: arenaSize - 5, r: i - Math.floor(theme.length/2) };
             const enemy = window.createMonster(type, spawnHex, null, null, 'enemy');
             window.entities.push(enemy);
-        }
+        });
     }
 
     window.drawMap();
     window.renderEntities();
-    window.gamePhase = 'WAITING'; // Redraw will trigger turns
+    window.updateTurnIndicator();
+    window.gamePhase = 'WAITING';
 }
 
 function talkToNPC(npc) {

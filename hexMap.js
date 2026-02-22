@@ -436,6 +436,26 @@ function initHexMap() {
   }
 }
 
+function centerCameraOn(hex) {
+    const {x, y} = hexToPixel(hex.q, hex.r);
+    // hexToPixel already includes current cameraX/Y and zoom
+    // We want to adjust cameraX/Y so that (x,y) is at the center of the canvas
+    const rect = mapCanvas.getBoundingClientRect();
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+
+    // Current pixel position without camera offset:
+    const worldX = (hexSize * (3/2 * hex.q) + mapOffsetX) * window.cameraZoom;
+    const worldY = (hexSize * (Math.sqrt(3) * hex.r + Math.sqrt(3)/2 * hex.q) + mapOffsetY) * window.cameraZoom;
+
+    window.cameraX = centerX - worldX;
+    window.cameraY = centerY - worldY;
+    
+    drawMap();
+    if (window.renderEntities) window.renderEntities();
+}
+
+window.centerCameraOn = centerCameraOn;
 window.mapCanvas = mapCanvas;
 window.mapCtx = mapCtx;
 window.hexSize = hexSize;
