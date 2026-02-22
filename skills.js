@@ -194,6 +194,7 @@ const skills = {
 
     // WEAPON SKILLS
     ...generateWeaponSkills('sword', 'Sword'),
+    ...generateWeaponSkills('sword_arrow_deflection', 'Sword of Arrow Deflection'),
     ...generateWeaponSkills('axe', 'Axe', 3),
     ...generateWeaponSkills('bow', 'Bow'),
     ...generateWeaponSkills('spear', 'Spear'),
@@ -246,16 +247,46 @@ const skills = {
 
     // MAGIC COMMON HELPERS (per school)
     ...generateMagicSkills('arcane', 'Firebolt', 'firebolt'),
+    ...generateMagicSkills('arcane', 'Counterspell', 'counterspell'),
     ...generateMagicSkills('divine', 'Heal', 'heal'),
     ...generateMagicSkills('divine', 'Smite Evil', 'smite_evil'),
     ...generateMagicSkills('divine', 'Divine Protection', 'divine_protection'),
     ...generateMagicSkills('nature', 'Summon Animal', 'summon_animal'),
+    ...generateMagicSkills('nature', 'Entangle', 'entangle'),
+    'arcane_expand': {
+        name: 'Arcane Expansion',
+        description: 'Increase the radius of Arcane AOE spells by 1 per rank. (+10 mana per increase)',
+        tree: 'arcane',
+        maxRanks: 3,
+        apply: (player) => {}
+    },
+    'divine_expand': {
+        name: 'Divine Expansion',
+        description: 'Increase the radius of Divine AOE spells by 1 per rank. (+10 mana per increase)',
+        tree: 'divine',
+        maxRanks: 3,
+        apply: (player) => {}
+    },
+    'nature_expand': {
+        name: 'Nature Expansion',
+        description: 'Increase the radius of Nature AOE spells by 1 per rank. (+10 mana per increase)',
+        tree: 'nature',
+        maxRanks: 3,
+        apply: (player) => {}
+    },
     'animal_companion': {
         name: 'Animal Companion',
         description: 'Passive: Your Nature summons become permanent animal companions. (Max 1)',
         tree: 'nature',
         maxRanks: 1,
         prereq: 'learn_summon_animal',
+        apply: (player) => {}
+    },
+    'poison_bite': {
+        name: 'Poison Bite',
+        description: 'Passive: Melee attacks have a 50% chance to poison targets for 2 damage per TP tick (10 times).',
+        tree: 'monster_skills',
+        maxRanks: 1,
         apply: (player) => {}
     },
     'companion_str_end': {

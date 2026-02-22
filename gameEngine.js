@@ -38,6 +38,12 @@ function playerMoveProcess(player, path) {
         return;
     }
 
+    if (player.webbedDuration > 0) {
+        window.showMessage(`${player.name} is webbed and cannot move! (${Math.ceil(player.webbedDuration)} TP remaining)`);
+        finalizePlayerAction(player, true);
+        return;
+    }
+
     const previousHex = { q: player.hex.q, r: player.hex.r };
     const nextHex = path[0];
 
@@ -345,7 +351,19 @@ function startGameCore(isLoading = false) {
       zombie: new Image(),
       imp: new Image(),
       torch_lit: new Image(),
-      fireplace: new Image()
+      fireplace: new Image(),
+      spider1: new Image(),
+      spider2: new Image(),
+      arenaannouncer: new Image(),
+      arenamercenary: new Image(),
+      arenashopkeeper: new Image(),
+      grishnak: new Image(),
+      floor1: new Image(),
+      floor2: new Image(),
+      floor3: new Image(),
+      floor4: new Image(),
+      overlay_blood: new Image(),
+      overlay_skull: new Image()
   };
   visuals.playerBase.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.leatherArmor.onload = () => { window.drawMap(); window.renderEntities(); };
@@ -373,6 +391,18 @@ function startGameCore(isLoading = false) {
   visuals.imp.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.torch_lit.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.fireplace.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.spider1.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.spider2.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.arenaannouncer.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.arenamercenary.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.arenashopkeeper.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.grishnak.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.floor1.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.floor2.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.floor3.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.floor4.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.overlay_blood.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.overlay_skull.onload = () => { window.drawMap(); window.renderEntities(); };
 
   visuals.playerBase.src = 'images/elf.png';
   visuals.leatherArmor.src = 'images/elfleatherarmour.png';
@@ -401,6 +431,18 @@ function startGameCore(isLoading = false) {
   visuals.imp.src = 'images/imp.svg';
   visuals.torch_lit.src = 'images/torch_lit.svg';
   visuals.fireplace.src = 'images/fireplace.svg';
+  visuals.spider1.src = 'images/spider1.png';
+  visuals.spider2.src = 'images/spider2.png';
+  visuals.arenaannouncer.src = 'images/arenaannouncer.png';
+  visuals.arenamercenary.src = 'images/arenamercenary.png';
+  visuals.arenashopkeeper.src = 'images/arenashopkeeper.png';
+  visuals.grishnak.src = 'images/Grishnak.png';
+  visuals.floor1.src = 'images/arenaHexFloor1.png';
+  visuals.floor2.src = 'images/arenaHexFloor2.png';
+  visuals.floor3.src = 'images/arenaHexFloor3.png';
+  visuals.floor4.src = 'images/arenaHexFloor4.png';
+  visuals.overlay_blood.src = 'images/overlay blood.png';
+  visuals.overlay_skull.src = 'images/overlay skull.png';
   
   window.gameVisuals = visuals;
 
@@ -602,6 +644,9 @@ function renderEntities() {
 
         let img = window.gameVisuals.monsterDefault;
         if (e.name === 'Orc' && window.gameVisuals.orcBase.complete) img = window.gameVisuals.orcBase;
+        if (e.name === 'Grishnak' && window.gameVisuals.grishnak.complete) img = window.gameVisuals.grishnak;
+        if (e.name === 'Spider' && e.spiderImage && window.gameVisuals[e.spiderImage]?.complete) img = window.gameVisuals[e.spiderImage];
+        if (e.customImage && window.gameVisuals[e.customImage]?.complete) img = window.gameVisuals[e.customImage];
         if (e.name === 'Horse' && window.gameVisuals.horse.complete) img = window.gameVisuals.horse;
         if (e.name === 'Skeleton' && window.gameVisuals.skeleton.complete) img = window.gameVisuals.skeleton;
         if (e.name === 'Zombie' && window.gameVisuals.zombie.complete) img = window.gameVisuals.zombie;
@@ -736,6 +781,17 @@ function runTickInternal() {
                     const tpGained = e.timePointsPerTick;
                     e.timePoints += tpGained;
 
+                    // POISON TICK
+                    if (e.poisonTicks > 0) {
+                        e.hp -= e.poisonDamage || 2;
+                        e.poisonTicks--;
+                        if (e.hp <= 0 && e.alive) {
+                            e.alive = false;
+                            window.showMessage(`${e.name} died from poison!`);
+                            checkCombatEnd();
+                        }
+                    }
+
                     // Mana Regeneration
                     let regen = 0.1;
                     if (e.skills?.arcane_regen) regen += e.skills.arcane_regen * 0.1;
@@ -779,6 +835,15 @@ function runTickInternal() {
             }
         });
         if (window.updateTime) window.updateTime(0.4);
+
+        // AMBIENT DIALOGUE (Arena Lobby)
+        if (window.currentCampaign === "1" && !window.isInArena) {
+            window.lobbyTPSpent = (window.lobbyTPSpent || 0) + 1;
+            if (window.lobbyTPSpent > 50 && !window.hasTriggeredImpatience) {
+                window.triggerAmbientDialogue('arena_lobby_1');
+                window.hasTriggeredImpatience = true;
+            }
+        }
     }
     window.updateTurnIndicator();
 }
@@ -900,6 +965,23 @@ function aiProcess(entity) {
         window.gamePhase = 'WAITING';
         return;
     }
+
+    // SPIDER WEB FLING PRIORITY
+    if (entity.name === 'Spider' && !entity.hasUsedWeb && entity.timePoints >= 5) {
+        const opponentSide = entity.side === 'player' ? 'enemy' : 'player';
+        const targets = window.entities.filter(e => e.alive && e.side === opponentSide && !e.webbedDuration && window.distance(entity.hex, e.hex) <= 10 && window.hasLineOfSight(entity.hex, e.hex));
+        if (targets.length > 0) {
+            targets.sort((a, b) => window.distance(entity.hex, a.hex) - window.distance(entity.hex, b.hex));
+            const target = targets[0];
+            window.showMessage(`${entity.name} flings a web at ${target.name}!`);
+            target.webbedDuration = 40; // TP to spend
+            entity.hasUsedWeb = true;
+            spendTP(entity, 5);
+            setTimeout(() => aiProcess(entity), 100);
+            return;
+        }
+    }
+
     let threshold = 80;
     if (entity.skills && entity.skills['quickRecovery']) threshold -= entity.skills['quickRecovery'];
     if (Math.floor(entity.timePoints) <= threshold || !entity.alive) {
@@ -1079,6 +1161,11 @@ function wakeUp(entity) {
 function spendTP(entity, amount) {
     entity.timePoints -= amount;
     entity.totalTPSpent += amount;
+
+    if (entity.webbedDuration > 0) {
+        entity.webbedDuration = Math.max(0, entity.webbedDuration - amount);
+        if (entity.webbedDuration <= 0) window.showMessage(`${entity.name} is no longer webbed.`);
+    }
     
     // Stealth Penalty for movement/actions
     if (entity.isStealthed && amount > 5) {
@@ -1235,6 +1322,64 @@ function handleClick(e){
                         
                         actionHandled = true;
                     }
+                } else if (spell.type === 'dispel') {
+                    // Target summoned entity to end its spell, or any entity to end a random buff/debuff
+                    if (target) {
+                        const activeEffects = (window.activeSpells || []).filter(s => s.targetEntityId === target.id || s.entityId === target.id);
+                        if (activeEffects.length > 0) {
+                            const effect = activeEffects[Math.floor(Math.random() * activeEffects.length)];
+                            window.cancelSpell(effect.spellInstanceId);
+                            window.showMessage(`${player.name} dispelled ${effect.name} on ${target.name}!`);
+                            actionHandled = true;
+                        } else {
+                            window.showMessage("No active spells found on this target.");
+                        }
+                    } else {
+                        // Hex dispel: Preference enemy -> neutral -> friendly
+                        const hexSpells = (window.activeSpells || []).filter(s => s.targetHexes && s.targetHexes.some(th => th.q === clickedHex.q && th.r === clickedHex.r));
+                        if (hexSpells.length > 0) {
+                            // Find casters
+                            const categorized = { enemy: [], neutral: [], player: [] };
+                            hexSpells.forEach(s => {
+                                const caster = window.entities.find(e => e.name === s.casterName);
+                                const side = caster ? caster.side : 'neutral';
+                                categorized[side].push(s);
+                            });
+                            const priority = categorized.enemy.length > 0 ? categorized.enemy : (categorized.neutral.length > 0 ? categorized.neutral : categorized.player);
+                            const effect = priority[Math.floor(Math.random() * priority.length)];
+                            window.cancelSpell(effect.spellInstanceId);
+                            window.showMessage(`${player.name} dispelled ${effect.name} at hex ${clickedHex.q},${clickedHex.r}!`);
+                            actionHandled = true;
+                        }
+                    }
+                } else if (spell.type === 'aoe_debuff') {
+                    // Target hex and adjacent within radius
+                    const center = clickedHex;
+                    const affected = [center];
+                    if (spell.radius > 0) {
+                        for (let r = 1; r <= spell.radius; r++) {
+                            const ring = window.getNeighbors(center.q, center.r); // Simplified for radius 1
+                            affected.push(...ring);
+                        }
+                    }
+                    
+                    const instanceId = Date.now() + Math.random();
+                    window.activeSpells.push({
+                        spellInstanceId: instanceId,
+                        baseId: spell.baseId,
+                        name: spell.name,
+                        casterName: player.name,
+                        coreManaCost: spell.coreManaCost || spell.manaCost,
+                        targetHexes: affected.map(h => ({q:h.q, r:h.r})),
+                        debuffType: spell.debuffType
+                    });
+                    
+                    affected.forEach(h => {
+                        window.setTerrainAt(h.q, h.r, 'Swamp'); // Visual representation: Swamp doubles move cost
+                    });
+
+                    window.showMessage(`${player.name} cast ${spell.name}!`);
+                    actionHandled = true;
                 } else {
                     let spellHitBonus = 0;
                     if (spell.baseId === 'firebolt' && player.skills?.firebolt_hit) {
@@ -1356,9 +1501,9 @@ function tryAttack(attacker, target, isFeint = false, isOffhand = false) {
     const reactions = [];
 
     // DEFENDER REACTIONS
-    if (!weapon || weapon.subType === 'melee') {
+    if (!weapon || weapon.subType === 'melee' || (target.equipped?.weapon && window.items[target.equipped.weapon].id === 'sword_arrow_deflection')) {
         const defW = target.equipped?.weapon ? window.items[target.equipped.weapon].id : null;
-        if ((defW === 'sword' || defW === 'dagger') && target.skills[`${defW}_parry`] && target.timePoints >= 3 && target.parriesRemaining > 0) {
+        if ((defW === 'sword' || defW === 'dagger' || defW === 'sword_arrow_deflection') && target.skills[`${defW}_parry`] && target.timePoints >= 3 && target.parriesRemaining > 0) {
             let tpCost = 3;
             if (target.skills[`${defW}_parry_cost`]>0) tpCost -= 1;
             
@@ -1537,6 +1682,13 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   window.showMessage(`${attacker.name} hits ${target.name} for ${fd} damage! (${dmg} base - ${red} reduction)`);
   target.hp -= fd; syncBackToPlayer(target);
   
+  // POISON LOGIC
+  if (attacker.skills?.poison_bite && Math.random() < 0.5) {
+      target.poisonTicks = 10;
+      target.poisonDamage = 2;
+      window.showMessage(`${target.name} is poisoned!`);
+  }
+
   // Set last seen hex so they can search if stealthed
   target.lastSeenTargetHex = { q: attacker.hex.q, r: attacker.hex.r };
   
@@ -1559,9 +1711,17 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
 }
 
 function checkCombatEnd() {
+    // Track Grishnak defeat
+    const grishnak = window.entities.find(e => e.name === "Grishnak");
+    if (grishnak && !grishnak.alive) {
+        window.grishnakDefeated = true;
+    }
+
     // Only check for ACTIVE enemies
     if (!window.entities.some(e => e.side === 'enemy' && e.alive)) {
         if (window.currentCampaign === "1") {
+            window.isInArena = false;
+            window.triggerAmbientDialogue('arena_victory');
             window.showMessage("You have won the battle! Teleporting back to the lobby...");
             setTimeout(() => {
                 setupArenaLobby();
@@ -1657,6 +1817,14 @@ function cancelSpell(instanceId) {
     if (spell.entityId) {
         const ent = window.entities.find(e => e.id === spell.entityId);
         if (ent) ent.alive = false;
+    }
+
+    // Restore terrain if AOE
+    if (spell.targetHexes) {
+        spell.targetHexes.forEach(h => {
+            const key = `${h.q},${h.r}`;
+            delete window.overrideTerrain[key];
+        });
     }
 
     window.activeSpells.splice(spellIdx, 1);
@@ -1806,6 +1974,8 @@ function setupArenaLobby() {
     window.mapItems = {};
     window.overrideTerrain = {};
     window.tileObjects = {};
+    window.lobbyTPSpent = 0;
+    window.hasTriggeredImpatience = false;
 
     // Create a 20x20 stone lobby
     for (let q = -10; q <= 10; q++) {
@@ -1832,6 +2002,7 @@ function setupArenaLobby() {
     announcer.side = 'neutral';
     announcer.gender = 'male';
     announcer.race = 'human';
+    announcer.customImage = 'arenaannouncer';
     window.entities.push(announcer);
 
     const shopkeeper = new window.Entity("Shopkeeper", "green", {q: -2, r: 2}, 10);
@@ -1839,6 +2010,7 @@ function setupArenaLobby() {
     shopkeeper.side = 'neutral';
     shopkeeper.gender = 'female';
     shopkeeper.race = 'dwarf';
+    shopkeeper.customImage = 'arenashopkeeper';
     window.entities.push(shopkeeper);
 
     const recruiter = new window.Entity("Mercenary Recruiter", "cyan", {q: 3, r: 3}, 10);
@@ -1846,6 +2018,7 @@ function setupArenaLobby() {
     recruiter.side = 'neutral';
     recruiter.gender = 'male';
     recruiter.race = 'elf';
+    recruiter.customImage = 'arenamercenary';
     window.entities.push(recruiter);
 
     // Decorative Horse
@@ -1862,6 +2035,8 @@ function setupArenaLobby() {
 
 function startArenaFight() {
     window.showMessage("The announcer teleports you to the arena!");
+    window.isInArena = true;
+    window.triggerAmbientDialogue('arena_fight_start');
     
     // Create arena map (50x50 rectangle)
     window.entities = window.entities.filter(e => e.side === 'player'); // Keep only players
@@ -1882,13 +2057,37 @@ function startArenaFight() {
     });
 
     // Spawn enemies
-    const enemyCount = 2 + Math.floor(Math.random() * 4);
-    const monsterTypes = ['goblin', 'orc', 'skeleton', 'zombie', 'imp'];
-    for (let i = 0; i < enemyCount; i++) {
-        const type = monsterTypes[Math.floor(Math.random() * monsterTypes.length)];
-        const spawnHex = { q: arenaSize - 5, r: i - Math.floor(enemyCount/2) };
-        const enemy = window.createMonster(type, spawnHex, null, null, 'enemy');
-        window.entities.push(enemy);
+    let enemyCount = 2 + Math.floor(Math.random() * 4);
+    const monsterTypes = ['goblin', 'orc', 'skeleton', 'zombie', 'imp', 'spider'];
+    
+    // GRISHNAK ENCOUNTER (10% chance if not defeated)
+    if (!window.grishnakDefeated && Math.random() < 0.1) {
+        window.showMessage("A champion enters the arena: Grishnak!");
+        const grishnak = window.createMonster('orc', { q: arenaSize - 5, r: 0 }, null, null, 'enemy');
+        grishnak.name = "Grishnak";
+        // 1 rank in each arcane and wizard skill
+        const schools = ['arcane'];
+        schools.forEach(s => {
+            const keys = Object.keys(window.skills).filter(k => window.skills[k].tree === s || window.skills[k].tree === 'wizard');
+            keys.forEach(k => grishnak.skills[k] = 1);
+        });
+        grishnak.hp = 40;
+        grishnak.maxHp = 40;
+        grishnak.applySkills();
+        window.entities.push(grishnak);
+        
+        // Plus 2 regular orcs
+        for (let i = 0; i < 2; i++) {
+            const spawnHex = { q: arenaSize - 5, r: (i === 0 ? -2 : 2) };
+            window.entities.push(window.createMonster('orc', spawnHex, null, null, 'enemy'));
+        }
+    } else {
+        for (let i = 0; i < enemyCount; i++) {
+            const type = monsterTypes[Math.floor(Math.random() * monsterTypes.length)];
+            const spawnHex = { q: arenaSize - 5, r: i - Math.floor(enemyCount/2) };
+            const enemy = window.createMonster(type, spawnHex, null, null, 'enemy');
+            window.entities.push(enemy);
+        }
     }
 
     window.drawMap();

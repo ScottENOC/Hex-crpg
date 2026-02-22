@@ -77,9 +77,31 @@ function drawMap() {
 
           if (!visible && !explored) continue;
 
-          const {x, y} = hexToPixel(q, r);
           const terrain = window.getTerrainAt(q, r);
-          drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
+          
+          const {x, y} = hexToPixel(q, r);
+          const zoomedSize = hexSize * window.cameraZoom;
+
+          // SPECIAL: Arena/Lobby Floor Randomization
+          if ((window.currentCampaign === "1" || window.isInArena) && terrain.name === 'Cave Floor') {
+              const noise = Math.abs(Math.sin(q * 12.9898 + r * 78.233));
+              const floorNum = Math.floor(noise * 4) + 1;
+              const floorImg = window.gameVisuals[`floor${floorNum}`];
+              if (floorImg && floorImg.complete) {
+                  mapCtx.drawImage(floorImg, x - zoomedSize, y - zoomedSize, zoomedSize * 2, zoomedSize * 2);
+              } else {
+                  drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
+              }
+
+              // Overlays (10% Blood, 10% Skull)
+              if (noise < 0.1 && window.gameVisuals.overlay_blood.complete) {
+                  mapCtx.drawImage(window.gameVisuals.overlay_blood, x - zoomedSize/2, y - zoomedSize/2, zoomedSize, zoomedSize);
+              } else if (noise > 0.9 && window.gameVisuals.overlay_skull.complete) {
+                  mapCtx.drawImage(window.gameVisuals.overlay_skull, x - zoomedSize/2, y - zoomedSize/2, zoomedSize, zoomedSize);
+              }
+          } else {
+              drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
+          }
 
           if (!visible) {
               // Explored but not visible: dark overlay
@@ -246,7 +268,7 @@ function hasLineOfSight(start, end) {
     if (viewer) {
         baseVisionCap += (viewer.visionBonus || 0);
         if (viewer.equipped) {
-            [viewer.equipped.weapon, viewer.equipped.offhand].forEach(iid => {
+            [viewer.equipped.weapon, viewer.equipped.offhand, viewer.equipped.accessory].forEach(iid => {
                 if (iid && window.items[iid]?.lightRadius) viewerTorchRadius = Math.max(viewerTorchRadius, window.items[iid].lightRadius);
             });
         }
@@ -255,11 +277,11 @@ function hasLineOfSight(start, end) {
     // Is the target illuminated by ANY source?
     let targetIsIlluminated = false;
     
-    // Check entities for torches
+    // Check entities for torches/accessories
     window.entities.forEach(e => {
         if (!e.alive || !e.equipped) return;
         let r = 0;
-        [e.equipped.weapon, e.equipped.offhand].forEach(iid => {
+        [e.equipped.weapon, e.equipped.offhand, e.equipped.accessory].forEach(iid => {
             if (iid && window.items[iid]?.lightRadius) r = Math.max(r, window.items[iid].lightRadius);
         });
         if (r > 0 && distance(e.hex, end) <= r) targetIsIlluminated = true;

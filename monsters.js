@@ -121,6 +121,19 @@ const monsterTemplates = {
         skills: { 'firebolt_hit': 1 },
         defaultEquipment: []
     },
+    'spider': {
+        name: 'Spider',
+        color: '#444',
+        hp: 10,
+        expValue: 120,
+        tags: ['animal', 'spider'],
+        skills: {
+            'meleeDamage': 1,
+            'health': 1,
+            'poison_bite': 1
+        },
+        defaultEquipment: []
+    },
     'wolf_rider_goblin': {
         name: 'Wolf Rider Goblin',
         color: '#2e8b57',
@@ -150,6 +163,12 @@ function createMonster(type, hex, customSkills = null, customEquipment = null, s
     monster.tags = template.tags ? [...template.tags] : [];
     
     if (template.extraHexes) monster.extraHexes = template.extraHexes;
+
+    // Special Spider Initialization
+    if (type === 'spider') {
+        monster.spiderImage = Math.random() < 0.5 ? 'spider1' : 'spider2';
+        monster.hasUsedWeb = false;
+    }
 
     // 1. Assign Equipment First
     const equipment = customEquipment || template.defaultEquipment;

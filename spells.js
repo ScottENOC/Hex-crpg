@@ -41,6 +41,22 @@ const baseSpells = {
         baseMana: 10,
         type: 'summon',
         summons: ['wolf']
+    },
+    'counterspell': {
+        name: 'Counterspell',
+        school: 'arcane',
+        baseMana: 10,
+        type: 'dispel',
+        baseRange: 8
+    },
+    'entangle': {
+        name: 'Entangle',
+        school: 'nature',
+        baseMana: 12,
+        type: 'aoe_debuff',
+        baseRange: 8,
+        baseRadius: 1,
+        debuffType: 'entangled'
     }
 };
 

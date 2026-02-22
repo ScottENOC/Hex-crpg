@@ -192,6 +192,11 @@ window.startGame = function() {
 
   window.initializePlayer(race, cls, gender, campaign);
   window.party[0].name = name; // Update with generated name if needed
+  
+  // Campaign Level Caps
+  window.campaignLevelCaps = { "1": 50, "2": 5, "3": 50 };
+  window.currentLevelCap = window.campaignLevelCaps[campaign] || 50;
+
   window.updatePartyTabs();
 
   document.getElementById("characterCreator").style.display = "none";

@@ -673,6 +673,16 @@ function updateSpellPreview() {
             <span style="font-size: 0.8em; color: #aaa;">(+5 Mana per +1x Magnitude)</span>
         </div>
     `;
+    const expandRanks = player.skills[`${base.school}_expand`] || 0;
+    if (expandRanks > 0 && base.baseRadius !== undefined) {
+        html += `
+            <div class="form-group">
+                <label>Radius Bonus (Max: +${expandRanks}):</label>
+                <input type="number" id="spell-radius-bonus" value="0" min="0" max="${expandRanks}" onchange="window.renderSpellStats()">
+                <span style="font-size: 0.8em; color: #aaa;">(+10 Mana per +1 Radius)</span>
+            </div>
+        `;
+    }
     document.getElementById("spell-options-container").innerHTML = html;
     window.renderSpellStats();
 }
@@ -684,10 +694,15 @@ function renderSpellStats() {
     const speed = document.getElementById("spell-speed-select").value;
     const rangeBonus = parseInt(document.getElementById("spell-range-bonus").value) || 0;
     const magBonus = parseInt(document.getElementById("spell-magnitude-bonus").value) || 0;
+    const radBonusInput = document.getElementById("spell-radius-bonus");
+    const radBonus = radBonusInput ? (parseInt(radBonusInput.value) || 0) : 0;
+
     let manaCost = base.baseMana;
     let tpCost = 10;
     let magnitude = base.baseMagnitude * (1 + magBonus);
     let range = (base.baseRange || 1) + rangeBonus;
+    let radius = (base.baseRadius || 0) + radBonus;
+
     let effRange = 0, effMag = 0, effSpeed = 0;
     if (base.school === 'arcane') {
         effRange = player.skills['arcane_eff_range'] || 0;
@@ -703,7 +718,9 @@ function renderSpellStats() {
     const rangeManaMod = Math.max(0, rangeBonus - effRange);
 
     manaCost += (magBonus * Math.max(0, 5 - effMag));
-    const coreManaCost = base.baseMana + (magBonus * Math.max(0, 5 - effMag));
+    manaCost += (radBonus * 10);
+
+    const coreManaCost = base.baseMana + (magBonus * Math.max(0, 5 - effMag)) + (radBonus * 10);
 
     const cap = player.manaCaps[base.school] || 10;
     const overCap = manaCost > cap;
@@ -713,10 +730,11 @@ function renderSpellStats() {
         <p><strong>TP Cost:</strong> ${tpCost}</p>
         <p><strong>Magnitude:</strong> ${magnitude}</p>
         <p><strong>Range:</strong> ${range}</p>
+        ${base.baseRadius !== undefined ? `<p><strong>Radius:</strong> ${radius}</p>` : ''}
     `;
     document.getElementById("spell-stats-display").innerHTML = statsHtml;
     const animalId = document.getElementById("spell-animal-select") ? document.getElementById("spell-animal-select").value : null;
-    window.currentSpellCalc = { name: base.name, school: base.school, manaCost, coreManaCost, tpCost, magnitude, range, type: base.type, baseId, animalId };
+    window.currentSpellCalc = { name: base.name, school: base.school, manaCost, coreManaCost, tpCost, magnitude, range, radius, type: base.type, baseId, animalId };
 }
 
 function createSpell() {
@@ -739,7 +757,7 @@ function showInventoryScreen() {
     contentDiv.innerHTML = '';
     if (!player) { contentDiv.innerHTML = '<p>Character not initialized.</p>'; return; }
     let html = `<h3>Gold: ${player.gold || 0}</h3><h3>Equipped</h3>`;
-    const slots = [{ label: 'Weapon', key: 'weapon' }, { label: 'Off-hand', key: 'offhand' }, { label: 'Armor/Barding', key: 'armor' }, { label: 'Helmet', key: 'helmet' }];
+    const slots = [{ label: 'Weapon', key: 'weapon' }, { label: 'Off-hand', key: 'offhand' }, { label: 'Armor/Barding', key: 'armor' }, { label: 'Helmet', key: 'helmet' }, { label: 'Accessory', key: 'accessory' }];
     slots.forEach(slot => {
         const itemId = player.equipped[slot.key];
         const item = itemId ? window.items[itemId] : null;
@@ -764,6 +782,7 @@ function showInventoryScreen() {
             if (player.equipped.offhand === itemId) equipCount++;
             if (player.equipped.armor === itemId) equipCount++;
             if (player.equipped.helmet === itemId) equipCount++;
+            if (player.equipped.accessory === itemId) equipCount++;
 
             const available = count - equipCount;
             const canBeOffhand = item.canOffhand || item.type === 'shield';
@@ -775,8 +794,9 @@ function showInventoryScreen() {
                 ${equipCount > 0 ? `<br><span style="color: #4caf50; font-size: 0.8em;">Equipped: ${equipCount}</span>` : ''}
                 <br><span style="font-size: 0.8em; color: #aaa;">${item.damage ? 'Dmg: +' + item.damage : ''} ${item.range ? 'Range: +' + item.range : ''} ${item.hands ? 'Hands: ' + item.hands : ''}</span>
                 <br>
-                ${available > 0 ? `<button onclick="window.equipItem('${itemId}')">Equip</button>` : ''}
+                ${available > 0 && (item.type !== 'consumable') ? `<button onclick="window.equipItem('${itemId}')">Equip</button>` : ''}
                 ${showOffhandBtn ? `<button onclick="window.equipItem('${itemId}', true)" style="margin-left:5px;">Equip Off-hand</button>` : ''}
+                ${item.type === 'consumable' && available > 0 ? `<button onclick="window.drinkPotion('${itemId}')">Drink</button>` : ''}
             </div>`;
         });
     }
@@ -797,6 +817,35 @@ function unequipItem(slot) {
     updatePlayerUI();
 }
 
+function drinkPotion(itemId) {
+    const player = window.player;
+    const item = window.items[itemId];
+    const ent = window.entities.find(e => e.name === player.name);
+    
+    if (ent && ent.timePoints < 1) {
+        showMessage("Not enough TP to drink.");
+        return;
+    }
+
+    if (itemId === 'potion_health') {
+        const healAmt = 5;
+        player.hp = Math.min(player.maxHp, player.hp + healAmt);
+        if (ent) {
+            ent.hp = player.hp;
+            window.spendTP(ent, 1);
+        }
+        showMessage(`You drink the ${item.name} and heal for ${healAmt} HP.`);
+    }
+
+    // Remove from inventory
+    const idx = player.inventory.indexOf(itemId);
+    if (idx > -1) player.inventory.splice(idx, 1);
+
+    showInventoryScreen();
+    showCharacter();
+    window.renderEntities();
+}
+
 function equipItem(itemId, isOffhand = false) {
     const player = window.player;
     const item = window.items[itemId];
@@ -804,7 +853,10 @@ function equipItem(itemId, isOffhand = false) {
     if (!playerEntity) return;
     if (window.gamePhase !== 'PLAYER_TURN' || window.currentTurnEntity !== playerEntity) { showMessage("It must be this character's turn to change equipment."); return; }
     if (playerEntity.timePoints < 1) { showMessage("Not enough Time Points to change equipment."); return; }
-    if (item.type === 'weapon') {
+    
+    if (item.type === 'accessory') {
+        player.equipped.accessory = itemId;
+    } else if (item.type === 'weapon') {
         if (isOffhand) player.equipped.offhand = itemId;
         else { player.equipped.weapon = itemId; if (item.hands === 2) player.equipped.offhand = null; }
     } else if (item.type === 'shield') {
@@ -857,6 +909,7 @@ function gainExp(amt) {
 }
 
 function applyLevelUp(char, cls) {
+    if (char.level >= (window.currentLevelCap || 50)) return;
     char.level += 1;
     const cb = window.classData[cls].bonus;
     for (let key in cb) char.attributes[key] = (char.attributes[key] || 0) + cb[key];
@@ -866,6 +919,10 @@ function applyLevelUp(char, cls) {
 }
 
 function doLevelUp() {
+    if (window.player.level >= (window.currentLevelCap || 50)) {
+        window.showMessage("You have reached the level cap for this campaign!");
+        return;
+    }
     const cls = document.getElementById("level-up-class-select").value;
     const expReq = window.player.level * 1000;
     if (window.player.exp < expReq) return;
@@ -1185,6 +1242,7 @@ function openShop() {
 
     for (const id in counts) {
         const item = window.items[id];
+        if (!item) continue;
         const sellPrice = Math.floor((item.buyPrice || 0) * 0.5);
         if (sellPrice <= 0) continue;
 

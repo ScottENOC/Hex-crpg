@@ -14,7 +14,12 @@ const items = {
     'nasal_helm': { id: 'nasal_helm', name: 'Nasal Helm', type: 'helmet', reduction: 1, buyPrice: 30 },
     'torch': { id: 'torch', name: 'Torch', type: 'weapon', subType: 'tool', damage: 0, range: 0, lightRadius: 10, canOffhand: true, buyPrice: 5 },
     
-    'wooden_shield': { id: 'wooden_shield', name: 'Wooden Shield', type: 'shield', reduction: 1, hands: 1, buyPrice: 20 }
+    'wooden_shield': { id: 'wooden_shield', name: 'Wooden Shield', type: 'shield', reduction: 1, hands: 1, buyPrice: 20 },
+
+    // Magic Items
+    'sword_arrow_deflection': { id: 'sword_arrow_deflection', name: 'Sword of Arrow Deflection', type: 'weapon', subType: 'melee', damage: 3, range: 0, hands: 1, canOffhand: true, buyPrice: 500, skills: { 'deflect_arrows': 1 } },
+    'potion_health': { id: 'potion_health', name: 'Potion of Health', type: 'consumable', subType: 'potion', buyPrice: 50 },
+    'glowing_ring': { id: 'glowing_ring', name: 'Glowing Ring', type: 'accessory', buyPrice: 200, lightRadius: 10 }
 };
 
 window.items = items;
