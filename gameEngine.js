@@ -804,10 +804,16 @@ function tick() {
 
             if (window.isSleeping) {
                 const mc = window.entities.find(e => e.name === window.party[0].name);
-                if (!mc || (mc.totalTPSpent - (window.sleepStartTP || 0)) >= 100) {
+                if (mc) {
+                    const targetTPGained = (8 * 3600 / 0.4) * mc.timePointsPerTick;
+                    if ((mc.totalTPSpent - (window.sleepStartTP || 0)) >= targetTPGained) {
+                        window.isSleeping = false;
+                        sentientAllies.forEach(ent => ent.awakeSeconds = 0);
+                        window.showMessage("Sleep complete.");
+                        window.updateSleepButton();
+                    }
+                } else {
                     window.isSleeping = false;
-                    sentientAllies.forEach(ent => ent.awakeSeconds = 0);
-                    window.showMessage("Sleep complete.");
                     window.updateSleepButton();
                 }
             }

@@ -61,7 +61,11 @@ function addJerry() {
     const jerry = window.createCharacterData(randRace, randCls, `Jerry ${window.party.length}`, randGender);
     window.party.push(jerry);
     
-    const playerEntity = window.entities.find(e => e.name.includes("Player"));
+    const playerEntity = window.entities.find(e => e.side === 'player');
+    if (!playerEntity) {
+        showMessage("No player entity found to spawn next to!");
+        return;
+    }
     let spawnHex = { q: playerEntity.hex.q + 1, r: playerEntity.hex.r };
     
     const directions = [
