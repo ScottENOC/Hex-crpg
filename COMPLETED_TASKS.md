@@ -1,62 +1,27 @@
-- **Arena Environment Overhaul**:
-    - **Indoor vs. Outdoor**: Arena matches now have a 50/50 chance of being indoors (windowless, pitch black) or outdoors (time-of-day lighting).
-    - **Lobby Lighting**: The Arena Lobby is now correctly 0% lit by the sun, relying entirely on internal light sources like the fireplace.
-    - **Dynamic Lighting**: Indoor arenas have a 50% chance to contain randomized campfires for illumination.
-- **Improved Alert System**:
-    - Implemented a recursive alert/wake-up system. When an enemy is alerted, they chain-alert all allies within 10 hexes.
-    - Standardized enemy alliances for the Arena campaign to ensure coordinated AI responses.
-- **Party & Companion Fixes**:
-    - **Mount Teleportation**: Ensured that horses and other mounts correctly join the party when teleporting to and from arena matches.
-- **Sleep & Time Mechanics**:
-    - **Sleep Functionality**: Fixed the sleep button to correctly pass exactly 8 hours of game time.
-    - **Fast-Forward**: Optimized sleep logic to process Time Point distribution 1000x faster, removing artificial delays.
-    - **Sleep Interrupts**: Sleep is now correctly interrupted by taking damage or spotting an enemy.
-- **Stealth Overhaul**:
-    - Converted Stealth into a movement toggle rather than a one-time roll. Moving while stealthed adds a 4 TP penalty per hex.
-    - Added **Speedy Stealth** Rogue skill to reduce the movement penalty by 2 TP.
-    - Implemented a more dynamic detection system: enemies roll a "spot chance" when a stealthed character enters LOS, based on the character's `stealthScore` (which accounts for terrain, light, and armor) and distance.
-    - Once spotted, a character remains known until LOS is broken.
-- **Lighting & Environment**:
-    - Added an `indoorLightMult` system. Indoor areas can now have independent lighting from the time-of-day cycle.
-    - Set the Arena Lobby and Battle Maps to 0% ambient light, making them reliant on fireplaces and torches.
-- **Arena Campaign Improvements**:
-    - **Fresh Level Starts**: Every teleport (to/from the lobby) now correctly resets the "Fog of War" (`exploredHexes`), ensuring players can't see the arena layout before exploring it.
-    - **Visual Assets**: Integrated `axe.png` for axe-wielding characters and `troll.png` for Troll monsters.
-    - **NPC Image Fix**: Rescaled the Arena Mercenary image to be 15% narrower for better proportions.
-- **Monster & Summons**:
-    - **Spider Update**: Spiders now correctly use `spider1.png` or `spider2.png`.
-    - **Wolf & Rider Layers**: Nature summons now use the updated `wolf.png`. Goblin Wolf Riders correctly layer the goblin and their equipment on top of the wolf base.
-- **Spider Monster**: Added a new spider monster with two random images (`spider1.png`, `spider2.png`). Implemented "Poison Bite" (50% chance, 2 dmg/tick for 10 ticks) and "Web Fling" (range 10, prevents movement for 40 TP spent, used once per spider with priority on non-webbed targets).
-- **NPC Improvements**:
-    - Assigned specific images to Arena NPCs: `arenaannouncer.png`, `arenashopkeeper.png`, and `arenamercenary.png`.
-    - Implemented a dialogue system for these NPCs.
-    - **NPC Image Rendering**: Updated `renderEntities` to ensure neutral NPCs with custom images are correctly rendered using their assigned `.png` files instead of colored circles.
-    - **Dialogue Portraits**: Updated `showDialogue` to use custom NPC images in the dialogue modal for a more immersive experience.
-    - **Initiative Filter**: NPCs are now excluded from the turn indicator/initiative bar.
-- **Grishnak Encounter**: Added Grishnak, a custom Orc boss with arcane/wizard skills and 40 HP. He has a 10% chance to appear in arena fights until defeated.
-- **Arena Visuals**: 
-    - Implemented floor randomization using `arenaHexFloor1-4.png` for Cave Floor tiles in Campaign 1.
-    - Added 10% chance for `overlay blood.png` or `overlay skull.png` on these tiles.
-    - **Skull Overlay Adjustment**: Shrunk the skull overlay image to 25% of its original size and reduced its appearance frequency from 10% to 1% for a more subtle effect.
+- **Off-hand Weapon Rendering**: Implemented visual support for off-hand weapons on the game map. Off-hand weapons are now correctly mirrored vertically and positioned on the opposite side of the character.
+- **Weapon Visual Overhaul**: Updated rendering logic to use default base images for magic items (e.g., using the sword icon for the Sword of Arrow Deflection) unless a specialized image is provided.
+- **Improved Sleep Mechanics**: Rewrote the sleep system to simulate time by repeatedly processing 'Wait' actions for the entire party. This ensures 8 hours of game time pass in approximately one second while maintaining all recovery and interrupt logic.
+- **UI Refinements**:
+    - **Health Display**: All character and party HP values are now rounded up to the nearest integer in the UI to prevent confusing decimal values.
+    - **Inventory Filtering**: Resticted Shield equipping to the off-hand slot only, removing the redundant 'Equip' button for shields.
+    - **Visual Adjustments**: Repositioned and resized the Nasal Helm overlay for a better fit on character portraits.
+- **Combat & Skill Balancing**:
+    - **Sword Parry Mastery**: Reduced success chance from 10% to 5% per rank and capped at 2 ranks (was 3).
+    - **Spear Halt Fix**: Corrected the 'Spear Halt' reaction to allow the moving character to finish their current step before terminating their turn, preventing characters from getting stuck between hexes.
 - **Arena Campaign Overhaul**:
-    - **Level Loading Logic**: Teleporting to an arena fight now acts as loading a new level. The lobby is cleared, Time Points are reset, and the camera automatically centers on the player party.
-    - **Themed Encounters**: Implemented themed enemy groups (Spiders, Undead, Orcs/Goblins, Imps, Wolves) for arena matches.
-- **Camera System**:
-    - **centerCameraOn(hex)**: Implemented a new function to programmatically center the game camera on specific hex coordinates.
-- **New Spells**:
-    - **Counterspell (Arcane)**: Dispel target summoned creature or random buff/debuff. Can also target hexes to remove AOE effects.
-    - **Entangle (Nature)**: AOE debuff that marks hexes as 'Swamp' (visual representation), doubling movement cost.
-    - **Spell Expansion**: Added 'Arcane/Divine/Nature Expansion' skills (3 ranks) to increase AOE radius (+10 mana per rank).
-- **Magic Items**:
-    - **Sword of Arrow Deflection**: Allows parrying arrows using the sword parry skill.
-    - **Potion of Health**: Consumable that heals the player for 5 HP (uses 1 TP).
-    - **Glowing Ring**: Accessory that provides illumination equal to a torch without occupying a hand slot.
-    - Added accessory slot and 'Drink' button to the inventory UI.
-- **Ambient Dialogue**:
-    - Created `dialogue.js` to store background flavor text.
-    - Implemented triggers for the Announcer to comment on gladiator "cold feet" if spending too long in the lobby, and other combat-related lines.
-    - **Announcer Trigger Delay**: Increased the threshold for the Announcer's "cold feet" line from 50 to 150 timePoints to better reflect actual player inactivity.
-- **Campaign Level Caps**: Enforced level caps: Campaign 1 (50), Campaign 2 (5), Campaign 3 (50).
+    - **Indoor vs. Outdoor**: Arena matches now have a 50/50 chance of being indoors (windowless, pitch black) or outdoors (standard daylight cycle).
+    - **Lobby Lighting**: The Arena Lobby is now correctly 0% lit by the sun, relying entirely on internal light sources like the fireplace.
+    - **Recursive Alert System**: Enemies now coordinate better! When an enemy spots the player, they alert all allies within a 10-hex radius, who in turn alert their own nearby allies.
+- **Stealth Overhaul**:
+    - Converted Stealth into a movement toggle. Moving while stealthed adds a 4 TP penalty per hex.
+    - Added **Speedy Stealth** Rogue skill to reduce the movement penalty by 2 TP.
+    - Implemented a more dynamic detection system where enemies roll a "spot chance" when a stealthed character enters LOS.
+- **Spider Monster**: Added a new spider monster with random images (`spider1.png`, `spider2.png`), **Poison Bite**, and **Web Fling** abilities.
+- **NPC & Dialogue System**:
+    - Assigned unique images to Arena NPCs and implemented a dialogue system with portraits.
+    - **Initiative Filter**: NPCs are now excluded from the turn indicator bar.
+- **Grishnak Encounter**: Added a custom Orc boss with arcane skills who has a 10% chance to appear in arena fights until defeated.
 - **Bug Fixes**:
-    - Fixed a crash in the shop UI when inventory contained undefined items.
-    - Resolved duplicate stealth button bug by clearing the action container properly.
+    - **Fog of War Fix**: Resetting `exploredHexes` upon teleportation now ensures the Arena layout is hidden until explored.
+    - **setTerrainAt Implementation**: Fixed a crash in Campaign 1 lobby generation.
+    - **Duplicate Stealth Buttons**: Fixed a bug where the stealth button would duplicate every time the UI refreshed.

@@ -197,7 +197,13 @@ function checkMovementReactions(movingEntity, nextHex, callback) {
                     } else if (choiceId.startsWith('halt')) {
                         spendTP(opt.reactor, 1);
                         window.showMessage(`${opt.reactor.name} reacts with Spear Halt!`);
-                        callback(true); 
+                        
+                        // Let them finish this step
+                        movingEntity.hex = nextHex;
+                        if (movingEntity.riding) movingEntity.riding.hex = { q: nextHex.q, r: nextHex.r };
+                        
+                        callback(true); // Terminate movement AFTER this step
+                        return;
                     } else if (choiceId.startsWith('sidestep')) {
                         const reactor = opt.reactor;
                         const cost = opt.tpCost;
@@ -574,10 +580,12 @@ function renderEntities() {
               if (e.gender !== 'male' && window.gameVisuals.humanHair.complete) {
                   window.mapCtx.drawImage(window.gameVisuals.humanHair, x - humanSize/2, y - humanSize/2 + humanYOff - (3 * z), humanSize, (humanSize + humanHeightAdd));
               }
-              // LAYER: Human Helmet
-              if (e.equipped && e.equipped.helmet === 'nasal_helm' && window.gameVisuals.nasal_helm.complete) {
-                  window.mapCtx.drawImage(window.gameVisuals.nasal_helm, x - humanSize/2, y - humanSize/2 + humanYOff, humanSize, (humanSize + humanHeightAdd));
-              }
+                          // LAYER: Human Helmet
+                          if (e.equipped && e.equipped.helmet === 'nasal_helm' && window.gameVisuals.nasal_helm.complete) {
+                              const helmSize = humanSize * 1.1;
+                              window.mapCtx.drawImage(window.gameVisuals.nasal_helm, x - helmSize/2 - (3 * z), y - humanSize/2 + humanYOff + (2 * z), helmSize, (humanSize + humanHeightAdd));
+                          }
+              
               // LAYER: Human Armour
               let armorImg = null;
               if (e.equipped && e.equipped.armor) {
@@ -644,16 +652,35 @@ function renderEntities() {
               }
           }
           
-          // WEAPON LAYER: Sword or Axe
-          let weaponImg = null;
-          if (e.equipped?.weapon === 'sword') weaponImg = window.gameVisuals.swordIcon;
-          else if (e.equipped?.weapon === 'axe') weaponImg = window.gameVisuals.axe;
-  
-          if (weaponImg && weaponImg.complete) {
-              const weaponSize = window.hexSize * 1.0 * z; 
-              window.mapCtx.drawImage(weaponImg, x - (window.hexSize/2 + 5) * z, y - weaponSize/2, weaponSize, weaponSize);
-          }
-      } else if ((e instanceof window.Enemy || e.customImage) && window.gameVisuals) {
+                  // WEAPON LAYER: Sword or Axe
+                  let weaponImg = null;
+                  const mainW = e.equipped?.weapon;
+                  if (mainW === 'sword' || mainW === 'sword_arrow_deflection') weaponImg = window.gameVisuals.swordIcon;
+                  else if (mainW === 'axe') weaponImg = window.gameVisuals.axe;
+          
+                  if (weaponImg && weaponImg.complete) {
+                      const weaponSize = window.hexSize * 1.0 * z; 
+                      window.mapCtx.drawImage(weaponImg, x - (window.hexSize/2 + 5) * z, y - weaponSize/2, weaponSize, weaponSize);
+                  }
+          
+                  // OFF-HAND WEAPON LAYER
+                  let offhandImg = null;
+                  const offW = e.equipped?.offhand;
+                  if (offW === 'sword' || offW === 'sword_arrow_deflection') offhandImg = window.gameVisuals.swordIcon;
+                  else if (offW === 'axe') offhandImg = window.gameVisuals.axe;
+                  else if (offW === 'dagger') offhandImg = window.gameVisuals.swordIcon; // Daggers use sword icon for now
+          
+                  if (offhandImg && offhandImg.complete && window.items[offW]?.type === 'weapon') {
+                      const weaponSize = window.hexSize * 1.0 * z;
+                      window.mapCtx.save();
+                      // Flip vertically and position on the right side
+                      window.mapCtx.translate(x + (window.hexSize/2 + 5) * z, y);
+                      window.mapCtx.scale(1, -1);
+                      window.mapCtx.drawImage(offhandImg, -weaponSize/2, -weaponSize/2, weaponSize, weaponSize);
+                      window.mapCtx.restore();
+                  }
+              } else if ((e instanceof window.Enemy || e.customImage) && window.gameVisuals) {
+          
           let size = window.hexSize * 1.5 * z;
           let yOffset = 0;
           let widthMult = 1.0;
@@ -749,12 +776,18 @@ function tick() {
 
     // REST/SLEEP LOGIC: If resting/sleeping and anyone is ready, auto-wait to spend TP
     if (window.isResting || window.isSleeping) {
-        const ready = window.entities.filter(e => e.timePoints >= 100 && e.alive && e.side === 'player' && !e.rider);
-        ready.forEach(e => {
-            spendTP(e, 1);
-        });
-        
         const sentientAllies = window.entities.filter(e => e.alive && e.side === 'player' && e.name !== 'Wolf' && e.name !== 'Horse');
+
+        // Check if anyone is ready to take a turn (TP >= 100)
+        const ready = window.entities.filter(e => e.timePoints >= 100 && e.alive && e.side === 'player' && !e.rider);
+        if (ready.length > 0) {
+            ready.forEach(e => {
+                spendTP(e, 1); // This triggers world time progression if updateTime is tied to TP
+            });
+        } else {
+            // If no one is ready, we need to pass time via runTickInternal
+            runTickInternal();
+        }
 
         if (window.isResting) {
             const allRestored = sentientAllies.every(e => e.hp >= e.maxHp && (e.maxMana === 0 || e.currentMana >= e.maxMana));
@@ -786,13 +819,38 @@ function tick() {
 
         // FAST FORWARD SLEEP
         if (window.isSleeping) {
-            // Speed up sleep significantly: run many ticks per real tick
-            // Run 1000 ticks per real tick, no extra delay
+            // Run many logic cycles per frame to speed up sleep
             for(let i=0; i<1000; i++) {
-                runTickInternal();
-                if (!window.isSleeping) break;
+                // Repeat the rest/sleep check logic
+                const readyInner = window.entities.filter(ent => ent.timePoints >= 100 && ent.alive && ent.side === 'player' && !ent.rider);
+                if (readyInner.length > 0) {
+                    readyInner.forEach(ent => spendTP(ent, 1));
+                } else {
+                    runTickInternal();
+                }
+
+                // Check for completion
+                const secondsPassed = window.worldSeconds - (window.startSleepTime || 0);
+                if (secondsPassed >= 8 * 3600) {
+                    window.isSleeping = false;
+                    sentientAllies.forEach(ent => ent.awakeSeconds = 0);
+                    window.showMessage("Sleep complete. Everyone is well rested.");
+                    window.updateSleepButton();
+                    break;
+                }
+
+                // Check for interrupts
+                const enemySeenInner = window.entities.some(ent => ent.alive && ent.side === 'enemy' && window.isVisibleToPlayer(ent.hex));
+                const anyoneHurtInner = sentientAllies.some(ent => ent.hp < (ent.lastHp || ent.hp));
+                if (enemySeenInner || anyoneHurtInner) {
+                    window.isSleeping = false;
+                    window.showMessage("Sleep interrupted!");
+                    window.updateSleepButton();
+                    break;
+                }
+                sentientAllies.forEach(ent => ent.lastHp = ent.hp);
             }
-            return; // Don't run extra logic this tick
+            return;
         }
     }
 
@@ -2114,7 +2172,6 @@ function startArenaFight() {
 
     // Filter to keep players AND their mounts/allies
     window.entities = window.entities.filter(e => e.side === 'player'); 
-    window.entities.forEach(e => e.timePoints = 0); 
 
     // 2. Create arena map (50x50 rectangle)
     const arenaSize = 25;

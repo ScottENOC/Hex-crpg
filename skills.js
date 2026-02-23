@@ -202,7 +202,6 @@ const skills = {
 
     // WEAPON SKILLS
     ...generateWeaponSkills('sword', 'Sword'),
-    ...generateWeaponSkills('sword_arrow_deflection', 'Sword of Arrow Deflection'),
     ...generateWeaponSkills('axe', 'Axe', 3),
     ...generateWeaponSkills('bow', 'Bow'),
     ...generateWeaponSkills('spear', 'Spear'),
@@ -350,9 +349,9 @@ function generateWeaponSkills(id, label, maxDmgRanks = 1) {
         };
         s[`${id}_parry_chance`] = {
             name: `${label} Parry Mastery`,
-            description: `Grants +10% success chance when parrying with a ${label}.`,
+            description: `Grants +5% success chance when parrying with a ${label}.`,
             tree: 'weapons',
-            maxRanks: 3,
+            maxRanks: 2,
             prereq: parryId,
             apply: (player) => {}
         };

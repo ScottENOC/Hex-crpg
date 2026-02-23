@@ -169,7 +169,7 @@ function showCharacter(){
 <p>Race: ${window.player.race}</p>
 <p>Class: ${window.player.class}</p>
 <p>Level: ${window.player.level}</p>
-<p>HP: ${window.player.hp}/${window.player.maxHp}</p>
+<p>HP: ${Math.ceil(window.player.hp)}/${window.player.maxHp}</p>
 <p>Mana: ${Number(window.player.currentMana).toFixed(1)}/${window.player.maxMana}</p>
 <p>Damage: ${window.player.baseDamage}</p>
 `;
@@ -786,14 +786,14 @@ function showInventoryScreen() {
             const available = count - equipCount;
             const canBeOffhand = item.canOffhand || item.type === 'shield';
             const mainHandWeapon = player.equipped.weapon ? window.items[player.equipped.weapon] : null;
-            const showOffhandBtn = canBeOffhand && mainHandWeapon && mainHandWeapon.hands === 1 && available > 0;
+            const showOffhandBtn = canBeOffhand && (item.type === 'shield' || (mainHandWeapon && mainHandWeapon.hands === 1)) && available > 0;
 
             html += `<div style="margin-bottom: 10px; border-bottom: 1px solid #444; padding-bottom: 5px;">
                 <strong>${item.name} x${count}</strong> (${item.type})
                 ${equipCount > 0 ? `<br><span style="color: #4caf50; font-size: 0.8em;">Equipped: ${equipCount}</span>` : ''}
                 <br><span style="font-size: 0.8em; color: #aaa;">${item.damage ? 'Dmg: +' + item.damage : ''} ${item.range ? 'Range: +' + item.range : ''} ${item.hands ? 'Hands: ' + item.hands : ''}</span>
                 <br>
-                ${available > 0 && (item.type !== 'consumable') ? `<button onclick="window.equipItem('${itemId}')">Equip</button>` : ''}
+                ${available > 0 && (item.type !== 'consumable' && item.type !== 'shield') ? `<button onclick="window.equipItem('${itemId}')">Equip</button>` : ''}
                 ${showOffhandBtn ? `<button onclick="window.equipItem('${itemId}', true)" style="margin-left:5px;">Equip Off-hand</button>` : ''}
                 ${item.type === 'consumable' && available > 0 ? `<button onclick="window.drinkPotion('${itemId}')">Drink</button>` : ''}
             </div>`;
@@ -1121,11 +1121,11 @@ function updateTurnIndicator() {
         }
         const infoDiv = document.createElement('div');
         infoDiv.classList.add('turn-indicator-info');
-        let infoHtml = `<p><strong>${entity.name.split(' ')[0]}</strong></p><p>HP: ${entity.hp}/${entity.maxHp} | TP: ${Math.floor(entity.timePoints)}</p>`;
-        if (entity.maxMana > 0 || entity.currentMana > 0) infoHtml += `<p>MP: ${entity.currentMana || 0}/${entity.maxMana || 0}</p>`;
+        let infoHtml = `<p><strong>${entity.name.split(' ')[0]}</strong></p><p>HP: ${Math.ceil(entity.hp)}/${entity.maxHp} | TP: ${Math.floor(entity.timePoints)}</p>`;
+        if (entity.maxMana > 0 || entity.currentMana > 0) infoHtml += `<p>MP: ${Math.floor(entity.currentMana) || 0}/${entity.maxMana || 0}</p>`;
         if (entity.riding) {
             const m = entity.riding;
-            infoHtml += `<p style="border-top: 1px solid #555; margin-top: 2px; padding-top: 2px; font-size: 0.9em; color: #aaa;">${m.name}: ${m.hp}/${m.maxHp} HP | ${Math.floor(m.timePoints)} TP</p>`;
+            infoHtml += `<p style="border-top: 1px solid #555; margin-top: 2px; padding-top: 2px; font-size: 0.9em; color: #aaa;">${m.name}: ${Math.ceil(m.hp)}/${m.maxHp} HP | ${Math.floor(m.timePoints)} TP</p>`;
         }
         infoDiv.innerHTML = infoHtml;
         itemDiv.appendChild(portraitDiv);
