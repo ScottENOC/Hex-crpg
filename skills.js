@@ -222,14 +222,14 @@ const skills = {
     'unarmed_hit': {
         name: 'Unarmed Proficiency',
         description: 'Grants +5% hit chance when fighting unarmed.',
-        tree: 'way_of_the_open_palm',
+        tree: 'Way of the open palm',
         maxRanks: 1,
         apply: (player) => {}
     },
     'unarmed_dmg': {
         name: 'Unarmed Mastery',
         description: 'Grants +1 damage when fighting unarmed.',
-        tree: 'way_of_the_open_palm',
+        tree: 'Way of the open palm',
         maxRanks: 1,
         prereq: 'unarmed_hit',
         apply: (player) => {}
@@ -237,7 +237,7 @@ const skills = {
     'deflect_arrows': {
         name: 'Deflect Arrows',
         description: 'React to deflect ranged attacks if unarmored and having an open hand. Works like Parry.',
-        tree: 'way_of_the_open_palm',
+        tree: 'Way of the open palm',
         maxRanks: 1,
         reaction: true,
         apply: (player) => {}

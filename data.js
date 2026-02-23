@@ -29,7 +29,7 @@ const classData = {
         bonus: {druid: 1, nature: 2, endurance: 2, strength: 1, agility: 1 }
     },
     monk: {
-        bonus: { monk: 1, weapons: 1, way_of_the_open_palm: 2, strength: 1, endurance: 1, agility: 1 }
+        bonus: { monk: 1, weapons: 1, 'Way of the open palm': 2, strength: 1, endurance: 1, agility: 1 }
     }
 };
 

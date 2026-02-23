@@ -129,6 +129,9 @@ function toggleSleep() {
         }
         window.isSleeping = true;
         window.startSleepTime = window.worldSeconds; // Record when we started
+        const mainChar = window.entities.find(e => e.name === window.party[0].name);
+        window.sleepStartTP = mainChar ? mainChar.totalTPSpent : 0;
+
         // Initialize sleep timer for all player entities if needed
         window.entities.forEach(e => {
             if (e.side === 'player' && e.name !== 'Wolf' && e.name !== 'Horse') {
@@ -241,7 +244,7 @@ function showCharacterScreen() {
 
     const treesToShow = new Set();
     const hasWildcard = availablePoints.wildcard > 0;
-    const standardTrees = ['arcane', 'divine', 'nature', 'strength', 'endurance', 'agility', 'weapons', 'way_of_the_open_palm'];
+    const standardTrees = ['arcane', 'divine', 'nature', 'strength', 'endurance', 'agility', 'weapons', 'Way of the open palm'];
 
     for (const tree in availablePoints) {
         if (tree === 'wildcard') continue; 
@@ -1240,6 +1243,36 @@ function openShop() {
         div.appendChild(btn);
         buyList.appendChild(div);
     }
+
+    // Add Horse to shop
+    const horseDiv = document.createElement("div");
+    horseDiv.style.display = "flex";
+    horseDiv.style.justifyContent = "space-between";
+    horseDiv.style.marginBottom = "5px";
+    horseDiv.innerHTML = `<span>Horse (100g)</span>`;
+    const buyHorseBtn = document.createElement("button");
+    buyHorseBtn.innerText = "Buy";
+    buyHorseBtn.style.fontSize = "0.8em";
+    buyHorseBtn.disabled = player.gold < 100;
+    buyHorseBtn.onclick = () => {
+        player.gold -= 100;
+        // Spawn Horse logic
+        const pEnt = window.entities.find(e => e.name === player.name);
+        const neighbors = window.getNeighbors(pEnt.hex.q, pEnt.hex.r);
+        const h = neighbors.find(n => !window.entities.some(e => e.alive && e.getAllHexes().some(oh => oh.q === n.q && oh.r === n.r)) && window.getTerrainAt(n.q, n.r).name !== 'Water');
+        if (h) {
+            const horse = window.createMonster('horse', h, null, null, 'player');
+            window.entities.push(horse);
+            window.drawMap();
+            window.renderEntities();
+            window.showMessage("Horse purchased and joined the party!");
+        } else {
+            window.showMessage("No space for a horse!");
+        }
+        openShop(); // Refresh
+    };
+    horseDiv.appendChild(buyHorseBtn);
+    buyList.appendChild(horseDiv);
 
     sellList.innerHTML = '';
     const inventory = player.inventory || [];

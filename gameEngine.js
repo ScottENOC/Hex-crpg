@@ -331,6 +331,15 @@ function startGameCore(isLoading = false) {
   window.playerWorldPos = { x: 220, y: 200 };
   window.activeSpells = window.activeSpells || [];
 
+  // Set initial time based on campaign if not loading
+  if (!isLoading) {
+      if (window.currentCampaign === "3") {
+          window.worldSeconds = 18 * 3600; // 18:00
+      } else {
+          window.worldSeconds = 8 * 3600; // 08:00
+      }
+  }
+
   window.mapCanvas = document.getElementById("mapCanvas");
   window.mapCtx = window.mapCanvas.getContext("2d");
   window.resizeCanvas();
@@ -751,11 +760,6 @@ function renderEntities() {
             window.mapCtx.arc(x + 10*z, y - 10*z, 3*z, 0, Math.PI*2);
             window.mapCtx.fill();
         }
-    } else {
-        window.mapCtx.beginPath();
-        window.mapCtx.arc(x, y, 10 * z, 0, 2*Math.PI);
-        window.mapCtx.fillStyle = e.color;
-        window.mapCtx.fill();
     }
 
     // UNIVERSAL LAYER: Torch
@@ -774,84 +778,50 @@ function renderEntities() {
 function tick() {
     if (window.isPausedForReaction) return;
 
-    // REST/SLEEP LOGIC: If resting/sleeping and anyone is ready, auto-wait to spend TP
+    // REST/SLEEP LOGIC
     if (window.isResting || window.isSleeping) {
         const sentientAllies = window.entities.filter(e => e.alive && e.side === 'player' && e.name !== 'Wolf' && e.name !== 'Horse');
 
-        // Check if anyone is ready to take a turn (TP >= 100)
-        const ready = window.entities.filter(e => e.timePoints >= 100 && e.alive && e.side === 'player' && !e.rider);
-        if (ready.length > 0) {
-            ready.forEach(e => {
-                spendTP(e, 1); // This triggers world time progression if updateTime is tied to TP
-            });
-        } else {
-            // If no one is ready, we need to pass time via runTickInternal
-            runTickInternal();
-        }
+        for(let i=0; i<1000; i++) {
+            if (!window.isResting && !window.isSleeping) break;
 
-        if (window.isResting) {
-            const allRestored = sentientAllies.every(e => e.hp >= e.maxHp && (e.maxMana === 0 || e.currentMana >= e.maxMana));
-            if (allRestored) {
-                window.isResting = false;
-                window.showMessage("Rest complete. Everyone is restored.");
-                window.updateRestButton();
+            const ready = window.entities.filter(e => e.timePoints >= 100 && e.alive && e.side === 'player' && !e.rider);
+            if (ready.length > 0) {
+                ready.forEach(e => spendTP(e, 1));
+            } else {
+                runTickInternal(true);
             }
-        }
 
-        if (window.isSleeping) {
-            const secondsPassed = window.worldSeconds - (window.startSleepTime || 0);
-            if (secondsPassed >= 8 * 3600) {
-                window.isSleeping = false;
-                sentientAllies.forEach(e => e.awakeSeconds = 0);
-                window.showMessage("Sleep complete. Everyone is well rested.");
-                window.updateSleepButton();
-            }
-        }
-
-        // CHECK INTERRUPT: Enemy seen or damage taken (Common for both)
-        const enemySeen = window.entities.some(e => e.alive && e.side === 'enemy' && window.isVisibleToPlayer(e.hex));
-        const anyoneHurt = sentientAllies.some(e => e.hp < (e.lastHp || e.hp)); // Simple check if HP decreased
-        if (enemySeen || anyoneHurt) {
-            if (window.isResting) { window.isResting = false; window.showMessage("Rest interrupted!"); window.updateRestButton(); }
-            if (window.isSleeping) { window.isSleeping = false; window.showMessage("Sleep interrupted!"); window.updateSleepButton(); }
-        }
-        sentientAllies.forEach(e => e.lastHp = e.hp);
-
-        // FAST FORWARD SLEEP
-        if (window.isSleeping) {
-            // Run many logic cycles per frame to speed up sleep
-            for(let i=0; i<1000; i++) {
-                // Repeat the rest/sleep check logic
-                const readyInner = window.entities.filter(ent => ent.timePoints >= 100 && ent.alive && ent.side === 'player' && !ent.rider);
-                if (readyInner.length > 0) {
-                    readyInner.forEach(ent => spendTP(ent, 1));
-                } else {
-                    runTickInternal();
+            // CHECK COMPLETION
+            if (window.isResting) {
+                const allRestored = sentientAllies.every(e => e.hp >= e.maxHp && (e.maxMana === 0 || e.currentMana >= e.maxMana));
+                if (allRestored) {
+                    window.isResting = false;
+                    window.showMessage("Rest complete. Everyone is restored.");
+                    window.updateRestButton();
                 }
+            }
 
-                // Check for completion
-                const secondsPassed = window.worldSeconds - (window.startSleepTime || 0);
-                if (secondsPassed >= 8 * 3600) {
+            if (window.isSleeping) {
+                const mc = window.entities.find(e => e.name === window.party[0].name);
+                if (!mc || (mc.totalTPSpent - (window.sleepStartTP || 0)) >= 100) {
                     window.isSleeping = false;
                     sentientAllies.forEach(ent => ent.awakeSeconds = 0);
-                    window.showMessage("Sleep complete. Everyone is well rested.");
+                    window.showMessage("Sleep complete.");
                     window.updateSleepButton();
-                    break;
                 }
-
-                // Check for interrupts
-                const enemySeenInner = window.entities.some(ent => ent.alive && ent.side === 'enemy' && window.isVisibleToPlayer(ent.hex));
-                const anyoneHurtInner = sentientAllies.some(ent => ent.hp < (ent.lastHp || ent.hp));
-                if (enemySeenInner || anyoneHurtInner) {
-                    window.isSleeping = false;
-                    window.showMessage("Sleep interrupted!");
-                    window.updateSleepButton();
-                    break;
-                }
-                sentientAllies.forEach(ent => ent.lastHp = ent.hp);
             }
-            return;
+
+            // CHECK INTERRUPTS
+            const enemySeen = window.entities.some(e => e.alive && e.side === 'enemy' && window.isVisibleToPlayer(e.hex));
+            const anyoneHurt = sentientAllies.some(e => e.hp < (e.lastHp || e.hp)); 
+            if (enemySeen || anyoneHurt) {
+                if (window.isResting) { window.isResting = false; window.showMessage("Rest interrupted!"); window.updateRestButton(); }
+                if (window.isSleeping) { window.isSleeping = false; window.showMessage("Sleep interrupted!"); window.updateSleepButton(); }
+            }
+            sentientAllies.forEach(e => e.lastHp = e.hp);
         }
+        return; // Exit main tick loop after fast-forward
     }
 
     runTickInternal();
@@ -2063,10 +2033,6 @@ function setupArenaLobby() {
     recruiter.race = 'elf';
     recruiter.customImage = 'arenamercenary';
     window.entities.push(recruiter);
-
-    // Decorative Horse
-    const horse = window.createMonster('horse', {q: -4, r: -4}, null, null, 'neutral');
-    window.entities.push(horse);
 
     // Fireplace in the center-ish
     window.tileObjects["-1,-1"] = { type: 'fireplace', lightRadius: 12 };

@@ -1,19 +1,22 @@
 - **Off-hand Weapon Rendering**: Implemented visual support for off-hand weapons on the game map. Off-hand weapons are now correctly mirrored vertically and positioned on the opposite side of the character.
 - **Weapon Visual Overhaul**: Updated rendering logic to use default base images for magic items (e.g., standard sword icon for the Sword of Arrow Deflection) unless a specialized image is provided.
 - **Improved Sleep Mechanics**: 
-    - **How it works**: The sleep function now uses a high-speed simulation loop within the main game tick. When sleeping, the engine executes up to 1000 logic cycles per real-time frame. Each cycle advances world time by 0.4 seconds and processes attribute regeneration (HP/Mana). This allows a full 8-hour rest period to resolve in approximately one second of real time.
-    - **Intelligent Interrupts**: The simulation automatically halts if an enemy is spotted or if any party member takes damage (e.g., from poison or environmental effects).
+    - **Simplified logic**: The sleep function now operates by repeatedly applying 'Wait' actions (spending Time Points) for the entire party.
+    - **Fixed completion**: Sleep now completes precisely when the main character has spent 100 Time Points waiting, ensuring reliable progression.
+    - **Intelligent Interrupts**: Sleep correctly halts if an enemy is spotted or if any party member takes damage.
+- **Campaign & Time Refinements**:
+    - **Start Times**: Set initial game world time based on the selected campaign: 8:00 AM for Campaigns 1 & 2, and 6:00 PM for Campaign 3.
+    - **UI Reordering**: Reordered the campaign selection dropdown to show 1, 2, 3 for better clarity.
 - **UI & Display Refinements**:
-    - **Health Display**: All character and party HP values are now rounded up to the nearest integer in the UI (Portraits, Character Screen, and Logs) to prevent confusing decimal values while ensuring "1 HP" correctly indicates a character is still clinging to life.
-    - **Inventory Logic**: Restricted shield equipping to the off-hand slot only, removing the redundant 'Equip' button for shields.
-    - **Visual Adjustments**: Repositioned and resized the Nasal Helm overlay for a better fit on character portraits.
-- **Combat & Skill Balancing**:
-    - **Sword Parry Mastery**: Reduced success chance from 10% to 5% per rank and capped at 2 ranks (was 3).
-    - **Sword of Arrow Deflection**: This magic item now correctly utilizes standard Sword skills (Parry, Mastery, etc.) and its specialized ability to parry ranged attacks is integrated into the core parry logic.
-    - **Spear Halt Fix**: Improved the 'Spear Halt' reaction to allow enemies to reach their target hex before ending their turn, ensuring they don't get stuck in transit.
-- **AI & Level Transitions**:
-    - **Grishnak Spellcasting**: Added Grishnak's AI to prioritize Counterspell (as a reaction) and Firebolt (during his turn). He will also attempt to dispel active player summons or buffs.
-    - **Lobby Preservation**: Updated level transition logic to ensure player-side entities (like Horses or summons) are correctly preserved when moving between the Arena and the Lobby.
-    - **Arena Efficiency**: Removed the redundant Time Point reset when entering the arena, as the coordinated alert system now handles initiative more naturally.
-- **Coordinated Alert System**:
-    - Enemies now feature a recursive alert system. Spotting a player will cause an enemy to alert all allies within 10 hexes, who will then continue the chain, leading to a coordinated response across the map.
+    - **HP Display**: All character and party HP values are now rounded up to the nearest integer in the UI.
+    - **Inventory Logic**: Restricted shield equipping to the off-hand slot only.
+    - **NPC Rendering**: NPCs in the Arena Lobby now use their unique custom images (`arenaannouncer.png`, etc.) instead of generic colored circles.
+    - **Visual Fix**: Removed the "red dot" indicator from enemies to declutter the map.
+- **Economy Improvements**:
+    - **Horse Merchant**: The Arena Shopkeeper now sells horses for 100 gold. Purchased horses correctly join the player's party and teleport into arena matches.
+- **Combat & AI Balancing**:
+    - **Sword Parry Mastery**: Reduced success chance from 10% to 5% per rank and capped at 2 ranks.
+    - **Recursive Alert System**: Enemies now features a recursive alert system where spotting a player alerts all allies within 10 hexes in a chain reaction.
+    - **Grishnak AI**: Implemented spellcasting AI for Grishnak, prioritizing Counterspell reactions and offensive Firebolts.
+- **Skill Tree Cleaning**:
+    - Renamed the 'Way\_of\_the\_open\_palm' skill tree to '**Way of the open palm**' (removing underscores) for better readability.

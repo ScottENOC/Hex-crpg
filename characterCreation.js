@@ -11,7 +11,7 @@ function initializePlayer(race, cls, gender, campaign = "3") {
 
 function createCharacterData(race, cls, name, gender = "female") {
   // Gather all possible attribute keys to initialize them to 0
-  const allAttributes = new Set(['strength', 'endurance', 'agility', 'weapons', 'divine', 'nature', 'arcane', 'wildcard', 'monk', 'way_of_the_open_palm']);
+  const allAttributes = new Set(['strength', 'endurance', 'agility', 'weapons', 'divine', 'nature', 'arcane', 'wildcard', 'monk', 'Way of the open palm']);
   for (const r in window.raceData) {
     for (const attr in window.raceData[r].bonus) {
       allAttributes.add(attr);
