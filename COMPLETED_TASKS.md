@@ -2,11 +2,11 @@
 - **Weapon Visual Overhaul**: Updated rendering logic to use default base images for magic items (e.g., standard sword icon for the Sword of Arrow Deflection) unless a specialized image is provided.
 - **Improved Sleep Mechanics**: 
     - **Simplified logic**: The sleep function now operates by repeatedly applying 'Wait' actions (spending Time Points) for the entire party.
-    - **Fixed completion**: Sleep now completes precisely when the main character has spent 100 Time Points waiting, ensuring reliable progression.
+    - **8-Hour Duration**: Sleep now accurately passes 8 hours of game time by calculating the exact number of Time Points required based on the main character's speed (TP per 0.4 seconds).
     - **Intelligent Interrupts**: Sleep correctly halts if an enemy is spotted or if any party member takes damage.
 - **Campaign & Time Refinements**:
-    - **Start Times**: Set initial game world time based on the selected campaign: 8:00 AM for Campaigns 1 & 2, and 6:00 PM for Campaign 3.
-    - **UI Reordering**: Reordered the campaign selection dropdown to show 1, 2, 3 for better clarity.
+    - **Start Times**: Set initial game world time based on the selected campaign: 8:00 AM for Campaigns 1 & 2 (Arena and Small World), and 6:00 PM for Campaign 3 (Main).
+    - **UI Reordering**: Reordered the campaign selection dropdown to show 1, 2, 3 and set Campaign 1 (Arena) as the default selection.
 - **UI & Display Refinements**:
     - **HP Display**: All character and party HP values are now rounded up to the nearest integer in the UI.
     - **Inventory Logic**: Restricted shield equipping to the off-hand slot only.
@@ -20,3 +20,5 @@
     - **Grishnak AI**: Implemented spellcasting AI for Grishnak, prioritizing Counterspell reactions and offensive Firebolts.
 - **Skill Tree Cleaning**:
     - Renamed the 'Way\_of\_the\_open\_palm' skill tree to '**Way of the open palm**' (removing underscores) for better readability.
+- **Bug Fixes**:
+    - **Cheat Add Jerry**: Fixed a crash where adding a "Jerry" character would fail if no player entity with the word "Player" in its name was found (now searches for any player-side entity).
