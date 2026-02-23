@@ -1,17 +1,14 @@
+- **UI & Display Refinements**:
+    - **Mana Display**: Standardized all mana displays to show integer values (rounded down), providing a cleaner UI consistent with the HP display.
+    - **Panel Width & Wrapping**: Re-confirmed fixed width of 350px for the UI log/details panel with active text wrapping to prevent layout distortion.
+- **Bug Fixes & Stability**:
+    - **Item ID Error**: Fixed a crash in the action bar logic ("cannot read properties of undefined reading 'id'") by adding safety checks when verifying equipped weapon requirements for skills.
+    - **Shop Crash**: Added null checks to the shop system to prevent crashes if the party is empty or if character data hasn't fully initialized.
+    - **Campaign Defaults**: Re-confirmed Campaign 1 (Arena) as the default selection on the character creation screen for a smoother onboarding experience.
 - **Arena Roguelike System**:
     - **Lobby Redesign**: Replaced the rhombus-shaped lobby with a more organized two-room layout (Spawn Room and NPC Room) connected by a passage.
-    - **Permanent Progression**: Added a roguelike loop for Campaign 1. Upon the main character's death, players can choose from three permanent legacy rewards:
-        - **Ally-Based Skill Bonus**: Gain a permanent skill point in a tree where your party excelled.
-        - **Enemy-Based Skill Bonus**: Gain a permanent skill point in a tree where your enemies were powerful.
-        - **Relics**: Carry over powerful magic items to all future Arena runs (unlocked after completing enough fights).
-    - **Mercenary Graveyard**: Hired mercenaries who survive a run are now snapshotted upon the main character's death. These "phantom" mercenaries can appear as opponents in future Arena matches. Defeating them removes them from the graveyard.
-    - **Scaling Difficulty**: Implemented dynamic enemy scaling. The first fight starts with 12-16 skill points, increasing by 3-5 points per subsequent match.
-    - **Roguelike Controls**: Added a "Roguelike Rewards Activated" toggle and a "Reset Roguelike Progress" button to the character creation screen.
+    - **Permanent Progression**: Added a roguelike loop for Campaign 1. Upon the main character's death, players can choose from permanent legacy rewards (Skill points or Relics).
+    - **Mercenary Graveyard**: Survivors of a run are snapshotted and can appear as powerful opponents in future Arena matches.
+    - **Scaling Difficulty**: Enemies now scale in power based on the number of matches won in a single run.
 - **Sleep Mechanics Refinement**: 
-    - Fixed a bug where resuming interrupted sleep would reset the timer to a full 8 hours. Resuming now correctly tracks and completes based on the remaining time.
-- **UI & Layout Improvements**:
-    - **Fixed Panel Width**: Locked the UI details and log panel to a fixed width of 350px with automatic text wrapping.
-- **Game Flow & Automation**:
-    - **Auto-Turn Recognition**: The game now automatically initiates the player's turn immediately after teleporting between the Arena and the Lobby.
-- **Bug Fixes**:
-    - **Cheat Add Jerry**: Fixed a crash where adding a "Jerry" character would fail if no player entity was found.
+    - Fixed a bug where resuming interrupted sleep would reset the timer to a full 8 hours.

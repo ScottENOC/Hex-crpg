@@ -176,7 +176,7 @@ function showCharacter(){
 <p>Class: ${window.player.class}</p>
 <p>Level: ${window.player.level}</p>
 <p>HP: ${Math.ceil(window.player.hp)}/${window.player.maxHp}</p>
-<p>Mana: ${Number(window.player.currentMana).toFixed(1)}/${window.player.maxMana}</p>
+<p>Mana: ${Math.floor(window.player.currentMana)}/${window.player.maxMana}</p>
 <p>Damage: ${window.player.baseDamage}</p>
 `;
   document.getElementById("character-info").innerHTML=txt;
@@ -573,7 +573,7 @@ function updateActionButtons() {
                 if (skillKey.endsWith('_feint')) {
                     const weaponType = skillKey.split('_')[0];
                     const eq = charData.equipped.weapon;
-                    if (!eq || !window.items[eq].id.includes(weaponType)) weaponReqMet = false;
+                    if (!eq || !window.items[eq] || !window.items[eq].id.includes(weaponType)) weaponReqMet = false;
                 } else if (skillKey === 'quarterstaff_trip') {
                     const eq = charData.equipped.weapon;
                     const isAnimal = charData.race === 'wolf'; 
@@ -1128,7 +1128,7 @@ function updateTurnIndicator() {
         const infoDiv = document.createElement('div');
         infoDiv.classList.add('turn-indicator-info');
         let infoHtml = `<p><strong>${entity.name.split(' ')[0]}</strong></p><p>HP: ${Math.ceil(entity.hp)}/${entity.maxHp} | TP: ${Math.floor(entity.timePoints)}</p>`;
-        if (entity.maxMana > 0 || entity.currentMana > 0) infoHtml += `<p>MP: ${Math.floor(entity.currentMana) || 0}/${entity.maxMana || 0}</p>`;
+        if (entity.maxMana > 0 || entity.currentMana > 0) infoHtml += `<p>MP: ${Math.floor(entity.currentMana)}/${entity.maxMana || 0}</p>`;
         if (entity.riding) {
             const m = entity.riding;
             infoHtml += `<p style="border-top: 1px solid #555; margin-top: 2px; padding-top: 2px; font-size: 0.9em; color: #aaa;">${m.name}: ${Math.ceil(m.hp)}/${m.maxHp} HP | ${Math.floor(m.timePoints)} TP</p>`;
@@ -1222,7 +1222,11 @@ function openShop() {
     const sellList = document.getElementById("shop-sell-list");
     const goldDisplay = document.getElementById("shop-player-gold");
 
-    const player = window.party[0]; // Shop always uses main character's gold/inventory for now
+    const player = window.party ? window.party[0] : null; 
+    if (!player) {
+        showMessage("You need a character to trade!");
+        return;
+    }
     goldDisplay.innerText = player.gold;
 
     buyList.innerHTML = '';
