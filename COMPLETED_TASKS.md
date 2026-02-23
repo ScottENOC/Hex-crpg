@@ -1,27 +1,19 @@
 - **Off-hand Weapon Rendering**: Implemented visual support for off-hand weapons on the game map. Off-hand weapons are now correctly mirrored vertically and positioned on the opposite side of the character.
-- **Weapon Visual Overhaul**: Updated rendering logic to use default base images for magic items (e.g., using the sword icon for the Sword of Arrow Deflection) unless a specialized image is provided.
-- **Improved Sleep Mechanics**: Rewrote the sleep system to simulate time by repeatedly processing 'Wait' actions for the entire party. This ensures 8 hours of game time pass in approximately one second while maintaining all recovery and interrupt logic.
-- **UI Refinements**:
-    - **Health Display**: All character and party HP values are now rounded up to the nearest integer in the UI to prevent confusing decimal values.
-    - **Inventory Filtering**: Resticted Shield equipping to the off-hand slot only, removing the redundant 'Equip' button for shields.
+- **Weapon Visual Overhaul**: Updated rendering logic to use default base images for magic items (e.g., standard sword icon for the Sword of Arrow Deflection) unless a specialized image is provided.
+- **Improved Sleep Mechanics**: 
+    - **How it works**: The sleep function now uses a high-speed simulation loop within the main game tick. When sleeping, the engine executes up to 1000 logic cycles per real-time frame. Each cycle advances world time by 0.4 seconds and processes attribute regeneration (HP/Mana). This allows a full 8-hour rest period to resolve in approximately one second of real time.
+    - **Intelligent Interrupts**: The simulation automatically halts if an enemy is spotted or if any party member takes damage (e.g., from poison or environmental effects).
+- **UI & Display Refinements**:
+    - **Health Display**: All character and party HP values are now rounded up to the nearest integer in the UI (Portraits, Character Screen, and Logs) to prevent confusing decimal values while ensuring "1 HP" correctly indicates a character is still clinging to life.
+    - **Inventory Logic**: Restricted shield equipping to the off-hand slot only, removing the redundant 'Equip' button for shields.
     - **Visual Adjustments**: Repositioned and resized the Nasal Helm overlay for a better fit on character portraits.
 - **Combat & Skill Balancing**:
     - **Sword Parry Mastery**: Reduced success chance from 10% to 5% per rank and capped at 2 ranks (was 3).
-    - **Spear Halt Fix**: Corrected the 'Spear Halt' reaction to allow the moving character to finish their current step before terminating their turn, preventing characters from getting stuck between hexes.
-- **Arena Campaign Overhaul**:
-    - **Indoor vs. Outdoor**: Arena matches now have a 50/50 chance of being indoors (windowless, pitch black) or outdoors (standard daylight cycle).
-    - **Lobby Lighting**: The Arena Lobby is now correctly 0% lit by the sun, relying entirely on internal light sources like the fireplace.
-    - **Recursive Alert System**: Enemies now coordinate better! When an enemy spots the player, they alert all allies within a 10-hex radius, who in turn alert their own nearby allies.
-- **Stealth Overhaul**:
-    - Converted Stealth into a movement toggle. Moving while stealthed adds a 4 TP penalty per hex.
-    - Added **Speedy Stealth** Rogue skill to reduce the movement penalty by 2 TP.
-    - Implemented a more dynamic detection system where enemies roll a "spot chance" when a stealthed character enters LOS.
-- **Spider Monster**: Added a new spider monster with random images (`spider1.png`, `spider2.png`), **Poison Bite**, and **Web Fling** abilities.
-- **NPC & Dialogue System**:
-    - Assigned unique images to Arena NPCs and implemented a dialogue system with portraits.
-    - **Initiative Filter**: NPCs are now excluded from the turn indicator bar.
-- **Grishnak Encounter**: Added a custom Orc boss with arcane skills who has a 10% chance to appear in arena fights until defeated.
-- **Bug Fixes**:
-    - **Fog of War Fix**: Resetting `exploredHexes` upon teleportation now ensures the Arena layout is hidden until explored.
-    - **setTerrainAt Implementation**: Fixed a crash in Campaign 1 lobby generation.
-    - **Duplicate Stealth Buttons**: Fixed a bug where the stealth button would duplicate every time the UI refreshed.
+    - **Sword of Arrow Deflection**: This magic item now correctly utilizes standard Sword skills (Parry, Mastery, etc.) and its specialized ability to parry ranged attacks is integrated into the core parry logic.
+    - **Spear Halt Fix**: Improved the 'Spear Halt' reaction to allow enemies to reach their target hex before ending their turn, ensuring they don't get stuck in transit.
+- **AI & Level Transitions**:
+    - **Grishnak Spellcasting**: Added Grishnak's AI to prioritize Counterspell (as a reaction) and Firebolt (during his turn). He will also attempt to dispel active player summons or buffs.
+    - **Lobby Preservation**: Updated level transition logic to ensure player-side entities (like Horses or summons) are correctly preserved when moving between the Arena and the Lobby.
+    - **Arena Efficiency**: Removed the redundant Time Point reset when entering the arena, as the coordinated alert system now handles initiative more naturally.
+- **Coordinated Alert System**:
+    - Enemies now feature a recursive alert system. Spotting a player will cause an enemy to alert all allies within 10 hexes, who will then continue the chain, leading to a coordinated response across the map.

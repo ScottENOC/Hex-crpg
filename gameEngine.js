@@ -857,11 +857,11 @@ function tick() {
     runTickInternal();
 }
 
-function runTickInternal() {
-    if (window.currentTurnEntity) return;
+function runTickInternal(isSleepCycle = false) {
+    if (window.currentTurnEntity && !isSleepCycle) return;
     
     const readyEntities = window.entities.filter(e => e.timePoints >= 100 && e.alive && !e.rider);
-    if (readyEntities.length > 0) {
+    if (readyEntities.length > 0 && !isSleepCycle) {
         readyEntities.sort((a, b) => (b.timePoints !== a.timePoints) ? (b.timePoints - a.timePoints) : (Math.random() - 0.5));
         window.currentTurnEntity = readyEntities[0];
         window.currentTurnEntity.parriesRemaining = 3;
@@ -1125,13 +1125,56 @@ function aiProcess(entity) {
 
     // Combat Logic
     const opponentSide = entity.side === 'player' ? 'enemy' : 'player';
-    const targets = window.entities.filter(e => e.alive && e.side === opponentSide);
-    const visibleTargets = targets.filter(t => canSee(entity, t));
+    const opponents = window.entities.filter(e => e.alive && e.side === opponentSide);
+    const visibleOpponents = opponents.filter(t => canSee(entity, t));
+
+    // SPELLCASTING AI (Grishnak / Casters)
+    if (entity.createdSpells && entity.createdSpells.length > 0 && entity.timePoints >= 10) {
+        // Priority 1: Dispel / Counter active player spells
+        const dispelSpell = entity.createdSpells.find(s => s.baseId === 'counterspell');
+        if (dispelSpell && entity.currentMana >= dispelSpell.manaCost) {
+            const playerSpells = (window.activeSpells || []).filter(s => {
+                const caster = window.entities.find(e => e.name === s.casterName);
+                return caster && caster.side === 'player';
+            });
+            if (playerSpells.length > 0) {
+                // Find a target within range
+                let spellTarget = null;
+                for (let ps of playerSpells) {
+                    if (ps.entityId) {
+                        const ent = window.entities.find(e => e.id === ps.entityId);
+                        if (ent && window.distance(entity.hex, ent.hex) <= dispelSpell.range) { spellTarget = ent; break; }
+                    } else if (ps.targetEntityId) {
+                        const ent = window.entities.find(e => e.id === ps.targetEntityId);
+                        if (ent && window.distance(entity.hex, ent.hex) <= dispelSpell.range) { spellTarget = ent; break; }
+                    }
+                }
+                if (spellTarget) {
+                    tryCastSpell(entity, dispelSpell, spellTarget, spellTarget.hex);
+                    spendTP(entity, 10);
+                    setTimeout(() => aiProcess(entity), 100);
+                    return;
+                }
+            }
+        }
+
+        // Priority 2: Firebolt
+        const attackSpell = entity.createdSpells.find(s => s.baseId === 'firebolt');
+        if (attackSpell && entity.currentMana >= attackSpell.manaCost) {
+            const inRange = visibleOpponents.find(o => window.distance(entity.hex, o.hex) <= attackSpell.range);
+            if (inRange) {
+                tryCastSpell(entity, attackSpell, inRange, inRange.hex);
+                spendTP(entity, 10);
+                setTimeout(() => aiProcess(entity), 100);
+                return;
+            }
+        }
+    }
 
     let target = null;
-    if (visibleTargets.length > 0) {
-        visibleTargets.sort((a, b) => getMinDistance(entity, a) - getMinDistance(entity, b));
-        target = visibleTargets[0];
+    if (visibleOpponents.length > 0) {
+        visibleOpponents.sort((a, b) => getMinDistance(entity, a) - getMinDistance(entity, b));
+        target = visibleOpponents[0];
         entity.lastSeenTargetHex = { q: target.hex.q, r: target.hex.r };
     }
 
@@ -1393,150 +1436,17 @@ function handleClick(e){
             const spell = window.player.createdSpells[act.index];
             const dist = target ? getMinDistance(player, target) : window.distance(player.hex, clickedHex);
             if (dist <= spell.range && player.currentMana >= spell.manaCost && player.timePoints >= spell.tpCost) {
-                if (spell.type === 'summon') {
-                    if (!getEntityAtHex(clickedHex.q, clickedHex.r) && window.distance(player.hex, clickedHex) <= 1) {
-                        const s = window.createMonster(spell.animalId, clickedHex, null, null, 'player');
-                        s.maxTPAllowed = 0; // Ongoing!
-                        
-                        // ANIMAL COMPANION LOGIC
-                        if (player.skills?.animal_companion && !player.animalCompanion) {
-                            player.animalCompanion = s;
-                            s.isCompanion = true;
-                            
-                            // Apply bonuses
-                            if (player.skills.companion_str_end) {
-                                s.baseDamage += 1;
-                                s.maxHp += 10;
-                                s.hp += 10;
-                            }
-                            if (player.skills.companion_agi_end) {
-                                s.timePointsPerTick += 0.05;
-                                s.maxHp += 10;
-                                s.hp += 10;
-                            }
-                            
-                            window.entities.push(s);
-                            window.showMessage(`${player.name} summons a permanent companion: ${s.name}!`);
-                        } else {
-                            window.entities.push(s); 
-                            // Track as active spell (with upkeep)
-                            const instanceId = Date.now() + Math.random();
-                            window.activeSpells.push({
-                                spellInstanceId: instanceId,
-                                name: spell.name,
-                                casterName: player.name,
-                                coreManaCost: spell.coreManaCost || spell.manaCost,
-                                entityId: s.id
-                            });
-                        }
-                        
-                        actionHandled = true;
-                    }
-                } else if (spell.type === 'dispel') {
-                    // Target summoned entity to end its spell, or any entity to end a random buff/debuff
-                    if (target) {
-                        const activeEffects = (window.activeSpells || []).filter(s => s.targetEntityId === target.id || s.entityId === target.id);
-                        if (activeEffects.length > 0) {
-                            const effect = activeEffects[Math.floor(Math.random() * activeEffects.length)];
-                            window.cancelSpell(effect.spellInstanceId);
-                            window.showMessage(`${player.name} dispelled ${effect.name} on ${target.name}!`);
-                            actionHandled = true;
-                        } else {
-                            window.showMessage("No active spells found on this target.");
-                        }
-                    } else {
-                        // Hex dispel: Preference enemy -> neutral -> friendly
-                        const hexSpells = (window.activeSpells || []).filter(s => s.targetHexes && s.targetHexes.some(th => th.q === clickedHex.q && th.r === clickedHex.r));
-                        if (hexSpells.length > 0) {
-                            // Find casters
-                            const categorized = { enemy: [], neutral: [], player: [] };
-                            hexSpells.forEach(s => {
-                                const caster = window.entities.find(e => e.name === s.casterName);
-                                const side = caster ? caster.side : 'neutral';
-                                categorized[side].push(s);
-                            });
-                            const priority = categorized.enemy.length > 0 ? categorized.enemy : (categorized.neutral.length > 0 ? categorized.neutral : categorized.player);
-                            const effect = priority[Math.floor(Math.random() * priority.length)];
-                            window.cancelSpell(effect.spellInstanceId);
-                            window.showMessage(`${player.name} dispelled ${effect.name} at hex ${clickedHex.q},${clickedHex.r}!`);
-                            actionHandled = true;
-                        }
-                    }
-                } else if (spell.type === 'aoe_debuff') {
-                    // Target hex and adjacent within radius
-                    const center = clickedHex;
-                    const affected = [center];
-                    if (spell.radius > 0) {
-                        for (let r = 1; r <= spell.radius; r++) {
-                            const ring = window.getNeighbors(center.q, center.r); // Simplified for radius 1
-                            affected.push(...ring);
-                        }
-                    }
-                    
-                    const instanceId = Date.now() + Math.random();
-                    window.activeSpells.push({
-                        spellInstanceId: instanceId,
-                        baseId: spell.baseId,
-                        name: spell.name,
-                        casterName: player.name,
-                        coreManaCost: spell.coreManaCost || spell.manaCost,
-                        targetHexes: affected.map(h => ({q:h.q, r:h.r})),
-                        debuffType: spell.debuffType
-                    });
-                    
-                    affected.forEach(h => {
-                        window.setTerrainAt(h.q, h.r, 'Swamp'); // Visual representation: Swamp doubles move cost
-                    });
-
-                    window.showMessage(`${player.name} cast ${spell.name}!`);
-                    actionHandled = true;
-                } else {
-                    let spellHitBonus = 0;
-                    if (spell.baseId === 'firebolt' && player.skills?.firebolt_hit) {
-                        spellHitBonus = player.skills.firebolt_hit * 5;
-                    }
-                    let hit = !spell.needsHitCheck || (target && Math.random() * 100 < (50 + player.toHitSpell + spellHitBonus - target.passiveDodge));
-                    if (spell.type === 'damage' && target && target.side !== player.side) {
-                        const baseSpell = window.baseSpells[spell.baseId];
-                        if (baseSpell && baseSpell.validTags) {
-                            const hasValidTag = baseSpell.validTags.some(tag => target.tags && target.tags.includes(tag));
-                            if (!hasValidTag) {
-                                window.showMessage(`${spell.name} has no effect on ${target.name}!`);
-                                hit = false;
-                            }
-                        }
-                        if (hit) {
-                            let red = (target.baseReduction || 0) + (target.equipped?.armor ? window.items[target.equipped.armor].reduction : 0) + (window.items[target.equipped?.offhand]?.type === 'shield' ? window.items[target.equipped.offhand].reduction : 0);
-                            let fd = Math.max(1, spell.magnitude - red);
-                            target.hp -= fd; syncBackToPlayer(target);
-                            wakeUp(target); // WAKE UP ON HIT
-                            if (target.hp <= 0 && target.alive) { target.alive = false; window.showMessage(`${target.name} defeated!`); if (target.expValue) window.gainExp(target.expValue); }
-                        }
-                        actionHandled = true;
-                    } else if (spell.type === 'heal' && target) {
-                        target.hp = Math.min(target.maxHp, target.hp + spell.magnitude);
-                        syncBackToPlayer(target); actionHandled = true;
-                    } else if (spell.type === 'buff' && target && target.side === player.side) {
-                        // Apply ongoing buff
-                        const instanceId = Date.now() + Math.random();
-                        window.activeSpells.push({
-                            spellInstanceId: instanceId,
-                            baseId: spell.baseId,
-                            name: spell.name,
-                            casterName: player.name,
-                            coreManaCost: spell.coreManaCost || spell.manaCost,
-                            targetEntityId: target.id,
-                            magnitude: spell.magnitude
-                        });
-                        window.showMessage(`${player.name} cast ${spell.name} on ${target.name}.`);
-                        actionHandled = true;
-                    }
+                // Use centralized spellcasting with reaction checks
+                actionHandled = tryCastSpell(player, spell, target, clickedHex);
+                if (actionHandled === 'counter_pending') {
+                    actionHandled = true; // Wait for reaction modal
                 }
                 if (actionHandled) { 
-                    player.currentMana -= spell.manaCost; 
-                    spendTP(player, spell.tpCost); 
-                    if (player.isStealthed) breakStealth(player);
+                    if (actionHandled === true) spendTP(player, spell.tpCost); 
                 }
+            } else {
+                if (dist > spell.range) window.showMessage("Target out of range.");
+                else window.showMessage("Not enough mana or TP.");
             }
         }
         if (actionHandled) { window.playerAction = null; syncBackToPlayer(player); }
@@ -1611,14 +1521,17 @@ function tryAttack(attacker, target, isFeint = false, isOffhand = false) {
     const reactions = [];
 
     // DEFENDER REACTIONS
-    if (!weapon || weapon.subType === 'melee' || (target.equipped?.weapon && window.items[target.equipped.weapon].id === 'sword_arrow_deflection')) {
-        const defW = target.equipped?.weapon ? window.items[target.equipped.weapon].id : null;
-        if ((defW === 'sword' || defW === 'dagger' || defW === 'sword_arrow_deflection') && target.skills[`${defW}_parry`] && target.timePoints >= 3 && target.parriesRemaining > 0) {
+    const targetWeaponId = target.equipped?.weapon;
+    const targetWeapon = targetWeaponId ? window.items[targetWeaponId] : null;
+    let skillBase = (targetWeapon?.id === 'sword_arrow_deflection') ? 'sword' : targetWeapon?.id;
+
+    if (!weapon || weapon.subType === 'melee' || targetWeapon?.id === 'sword_arrow_deflection') {
+        if (skillBase && target.skills[`${skillBase}_parry`] && target.timePoints >= 3 && target.parriesRemaining > 0) {
             let tpCost = 3;
-            if (target.skills[`${defW}_parry_cost`]>0) tpCost -= 1;
+            if (target.skills[`${skillBase}_parry_cost`] > 0) tpCost -= 1;
             
             if (target.timePoints >= tpCost) {
-                reactions.push({ id: 'parry', name: 'Parry', tpCost: tpCost, weaponId: defW });
+                reactions.push({ id: 'parry', name: 'Parry', tpCost: tpCost, skillBase: skillBase });
             }
         }
     }
@@ -1657,7 +1570,7 @@ function tryAttack(attacker, target, isFeint = false, isOffhand = false) {
                 const r = reactions.find(o => o.id === 'parry');
                 spendTP(target, r.tpCost); target.parriesRemaining -= 1;
                 
-                let parryBonus = (target.skills[`${r.weaponId}_parry_chance`] || 0) * 10;
+                let parryBonus = (target.skills[`${r.skillBase}_parry_chance`] || 0) * 5;
                 let hit = Math.random() * 100 < (50 + target.toHitMelee + parryBonus - attacker.passiveDodge);
                 
                 if (hit) { 
@@ -2085,6 +1998,10 @@ window.cancelSpell = cancelSpell;
 
 function setupArenaLobby() {
     window.gamePhase = 'WAITING';
+    
+    // Keep existing player entities (horses, summons) instead of just party data
+    const playerEntities = window.entities.filter(e => e.side === 'player' && e.alive);
+    
     window.entities = [];
     window.mapItems = {};
     window.overrideTerrain = {};
@@ -2093,26 +2010,34 @@ function setupArenaLobby() {
     window.indoorLightMult = 0.0; // Lobby is 0% daylight
     window.lobbyTPSpent = 0;
     window.hasTriggeredImpatience = false;
-    window.startSleepTime = 0; // Track sleep start
+    window.startSleepTime = 0; 
 
     // Create a 20x20 stone lobby
     for (let q = -10; q <= 10; q++) {
         for (let r = -10; r <= 10; r++) {
-            window.setTerrainAt(q, r, 'Wall'); // Surround with walls
+            window.setTerrainAt(q, r, 'Wall'); 
             if (q > -8 && q < 8 && r > -8 && r < 8) {
-                window.setTerrainAt(q, r, 'Cave Floor'); // Gritty stone lobby
+                window.setTerrainAt(q, r, 'Cave Floor');
             }
         }
     }
 
-    // Spawn Party
-    window.party.forEach((p, i) => {
-        const spawnHex = { q: -2 + i, r: 0 };
-        const playerEntity = new window.Entity(p.name, "red", spawnHex, p.attributes.agility + 10);
-        playerEntity.side = 'player';
-        Object.assign(playerEntity, p);
-        window.entities.push(playerEntity);
-    });
+    if (playerEntities.length > 0) {
+        playerEntities.forEach((e, i) => {
+            e.hex = { q: -2 + i, r: 0 };
+            if (e.riding) e.riding.hex = { q: e.hex.q, r: e.hex.r };
+            window.entities.push(e);
+        });
+    } else {
+        // First time initialization: spawn from party data
+        window.party.forEach((p, i) => {
+            const spawnHex = { q: -2 + i, r: 0 };
+            const playerEntity = new window.Entity(p.name, "red", spawnHex, p.attributes.agility + 10);
+            playerEntity.side = 'player';
+            Object.assign(playerEntity, p);
+            window.entities.push(playerEntity);
+        });
+    }
 
     // Spawn NPCs
     const announcer = new window.Entity("Arena Announcer", "yellow", {q: 2, r: -2}, 10);
@@ -2205,14 +2130,38 @@ function startArenaFight() {
         window.showMessage("A champion enters the arena: Grishnak!");
         const grishnak = window.createMonster('orc', { q: arenaSize - 5, r: 0 }, null, null, 'enemy');
         grishnak.name = "Grishnak";
-        const schools = ['arcane'];
-        schools.forEach(s => {
-            const keys = Object.keys(window.skills).filter(k => window.skills[k].tree === s || window.skills[k].tree === 'wizard');
-            keys.forEach(k => grishnak.skills[k] = 1);
-        });
         grishnak.hp = 40;
         grishnak.maxHp = 40;
+        grishnak.currentMana = 50;
+        grishnak.maxMana = 50;
+        
+        // 1 rank in each arcane and wizard skill
+        const keys = Object.keys(window.skills).filter(k => window.skills[k].tree === 'arcane' || window.skills[k].tree === 'wizard');
+        keys.forEach(k => grishnak.skills[k] = 1);
         grishnak.applySkills();
+
+        // Give Grishnak some spells
+        grishnak.createdSpells.push({
+            name: "Counterspell",
+            baseId: 'counterspell',
+            type: 'dispel',
+            school: 'arcane',
+            manaCost: 10,
+            tpCost: 10,
+            range: 8
+        });
+        grishnak.createdSpells.push({
+            name: "Firebolt",
+            baseId: 'firebolt',
+            type: 'damage',
+            school: 'arcane',
+            manaCost: 5,
+            tpCost: 10,
+            range: 10,
+            magnitude: 8,
+            needsHitCheck: true
+        });
+
         window.entities.push(grishnak);
         for (let i = 0; i < 2; i++) {
             const spawnHex = { q: arenaSize - 5, r: (i === 0 ? -2 : 2) };
@@ -2272,3 +2221,150 @@ window.spendTP = spendTP;
 window.finalizePlayerAction = finalizePlayerAction;
 window.handleMovement = (e) => {};
 window.tryShove = tryShove;
+
+function resolveSpell(caster, spell, target, clickedHex) {
+    let actionHandled = false;
+    if (spell.type === 'summon') {
+        const s = window.createMonster(spell.animalId, clickedHex, null, null, caster.side);
+        s.maxTPAllowed = 0; 
+        if (caster.side === 'player' && caster.skills?.animal_companion && !caster.animalCompanion) {
+            caster.animalCompanion = s;
+            s.isCompanion = true;
+            if (caster.skills.companion_str_end) { s.baseDamage += 1; s.maxHp += 10; s.hp += 10; }
+            if (caster.skills.companion_agi_end) { s.timePointsPerTick += 0.05; s.maxHp += 10; s.hp += 10; }
+            window.entities.push(s);
+            window.showMessage(`${caster.name} summons a permanent companion: ${s.name}!`);
+        } else {
+            window.entities.push(s); 
+            const instanceId = Date.now() + Math.random();
+            window.activeSpells.push({
+                spellInstanceId: instanceId, name: spell.name, casterName: caster.name,
+                coreManaCost: spell.coreManaCost || spell.manaCost, entityId: s.id
+            });
+        }
+        actionHandled = true;
+    } else if (spell.type === 'dispel') {
+        if (target) {
+            const activeEffects = (window.activeSpells || []).filter(s => s.targetEntityId === target.id || s.entityId === target.id);
+            if (activeEffects.length > 0) {
+                const effect = activeEffects[Math.floor(Math.random() * activeEffects.length)];
+                window.cancelSpell(effect.spellInstanceId);
+                window.showMessage(`${caster.name} dispelled ${effect.name} on ${target.name}!`);
+                actionHandled = true;
+            }
+        } else {
+            const hexSpells = (window.activeSpells || []).filter(s => s.targetHexes && s.targetHexes.some(th => th.q === clickedHex.q && th.r === clickedHex.r));
+            if (hexSpells.length > 0) {
+                const categorized = { enemy: [], neutral: [], player: [] };
+                hexSpells.forEach(s => {
+                    const scaster = window.entities.find(e => e.name === s.casterName);
+                    const side = scaster ? scaster.side : 'neutral';
+                    categorized[side].push(s);
+                });
+                const priority = categorized.enemy.length > 0 ? categorized.enemy : (categorized.neutral.length > 0 ? categorized.neutral : categorized.player);
+                const effect = priority[Math.floor(Math.random() * priority.length)];
+                window.cancelSpell(effect.spellInstanceId);
+                window.showMessage(`${caster.name} dispelled ${effect.name} at hex ${clickedHex.q},${clickedHex.r}!`);
+                actionHandled = true;
+            }
+        }
+    } else if (spell.type === 'aoe_debuff') {
+        const center = clickedHex;
+        const affected = [center];
+        if (spell.radius > 0) {
+            for (let r = 1; r <= spell.radius; r++) { affected.push(...window.getNeighbors(center.q, center.r)); }
+        }
+        const instanceId = Date.now() + Math.random();
+        window.activeSpells.push({
+            spellInstanceId: instanceId, baseId: spell.baseId, name: spell.name, casterName: caster.name,
+            coreManaCost: spell.coreManaCost || spell.manaCost, targetHexes: affected.map(h => ({q:h.q, r:h.r})), debuffType: spell.debuffType
+        });
+        affected.forEach(h => { window.setTerrainAt(h.q, h.r, 'Swamp'); });
+        window.showMessage(`${caster.name} cast ${spell.name}!`);
+        actionHandled = true;
+    } else {
+        let spellHitBonus = 0;
+        if (spell.baseId === 'firebolt' && caster.skills?.firebolt_hit) spellHitBonus = caster.skills.firebolt_hit * 5;
+        let hit = !spell.needsHitCheck || (target && Math.random() * 100 < (50 + caster.toHitSpell + spellHitBonus - target.passiveDodge));
+        if (spell.type === 'damage' && target && target.side !== caster.side) {
+            const baseSpell = window.baseSpells[spell.baseId];
+            if (baseSpell && baseSpell.validTags) {
+                const hasValidTag = baseSpell.validTags.some(tag => target.tags && target.tags.includes(tag));
+                if (!hasValidTag) { window.showMessage(`${spell.name} has no effect on ${target.name}!`); hit = false; }
+            }
+            if (hit) {
+                let red = (target.baseReduction || 0) + (target.equipped?.armor ? window.items[target.equipped.armor].reduction : 0) + (window.items[target.equipped?.offhand]?.type === 'shield' ? window.items[target.equipped.offhand].reduction : 0);
+                let fd = Math.max(1, (spell.magnitude || 0) - red);
+                target.hp -= fd; syncBackToPlayer(target);
+                wakeUp(target);
+                if (target.hp <= 0 && target.alive) { 
+                    target.alive = false; window.showMessage(`${target.name} defeated!`); 
+                    if (caster.side === 'player' && target.expValue) window.gainExp(target.expValue); 
+                }
+            }
+            actionHandled = true;
+        } else if (spell.type === 'heal' && target) {
+            target.hp = Math.min(target.maxHp, target.hp + spell.magnitude);
+            syncBackToPlayer(target); actionHandled = true;
+        } else if (spell.type === 'buff' && target && target.side === caster.side) {
+            const instanceId = Date.now() + Math.random();
+            window.activeSpells.push({
+                spellInstanceId: instanceId, baseId: spell.baseId, name: spell.name, casterName: caster.name,
+                coreManaCost: spell.coreManaCost || spell.manaCost, targetEntityId: target.id, magnitude: spell.magnitude
+            });
+            window.showMessage(`${caster.name} cast ${spell.name} on ${target.name}.`);
+            actionHandled = true;
+        }
+    }
+    return actionHandled;
+}
+
+function tryCastSpell(caster, spell, target, clickedHex) {
+    // 1. Reactions (Counterspell)
+    const opponents = window.entities.filter(e => e.alive && e.side !== caster.side);
+    const counterOptions = [];
+    opponents.forEach(o => {
+        const oCounter = (o.createdSpells || []).find(s => s.baseId === 'counterspell');
+        if (oCounter && o.currentMana >= oCounter.manaCost && o.timePoints >= 5) {
+            const distToCaster = window.distance(o.hex, caster.hex);
+            const distToTarget = target ? window.distance(o.hex, target.hex) : window.distance(o.hex, clickedHex);
+            if (distToCaster <= oCounter.range || distToTarget <= oCounter.range) {
+                counterOptions.push({ id: `counter_${o.name}`, name: `Counterspell (${o.name})`, tpCost: 5, reactor: o, spell: oCounter });
+            }
+        }
+    });
+
+    if (counterOptions.length > 0) {
+        const playerCounter = counterOptions.find(opt => opt.reactor.side === 'player');
+        if (playerCounter && caster.side !== 'player') {
+            window.requestReaction(playerCounter.reactor, [{id:'counter', name:`Counterspell (${playerCounter.reactor.name})`, tpCost:5}], (choice) => {
+                if (choice === 'counter') {
+                    spendTP(playerCounter.reactor, 5);
+                    playerCounter.reactor.currentMana -= playerCounter.spell.manaCost;
+                    window.showMessage(`${playerCounter.reactor.name} counters ${caster.name}'s ${spell.name}!`);
+                    caster.currentMana -= spell.manaCost; 
+                    // Spell is negated
+                } else {
+                    // Resolve spell normally
+                    resolveSpell(caster, spell, target, clickedHex);
+                }
+            });
+            return 'counter_pending'; // Signal that we are waiting for a reaction
+        } else if (caster.side === 'player') {
+            // AI Counter: 50% chance
+            const aiCounter = counterOptions.find(opt => opt.reactor.side !== 'player');
+            if (aiCounter && Math.random() < 0.5) {
+                spendTP(aiCounter.reactor, 5);
+                aiCounter.reactor.currentMana -= aiCounter.spell.manaCost;
+                window.showMessage(`${aiCounter.reactor.name} counters ${caster.name}'s ${spell.name}!`);
+                caster.currentMana -= spell.manaCost; 
+                return true; 
+            }
+        }
+    }
+
+    // 2. Resolve Spell (Normal path if no reaction or AI missed)
+    caster.currentMana -= spell.manaCost;
+    if (caster.isStealthed) breakStealth(caster);
+    return resolveSpell(caster, spell, target, clickedHex);
+}
