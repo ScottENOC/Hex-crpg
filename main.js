@@ -179,6 +179,39 @@ document.addEventListener("DOMContentLoaded", () => {
 
     window.initHexMap();
     if (window.initWorldMapEvents) window.initWorldMapEvents();
+    
+    // Initialize Roguelike data
+    window.roguelikeData = JSON.parse(localStorage.getItem('rpg_roguelike_data') || JSON.stringify({
+        permanentSkillBonuses: {}, // tree -> count
+        relics: [],
+        mercenaryGraveyard: [], // Snapshots of mercenaries
+        fightsCompleted: 0
+    }));
+
+    window.toggleArenaOptions = function() {
+        const campaign = document.getElementById("campaign-select").value;
+        const optionsDiv = document.getElementById("arena-roguelike-options");
+        if (optionsDiv) {
+            optionsDiv.style.display = (campaign === "1") ? "block" : "none";
+        }
+    };
+    window.toggleArenaOptions(); // Initial call
+
+    const resetBtn = document.getElementById("reset-roguelike-btn");
+    if (resetBtn) {
+        resetBtn.addEventListener("click", () => {
+            if (confirm("Are you sure you want to reset all roguelike progress? This cannot be undone.")) {
+                window.roguelikeData = {
+                    permanentSkillBonuses: {},
+                    relics: [],
+                    mercenaryGraveyard: [],
+                    fightsCompleted: 0
+                };
+                localStorage.setItem('rpg_roguelike_data', JSON.stringify(window.roguelikeData));
+                alert("Progress reset!");
+            }
+        });
+    }
 });
 
 window.startGame = function() {
@@ -193,6 +226,23 @@ window.startGame = function() {
   window.initializePlayer(race, cls, gender, campaign);
   window.party[0].name = name; // Update with generated name if needed
   
+  // Roguelike: Apply permanent skill bonuses
+  window.relicsEnabled = document.getElementById("relics-activated-check").checked;
+  if (campaign === "1" && window.relicsEnabled) {
+      window.party.forEach(char => {
+          for (const tree in window.roguelikeData.permanentSkillBonuses) {
+              const bonus = window.roguelikeData.permanentSkillBonuses[tree];
+              char.attributes[tree] = (char.attributes[tree] || 0) + bonus;
+          }
+      });
+      // Give relics to inventory
+      (window.roguelikeData.relics || []).forEach(rid => {
+          window.party[0].inventory.push(rid);
+      });
+      window.roguelikeData.fightsCompleted = 0; 
+      window.runMaxEnemySkills = {}; // Reset tracking
+  }
+
   // Campaign Level Caps
   window.campaignLevelCaps = { "1": 50, "2": 5, "3": 50 };
   window.currentLevelCap = window.campaignLevelCaps[campaign] || 50;

@@ -1314,6 +1314,113 @@ function startMercenaryHire() {
     modal.style.display = "block";
 }
 
+function getRunMaxFriendlySkills() {
+    const maxSkills = {};
+    const friendlies = window.entities.filter(e => e.side === 'player');
+    friendlies.forEach(f => {
+        for (const skillKey in window.skills) {
+            const tree = window.skills[skillKey].tree;
+            const ranks = f.skills[skillKey] || 0;
+            maxSkills[tree] = Math.max(maxSkills[tree] || 0, ranks);
+        }
+        // Add unspent points
+        if (f.attributes) {
+            for (const tree in f.attributes) {
+                if (tree === 'wildcard') continue;
+                maxSkills[tree] = Math.max(maxSkills[tree] || 0, f.attributes[tree]);
+            }
+            // Count wildcards as general bonus to their best tree?
+            // "Racial skill trees should be counted in this as normal, including counting how many wildcard skill points you have"
+            maxSkills['wildcard'] = Math.max(maxSkills['wildcard'] || 0, f.attributes['wildcard']);
+        }
+    });
+    return maxSkills;
+}
+
+function endArenaRun() {
+    if (!window.relicsEnabled) {
+        alert("Main Character has died. Run ended.");
+        location.reload();
+        return;
+    }
+
+    // 1. Snapshot Mercenaries
+    const mercenaries = window.entities.filter(e => e.side === 'player' && e.name !== window.party[0].name && e.alive);
+    mercenaries.forEach(m => {
+        const snapshot = {
+            name: m.name, race: m.race, gender: m.gender, class: m.class, level: m.level, exp: m.exp,
+            attributes: { ...m.attributes }, skills: { ...m.skills }, equipped: { ...m.equipped },
+            inventory: [...m.inventory]
+        };
+        // Spend unspent points
+        // (Simplified logic: spend on random existing tree skills)
+        window.roguelikeData.mercenaryGraveyard.push(snapshot);
+    });
+
+    // 2. Generate Rewards
+    const maxFriendly = getRunMaxFriendlySkills();
+    const maxEnemy = window.runMaxEnemySkills || {};
+    
+    const validFriendlyTrees = Object.keys(maxFriendly).filter(t => maxFriendly[t] > (window.roguelikeData.permanentSkillBonuses[t] || 0));
+    const validEnemyTrees = Object.keys(maxEnemy).filter(t => maxEnemy[t] > (window.roguelikeData.permanentSkillBonuses[t] || 0));
+
+    const choices = [];
+    if (validFriendlyTrees.length > 0) {
+        const tree = validFriendlyTrees[Math.floor(Math.random() * validFriendlyTrees.length)];
+        choices.push({ type: 'skill', tree: tree, label: `Permanent ${tree} point (From Allies)` });
+    }
+    if (validEnemyTrees.length > 0) {
+        const tree = validEnemyTrees[Math.floor(Math.random() * validEnemyTrees.length)];
+        choices.push({ type: 'skill', tree: tree, label: `Permanent ${tree} point (From Enemies)` });
+    }
+    
+    // Relic (Simplified: random magic item if beat > 2 fights)
+    if (window.roguelikeData.fightsCompleted > 2) {
+        const magicItems = Object.keys(window.items).filter(id => id.includes('sword_arrow') || id.includes('glowing'));
+        const item = magicItems[Math.floor(Math.random() * magicItems.length)];
+        choices.push({ type: 'relic', id: item, label: `Relic: ${window.items[item].name}` });
+    }
+
+    // 3. Show Modal
+    const modal = document.getElementById("end-run-modal");
+    const msg = document.getElementById("end-run-message");
+    const choiceDiv = document.getElementById("reward-choices");
+    
+    msg.innerText = `Your journey ends here. You completed ${window.roguelikeData.fightsCompleted} matches. Choose a legacy for your next character:`;
+    choiceDiv.innerHTML = '';
+    
+    if (choices.length === 0) {
+        const btn = document.createElement("button");
+        btn.innerText = "Accept Fate (No Rewards Available)";
+        btn.onclick = () => location.reload();
+        choiceDiv.appendChild(btn);
+    } else {
+        choices.forEach(c => {
+            const btn = document.createElement("button");
+            btn.innerText = c.label;
+            btn.onclick = () => selectRoguelikeReward(c);
+            choiceDiv.appendChild(btn);
+        });
+    }
+
+    modal.style.display = "block";
+}
+
+function selectRoguelikeReward(choice) {
+    if (choice.type === 'skill') {
+        window.roguelikeData.permanentSkillBonuses[choice.tree] = (window.roguelikeData.permanentSkillBonuses[choice.tree] || 0) + 1;
+    } else if (choice.type === 'relic') {
+        window.roguelikeData.relics.push(choice.id);
+    }
+    
+    localStorage.setItem('rpg_roguelike_data', JSON.stringify(window.roguelikeData));
+    alert("Legacy recorded. Good luck in your next life.");
+    location.reload();
+}
+
+window.endArenaRun = endArenaRun;
+window.selectRoguelikeReward = selectRoguelikeReward;
+
 window.addAllEquipment = addAllEquipment;
 window.cancelAllMoveOrders = cancelAllMoveOrders;
 window.toggleRest = toggleRest;

@@ -1,21 +1,17 @@
+- **Arena Roguelike System**:
+    - **Lobby Redesign**: Replaced the rhombus-shaped lobby with a more organized two-room layout (Spawn Room and NPC Room) connected by a passage.
+    - **Permanent Progression**: Added a roguelike loop for Campaign 1. Upon the main character's death, players can choose from three permanent legacy rewards:
+        - **Ally-Based Skill Bonus**: Gain a permanent skill point in a tree where your party excelled.
+        - **Enemy-Based Skill Bonus**: Gain a permanent skill point in a tree where your enemies were powerful.
+        - **Relics**: Carry over powerful magic items to all future Arena runs (unlocked after completing enough fights).
+    - **Mercenary Graveyard**: Hired mercenaries who survive a run are now snapshotted upon the main character's death. These "phantom" mercenaries can appear as opponents in future Arena matches. Defeating them removes them from the graveyard.
+    - **Scaling Difficulty**: Implemented dynamic enemy scaling. The first fight starts with 12-16 skill points, increasing by 3-5 points per subsequent match.
+    - **Roguelike Controls**: Added a "Roguelike Rewards Activated" toggle and a "Reset Roguelike Progress" button to the character creation screen.
 - **Sleep Mechanics Refinement**: 
     - Fixed a bug where resuming interrupted sleep would reset the timer to a full 8 hours. Resuming now correctly tracks and completes based on the remaining time.
-    - Sleep logic remains tied to the game's Time Point (TP) system for consistent recovery and world time progression.
 - **UI & Layout Improvements**:
-    - **Fixed Panel Width**: Locked the UI details and log panel to a fixed width of 350px.
-    - **Text Wrapping**: Implemented automatic text wrapping (`overflow-wrap: break-word`) for the log and character info panels, preventing long announcements from distorting the game layout.
+    - **Fixed Panel Width**: Locked the UI details and log panel to a fixed width of 350px with automatic text wrapping.
 - **Game Flow & Automation**:
-    - **Auto-Turn Recognition**: The game now automatically acknowledges and initiates the player's turn immediately after teleporting between the Arena and the Lobby, removing the need for a manual 'Wait' action to start.
-- **Campaign Selection**: 
-    - Set **Campaign 1 (Arena)** as the default selected option in the character creation screen.
+    - **Auto-Turn Recognition**: The game now automatically initiates the player's turn immediately after teleporting between the Arena and the Lobby.
 - **Bug Fixes**:
-    - **Cheat Add Jerry**: Fixed a crash where adding a "Jerry" character would fail if no player entity was found. It now intelligently finds any valid player-side entity to spawn next to.
-- **Off-hand Weapon Rendering**: Implemented visual support for off-hand weapons on the game map. Off-hand weapons are now correctly mirrored vertically and positioned on the opposite side of the character.
-- **Weapon Visual Overhaul**: Updated rendering logic to use default base images for magic items (e.g., standard sword icon for the Sword of Arrow Deflection) unless a specialized image is provided.
-- **Campaign & Time Refinements**:
-    - **Start Times**: Set initial game world time based on the selected campaign: 8:00 AM for Campaigns 1 & 2, and 6:00 PM for Campaign 3.
-- **Combat & Skill Balancing**:
-    - **Sword Parry Mastery**: Reduced success chance from 10% to 5% per rank and capped at 2 ranks.
-    - **Spear Halt Fix**: Improved the 'Spear Halt' reaction to allow enemies to reach their target hex before ending their turn.
-- **Grishnak AI**: Implemented spellcasting AI for Grishnak, prioritizing Counterspell reactions and offensive Firebolts.
-- **Recursive Alert System**: Enemies now features a recursive alert system where spotting a player alerts all allies within 10 hexes in a chain reaction.
+    - **Cheat Add Jerry**: Fixed a crash where adding a "Jerry" character would fail if no player entity was found.

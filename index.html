@@ -129,11 +129,18 @@
             </div>
             <div class="form-group">
                 <label for="campaign-select">Campaign:</label>
-                <select id="campaign-select">
+                <select id="campaign-select" onchange="window.toggleArenaOptions()">
                     <option value="1" selected>Campaign 1 (Arena)</option>
                     <option value="2">Campaign 2 (Small World)</option>
                     <option value="3">Campaign 3 (Main)</option>
                 </select>
+            </div>
+            <div id="arena-roguelike-options" style="margin-bottom: 15px;">
+                <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
+                    <input type="checkbox" id="relics-activated-check" checked style="width: 20px; height: 20px;">
+                    <label for="relics-activated-check" style="margin-bottom: 0;">Roguelike Rewards Activated</label>
+                </div>
+                <button id="reset-roguelike-btn" style="background-color: #f44336; font-size: 0.8em; margin-top: 5px;">Reset Roguelike Progress</button>
             </div>
             <!-- Skill Point Allocation Section -->
             <div class="skills-section">
@@ -307,6 +314,14 @@
                 <button id="confirm-hire-btn">Hire</button>
                 <button id="cancel-hire-btn" style="background: #777;">Cancel</button>
             </div>
+        </div>
+    </div>
+
+    <div id="end-run-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h2>Run Ended</h2>
+            <p id="end-run-message"></p>
+            <div id="reward-choices" style="display: flex; gap: 20px; justify-content: space-around; margin-top: 20px;"></div>
         </div>
     </div>
 

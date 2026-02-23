@@ -29,6 +29,11 @@ function syncBackToPlayer(entity) {
             char.offhandAttackAvailable = entity.offhandAttackAvailable;
             if (char === window.player) window.showCharacter(); 
         }
+        
+        // ROGUELIKE: End of run if main char dies
+        if (window.currentCampaign === "1" && entity.name === window.party[0].name && entity.hp <= 0) {
+            window.endArenaRun();
+        }
     }
 }
 
@@ -1706,6 +1711,22 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   attacker.offhandAttackAvailable = !isOffhand && (attacker.equipped?.offhand && window.items[attacker.equipped.offhand].type === 'weapon');
   if (target.hp <= 0 && target.alive) {
       target.alive = false; window.showMessage(`${target.name} defeated!`);
+      
+      // ROGUELIKE: Remove from graveyard if a graveyard merc dies
+      if (target.isGraveyardMerc) {
+          window.roguelikeData.mercenaryGraveyard = window.roguelikeData.mercenaryGraveyard.filter(m => m.name !== target.name);
+          localStorage.setItem('rpg_roguelike_data', JSON.stringify(window.roguelikeData));
+      }
+
+      // ROGUELIKE: Track max enemy skills for rewards
+      if (attacker.side === 'player' && target.side === 'enemy') {
+          if (!window.runMaxEnemySkills) window.runMaxEnemySkills = {};
+          for (const tree in window.skills) {
+              const ranks = target.skills[tree] || 0;
+              window.runMaxEnemySkills[tree] = Math.max(window.runMaxEnemySkills[tree] || 0, ranks);
+          }
+      }
+
       if (attacker.side === 'player') {
           if (target.expValue) window.gainExp(target.expValue);
           if (target.gold) window.player.gold += target.gold;
@@ -1982,11 +2003,23 @@ function setupArenaLobby() {
     window.hasTriggeredImpatience = false;
     window.startSleepTime = 0; 
 
-    // Create a 20x20 stone lobby
-    for (let q = -10; q <= 10; q++) {
-        for (let r = -10; r <= 10; r++) {
-            window.setTerrainAt(q, r, 'Wall'); 
-            if (q > -8 && q < 8 && r > -8 && r < 8) {
+    // Create two rooms: Spawn Room and NPC Room
+    // Room 1 (Spawn): -10 to -2
+    // Room 2 (NPCs): 2 to 10
+    for (let q = -12; q <= 12; q++) {
+        for (let r = -8; r <= 8; r++) {
+            window.setTerrainAt(q, r, 'Wall');
+            
+            // Spawn Room
+            if (q >= -10 && q <= -2 && r >= -6 && r <= 6) {
+                window.setTerrainAt(q, r, 'Cave Floor');
+            }
+            // NPC Room
+            if (q >= 2 && q <= 10 && r >= -6 && r <= 6) {
+                window.setTerrainAt(q, r, 'Cave Floor');
+            }
+            // Connecting passage
+            if (q > -2 && q < 2 && r >= -1 && r <= 1) {
                 window.setTerrainAt(q, r, 'Cave Floor');
             }
         }
@@ -1994,14 +2027,14 @@ function setupArenaLobby() {
 
     if (playerEntities.length > 0) {
         playerEntities.forEach((e, i) => {
-            e.hex = { q: -2 + i, r: 0 };
+            e.hex = { q: -8 + Math.floor(i/3), r: -2 + (i%3) };
             if (e.riding) e.riding.hex = { q: e.hex.q, r: e.hex.r };
             window.entities.push(e);
         });
     } else {
         // First time initialization: spawn from party data
         window.party.forEach((p, i) => {
-            const spawnHex = { q: -2 + i, r: 0 };
+            const spawnHex = { q: -8 + Math.floor(i/3), r: -2 + (i%3) };
             const playerEntity = new window.Entity(p.name, "red", spawnHex, p.attributes.agility + 10);
             playerEntity.side = 'player';
             Object.assign(playerEntity, p);
@@ -2009,8 +2042,8 @@ function setupArenaLobby() {
         });
     }
 
-    // Spawn NPCs
-    const announcer = new window.Entity("Arena Announcer", "yellow", {q: 2, r: -2}, 10);
+    // Spawn NPCs in the right room
+    const announcer = new window.Entity("Arena Announcer", "yellow", {q: 6, r: -3}, 10);
     announcer.isNPC = true;
     announcer.side = 'neutral';
     announcer.gender = 'male';
@@ -2018,7 +2051,7 @@ function setupArenaLobby() {
     announcer.customImage = 'arenaannouncer';
     window.entities.push(announcer);
 
-    const shopkeeper = new window.Entity("Shopkeeper", "green", {q: -2, r: 2}, 10);
+    const shopkeeper = new window.Entity("Shopkeeper", "green", {q: 4, r: 3}, 10);
     shopkeeper.isNPC = true;
     shopkeeper.side = 'neutral';
     shopkeeper.gender = 'female';
@@ -2026,7 +2059,7 @@ function setupArenaLobby() {
     shopkeeper.customImage = 'arenashopkeeper';
     window.entities.push(shopkeeper);
 
-    const recruiter = new window.Entity("Mercenary Recruiter", "cyan", {q: 3, r: 3}, 10);
+    const recruiter = new window.Entity("Mercenary Recruiter", "cyan", {q: 8, r: 2}, 10);
     recruiter.isNPC = true;
     recruiter.side = 'neutral';
     recruiter.gender = 'male';
@@ -2034,8 +2067,10 @@ function setupArenaLobby() {
     recruiter.customImage = 'arenamercenary';
     window.entities.push(recruiter);
 
-    // Fireplace in the center-ish
-    window.tileObjects["-1,-1"] = { type: 'fireplace', lightRadius: 12 };
+    // Fireplace in the center of NPC room
+    window.tileObjects["6,0"] = { type: 'fireplace', lightRadius: 12 };
+    // Fireplace in spawn room
+    window.tileObjects["-6,0"] = { type: 'fireplace', lightRadius: 8 };
 
     window.drawMap();
     window.renderEntities();
@@ -2048,6 +2083,9 @@ function startArenaFight() {
     window.isInArena = true;
     window.triggerAmbientDialogue('arena_fight_start');
     
+    // Increment progress
+    window.roguelikeData.fightsCompleted = (window.roguelikeData.fightsCompleted || 0) + 1;
+
     // 1. Level Transition
     window.overrideTerrain = {}; 
     window.tileObjects = {}; 
@@ -2091,7 +2129,13 @@ function startArenaFight() {
         window.centerCameraOn(window.entities[0].hex);
     }
 
-    // 4. Spawn enemies
+    // 4. Spawn enemies based on scaled difficulty
+    // First fight: 12-16 skill points
+    // Increase min by 3, max by 5 per fight
+    const minSP = 12 + (window.roguelikeData.fightsCompleted - 1) * 3;
+    const maxSP = 16 + (window.roguelikeData.fightsCompleted - 1) * 5;
+    let targetSP = minSP + Math.floor(Math.random() * (maxSP - minSP + 1));
+
     // GRISHNAK ENCOUNTER (10% chance if not defeated)
     if (!window.grishnakDefeated && Math.random() < 0.1) {
         window.showMessage("A champion enters the arena: Grishnak!");
@@ -2109,24 +2153,10 @@ function startArenaFight() {
 
         // Give Grishnak some spells
         grishnak.createdSpells.push({
-            name: "Counterspell",
-            baseId: 'counterspell',
-            type: 'dispel',
-            school: 'arcane',
-            manaCost: 10,
-            tpCost: 10,
-            range: 8
+            name: "Counterspell", baseId: 'counterspell', type: 'dispel', school: 'arcane', manaCost: 10, tpCost: 10, range: 8
         });
         grishnak.createdSpells.push({
-            name: "Firebolt",
-            baseId: 'firebolt',
-            type: 'damage',
-            school: 'arcane',
-            manaCost: 5,
-            tpCost: 10,
-            range: 10,
-            magnitude: 8,
-            needsHitCheck: true
+            name: "Firebolt", baseId: 'firebolt', type: 'damage', school: 'arcane', manaCost: 5, tpCost: 10, range: 10, magnitude: 8, needsHitCheck: true
         });
 
         window.entities.push(grishnak);
@@ -2135,20 +2165,49 @@ function startArenaFight() {
             window.entities.push(window.createMonster('orc', spawnHex, null, null, 'enemy'));
         }
     } else {
-        // THEMED ENCOUNTERS
-        const themes = [
-            ['spider', 'spider', 'spider'],
-            ['skeleton', 'skeleton', 'zombie', 'zombie'],
-            ['orc', 'goblin', 'goblin'],
-            ['imp', 'imp', 'imp'],
-            ['wolf', 'wolf', 'wolf_rider_goblin']
-        ];
-        const theme = themes[Math.floor(Math.random() * themes.length)];
-        theme.forEach((type, i) => {
-            const spawnHex = { q: arenaSize - 5, r: i - Math.floor(theme.length/2) };
-            const enemy = window.createMonster(type, spawnHex, null, null, 'enemy');
-            window.entities.push(enemy);
-        });
+        // Normal encounter: spend targetSP on monsters
+        let currentSP = 0;
+        const monsterTypes = ['goblin', 'orc', 'skeleton', 'zombie', 'imp', 'spider', 'troll'];
+        let spawnIndex = 0;
+
+        while (currentSP < targetSP) {
+            // Priority: Mercenary Graveyard (if any)
+            if (window.roguelikeData.mercenaryGraveyard.length > 0 && Math.random() < 0.2) {
+                const snapshot = window.roguelikeData.mercenaryGraveyard.splice(Math.floor(Math.random() * window.roguelikeData.mercenaryGraveyard.length), 1)[0];
+                const spawnHex = { q: arenaSize - 5, r: spawnIndex - 2 };
+                const merc = new window.Enemy(snapshot.name, "purple", spawnHex, snapshot.attributes.agility + 10);
+                merc.side = 'enemy';
+                Object.assign(merc, snapshot);
+                merc.isGraveyardMerc = true;
+                window.entities.push(merc);
+                currentSP += calculateTotalExp(snapshot.level, snapshot.exp) / 100; // Rough estimate of SP
+                spawnIndex++;
+                continue;
+            }
+
+            const type = monsterTypes[Math.floor(Math.random() * monsterTypes.length)];
+            const template = window.monsterTemplates[type];
+            // Base SP estimation for templates
+            const baseSP = Object.values(template.skills || {}).reduce((a, b) => a + b, 0) + (template.hp / 5);
+            
+            if (currentSP + baseSP > targetSP + 10 && currentSP > 0) break;
+
+            const spawnHex = { q: arenaSize - 5, r: spawnIndex - 2 };
+            const m = window.createMonster(type, spawnHex, null, null, 'enemy');
+            
+            // If monster is underpowered, add some stats
+            if (currentSP + baseSP < targetSP) {
+                const diff = targetSP - (currentSP + baseSP);
+                const extraHP = Math.floor(diff * 5);
+                m.maxHp += extraHP;
+                m.hp += extraHP;
+            }
+
+            window.entities.push(m);
+            currentSP += baseSP;
+            spawnIndex++;
+            if (spawnIndex > 10) break; // Hard limit on count
+        }
     }
 
     window.drawMap();
