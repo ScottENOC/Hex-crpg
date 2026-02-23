@@ -18,6 +18,9 @@ body {
 
 #ui-container {
     margin-left: 20px;
+    width: 350px;
+    flex-shrink: 0;
+    overflow-wrap: break-word;
 }
 
 .hex {

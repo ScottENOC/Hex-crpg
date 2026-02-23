@@ -1,24 +1,21 @@
+- **Sleep Mechanics Refinement**: 
+    - Fixed a bug where resuming interrupted sleep would reset the timer to a full 8 hours. Resuming now correctly tracks and completes based on the remaining time.
+    - Sleep logic remains tied to the game's Time Point (TP) system for consistent recovery and world time progression.
+- **UI & Layout Improvements**:
+    - **Fixed Panel Width**: Locked the UI details and log panel to a fixed width of 350px.
+    - **Text Wrapping**: Implemented automatic text wrapping (`overflow-wrap: break-word`) for the log and character info panels, preventing long announcements from distorting the game layout.
+- **Game Flow & Automation**:
+    - **Auto-Turn Recognition**: The game now automatically acknowledges and initiates the player's turn immediately after teleporting between the Arena and the Lobby, removing the need for a manual 'Wait' action to start.
+- **Campaign Selection**: 
+    - Set **Campaign 1 (Arena)** as the default selected option in the character creation screen.
+- **Bug Fixes**:
+    - **Cheat Add Jerry**: Fixed a crash where adding a "Jerry" character would fail if no player entity was found. It now intelligently finds any valid player-side entity to spawn next to.
 - **Off-hand Weapon Rendering**: Implemented visual support for off-hand weapons on the game map. Off-hand weapons are now correctly mirrored vertically and positioned on the opposite side of the character.
 - **Weapon Visual Overhaul**: Updated rendering logic to use default base images for magic items (e.g., standard sword icon for the Sword of Arrow Deflection) unless a specialized image is provided.
-- **Improved Sleep Mechanics**: 
-    - **Simplified logic**: The sleep function now operates by repeatedly applying 'Wait' actions (spending Time Points) for the entire party.
-    - **8-Hour Duration**: Sleep now accurately passes 8 hours of game time by calculating the exact number of Time Points required based on the main character's speed (TP per 0.4 seconds).
-    - **Intelligent Interrupts**: Sleep correctly halts if an enemy is spotted or if any party member takes damage.
 - **Campaign & Time Refinements**:
-    - **Start Times**: Set initial game world time based on the selected campaign: 8:00 AM for Campaigns 1 & 2 (Arena and Small World), and 6:00 PM for Campaign 3 (Main).
-    - **UI Reordering**: Reordered the campaign selection dropdown to show 1, 2, 3 and set Campaign 1 (Arena) as the default selection.
-- **UI & Display Refinements**:
-    - **HP Display**: All character and party HP values are now rounded up to the nearest integer in the UI.
-    - **Inventory Logic**: Restricted shield equipping to the off-hand slot only.
-    - **NPC Rendering**: NPCs in the Arena Lobby now use their unique custom images (`arenaannouncer.png`, etc.) instead of generic colored circles.
-    - **Visual Fix**: Removed the "red dot" indicator from enemies to declutter the map.
-- **Economy Improvements**:
-    - **Horse Merchant**: The Arena Shopkeeper now sells horses for 100 gold. Purchased horses correctly join the player's party and teleport into arena matches.
-- **Combat & AI Balancing**:
+    - **Start Times**: Set initial game world time based on the selected campaign: 8:00 AM for Campaigns 1 & 2, and 6:00 PM for Campaign 3.
+- **Combat & Skill Balancing**:
     - **Sword Parry Mastery**: Reduced success chance from 10% to 5% per rank and capped at 2 ranks.
-    - **Recursive Alert System**: Enemies now features a recursive alert system where spotting a player alerts all allies within 10 hexes in a chain reaction.
-    - **Grishnak AI**: Implemented spellcasting AI for Grishnak, prioritizing Counterspell reactions and offensive Firebolts.
-- **Skill Tree Cleaning**:
-    - Renamed the 'Way\_of\_the\_open\_palm' skill tree to '**Way of the open palm**' (removing underscores) for better readability.
-- **Bug Fixes**:
-    - **Cheat Add Jerry**: Fixed a crash where adding a "Jerry" character would fail if no player entity with the word "Player" in its name was found (now searches for any player-side entity).
+    - **Spear Halt Fix**: Improved the 'Spear Halt' reaction to allow enemies to reach their target hex before ending their turn.
+- **Grishnak AI**: Implemented spellcasting AI for Grishnak, prioritizing Counterspell reactions and offensive Firebolts.
+- **Recursive Alert System**: Enemies now features a recursive alert system where spotting a player alerts all allies within 10 hexes in a chain reaction.

@@ -132,14 +132,13 @@ function toggleSleep() {
             return;
         }
         window.isSleeping = true;
-        window.startSleepTime = window.worldSeconds; // Record when we started
-        const mainChar = window.entities.find(e => e.name === window.party[0].name);
-        window.sleepStartTP = mainChar ? mainChar.totalTPSpent : 0;
-
-        // Initialize sleep timer for all player entities if needed
+        
+        // Initialize sleep timer for all player entities if needed (only if they don't have time left)
         window.entities.forEach(e => {
             if (e.side === 'player' && e.name !== 'Wolf' && e.name !== 'Horse') {
-                e.sleepRemainingSeconds = 8 * 3600; // 8 hours
+                if (!e.sleepRemainingSeconds || e.sleepRemainingSeconds <= 0) {
+                    e.sleepRemainingSeconds = 8 * 3600; // 8 hours
+                }
             }
         });
         showMessage("Going to sleep...");

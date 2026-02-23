@@ -804,16 +804,10 @@ function tick() {
 
             if (window.isSleeping) {
                 const mc = window.entities.find(e => e.name === window.party[0].name);
-                if (mc) {
-                    const targetTPGained = (8 * 3600 / 0.4) * mc.timePointsPerTick;
-                    if ((mc.totalTPSpent - (window.sleepStartTP || 0)) >= targetTPGained) {
-                        window.isSleeping = false;
-                        sentientAllies.forEach(ent => ent.awakeSeconds = 0);
-                        window.showMessage("Sleep complete.");
-                        window.updateSleepButton();
-                    }
-                } else {
+                if (!mc || (mc.sleepRemainingSeconds <= 0)) {
                     window.isSleeping = false;
+                    sentientAllies.forEach(ent => ent.awakeSeconds = 0);
+                    window.showMessage("Sleep complete.");
                     window.updateSleepButton();
                 }
             }
@@ -2046,6 +2040,7 @@ function setupArenaLobby() {
     window.drawMap();
     window.renderEntities();
     window.showCharacter();
+    window.runTickInternal();
 }
 
 function startArenaFight() {
@@ -2160,6 +2155,7 @@ function startArenaFight() {
     window.renderEntities();
     window.updateTurnIndicator();
     window.gamePhase = 'WAITING';
+    window.runTickInternal();
 }
 
 function talkToNPC(npc) {
