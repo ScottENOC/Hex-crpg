@@ -1,3 +1,12 @@
+- **Audio System Implementation**:
+    - Created `audio.js` to manage game music and sound effects with support for linear fading.
+    - Implemented **Arena Music**: Added `Arena pre battle.wav` (lobby/exploration) and `Arena battle.wav` (combat).
+    - Added **Battle Sting**: `Arena battle sting.wav` plays immediately when combat starts.
+    - **Fading Transitions**: Implemented smooth volume transitions (0.8s fade-in, 0.6s fade-out) when entering or leaving combat.
+    - **Mute Functionality**: Added "Mute Music" checkboxes to both the Title Screen and the Main Menu. The game is muted by default on load.
+- **Bug Fixes & Stability**:
+    - **Syntax Error Fix**: Resolved "Identifier nextHex has already been declared" in `gameEngine.js` by removing a redundant variable declaration in `playerMoveProcess`.
+    - **Script Loading Fix**: Fixed "window.startGameCore is not a function" which was a side-effect of the syntax error preventing the game engine script from loading correctly.
 - **Pedestals & High Walls**: Added `Pedestal` terrain type that blocks LOS. Implemented image-based rendering using `mediumpillar.png`. Entities standing on pedestals are vertically offset by 30% of hex height. Pedestals become 50% transparent when they partially cover entities behind them.
 - **Visual Asset Integration**:
     - **Axe Overlay**: Characters with an axe equipped now have `axe.png` overlaid on their avatar.
@@ -19,7 +28,7 @@
 - **Roguelike Rewards & Progression**:
     - Implemented choosing permanent legacy rewards (Skill points or Relics) when the main character dies in the arena.
     - Added **Mercenary Graveyard** where surviving mercenaries from past runs can return as arena opponents.
-- **Bug Fixes**:
+- **UI & Flow Fixes**:
     - **Sleep Resumption**: Resuming interrupted sleep now correctly calculates remaining time.
     - **UI Panel Width**: Locked UI details/log panel to 350px with word wrapping.
     - **Teleport Turn Fix**: The game now automatically triggers the player's turn after teleporting between lobby and arena.

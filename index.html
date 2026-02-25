@@ -78,6 +78,10 @@
                 <button id="load-menu-btn" style="background-color: #9C27B0;">Load Game</button>
                 <button id="quick-save-btn" style="background-color: #1976D2;">Quick Save</button>
                 <button id="quick-load-btn" style="background-color: #7B1FA2;">Quick Load</button>
+                <div style="padding: 10px; border-top: 1px solid #555; display: flex; align-items: center; gap: 5px;">
+                    <input type="checkbox" id="mute-check-menu" onchange="window.syncMute(this.checked)" style="width: 15px; height: 15px;">
+                    <label for="mute-check-menu" style="font-size: 0.8em; color: white;">Mute Music</label>
+                </div>
             </div>
         </div>
 
@@ -147,6 +151,10 @@
                 <div id="skill-trees-container">
                     <!-- Skill trees will be populated by JavaScript -->
                 </div>
+            </div>
+            <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
+                <input type="checkbox" id="mute-check-title" onchange="window.syncMute(this.checked)" style="width: 20px; height: 20px;">
+                <label for="mute-check-title" style="margin-bottom: 0;">Mute Music</label>
             </div>
             <div class="button-group">
                 <button id="createCharacterButton">Create Character</button>
@@ -340,6 +348,7 @@
     <script src="spells.js"></script>
     <script src="skills.js"></script>
     <script src="persistence.js"></script>
+    <script src="audio.js"></script>
     <script src="ui.js"></script>
     <script src="gameEngine.js"></script>
     <script src="main.js?v=2"></script>

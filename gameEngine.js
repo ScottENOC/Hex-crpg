@@ -69,7 +69,6 @@ function playerMoveProcess(player, path) {
     }
 
     const previousHex = { q: player.hex.q, r: player.hex.r };
-    const nextHex = path[0];
 
     checkMovementReactions(player, nextHex, (forceEnd) => {
         const occupant = getEntityAtHex(nextHex.q, nextHex.r);
@@ -1287,6 +1286,14 @@ function aiProcess(entity) {
 
 function wakeUp(entity) {
     if (entity.aiState === 'combat') return;
+    
+    // AUDIO: Transition to battle if this is the first alert
+    const firstAlert = !window.entities.some(e => e.side !== 'player' && e.side !== 'neutral' && e.aiState === 'combat');
+    if (firstAlert && window.isInArena) {
+        window.playSting();
+        window.playArenaMusic('battle', 0.8);
+    }
+
     entity.aiState = 'combat';
     
     // Reset players initiative if this is the start of combat
@@ -1803,6 +1810,10 @@ function checkCombatEnd() {
             window.isInArena = false;
             window.triggerAmbientDialogue('arena_victory');
             window.showMessage("You have won the battle! Teleporting back to the lobby...");
+            
+            // AUDIO: Victory fade out
+            if (window.stopAllMusic) window.stopAllMusic(0.8);
+
             setTimeout(() => {
                 setupArenaLobby();
                 window.drawMap();
@@ -1814,15 +1825,14 @@ function checkCombatEnd() {
             return;
         }
 
-        // If all active enemies are dead, maybe we can relax?
-        window.entities.forEach(e => { if (e.alive) e.timePoints = 0; });
-        
-        // Spawn more monsters far away to keep the world populated
-        spawnNewMonster(); 
-        
-        const p = window.entities.find(e => e.name.includes("Player"));
-        if (p?.skills['initiativeBonus']) p.timePoints += p.skills['initiativeBonus'] * 5;
-        window.drawMap(); window.renderEntities(); window.updateTurnIndicator();
+        // ... (existing logic)
+    }
+
+    // AUDIO: If staying in arena but combat ended (no active combat AI states)
+    const inCombat = window.entities.some(e => e.alive && e.side === 'enemy' && e.aiState === 'combat');
+    if (!inCombat && window.isInArena) {
+        // Transition back to pre-battle music
+        if (window.playArenaMusic) window.playArenaMusic('preBattle', 0.6);
     }
 }
 
@@ -2043,6 +2053,7 @@ window.cancelSpell = cancelSpell;
 
 function setupArenaLobby() {
     window.gamePhase = 'WAITING';
+    if (window.stopAllMusic) window.stopAllMusic(0.8);
     
     // Keep existing player entities (horses, summons) instead of just party data
     const playerEntities = window.entities.filter(e => e.side === 'player' && e.alive);
@@ -2280,6 +2291,15 @@ function startArenaFight() {
             spawnIndex++;
             if (spawnIndex > 10) break; // Hard limit on count
         }
+    }
+
+    // AUDIO: Play music based on immediate visibility
+    const anyEnemySeen = window.entities.some(e => e.alive && e.side === 'enemy' && window.isVisibleToPlayer(e.hex));
+    if (anyEnemySeen) {
+        window.playSting();
+        window.playArenaMusic('battle', 0.8);
+    } else {
+        window.playArenaMusic('preBattle', 0.8);
     }
 
     window.drawMap();

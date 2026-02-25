@@ -1475,6 +1475,19 @@ function selectRoguelikeReward(choice) {
 window.endArenaRun = endArenaRun;
 window.selectRoguelikeReward = selectRoguelikeReward;
 
+window.syncMute = function(isMuted) {
+    window.setAudioEnabled(!isMuted);
+    const titleCheck = document.getElementById('mute-check-title');
+    const menuCheck = document.getElementById('mute-check-menu');
+    if (titleCheck) titleCheck.checked = isMuted;
+    if (menuCheck) menuCheck.checked = isMuted;
+};
+
+// Default to muted
+document.addEventListener('DOMContentLoaded', () => {
+    window.syncMute(true);
+});
+
 window.addAllEquipment = addAllEquipment;
 window.cancelAllMoveOrders = cancelAllMoveOrders;
 window.toggleRest = toggleRest;
