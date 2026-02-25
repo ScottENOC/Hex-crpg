@@ -1,14 +1,28 @@
-- **UI & Display Refinements**:
-    - **Mana Display**: Standardized all mana displays to show integer values (rounded down), providing a cleaner UI consistent with the HP display.
-    - **Panel Width & Wrapping**: Re-confirmed fixed width of 350px for the UI log/details panel with active text wrapping to prevent layout distortion.
-- **Bug Fixes & Stability**:
-    - **Item ID Error**: Fixed a crash in the action bar logic ("cannot read properties of undefined reading 'id'") by adding safety checks when verifying equipped weapon requirements for skills.
-    - **Shop Crash**: Added null checks to the shop system to prevent crashes if the party is empty or if character data hasn't fully initialized.
-    - **Campaign Defaults**: Re-confirmed Campaign 1 (Arena) as the default selection on the character creation screen for a smoother onboarding experience.
-- **Arena Roguelike System**:
-    - **Lobby Redesign**: Replaced the rhombus-shaped lobby with a more organized two-room layout (Spawn Room and NPC Room) connected by a passage.
-    - **Permanent Progression**: Added a roguelike loop for Campaign 1. Upon the main character's death, players can choose from permanent legacy rewards (Skill points or Relics).
-    - **Mercenary Graveyard**: Survivors of a run are snapshotted and can appear as powerful opponents in future Arena matches.
-    - **Scaling Difficulty**: Enemies now scale in power based on the number of matches won in a single run.
-- **Sleep Mechanics Refinement**: 
-    - Fixed a bug where resuming interrupted sleep would reset the timer to a full 8 hours.
+- **Pedestals & High Walls**: Added `Pedestal` terrain type that blocks LOS. Implemented image-based rendering using `mediumpillar.png`. Entities standing on pedestals are vertically offset by 30% of hex height. Pedestals become 50% transparent when they partially cover entities behind them.
+- **Visual Asset Integration**:
+    - **Axe Overlay**: Characters with an axe equipped now have `axe.png` overlaid on their avatar.
+    - **Troll Image**: Troll monsters now use the `troll.png` image.
+    - **Water Rendering**: Updated water terrain to use the `water.png` image.
+    - **Wolf & Rider Layers**: Nature summons use the updated `wolf.png`. Goblin Wolf Riders correctly layer the goblin and their equipment on top of the wolf base.
+- **Boar Monster & Summoning**:
+    - Added **Boar** monster with high health and damage.
+    - Implemented **Furious Charge**: A new ability for boars (and available as a skill) that allows charging an enemy 3-5 hexes away for +4 bonus damage.
+    - Added **Boar Summoning** Nature skill to allow summoning a boar instead of a wolf (+8 mana).
+- **Arena Improvements**:
+    - **Randomized Environments**: Arena maps now vary between indoor (dark, campfires) and outdoor (daylight).
+    - **Dynamic Obstacles**: Added randomized water features and pedestal lines/clusters to arena battle maps.
+    - **Boar Riders**: Orcs in the arena now have a chance to spawn mounted on boars.
+- **Stealth Overhaul**:
+    - Converted Stealth into a movement toggle with a 4 TP penalty per hex.
+    - Added **Speedy Stealth** Rogue skill to reduce this penalty.
+    - Implemented dynamic detection where enemies roll to spot stealthed characters based on distance and `stealthScore`.
+- **Roguelike Rewards & Progression**:
+    - Implemented choosing permanent legacy rewards (Skill points or Relics) when the main character dies in the arena.
+    - Added **Mercenary Graveyard** where surviving mercenaries from past runs can return as arena opponents.
+- **Bug Fixes**:
+    - **Sleep Resumption**: Resuming interrupted sleep now correctly calculates remaining time.
+    - **UI Panel Width**: Locked UI details/log panel to 350px with word wrapping.
+    - **Teleport Turn Fix**: The game now automatically triggers the player's turn after teleporting between lobby and arena.
+    - **Add Jerry Crash**: Fixed a crash when no player-side entity was found for the Jerry cheat.
+    - **HP/Mana Display**: All health and mana values are now rounded to the nearest integer in the UI.
+    - **Item ID Safety**: Added checks to prevent crashes when items are undefined.

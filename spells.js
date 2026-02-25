@@ -40,7 +40,7 @@ const baseSpells = {
         school: 'nature',
         baseMana: 10,
         type: 'summon',
-        summons: ['wolf']
+        summons: ['wolf', 'boar']
     },
     'counterspell': {
         name: 'Counterspell',

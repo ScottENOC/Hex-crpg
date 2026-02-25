@@ -649,11 +649,16 @@ function updateSpellPreview() {
     const options = player.unlockedCastingOptions[base.school] || {};
     let html = '';
     if (base.type === 'summon') {
+        let optionsHtml = '';
+        base.summons.forEach(animalId => {
+            if (animalId === 'boar' && (!player.skills?.learn_boar_summon)) return;
+            optionsHtml += `<option value="${animalId}">${window.monsterTemplates[animalId].name}</option>`;
+        });
         html += `
             <div class="form-group">
                 <label>Animal to Summon:</label>
                 <select id="spell-animal-select" onchange="window.renderSpellStats()">
-                    ${base.summons.map(animalId => `<option value="${animalId}">${window.monsterTemplates[animalId].name}</option>`).join('')}
+                    ${optionsHtml}
                 </select>
             </div>
         `;
@@ -739,6 +744,22 @@ function renderSpellStats() {
     `;
     document.getElementById("spell-stats-display").innerHTML = statsHtml;
     const animalId = document.getElementById("spell-animal-select") ? document.getElementById("spell-animal-select").value : null;
+    
+    if (animalId === 'boar') {
+        manaCost += 8;
+        // Update display again with corrected mana
+        const overCapNew = manaCost > cap;
+        statsHtml = `
+            <p><strong>Total Mana Cost:</strong> ${manaCost.toFixed(1)} ${overCapNew ? '<span style="color:#f44336; font-weight: bold;">(EXCEEDS CAP: ' + cap + ')</span>' : ''}</p>
+            <p><strong>Core Mana Cost (Maint):</strong> ${coreManaCost.toFixed(1)}</p>
+            <p><strong>TP Cost:</strong> ${tpCost}</p>
+            <p><strong>Magnitude:</strong> ${magnitude}</p>
+            <p><strong>Range:</strong> ${range}</p>
+            ${base.baseRadius !== undefined ? `<p><strong>Radius:</strong> ${radius}</p>` : ''}
+        `;
+        document.getElementById("spell-stats-display").innerHTML = statsHtml;
+    }
+
     window.currentSpellCalc = { name: base.name, school: base.school, manaCost, coreManaCost, tpCost, magnitude, range, radius, type: base.type, baseId, animalId };
 }
 
@@ -1280,6 +1301,35 @@ function openShop() {
     };
     horseDiv.appendChild(buyHorseBtn);
     buyList.appendChild(horseDiv);
+
+    // Add Boar to shop
+    const boarDiv = document.createElement("div");
+    boarDiv.style.display = "flex";
+    boarDiv.style.justifyContent = "space-between";
+    boarDiv.style.marginBottom = "5px";
+    boarDiv.innerHTML = `<span>Boar (150g)</span>`;
+    const buyBoarBtn = document.createElement("button");
+    buyBoarBtn.innerText = "Buy";
+    buyBoarBtn.style.fontSize = "0.8em";
+    buyBoarBtn.disabled = player.gold < 150;
+    buyBoarBtn.onclick = () => {
+        player.gold -= 150;
+        const pEnt = window.entities.find(e => e.name === player.name);
+        const neighbors = window.getNeighbors(pEnt.hex.q, pEnt.hex.r);
+        const h = neighbors.find(n => !window.entities.some(e => e.alive && e.getAllHexes().some(oh => oh.q === n.q && oh.r === n.r)) && window.getTerrainAt(n.q, n.r).name !== 'Water');
+        if (h) {
+            const boar = window.createMonster('boar', h, null, null, 'player');
+            window.entities.push(boar);
+            window.drawMap();
+            window.renderEntities();
+            window.showMessage("Boar purchased and joined the party!");
+        } else {
+            window.showMessage("No space for a boar!");
+        }
+        openShop();
+    };
+    boarDiv.appendChild(buyBoarBtn);
+    buyList.appendChild(boarDiv);
 
     sellList.innerHTML = '';
     const inventory = player.inventory || [];

@@ -134,6 +134,22 @@ const monsterTemplates = {
         },
         defaultEquipment: []
     },
+    'boar': {
+        name: 'Boar',
+        color: '#8d6e63',
+        hp: 25,
+        expValue: 250,
+        canLoot: false,
+        mountSize: 3,
+        tags: ['animal'],
+        skills: {
+            'health': 3,
+            'meleeDamage': 2,
+            'furious_charge': 1,
+            'fastMovement': 1
+        },
+        defaultEquipment: []
+    },
     'wolf_rider_goblin': {
         name: 'Wolf Rider Goblin',
         color: '#2e8b57',

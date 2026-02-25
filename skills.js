@@ -76,6 +76,14 @@ const skills = {
         maxRanks: 1,
         apply: (player) => {}
     },
+    'furious_charge': {
+        name: 'Furious Charge',
+        description: 'Active: Charge an enemy 3-5 hexes away and attack for +4 damage. (10 TP)',
+        tree: 'strength',
+        maxRanks: 1,
+        active: true,
+        apply: (player) => {}
+    },
     // AGILITY
     'timePointRate': {
         name: 'Time Point Rate',
@@ -279,6 +287,28 @@ const skills = {
         description: 'Increase the radius of Nature AOE spells by 1 per rank. (+10 mana per increase)',
         tree: 'nature',
         maxRanks: 3,
+        apply: (player) => {}
+    },
+    'arcane_expand': {
+        name: 'Arcane Expansion',
+        description: 'Increase the radius of Arcane AOE spells by 1 per rank. (+10 mana per increase)',
+        tree: 'arcane',
+        maxRanks: 3,
+        apply: (player) => {}
+    },
+    'divine_expand': {
+        name: 'Divine Expansion',
+        description: 'Increase the radius of Divine AOE spells by 1 per rank. (+10 mana per increase)',
+        tree: 'divine',
+        maxRanks: 3,
+        apply: (player) => {}
+    },
+    'learn_boar_summon': {
+        name: 'Boar Summoning',
+        description: 'Allows you to summon a Boar instead of a Wolf (+8 mana).',
+        tree: 'nature',
+        maxRanks: 1,
+        prereq: 'learn_summon_animal',
         apply: (player) => {}
     },
     'animal_companion': {

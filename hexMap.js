@@ -100,6 +100,16 @@ function drawMap() {
                   const skullSize = zoomedSize * 0.25;
                   mapCtx.drawImage(window.gameVisuals.overlay_skull, x - skullSize/2, y - skullSize/2, skullSize, skullSize);
               }
+          } else if (terrain.name === 'Water' && window.gameVisuals.water.complete) {
+              mapCtx.drawImage(window.gameVisuals.water, x - zoomedSize, y - zoomedSize, zoomedSize * 2, zoomedSize * 2);
+          } else if (terrain.name === 'Pedestal' && window.gameVisuals.pedestal.complete) {
+              // Check if we need to be transparent (entity at hex above or NE)
+              const blockedHexes = [{q: q, r: r-1}, {q: q+1, r: r-1}];
+              const needsTransparency = window.entities.some(e => e.alive && blockedHexes.some(bh => e.getAllHexes().some(h => h.q === bh.q && h.r === bh.r)));
+              
+              if (needsTransparency) mapCtx.globalAlpha = 0.5;
+              mapCtx.drawImage(window.gameVisuals.pedestal, x - zoomedSize, y - zoomedSize, zoomedSize * 2, zoomedSize * 2);
+              if (needsTransparency) mapCtx.globalAlpha = 1.0;
           } else {
               drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
           }

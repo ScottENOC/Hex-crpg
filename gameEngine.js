@@ -49,6 +49,25 @@ function playerMoveProcess(player, path) {
         return;
     }
 
+    // MULTI-HEX / WALL FIT CHECK
+    const nextHex = path[0];
+    const occupant = getEntityAtHex(nextHex.q, nextHex.r);
+    const targetTerrain = window.getTerrainAt(nextHex.q, nextHex.r);
+    
+    if (targetTerrain.name === 'Pedestal') {
+        const myHexes = player.getAllHexes();
+        const allOnPedestal = myHexes.every(h => {
+            const relQ = h.q - player.hex.q;
+            const relR = h.r - player.hex.r;
+            return window.getTerrainAt(nextHex.q + relQ, nextHex.r + relR).name === 'Pedestal';
+        });
+        if (!allOnPedestal) {
+            window.showMessage("This creature is too large to fit on the pedestal.");
+            finalizePlayerAction(player, true);
+            return;
+        }
+    }
+
     const previousHex = { q: player.hex.q, r: player.hex.r };
     const nextHex = path[0];
 
@@ -391,7 +410,10 @@ function startGameCore(isLoading = false) {
       floor3: new Image(),
       floor4: new Image(),
       overlay_blood: new Image(),
-      overlay_skull: new Image()
+      overlay_skull: new Image(),
+      pedestal: new Image(),
+      water: new Image(),
+      boar: new Image()
   };
   visuals.playerBase.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.leatherArmor.onload = () => { window.drawMap(); window.renderEntities(); };
@@ -434,6 +456,9 @@ function startGameCore(isLoading = false) {
   visuals.floor4.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.overlay_blood.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.overlay_skull.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.pedestal.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.water.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.boar.onload = () => { window.drawMap(); window.renderEntities(); };
 
   visuals.playerBase.src = 'images/elf.png';
   visuals.leatherArmor.src = 'images/elfleatherarmour.png';
@@ -477,6 +502,9 @@ function startGameCore(isLoading = false) {
   visuals.floor4.src = 'images/arenaHexFloor4.png';
   visuals.overlay_blood.src = 'images/overlay blood.png';
   visuals.overlay_skull.src = 'images/overlay skull.png';
+  visuals.pedestal.src = 'images/mediumpillar.png';
+  visuals.water.src = 'images/water.png';
+  visuals.boar.src = 'images/boar.png';
   
   window.gameVisuals = visuals;
 
@@ -567,14 +595,19 @@ function renderEntities() {
       return az - bz;
   });
 
-      sorted.forEach(e => {
-      const {x,y} = window.hexToPixel(e.hex.q, e.hex.r);
-      // Basic off-screen culling for drawing
-      if (x < -100 || y < -100 || x > window.mapCanvas.width + 100 || y > window.mapCanvas.height + 100) return;
-  
-      if (e.isStealthed) window.mapCtx.globalAlpha = 0.5;
+          sorted.forEach(e => {
+          let {x,y} = window.hexToPixel(e.hex.q, e.hex.r);
+          // Basic off-screen culling for drawing
+          if (x < -100 || y < -100 || x > window.mapCanvas.width + 100 || y > window.mapCanvas.height + 100) return;
       
-      const isSentientAlly = e.side === 'player' && e.name !== 'Wolf' && e.name !== 'Horse';
+          // TERRAIN OFFSET: Stand on top of pedestals
+          const t = window.getTerrainAt(e.hex.q, e.hex.r);
+          if (t.name === 'Pedestal') {
+              y -= (window.hexSize * 0.6) * z; // 30% of hex height (2*size is full height)
+          }
+      
+          if (e.isStealthed) window.mapCtx.globalAlpha = 0.5;
+            const isSentientAlly = e.side === 'player' && e.name !== 'Wolf' && e.name !== 'Horse';
   
       if (isSentientAlly && window.gameVisuals) {
           const size = window.hexSize * 2.0 * z;
@@ -1353,6 +1386,27 @@ function handleClick(e){
                         spendTP(player, 5); actionHandled = true;
                     } else { window.showMessage("Target out of range."); }
                 }
+            } else if (act.id === 'furious_charge') {
+                if (target && target.side !== player.side) {
+                    const dist = getMinDistance(player, target);
+                    if (dist >= 3 && dist <= 5) {
+                        // Find hex adjacent to target closest to player
+                        const neighbors = window.getNeighbors(target.hex.q, target.hex.r);
+                        const bestHex = neighbors.sort((a,b) => window.distance(a, player.hex) - window.distance(b, player.hex))[0];
+                        if (!getEntityAtHex(bestHex.q, bestHex.r)) {
+                            player.hex = bestHex;
+                            if (player.riding) player.riding.hex = {q: bestHex.q, r: bestHex.r};
+                            window.showMessage(`${player.name} charges ${target.name}!`);
+                            tryAttack(player, target, false, false, 4); // +4 bonus damage
+                            spendTP(player, 10);
+                            actionHandled = true;
+                        } else {
+                            window.showMessage("No space to complete the charge.");
+                        }
+                    } else {
+                        window.showMessage("Target must be 3-5 hexes away for Furious Charge.");
+                    }
+                }
             } else if (act.id === 'dagger_throw') {
                 if (target && target.side !== player.side) {
                     const dist = getMinDistance(player, target);
@@ -1467,7 +1521,7 @@ function handleClick(e){
     finalizePlayerAction(player, actionHandled);
 }
 
-function tryAttack(attacker, target, isFeint = false, isOffhand = false) {
+function tryAttack(attacker, target, isFeint = false, isOffhand = false, bonusDamage = 0) {
     if (target.side === 'neutral') {
         if (attacker.side === 'player') window.showMessage("You cannot attack a neutral character!");
         return;
@@ -1607,11 +1661,11 @@ function tryAttack(attacker, target, isFeint = false, isOffhand = false) {
                 }
             };
 
-            resolveAttack(attacker, target, isFeint, isOffhand, missCallback);
+            resolveAttack(attacker, target, isFeint, isOffhand, missCallback, bonusDamage);
             if (target.tempReduction) delete target.tempReduction;
         }, `Being attacked by ${attacker.name}`);
     } else {
-        resolveAttack(attacker, target, isFeint, isOffhand);
+        resolveAttack(attacker, target, isFeint, isOffhand, null, bonusDamage);
     }
 }
 
@@ -1660,7 +1714,7 @@ function canSee(viewer, target) {
     return true;
 }
 
-function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallback = null) {
+function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallback = null, bonusDamage = 0) {
   if (isFeint) {
       if (!isOffhand) attacker.offhandAttackAvailable = (attacker.equipped?.offhand && window.items[attacker.equipped.offhand].type === 'weapon');
       return;
@@ -1681,7 +1735,7 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
       if (missCallback) missCallback();
       return;
   }
-  let dmg = (attacker.baseDamage || 1) + (weapon?.damage || 0) + (attacker.skills[`${weapon?.id}_dmg`] || 0) + (attacker.skills['meleeDamage'] || 0);
+  let dmg = (attacker.baseDamage || 1) + (weapon?.damage || 0) + (attacker.skills[`${weapon?.id}_dmg`] || 0) + (attacker.skills['meleeDamage'] || 0) + bonusDamage;
   if (isOffhand) dmg -= 2;
   let red = (target.baseReduction || 0) + 
             (target.equipped?.armor && window.items[target.equipped.armor] ? window.items[target.equipped.armor].reduction : 0) + 
@@ -2105,14 +2159,32 @@ function startArenaFight() {
 
     // 2. Create arena map (50x50 rectangle)
     const arenaSize = 25;
+    const isWaterArena = Math.random() < 0.3;
+    const isPedestalArena = Math.random() < 0.4;
+    
     for (let q = -arenaSize; q <= arenaSize; q++) {
         for (let r = -arenaSize; r <= arenaSize; r++) {
             if (Math.abs(q) === arenaSize || Math.abs(r) === arenaSize || Math.abs(q+r) === arenaSize) {
                  window.setTerrainAt(q, r, 'Wall');
             } else {
-                 window.setTerrainAt(q, r, 'Cave Floor');
+                 let tType = 'Cave Floor';
+                 
+                 // Random Water (Lakes/Rivers)
+                 if (isWaterArena) {
+                     const waterNoise = Math.abs(Math.sin(q * 0.2 + r * 0.15));
+                     if (waterNoise > 0.8) tType = 'Water';
+                 }
+
+                 // Random Pedestals (Lines or Clusters)
+                 if (isPedestalArena && tType === 'Cave Floor') {
+                     const pNoise = Math.abs(Math.sin(q * 0.5 + r * 0.05));
+                     if (pNoise > 0.9) tType = 'Pedestal';
+                 }
+
+                 window.setTerrainAt(q, r, tType);
+                 
                  // 50% chance for some campfires if indoor
-                 if (isIndoor && Math.random() < 0.02) {
+                 if (isIndoor && Math.random() < 0.02 && tType === 'Cave Floor') {
                      window.tileObjects[`${q},${r}`] = { type: 'fireplace', lightRadius: 10 };
                  }
             }
@@ -2297,10 +2369,20 @@ function resolveSpell(caster, spell, target, clickedHex) {
         }
     } else if (spell.type === 'aoe_debuff') {
         const center = clickedHex;
+        const radius = spell.radius || 0;
         const affected = [center];
-        if (spell.radius > 0) {
-            for (let r = 1; r <= spell.radius; r++) { affected.push(...window.getNeighbors(center.q, center.r)); }
+        
+        if (radius > 0) {
+            // Get all hexes within radius
+            for (let q = -radius; q <= radius; q++) {
+                for (let r = Math.max(-radius, -q - radius); r <= Math.min(radius, -q + radius); r++) {
+                    if (q === 0 && r === 0) continue;
+                    const h = { q: center.q + q, r: center.r + r };
+                    if (window.isHexInBounds(h)) affected.push(h);
+                }
+            }
         }
+        
         const instanceId = Date.now() + Math.random();
         window.activeSpells.push({
             spellInstanceId: instanceId, baseId: spell.baseId, name: spell.name, casterName: caster.name,
