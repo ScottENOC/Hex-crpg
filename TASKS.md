@@ -1,0 +1,10 @@
+I’ve added a mediumpedestal.png. This represents a medium height wall. This blocks line of sight to a reasonable degree. I think we’ve already coded up this type of terrain (and use it in our terrain generation in scenario 3), but we need to use the image instead of the colored tile. Additionally, we need to appropriately handle drawing entities near it. If an entity is on the same hex, we need to move the image of the entity (including all layers on top such as armour) so they appear to be standing on top of the pedestal. Maybe 30% of a hex height. But then for entities partially covered by this (with one of the entity’s hexes being the hex above the pedestal or the one that’s north east from the pedestal), then we need to make the pedestal layered above the entity 50% transparent to allow us to see the entity behind it. Also, don’t let an entity move onto these walls unless all of their hexes can fit on a wall. 
+
+I want some of these medium pedestals to be used in our arena battle maps. Sometimes scattered randomly, sometimes not there at all, sometimes arranges as fortified lines.
+
+I've also added water.png. We already have water terrain in scenario 3. Please use this png file for water, and have water appear in some arena battle maps (can be not there, present as lakes, or present as rivers).
+
+I've added boar.png. Please create an animal called boar. It should be more melee damage skill and endurance skill than a wolf, but not have the trip ability. It should have a furious charge as a clickable ability. If not adjacent to any enemies, and there's an enemy at least 3 hexes away, but no more than 5, move towards them and attack, dealing plus 4 damage if hit. Costs 10 timePoints. the ai should use this ability whenever the conditions are met. some orcs should spawn as boar riders, i.e. mounted on a boar. Boar should have mount size such that humans and orcs can ride them. 
+
+Also add a nature skill tree skill that allows you to modify the summon spell to summon a boar instead of a wolf. Adds 8 to the mana cost. 
+
