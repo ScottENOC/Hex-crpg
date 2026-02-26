@@ -1,37 +1,25 @@
-- **Audio System Implementation**:
-    - Created `audio.js` to manage game music and sound effects with support for linear fading.
-    - Implemented **Arena Music**: Added `Arena pre battle.wav` (lobby/exploration) and `Arena battle.wav` (combat).
-    - Added **Battle Sting**: `Arena battle sting.wav` plays immediately when combat starts.
-    - **Fading Transitions**: Implemented smooth volume transitions (0.8s fade-in, 0.6s fade-out) when entering or leaving combat.
-    - **Mute Functionality**: Added "Mute Music" checkboxes to both the Title Screen and the Main Menu. The game is muted by default on load.
-- **Bug Fixes & Stability**:
-    - **Syntax Error Fix**: Resolved "Identifier nextHex has already been declared" in `gameEngine.js` by removing a redundant variable declaration in `playerMoveProcess`.
-    - **Script Loading Fix**: Fixed "window.startGameCore is not a function" which was a side-effect of the syntax error preventing the game engine script from loading correctly.
-- **Pedestals & High Walls**: Added `Pedestal` terrain type that blocks LOS. Implemented image-based rendering using `mediumpillar.png`. Entities standing on pedestals are vertically offset by 30% of hex height. Pedestals become 50% transparent when they partially cover entities behind them.
-- **Visual Asset Integration**:
-    - **Axe Overlay**: Characters with an axe equipped now have `axe.png` overlaid on their avatar.
-    - **Troll Image**: Troll monsters now use the `troll.png` image.
-    - **Water Rendering**: Updated water terrain to use the `water.png` image.
-    - **Wolf & Rider Layers**: Nature summons use the updated `wolf.png`. Goblin Wolf Riders correctly layer the goblin and their equipment on top of the wolf base.
-- **Boar Monster & Summoning**:
-    - Added **Boar** monster with high health and damage.
-    - Implemented **Furious Charge**: A new ability for boars (and available as a skill) that allows charging an enemy 3-5 hexes away for +4 bonus damage.
-    - Added **Boar Summoning** Nature skill to allow summoning a boar instead of a wolf (+8 mana).
-- **Arena Improvements**:
-    - **Randomized Environments**: Arena maps now vary between indoor (dark, campfires) and outdoor (daylight).
-    - **Dynamic Obstacles**: Added randomized water features and pedestal lines/clusters to arena battle maps.
-    - **Boar Riders**: Orcs in the arena now have a chance to spawn mounted on boars.
-- **Stealth Overhaul**:
-    - Converted Stealth into a movement toggle with a 4 TP penalty per hex.
-    - Added **Speedy Stealth** Rogue skill to reduce this penalty.
-    - Implemented dynamic detection where enemies roll to spot stealthed characters based on distance and `stealthScore`.
-- **Roguelike Rewards & Progression**:
-    - Implemented choosing permanent legacy rewards (Skill points or Relics) when the main character dies in the arena.
-    - Added **Mercenary Graveyard** where surviving mercenaries from past runs can return as arena opponents.
-- **UI & Flow Fixes**:
-    - **Sleep Resumption**: Resuming interrupted sleep now correctly calculates remaining time.
-    - **UI Panel Width**: Locked UI details/log panel to 350px with word wrapping.
-    - **Teleport Turn Fix**: The game now automatically triggers the player's turn after teleporting between lobby and arena.
-    - **Add Jerry Crash**: Fixed a crash when no player-side entity was found for the Jerry cheat.
-    - **HP/Mana Display**: All health and mana values are now rounded to the nearest integer in the UI.
-    - **Item ID Safety**: Added checks to prevent crashes when items are undefined.
+- **Audio System Overhaul**:
+    - **New Tracks Integrated**: Added `Title.wav` (menus/creation), `Constant.wav` (ambient background), `Arena lobby.wav` (preparation phase), and `Arena death.wav`.
+    - **Contextual Music Logic**:
+        - `Title.wav` plays in the character creator and all menu screens (inventory, spells, skills) with smooth transitions.
+        - `Arena lobby.wav` plays specifically in the lobby when not in a menu.
+        - `Constant.wav` layers at all times for a consistent atmosphere.
+    - **Advanced Transitions & Stings**:
+        - **Teleport Sting**: Added `Arenalobby2arena.wav` which plays when being teleported to a fight by the announcer.
+        - **Combat Transitions**: Implemented automatic music shifting between `Arena pre battle.wav` and `Arena battle.wav` based on enemy detection.
+        - **Death Mechanics**: On main character death, the game plays `Arena death sting.wav` and transitions to `Arena death.wav` with sharp, dramatic fades (0.3s down, 0.4s up).
+- **New Monsters & Summoning**:
+    - **Tiger**: High-level monster with Rogue, Agility, and Strength skills. Includes a **Furious Charge** ability similar to the boar. Summonable by Druids (+15 mana).
+    - **Eagle**: Low-stat scouting monster with **Fly** and **Land** abilities.
+        - **Flying Mechanics**: Flying eagles use a vertical offset image (`eagleflying.png`), ignore terrain movement penalties, ignore LOS obstructions, and are immune to melee attacks (and cannot use them).
+        - **Improved Vision**: Eagles possess elven-tier darkvision.
+- **Weapon Visuals & Mechanics**:
+    - **Spear & Club Overlays**: Implemented map-level overlays for spears and clubs (`spear.png`, `club.png`) when equipped.
+    - **Magic Item Consistency**: Magic items (like the Sword of Arrow Deflection) now correctly use their base weapon's visual assets unless a specific unique image is provided.
+- **UI & Accessibility Improvements**:
+    - **Show All Skills**: Added a toggle button in the character screen to view all possible skills, including those without available points or unmet prerequisites.
+    - **Prerequisite Tooltips**: Hovering over locked skills now displays a red warning indicating the missing requirements.
+    - **Spiderweb Overlay**: Added a visual `spiderweb.png` overlay for characters immobilized by a spider's web ability.
+- **Environment Logic**:
+    - **Multi-Hex Wall Constraints**: Entities (especially larger ones) can no longer move onto pedestal walls unless their entire size/footprint fits on the structure.
+    - **Fog of War**: Confirmed that every teleportation correctly resets the Fog of War for the new area.

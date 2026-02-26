@@ -289,6 +289,22 @@ const skills = {
         maxRanks: 3,
         apply: (player) => {}
     },
+    'fly': {
+        name: 'Fly',
+        description: 'Active: Take to the air. (5 TP)',
+        tree: 'nature',
+        maxRanks: 1,
+        active: true,
+        apply: (player) => {}
+    },
+    'land': {
+        name: 'Land',
+        description: 'Active: Return to the ground. (2 TP)',
+        tree: 'nature',
+        maxRanks: 1,
+        active: true,
+        apply: (player) => {}
+    },
     'arcane_expand': {
         name: 'Arcane Expansion',
         description: 'Increase the radius of Arcane AOE spells by 1 per rank. (+10 mana per increase)',
@@ -306,6 +322,22 @@ const skills = {
     'learn_boar_summon': {
         name: 'Boar Summoning',
         description: 'Allows you to summon a Boar instead of a Wolf (+8 mana).',
+        tree: 'nature',
+        maxRanks: 1,
+        prereq: 'learn_summon_animal',
+        apply: (player) => {}
+    },
+    'learn_tiger_summon': {
+        name: 'Tiger Summoning',
+        description: 'Allows you to summon a Tiger instead of a Wolf (+15 mana).',
+        tree: 'nature',
+        maxRanks: 1,
+        prereq: 'learn_summon_animal',
+        apply: (player) => {}
+    },
+    'learn_eagle_summon': {
+        name: 'Eagle Summoning',
+        description: 'Allows you to summon an Eagle instead of a Wolf (+5 mana).',
         tree: 'nature',
         maxRanks: 1,
         prereq: 'learn_summon_animal',

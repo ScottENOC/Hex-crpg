@@ -32,6 +32,8 @@ function syncBackToPlayer(entity) {
         
         // ROGUELIKE: End of run if main char dies
         if (window.currentCampaign === "1" && entity.name === window.party[0].name && entity.hp <= 0) {
+            window.playSting('deathSting');
+            window.playMusic('deathTheme', 0.4, 0.3);
             window.endArenaRun();
         }
     }
@@ -100,7 +102,7 @@ function playerMoveProcess(player, path) {
         }
         baseMoveCost = Math.max(1, baseMoveCost);
         const terrain = window.getTerrainAt(player.hex.q, player.hex.r);
-        const stepCost = baseMoveCost * terrain.moveCostMult;
+        const stepCost = baseMoveCost * (player.isFlying ? 1 : terrain.moveCostMult);
         
         let canAfford = true;
         if (player.riding) {
@@ -398,6 +400,9 @@ function startGameCore(isLoading = false) {
       fireplace: new Image(),
       axe: new Image(),
       troll: new Image(),
+      spear: new Image(),
+      club: new Image(),
+      spiderweb: new Image(),
       spider1: new Image(),
       spider2: new Image(),
       arenaannouncer: new Image(),
@@ -443,6 +448,9 @@ function startGameCore(isLoading = false) {
   visuals.fireplace.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.axe.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.troll.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.spear.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.club.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.spiderweb.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.spider1.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.spider2.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.arenaannouncer.onload = () => { window.drawMap(); window.renderEntities(); };
@@ -489,6 +497,9 @@ function startGameCore(isLoading = false) {
   visuals.fireplace.src = 'images/fireplace.svg';
   visuals.axe.src = 'images/axe.png';
   visuals.troll.src = 'images/troll.png';
+  visuals.spear.src = 'images/spear.png';
+  visuals.club.src = 'images/club.png';
+  visuals.spiderweb.src = 'images/spiderweb.png';
   visuals.spider1.src = 'images/spider1.png';
   visuals.spider2.src = 'images/spider2.png';
   visuals.arenaannouncer.src = 'images/arenaannouncer.png';
@@ -698,108 +709,140 @@ function renderEntities() {
               }
           }
           
-                  // WEAPON LAYER: Sword or Axe
-                  let weaponImg = null;
-                  const mainW = e.equipped?.weapon;
-                  if (mainW === 'sword' || mainW === 'sword_arrow_deflection') weaponImg = window.gameVisuals.swordIcon;
-                  else if (mainW === 'axe') weaponImg = window.gameVisuals.axe;
-          
-                  if (weaponImg && weaponImg.complete) {
-                      const weaponSize = window.hexSize * 1.0 * z; 
-                      window.mapCtx.drawImage(weaponImg, x - (window.hexSize/2 + 5) * z, y - weaponSize/2, weaponSize, weaponSize);
-                  }
-          
-                  // OFF-HAND WEAPON LAYER
-                  let offhandImg = null;
-                  const offW = e.equipped?.offhand;
-                  if (offW === 'sword' || offW === 'sword_arrow_deflection') offhandImg = window.gameVisuals.swordIcon;
-                  else if (offW === 'axe') offhandImg = window.gameVisuals.axe;
-                  else if (offW === 'dagger') offhandImg = window.gameVisuals.swordIcon; // Daggers use sword icon for now
-          
-                  if (offhandImg && offhandImg.complete && window.items[offW]?.type === 'weapon') {
-                      const weaponSize = window.hexSize * 1.0 * z;
-                      window.mapCtx.save();
-                      // Flip vertically and position on the right side
-                      window.mapCtx.translate(x + (window.hexSize/2 + 5) * z, y);
-                      window.mapCtx.scale(1, -1);
-                      window.mapCtx.drawImage(offhandImg, -weaponSize/2, -weaponSize/2, weaponSize, weaponSize);
-                      window.mapCtx.restore();
-                  }
-              } else if ((e instanceof window.Enemy || e.customImage) && window.gameVisuals) {
-          
-          let size = window.hexSize * 1.5 * z;
-          let yOffset = 0;
-          let widthMult = 1.0;
-  
-          if (e.name === 'Horse') {
-              size = window.hexSize * 4.5 * z; // 3x of 1.5
-              yOffset = (Math.sqrt(3) * window.hexSize / 2) * z;
-          } else if (e.name === 'Troll') {
-              size = window.hexSize * 4.5 * z;
-              yOffset = (Math.sqrt(3) * window.hexSize / 2) * z;
-          }
-  
-          if (e.customImage === 'arenamercenary') widthMult = 0.85;
-  
-          let img = window.gameVisuals.monsterDefault;
-          if (e.name === 'Orc' && window.gameVisuals.orcBase.complete) img = window.gameVisuals.orcBase;
-          if (e.name === 'Grishnak' && window.gameVisuals.grishnak.complete) img = window.gameVisuals.grishnak;
-          if (e.name === 'Spider' && e.spiderImage && window.gameVisuals[e.spiderImage]?.complete) img = window.gameVisuals[e.spiderImage];
-          if (e.customImage && window.gameVisuals[e.customImage]?.complete) img = window.gameVisuals[e.customImage];
-          if (e.name === 'Horse' && window.gameVisuals.horse.complete) img = window.gameVisuals.horse;
-          if (e.name === 'Wolf' && window.gameVisuals.horse.complete) img = window.gameVisuals.horse; // Temporarily horse until visuals.wolf assigned
-          if (e.name === 'Troll' && window.gameVisuals.troll.complete) img = window.gameVisuals.troll;
-          if (e.name === 'Skeleton' && window.gameVisuals.skeleton.complete) img = window.gameVisuals.skeleton;
-          if (e.name === 'Zombie' && window.gameVisuals.zombie.complete) img = window.gameVisuals.zombie;
-          if (e.name === 'Imp' && window.gameVisuals.imp.complete) img = window.gameVisuals.imp;
-          
-          try {
-              if (img && img.complete) {
-                  const finalWidth = size * widthMult;
-                  window.mapCtx.drawImage(img, x - finalWidth/2, y - size/2 + yOffset, finalWidth, size);
-              }
-          } catch (err) {}
-  
-          if (e.mountSize > 0 && e.equipped && e.equipped.armor) {
-              const armorId = e.equipped.armor;
-              let armorImg = (armorId === 'medium_armor' || armorId === 'heavy_armor') ? window.gameVisuals.chainArmor : window.gameVisuals.leatherArmor;
-              if (armorImg && armorImg.complete) {
-                  window.mapCtx.drawImage(armorImg, x - size/2, y - size/2 + (5 * z), size, size);
-              }
-          }
-  
-          if (e.extraHexes.length > 0 && e.name !== 'Horse' && e.name !== 'Troll') {
-              const offsets = [{q:0, r:0}, ...e.extraHexes];
-              const labels = ['f', 'l', 'r'];
-              const prefix = 'T';
-              offsets.forEach((off, i) => {
-                  const hp = window.hexToPixel(e.hex.q + off.q, e.hex.r + off.r);
-                  window.mapCtx.fillStyle = "white";
-                  window.mapCtx.font = `${12 * z}px Arial`;
-                  window.mapCtx.fillText(prefix + labels[i], hp.x - 5*z, hp.y + 5*z);
-              });
-          }
-  
-          // WEAPON LAYER: Axe
-          if (e.equipped?.weapon === 'axe' && window.gameVisuals.axe.complete) {
-              const weaponSize = window.hexSize * 0.8 * z;
-              window.mapCtx.drawImage(window.gameVisuals.axe, x - (window.hexSize/2 + 5) * z, y - weaponSize/2, weaponSize, weaponSize);
-          }
-  
-          if (e.equipped && e.equipped.weapon === 'sword' && window.gameVisuals.swordIcon.complete) {
-              const weaponSize = window.hexSize * 0.8 * z;
-              window.mapCtx.drawImage(window.gameVisuals.swordIcon, x - (window.hexSize/2 + 5) * z, y - weaponSize/2, weaponSize, weaponSize);
-          }
-          // AI State Indicator
-        if (e.aiState === 'combat') {
-            window.mapCtx.fillStyle = "red";
-            window.mapCtx.beginPath();
-            window.mapCtx.arc(x + 10*z, y - 10*z, 3*z, 0, Math.PI*2);
-            window.mapCtx.fill();
-        }
-    }
-
-    // UNIVERSAL LAYER: Torch
+                          // WEAPON LAYER: Sword, Axe, Spear or Club
+                          let weaponImg = null;
+                          const mainW = e.equipped?.weapon;
+                          if (mainW === 'sword' || mainW === 'sword_arrow_deflection') weaponImg = window.gameVisuals.swordIcon;
+                          else if (mainW === 'axe') weaponImg = window.gameVisuals.axe;
+                          else if (mainW === 'spear') weaponImg = window.gameVisuals.spear;
+                          else if (mainW === 'club') weaponImg = window.gameVisuals.club;
+                  
+                          if (weaponImg && weaponImg.complete) {
+                              const weaponSize = window.hexSize * 1.0 * z; 
+                              window.mapCtx.drawImage(weaponImg, x - (window.hexSize/2 + 5) * z, y - weaponSize/2, weaponSize, weaponSize);
+                          }
+                  
+                          // OFF-HAND WEAPON LAYER
+                          let offhandImg = null;
+                          const offW = e.equipped?.offhand;
+                          if (offW === 'sword' || offW === 'sword_arrow_deflection') offhandImg = window.gameVisuals.swordIcon;
+                          else if (offW === 'axe') offhandImg = window.gameVisuals.axe;
+                          else if (offW === 'spear') offhandImg = window.gameVisuals.spear;
+                          else if (offW === 'club') offhandImg = window.gameVisuals.club;
+                          else if (offW === 'dagger') offhandImg = window.gameVisuals.swordIcon; // Daggers use sword icon for now
+                  
+                          if (offhandImg && offhandImg.complete && window.items[offW]?.type === 'weapon') {
+                              const weaponSize = window.hexSize * 1.0 * z;
+                              window.mapCtx.save();
+                              // Flip vertically and position on the right side
+                              window.mapCtx.translate(x + (window.hexSize/2 + 5) * z, y);
+                              window.mapCtx.scale(1, -1);
+                              window.mapCtx.drawImage(offhandImg, -weaponSize/2, -weaponSize/2, weaponSize, weaponSize);
+                              window.mapCtx.restore();
+                          }
+                      } else if ((e instanceof window.Enemy || e.customImage) && window.gameVisuals) {
+                          let size = window.hexSize * 1.5 * z;
+                          let yOffset = 0;
+                          let widthMult = 1.0;
+                  
+                          if (e.name === 'Horse' || e.name === 'Wolf' || e.name === 'Boar' || e.name === 'Tiger') {
+                              size = window.hexSize * 4.5 * z; // Large animals
+                              yOffset = (Math.sqrt(3) * window.hexSize / 2) * z;
+                          } else if (e.name === 'Troll') {
+                              size = window.hexSize * 4.5 * z;
+                              yOffset = (Math.sqrt(3) * window.hexSize / 2) * z;
+                          } else if (e.name === 'Eagle') {
+                              size = window.hexSize * 3.0 * z;
+                              yOffset = e.isFlying ? -20*z : 0;
+                          }
+                  
+                          if (e.customImage === 'arenamercenary') widthMult = 0.85;
+                  
+                          let img = window.gameVisuals.monsterDefault;
+                          if (e.name === 'Orc' && window.gameVisuals.orcBase.complete) img = window.gameVisuals.orcBase;
+                          if (e.name === 'Grishnak' && window.gameVisuals.grishnak.complete) img = window.gameVisuals.grishnak;
+                          if (e.name === 'Spider' && e.spiderImage && window.gameVisuals[e.spiderImage]?.complete) img = window.gameVisuals[e.spiderImage];
+                          if (e.customImage && window.gameVisuals[e.customImage]?.complete) img = window.gameVisuals[e.customImage];
+                          if (e.name === 'Horse' && window.gameVisuals.horse.complete) img = window.gameVisuals.horse;
+                          if (e.name === 'Wolf' && window.gameVisuals.wolf.complete) img = window.gameVisuals.wolf; 
+                          if (e.name === 'Boar' && window.gameVisuals.boar.complete) img = window.gameVisuals.boar;
+                          if (e.name === 'Tiger' && window.gameVisuals.tiger.complete) img = window.gameVisuals.tiger;
+                          if (e.name === 'Troll' && window.gameVisuals.troll.complete) img = window.gameVisuals.troll;
+                          if (e.name === 'Eagle') {
+                              const eagleImg = e.isFlying ? window.gameVisuals.eagleflying : window.gameVisuals.eagle;
+                              if (eagleImg?.complete) img = eagleImg;
+                          }
+                          if (e.name === 'Skeleton' && window.gameVisuals.skeleton.complete) img = window.gameVisuals.skeleton;
+                          if (e.name === 'Zombie' && window.gameVisuals.zombie.complete) img = window.gameVisuals.zombie;
+                          if (e.name === 'Imp' && window.gameVisuals.imp.complete) img = window.gameVisuals.imp;
+                          
+                                  try {
+                                      if (img && img.complete) {
+                                          // SPECIAL: Wolf Rider Layering
+                                          if (e.name === 'Wolf Rider Goblin') {
+                                              // Goblin Base
+                                              window.mapCtx.drawImage(window.gameVisuals.monsterDefault, x - size/2, y - size/2 + yOffset, size, size);
+                                              // Equipment
+                                              if (e.equipped?.armor) {
+                                                  // ... draw armor
+                                              }
+                                              // Wolf on TOP
+                                              window.mapCtx.drawImage(window.gameVisuals.wolf, x - size/2, y - size/2 + yOffset, size, size);
+                                          } else {
+                                              const finalWidth = size * widthMult;
+                                              window.mapCtx.drawImage(img, x - finalWidth/2, y - size/2 + yOffset, finalWidth, size);
+                                          }
+                                      }
+                                  } catch (err) {}
+                                                    if (e.mountSize > 0 && e.equipped && e.equipped.armor) {
+                              const armorId = e.equipped.armor;
+                              let armorImg = (armorId === 'medium_armor' || armorId === 'heavy_armor') ? window.gameVisuals.chainArmor : window.gameVisuals.leatherArmor;
+                              if (armorImg && armorImg.complete) {
+                                  window.mapCtx.drawImage(armorImg, x - size/2, y - size/2 + (5 * z), size, size);
+                              }
+                          }
+                  
+                          if (e.extraHexes.length > 0 && e.name !== 'Horse' && e.name !== 'Troll' && e.name !== 'Boar' && e.name !== 'Tiger') {
+                              const offsets = [{q:0, r:0}, ...e.extraHexes];
+                              const labels = ['f', 'l', 'r'];
+                              const prefix = 'T';
+                              offsets.forEach((off, i) => {
+                                  const hp = window.hexToPixel(e.hex.q + off.q, e.hex.r + off.r);
+                                  window.mapCtx.fillStyle = "white";
+                                  window.mapCtx.font = `${12 * z}px Arial`;
+                                  window.mapCtx.fillText(prefix + labels[i], hp.x - 5*z, hp.y + 5*z);
+                              });
+                          }
+                  
+                          // WEAPON LAYER
+                          let weaponImgEn = null;
+                          if (e.equipped?.weapon === 'sword') weaponImgEn = window.gameVisuals.swordIcon;
+                          else if (e.equipped?.weapon === 'axe') weaponImgEn = window.gameVisuals.axe;
+                          else if (e.equipped?.weapon === 'spear') weaponImgEn = window.gameVisuals.spear;
+                          else if (e.equipped?.weapon === 'club') weaponImgEn = window.gameVisuals.club;
+                  
+                          if (weaponImgEn && weaponImgEn.complete) {
+                              const weaponSize = window.hexSize * 0.8 * z;
+                              window.mapCtx.drawImage(weaponImgEn, x - (window.hexSize/2 + 5) * z, y - weaponSize/2, weaponSize, weaponSize);
+                          }
+                  
+                          // AI State Indicator
+                          if (e.aiState === 'combat') {
+                              window.mapCtx.fillStyle = "red";
+                              window.mapCtx.beginPath();
+                              window.mapCtx.arc(x + 10*z, y - 10*z, 3*z, 0, Math.PI*2);
+                              window.mapCtx.fill();
+                          }
+                      }
+                  
+                      // SPIDER WEB OVERLAY
+                      if (e.webbedDuration > 0 && window.gameVisuals.spiderweb.complete) {
+                          const wSize = window.hexSize * 2.0 * z;
+                          window.mapCtx.drawImage(window.gameVisuals.spiderweb, x - wSize/2, y - wSize/2, wSize, wSize);
+                      }
+                  
+                      // UNIVERSAL LAYER: Torch
+                  
     if (e.equipped && window.gameVisuals.torch_lit.complete) {
         const hasTorch = (e.equipped.weapon === 'torch' || e.equipped.offhand === 'torch');
         if (hasTorch) {
@@ -1414,6 +1457,16 @@ function handleClick(e){
                         window.showMessage("Target must be 3-5 hexes away for Furious Charge.");
                     }
                 }
+            } else if (act.id === 'fly') {
+                player.isFlying = true;
+                window.showMessage(`${player.name} takes to the air!`);
+                spendTP(player, 5);
+                actionHandled = true;
+            } else if (act.id === 'land') {
+                player.isFlying = false;
+                window.showMessage(`${player.name} lands.`);
+                spendTP(player, 2);
+                actionHandled = true;
             } else if (act.id === 'dagger_throw') {
                 if (target && target.side !== player.side) {
                     const dist = getMinDistance(player, target);
@@ -1728,7 +1781,15 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   }
   const weaponSlot = isOffhand ? 'offhand' : 'weapon';
   const weapon = window.items[attacker.equipped?.[weaponSlot]] || null;
-  const baseHit = weapon?.subType === 'ranged' ? attacker.toHitRanged : attacker.toHitMelee;
+  const isRanged = weapon?.subType === 'ranged';
+
+  // FLYING MELEE IMMUNITY
+  if (!isRanged && (attacker.isFlying || target.isFlying)) {
+      window.showMessage(`Cannot reach ${target.name} with a melee attack while ${attacker.isFlying ? 'flying' : 'they are flying'}!`);
+      return;
+  }
+
+  const baseHit = isRanged ? attacker.toHitRanged : attacker.toHitMelee;
   const attackerTerrain = window.getTerrainAt(attacker.hex.q, attacker.hex.r);
   const targetTerrain = window.getTerrainAt(target.hex.q, target.hex.r);
   let hitChance = 50 + baseHit + attackerTerrain.hitBonus - (target.passiveDodge + targetTerrain.dodgeBonus);
@@ -2145,6 +2206,7 @@ function setupArenaLobby() {
 
 function startArenaFight() {
     window.showMessage("The announcer teleports you to the arena!");
+    window.playSting('teleportSting');
     window.isInArena = true;
     window.triggerAmbientDialogue('arena_fight_start');
     

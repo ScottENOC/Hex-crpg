@@ -320,6 +320,9 @@ function hasLineOfSight(start, end) {
     const startOnWall = window.getTerrainAt(start.q, start.r).name === 'Wall';
     const endOnWall = window.getTerrainAt(end.q, end.r).name === 'Wall';
 
+    // FLYING LOS BYPASS
+    if (viewer && viewer.isFlying) return true;
+
     for (let i = 0; i <= d; i++) {
         const t = d === 0 ? 0 : i / d;
         const current = hexRound(hexLerp(start, end, t).q, hexLerp(start, end, t).r);

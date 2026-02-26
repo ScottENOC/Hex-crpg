@@ -189,6 +189,18 @@ function showCharacterScreen() {
     const contentDiv = document.getElementById("character-screen-content");
     contentDiv.innerHTML = ''; 
 
+    // SHOW ALL SKILLS TOGGLE
+    const toggleDiv = document.createElement('div');
+    toggleDiv.style.marginBottom = '15px';
+    const toggleBtn = document.createElement('button');
+    toggleBtn.innerText = window.showAllSkillsMode ? "Hide Locked Skills" : "Show All Skills";
+    toggleBtn.onclick = () => {
+        window.showAllSkillsMode = !window.showAllSkillsMode;
+        showCharacterScreen();
+    };
+    toggleDiv.appendChild(toggleBtn);
+    contentDiv.appendChild(toggleDiv);
+
     const isPartyMember = window.party.some(p => p.name === char.name);
     if (isPartyMember) {
         const expNext = char.level * 1000;
@@ -249,19 +261,24 @@ function showCharacterScreen() {
     const hasWildcard = availablePoints.wildcard > 0;
     const standardTrees = ['arcane', 'divine', 'nature', 'strength', 'endurance', 'agility', 'weapons', 'Way of the open palm'];
 
-    for (const tree in availablePoints) {
-        if (tree === 'wildcard') continue; 
-        if (availablePoints[tree] > 0 || (hasWildcard && standardTrees.includes(tree))) {
-            treesToShow.add(tree);
+    if (window.showAllSkillsMode) {
+        Object.keys(skillTrees).forEach(t => treesToShow.add(t));
+    } else {
+        for (const tree in availablePoints) {
+            if (tree === 'wildcard') continue; 
+            if (availablePoints[tree] > 0 || (hasWildcard && standardTrees.includes(tree))) {
+                treesToShow.add(tree);
+            }
         }
-    }
-    for (const skillKey in playerSkills) {
-        if (playerSkills[skillKey] > 0 && window.skills[skillKey]) {
-            treesToShow.add(window.skills[skillKey].tree);
+        for (const skillKey in playerSkills) {
+            if (playerSkills[skillKey] > 0 && window.skills[skillKey]) {
+                treesToShow.add(window.skills[skillKey].tree);
+            }
         }
     }
 
     treesToShow.forEach(tree => {
+        if (tree === 'monster_skills') return; // Hide internal tree
         const treeDiv = document.createElement('div');
         treeDiv.className = 'skill-tree-container';
         let treeHtml = `<h3>${tree.charAt(0).toUpperCase() + tree.slice(1)} (Unspent: ${availablePoints[tree] || 0})</h3>`;
@@ -282,24 +299,32 @@ function showCharacterScreen() {
                 const isMaxed = maxRanks > 0 && currentRanks >= maxRanks;
                 
                 let prereqMet = true;
+                let missingPrereq = "";
                 if (skill.prereq) {
                     const prereqRanks = playerSkills[skill.prereq] || 0;
-                    if (prereqRanks === 0) prereqMet = false;
+                    if (prereqRanks === 0) {
+                        prereqMet = false;
+                        missingPrereq = `Requires: ${window.skills[skill.prereq].name}`;
+                    }
                 }
                 if (skill.prereq_eval) {
-                    if (!skill.prereq_eval(char)) prereqMet = false;
+                    if (!skill.prereq_eval(char)) {
+                        prereqMet = false;
+                        missingPrereq = "Requirements not met.";
+                    }
                 }
 
-                const hasPoints = availablePoints[tree] > 0;
-                const hasWildcardPoints = availablePoints.wildcard > 0;
+                const hasPoints = (availablePoints[tree] || 0) > 0;
+                const hasWildcardPoints = (availablePoints.wildcard || 0) > 0;
                 const canUseWildcard = hasWildcardPoints && !['elf', 'dwarf', 'human', 'fighter', 'rogue', 'cleric', 'wizard', 'druid'].includes(tree);
                 const canLearn = (hasPoints || canUseWildcard) && !isMaxed && prereqMet;
                 const buttonLabel = maxRanks === 1 ? 'Learn' : `+1 Rank (${currentRanks})`;
                 
-                if (prereqMet || currentRanks > 0) {
+                if (window.showAllSkillsMode || prereqMet || currentRanks > 0) {
                     treeHtml += `
-                        <div class="skill-item" style="padding-left: 20px; margin-bottom: 10px;">
+                        <div class="skill-item" style="padding-left: 20px; margin-bottom: 10px;" title="${missingPrereq}">
                             <strong>${skill.name}</strong>: ${skill.description}
+                            ${missingPrereq ? `<br><small style="color: #f44336;">${missingPrereq}</small>` : ''}
                             ${isMaxed && maxRanks === 1 ? 
                                 '<span style="color: #4caf50; margin-left: 10px;">(Learned)</span>' : 
                                 (isMaxed ? `<span style="color: #4caf50; margin-left: 10px;">(Max Rank: ${currentRanks})</span>` :
@@ -652,6 +677,8 @@ function updateSpellPreview() {
         let optionsHtml = '';
         base.summons.forEach(animalId => {
             if (animalId === 'boar' && (!player.skills?.learn_boar_summon)) return;
+            if (animalId === 'tiger' && (!player.skills?.learn_tiger_summon)) return;
+            if (animalId === 'eagle' && (!player.skills?.learn_eagle_summon)) return;
             optionsHtml += `<option value="${animalId}">${window.monsterTemplates[animalId].name}</option>`;
         });
         html += `
@@ -747,6 +774,13 @@ function renderSpellStats() {
     
     if (animalId === 'boar') {
         manaCost += 8;
+    } else if (animalId === 'tiger') {
+        manaCost += 15;
+    } else if (animalId === 'eagle') {
+        manaCost += 5;
+    }
+
+    if (animalId === 'boar' || animalId === 'tiger' || animalId === 'eagle') {
         // Update display again with corrected mana
         const overCapNew = manaCost > cap;
         statsHtml = `
@@ -1481,11 +1515,49 @@ window.syncMute = function(isMuted) {
     const menuCheck = document.getElementById('mute-check-menu');
     if (titleCheck) titleCheck.checked = isMuted;
     if (menuCheck) menuCheck.checked = isMuted;
+    
+    // Refresh music state when toggling mute
+    if (!isMuted) updateMusicState();
 };
+
+function updateMusicState() {
+    if (!window.audioEnabled) return;
+
+    const characterModal = document.getElementById("character-screen-modal");
+    const spellModal = document.getElementById("spell-menu-modal");
+    const inventoryModal = document.getElementById("inventory-modal");
+    
+    const inMenu = (characterModal && characterModal.style.display === "block") ||
+                   (spellModal && spellModal.style.display === "block") ||
+                   (inventoryModal && inventoryModal.style.display === "block") ||
+                   (document.getElementById("characterCreator").style.display === "block");
+
+    if (inMenu) {
+        window.playMusic('title');
+    } else {
+        // We are in the game world
+        if (window.currentCampaign === "1" && !window.isInArena) {
+            window.playMusic('lobby');
+        } else if (window.currentCampaign === "1" && window.isInArena) {
+            // Battle music state is usually handled by startArenaFight/wakeUp/checkCombatEnd
+            // But if we close a menu in the arena, we might need to restore it
+            const inCombat = window.entities.some(e => e.alive && e.side === 'enemy' && e.aiState === 'combat');
+            if (inCombat) {
+                window.playMusic('battle');
+            } else {
+                window.playMusic('preBattle');
+            }
+        } else {
+            window.stopAllMusic();
+        }
+    }
+}
 
 // Default to muted
 document.addEventListener('DOMContentLoaded', () => {
     window.syncMute(true);
+    // Initial music check
+    setTimeout(updateMusicState, 500); 
 });
 
 window.addAllEquipment = addAllEquipment;

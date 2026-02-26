@@ -150,6 +150,40 @@ const monsterTemplates = {
         },
         defaultEquipment: []
     },
+    'tiger': {
+        name: 'Tiger',
+        color: '#ff9800',
+        hp: 35,
+        expValue: 400,
+        canLoot: false,
+        mountSize: 3,
+        tags: ['animal'],
+        skills: {
+            'health': 4,
+            'meleeDamage': 4,
+            'furious_charge': 1,
+            'fastMovement': 2,
+            'stealth_rogue': 2,
+            'quickRecovery': 5,
+            'initiativeBonus': 5
+        },
+        defaultEquipment: []
+    },
+    'eagle': {
+        name: 'Eagle',
+        color: '#795548',
+        hp: 10,
+        expValue: 100,
+        canLoot: false,
+        mountSize: 0,
+        tags: ['animal', 'flying'],
+        skills: {
+            'health': 1,
+            'fastMovement': 3,
+            'elf_darkvision': 1
+        },
+        defaultEquipment: []
+    },
     'wolf_rider_goblin': {
         name: 'Wolf Rider Goblin',
         color: '#2e8b57',

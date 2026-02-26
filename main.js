@@ -19,12 +19,14 @@ document.addEventListener("DOMContentLoaded", () => {
             if (modal) {
                 modal.style.display = "block";
                 window.showCharacterScreen();
+                if (window.updateMusicState) window.updateMusicState();
             }
         } else if (btnId === "spell-menu-btn") {
             const modal = document.getElementById("spell-menu-modal");
             if (modal) {
                 modal.style.display = "block";
                 window.showSpellScreen();
+                if (window.updateMusicState) window.updateMusicState();
             }
         } else if (btnId === "inventory-btn") {
             console.log("Inventory button CLICKED - Opening modal");
@@ -32,6 +34,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (modal) {
                 modal.style.display = "block";
                 window.showInventoryScreen();
+                if (window.updateMusicState) window.updateMusicState();
             } else {
                 console.error("CRITICAL: inventory-modal not found in HTML!");
             }
@@ -159,6 +162,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const modal = e.target.closest(".modal");
             if (modal) {
                 modal.style.display = "none";
+                if (window.updateMusicState) window.updateMusicState();
                 // If this was the first character screen close, start the game
                 if (modal.id === "character-screen-modal" && window.isInitialCharacterScreen) {
                     window.isInitialCharacterScreen = false;
@@ -170,6 +174,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (e.target.classList.contains('modal')) {
             const modal = e.target;
             modal.style.display = "none";
+            if (window.updateMusicState) window.updateMusicState();
             if (modal.id === "character-screen-modal" && window.isInitialCharacterScreen) {
                 window.isInitialCharacterScreen = false;
                 window.startGameCore();
