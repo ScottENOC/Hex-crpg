@@ -417,7 +417,11 @@ function startGameCore(isLoading = false) {
       overlay_skull: new Image(),
       pedestal: new Image(),
       water: new Image(),
-      boar: new Image()
+      boar: new Image(),
+      tiger: new Image(),
+      eagle: new Image(),
+      eagleflying: new Image(),
+      foliage: new Image()
   };
   visuals.playerBase.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.leatherArmor.onload = () => { window.drawMap(); window.renderEntities(); };
@@ -466,6 +470,9 @@ function startGameCore(isLoading = false) {
   visuals.pedestal.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.water.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.boar.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.tiger.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.eagle.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.eagleflying.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.foliage.onload = () => { window.drawMap(); window.renderEntities(); };
 
   visuals.playerBase.src = 'images/elf.png';
@@ -516,6 +523,9 @@ function startGameCore(isLoading = false) {
   visuals.pedestal.src = 'images/mediumpillar.png';
   visuals.water.src = 'images/water.png';
   visuals.boar.src = 'images/boar.png';
+  visuals.tiger.src = 'images/tiger.png';
+  visuals.eagle.src = 'images/eagle.png';
+  visuals.eagleflying.src = 'images/eagleflying.png';
   visuals.foliage.src = 'images/foliage.png';
   
   window.gameVisuals = visuals;

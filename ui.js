@@ -1,5 +1,10 @@
 // ui.js
 
+window.updatePartyTabs = updatePartyTabs;
+window.selectCharacterByName = selectCharacterByName;
+window.addJerry = addJerry;
+window.requestReaction = requestReaction;
+
 function updatePartyTabs() {
     const partyDiv = document.getElementById("party-selection");
     if (!partyDiv) return;
@@ -1673,7 +1678,3 @@ function highlightValidTargets(caster, spell) {
 }
 
 window.highlightValidTargets = highlightValidTargets;
-window.updatePartyTabs = updatePartyTabs;
-window.selectCharacterByName = selectCharacterByName;
-window.addJerry = addJerry;
-window.requestReaction = requestReaction;

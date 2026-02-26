@@ -1,3 +1,7 @@
+- **Audio System Fixes**:
+    - Ensured that `visuals` for all creatures (`Tiger`, `Eagle`, `Eagleflying`) and terrain (`Foliage`) are correctly initialized, fixing the "Cannot set properties of undefined (setting 'onload')" crash.
+- **UI & Initialization Improvements**:
+    - Moved key UI function assignments (`updatePartyTabs`, `selectCharacterByName`, etc.) to the top of `ui.js` to ensure they are available immediately during game startup, preventing "is not a function" errors in `main.js`.
 - **Map & Environment Enhancements**:
     - **Foliage Integration**: Added `foliage.png` and created a `Foliage` terrain type. Foliage provides significant stealth bonuses (+40) and defensive cover (+15 dodge, -10 hit chance for attackers). Missile attacks against targets in foliage face an additional -10 hit penalty.
     - **Outdoor Arena Features**: Outdoor arenas in Campaign 1 now randomly generate foliage clusters for tactical depth.
