@@ -514,6 +514,7 @@ function updateActionButtons() {
                 highlightValidTargets(player, window.playerAction.spell);
             }
             window.drawMap();
+            window.renderEntities();
         }
 
         if (player.offhandAttackAvailable) {

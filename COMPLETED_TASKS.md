@@ -1,21 +1,17 @@
-- **Audio System Fixes**:
-    - Ensured that `visuals` for all creatures (`Tiger`, `Eagle`, `Eagleflying`) and terrain (`Foliage`) are correctly initialized, fixing the "Cannot set properties of undefined (setting 'onload')" crash.
-- **UI & Initialization Improvements**:
-    - Moved key UI function assignments (`updatePartyTabs`, `selectCharacterByName`, etc.) to the top of `ui.js` to ensure they are available immediately during game startup, preventing "is not a function" errors in `main.js`.
-- **Map & Environment Enhancements**:
-    - **Foliage Integration**: Added `foliage.png` and created a `Foliage` terrain type. Foliage provides significant stealth bonuses (+40) and defensive cover (+15 dodge, -10 hit chance for attackers). Missile attacks against targets in foliage face an additional -10 hit penalty.
-    - **Outdoor Arena Features**: Outdoor arenas in Campaign 1 now randomly generate foliage clusters for tactical depth.
-    - **Water Rendering Overhaul**: Water tiles are now rendered as a semi-transparent (50%) overlay on top of base terrain, allowing submerged land features to remain visible.
-    - **Immersion Updates**: Removed references to "teleporting" in the arena dialogue, replaced with more thematic descriptions of walking through corridors. Added time-aware arena entrance text (Sun vs. Moon/Stars based on light levels).
-- **Combat & Turn Logic**:
-    - **Immediate Turn Initialization**: Fixed a bug where arena matches would load into a "no-one's turn" state. The game now automatically triggers the player's turn upon entering the map.
-    - **Immediate Visual Feedback**: Movement and attack highlights are now calculated and displayed immediately when a character's turn begins, removing the need for an initial map click.
-    - **Target Highlighting**: When casting a spell, the game now highlights all valid target hexes/entities based on the spell's type (summon, heal, damage, etc.) and range.
-- **Spell System & Summoning**:
-    - **Intelligent Summon Placement**: Multi-hex creatures now use a sophisticated placement algorithm. When summoning, the code searches for a valid orientation that fits the creature without overlapping terrain or other entities, prioritizing the clicked hex.
-    - **Dynamic Summon Naming**: The default name for summon spells now automatically incorporates the chosen animal (e.g., "Summon Boar").
-    - **Eagle Fixes**: Eagle summons now correctly use `eagleflying.png` and are placed in Flying mode by default.
+- **Rendering & Click Stability**:
+    - Fixed a critical bug where characters would disappear upon clicking the map. The game now correctly redraws all entities whenever action highlights are updated.
+    - Resolved a double-click issue by implementing an input-blocking state during movement and attack animations. The game now ignores subsequent clicks until the current action is finalized.
+- **Mana & Spell System Polish**:
+    - **Optimized Upkeep**: Refined the mana upkeep logic to stop processing spell costs immediately once mana reaches zero, preventing negative mana values and log spam.
+    - **Summon Vanish Fix**: Added unique IDs to all entities, ensuring summoned creatures are correctly identified and removed from the map when their upkeep spell expires or is cancelled.
+- **Environment & Immersion**:
+    - **Thematic Transitions**: Replaced "teleportation" terminology with more grounded descriptions of walking through corridors or using elevators to enter the arena.
+    - **Time-Aware Atmosphere**: Implemented dynamic arena entrance text that correctly identifies if the Sun or the Moon/Stars are illuminating the outdoor matches based on the current world time and light level.
+- **Visuals & Layering**:
+    - **Water Rendering**: Implemented a two-pass rendering system where water images are layered with 50% transparency over the base terrain, allowing submerged features to remain visible.
+    - **Foliage Integration**: Added `foliage.png` support for outdoor arenas, providing tactical cover and stealth benefits.
+    - **Eagle Fixes**: Ensured Eagles use their flying sprites and mechanics immediately upon being summoned.
 - **Bug Fixes**:
     - **Syntax Error Fixed**: Resolved the "animalId has already been declared" error in `ui.js`.
-    - **Initialization Fix**: Resolved the "window.updatePartyTabs is not a function" crash in `main.js`.
-    - **Cover System**: Added a cover bonus (-5 hit) for attackers firing at targets partially blocked by pedestals.
+    - **Initialization Fix**: Fixed "window.updatePartyTabs is not a function" by ensuring proper function exposure in `ui.js`.
+    - **Cover System**: Added defensive bonuses for characters standing behind pedestals.

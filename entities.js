@@ -1,6 +1,7 @@
 // entities.js
 class Entity {
   constructor(name, color, hex, initiative) {
+    this.id = Date.now() + Math.random();
     this.name = name;
     this.color = color;
     this.hex = hex;

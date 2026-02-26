@@ -173,6 +173,7 @@ function finalizePlayerAction(player, actionHandled) {
         window.drawMap();
         window.renderEntities();
     } else {
+        window.gamePhase = 'PLAYER_TURN'; // Restore control
         updatePlayerUI();
         window.updateActionButtons();
     }
@@ -966,17 +967,16 @@ function runTickInternal(isSleepCycle = false) {
 
                     // Ongoing Spell Costs (2.5% of core mana cost per TP gained)
                     const mySpells = (window.activeSpells || []).filter(s => s.casterName === e.name);
-                    let totalUpkeep = 0;
-                    mySpells.forEach(s => {
+                    for (const s of mySpells) {
+                        if (e.currentMana <= 0) break; 
                         const cost = s.coreManaCost * 0.025 * tpGained;
-                        totalUpkeep += cost;
                         e.currentMana -= cost;
                         if (e.currentMana <= 0) {
                             e.currentMana = 0;
-                            window.showMessage(`Spell ${s.name} faded due to lack of mana.`);
+                            window.showMessage(`Spell ${s.name} on ${e.name} faded due to lack of mana.`);
                             window.cancelSpell(s.spellInstanceId);
                         }
-                    });
+                    }
 
                     // REST INTERRUPT: Net negative mana
                     if (window.isResting && e.side === 'player' && (totalUpkeep > regen * tpGained) && e.currentMana < e.maxMana * 0.1) {
@@ -1557,6 +1557,8 @@ function handleClick(e){
         if (actionHandled) { window.playerAction = null; syncBackToPlayer(player); }
     } else if (target && target.side !== player.side) {
         if (window.highlightedHexes.some(h => h.type === 'attack' && h.q === clickedHex.q && h.r === clickedHex.r)) {
+            window.gamePhase = 'AI_TURN'; // Block clicks
+            window.clearHighlights();
             tryAttack(player, target); spendTP(player, 10); actionHandled = 'main_attack';
         }
     } else if (window.highlightedHexes.some(h => h.type === 'move' && h.q === clickedHex.q && h.r === clickedHex.r)) {
@@ -1568,7 +1570,13 @@ function handleClick(e){
 
         let path = window.findPath(player.hex, clickedHex, availableTP, moveEntity);
         if (!path && window.distance(player.hex, clickedHex) === 1 && availableTP > 0) path = [player.hex, clickedHex];
-        if (path) { path.shift(); playerMoveProcess(player, path); return; }
+        if (path) { 
+            window.gamePhase = 'AI_TURN'; // Block clicks
+            window.clearHighlights();
+            path.shift(); 
+            playerMoveProcess(player, path); 
+            return; 
+        }
     } else if (!target) {
         // NO ACTION/MOVE ACTIVE: Set Destination for Auto-Move
         if (window.groupMoveMode) {
