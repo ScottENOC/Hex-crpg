@@ -252,7 +252,7 @@ window.startGame = function() {
   window.campaignLevelCaps = { "1": 50, "2": 5, "3": 50 };
   window.currentLevelCap = window.campaignLevelCaps[campaign] || 50;
 
-  window.updatePartyTabs();
+  if (window.updatePartyTabs) window.updatePartyTabs();
 
   document.getElementById("characterCreator").style.display = "none";
   document.getElementById("gameContainer").style.display = "block";

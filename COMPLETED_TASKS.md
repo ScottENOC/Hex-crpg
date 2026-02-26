@@ -1,16 +1,17 @@
-- **Skill System Cleanup**:
-    - Moved **Furious Charge**, **Fly**, and **Land** to the hidden `monster_skills` tree. These are now inherent creature abilities and no longer clutter the player's Strength or Nature trees.
-    - Removed duplicated `arcane_expand` and `divine_expand` skill definitions.
-- **Spell System Improvements**:
-    - **Dynamic Summon Naming**: When creating a "Summon Animal" spell, the default name now automatically updates based on the selected animal (e.g., "Summon Wolf", "Summon Boar", "Summon Tiger").
-    - **Summon Mana Scaling**: Implemented specific mana costs for different animals: Boar (+8), Eagle (+5), and Tiger (+15).
-    - **Summon Requirements**: Tiger and Eagle summoning now correctly require their respective Nature skills to be learned.
-- **Animal & Summoning Mechanics**:
-    - **Eagle Fixes**: Eagle summons now correctly use the eagle visual assets and are automatically placed in "Flying" mode upon arrival.
-    - **Vanish on Expire**: When a summon spell ends (due to mana depletion or manual cancellation), the summoned creature now correctly vanishes from the map, accompanied by a log message.
-- **Mana Upkeep Logic**:
-    - Enhanced the mana upkeep system to gracefully handle mana depletion. If an entity runs out of mana, their active spells will fade one by one, preventing negative mana values and providing clear feedback in the combat log.
-- **UI & Accessibility**:
-    - **Show All Skills Mode**: Added a toggle to the character screen to view all possible skills.
-    - **Prerequisite Guidance**: Skills that cannot be learned now display their missing requirements in red and as tooltips, making progression paths easier to understand.
-    - **Animal Ally Rendering**: Updated the rendering logic to ensure animal allies (Wolf, Horse, Boar, Tiger, Eagle) are always drawn using their correct creature images instead of falling back to character avatars.
+- **Map & Environment Enhancements**:
+    - **Foliage Integration**: Added `foliage.png` and created a `Foliage` terrain type. Foliage provides significant stealth bonuses (+40) and defensive cover (+15 dodge, -10 hit chance for attackers). Missile attacks against targets in foliage face an additional -10 hit penalty.
+    - **Outdoor Arena Features**: Outdoor arenas in Campaign 1 now randomly generate foliage clusters for tactical depth.
+    - **Water Rendering Overhaul**: Water tiles are now rendered as a semi-transparent (50%) overlay on top of base terrain, allowing submerged land features to remain visible.
+    - **Immersion Updates**: Removed references to "teleporting" in the arena dialogue, replaced with more thematic descriptions of walking through corridors. Added time-aware arena entrance text (Sun vs. Moon/Stars based on light levels).
+- **Combat & Turn Logic**:
+    - **Immediate Turn Initialization**: Fixed a bug where arena matches would load into a "no-one's turn" state. The game now automatically triggers the player's turn upon entering the map.
+    - **Immediate Visual Feedback**: Movement and attack highlights are now calculated and displayed immediately when a character's turn begins, removing the need for an initial map click.
+    - **Target Highlighting**: When casting a spell, the game now highlights all valid target hexes/entities based on the spell's type (summon, heal, damage, etc.) and range.
+- **Spell System & Summoning**:
+    - **Intelligent Summon Placement**: Multi-hex creatures now use a sophisticated placement algorithm. When summoning, the code searches for a valid orientation that fits the creature without overlapping terrain or other entities, prioritizing the clicked hex.
+    - **Dynamic Summon Naming**: The default name for summon spells now automatically incorporates the chosen animal (e.g., "Summon Boar").
+    - **Eagle Fixes**: Eagle summons now correctly use `eagleflying.png` and are placed in Flying mode by default.
+- **Bug Fixes**:
+    - **Syntax Error Fixed**: Resolved the "animalId has already been declared" error in `ui.js`.
+    - **Initialization Fix**: Resolved the "window.updatePartyTabs is not a function" crash in `main.js`.
+    - **Cover System**: Added a cover bonus (-5 hit) for attackers firing at targets partially blocked by pedestals.

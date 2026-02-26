@@ -476,6 +476,41 @@ function updateActionButtons() {
         const player = window.currentTurnEntity;
         const charData = window.player; 
         
+        const isSentientAlly = player.side === 'player' && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(player.name);
+        if (isSentientAlly) {
+            window.clearHighlights();
+            if (!window.playerAction) {
+                // BFS for movement range
+                const moveRange = Math.floor(player.timePoints / 5);
+                if (moveRange > 0) {
+                    for (let q = -moveRange; q <= moveRange; q++) {
+                        for (let r = Math.max(-moveRange, -q - moveRange); r <= Math.min(moveRange, -q + moveRange); r++) {
+                            const targetHex = { q: player.hex.q + q, r: player.hex.r + r };
+                            if (window.isHexInBounds(targetHex)) {
+                                const path = window.findPath(player.hex, targetHex, player.timePoints, player);
+                                if (path && path.length > 1) {
+                                    window.highlightedHexes.push({ q: targetHex.q, r: targetHex.r, type: 'move' });
+                                }
+                            }
+                        }
+                    }
+                }
+                // Weapon range
+                const weaponId = player.equipped?.weapon;
+                const range = weaponId ? (window.items[weaponId]?.range || 1) : 1;
+                window.entities.forEach(e => {
+                    if (e.alive && e.side !== 'player' && window.isVisibleToPlayer(e.hex)) {
+                        if (window.distance(player.hex, e.hex) <= range) {
+                            window.highlightedHexes.push({ q: e.hex.q, r: e.hex.r, type: 'attack' });
+                        }
+                    }
+                });
+            } else if (window.playerAction.type === 'spell') {
+                highlightValidTargets(player, window.playerAction.spell);
+            }
+            window.drawMap();
+        }
+
         if (player.offhandAttackAvailable) {
             const offhandBtn = document.createElement('button');
             offhandBtn.innerText = "Off-hand Attack";
@@ -777,7 +812,6 @@ function renderSpellStats() {
         ${base.baseRadius !== undefined ? `<p><strong>Radius:</strong> ${radius}</p>` : ''}
     `;
     document.getElementById("spell-stats-display").innerHTML = statsHtml;
-    const animalId = document.getElementById("spell-animal-select") ? document.getElementById("spell-animal-select").value : null;
     
     if (animalId === 'boar') {
         manaCost += 8;
@@ -1589,6 +1623,56 @@ window.unequipItem = unequipItem;
 window.syncPlayerEntity = syncPlayerEntity;
 window.gainExp = gainExp;
 window.doLevelUp = doLevelUp;
+function highlightValidTargets(caster, spell) {
+    const range = spell.range || 1;
+    const type = spell.type;
+
+    // Summon: Unoccupied hexes in range
+    if (type === 'summon') {
+        for (let q = -range; q <= range; q++) {
+            for (let r = Math.max(-range, -q - range); r <= Math.min(range, -q + range); r++) {
+                const targetHex = { q: caster.hex.q + q, r: caster.hex.r + r };
+                if (window.isHexInBounds(targetHex) && window.distance(caster.hex, targetHex) <= range) {
+                    const occupant = window.entities.find(e => e.alive && e.getAllHexes().some(h => h.q === targetHex.q && h.r === targetHex.r));
+                    const terrain = window.getTerrainAt(targetHex.q, targetHex.r);
+                    if (!occupant && terrain.name !== 'Wall' && terrain.name !== 'Water') {
+                        window.highlightedHexes.push({ q: targetHex.q, r: targetHex.r, type: 'attack' });
+                    }
+                }
+            }
+        }
+    } else {
+        // Targets: Entities in range
+        window.entities.forEach(e => {
+            if (e.alive && window.isVisibleToPlayer(e.hex)) {
+                const dist = window.distance(caster.hex, e.hex);
+                if (dist <= range) {
+                    let valid = false;
+                    if (type === 'damage') valid = (e.side !== caster.side);
+                    else if (type === 'heal' || type === 'buff') valid = (e.side === caster.side);
+                    else if (type === 'dispel') valid = true;
+                    
+                    if (valid) {
+                        window.highlightedHexes.push({ q: e.hex.q, r: e.hex.r, type: 'attack' });
+                    }
+                }
+            }
+        });
+        // AOE Debuffs can also target empty hexes
+        if (type === 'aoe_debuff') {
+            for (let q = -range; q <= range; q++) {
+                for (let r = Math.max(-range, -q - range); r <= Math.min(range, -q + range); r++) {
+                    const h = { q: caster.hex.q + q, r: caster.hex.r + r };
+                    if (window.isHexInBounds(h) && window.distance(caster.hex, h) <= range) {
+                        window.highlightedHexes.push({ q: h.q, r: h.r, type: 'attack' });
+                    }
+                }
+            }
+        }
+    }
+}
+
+window.highlightValidTargets = highlightValidTargets;
 window.updatePartyTabs = updatePartyTabs;
 window.selectCharacterByName = selectCharacterByName;
 window.addJerry = addJerry;

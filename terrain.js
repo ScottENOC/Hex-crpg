@@ -9,7 +9,8 @@ const terrainTypes = {
     'water': { name: 'Water', color: '#4169e1', moveCostMult: 2, hitBonus: -10, dodgeBonus: -5, stealthBonus: -20 },
     'wall': { name: 'Wall', color: '#696969', moveCostMult: 2, hitBonus: 5, dodgeBonus: 5, stealthBonus: 0 },
     'cave_floor': { name: 'Cave Floor', color: '#3e3e3e', moveCostMult: 1, hitBonus: 0, dodgeBonus: 0, stealthBonus: 0 },
-    'pedestal': { name: 'Pedestal', color: '#888', moveCostMult: 2, hitBonus: 10, dodgeBonus: -5, stealthBonus: 0, blocksLOS: true }
+    'pedestal': { name: 'Pedestal', color: '#888', moveCostMult: 2, hitBonus: 10, dodgeBonus: -5, stealthBonus: 0, blocksLOS: true },
+    'foliage': { name: 'Foliage', color: '#2e7d32', moveCostMult: 1.5, hitBonus: -10, dodgeBonus: 15, stealthBonus: 40 }
 };
 
 window.mapItems = {}; // Key format: "q,r", Value: array of item IDs

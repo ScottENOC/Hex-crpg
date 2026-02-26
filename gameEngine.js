@@ -466,6 +466,7 @@ function startGameCore(isLoading = false) {
   visuals.pedestal.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.water.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.boar.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.foliage.onload = () => { window.drawMap(); window.renderEntities(); };
 
   visuals.playerBase.src = 'images/elf.png';
   visuals.leatherArmor.src = 'images/elfleatherarmour.png';
@@ -515,6 +516,7 @@ function startGameCore(isLoading = false) {
   visuals.pedestal.src = 'images/mediumpillar.png';
   visuals.water.src = 'images/water.png';
   visuals.boar.src = 'images/boar.png';
+  visuals.foliage.src = 'images/foliage.png';
   
   window.gameVisuals = visuals;
 
@@ -1000,8 +1002,12 @@ function takeTurn(entity) {
     const isSentientAlly = entity.side === 'player' && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(entity.name);
     if (entity.side === 'player') {
         window.gamePhase = isSentientAlly ? 'PLAYER_TURN' : 'AI_TURN';
-        if (isSentientAlly) window.showMessage(`It is ${entity.name}'s turn!`);
-        window.selectCharacterByName(entity.name);
+        if (isSentientAlly) {
+            window.showMessage(`It is ${entity.name}'s turn!`);
+            window.selectCharacterByName(entity.name);
+            // RE-CALC HIGHLIGHTS IMMEDIATELY
+            window.updateActionButtons(); 
+        }
 
         // AUTO-MOVE LOGIC
         if (entity.destination) {
@@ -1793,6 +1799,20 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   const attackerTerrain = window.getTerrainAt(attacker.hex.q, attacker.hex.r);
   const targetTerrain = window.getTerrainAt(target.hex.q, target.hex.r);
   let hitChance = 50 + baseHit + attackerTerrain.hitBonus - (target.passiveDodge + targetTerrain.dodgeBonus);
+  
+  // FOLIAGE DEFENSE
+  if (targetTerrain.name === 'Foliage') {
+      if (isRanged) hitChance -= 10; // Extra missile penalty
+  }
+
+  // COVER: Pedestals
+  const blockedHexes = [{q: target.hex.q, r: target.hex.r-1}, {q: target.hex.q+1, r: target.hex.r-1}];
+  const isCovered = blockedHexes.some(bh => window.getTerrainAt(bh.q, bh.r).name === 'Pedestal');
+  if (isCovered) {
+      window.showMessage(`${target.name} is behind a pedestal (Cover bonus: -5 hit)`);
+      hitChance -= 5;
+  }
+
   if (attacker.equipped?.weapon && attacker.equipped?.offhand && window.items[attacker.equipped.offhand].type === 'weapon') hitChance -= 5;
   if (isOffhand) hitChance -= 5;
   if (weapon && attacker.skills[`${weapon.id}_hit`]) hitChance += 5;
@@ -2209,7 +2229,7 @@ function setupArenaLobby() {
 }
 
 function startArenaFight() {
-    window.showMessage("The announcer teleports you to the arena!");
+    window.showMessage("You make your way through the corridors into the arena.");
     window.playSting('teleportSting');
     window.isInArena = true;
     window.triggerAmbientDialogue('arena_fight_start');
@@ -2228,7 +2248,13 @@ function startArenaFight() {
     if (isIndoor) {
         window.showMessage("The air grows stale and cold... you are in an indoor pit.");
     } else {
-        window.showMessage("The sun (or moon) shines down on the open arena.");
+        const timeStr = window.getFormattedTime();
+        const isNight = window.lightLevel < 0.5;
+        if (isNight) {
+            window.showMessage("The moon and stars shine down on the open arena.");
+        } else {
+            window.showMessage("The sun shines brightly down on the open arena.");
+        }
     }
 
     // Filter to keep players AND their mounts/allies
@@ -2238,6 +2264,7 @@ function startArenaFight() {
     const arenaSize = 25;
     const isWaterArena = Math.random() < 0.3;
     const isPedestalArena = Math.random() < 0.4;
+    const isFoliageArena = !isIndoor && Math.random() < 0.5;
     
     for (let q = -arenaSize; q <= arenaSize; q++) {
         for (let r = -arenaSize; r <= arenaSize; r++) {
@@ -2256,6 +2283,12 @@ function startArenaFight() {
                  if (isPedestalArena && tType === 'Cave Floor') {
                      const pNoise = Math.abs(Math.sin(q * 0.5 + r * 0.05));
                      if (pNoise > 0.9) tType = 'Pedestal';
+                 }
+
+                 // Random Foliage (Only outdoor)
+                 if (isFoliageArena && tType === 'Cave Floor') {
+                     const fNoise = Math.abs(Math.sin(q * 0.3 + r * 0.3 + 5));
+                     if (fNoise > 0.85) tType = 'foliage';
                  }
 
                  window.setTerrainAt(q, r, tType);
@@ -2410,7 +2443,53 @@ window.tryShove = tryShove;
 function resolveSpell(caster, spell, target, clickedHex) {
     let actionHandled = false;
     if (spell.type === 'summon') {
-        const s = window.createMonster(spell.animalId, clickedHex, null, null, caster.side);
+        const template = window.monsterTemplates[spell.animalId];
+        const extraOffsets = template.extraHexes || [];
+        
+        let finalHex = clickedHex;
+        let validPlacement = false;
+
+        if (extraOffsets.length === 0) {
+            // Single hex summon: just check current hex
+            const occupant = getEntityAtHex(clickedHex.q, clickedHex.r);
+            const terrain = window.getTerrainAt(clickedHex.q, clickedHex.r);
+            if (!occupant && terrain.name !== 'Wall' && terrain.name !== 'Water') validPlacement = true;
+        } else {
+            // Multi-hex: Try different orientations where clickedHex is part of the creature
+            const candidates = [{q:0, r:0}, ...extraOffsets]; // The relative offsets of the creature
+            
+            // Try each candidate offset as being the one located at clickedHex
+            for (let anchorOffset of candidates) {
+                // Potential root hex if anchorOffset is at clickedHex
+                const rootQ = clickedHex.q - anchorOffset.q;
+                const rootR = clickedHex.r - anchorOffset.r;
+                
+                // Check all hexes for this orientation
+                let fits = true;
+                for (let off of candidates) {
+                    const checkQ = rootQ + off.q;
+                    const checkR = rootR + off.r;
+                    const h = { q: checkQ, r: checkR };
+                    const occupant = getEntityAtHex(h.q, h.r);
+                    const terrain = window.getTerrainAt(h.q, h.r);
+                    if (!window.isHexInBounds(h) || (occupant && occupant !== caster) || terrain.name === 'Wall' || terrain.name === 'Water') {
+                        fits = false; break;
+                    }
+                }
+                if (fits) {
+                    finalHex = { q: rootQ, r: rootR };
+                    validPlacement = true;
+                    break;
+                }
+            }
+        }
+
+        if (!validPlacement) {
+            window.showMessage("No room to summon that creature there.");
+            return false;
+        }
+
+        const s = window.createMonster(spell.animalId, finalHex, null, null, caster.side);
         if (spell.animalId === 'eagle') s.isFlying = true;
         s.maxTPAllowed = 0; 
         if (caster.side === 'player' && caster.skills?.animal_companion && !caster.animalCompanion) {
