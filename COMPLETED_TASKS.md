@@ -1,25 +1,16 @@
-- **Audio System Overhaul**:
-    - **New Tracks Integrated**: Added `Title.wav` (menus/creation), `Constant.wav` (ambient background), `Arena lobby.wav` (preparation phase), and `Arena death.wav`.
-    - **Contextual Music Logic**:
-        - `Title.wav` plays in the character creator and all menu screens (inventory, spells, skills) with smooth transitions.
-        - `Arena lobby.wav` plays specifically in the lobby when not in a menu.
-        - `Constant.wav` layers at all times for a consistent atmosphere.
-    - **Advanced Transitions & Stings**:
-        - **Teleport Sting**: Added `Arenalobby2arena.wav` which plays when being teleported to a fight by the announcer.
-        - **Combat Transitions**: Implemented automatic music shifting between `Arena pre battle.wav` and `Arena battle.wav` based on enemy detection.
-        - **Death Mechanics**: On main character death, the game plays `Arena death sting.wav` and transitions to `Arena death.wav` with sharp, dramatic fades (0.3s down, 0.4s up).
-- **New Monsters & Summoning**:
-    - **Tiger**: High-level monster with Rogue, Agility, and Strength skills. Includes a **Furious Charge** ability similar to the boar. Summonable by Druids (+15 mana).
-    - **Eagle**: Low-stat scouting monster with **Fly** and **Land** abilities.
-        - **Flying Mechanics**: Flying eagles use a vertical offset image (`eagleflying.png`), ignore terrain movement penalties, ignore LOS obstructions, and are immune to melee attacks (and cannot use them).
-        - **Improved Vision**: Eagles possess elven-tier darkvision.
-- **Weapon Visuals & Mechanics**:
-    - **Spear & Club Overlays**: Implemented map-level overlays for spears and clubs (`spear.png`, `club.png`) when equipped.
-    - **Magic Item Consistency**: Magic items (like the Sword of Arrow Deflection) now correctly use their base weapon's visual assets unless a specific unique image is provided.
-- **UI & Accessibility Improvements**:
-    - **Show All Skills**: Added a toggle button in the character screen to view all possible skills, including those without available points or unmet prerequisites.
-    - **Prerequisite Tooltips**: Hovering over locked skills now displays a red warning indicating the missing requirements.
-    - **Spiderweb Overlay**: Added a visual `spiderweb.png` overlay for characters immobilized by a spider's web ability.
-- **Environment Logic**:
-    - **Multi-Hex Wall Constraints**: Entities (especially larger ones) can no longer move onto pedestal walls unless their entire size/footprint fits on the structure.
-    - **Fog of War**: Confirmed that every teleportation correctly resets the Fog of War for the new area.
+- **Skill System Cleanup**:
+    - Moved **Furious Charge**, **Fly**, and **Land** to the hidden `monster_skills` tree. These are now inherent creature abilities and no longer clutter the player's Strength or Nature trees.
+    - Removed duplicated `arcane_expand` and `divine_expand` skill definitions.
+- **Spell System Improvements**:
+    - **Dynamic Summon Naming**: When creating a "Summon Animal" spell, the default name now automatically updates based on the selected animal (e.g., "Summon Wolf", "Summon Boar", "Summon Tiger").
+    - **Summon Mana Scaling**: Implemented specific mana costs for different animals: Boar (+8), Eagle (+5), and Tiger (+15).
+    - **Summon Requirements**: Tiger and Eagle summoning now correctly require their respective Nature skills to be learned.
+- **Animal & Summoning Mechanics**:
+    - **Eagle Fixes**: Eagle summons now correctly use the eagle visual assets and are automatically placed in "Flying" mode upon arrival.
+    - **Vanish on Expire**: When a summon spell ends (due to mana depletion or manual cancellation), the summoned creature now correctly vanishes from the map, accompanied by a log message.
+- **Mana Upkeep Logic**:
+    - Enhanced the mana upkeep system to gracefully handle mana depletion. If an entity runs out of mana, their active spells will fade one by one, preventing negative mana values and providing clear feedback in the combat log.
+- **UI & Accessibility**:
+    - **Show All Skills Mode**: Added a toggle to the character screen to view all possible skills.
+    - **Prerequisite Guidance**: Skills that cannot be learned now display their missing requirements in red and as tooltips, making progression paths easier to understand.
+    - **Animal Ally Rendering**: Updated the rendering logic to ensure animal allies (Wolf, Horse, Boar, Tiger, Eagle) are always drawn using their correct creature images instead of falling back to character avatars.

@@ -617,7 +617,7 @@ function renderEntities() {
           }
       
           if (e.isStealthed) window.mapCtx.globalAlpha = 0.5;
-            const isSentientAlly = e.side === 'player' && e.name !== 'Wolf' && e.name !== 'Horse';
+          const isSentientAlly = e.side === 'player' && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(e.name);
   
       if (isSentientAlly && window.gameVisuals) {
           const size = window.hexSize * 2.0 * z;
@@ -997,7 +997,7 @@ function takeTurn(entity) {
     let threshold = 80;
     if (entity.skills && entity.skills['quickRecovery']) threshold -= entity.skills['quickRecovery'];
 
-    const isSentientAlly = entity.side === 'player' && entity.name !== 'Wolf' && entity.name !== 'Horse';
+    const isSentientAlly = entity.side === 'player' && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(entity.name);
     if (entity.side === 'player') {
         window.gamePhase = isSentientAlly ? 'PLAYER_TURN' : 'AI_TURN';
         if (isSentientAlly) window.showMessage(`It is ${entity.name}'s turn!`);
@@ -1970,7 +1970,11 @@ function cancelSpell(instanceId) {
     // Remove entity if it was a summon
     if (spell.entityId) {
         const ent = window.entities.find(e => e.id === spell.entityId);
-        if (ent) ent.alive = false;
+        if (ent) {
+            ent.alive = false;
+            window.showMessage(`${ent.name} vanishes as the summon spell ends.`);
+            checkCombatEnd();
+        }
     }
 
     // Restore terrain if AOE
@@ -2407,6 +2411,7 @@ function resolveSpell(caster, spell, target, clickedHex) {
     let actionHandled = false;
     if (spell.type === 'summon') {
         const s = window.createMonster(spell.animalId, clickedHex, null, null, caster.side);
+        if (spell.animalId === 'eagle') s.isFlying = true;
         s.maxTPAllowed = 0; 
         if (caster.side === 'player' && caster.skills?.animal_companion && !caster.animalCompanion) {
             caster.animalCompanion = s;

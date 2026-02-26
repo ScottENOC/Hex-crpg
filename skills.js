@@ -76,14 +76,6 @@ const skills = {
         maxRanks: 1,
         apply: (player) => {}
     },
-    'furious_charge': {
-        name: 'Furious Charge',
-        description: 'Active: Charge an enemy 3-5 hexes away and attack for +4 damage. (10 TP)',
-        tree: 'strength',
-        maxRanks: 1,
-        active: true,
-        apply: (player) => {}
-    },
     // AGILITY
     'timePointRate': {
         name: 'Time Point Rate',
@@ -289,36 +281,6 @@ const skills = {
         maxRanks: 3,
         apply: (player) => {}
     },
-    'fly': {
-        name: 'Fly',
-        description: 'Active: Take to the air. (5 TP)',
-        tree: 'nature',
-        maxRanks: 1,
-        active: true,
-        apply: (player) => {}
-    },
-    'land': {
-        name: 'Land',
-        description: 'Active: Return to the ground. (2 TP)',
-        tree: 'nature',
-        maxRanks: 1,
-        active: true,
-        apply: (player) => {}
-    },
-    'arcane_expand': {
-        name: 'Arcane Expansion',
-        description: 'Increase the radius of Arcane AOE spells by 1 per rank. (+10 mana per increase)',
-        tree: 'arcane',
-        maxRanks: 3,
-        apply: (player) => {}
-    },
-    'divine_expand': {
-        name: 'Divine Expansion',
-        description: 'Increase the radius of Divine AOE spells by 1 per rank. (+10 mana per increase)',
-        tree: 'divine',
-        maxRanks: 3,
-        apply: (player) => {}
-    },
     'learn_boar_summon': {
         name: 'Boar Summoning',
         description: 'Allows you to summon a Boar instead of a Wolf (+8 mana).',
@@ -356,6 +318,30 @@ const skills = {
         description: 'Passive: Melee attacks have a 50% chance to poison targets for 2 damage per TP tick (10 times).',
         tree: 'monster_skills',
         maxRanks: 1,
+        apply: (player) => {}
+    },
+    'furious_charge': {
+        name: 'Furious Charge',
+        description: 'Active: Charge an enemy 3-5 hexes away and attack for +4 damage. (10 TP)',
+        tree: 'monster_skills',
+        maxRanks: 1,
+        active: true,
+        apply: (player) => {}
+    },
+    'fly': {
+        name: 'Fly',
+        description: 'Active: Take to the air. (5 TP)',
+        tree: 'monster_skills',
+        maxRanks: 1,
+        active: true,
+        apply: (player) => {}
+    },
+    'land': {
+        name: 'Land',
+        description: 'Active: Return to the ground. (2 TP)',
+        tree: 'monster_skills',
+        maxRanks: 1,
+        active: true,
         apply: (player) => {}
     },
     'companion_str_end': {

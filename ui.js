@@ -740,6 +740,13 @@ function renderSpellStats() {
     let range = (base.baseRange || 1) + rangeBonus;
     let radius = (base.baseRadius || 0) + radBonus;
 
+    let defaultName = base.name;
+    const animalId = document.getElementById("spell-animal-select") ? document.getElementById("spell-animal-select").value : null;
+    if (base.type === 'summon' && animalId) {
+        const animalName = window.monsterTemplates[animalId].name;
+        defaultName = `Summon ${animalName}`;
+    }
+
     let effRange = 0, effMag = 0, effSpeed = 0;
     if (base.school === 'arcane') {
         effRange = player.skills['arcane_eff_range'] || 0;
@@ -794,7 +801,7 @@ function renderSpellStats() {
         document.getElementById("spell-stats-display").innerHTML = statsHtml;
     }
 
-    window.currentSpellCalc = { name: base.name, school: base.school, manaCost, coreManaCost, tpCost, magnitude, range, radius, type: base.type, baseId, animalId };
+    window.currentSpellCalc = { name: defaultName, school: base.school, manaCost, coreManaCost, tpCost, magnitude, range, radius, type: base.type, baseId, animalId };
 }
 
 function createSpell() {
@@ -1196,7 +1203,7 @@ function updateTurnIndicator() {
 }
 
 function requestReaction(entity, options, callback, customMsg = null) {
-    const isSentientAlly = entity.side === 'player' && entity.name !== 'Wolf';
+    const isSentientAlly = entity.side === 'player' && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(entity.name);
     if (!isSentientAlly) {
         if (options.length > 0 && Math.random() < 0.7) callback(options[0].id);
         else callback(null);
