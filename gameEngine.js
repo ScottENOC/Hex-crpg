@@ -1664,8 +1664,8 @@ function tryAttack(attacker, target, isFeint = false, isOffhand = false, bonusDa
     }
 
     // FLYING MELEE IMMUNITY
-    const weaponSlot = isOffhand ? 'offhand' : 'weapon';
-    const weapon = window.items[attacker.equipped?.[weaponSlot]] || null;
+    let weaponSlot = isOffhand ? 'offhand' : 'weapon';
+    let weapon = window.items[attacker.equipped?.[weaponSlot]] || null;
     const isRanged = weapon?.subType === 'ranged';
     if (!isRanged && (attacker.isFlying || target.isFlying) && !(attacker.isFlying && target.isFlying)) {
         if (attacker.side === 'player') {
@@ -1692,9 +1692,6 @@ function tryAttack(attacker, target, isFeint = false, isOffhand = false, bonusDa
     // BREAK STEALTH
     if (attacker.isStealthed) breakStealth(attacker);
 
-    weaponSlot = isOffhand ? 'offhand' : 'weapon';
-    const weaponId = attacker.equipped?.[weaponSlot] || null;
-    const weapon = weaponId ? window.items[weaponId] : null;
     const reactions = [];
 
     // DEFENDER REACTIONS
