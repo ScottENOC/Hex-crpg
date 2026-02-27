@@ -624,6 +624,24 @@ function renderEntities() {
 
           sorted.forEach(e => {
           let {x,y} = window.hexToPixel(e.hex.q, e.hex.r);
+          
+          // MULTI-HEX CENTERING: If the creature occupies multiple hexes, calculate the visual center
+          if (e.extraHexes && e.extraHexes.length > 0) {
+              const allHexes = [{q: e.hex.q, r: e.hex.r}, ...e.getAllHexes().filter(h => h.q !== e.hex.q || h.r !== e.hex.r)];
+              // We use getAllHexes to be safe, but filter to avoid double counting the origin if it's there
+              // Actually Entity.getAllHexes already includes origin. 
+              const uniqueHexes = e.getAllHexes(); 
+              let totalX = 0;
+              let totalY = 0;
+              uniqueHexes.forEach(h => {
+                  const p = window.hexToPixel(h.q, h.r);
+                  totalX += p.x;
+                  totalY += p.y;
+              });
+              x = totalX / uniqueHexes.length;
+              y = totalY / uniqueHexes.length;
+          }
+
           // Basic off-screen culling for drawing
           if (x < -100 || y < -100 || x > window.mapCanvas.width + 100 || y > window.mapCanvas.height + 100) return;
       
@@ -764,10 +782,8 @@ function renderEntities() {
                   
                           if (e.name === 'Horse' || e.name === 'Wolf' || e.name === 'Boar' || e.name === 'Tiger') {
                               size = window.hexSize * 4.5 * z; // Large animals
-                              yOffset = (Math.sqrt(3) * window.hexSize / 2) * z;
                           } else if (e.name === 'Troll') {
                               size = window.hexSize * 4.5 * z;
-                              yOffset = (Math.sqrt(3) * window.hexSize / 2) * z;
                           } else if (e.name === 'Eagle') {
                               size = window.hexSize * 3.0 * z;
                               yOffset = e.isFlying ? -20*z : 0;
