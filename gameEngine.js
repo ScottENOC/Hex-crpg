@@ -341,14 +341,21 @@ function updatePlayerUI() {
     });
 
     let attackRange = 1;
+    let isRanged = false;
     if (player.equipped && player.equipped.weapon) {
-        attackRange += (window.items[player.equipped.weapon].range || 0);
+        const weapon = window.items[player.equipped.weapon];
+        attackRange += (weapon.range || 0);
+        isRanged = (weapon.subType === 'ranged');
     }
     const attackHexes = getHexesInRange(player.hex, attackRange);
     attackHexes.forEach(h => {
         const target = getEntityAtHex(h.q, h.r);
         if (target && target.side === 'enemy') {
-            window.highlightedHexes.push({ ...h, type: 'attack' });
+            const bothFlying = player.isFlying && target.isFlying;
+            const eitherFlying = player.isFlying || target.isFlying;
+            if (isRanged || !eitherFlying || bothFlying) {
+                window.highlightedHexes.push({ ...h, type: 'attack' });
+            }
         }
     });
 
@@ -859,13 +866,7 @@ function renderEntities() {
                               window.mapCtx.drawImage(weaponImgEn, x - (window.hexSize/2 + 5) * z, y - weaponSize/2, weaponSize, weaponSize);
                           }
                   
-                          // AI State Indicator
-                          if (e.aiState === 'combat') {
-                              window.mapCtx.fillStyle = "red";
-                              window.mapCtx.beginPath();
-                              window.mapCtx.arc(x + 10*z, y - 10*z, 3*z, 0, Math.PI*2);
-                              window.mapCtx.fill();
-                          }
+                          // AI State Indicator Removed
                       }
                   
                       // SPIDER WEB OVERLAY
@@ -1182,25 +1183,20 @@ function aiProcess(entity) {
         // Idle behavior: Check for enemies
         const targets = window.entities.filter(e => e.alive && e.side === 'player');
         
-        const visibleTarget = targets.find(t => canSee(entity, t));
+        // Non-aggro on Eagle
+        const visibleTarget = targets.find(t => canSee(entity, t) && t.name !== 'Eagle');
 
         if (visibleTarget) {
             wakeUp(entity);
             window.showMessage(`${entity.name} spotted a target and engages!`);
         } else {
-            // SEARCHING: If I've been hit but see no one
-            if (entity.hp < entity.maxHp && !entity.lastSeenTargetHex) {
-                // If I have no target but I'm hurt, wander towards "noise" or just random search
-                // For now, let's keep idle wander
-            }
-            // Wander or stand still
+            // ... search or wander ...
             if (Math.random() < 0.3) {
-                // Random move
                 const neighbors = window.getNeighbors(entity.hex.q, entity.hex.r);
                 const valid = neighbors.filter(h => !getEntityAtHex(h.q, h.r) && window.getTerrainAt(h.q, h.r).name !== 'Water');
                 if (valid.length > 0) {
                     const next = valid[Math.floor(Math.random() * valid.length)];
-                    entity.hex = next; // Instant move for idle/flavor
+                    entity.hex = next; 
                     spendTP(entity, 10);
                 } else {
                     spendTP(entity, 10);
@@ -1213,42 +1209,65 @@ function aiProcess(entity) {
         }
     }
 
+    // Eagle Scouting AI
+    if (entity.name === 'Eagle' && entity.side === 'player') {
+        entity.isFlying = true; // Always flying
+        
+        // Find best scouting target
+        // 1. Lost enemies (previously seen but not current)
+        const enemies = window.entities.filter(e => e.side === 'enemy' && e.alive);
+        const lostEnemy = enemies.find(e => e.hasBeenSeenByPlayer && !window.isVisibleToPlayer(e.hex));
+        
+        let scoutTarget = null;
+        if (lostEnemy) {
+            scoutTarget = lostEnemy.hex;
+        } else {
+            // 2. Oldest seen or never seen tiles within 20 hexes
+            const range = 20;
+            const candidates = window.getHexesInRange(entity.hex, range);
+            candidates.sort((a, b) => {
+                const ta = window.lastSeenTimeMap?.[`${a.q},${a.r}`] || 0;
+                const tb = window.lastSeenTimeMap?.[`${b.q},${b.r}`] || 0;
+                return ta - tb; // Prioritize lower (older) time
+            });
+            scoutTarget = candidates[0];
+        }
+
+        if (scoutTarget) {
+            const neighbors = window.getNeighbors(entity.hex.q, entity.hex.r);
+            const bestHex = neighbors.sort((a,b) => window.distance(a, scoutTarget) - window.distance(b, scoutTarget))[0];
+            const terrain = window.getTerrainAt(bestHex.q, bestHex.r);
+            if (!getEntityAtHex(bestHex.q, bestHex.r)) {
+                entity.hex = bestHex;
+                spendTP(entity, 5 * (terrain.moveCostMult || 1));
+            } else {
+                spendTP(entity, 5);
+            }
+        } else {
+            spendTP(entity, 10);
+        }
+        setTimeout(() => aiProcess(entity), 100);
+        return;
+    }
+
     // Combat Logic
     const opponentSide = entity.side === 'player' ? 'enemy' : 'player';
     const opponents = window.entities.filter(e => e.alive && e.side === opponentSide);
     const visibleOpponents = opponents.filter(t => canSee(entity, t));
 
+    // Filter attackable targets based on flying
+    const weaponSlot = 'weapon';
+    const weapon = entity.equipped?.[weaponSlot] ? window.items[entity.equipped[weaponSlot]] : null;
+    const isRanged = weapon?.subType === 'ranged';
+    const attackableOpponents = visibleOpponents.filter(o => {
+        const bothFlying = entity.isFlying && o.isFlying;
+        const eitherFlying = entity.isFlying || o.isFlying;
+        return isRanged || !eitherFlying || bothFlying;
+    });
+
     // SPELLCASTING AI (Grishnak / Casters)
     if (entity.createdSpells && entity.createdSpells.length > 0 && entity.timePoints >= 10) {
-        // Priority 1: Dispel / Counter active player spells
-        const dispelSpell = entity.createdSpells.find(s => s.baseId === 'counterspell');
-        if (dispelSpell && entity.currentMana >= dispelSpell.manaCost) {
-            const playerSpells = (window.activeSpells || []).filter(s => {
-                const caster = window.entities.find(e => e.name === s.casterName);
-                return caster && caster.side === 'player';
-            });
-            if (playerSpells.length > 0) {
-                // Find a target within range
-                let spellTarget = null;
-                for (let ps of playerSpells) {
-                    if (ps.entityId) {
-                        const ent = window.entities.find(e => e.id === ps.entityId);
-                        if (ent && window.distance(entity.hex, ent.hex) <= dispelSpell.range) { spellTarget = ent; break; }
-                    } else if (ps.targetEntityId) {
-                        const ent = window.entities.find(e => e.id === ps.targetEntityId);
-                        if (ent && window.distance(entity.hex, ent.hex) <= dispelSpell.range) { spellTarget = ent; break; }
-                    }
-                }
-                if (spellTarget) {
-                    tryCastSpell(entity, dispelSpell, spellTarget, spellTarget.hex);
-                    spendTP(entity, 10);
-                    setTimeout(() => aiProcess(entity), 100);
-                    return;
-                }
-            }
-        }
-
-        // Priority 2: Firebolt
+        // ... (existing spell logic) ...
         const attackSpell = entity.createdSpells.find(s => s.baseId === 'firebolt');
         if (attackSpell && entity.currentMana >= attackSpell.manaCost) {
             const inRange = visibleOpponents.find(o => window.distance(entity.hex, o.hex) <= attackSpell.range);
@@ -1262,13 +1281,22 @@ function aiProcess(entity) {
     }
 
     let target = null;
-    if (visibleOpponents.length > 0) {
-        visibleOpponents.sort((a, b) => getMinDistance(entity, a) - getMinDistance(entity, b));
-        target = visibleOpponents[0];
+    if (attackableOpponents.length > 0) {
+        attackableOpponents.sort((a, b) => getMinDistance(entity, a) - getMinDistance(entity, b));
+        target = attackableOpponents[0];
         entity.lastSeenTargetHex = { q: target.hex.q, r: target.hex.r };
     }
 
     let huntTargetHex = target ? target.hex : (entity.lastSeenTargetHex || null);
+    
+    // If no target because of flying, move towards favorable terrain or away
+    if (!target && visibleOpponents.length > 0) {
+        const nearestFlyer = visibleOpponents.sort((a, b) => window.distance(entity.hex, a.hex) - window.distance(entity.hex, b.hex))[0];
+        // Move away from flyer
+        const neighbors = window.getNeighbors(entity.hex.q, entity.hex.r);
+        huntTargetHex = neighbors.sort((a, b) => window.distance(b, nearestFlyer.hex) - window.distance(a, nearestFlyer.hex))[0];
+    }
+
     if (huntTargetHex && !target && entity.hex.q === huntTargetHex.q && entity.hex.r === huntTargetHex.r) {
         entity.lastSeenTargetHex = null;
         huntTargetHex = null;
@@ -1634,6 +1662,18 @@ function tryAttack(attacker, target, isFeint = false, isOffhand = false, bonusDa
         if (attacker.side === 'player') window.showMessage("You cannot attack a neutral character!");
         return;
     }
+
+    // FLYING MELEE IMMUNITY
+    const weaponSlot = isOffhand ? 'offhand' : 'weapon';
+    const weapon = window.items[attacker.equipped?.[weaponSlot]] || null;
+    const isRanged = weapon?.subType === 'ranged';
+    if (!isRanged && (attacker.isFlying || target.isFlying) && !(attacker.isFlying && target.isFlying)) {
+        if (attacker.side === 'player') {
+            window.showMessage(`Cannot reach ${target.name} with a melee attack while ${attacker.isFlying ? 'flying' : 'they are flying'}!`);
+        }
+        return;
+    }
+
     // Wake up target if attacked
     if (target.side === 'enemy' && target.aiState === 'idle') wakeUp(target);
 
@@ -1779,7 +1819,12 @@ function tryAttack(attacker, target, isFeint = false, isOffhand = false, bonusDa
 
 function canSee(viewer, target) {
     const d = window.distance(viewer.hex, target.hex);
-    const visionCap = 30 + (viewer.visionBonus || 0);
+    
+    // Vision Range affected by light
+    let visionRange = 30 + (viewer.visionBonus || 0);
+    const light = window.lightLevel || 1.0;
+    const effectiveLight = (viewer.skills?.elf_darkvision) ? 1.0 : light;
+    const visionCap = visionRange * Math.max(0.2, effectiveLight);
     
     // Line of sight check first (Physical obstruction)
     if (d > visionCap || !window.hasLineOfSight(viewer.hex, target.hex)) {
@@ -1809,7 +1854,10 @@ function canSee(viewer, target) {
             const items = [viewer.equipped.weapon, viewer.equipped.offhand, viewer.equipped.accessory];
             if (items.some(iid => iid && window.items[iid]?.lightRadius)) hasLight = true;
         }
-        const finalChance = hasLight ? spotChance * 1.5 : spotChance;
+        
+        // Elf Darkvision: negate light penalty for spot chance
+        let lightPenalty = (1.0 - effectiveLight) * 50;
+        let finalChance = (hasLight ? spotChance * 1.5 : spotChance) - lightPenalty;
         
         if (Math.random() * 100 < finalChance) {
             // Spotted!
@@ -1830,12 +1878,6 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   const weaponSlot = isOffhand ? 'offhand' : 'weapon';
   const weapon = window.items[attacker.equipped?.[weaponSlot]] || null;
   const isRanged = weapon?.subType === 'ranged';
-
-  // FLYING MELEE IMMUNITY
-  if (!isRanged && (attacker.isFlying || target.isFlying)) {
-      window.showMessage(`Cannot reach ${target.name} with a melee attack while ${attacker.isFlying ? 'flying' : 'they are flying'}!`);
-      return;
-  }
 
   const baseHit = isRanged ? attacker.toHitRanged : attacker.toHitMelee;
   const attackerTerrain = window.getTerrainAt(attacker.hex.q, attacker.hex.r);
@@ -1930,6 +1972,11 @@ function checkCombatEnd() {
 
     // Only check for ACTIVE enemies
     if (!window.entities.some(e => e.side === 'enemy' && e.alive)) {
+        // Combat Ended Auto-save
+        if (window.saveGame && !window.ironmanMode) {
+             window.saveGame("AutoSave_CombatEnd");
+        }
+
         if (window.currentCampaign === "1" && window.isInArena) {
             window.isInArena = false;
             window.triggerAmbientDialogue('arena_victory');

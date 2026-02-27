@@ -11,7 +11,27 @@
     - **Water Rendering**: Implemented a two-pass rendering system where water images are layered with 50% transparency over the base terrain, allowing submerged features to remain visible.
     - **Foliage Integration**: Added `foliage.png` support for outdoor arenas, providing tactical cover and stealth benefits.
     - **Eagle Fixes**: Ensured Eagles use their flying sprites and mechanics immediately upon being summoned.
+    - **Eagle Size & Tracking**: Shrunk the Eagle image by 50% for better visual balance and updated the initiative tracker to correctly show the Eagle's flying or ground sprite based on its status.
+- **Flying Combat & AI**:
+    - **Flying Melee Rules**: Implemented logic to block melee attacks from/against flyers unless both units are flying. Melee attacks against flyers now correctly show a message and do not consume Time Points.
+    - **AI Adaptation**: AI now filters out un-attackable flying targets if they only have melee attacks and will choose alternative actions like moving toward favorable terrain or away from flyers.
+    - **Scouting Eagle**: Implemented specialized scouting AI for the Eagle. It prioritizes tiles not seen for the longest time and searches for lost enemies. The Eagle is now non-combatant, always flying, and does not trigger enemy aggro.
+    - **Flying Toggle**: Added "Fly" and "Land" actions (1 TP cost) available to any unit with the flying capability or the fly cheat.
+- **UI & Character Systems**:
+    - **Paladin Removal**: Removed Paladin from initial character creation and level-up options. Removed the Paladin skill tree from the "See All Skills" view.
+    - **Skill Tree Overhaul**: Updated the "See All Skills" mode to correctly show all racial skill trees (Human, Dwarf, Elf).
+    - **Elf Darkvision**: Added the "Elf Darkvision" skill to the Elf tree, which reduces vision and stealth detection penalties in low-light conditions.
+    - **Visual Cleanup**: Removed the red dot "AI State Indicator" from enemies for a cleaner map visual.
+- **Persistence & Modes**:
+    - **Auto-Save**: Implemented an auto-save function that triggers every time combat ends (unless in Iron Man mode).
+    - **Iron Man Mode**: Added Iron Man mode, mandatory for Campaign 1 (Arena) and optional for others. It disables auto-save, deletes previous saves for the same character run upon saving, and returns the player to the title screen.
+    - **Vision Tracking**: Added `lastSeenTimeMap` to track the last time each hex was seen, facilitating the Eagle's scouting behavior and persistence across saves.
 - **Bug Fixes**:
     - **Syntax Error Fixed**: Resolved the "animalId has already been declared" error in `ui.js`.
     - **Initialization Fix**: Fixed "window.updatePartyTabs is not a function" by ensuring proper function exposure in `ui.js`.
     - **Cover System**: Added defensive bonuses for characters standing behind pedestals.
+    - **Arena Victory Logic**: Refined the arena victory check to trigger only when an enemy is defeated or vanishes, and ensured it only occurs when transitioning from an active fight area.
+    - **UI Refresh**: Implemented a manual UI refresh for character stats (HP, Mana) and the turn indicator immediately after completing "Rest until Restored" or "Sleep" actions.
+- **Quality of Life & Cheats**:
+    - **Fly All Cheat**: Added a new cheat button that toggles flying status for all friendly characters, including visual updates and button state changes.
+    - **Terminology Polish**: Replaced "Teleporting" with "Heading back to" in the arena victory sequence for better thematic consistency.

@@ -13,6 +13,8 @@ function saveGame(saveName = "rpg_save_game") {
         selectedCharacterIndex: window.selectedCharacterIndex,
         overrideTerrain: window.overrideTerrain,
         exploredHexes: Array.from(window.exploredHexes),
+        lastSeenTimeMap: window.lastSeenTimeMap || {},
+        ironmanMode: window.ironmanMode || false,
         mapItems: window.mapItems,
         gamePhase: window.gamePhase,
         currentTurnIndex: window.entities.indexOf(window.currentTurnEntity),
@@ -45,7 +47,8 @@ function saveGame(saveName = "rpg_save_game") {
             side: e.side,
             gender: e.gender,
             race: e.race,
-            lastSeenTargetHex: e.lastSeenTargetHex
+            lastSeenTargetHex: e.lastSeenTargetHex,
+            isFlying: e.isFlying
         })),
         saveDate: new Date().toISOString(),
         saveName: saveName
@@ -54,15 +57,34 @@ function saveGame(saveName = "rpg_save_game") {
     const key = saveName.startsWith("rpg_save_") ? saveName : `rpg_save_${saveName}`;
 
     try {
+        if (window.ironmanMode) {
+            // Delete all other saves for this character name
+            const charName = window.party[0].name;
+            const metadata = JSON.parse(localStorage.getItem('rpg_save_metadata') || "[]");
+            const toDelete = metadata.filter(m => m.name.includes(charName) && m.key !== key);
+            
+            toDelete.forEach(d => {
+                localStorage.removeItem(d.key);
+            });
+            
+            const newMetadata = metadata.filter(m => !toDelete.includes(m));
+            localStorage.setItem('rpg_save_metadata', JSON.stringify(newMetadata));
+        }
+
         localStorage.setItem(key, JSON.stringify(gameState));
         
         // Update metadata list
         let metadata = JSON.parse(localStorage.getItem('rpg_save_metadata') || "[]");
         metadata = metadata.filter(m => m.key !== key);
-        metadata.push({ key: key, name: saveName, date: gameState.saveDate });
+        metadata.push({ key: key, name: saveName, date: gameState.saveDate, ironman: window.ironmanMode });
         localStorage.setItem('rpg_save_metadata', JSON.stringify(metadata));
 
         window.showMessage(`Game saved as "${saveName}"!`);
+
+        if (window.ironmanMode && !saveName.includes("AutoSave")) {
+            alert("Iron Man Save: Returning to title screen.");
+            location.reload(); // Simplest way to return to title
+        }
     } catch (e) {
         console.error("Save failed", e);
         window.showMessage("Failed to save game. Local storage might be full.");
@@ -87,6 +109,8 @@ function loadGame(saveName = "rpg_save_game") {
         window.selectedCharacterIndex = gameState.selectedCharacterIndex || 0;
         window.overrideTerrain = gameState.overrideTerrain || {};
         window.exploredHexes = new Set(gameState.exploredHexes || []);
+        window.lastSeenTimeMap = gameState.lastSeenTimeMap || {};
+        window.ironmanMode = gameState.ironmanMode || false;
         window.mapItems = gameState.mapItems || {};
 
         // 2. Hide Creator, Show Game

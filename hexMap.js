@@ -367,8 +367,20 @@ function isVisibleToPlayer(targetHex) {
 
         const myHexes = f.getAllHexes();
         for (let fh of myHexes) {
-            if (hasLineOfSight(fh, targetHex)) {
+            const dist = distance(fh, targetHex);
+            
+            // Vision Range affected by light
+            let visionRange = 30 + (f.visionBonus || 0);
+            const light = window.lightLevel || 1.0;
+            
+            // Elf Darkvision: treat light as 1.0 for range if they have the skill
+            const effectiveLight = (f.skills?.elf_darkvision) ? 1.0 : light;
+            const finalRange = visionRange * Math.max(0.2, effectiveLight);
+
+            if (dist <= finalRange && hasLineOfSight(fh, targetHex)) {
                 window.exploredHexes.add(`${targetHex.q},${targetHex.r}`);
+                if (!window.lastSeenTimeMap) window.lastSeenTimeMap = {};
+                window.lastSeenTimeMap[`${targetHex.q},${targetHex.r}`] = window.worldSeconds;
                 
                 // Mark any entity at this hex as seen
                 const ent = window.entities.find(e => e.alive && e.hex.q === targetHex.q && e.hex.r === targetHex.r);

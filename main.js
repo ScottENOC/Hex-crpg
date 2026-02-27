@@ -198,8 +198,19 @@ document.addEventListener("DOMContentLoaded", () => {
     window.toggleArenaOptions = function() {
         const campaign = document.getElementById("campaign-select").value;
         const optionsDiv = document.getElementById("arena-roguelike-options");
-        if (optionsDiv) {
-            optionsDiv.style.display = (campaign === "1") ? "block" : "none";
+        const ironmanCheck = document.getElementById("ironman-check");
+
+        if (campaign === "1") {
+            if (optionsDiv) optionsDiv.style.display = "block";
+            if (ironmanCheck) {
+                ironmanCheck.checked = true;
+                ironmanCheck.disabled = true;
+            }
+        } else {
+            if (optionsDiv) optionsDiv.style.display = "none";
+            if (ironmanCheck) {
+                ironmanCheck.disabled = false;
+            }
         }
     };
     window.toggleArenaOptions(); // Initial call
@@ -254,6 +265,8 @@ window.startGame = function() {
   window.initializePlayer(race, cls, gender, campaign);
   window.party[0].name = name; // Update with generated name if needed
   
+  window.ironmanMode = document.getElementById("ironman-check").checked;
+
   // Roguelike: Apply permanent skill bonuses
   window.relicsEnabled = document.getElementById("relics-activated-check").checked;
   if (campaign === "1" && window.relicsEnabled) {

@@ -305,6 +305,15 @@ const skills = {
         prereq: 'learn_summon_animal',
         apply: (player) => {}
     },
+    'elf_darkvision': {
+        name: 'Elf Darkvision',
+        description: 'Reduces vision penalties and stealth detection penalties in low light.',
+        tree: 'elf',
+        maxRanks: 1,
+        apply: (player) => {
+            player.visionBonus = (player.visionBonus || 0) + 5;
+        }
+    },
     'animal_companion': {
         name: 'Animal Companion',
         description: 'Passive: Your Nature summons become permanent animal companions. (Max 1)',
@@ -330,7 +339,7 @@ const skills = {
     },
     'fly': {
         name: 'Fly',
-        description: 'Active: Take to the air. (5 TP)',
+        description: 'Active: Take to the air. (1 TP)',
         tree: 'monster_skills',
         maxRanks: 1,
         active: true,
@@ -338,7 +347,7 @@ const skills = {
     },
     'land': {
         name: 'Land',
-        description: 'Active: Return to the ground. (2 TP)',
+        description: 'Active: Return to the ground. (1 TP)',
         tree: 'monster_skills',
         maxRanks: 1,
         active: true,

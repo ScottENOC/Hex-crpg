@@ -235,7 +235,6 @@ function showCharacterScreen() {
                     <option value="wizard">Wizard</option>
                     <option value="druid">Druid</option>
                     <option value="monk">Monk</option>
-                    <option value="paladin">Paladin</option>
                 </select>
                 <button onclick="window.doLevelUp()">Gains Level</button>
             `;
@@ -264,10 +263,12 @@ function showCharacterScreen() {
 
     const treesToShow = new Set();
     const hasWildcard = availablePoints.wildcard > 0;
-    const standardTrees = ['arcane', 'divine', 'nature', 'strength', 'endurance', 'agility', 'weapons', 'Way of the open palm'];
+    const standardTrees = ['arcane', 'divine', 'nature', 'strength', 'endurance', 'agility', 'weapons', 'Way of the open palm', 'human', 'dwarf', 'elf'];
 
     if (window.showAllSkillsMode) {
-        Object.keys(skillTrees).forEach(t => treesToShow.add(t));
+        Object.keys(skillTrees).forEach(t => {
+            if (t !== 'paladin') treesToShow.add(t);
+        });
     } else {
         for (const tree in availablePoints) {
             if (tree === 'wildcard') continue; 
@@ -283,7 +284,7 @@ function showCharacterScreen() {
     }
 
     treesToShow.forEach(tree => {
-        if (tree === 'monster_skills') return; // Hide internal tree
+        if (tree === 'monster_skills' || tree === 'paladin') return; // Hide internal and removed trees
         const treeDiv = document.createElement('div');
         treeDiv.className = 'skill-tree-container';
         let treeHtml = `<h3>${tree.charAt(0).toUpperCase() + tree.slice(1)} (Unspent: ${availablePoints[tree] || 0})</h3>`;
@@ -354,7 +355,7 @@ function learnSkill(skillKey) {
         return;
     }
 
-    const isExclusion = ['elf', 'dwarf', 'human', 'fighter', 'rogue', 'cleric', 'wizard', 'druid', 'paladin'].includes(skill.tree);
+    const isExclusion = ['elf', 'dwarf', 'human', 'fighter', 'rogue', 'cleric', 'wizard', 'druid'].includes(skill.tree);
 
     const currentRanks = player.skills[skillKey] || 0;
     if (skill.maxRanks > 0 && currentRanks >= skill.maxRanks) {
@@ -589,6 +590,36 @@ function updateActionButtons() {
                     updateActionButtons();
                 };
                 buttonsDiv.appendChild(mountBtn);
+            }
+        }
+
+        // FLY / LAND BUTTONS
+        const canFly = player.skills?.fly || player.isFlying || player.name === 'Eagle' || (player.tags && player.tags.includes('flying'));
+        if (canFly) {
+            if (!player.isFlying) {
+                const flyBtn = document.createElement('button');
+                flyBtn.innerText = "Fly (1 TP)";
+                flyBtn.style.backgroundColor = "#03a9f4";
+                flyBtn.disabled = player.timePoints < 1;
+                flyBtn.onclick = () => {
+                    player.isFlying = true;
+                    window.spendTP(player, 1);
+                    showMessage(`${player.name} takes to the air!`);
+                    window.finalizePlayerAction(player, true);
+                };
+                buttonsDiv.appendChild(flyBtn);
+            } else {
+                const landBtn = document.createElement('button');
+                landBtn.innerText = "Land (1 TP)";
+                landBtn.style.backgroundColor = "#8bc34a";
+                landBtn.disabled = player.timePoints < 1;
+                landBtn.onclick = () => {
+                    player.isFlying = false;
+                    window.spendTP(player, 1);
+                    showMessage(`${player.name} lands.`);
+                    window.finalizePlayerAction(player, true);
+                };
+                buttonsDiv.appendChild(landBtn);
             }
         }
 
