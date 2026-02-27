@@ -1195,6 +1195,9 @@ function updateTurnIndicator() {
             else if (entity.name === 'Skeleton') img.src = 'images/skeleton.svg';
             else if (entity.name === 'Zombie') img.src = 'images/zombie.svg';
             else if (entity.name === 'Imp') img.src = 'images/imp.svg';
+            else if (entity.name === 'Eagle') {
+                img.src = entity.isFlying ? 'images/eagleflying.png' : 'images/eagle.png';
+            }
             else img.src = 'images/goblin.png';
             img.classList.add('portrait-layer'); portraitDiv.appendChild(img);
         }

@@ -785,7 +785,7 @@ function renderEntities() {
                           } else if (e.name === 'Troll') {
                               size = window.hexSize * 4.5 * z;
                           } else if (e.name === 'Eagle') {
-                              size = window.hexSize * 3.0 * z;
+                              size = window.hexSize * 1.5 * z;
                               yOffset = e.isFlying ? -20*z : 0;
                           }
                   
@@ -912,6 +912,8 @@ function tick() {
                     window.isResting = false;
                     window.showMessage("Rest complete. Everyone is restored.");
                     window.updateRestButton();
+                    window.showCharacter();
+                    window.updateTurnIndicator();
                 }
             }
 
@@ -922,6 +924,8 @@ function tick() {
                     sentientAllies.forEach(ent => ent.awakeSeconds = 0);
                     window.showMessage("Sleep complete.");
                     window.updateSleepButton();
+                    window.showCharacter();
+                    window.updateTurnIndicator();
                 }
             }
 
@@ -1429,7 +1433,7 @@ function checkDisappearance(entity) {
         window.showMessage(`${entity.name} has vanished!`);
         window.drawMap();
         window.renderEntities();
-        checkCombatEnd();
+        if (entity.side === 'enemy') checkCombatEnd();
     }
 }
 
@@ -1891,6 +1895,7 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   attacker.offhandAttackAvailable = !isOffhand && (attacker.equipped?.offhand && window.items[attacker.equipped.offhand].type === 'weapon');
   if (target.hp <= 0 && target.alive) {
       target.alive = false; window.showMessage(`${target.name} defeated!`);
+      const side = target.side;
       
       // ROGUELIKE: Remove from graveyard if a graveyard merc dies
       if (target.isGraveyardMerc) {
@@ -1912,7 +1917,7 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
           if (target.gold) window.player.gold += target.gold;
           target.inventory.forEach(i => window.player.inventory.push(i));
       }
-      checkCombatEnd();
+      if (side === 'enemy') checkCombatEnd();
   }
 }
 
@@ -1925,10 +1930,10 @@ function checkCombatEnd() {
 
     // Only check for ACTIVE enemies
     if (!window.entities.some(e => e.side === 'enemy' && e.alive)) {
-        if (window.currentCampaign === "1") {
+        if (window.currentCampaign === "1" && window.isInArena) {
             window.isInArena = false;
             window.triggerAmbientDialogue('arena_victory');
-            window.showMessage("You have won the battle! Teleporting back to the lobby...");
+            window.showMessage("You have won the battle! Heading back to the lobby...");
             
             // AUDIO: Victory fade out
             if (window.stopAllMusic) window.stopAllMusic(0.8);

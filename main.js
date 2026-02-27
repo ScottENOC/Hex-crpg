@@ -147,6 +147,8 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         } else if (btnId === "cheat-all-equip-btn") {
             window.addAllEquipment();
+        } else if (btnId === "cheat-fly-btn") {
+            window.toggleFlyCheat();
         } else if (btnId === "cancel-moves-btn") {
             window.cancelAllMoveOrders();
         } else if (btnId === "rest-btn") {
@@ -218,6 +220,27 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 });
+
+window.toggleFlyCheat = function() {
+    const friendlies = window.entities.filter(e => e.alive && e.side === 'player');
+    const isAnyFlying = friendlies.some(f => f.isFlying && f.name !== 'Eagle');
+    const newState = !isAnyFlying;
+
+    friendlies.forEach(f => {
+        f.isFlying = newState;
+    });
+
+    const btn = document.getElementById("cheat-fly-btn");
+    if (btn) {
+        btn.innerText = newState ? "Cheat: Remove Flying" : "Cheat: Fly All";
+        btn.style.backgroundColor = newState ? "#f44336" : "#03a9f4";
+    }
+
+    window.showMessage(newState ? "All friendlies are now flying!" : "Flying removed from all friendlies.");
+    window.drawMap();
+    window.renderEntities();
+    window.updateTurnIndicator();
+};
 
 window.startGame = function() {
   console.log("Starting Game Setup...");
