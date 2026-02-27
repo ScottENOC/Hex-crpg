@@ -104,16 +104,20 @@ function playerMoveProcess(player, path) {
         const terrain = window.getTerrainAt(player.hex.q, player.hex.r);
         const stepCost = baseMoveCost * (player.isFlying ? 1 : terrain.moveCostMult);
         
+        let threshold = 80;
+        const mainChar = window.party?.[0]; // Default threshold context
+        if (player.skills && player.skills['quickRecovery']) threshold -= player.skills['quickRecovery'];
+
         let canAfford = true;
         if (player.riding) {
-            if (player.riding.timePoints >= 80 + stepCost) {
+            if (player.riding.timePoints > 80) { // Mounts usually have fixed 80 threshold
                 spendTP(player.riding, stepCost);
             } else {
                 window.showMessage("Mount is exhausted!");
                 canAfford = false;
             }
         } else {
-            if (player.timePoints >= 80 + stepCost) {
+            if (player.timePoints > threshold) {
                 spendTP(player, stepCost);
             } else {
                 canAfford = false;
@@ -300,7 +304,7 @@ function updatePlayerUI() {
     }
     
     const moveEntity = player.riding || player;
-    const availableTP = moveEntity.timePoints - 80; 
+    const availableTP = moveEntity.timePoints - (player.riding ? 80 : threshold); 
     
     // Optimized UI: Only check visible range for movement highlights
     // Instead of all mapCols, check a radius around player
@@ -343,7 +347,7 @@ function updatePlayerUI() {
     const attackHexes = getHexesInRange(player.hex, attackRange);
     attackHexes.forEach(h => {
         const target = getEntityAtHex(h.q, h.r);
-        if (target && target.side !== player.side) {
+        if (target && target.side === 'enemy') {
             window.highlightedHexes.push({ ...h, type: 'attack' });
         }
     });
@@ -1075,7 +1079,7 @@ function autoMoveProcess(entity) {
     }
 
     const moveEntity = entity.riding || entity;
-    const availableTP = moveEntity.timePoints - 80;
+    const availableTP = moveEntity.timePoints - (entity.riding ? 80 : threshold);
 
     // STAY TOGETHER: Slow down if too far ahead of leader
     if (window.groupLeader && entity !== window.groupLeader) {
@@ -1555,8 +1559,8 @@ function handleClick(e){
             }
         }
         if (actionHandled) { window.playerAction = null; syncBackToPlayer(player); }
-    } else if (target && target.side !== player.side) {
-        if (window.highlightedHexes.some(h => h.type === 'attack' && h.q === clickedHex.q && h.r === clickedHex.r)) {
+    } else if (window.highlightedHexes.some(h => h.type === 'attack' && h.q === clickedHex.q && h.r === clickedHex.r)) {
+        if (target && target.side !== player.side) {
             window.gamePhase = 'AI_TURN'; // Block clicks
             window.clearHighlights();
             tryAttack(player, target); spendTP(player, 10); actionHandled = 'main_attack';
@@ -1577,8 +1581,8 @@ function handleClick(e){
             playerMoveProcess(player, path); 
             return; 
         }
-    } else if (!target) {
-        // NO ACTION/MOVE ACTIVE: Set Destination for Auto-Move
+    } else {
+        // NO ACTION/MOVE ACTIVE or CLICKED OUTSIDE HIGHLIGHTS: Set Destination for Auto-Move
         if (window.groupMoveMode) {
             const leader = player;
             const moveEntity = leader.riding || leader;
@@ -1599,7 +1603,7 @@ function handleClick(e){
         }
         // Force evaluation if it's currently their turn
         if (window.gamePhase === 'PLAYER_TURN' && window.currentTurnEntity === player) {
-            setTimeout(() => autoMoveProcess(player), 100);
+            setTimeout(() => window.autoMoveProcess(player), 100);
         }
     }
     finalizePlayerAction(player, actionHandled);
@@ -2661,3 +2665,16 @@ function tryCastSpell(caster, spell, target, clickedHex) {
     if (caster.isStealthed) breakStealth(caster);
     return resolveSpell(caster, spell, target, clickedHex);
 }
+
+// GLOBAL EXPORTS
+window.updatePlayerUI = updatePlayerUI;
+window.autoMoveProcess = autoMoveProcess;
+window.handleClick = handleClick;
+window.getEntityAtHex = getEntityAtHex;
+window.getHexesInRange = getHexesInRange;
+window.spendTP = spendTP;
+window.finalizePlayerAction = finalizePlayerAction;
+window.tryCastSpell = tryCastSpell;
+window.tryAttack = tryAttack;
+window.resolveAttack = resolveAttack;
+window.takeTurn = takeTurn;

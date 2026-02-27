@@ -483,34 +483,10 @@ function updateActionButtons() {
         
         const isSentientAlly = player.side === 'player' && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(player.name);
         if (isSentientAlly) {
-            window.clearHighlights();
             if (!window.playerAction) {
-                // BFS for movement range
-                const moveRange = Math.floor(player.timePoints / 5);
-                if (moveRange > 0) {
-                    for (let q = -moveRange; q <= moveRange; q++) {
-                        for (let r = Math.max(-moveRange, -q - moveRange); r <= Math.min(moveRange, -q + moveRange); r++) {
-                            const targetHex = { q: player.hex.q + q, r: player.hex.r + r };
-                            if (window.isHexInBounds(targetHex)) {
-                                const path = window.findPath(player.hex, targetHex, player.timePoints, player);
-                                if (path && path.length > 1) {
-                                    window.highlightedHexes.push({ q: targetHex.q, r: targetHex.r, type: 'move' });
-                                }
-                            }
-                        }
-                    }
-                }
-                // Weapon range
-                const weaponId = player.equipped?.weapon;
-                const range = weaponId ? (window.items[weaponId]?.range || 1) : 1;
-                window.entities.forEach(e => {
-                    if (e.alive && e.side !== 'player' && window.isVisibleToPlayer(e.hex)) {
-                        if (window.distance(player.hex, e.hex) <= range) {
-                            window.highlightedHexes.push({ q: e.hex.q, r: e.hex.r, type: 'attack' });
-                        }
-                    }
-                });
+                window.updatePlayerUI();
             } else if (window.playerAction.type === 'spell') {
+                window.clearHighlights();
                 highlightValidTargets(player, window.playerAction.spell);
             }
             window.drawMap();
@@ -921,7 +897,7 @@ function unequipItem(slot) {
     syncPlayerEntity();
     showInventoryScreen();
     showCharacter();
-    updatePlayerUI();
+    window.updatePlayerUI();
 }
 
 function drinkPotion(itemId) {
@@ -981,7 +957,7 @@ function equipItem(itemId, isOffhand = false) {
     syncPlayerEntity();
     showInventoryScreen();
     showCharacter();
-    updatePlayerUI();
+    window.updatePlayerUI();
 }
 
 function syncPlayerEntity() {
@@ -1654,7 +1630,7 @@ function highlightValidTargets(caster, spell) {
                 const dist = window.distance(caster.hex, e.hex);
                 if (dist <= range) {
                     let valid = false;
-                    if (type === 'damage') valid = (e.side !== caster.side);
+                    if (type === 'damage') valid = (e.side !== caster.side && e.side !== 'neutral');
                     else if (type === 'heal' || type === 'buff') valid = (e.side === caster.side);
                     else if (type === 'dispel') valid = true;
                     

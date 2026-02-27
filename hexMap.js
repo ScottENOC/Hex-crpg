@@ -252,7 +252,8 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
 
             const nextCost = cost + (baseCost * terrain.moveCostMult);
 
-            if (!ignoreTP && availableTP !== undefined && nextCost > availableTP) continue;
+            // Allow one last step that crosses the availableTP threshold
+            if (!ignoreTP && availableTP !== undefined && nextCost > availableTP && cost >= availableTP) continue;
 
             if (!visited.has(key) || nextCost < visited.get(key)) {
                 visited.set(key, nextCost);
