@@ -112,3 +112,16 @@ window.stopAllMusic = function(duration = 0.8) {
 
 // Aliases for compatibility
 window.playArenaMusic = (type, fade) => window.playMusic(type, fade);
+
+window.playDialogue = function(key) {
+    if (!window.audioEnabled) return;
+    const audio = new Audio(`audio/dialogue/${key}.wav`);
+    audio.play().catch(e => console.error(`Failed to play dialogue audio: ${key}`, e));
+};
+
+window.playParrySound = function() {
+    if (!window.audioEnabled) return;
+    const sound = Math.random() < 0.5 ? 'parry' : 'parry2';
+    const audio = new Audio(`audio/effects/${sound}.wav`);
+    audio.play().catch(e => console.error(`Failed to play parry sound: ${sound}`, e));
+};

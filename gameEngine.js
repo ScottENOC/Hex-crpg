@@ -1692,7 +1692,7 @@ function tryAttack(attacker, target, isFeint = false, isOffhand = false, bonusDa
     // BREAK STEALTH
     if (attacker.isStealthed) breakStealth(attacker);
 
-    const weaponSlot = isOffhand ? 'offhand' : 'weapon';
+    weaponSlot = isOffhand ? 'offhand' : 'weapon';
     const weaponId = attacker.equipped?.[weaponSlot] || null;
     const weapon = weaponId ? window.items[weaponId] : null;
     const reactions = [];
@@ -1752,6 +1752,7 @@ function tryAttack(attacker, target, isFeint = false, isOffhand = false, bonusDa
                 
                 if (hit) { 
                     window.showMessage(`${target.name} successfully parried ${attacker.name}!`);
+                    if (window.playParrySound) window.playParrySound();
                     if (isFeint) window.showMessage(`[FEINT SUCCESS] ${attacker.name} tricked ${target.name} into wasting a Parry!`);
                     return; 
                 } else {
@@ -1775,6 +1776,7 @@ function tryAttack(attacker, target, isFeint = false, isOffhand = false, bonusDa
 
                 if (hit) {
                     window.showMessage(`${ally.name} successfully parried ${attacker.name} for ${target.name}!`);
+                    if (window.playParrySound) window.playParrySound();
                     if (isFeint) window.showMessage(`[FEINT SUCCESS] ${attacker.name} tricked ${ally.name} into wasting a Protector Parry!`);
                     return;
                 } else {
@@ -2220,7 +2222,6 @@ function lootItems(entity) {
     window.renderEntities();
 }
 
-window.startGameCore = startGameCore;
 window.renderEntities = renderEntities;
 window.handleClick = handleClick;
 window.tryAttack = tryAttack;
@@ -2746,3 +2747,4 @@ window.tryCastSpell = tryCastSpell;
 window.tryAttack = tryAttack;
 window.resolveAttack = resolveAttack;
 window.takeTurn = takeTurn;
+window.startGameCore = startGameCore;

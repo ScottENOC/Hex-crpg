@@ -26,9 +26,14 @@
     - **Auto-Save**: Implemented an auto-save function that triggers every time combat ends (unless in Iron Man mode).
     - **Iron Man Mode**: Added Iron Man mode, mandatory for Campaign 1 (Arena) and optional for others. It disables auto-save, deletes previous saves for the same character run upon saving, and returns the player to the title screen.
     - **Vision Tracking**: Added `lastSeenTimeMap` to track the last time each hex was seen, facilitating the Eagle's scouting behavior and persistence across saves.
+- **Audio Integration**:
+    - **Dialogue Audio**: Implemented automatic audio playback for ambient dialogue. Audio files in `/audio/dialogue/` are now played when their corresponding dialogue lines appear.
+    - **Parry Sound Effects**: Added randomized parry sound effects (`parry.wav` and `parry2.wav`) that play upon a successful parry or protector parry.
 - **Bug Fixes**:
     - **Syntax Error Fixed**: Resolved the "animalId has already been declared" error in `ui.js`.
+    - **Redeclaration Fix**: Fixed "weaponSlot has already been declared" in `gameEngine.js`.
     - **Initialization Fix**: Fixed "window.updatePartyTabs is not a function" by ensuring proper function exposure in `ui.js`.
+    - **Global Export Fix**: Fixed "window.startGameCore is not a function" by correctly exporting it in `gameEngine.js`.
     - **Cover System**: Added defensive bonuses for characters standing behind pedestals.
     - **Arena Victory Logic**: Refined the arena victory check to trigger only when an enemy is defeated or vanishes, and ensured it only occurs when transitioning from an active fight area.
     - **UI Refresh**: Implemented a manual UI refresh for character stats (HP, Mana) and the turn indicator immediately after completing "Rest until Restored" or "Sleep" actions.
