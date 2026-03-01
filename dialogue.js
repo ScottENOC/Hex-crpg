@@ -29,6 +29,36 @@ const dialogueData = {
         speaker: 'Arena Announcer',
         mood: 'impressed',
         dialogue: "We have a winner! Clean up the mess and bring them back to the lobby!"
+    },
+    'arena_entrance': {
+        speaker: 'Narrator',
+        mood: 'neutral',
+        dialogue: "You make your way through the corridors into the arena."
+    },
+    'arena_indoor': {
+        speaker: 'Narrator',
+        mood: 'neutral',
+        dialogue: "The air grows stale and cold... you are in an indoor pit."
+    },
+    'arena_outdoor_night': {
+        speaker: 'Narrator',
+        mood: 'neutral',
+        dialogue: "The moon and stars shine down on the open arena."
+    },
+    'arena_outdoor_day': {
+        speaker: 'Narrator',
+        mood: 'neutral',
+        dialogue: "The sun shines brightly down on the open arena."
+    },
+    'arena_victory_return': {
+        speaker: 'Narrator',
+        mood: 'neutral',
+        dialogue: "You have won the battle! Heading back to the lobby..."
+    },
+    'grishnak_entry': {
+        speaker: 'Narrator',
+        mood: 'neutral',
+        dialogue: "A champion enters the arena: Grishnak!"
     }
 };
 

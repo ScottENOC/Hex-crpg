@@ -7,11 +7,13 @@
 - **Environment & Immersion**:
     - **Thematic Transitions**: Replaced "teleportation" terminology with more grounded descriptions of walking through corridors or using elevators to enter the arena.
     - **Time-Aware Atmosphere**: Implemented dynamic arena entrance text that correctly identifies if the Sun or the Moon/Stars are illuminating the outdoor matches based on the current world time and light level.
+    - **Narrator Dialogue**: Moved flavor narration text (entering the arena, map descriptions, victory return, Grishnak's entry) to `dialogue.js` under a 'Narrator' speaker to support future audio integration.
 - **Visuals & Layering**:
     - **Water Rendering**: Implemented a two-pass rendering system where water images are layered with 50% transparency over the base terrain, allowing submerged features to remain visible.
     - **Foliage Integration**: Added `foliage.png` support for outdoor arenas, providing tactical cover and stealth benefits.
     - **Eagle Fixes**: Ensured Eagles use their flying sprites and mechanics immediately upon being summoned.
     - **Eagle Size & Tracking**: Shrunk the Eagle image by 50% for better visual balance and updated the initiative tracker to correctly show the Eagle's flying or ground sprite based on its status.
+    - **Painter's Algorithm**: Implemented Y-coordinate sorting in the map rendering loop. This ensures that objects closer to the "front" (South-West) are drawn on top of objects further "back" (North-East), fixing visual layering issues with pedestals and other terrain features.
 - **Flying Combat & AI**:
     - **Flying Melee Rules**: Implemented logic to block melee attacks from/against flyers unless both units are flying. Melee attacks against flyers now correctly show a message and do not consume Time Points.
     - **AI Adaptation**: AI now filters out un-attackable flying targets if they only have melee attacks and will choose alternative actions like moving toward favorable terrain or away from flyers.

@@ -1979,7 +1979,7 @@ function checkCombatEnd() {
         if (window.currentCampaign === "1" && window.isInArena) {
             window.isInArena = false;
             window.triggerAmbientDialogue('arena_victory');
-            window.showMessage("You have won the battle! Heading back to the lobby...");
+            window.triggerAmbientDialogue('arena_victory_return');
             
             // AUDIO: Victory fade out
             if (window.stopAllMusic) window.stopAllMusic(0.8);
@@ -2317,7 +2317,7 @@ function setupArenaLobby() {
 }
 
 function startArenaFight() {
-    window.showMessage("You make your way through the corridors into the arena.");
+    window.triggerAmbientDialogue('arena_entrance');
     window.playSting('teleportSting');
     window.isInArena = true;
     window.triggerAmbientDialogue('arena_fight_start');
@@ -2334,14 +2334,14 @@ function startArenaFight() {
     const isIndoor = Math.random() < 0.5;
     window.indoorLightMult = isIndoor ? 0.0 : 1.0;
     if (isIndoor) {
-        window.showMessage("The air grows stale and cold... you are in an indoor pit.");
+        window.triggerAmbientDialogue('arena_indoor');
     } else {
         const timeStr = window.getFormattedTime();
         const isNight = window.lightLevel < 0.5;
         if (isNight) {
-            window.showMessage("The moon and stars shine down on the open arena.");
+            window.triggerAmbientDialogue('arena_outdoor_night');
         } else {
-            window.showMessage("The sun shines brightly down on the open arena.");
+            window.triggerAmbientDialogue('arena_outdoor_day');
         }
     }
 
@@ -2408,7 +2408,7 @@ function startArenaFight() {
 
     // GRISHNAK ENCOUNTER (10% chance if not defeated)
     if (!window.grishnakDefeated && Math.random() < 0.1) {
-        window.showMessage("A champion enters the arena: Grishnak!");
+        window.triggerAmbientDialogue('grishnak_entry');
         const grishnak = window.createMonster('orc', { q: arenaSize - 5, r: 0 }, null, null, 'enemy');
         grishnak.name = "Grishnak";
         grishnak.hp = 40;

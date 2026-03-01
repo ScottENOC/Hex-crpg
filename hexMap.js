@@ -79,6 +79,10 @@ function drawMap() {
       }
   }
 
+  // Painter's Algorithm: Sort by Y coordinate so things further "back" are drawn first.
+  // In our flat-top layout, Y increases with both 'r' and 'q'.
+  visibleAndExplored.sort((a, b) => (a.r + a.q/2) - (b.r + b.q/2));
+
   // 2. PASS 1: Base Terrain & Foliage
   visibleAndExplored.forEach(({q, r, visible}) => {
       const terrain = window.getTerrainAt(q, r);
