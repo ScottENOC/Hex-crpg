@@ -56,6 +56,24 @@ function playerMoveProcess(player, path) {
     const occupant = getEntityAtHex(nextHex.q, nextHex.r);
     const targetTerrain = window.getTerrainAt(nextHex.q, nextHex.r);
     
+    // TASK 2: Knowledge-based blocking
+    const isVisible = window.isVisibleToPlayer(nextHex);
+    const isExplored = window.isHexExplored(nextHex.q, nextHex.r);
+
+    if (targetTerrain.name === 'Wall' && isExplored) {
+        window.showMessage("Path is blocked by a wall.");
+        player.destination = null;
+        finalizePlayerAction(player, true);
+        return;
+    }
+
+    if (occupant && occupant.alive && occupant.side !== player.side && isVisible) {
+        window.showMessage(`Path is blocked by ${occupant.name}.`);
+        player.destination = null;
+        finalizePlayerAction(player, true);
+        return;
+    }
+
     if (targetTerrain.name === 'Pedestal') {
         const myHexes = player.getAllHexes();
         const allOnPedestal = myHexes.every(h => {
@@ -81,6 +99,8 @@ function playerMoveProcess(player, path) {
         } else {
             player.hex = nextHex;
             if (player.riding) player.riding.hex = { q: nextHex.q, r: nextHex.r };
+            window.drawMap();
+            window.renderEntities();
         }
         
         const moveEntity = player.riding || player;

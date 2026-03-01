@@ -221,16 +221,28 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
         for (let next of neighbors) {
             const key = `${next.q},${next.r}`;
             
+            // TASK 2: Knowledge-based pathing for player
+            const isPlayer = (entity.side === 'player');
+            const isVisible = window.isVisibleToPlayer(next);
+            const isExplored = window.isHexExplored(next.q, next.r);
+
             // Check for ENEMY obstacles (Living enemies only)
             // Friendlies DO NOT block movement
-            const isEnemyBlocked = window.entities.some(e => 
+            const occupant = window.entities.find(e => 
                 e.alive && e.side !== entity.side &&
                 e.getAllHexes().some(h => h.q === next.q && h.r === next.r)
             );
-            
-            // Cannot path THROUGH enemies (unless it is the target hex - e.g. for attack range check)
-            if (isEnemyBlocked && !(next.q === target.q && next.r === target.r)) continue; 
 
+            if (occupant) {
+                const isKnownObstacle = !isPlayer || isVisible;
+                if (isKnownObstacle) {
+                    // It's a known obstacle. 
+                    // Task 1: If it's the target hex, it's blocked. 
+                    // (Old logic allowed pathing TO occupied hexes, we now block it if known).
+                    continue; 
+                }
+            }
+            
             // Calculate cost
             let baseCost = 5;
             if (entity.skills) {
@@ -252,7 +264,10 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
 
             const terrain = window.getTerrainAt(next.q, next.r);
             // Wall check
-            if (terrain.name === 'Wall' && !(next.q === target.q && next.r === target.r)) continue;
+            if (terrain.name === 'Wall') {
+                const isKnownWall = !isPlayer || isExplored;
+                if (isKnownWall) continue;
+            }
 
             const nextCost = cost + (baseCost * terrain.moveCostMult);
 

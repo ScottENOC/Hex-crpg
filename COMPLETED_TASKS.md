@@ -15,6 +15,11 @@
     - **Eagle Fixes**: Ensured Eagles use their flying sprites and mechanics immediately upon being summoned.
     - **Eagle Size & Tracking**: Shrunk the Eagle image by 50% for better visual balance and updated the initiative tracker to correctly show the Eagle's flying or ground sprite based on its status.
     - **Painter's Algorithm**: Implemented Y-coordinate sorting in the map rendering loop. This ensures that objects closer to the "front" (South-West) are drawn on top of objects further "back" (North-East), fixing visual layering issues with pedestals and other terrain features.
+- **Movement & Pathfinding**:
+    - **Knowledge-Based Pathing**: Updated pathfinding to respect player knowledge. Characters now plan paths around known obstacles (explored walls and visible entities) but will attempt to move through unknown areas as if they were clear.
+    - **Dynamic Move Cancellation**: Implemented logic to cancel auto-movement if a previously hidden obstacle (like an enemy or wall) is revealed during the player's journey.
+    - **NPC Collision Prevention**: Restricted movement onto hexes occupied by visible NPCs or enemies, preventing players from "stacking" on top of characters like the Arena Announcer.
+    - **Smooth Auto-Move**: Added incremental map updates and rendering during multi-step auto-movement, providing better visual feedback and ensuring fog-of-war is revealed correctly as the player moves.
 - **Flying Combat & AI**:
     - **Flying Melee Rules**: Implemented logic to block melee attacks from/against flyers unless both units are flying. Melee attacks against flyers now correctly show a message and do not consume Time Points.
     - **AI Adaptation**: AI now filters out un-attackable flying targets if they only have melee attacks and will choose alternative actions like moving toward favorable terrain or away from flyers.
