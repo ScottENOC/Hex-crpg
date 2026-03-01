@@ -41,6 +41,13 @@ class Entity {
     this.stealthScore = 0; // Calculated when stealthing
     this.lastMoveTime = 0; // To track movement penalties
     
+    // NEW SYSTEM STATS
+    this.forcedMoveResistance = 0; // % chance to resist shove/trip
+    this.reactionBlocked = false; // Cannot take reactions until next action
+    this.visionPenaltyStacks = 0; // Stacks of vision reduction
+    this.dmgPenaltyStacks = 0; // Stacks of damage reduction
+    this.healingReduction = 0; // % reduction in incoming healing
+    
     // Riding properties
     this.riderSize = 0;
     this.mountSize = 0;

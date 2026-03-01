@@ -48,7 +48,13 @@ function saveGame(saveName = "rpg_save_game") {
             gender: e.gender,
             race: e.race,
             lastSeenTargetHex: e.lastSeenTargetHex,
-            isFlying: e.isFlying
+            isFlying: e.isFlying,
+            flyCheat: e.flyCheat,
+            forcedMoveResistance: e.forcedMoveResistance,
+            visionPenaltyStacks: e.visionPenaltyStacks,
+            dmgPenaltyStacks: e.dmgPenaltyStacks,
+            healingReduction: e.healingReduction,
+            reactionBlocked: e.reactionBlocked
         })),
         saveDate: new Date().toISOString(),
         saveName: saveName

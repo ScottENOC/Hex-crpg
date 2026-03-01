@@ -26,6 +26,26 @@ const baseSpells = {
         needsHitCheck: true,
         validTags: ['undead', 'demon']
     },
+    'divine_silence': {
+        name: 'Divine Silence',
+        school: 'divine',
+        baseMana: 15,
+        baseMagnitude: 6, // Ongoing damage
+        baseRange: 8,
+        type: 'debuff',
+        ongoing: true,
+        debuffType: 'silence_penalty'
+    },
+    'sanctuary': {
+        name: 'Sanctuary',
+        school: 'divine',
+        baseMana: 12,
+        baseMagnitude: 1, // TP loss amount
+        baseRange: 8,
+        type: 'buff',
+        ongoing: true,
+        debuffType: 'sanctuary_protected'
+    },
     'divine_protection': {
         name: 'Divine Protection',
         school: 'divine',

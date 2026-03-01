@@ -263,7 +263,7 @@ function showCharacterScreen() {
 
     const treesToShow = new Set();
     const hasWildcard = availablePoints.wildcard > 0;
-    const standardTrees = ['arcane', 'divine', 'nature', 'strength', 'endurance', 'agility', 'weapons', 'Way of the open palm', 'human', 'dwarf', 'elf'];
+    const standardTrees = ['arcane', 'divine', 'nature', 'strength', 'endurance', 'agility', 'weapons', 'Way of the open palm', 'human', 'dwarf', 'elf', 'monk', 'rogue', 'fighter', 'cleric'];
 
     if (window.showAllSkillsMode) {
         Object.keys(skillTrees).forEach(t => {
@@ -311,6 +311,12 @@ function showCharacterScreen() {
                     if (prereqRanks === 0) {
                         prereqMet = false;
                         missingPrereq = `Requires: ${window.skills[skill.prereq].name}`;
+                    }
+                }
+                if (skill.anti_prereq) {
+                    if (playerSkills[skill.anti_prereq] > 0) {
+                        prereqMet = false;
+                        missingPrereq = `Incompatible with ${window.skills[skill.anti_prereq].name}`;
                     }
                 }
                 if (skill.prereq_eval) {
@@ -594,11 +600,11 @@ function updateActionButtons() {
         }
 
         // FLY / LAND BUTTONS
-        const canFly = player.skills?.fly || player.isFlying || player.name === 'Eagle' || (player.tags && player.tags.includes('flying'));
+        const canFly = player.skills?.fly || player.isFlying || player.name === 'Eagle' || (player.tags && player.tags.includes('flying')) || player.flyCheat;
         if (canFly) {
             if (!player.isFlying) {
                 const flyBtn = document.createElement('button');
-                flyBtn.innerText = "Fly (1 TP)";
+                flyBtn.innerText = "Take Off (1 TP)";
                 flyBtn.style.backgroundColor = "#03a9f4";
                 flyBtn.disabled = player.timePoints < 1;
                 flyBtn.onclick = () => {
@@ -647,11 +653,15 @@ function updateActionButtons() {
                     const weaponType = skillKey.split('_')[0];
                     const eq = charData.equipped.weapon;
                     if (!eq || !window.items[eq] || !window.items[eq].id.includes(weaponType)) weaponReqMet = false;
-                } else if (skillKey === 'quarterstaff_trip') {
+                } else if (skillKey === 'disarm') {
                     const eq = charData.equipped.weapon;
-                    const isAnimal = charData.race === 'wolf'; 
-                    if (eq !== 'quarterstaff' && !isAnimal) weaponReqMet = false;
+                    if (!eq) weaponReqMet = false; // Need a weapon to disarm? Or maybe just unarmed. 
+                    // Let's say Disarm requires a weapon or "unarmed mastery"
+                } else if (skillKey === 'assassinate') {
+                    const eq = charData.equipped.weapon;
+                    if (!eq) weaponReqMet = false;
                 }
+                
                 if (weaponReqMet) {
                     const button = document.createElement('button');
                     button.id = `skill-btn-${skillKey}`;
@@ -673,8 +683,9 @@ function updateActionButtons() {
                 button.id = `spell-btn-${index}`;
                 button.innerText = spell.name;
                 button.onclick = () => {
-                    window.playerAction = { type: 'spell', index: index };
-                    window.showMessage(`Spell ready: ${spell.name}. Click a target in range (${spell.range}).`);
+                    window.playerAction = { type: 'spell', index: index, targets: [] };
+                    const targetStr = (spell.extraTargets || 0) > 0 ? `Select up to ${1 + spell.extraTargets} targets.` : "Click a target.";
+                    window.showMessage(`Spell ready: ${spell.name}. ${targetStr} Range (${spell.range}).`);
                     updateActionButtons();
                 };
                 buttonsDiv.appendChild(button);
@@ -768,6 +779,16 @@ function updateSpellPreview() {
             </div>
         `;
     }
+    const targetRanks = player.skills[`${base.school}_targets`] || 0;
+    if (targetRanks > 0 && base.type !== 'aoe_debuff' && base.type !== 'summon') {
+        html += `
+            <div class="form-group">
+                <label>Extra Targets (Max: +${targetRanks}):</label>
+                <input type="number" id="spell-targets-bonus" value="0" min="0" max="${targetRanks}" onchange="window.renderSpellStats()">
+                <span style="font-size: 0.8em; color: #aaa;">(+15 Mana per +1 Target)</span>
+            </div>
+        `;
+    }
     document.getElementById("spell-options-container").innerHTML = html;
     window.renderSpellStats();
 }
@@ -781,12 +802,15 @@ function renderSpellStats() {
     const magBonus = parseInt(document.getElementById("spell-magnitude-bonus").value) || 0;
     const radBonusInput = document.getElementById("spell-radius-bonus");
     const radBonus = radBonusInput ? (parseInt(radBonusInput.value) || 0) : 0;
+    const targetBonusInput = document.getElementById("spell-targets-bonus");
+    const targetBonus = targetBonusInput ? (parseInt(targetBonusInput.value) || 0) : 0;
 
     let manaCost = base.baseMana;
     let tpCost = 10;
     let magnitude = base.baseMagnitude * (1 + magBonus);
     let range = (base.baseRange || 1) + rangeBonus;
     let radius = (base.baseRadius || 0) + radBonus;
+    let extraTargets = targetBonus;
 
     let defaultName = base.name;
     const animalId = document.getElementById("spell-animal-select") ? document.getElementById("spell-animal-select").value : null;
@@ -811,8 +835,9 @@ function renderSpellStats() {
 
     manaCost += (magBonus * Math.max(0, 5 - effMag));
     manaCost += (radBonus * 10);
+    manaCost += (targetBonus * 15);
 
-    const coreManaCost = base.baseMana + (magBonus * Math.max(0, 5 - effMag)) + (radBonus * 10);
+    const coreManaCost = base.baseMana + (magBonus * Math.max(0, 5 - effMag)) + (radBonus * 10) + (targetBonus * 15);
 
     const cap = player.manaCaps[base.school] || 10;
     const overCap = manaCost > cap;
@@ -823,6 +848,7 @@ function renderSpellStats() {
         <p><strong>Magnitude:</strong> ${magnitude}</p>
         <p><strong>Range:</strong> ${range}</p>
         ${base.baseRadius !== undefined ? `<p><strong>Radius:</strong> ${radius}</p>` : ''}
+        ${extraTargets > 0 ? `<p><strong>Extra Targets:</strong> ${extraTargets}</p>` : ''}
     `;
     document.getElementById("spell-stats-display").innerHTML = statsHtml;
     
@@ -844,11 +870,12 @@ function renderSpellStats() {
             <p><strong>Magnitude:</strong> ${magnitude}</p>
             <p><strong>Range:</strong> ${range}</p>
             ${base.baseRadius !== undefined ? `<p><strong>Radius:</strong> ${radius}</p>` : ''}
+            ${extraTargets > 0 ? `<p><strong>Extra Targets:</strong> ${extraTargets}</p>` : ''}
         `;
         document.getElementById("spell-stats-display").innerHTML = statsHtml;
     }
 
-    window.currentSpellCalc = { name: defaultName, school: base.school, manaCost, coreManaCost, tpCost, magnitude, range, radius, type: base.type, baseId, animalId };
+    window.currentSpellCalc = { name: defaultName, school: base.school, manaCost, coreManaCost, tpCost, magnitude, range, radius, extraTargets, type: base.type, baseId, animalId };
 }
 
 function createSpell() {

@@ -206,7 +206,6 @@ const skills = {
     ...generateWeaponSkills('bow', 'Bow'),
     ...generateWeaponSkills('spear', 'Spear'),
     ...generateWeaponSkills('dagger', 'Dagger'),
-    ...generateWeaponSkills('quarterstaff', 'Quarterstaff'),
     ...generateWeaponSkills('club', 'Club'),
 
     // MONSTER ONLY SKILLS
@@ -234,6 +233,14 @@ const skills = {
         prereq: 'unarmed_hit',
         apply: (player) => {}
     },
+    'unarmed_reaction_block': {
+        name: 'Pressure Point Strike',
+        description: 'Passive: When you hit an opponent with an unarmed attack, they cannot take reactions until they next take an action.',
+        tree: 'Way of the open palm',
+        maxRanks: 1,
+        prereq: 'unarmed_dmg',
+        apply: (player) => {}
+    },
     'deflect_arrows': {
         name: 'Deflect Arrows',
         description: 'React to deflect ranged attacks if unarmored and having an open hand. Works like Parry.',
@@ -251,6 +258,29 @@ const skills = {
         maxRanks: 1,
         apply: (player) => {}
     },
+    'trip_reaction': {
+        name: 'Counter Trip',
+        description: 'Reaction: If an opponent attacks you and misses, spend 2 TP to make a trip attempt.',
+        tree: 'monk',
+        maxRanks: 1,
+        reaction: true,
+        apply: (player) => {}
+    },
+    'agile_climber': {
+        name: 'Agile Climber',
+        description: 'Reduces movement TP penalty when moving up or down terrain levels.',
+        tree: 'monk',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+    'disarm': {
+        name: 'Disarm',
+        description: 'Active: Attempt to disarm an opponent (50% base chance). (5 TP)',
+        tree: 'monk',
+        maxRanks: 1,
+        active: true,
+        apply: (player) => {}
+    },
 
     // MAGIC COMMON HELPERS (per school)
     ...generateMagicSkills('arcane', 'Firebolt', 'firebolt'),
@@ -258,6 +288,8 @@ const skills = {
     ...generateMagicSkills('divine', 'Heal', 'heal'),
     ...generateMagicSkills('divine', 'Smite Evil', 'smite_evil'),
     ...generateMagicSkills('divine', 'Divine Protection', 'divine_protection'),
+    ...generateMagicSkills('divine', 'Divine Silence', 'divine_silence'),
+    ...generateMagicSkills('divine', 'Sanctuary', 'sanctuary'),
     ...generateMagicSkills('nature', 'Summon Animal', 'summon_animal'),
     ...generateMagicSkills('nature', 'Entangle', 'entangle'),
     'arcane_expand': {
@@ -279,6 +311,28 @@ const skills = {
         description: 'Increase the radius of Nature AOE spells by 1 per rank. (+10 mana per increase)',
         tree: 'nature',
         maxRanks: 3,
+        apply: (player) => {}
+    },
+    // Multi-target
+    'arcane_targets': {
+        name: 'Arcane Fork',
+        description: 'Increase the number of targets for single-target Arcane spells by 1 per rank. (+15 mana per target)',
+        tree: 'arcane',
+        maxRanks: 6,
+        apply: (player) => {}
+    },
+    'divine_targets': {
+        name: 'Divine Presence',
+        description: 'Increase the number of targets for single-target Divine spells by 1 per rank. (+15 mana per target)',
+        tree: 'divine',
+        maxRanks: 6,
+        apply: (player) => {}
+    },
+    'nature_targets': {
+        name: 'Nature\'s Reach',
+        description: 'Increase the number of targets for single-target Nature spells by 1 per rank. (+15 mana per target)',
+        tree: 'nature',
+        maxRanks: 6,
         apply: (player) => {}
     },
     'learn_boar_summon': {
@@ -305,6 +359,22 @@ const skills = {
         prereq: 'learn_summon_animal',
         apply: (player) => {}
     },
+    'elf_vision': {
+        name: 'Keen Elf Sight',
+        description: 'Increases vision range by 4 per rank.',
+        tree: 'elf',
+        maxRanks: 3,
+        apply: (player) => {
+            player.visionBonus = (player.visionBonus || 0) + 4;
+        }
+    },
+    'elf_bow_range': {
+        name: 'Elf Bow Mastery',
+        description: 'Increases range with bows by 4 per rank.',
+        tree: 'elf',
+        maxRanks: 3,
+        apply: (player) => {}
+    },
     'elf_darkvision': {
         name: 'Elf Darkvision',
         description: 'Reduces vision penalties and stealth detection penalties in low light.',
@@ -313,6 +383,103 @@ const skills = {
         apply: (player) => {
             player.visionBonus = (player.visionBonus || 0) + 5;
         }
+    },
+    'elf_foliage_expertise': {
+        name: 'Woodland Stride',
+        description: 'Reduced movement cost, improved stealth, and improved defense while in foliage terrain. (Anti-requisite: Druid Foliage Mastery)',
+        tree: 'elf',
+        maxRanks: 1,
+        anti_prereq: 'druid_foliage_expertise',
+        apply: (player) => {}
+    },
+    'druid_foliage_expertise': {
+        name: 'Foliage Mastery',
+        description: 'Reduced movement cost, improved stealth, and improved defense while in foliage terrain. (Anti-requisite: Woodland Stride)',
+        tree: 'druid',
+        maxRanks: 1,
+        anti_prereq: 'elf_foliage_expertise',
+        apply: (player) => {}
+    },
+    'dwarf_axe_mastery': {
+        name: 'Dwarven Axe Mastery',
+        description: 'Grants +2 damage when using an Axe.',
+        tree: 'dwarf',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+    'dwarf_solid': {
+        name: 'Solid as a Rock',
+        description: 'Reduces chance of being moved against your will (shove, trip) by 5%.',
+        tree: 'dwarf',
+        maxRanks: 1,
+        apply: (player) => {
+            player.forcedMoveResistance = (player.forcedMoveResistance || 0) + 5;
+        }
+    },
+    'cleric_trigger_damage': {
+        name: 'Divine Retribution',
+        description: 'Whenever your trigger spells (Divine Silence, Sanctuary) activate, the target takes 1 damage immediately per rank.',
+        tree: 'cleric',
+        maxRanks: 2,
+        apply: (player) => {}
+    },
+    'cleric_trigger_mana': {
+        name: 'Divine Drain',
+        description: 'Whenever your trigger spells activate, the target loses 1 mana immediately per rank.',
+        tree: 'cleric',
+        maxRanks: 2,
+        apply: (player) => {}
+    },
+    'cleric_trigger_vision': {
+        name: 'Clouded Mind',
+        description: 'Whenever your trigger spells activate, reduce target vision range by 1 hex per rank (stacks 3x).',
+        tree: 'cleric',
+        maxRanks: 2,
+        apply: (player) => {}
+    },
+    'cleric_trigger_dmg_red': {
+        name: 'Feeble Strike',
+        description: 'Whenever your trigger spells activate, reduce target damage dealt by 1 per rank (stacks 3x).',
+        tree: 'cleric',
+        maxRanks: 2,
+        apply: (player) => {}
+    },
+    'cleric_trigger_heal_red': {
+        name: 'Severed Grace',
+        description: 'Whenever your trigger spells activate, reduce incoming healing by 50% per rank (Max 100%).',
+        tree: 'cleric',
+        maxRanks: 2,
+        apply: (player) => {}
+    },
+    'assassinate': {
+        name: 'Assassinate',
+        description: 'Active: If no enemies can see you, perform a high-accuracy (+50%) attack for 80 TP.',
+        tree: 'rogue',
+        maxRanks: 1,
+        active: true,
+        apply: (player) => {}
+    },
+    'sneak_attack_dmg': {
+        name: 'Sneak Attack',
+        description: 'Increases damage by 4 if the target cannot see you per rank.',
+        tree: 'rogue',
+        maxRanks: 3,
+        apply: (player) => {}
+    },
+    'pickpocket': {
+        name: 'Pickpocket',
+        description: 'Active: Attempt to take unequipped items from an enemy who can\'t see you, or a neutral target. (5 TP)',
+        tree: 'rogue',
+        maxRanks: 1,
+        active: true,
+        apply: (player) => {}
+    },
+    'zone_of_control': {
+        name: 'Zone of Control',
+        description: 'Passive: Enemies moving out of your melee reach have their movement cost doubled (Rank 1) or tripled (Rank 2).',
+        tree: 'fighter',
+        maxRanks: 2,
+        apply: (player) => {}
     },
     'animal_companion': {
         name: 'Animal Companion',
@@ -386,7 +553,7 @@ function generateWeaponSkills(id, label, maxDmgRanks = 1) {
 
     s[dmgId] = {
         name: `${label} Mastery`,
-        description: `Grants +1 damage when using a ${label} per rank.`,
+        description: `Grants +2 damage when using a ${label} per rank.`,
         tree: 'weapons',
         maxRanks: maxDmgRanks,
         prereq: hitId,
@@ -460,18 +627,6 @@ function generateWeaponSkills(id, label, maxDmgRanks = 1) {
             maxRanks: 1,
             prereq: dmgId,
             reaction: true,
-            apply: (player) => {}
-        };
-    }
-
-    if (id === 'quarterstaff') {
-        s[`quarterstaff_trip`] = {
-            name: `Trip`,
-            description: `Unlock Trip: 5 TP melee attack. On hit, reduce enemy TP by 5. No damage.`,
-            tree: 'weapons',
-            maxRanks: 1,
-            prereq: dmgId,
-            active: true,
             apply: (player) => {}
         };
     }

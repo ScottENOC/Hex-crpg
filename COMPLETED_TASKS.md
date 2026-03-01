@@ -4,6 +4,7 @@
 - **Mana & Spell System Polish**:
     - **Optimized Upkeep**: Refined the mana upkeep logic to stop processing spell costs immediately once mana reaches zero, preventing negative mana values and log spam.
     - **Summon Vanish Fix**: Added unique IDs to all entities, ensuring summoned creatures are correctly identified and removed from the map when their upkeep spell expires or is cancelled.
+    - **Multi-Target Spells**: Implemented "Fork" skills for Arcane, Divine, and Nature trees (6 ranks each). Single-target spells can now be modified to affect multiple targets, with increased mana and maintenance costs.
 - **Environment & Immersion**:
     - **Thematic Transitions**: Replaced "teleportation" terminology with more grounded descriptions of walking through corridors or using elevators to enter the arena.
     - **Time-Aware Atmosphere**: Implemented dynamic arena entrance text that correctly identifies if the Sun or the Moon/Stars are illuminating the outdoor matches based on the current world time and light level.
@@ -18,12 +19,19 @@
     - **Flying Melee Rules**: Implemented logic to block melee attacks from/against flyers unless both units are flying. Melee attacks against flyers now correctly show a message and do not consume Time Points.
     - **AI Adaptation**: AI now filters out un-attackable flying targets if they only have melee attacks and will choose alternative actions like moving toward favorable terrain or away from flyers.
     - **Scouting Eagle**: Implemented specialized scouting AI for the Eagle. It prioritizes tiles not seen for the longest time and searches for lost enemies. The Eagle is now non-combatant, always flying, and does not trigger enemy aggro.
-    - **Flying Toggle**: Added "Fly" and "Land" actions (1 TP cost) available to any unit with the flying capability or the fly cheat.
-- **UI & Character Systems**:
-    - **Paladin Removal**: Removed Paladin from initial character creation and level-up options. Removed the Paladin skill tree from the "See All Skills" view.
-    - **Skill Tree Overhaul**: Updated the "See All Skills" mode to correctly show all racial skill trees (Human, Dwarf, Elf).
-    - **Elf Darkvision**: Added the "Elf Darkvision" skill to the Elf tree, which reduces vision and stealth detection penalties in low-light conditions.
-    - **Visual Cleanup**: Removed the red dot "AI State Indicator" from enemies for a cleaner map visual.
+    - **Flying Unit Persistence**: Refined the flying cheat logic. Characters are now persistent "flying units" when the cheat is active, gaining access to "Take Off" and "Land" action buttons.
+- **Character & Skill Systems**:
+    - **Cleric Spells**: Added `Divine Silence` (ongoing damage debuff until a spell is cast) and `Sanctuary` (triggers Time Point penalties on attackers).
+    - **Trigger Penalties**: Added Cleric skills (`Divine Retribution`, `Divine Drain`, `Clouded Mind`, `Feeble Strike`, `Severed Grace`) that apply immediate or stackable penalties when trigger spells are activated.
+    - **Racial Skills**: 
+        - Elf: Added `Keen Elf Sight` (+vision), `Elf Bow Mastery` (+range), and `Woodland Stride` (foliage expertise).
+        - Dwarf: Added `Dwarven Axe Mastery` (+2 dmg) and `Solid as a Rock` (forced movement resistance).
+    - **Class Skills**:
+        - Monk: Added `Pressure Point Strike` (unarmed reaction block), `Counter Trip` (reaction), `Agile Climber` (height penalty reduction), and `Disarm` (active ability).
+        - Rogue: Added `Assassinate` (high-accuracy stealth strike), `Sneak Attack` (+dmg from stealth), and `Pickpocket` (steal items).
+        - Fighter: Added `Zone of Control` (penalize enemies moving out of melee reach).
+    - **Weapon Masteries**: Rebalanced all weapon masteries to provide +2 damage per rank instead of +1.
+    - **Quarterstaff Removal**: Removed all references to Quarterstaff from items, skills, and UI.
 - **Persistence & Modes**:
     - **Auto-Save**: Implemented an auto-save function that triggers every time combat ends (unless in Iron Man mode).
     - **Iron Man Mode**: Added Iron Man mode, mandatory for Campaign 1 (Arena) and optional for others. It disables auto-save, deletes previous saves for the same character run upon saving, and returns the player to the title screen.
@@ -32,13 +40,10 @@
     - **Dialogue Audio**: Implemented automatic audio playback for ambient dialogue. Audio files in `/audio/dialogue/` are now played when their corresponding dialogue lines appear.
     - **Parry Sound Effects**: Added randomized parry sound effects (`parry.wav` and `parry2.wav`) that play upon a successful parry or protector parry.
 - **Bug Fixes**:
-    - **Syntax Error Fixed**: Resolved the "animalId has already been declared" error in `ui.js`.
-    - **Redeclaration Fix**: Fixed "weaponSlot has already been declared" and "weapon has already been declared" in `gameEngine.js` by cleaning up redundant logic in `tryAttack`.
-    - **Initialization Fix**: Fixed "window.updatePartyTabs is not a function" by ensuring proper function exposure in `ui.js`.
-    - **Global Export Fix**: Fixed "window.startGameCore is not a function" by correctly exporting it in `gameEngine.js` and ensuring the script parses correctly.
-    - **Cover System**: Added defensive bonuses for characters standing behind pedestals.
-    - **Arena Victory Logic**: Refined the arena victory check to trigger only when an enemy is defeated or vanishes, and ensured it only occurs when transitioning from an active fight area.
-    - **UI Refresh**: Implemented a manual UI refresh for character stats (HP, Mana) and the turn indicator immediately after completing "Rest until Restored" or "Sleep" actions.
+    - **AI Re-arming**: Implemented logic for AI to prioritize picking up dropped weapons or drawing new ones from inventory when disarmed.
+    - **Height Penalty**: Added Time Point penalties for moving up/down levels (e.g., Pedestals), with Monk-specific reductions.
+    - **Syntax Error Fixed**: Resolved several redeclaration errors in `gameEngine.js`.
+    - **Initialization Fix**: Fixed several "function is not defined" errors during game startup and loading.
 - **Quality of Life & Cheats**:
     - **Fly All Cheat**: Added a new cheat button that toggles flying status for all friendly characters, including visual updates and button state changes.
     - **Terminology Polish**: Replaced "Teleporting" with "Heading back to" in the arena victory sequence for better thematic consistency.

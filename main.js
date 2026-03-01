@@ -234,11 +234,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
 window.toggleFlyCheat = function() {
     const friendlies = window.entities.filter(e => e.alive && e.side === 'player');
-    const isAnyFlying = friendlies.some(f => f.isFlying && f.name !== 'Eagle');
-    const newState = !isAnyFlying;
+    const isAnyCheat = friendlies.some(f => f.flyCheat);
+    const newState = !isAnyCheat;
 
     friendlies.forEach(f => {
-        f.isFlying = newState;
+        f.flyCheat = newState;
+        if (newState) f.isFlying = true;
+        else f.isFlying = false;
     });
 
     const btn = document.getElementById("cheat-fly-btn");
@@ -247,10 +249,11 @@ window.toggleFlyCheat = function() {
         btn.style.backgroundColor = newState ? "#f44336" : "#03a9f4";
     }
 
-    window.showMessage(newState ? "All friendlies are now flying!" : "Flying removed from all friendlies.");
+    window.showMessage(newState ? "All friendlies are now flying units!" : "Flying capability removed from all friendlies.");
     window.drawMap();
     window.renderEntities();
     window.updateTurnIndicator();
+    if (window.updateActionButtons) window.updateActionButtons();
 };
 
 window.startGame = function() {

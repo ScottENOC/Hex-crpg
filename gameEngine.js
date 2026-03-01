@@ -100,10 +100,44 @@ function playerMoveProcess(player, path) {
                 if (isUnarmored) baseMoveCost -= 1;
             }
         }
-        baseMoveCost = Math.max(1, baseMoveCost);
+        const previousTerrain = window.getTerrainAt(previousHex.q, previousHex.r);
         const terrain = window.getTerrainAt(player.hex.q, player.hex.r);
-        const stepCost = baseMoveCost * (player.isFlying ? 1 : terrain.moveCostMult);
         
+        let terrainMult = terrain.moveCostMult;
+        if (terrain.name === 'Foliage' && (moveEntity.skills?.elf_foliage_expertise || moveEntity.skills?.druid_foliage_expertise)) {
+            terrainMult = 1.0; 
+        }
+
+        // HEIGHT PENALTY (Pedestals)
+        if (previousTerrain.name !== terrain.name && (previousTerrain.name === 'Pedestal' || terrain.name === 'Pedestal')) {
+            let heightPenalty = 1.0;
+            if (moveEntity.skills?.agile_climber) heightPenalty = 0.5;
+            terrainMult += heightPenalty;
+        } else if (previousTerrain.name === 'Pedestal' && terrain.name === 'Pedestal') {
+            terrainMult = 1.0; // Flat movement on same level
+        }
+
+        let stepCost = baseMoveCost * (player.isFlying ? 1 : terrainMult);
+        
+        // ZONE OF CONTROL
+        if (!player.isFlying) {
+            const enemies = window.entities.filter(e => e.alive && e.side !== player.side && !e.isFlying);
+            for (let enemy of enemies) {
+                const weaponId = enemy.equipped?.weapon;
+                const weapon = weaponId ? window.items[weaponId] : null;
+                const reach = 1 + (weapon?.range || 0);
+                const enemyAllHexes = enemy.getAllHexes();
+                const wasInRange = enemyAllHexes.some(eh => window.distance(eh, previousHex) <= reach);
+                const isStillInRange = enemyAllHexes.some(eh => window.distance(eh, player.hex) <= reach);
+                
+                if (wasInRange && !isStillInRange) {
+                    const zocRank = enemy.skills?.zone_of_control || 0;
+                    if (zocRank === 1) stepCost *= 2;
+                    else if (zocRank >= 2) stepCost *= 3;
+                }
+            }
+        }
+
         let threshold = 80;
         const mainChar = window.party?.[0]; // Default threshold context
         if (player.skills && player.skills['quickRecovery']) threshold -= player.skills['quickRecovery'];
@@ -344,7 +378,9 @@ function updatePlayerUI() {
     let isRanged = false;
     if (player.equipped && player.equipped.weapon) {
         const weapon = window.items[player.equipped.weapon];
-        attackRange += (weapon.range || 0);
+        let rangeBonus = (weapon.range || 0);
+        if (weapon.id === 'bow' && player.skills?.elf_bow_range) rangeBonus += (player.skills.elf_bow_range * 4);
+        attackRange += rangeBonus;
         isRanged = (weapon.subType === 'ranged');
     }
     const attackHexes = getHexesInRange(player.hex, attackRange);
@@ -889,6 +925,44 @@ function renderEntities() {
   });
 }
 
+function triggerPenalty(casterName, victim, spell) {
+    const caster = window.entities.find(e => e.name === casterName);
+    if (!caster) return;
+
+    // Apply Cleric Skill Bonuses
+    if (caster.skills?.cleric_trigger_damage) {
+        const dmg = caster.skills.cleric_trigger_damage;
+        victim.hp -= dmg;
+        window.showMessage(`${victim.name} takes ${dmg} divine retribution damage!`);
+    }
+    if (caster.skills?.cleric_trigger_mana) {
+        const manaLoss = caster.skills.cleric_trigger_mana;
+        victim.currentMana = Math.max(0, victim.currentMana - manaLoss);
+        window.showMessage(`${victim.name} loses ${manaLoss} mana from divine drain!`);
+    }
+    if (caster.skills?.cleric_trigger_vision) {
+        if (victim.visionPenaltyStacks < 3) {
+            victim.visionPenaltyStacks++;
+            const penalty = caster.skills.cleric_trigger_vision;
+            victim.visionBonus = (victim.visionBonus || 0) - penalty;
+            window.showMessage(`${victim.name}'s vision is clouded!`);
+        }
+    }
+    if (caster.skills?.cleric_trigger_dmg_red) {
+        if (victim.dmgPenaltyStacks < 3) {
+            victim.dmgPenaltyStacks++;
+            const penalty = caster.skills.cleric_trigger_dmg_red;
+            victim.baseDamage = Math.max(0, victim.baseDamage - penalty);
+            window.showMessage(`${victim.name} is weakened by divine power!`);
+        }
+    }
+    if (caster.skills?.cleric_trigger_heal_red) {
+        const penalty = caster.skills.cleric_trigger_heal_red * 50;
+        victim.healingReduction = Math.min(100, (victim.healingReduction || 0) + penalty);
+        window.showMessage(`${victim.name}'s connection to grace is severed!`);
+    }
+}
+
 function tick() {
     if (window.isPausedForReaction) return;
 
@@ -1014,6 +1088,14 @@ function runTickInternal(isSleepCycle = false) {
                 if (e.skills['regeneration'] && Math.random() < 0.2) {
                     e.hp = Math.min(e.maxHp, e.hp + 1);
                 }
+
+                // TRIGGER SPELL PENALTIES (Ongoing Divine Silence)
+                const silenceEffects = (window.activeSpells || []).filter(s => s.debuffType === 'silence_penalty' && s.targetEntityId === e.id);
+                silenceEffects.forEach(s => {
+                    const dmg = (s.magnitude || 6) * 0.05 * tpGained; // Scaled damage
+                    e.hp -= dmg;
+                    if (e.hp <= 0 && e.alive) { e.alive = false; window.showMessage(`${e.name} succumbed to divine silence!`); checkCombatEnd(); }
+                });
             }
         });
         if (window.updateTime) window.updateTime(0.4);
@@ -1031,6 +1113,7 @@ function runTickInternal(isSleepCycle = false) {
 }
 
 function takeTurn(entity) {
+    entity.reactionBlocked = false; // Reset reaction block
     let threshold = 80;
     if (entity.skills && entity.skills['quickRecovery']) threshold -= entity.skills['quickRecovery'];
 
@@ -1178,6 +1261,34 @@ function aiProcess(entity) {
         return;
     }
 
+    // AI RE-ARMING PRIORITY
+    if (entity.equipped && !entity.equipped.weapon && entity.timePoints >= 5) {
+        const coord = `${entity.hex.q},${entity.hex.r}`;
+        const itemsInHex = window.mapItems[coord] || [];
+        const weaponInHex = itemsInHex.find(iid => window.items[iid].type === 'weapon');
+        if (weaponInHex) {
+            window.showMessage(`${entity.name} picks up and equips ${window.items[weaponInHex].name}.`);
+            entity.equipped.weapon = weaponInHex;
+            itemsInHex.splice(itemsInHex.indexOf(weaponInHex), 1);
+            if (itemsInHex.length === 0) delete window.mapItems[coord];
+            spendTP(entity, 5);
+            setTimeout(() => aiProcess(entity), 100);
+            return;
+        }
+        // No weapon in hex, check inventory
+        if (entity.inventory && entity.inventory.length > 0) {
+            const weaponInInv = entity.inventory.find(iid => window.items[iid].type === 'weapon');
+            if (weaponInInv) {
+                window.showMessage(`${entity.name} draws a ${window.items[weaponInInv].name} from their pack.`);
+                entity.equipped.weapon = weaponInInv;
+                entity.inventory.splice(entity.inventory.indexOf(weaponInInv), 1);
+                spendTP(entity, 5);
+                setTimeout(() => aiProcess(entity), 100);
+                return;
+            }
+        }
+    }
+
     // AI STATE LOGIC
     if (entity.side === 'enemy' && entity.aiState !== 'combat') {
         // Idle behavior: Check for enemies
@@ -1318,7 +1429,12 @@ function aiProcess(entity) {
     }
 
     let attackRange = 1;
-    if (entity.equipped?.weapon) attackRange += (window.items[entity.equipped.weapon].range || 0);
+    if (entity.equipped?.weapon) {
+        const weapon = window.items[entity.equipped.weapon];
+        let rb = (weapon.range || 0);
+        if (weapon.id === 'bow' && entity.skills?.elf_bow_range) rb += (entity.skills.elf_bow_range * 4);
+        attackRange += rb;
+    }
     const dist = getMinDistance(entity, target || { getAllHexes: () => [huntTargetHex], hex: huntTargetHex });
 
     let hasLOE = target ? entity.getAllHexes().some(h => window.hasLineOfEffect(h, target.hex)) : false;
@@ -1528,13 +1644,68 @@ function handleClick(e){
             } else if (act.id === 'fly') {
                 player.isFlying = true;
                 window.showMessage(`${player.name} takes to the air!`);
-                spendTP(player, 5);
+                spendTP(player, 1);
                 actionHandled = true;
             } else if (act.id === 'land') {
                 player.isFlying = false;
                 window.showMessage(`${player.name} lands.`);
-                spendTP(player, 2);
+                spendTP(player, 1);
                 actionHandled = true;
+            } else if (act.id === 'assassinate') {
+                if (target && target.side !== player.side) {
+                    const enemies = window.entities.filter(e => e.alive && e.side !== player.side);
+                    const isSeen = enemies.some(e => canSee(e, player));
+                    if (!isSeen) {
+                        window.showMessage(`${player.name} performs an assassination strike!`);
+                        // Temporarily boost hit chance
+                        player.tempHitBonus = 50;
+                        tryAttack(player, target, false);
+                        delete player.tempHitBonus;
+                        spendTP(player, 80);
+                        actionHandled = true;
+                    } else {
+                        window.showMessage("Cannot assassinate while seen by any enemy!");
+                    }
+                }
+            } else if (act.id === 'disarm') {
+                if (target && target.side !== player.side && window.areAdjacent(player.hex, target.hex)) {
+                    const roll = Math.random() * 100;
+                    if (roll < 50) {
+                        const weaponId = target.equipped?.weapon;
+                        const offhandId = target.equipped?.offhand;
+                        const itemToDrop = weaponId || (offhandId && window.items[offhandId].type !== 'shield' ? offhandId : null);
+                        
+                        if (itemToDrop) {
+                            window.showMessage(`${player.name} disarms ${target.name}! ${window.items[itemToDrop].name} dropped.`);
+                            if (itemToDrop === weaponId) target.equipped.weapon = null;
+                            else target.equipped.offhand = null;
+                            
+                            const coord = `${target.hex.q},${target.hex.r}`;
+                            if (!window.mapItems[coord]) window.mapItems[coord] = [];
+                            window.mapItems[coord].push(itemToDrop);
+                        } else {
+                            window.showMessage(`${target.name} has no weapon to disarm!`);
+                        }
+                    } else {
+                        window.showMessage(`${player.name} tries to disarm ${target.name} but fails!`);
+                    }
+                    spendTP(player, 5);
+                    actionHandled = true;
+                }
+            } else if (act.id === 'pickpocket') {
+                if (target && (target.side === 'neutral' || !canSee(target, player))) {
+                    if (window.distance(player.hex, target.hex) === 1) {
+                        if (target.inventory && target.inventory.length > 0) {
+                            const stolen = target.inventory.pop();
+                            player.inventory.push(stolen);
+                            window.showMessage(`${player.name} stole ${window.items[stolen].name} from ${target.name}!`);
+                        } else {
+                            window.showMessage(`${target.name}'s pockets are empty.`);
+                        }
+                        spendTP(player, 5);
+                        actionHandled = true;
+                    }
+                }
             } else if (act.id === 'dagger_throw') {
                 if (target && target.side !== player.side) {
                     const dist = getMinDistance(player, target);
@@ -1593,13 +1764,31 @@ function handleClick(e){
             const spell = window.player.createdSpells[act.index];
             const dist = target ? getMinDistance(player, target) : window.distance(player.hex, clickedHex);
             if (dist <= spell.range && player.currentMana >= spell.manaCost && player.timePoints >= spell.tpCost) {
-                // Use centralized spellcasting with reaction checks
-                actionHandled = tryCastSpell(player, spell, target, clickedHex);
-                if (actionHandled === 'counter_pending') {
-                    actionHandled = true; // Wait for reaction modal
+                const maxTargets = 1 + (spell.extraTargets || 0);
+                
+                // Add target if not already added
+                const alreadySelected = act.targets.some(t => t.id === (target ? target.id : null) && t.hex.q === clickedHex.q && t.hex.r === clickedHex.r);
+                if (!alreadySelected) {
+                    act.targets.push({ id: target ? target.id : null, hex: clickedHex, entity: target });
                 }
-                if (actionHandled) { 
-                    if (actionHandled === true) spendTP(player, spell.tpCost); 
+
+                if (act.targets.length >= maxTargets) {
+                    // Cast on all targets
+                    act.targets.forEach((t, i) => {
+                        const isLast = (i === act.targets.length - 1);
+                        const result = tryCastSpell(player, spell, t.entity, t.hex);
+                        if (isLast) {
+                            if (result === 'counter_pending') actionHandled = true;
+                            else if (result !== false) {
+                                spendTP(player, spell.tpCost);
+                                actionHandled = true;
+                            }
+                        }
+                    });
+                } else {
+                    window.showMessage(`Target ${act.targets.length}/${maxTargets} selected. Click next target.`);
+                    window.updateActionButtons();
+                    return; // Don't finalize yet
                 }
             } else {
                 if (dist > spell.range) window.showMessage("Target out of range.");
@@ -1663,6 +1852,29 @@ function tryAttack(attacker, target, isFeint = false, isOffhand = false, bonusDa
         return;
     }
 
+    // SANCTUARY TRIGGER
+    const sanctuary = (window.activeSpells || []).find(s => s.debuffType === 'sanctuary_protected' && s.targetEntityId === target.id);
+    if (sanctuary && attacker.side !== target.side) {
+        const penalty = (sanctuary.magnitude || 1);
+        attacker.timePoints -= penalty;
+        window.showMessage(`${attacker.name} is hindered by Sanctuary! (-${penalty} TP)`);
+        triggerPenalty(sanctuary.casterName, attacker, sanctuary);
+    }
+
+    // DIVINE PROTECTION: Attacker loses TP
+    const protections = (window.activeSpells || []).filter(s => s.baseId === 'divine_protection' && s.targetEntityId === target.id);
+    protections.forEach(p => {
+        attacker.timePoints -= (p.magnitude || 1);
+        window.showMessage(`${attacker.name} is hindered by Divine Protection! (-${p.magnitude || 1} TP)`);
+    });
+
+    // BREAK SANCTUARY ON OFFENSIVE ACTION
+    const mySanctuary = (window.activeSpells || []).find(s => s.debuffType === 'sanctuary_protected' && s.targetEntityId === attacker.id);
+    if (mySanctuary && target.side !== attacker.side) {
+        window.showMessage(`${attacker.name}'s Sanctuary fades as they take offensive action.`);
+        window.cancelSpell(mySanctuary.spellInstanceId);
+    }
+
     // FLYING MELEE IMMUNITY
     let weaponSlot = isOffhand ? 'offhand' : 'weapon';
     let weapon = window.items[attacker.equipped?.[weaponSlot]] || null;
@@ -1681,13 +1893,6 @@ function tryAttack(attacker, target, isFeint = false, isOffhand = false, bonusDa
     if (target.skills?.battle_reflexes) {
         target.timePoints += 1;
     }
-
-    // Divine Protection: Attacker loses TP
-    const protections = (window.activeSpells || []).filter(s => s.baseId === 'divine_protection' && s.targetEntityId === target.id);
-    protections.forEach(p => {
-        attacker.timePoints -= (p.magnitude || 1);
-        window.showMessage(`${attacker.name} is hindered by Divine Protection! (-${p.magnitude || 1} TP)`);
-    });
 
     // BREAK STEALTH
     if (attacker.isStealthed) breakStealth(attacker);
@@ -1737,7 +1942,7 @@ function tryAttack(attacker, target, isFeint = false, isOffhand = false, bonusDa
         }
     }
 
-    if (reactions.length > 0) {
+    if (reactions.length > 0 && !target.reactionBlocked) {
         // For simplicity, we combine them but handle who spends TP.
         window.requestReaction(target, reactions, (choice) => {
             if (choice === 'parry') {
@@ -1885,7 +2090,9 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   
   // FOLIAGE DEFENSE
   if (targetTerrain.name === 'Foliage') {
-      if (isRanged) hitChance -= 10; // Extra missile penalty
+      let foliagePenalty = (isRanged ? 10 : 0);
+      if (target.skills?.elf_foliage_expertise || target.skills?.druid_foliage_expertise) foliagePenalty += 10;
+      hitChance -= foliagePenalty;
   }
 
   // COVER: Pedestals
@@ -1899,24 +2106,84 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   if (attacker.equipped?.weapon && attacker.equipped?.offhand && window.items[attacker.equipped.offhand].type === 'weapon') hitChance -= 5;
   if (isOffhand) hitChance -= 5;
   if (weapon && attacker.skills[`${weapon.id}_hit`]) hitChance += 5;
-  const roll = Math.floor(Math.random() * 100);
-  if (roll >= hitChance) {
-      window.showMessage(`${attacker.name} misses ${target.name}! (Roll: ${roll} vs Need: <${hitChance})`);
-      if (!isOffhand) attacker.offhandAttackAvailable = (attacker.equipped?.offhand && window.items[attacker.equipped.offhand].type === 'weapon');
-      if (missCallback) missCallback();
-      return;
-  }
-  let dmg = (attacker.baseDamage || 1) + (weapon?.damage || 0) + (attacker.skills[`${weapon?.id}_dmg`] || 0) + (attacker.skills['meleeDamage'] || 0) + bonusDamage;
+      // If it's a miss, check for reactions
+      const missCallbackFinal = () => {
+          // SHIELD BASH (existing)
+          if (target.skills?.shield_bash && target.timePoints >= 3) {
+              const shieldId = target.equipped?.offhand;
+              if (shieldId && window.items[shieldId].type === 'shield' && !target.reactionBlocked) {
+                  window.requestReaction(target, [{id:'shield_bash', name:'Shield Bash', tpCost:3}], (bashChoice) => {
+                      if (bashChoice === 'shield_bash') {
+                          spendTP(target, 3);
+                          window.showMessage(`${target.name} counter-attacks with a Shield Bash!`);
+                          const hitChance = 50 + target.toHitMelee - attacker.passiveDodge;
+                          if (Math.random() * 100 < hitChance) {
+                              const dmg = target.baseDamage || 1;
+                              attacker.hp -= dmg;
+                              if (attacker.hp <= 0) { attacker.alive = false; window.showMessage(`${attacker.name} defeated!`); checkCombatEnd(); }
+                          } else { window.showMessage("Shield Bash misses!"); }
+                      }
+                  }, "The enemy missed! Use Shield Bash?");
+              }
+          }
+          // MONK TRIP REACTION
+          if (target.skills?.trip_reaction && target.timePoints >= 2 && !target.reactionBlocked && !isRanged) {
+              window.requestReaction(target, [{id:'trip_counter', name:'Counter Trip', tpCost:2}], (choice) => {
+                  if (choice === 'trip_counter') {
+                      spendTP(target, 2);
+                      window.showMessage(`${target.name} attempts a Counter Trip!`);
+                      const hitChance = 50 + target.toHitMelee - attacker.passiveDodge;
+                      if (Math.random() * 100 < hitChance) {
+                          window.showMessage(`${target.name} trips ${attacker.name}!`);
+                          attacker.timePoints = Math.max(0, attacker.timePoints - 5);
+                      } else { window.showMessage("Counter Trip fails!"); }
+                  }
+              }, "The enemy missed! Attempt Counter Trip?");
+          }
+          if (missCallback) missCallback();
+      };
+
+      if (roll >= hitChance) {
+          window.showMessage(`${attacker.name} misses ${target.name}! (Roll: ${roll} vs Need: <${hitChance})`);
+          if (!isOffhand) attacker.offhandAttackAvailable = (attacker.equipped?.offhand && window.items[attacker.equipped.offhand].type === 'weapon');
+          missCallbackFinal();
+          return;
+      }
+  let dmg = (attacker.baseDamage || 1) + (weapon?.damage || 0) + ((attacker.skills[`${weapon?.id}_dmg`] || 0) * 2) + (attacker.skills['meleeDamage'] || 0) + bonusDamage;
   if (isOffhand) dmg -= 2;
+
+  // DWARF AXE MASTERY
+  if (weapon?.id === 'axe' && attacker.skills?.dwarf_axe_mastery) dmg += 2;
+
+  // SNEAK ATTACK / BACKSTAB
+  if (attacker.skills?.sneak_attack_dmg) {
+      const enemies = window.entities.filter(e => e.alive && e.side !== attacker.side);
+      const isSeen = enemies.some(e => canSee(e, attacker));
+      if (!isSeen) {
+          const saBonus = attacker.skills.sneak_attack_dmg * 4;
+          dmg += saBonus;
+          window.showMessage(`Sneak Attack! (+${saBonus} damage)`);
+      }
+  }
+
   let red = (target.baseReduction || 0) + 
             (target.equipped?.armor && window.items[target.equipped.armor] ? window.items[target.equipped.armor].reduction : 0) + 
             (target.equipped?.offhand && window.items[target.equipped.offhand] && window.items[target.equipped.offhand].type === 'shield' ? (window.items[target.equipped.offhand].reduction + (target.skills?.shield_proficiency || 0)) : 0) +
             (target.equipped?.helmet && window.items[target.equipped.helmet] ? (window.items[target.equipped.helmet].reduction || 0) : 0) +
             (target.tempReduction || 0);
   let fd = Math.max(1, dmg - red);
+  
+  // HEALING REDUCTION / PENALTIES (Not applicable to damage directly but noted)
+
   window.showMessage(`${attacker.name} hits ${target.name} for ${fd} damage! (${dmg} base - ${red} reduction)`);
   target.hp -= fd; syncBackToPlayer(target);
   
+  // UNARMED REACTION BLOCK
+  if (!weapon && attacker.skills?.unarmed_reaction_block) {
+      target.reactionBlocked = true;
+      window.showMessage(`${target.name}'s pressure points were struck! Reactions blocked.`);
+  }
+
   // POISON LOGIC
   if (attacker.skills?.poison_bite && Math.random() < 0.5) {
       target.poisonTicks = 10;
@@ -2134,6 +2401,9 @@ function tryStealth(entity) {
     score -= (light * 40);
     const terrain = window.getTerrainAt(entity.hex.q, entity.hex.r);
     score += (terrain.stealthBonus || 0);
+    if (terrain.name === 'Foliage' && (entity.skills?.elf_foliage_expertise || entity.skills?.druid_foliage_expertise)) {
+        score += 20;
+    }
     if (entity.equipped?.armor) {
         const aid = entity.equipped.armor;
         if (aid === 'heavy_armor') score -= 30;
@@ -2165,6 +2435,14 @@ function tryShove(shover, target) {
         spendTP(shover, 5);
         window.playerAction = null;
         return true; 
+    }
+
+    // RESISTANCE CHECK
+    if (Math.random() * 100 < (target.forcedMoveResistance || 0)) {
+        window.showMessage(`${target.name} stands solid as a rock and resists the shove!`);
+        spendTP(shover, 5);
+        window.playerAction = null;
+        return true;
     }
 
     const newHex = window.getHexBehind(shover.hex, target.hex);
@@ -2669,11 +2947,12 @@ function resolveSpell(caster, spell, target, clickedHex) {
         } else if (spell.type === 'heal' && target) {
             target.hp = Math.min(target.maxHp, target.hp + spell.magnitude);
             syncBackToPlayer(target); actionHandled = true;
-        } else if (spell.type === 'buff' && target && target.side === caster.side) {
+        } else if ((spell.type === 'buff' || spell.type === 'debuff') && target) {
             const instanceId = Date.now() + Math.random();
             window.activeSpells.push({
                 spellInstanceId: instanceId, baseId: spell.baseId, name: spell.name, casterName: caster.name,
-                coreManaCost: spell.coreManaCost || spell.manaCost, targetEntityId: target.id, magnitude: spell.magnitude
+                coreManaCost: spell.coreManaCost || spell.manaCost, targetEntityId: target.id, 
+                magnitude: spell.magnitude, debuffType: spell.debuffType
             });
             window.showMessage(`${caster.name} cast ${spell.name} on ${target.name}.`);
             actionHandled = true;
@@ -2683,10 +2962,56 @@ function resolveSpell(caster, spell, target, clickedHex) {
 }
 
 function tryCastSpell(caster, spell, target, clickedHex) {
+    // DIVINE SILENCE REMOVAL
+    const silence = (window.activeSpells || []).find(s => s.debuffType === 'silence_penalty' && s.targetEntityId === caster.id);
+    if (silence) {
+        window.showMessage(`${caster.name} breaks the Divine Silence by casting a spell!`);
+        window.cancelSpell(silence.spellInstanceId);
+    }
+
+    // SANCTUARY TRIGGER (Target protection)
+    const targets = target ? [target] : []; // Handle multi-target? For simplicity, check clickedHex/target
+    const targetEntity = target || getEntityAtHex(clickedHex.q, clickedHex.r);
+    if (targetEntity && targetEntity.side !== caster.side) {
+        const targetSanctuary = (window.activeSpells || []).find(s => s.debuffType === 'sanctuary_protected' && s.targetEntityId === targetEntity.id);
+        if (targetSanctuary) {
+            const penalty = (targetSanctuary.magnitude || 1);
+            caster.timePoints -= penalty;
+            window.showMessage(`${caster.name} is hindered by ${targetEntity.name}'s Sanctuary! (-${penalty} TP)`);
+            triggerPenalty(targetSanctuary.casterName, caster, targetSanctuary);
+        }
+    }
+
+    // BREAK SANCTUARY ON OFFENSIVE CAST
+    if (targetEntity && targetEntity.side !== caster.side) {
+        const mySanctuary = (window.activeSpells || []).find(s => s.debuffType === 'sanctuary_protected' && s.targetEntityId === caster.id);
+        if (mySanctuary) {
+            window.showMessage(`${caster.name}'s Sanctuary fades as they cast an offensive spell.`);
+            window.cancelSpell(mySanctuary.spellInstanceId);
+        }
+    }
+
+    // AOE SANCTUARY CHECK
+    if (spell.radius > 0) {
+        const radius = spell.radius;
+        const affectedHexes = window.getHexesInRange(clickedHex, radius);
+        const protectedEnemies = window.entities.filter(e => e.alive && e.side !== caster.side && affectedHexes.some(h => e.getAllHexes().some(eh => eh.q === h.q && eh.r === h.r)));
+        for (let enemy of protectedEnemies) {
+            const sanc = (window.activeSpells || []).find(s => s.debuffType === 'sanctuary_protected' && s.targetEntityId === enemy.id);
+            if (sanc) {
+                const penalty = (sanc.magnitude || 1);
+                caster.timePoints -= penalty;
+                window.showMessage(`${caster.name} is hindered by ${enemy.name}'s Sanctuary (AOE)! (-${penalty} TP)`);
+                triggerPenalty(sanc.casterName, caster, sanc);
+            }
+        }
+    }
+
     // 1. Reactions (Counterspell)
     const opponents = window.entities.filter(e => e.alive && e.side !== caster.side);
     const counterOptions = [];
     opponents.forEach(o => {
+        if (o.reactionBlocked) return;
         const oCounter = (o.createdSpells || []).find(s => s.baseId === 'counterspell');
         if (oCounter && o.currentMana >= oCounter.manaCost && o.timePoints >= 5) {
             const distToCaster = window.distance(o.hex, caster.hex);
