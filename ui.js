@@ -658,6 +658,9 @@ function updateActionButtons() {
                 } else if (skillKey === 'assassinate') {
                     const eq = charData.equipped.weapon;
                     if (!eq) weaponReqMet = false;
+                } else if (skillKey === 'dagger_throw') {
+                    const eq = charData.equipped.weapon;
+                    if (eq !== 'dagger') weaponReqMet = false;
                 }
                 
                 if (weaponReqMet) {

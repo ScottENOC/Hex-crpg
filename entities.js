@@ -27,6 +27,7 @@ class Entity {
     this.hasBeenSeenByPlayer = false; 
     this.destination = null; // {q, r} or null
     this.parriesRemaining = 3;
+    this.sidestepsRemaining = 3;
     this.offhandAttackAvailable = false;
     this.side = 'enemy'; // 'player' or 'enemy'
     this.canLoot = true;

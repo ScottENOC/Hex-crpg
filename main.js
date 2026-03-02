@@ -293,16 +293,23 @@ window.cheatMaxSkills = function() {
     window.party.forEach(char => {
         for (const skillKey in window.skills) {
             const skill = window.skills[skillKey];
+            if (skill.tree === 'monster_skills') continue; // Skip flight/land
             const max = skill.maxRanks || 100;
             char.skills[skillKey] = max;
             if (skill.apply) skill.apply(char);
         }
+        // Re-calc HP based on endurance and health skill
+        char.maxHp = 10 + (char.attributes.endurance * 5);
+        if (char.skills['health']) char.maxHp += (char.skills['health'] * 10);
+        char.hp = char.maxHp;
     });
     // Sync entities
     window.entities.forEach(ent => {
         const partyMember = window.party.find(p => p.name === ent.name);
         if (partyMember) {
             ent.skills = partyMember.skills;
+            ent.maxHp = partyMember.maxHp;
+            ent.hp = partyMember.hp;
             // Re-apply skill effects to entity
             for (const sk in ent.skills) {
                 if (window.skills[sk]?.apply) window.skills[sk].apply(ent);

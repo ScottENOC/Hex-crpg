@@ -17,11 +17,16 @@
     - **Painter's Algorithm**: Implemented Y-coordinate sorting in the map rendering loop. This ensures that objects closer to the "front" (South-West) are drawn on top of objects further "back" (North-East), fixing visual layering issues with pedestals and other terrain features.
     - **Race Visuals**: Updated Elves to use standard human armor sprites for visual consistency.
     - **Weapon Visuals**: Implemented dynamic scaling for daggers, which now use the sword icon at 50% size.
+    - **Visual Polishing**:
+        - Shrunk Arena Mercenary width by 20% for better proportions.
+        - Increased Shield size by 50% for better visual impact.
+        - Centered the Nasal Helm horizontally on characters.
 - **Movement & Pathfinding**:
     - **Knowledge-Based Pathing**: Updated pathfinding to respect player knowledge. Characters now plan paths around known obstacles (explored walls and visible entities) but will attempt to move through unknown areas as if they were clear.
     - **Dynamic Move Cancellation**: Implemented logic to cancel auto-movement if a previously hidden obstacle (like an enemy or wall) is revealed during the player's journey.
     - **NPC Collision Prevention**: Restricted movement onto hexes occupied by visible NPCs or enemies, preventing players from "stacking" on top of characters like the Arena Announcer.
     - **Smooth Auto-Move**: Added incremental map updates and rendering during multi-step auto-movement, providing better visual feedback and ensuring fog-of-war is revealed correctly as the player moves.
+    - **Arena Variety**: Implemented random spawn positions for players and enemies in arena matches. Spawns now vary between "Opposite Ends," "In Sight," and "Close Quarters" (15% chance).
 - **Flying Combat & AI**:
     - **Flying Melee Rules**: Implemented logic to block melee attacks from/against flyers unless both units are flying. Melee attacks against flyers now correctly show a message and do not consume Time Points.
     - **AI Adaptation**: AI now filters out un-attackable flying targets if they only have melee attacks and will choose alternative actions like moving toward favorable terrain or away from flyers.
@@ -39,6 +44,10 @@
         - Monk: Added `Pressure Point Strike` (unarmed reaction block), `Counter Trip`, `Agile Climber` (height penalty reduction), and `Disarm`.
         - Rogue: Added `Assassinate` (high-accuracy stealth strike), `Sneak Attack` (+dmg from stealth), and `Pickpocket` (steal items).
         - Fighter: Added `Zone of Control` (penalize enemies moving out of melee reach).
+    - **Sidestep Polish**: 
+        - The movement triggering a Sidestep reaction is now visible before the player chooses to react.
+        - Sidestep now only highlights unoccupied and traversable hexes.
+        - Implemented a 3x charge limit for Sidestep, which resets at the start of the character's turn.
     - **Weapon Masteries**: Rebalanced all weapon masteries to provide +2 damage per rank instead of +1.
     - **Quarterstaff Removal**: Removed all references to Quarterstaff from items, skills, and UI.
     - **Starting Attributes Adjusted**: 
@@ -63,11 +72,13 @@
 - **Audio Integration**:
     - **Dialogue Audio**: Implemented automatic audio playback for ambient dialogue. Audio files in `/audio/dialogue/` are now played when their corresponding dialogue lines appear.
     - **Parry Sound Effects**: Added randomized parry sound effects (`parry.wav` and `parry2.wav`) that play upon a successful parry or protector parry.
-    - **Volume Balancing**: Significantly reduced the volume of the `constant.wav` background track to a 0.001 multiplier of music volume (near silent) to provide a very subtle base layer.
+    - **Volume Balancing**: Significantly reduced the volume of the `constant.wav` background track to a 0.001 multiplier of music volume (near silent) to provide a subtle base layer.
 - **Bug Fixes**:
     - **Combat Script Fix**: Resolved "uncaught referenceerror: roll is not defined" in `resolveAttack`.
     - **Dialogue Modal Fixes**: Added a missing close button to the dialogue modal and ensured that closing it correctly resets the game's "paused for reaction" state, preventing input lockups.
-    - **NPC Interaction Fix**: Exported `showDialogue`, `openShop`, and `startMercenaryHire` to the global `window` object, ensuring NPC triggers (like the Arena Shopkeeper) function correctly.
+    - **NPC Interaction Fix**:
+        - Exported `showDialogue`, `openShop`, and `startMercenaryHire` to the global `window` object.
+        - Fixed the Arena Shopkeeper dialogue trigger.
     - **UI Stability**: Fixed "Cannot set properties of null (setting 'innerHTML')" error in `ui.js` by adding proper element existence checks and re-integrating essential elements.
     - **Canvas Resizing**: Added a window resize listener to ensure the battle map always fills its container correctly when the browser is resized.
     - **AI Re-arming**: Implemented logic for AI to prioritize picking up dropped weapons or drawing new ones from inventory when disarmed.
@@ -75,7 +86,8 @@
     - **Syntax Error Fixed**: Resolved several redeclaration errors in `gameEngine.js`.
     - **Initialization Fix**: Fixed several "function is not defined" errors during game startup and loading.
 - **Quality of Life & Cheats**:
-    - **Cheat: Max Skills**: Added a new cheat button that instantly sets all skill ranks to maximum (or 100 for infinite skills) for all party members.
+    - **Cheat: Max Skills**: Added a new cheat button that instantly sets all skill ranks to maximum (or 100 for infinite skills) for all party members. Skips `monster_skills` tree to maintain intentional flight balance. Automatically updates max HP.
     - **Fly All Cheat**: Added a new cheat button that toggles flying status for all friendly characters, including visual updates and button state changes.
     - **Terminology Polish**: Replaced "Teleporting" with "Heading back to" in the arena victory sequence for better thematic consistency.
     - **Starting Gold**: Players now start Scenario 1 (Arena) with 100 gold.
+    - **Fast Forward**: Reduced processing delay by 50x when not in combat, speeding up Time Point distribution and regeneration.

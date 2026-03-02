@@ -246,9 +246,18 @@ function finalizePlayerAction(player, actionHandled) {
 }
 
 function checkMovementReactions(movingEntity, nextHex, callback) {
+    const originalHex = { q: movingEntity.hex.q, r: movingEntity.hex.r };
+    
+    // Temporarily update hex so player can see the movement triggering the reaction
+    movingEntity.hex = nextHex;
+    if (movingEntity.riding) movingEntity.riding.hex = { q: nextHex.q, r: nextHex.r };
+    window.drawMap();
+    window.renderEntities();
+
     const potentialReactors = window.entities.filter(e => e.alive && e !== movingEntity && window.areAdjacent(nextHex, e.hex));
     let allOptions = [];
     potentialReactors.forEach(r => {
+        if (r.reactionBlocked) return;
         const weaponId = (r.equipped && r.equipped.weapon) ? r.equipped.weapon : null;
         if (weaponId === 'spear') {
             if (r.skills['spear_intercept'] && r.timePoints >= 5) {
@@ -258,7 +267,7 @@ function checkMovementReactions(movingEntity, nextHex, callback) {
                 allOptions.push({ id: `halt_${r.name}`, name: `${r.name}: Halt`, tpCost: 1, reactor: r });
             }
         }
-        if (r.skills['sidestep']) {
+        if (r.skills['sidestep'] && r.sidestepsRemaining > 0) {
             let tpCost = 6;
             if (r.skills['sidestep_mastery']) tpCost -= 1;
             if (r.timePoints >= tpCost) {
@@ -268,7 +277,7 @@ function checkMovementReactions(movingEntity, nextHex, callback) {
     });
 
     if (allOptions.length > 0) {
-        const playerOption = allOptions.find(o => o.reactor.side === 'player' && o.reactor.name !== 'Wolf');
+        const playerOption = allOptions.find(o => o.reactor.side === 'player' && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(o.reactor.name));
         if (playerOption) {
             window.requestReaction(playerOption.reactor, allOptions.filter(o => o.reactor.side === 'player'), (choiceId) => {
                 if (choiceId) {
@@ -281,26 +290,23 @@ function checkMovementReactions(movingEntity, nextHex, callback) {
                     } else if (choiceId.startsWith('halt')) {
                         spendTP(opt.reactor, 1);
                         window.showMessage(`${opt.reactor.name} reacts with Spear Halt!`);
-                        
-                        // Let them finish this step
-                        movingEntity.hex = nextHex;
-                        if (movingEntity.riding) movingEntity.riding.hex = { q: nextHex.q, r: nextHex.r };
-                        
                         callback(true); // Terminate movement AFTER this step
                         return;
                     } else if (choiceId.startsWith('sidestep')) {
                         const reactor = opt.reactor;
                         const cost = opt.tpCost;
+                        reactor.sidestepsRemaining -= 1;
                         window.showMessage(`${reactor.name} Sidesteps! Select an adjacent free hex.`);
                         // Highlight adjacent free hexes
                         window.clearHighlights();
                         const neighbors = window.getNeighbors(reactor.hex.q, reactor.hex.r);
                         neighbors.forEach(nh => {
-                            if (!getEntityAtHex(nh.q, nh.r) && window.getTerrainAt(nh.q, nh.r).name !== 'Water') {
+                            if (!getEntityAtHex(nh.q, nh.r) && window.getTerrainAt(nh.q, nh.r).name !== 'Water' && window.getTerrainAt(nh.q, nh.r).name !== 'Wall') {
                                 window.highlightedHexes.push({ q: nh.q, r: nh.r, type: 'move' });
                             }
                         });
                         window.drawMap();
+                        window.renderEntities(); // Ensure we don't unpaint
                         
                         // Wait for a click
                         const board = document.getElementById('mapCanvas');
@@ -324,9 +330,15 @@ function checkMovementReactions(movingEntity, nextHex, callback) {
                 }
             });
         } else {
+            // Revert temporary move for AI or no reaction
+            movingEntity.hex = originalHex;
+            if (movingEntity.riding) movingEntity.riding.hex = { q: originalHex.q, r: originalHex.r };
             callback(false);
         }
     } else {
+        // Revert temporary move for AI or no reaction
+        movingEntity.hex = originalHex;
+        if (movingEntity.riding) movingEntity.riding.hex = { q: originalHex.q, r: originalHex.r };
         callback(false);
     }
 }
@@ -750,7 +762,7 @@ function renderEntities() {
                           // LAYER: Human Helmet
                           if (e.equipped && e.equipped.helmet === 'nasal_helm' && window.gameVisuals.nasal_helm.complete) {
                               const helmSize = humanSize * 1.1;
-                              window.mapCtx.drawImage(window.gameVisuals.nasal_helm, x - helmSize/2 - (3 * z), y - humanSize/2 + humanYOff + (2 * z), helmSize, (humanSize + humanHeightAdd));
+                              window.mapCtx.drawImage(window.gameVisuals.nasal_helm, x - helmSize/2, y - humanSize/2 + humanYOff + (2 * z), helmSize, (humanSize + humanHeightAdd));
                           }
               
               // LAYER: Human Armour
@@ -767,7 +779,8 @@ function renderEntities() {
               
               // LAYER: Shield (Human Scale)
               if (e.equipped && e.equipped.offhand && window.items[e.equipped.offhand].type === 'shield' && window.gameVisuals.shield.complete) {
-                  window.mapCtx.drawImage(window.gameVisuals.shield, x - humanSize/2, y - humanSize/2 + humanYOff, humanSize, humanSize + humanHeightAdd);
+                  const sSize = humanSize * 1.5;
+                  window.mapCtx.drawImage(window.gameVisuals.shield, x - sSize/2, y - sSize/2 + humanYOff, sSize, sSize);
               }
           } else {
               // LAYER: Non-human (Elf/Dwarf) Base
@@ -815,8 +828,8 @@ function renderEntities() {
               }
               // LAYER: Shield (Elf/Dwarf Scale)
               if (e.equipped && e.equipped.offhand && window.items[e.equipped.offhand].type === 'shield' && window.gameVisuals.shield.complete) {
-                  const shieldSize = currentSize;
-                  window.mapCtx.drawImage(window.gameVisuals.shield, x - shieldSize/2, y - shieldSize/2 + currentYOff, shieldSize, currentHeight);
+                  const sSize = currentSize * 1.5;
+                  window.mapCtx.drawImage(window.gameVisuals.shield, x - sSize/2, y - sSize/2 + currentYOff, sSize, sSize);
               }
           }
           
@@ -868,7 +881,7 @@ function renderEntities() {
                               yOffset = e.isFlying ? -20*z : 0;
                           }
                   
-                          if (e.customImage === 'arenamercenary') widthMult = 0.85;
+                          if (e.customImage === 'arenamercenary') widthMult = 0.68;
                   
                           let img = window.gameVisuals.monsterDefault;
                           if (e.name === 'Orc' && window.gameVisuals.orcBase.complete) img = window.gameVisuals.orcBase;
@@ -1052,7 +1065,16 @@ function tick() {
         return; // Exit main tick loop after fast-forward
     }
 
-    runTickInternal();
+    if (window.gamePhase === 'WAITING') {
+        const inCombat = window.entities.some(e => e.alive && e.side === 'enemy' && e.aiState === 'combat');
+        const numTicks = inCombat ? 1 : 50; 
+        for (let i = 0; i < numTicks; i++) {
+            runTickInternal();
+            if (window.gamePhase !== 'WAITING') break;
+        }
+    } else {
+        runTickInternal();
+    }
 }
 
 function runTickInternal(isSleepCycle = false) {
@@ -1151,6 +1173,8 @@ function runTickInternal(isSleepCycle = false) {
 
 function takeTurn(entity) {
     entity.reactionBlocked = false; // Reset reaction block
+    entity.parriesRemaining = 3;
+    entity.sidestepsRemaining = 3;
     let threshold = 80;
     if (entity.skills && entity.skills['quickRecovery']) threshold -= entity.skills['quickRecovery'];
 
@@ -2705,10 +2729,21 @@ function startArenaFight() {
         }
     }
 
-    // 3. Spawn players at one end and center camera
+    // 3. Spawn variety
+    const spawnClose = Math.random() < 0.15; // 15% chance to spawn close
+    const spawnInSight = Math.random() < 0.3; // 30% chance to spawn in sight
+
     window.entities.forEach((e, i) => {
-        // Simple offset spawn
-        e.hex = { q: -arenaSize + 5, r: i - Math.floor(window.entities.length/2) };
+        let q, r;
+        if (spawnClose) {
+            q = -5 + Math.floor(Math.random() * 3);
+            r = i - Math.floor(window.entities.length/2);
+        } else {
+            q = -arenaSize + 5 + Math.floor(Math.random() * 5);
+            // Limit r to be within reasonable bounds of the arena center
+            r = (Math.random() * (arenaSize - 10)) - (arenaSize/2);
+        }
+        e.hex = { q: Math.floor(q), r: Math.floor(r) };
         if (e.riding) e.riding.hex = { q: e.hex.q, r: e.hex.r };
     });
     if (window.entities.length > 0) {
@@ -2716,16 +2751,15 @@ function startArenaFight() {
     }
 
     // 4. Spawn enemies based on scaled difficulty
-    // First fight: 12-16 skill points
-    // Increase min by 3, max by 5 per fight
     const minSP = 12 + (window.roguelikeData.fightsCompleted - 1) * 3;
     const maxSP = 16 + (window.roguelikeData.fightsCompleted - 1) * 5;
-    let targetSP = minSP + Math.floor(Math.random() * (maxSP - minSP + 1));
+    const targetSP = minSP + Math.floor(Math.random() * (maxSP - minSP + 1));
 
     // GRISHNAK ENCOUNTER (10% chance if not defeated)
     if (!window.grishnakDefeated && Math.random() < 0.1) {
         window.triggerAmbientDialogue('grishnak_entry');
-        const grishnak = window.createMonster('orc', { q: arenaSize - 5, r: 0 }, null, null, 'enemy');
+        const gPos = spawnClose ? {q: 0, r: 0} : { q: arenaSize - 5, r: 0 };
+        const grishnak = window.createMonster('orc', gPos, null, null, 'enemy');
         grishnak.name = "Grishnak";
         grishnak.hp = 40;
         grishnak.maxHp = 40;
@@ -2747,7 +2781,7 @@ function startArenaFight() {
 
         window.entities.push(grishnak);
         for (let i = 0; i < 2; i++) {
-            const spawnHex = { q: arenaSize - 5, r: (i === 0 ? -2 : 2) };
+            const spawnHex = spawnClose ? {q: 2, r: (i === 0 ? -1 : 1)} : { q: arenaSize - 5, r: (i === 0 ? -2 : 2) };
             window.entities.push(window.createMonster('orc', spawnHex, null, null, 'enemy'));
         }
     } else {
@@ -2760,28 +2794,26 @@ function startArenaFight() {
             // Priority: Mercenary Graveyard (if any)
             if (window.roguelikeData.mercenaryGraveyard.length > 0 && Math.random() < 0.2) {
                 const snapshot = window.roguelikeData.mercenaryGraveyard.splice(Math.floor(Math.random() * window.roguelikeData.mercenaryGraveyard.length), 1)[0];
-                const spawnHex = { q: arenaSize - 5, r: spawnIndex - 2 };
+                const spawnHex = spawnClose ? {q: 3, r: spawnIndex} : { q: arenaSize - 5, r: spawnIndex - 2 };
                 const merc = new window.Enemy(snapshot.name, "purple", spawnHex, snapshot.attributes.agility + 10);
                 merc.side = 'enemy';
                 Object.assign(merc, snapshot);
                 merc.isGraveyardMerc = true;
                 window.entities.push(merc);
-                currentSP += calculateTotalExp(snapshot.level, snapshot.exp) / 100; // Rough estimate of SP
+                currentSP += 10; // Rough estimate
                 spawnIndex++;
                 continue;
             }
 
             const type = monsterTypes[Math.floor(Math.random() * monsterTypes.length)];
             const template = window.monsterTemplates[type];
-            // Base SP estimation for templates
             const baseSP = Object.values(template.skills || {}).reduce((a, b) => a + b, 0) + (template.hp / 5);
             
             if (currentSP + baseSP > targetSP + 10 && currentSP > 0) break;
 
-            const spawnHex = { q: arenaSize - 5, r: spawnIndex - 2 };
+            const spawnHex = spawnClose ? {q: 4, r: spawnIndex} : { q: arenaSize - 5, r: spawnIndex - 2 };
             const m = window.createMonster(type, spawnHex, null, null, 'enemy');
             
-            // If monster is underpowered, add some stats
             if (currentSP + baseSP < targetSP) {
                 const diff = targetSP - (currentSP + baseSP);
                 const extraHP = Math.floor(diff * 5);
@@ -2792,7 +2824,7 @@ function startArenaFight() {
             window.entities.push(m);
             currentSP += baseSP;
             spawnIndex++;
-            if (spawnIndex > 10) break; // Hard limit on count
+            if (spawnIndex > 10) break;
         }
     }
 
@@ -2819,6 +2851,7 @@ function talkToNPC(npc) {
             { label: "Not yet.", action: () => {} }
         ]);
     } else if (npc.name === "Shopkeeper") {
+        window.triggerAmbientDialogue('arena_lobby_3');
         window.showDialogue(npc, "Got some coin? I've got the goods. Unlimited stock, best prices in the pits!", [
             { label: "Let me see your wares.", action: () => window.openShop() },
             { label: "Maybe later.", action: () => {} }
