@@ -768,11 +768,7 @@ function renderEntities() {
               if (window.gameVisuals.humanHair.complete && e.gender !== 'male') {
                   window.mapCtx.drawImage(window.gameVisuals.humanHair, x - humanSize/2, y - humanSize/2 + humanYOff - (3 * z), humanSize, (humanSize + humanHeightAdd));
               } else if (window.gameVisuals.humanMaleHair.complete && e.gender === 'male') {
-                  const hWidth = humanSize * 0.1;
-                  const hHeight = (humanSize + humanHeightAdd) * 0.1;
-                  const hX = x - hWidth / 2;
-                  const hY = (y - humanSize / 2 + humanYOff) + (humanSize + humanHeightAdd) * 0.45;
-                  window.mapCtx.drawImage(window.gameVisuals.humanMaleHair, hX, hY, hWidth, hHeight);
+                  window.mapCtx.drawImage(window.gameVisuals.humanMaleHair, x - humanSize/2, y - humanSize/2 + humanYOff, humanSize, (humanSize + humanHeightAdd));
               }
                           // LAYER: Human Helmet
                           if (e.equipped && e.equipped.helmet === 'nasal_helm' && window.gameVisuals.nasal_helm.complete) {
@@ -890,15 +886,15 @@ function renderEntities() {
                           if (offhandImg && offhandImg.complete && window.items[offW]?.type === 'weapon') {
                               const weaponSize = window.hexSize * offhandScale * z;
                               window.mapCtx.save();
-                              // Flip vertically and horizontally, position on the right side
-                              let offX = x + (window.hexSize/2 + 5) * z;
+                              // Flip horizontally (scale -1, 1), position on the right side but shifted left
+                              let offX = x + (window.hexSize/2 + 5) * z - weaponSize;
                               let offY = y + flyOff;
                               if (offW === 'dagger') {
                                   offX += (window.hexSize * 0.16) * z;
                                   offY += (window.hexSize * 0.16) * z;
                               }
                               window.mapCtx.translate(offX, offY);
-                              window.mapCtx.scale(-1, -1);
+                              window.mapCtx.scale(-1, 1);
                               window.mapCtx.drawImage(offhandImg, -weaponSize/2, -weaponSize/2, weaponSize, weaponSize);
                               window.mapCtx.restore();
                           }

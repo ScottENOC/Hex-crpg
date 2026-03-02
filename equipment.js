@@ -7,6 +7,7 @@ const items = {
     'club': { id: 'club', name: 'Club', type: 'weapon', subType: 'melee', damage: 2, range: 0, hands: 1, buyPrice: 15 },
     'spear': { id: 'spear', name: 'Spear', type: 'weapon', subType: 'melee', damage: 1, range: 1, hands: 2, buyPrice: 20 },
     'bow': { id: 'bow', name: 'Bow', type: 'weapon', subType: 'ranged', damage: 1, range: 20, hands: 2, buyPrice: 30 },
+    'light_armor': { id: 'light_armor', name: 'Light Armor', type: 'armor', reduction: 1, buyPrice: 25 },
     'medium_armor': { id: 'medium_armor', name: 'Medium Armor', type: 'armor', reduction: 2, buyPrice: 50 },
     'heavy_armor': { id: 'heavy_armor', name: 'Heavy Armor', type: 'armor', reduction: 3, buyPrice: 100 },
     

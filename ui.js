@@ -1183,11 +1183,7 @@ function updateTurnIndicator() {
                                 } else {
                                     const hairImg = document.createElement('img');
                                     hairImg.src = 'images/humanmalehair.png'; hairImg.classList.add('portrait-layer');
-                                    hairImg.style.width = '9%';
-                                    hairImg.style.height = '9%';
-                                    hairImg.style.left = '45.5%';
-                                    hairImg.style.top = '45.5%';
-                                    portraitDiv.appendChild(hairImg);
+                                    applyHumanScaling(hairImg); portraitDiv.appendChild(hairImg);
                                 }
                                 
                                 if (entity.equipped && entity.equipped.helmet === 'nasal_helm') {
