@@ -14,7 +14,7 @@ const raceData = {
 
 const classData = {
     fighter: {
-        bonus: {fighter: 1, strength: 2, endurance: 2, weapons: 4 }
+        bonus: {fighter: 1, strength: 2, endurance: 2, weapons: 2 }
     },
     rogue: {
         bonus: {rogue: 1, agility: 3, weapons: 1, endurance: 2 }
@@ -23,13 +23,13 @@ const classData = {
         bonus: {cleric: 1, divine: 2, endurance: 2, weapons: 1, strength: 1 }
     },
     wizard: {
-        bonus: {wizard: 1, arcane: 5, endurance: 1 }
+        bonus: {wizard: 1, arcane: 4, endurance: 1, agility: 1 }
     },
     druid: {
         bonus: {druid: 1, nature: 2, endurance: 2, strength: 1, agility: 1 }
     },
     monk: {
-        bonus: { monk: 1, weapons: 1, 'Way of the open palm': 2, strength: 1, endurance: 1, agility: 1 }
+        bonus: { monk: 1, weapons: 0, 'Way of the open palm': 2, strength: 1, endurance: 2, agility: 1 }
     }
 };
 

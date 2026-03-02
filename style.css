@@ -1,22 +1,49 @@
+/* Base Layout */
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
 body {
     font-family: sans-serif;
-    margin: 0;
+    background-color: #222;
+    color: #eee;
+    overflow: hidden; /* Prevent body scroll */
+    display: flex;
+    flex-direction: column;
+}
+
+#characterCreator {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #222;
+    z-index: 200;
 }
 
 #gameContainer {
     position: fixed;
-    top: 110px; /* Adjusted for turn indicator (60px) + menu (~50px) */
+    top: 110px; /* Base for turn bar (60) + menu (50) */
     left: 0;
     width: 100%;
     bottom: 0;
     display: flex;
     flex-direction: column;
+    z-index: 1;
 }
 
 #game-container {
     display: flex;
     flex: 1;
+    min-height: 0;
     overflow: hidden;
+    width: 100%;
 }
 
 #game-board {
@@ -24,16 +51,24 @@ body {
     position: relative;
     overflow: hidden;
     background-color: #000;
+    height: 100%;
+}
+
+#mapCanvas {
+    display: block;
+    width: 100%;
+    height: 100%;
 }
 
 #ui-container {
-    width: 300px;
+    width: 350px;
     background-color: #222;
     border-left: 1px solid #444;
     display: flex;
     flex-direction: column;
     padding: 10px;
     box-sizing: border-box;
+    height: 100%;
 }
 
 .hex {
@@ -145,7 +180,6 @@ body {
 }
 
 /* Basic styling for creation page - can be expanded */
-body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; background-color: #222; color: #eee; }
 .creation-container { background-color: #333; padding: 30px; border-radius: 8px; box-shadow: 0 0 15px rgba(0,0,0,0.5); width: 80%; max-width: 600px; }
 h1 { text-align: center; margin-bottom: 20px; }
 .form-group { margin-bottom: 15px; }

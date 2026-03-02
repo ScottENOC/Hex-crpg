@@ -447,6 +447,7 @@ function initHexMap() {
     mapCtx = mapCanvas.getContext("2d");
     
     resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
 
     mapCanvas.addEventListener('mousedown', (e) => {
         isDragging = true;

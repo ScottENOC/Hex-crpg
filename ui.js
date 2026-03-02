@@ -174,17 +174,14 @@ function updateSleepButton() {
 }
 
 function showCharacter(){
-  if (!window.player){document.getElementById("character-info").innerText="No character yet.";return;}
+  const info = document.getElementById("character-info");
+  if (!info) return;
+  if (!window.player){info.innerText="No character yet.";return;}
   
-  let txt=`<p><strong>Name: ${window.player.name}</strong></p>
-<p>Race: ${window.player.race}</p>
-<p>Class: ${window.player.class}</p>
-<p>Level: ${window.player.level}</p>
-<p>HP: ${Math.ceil(window.player.hp)}/${window.player.maxHp}</p>
-<p>Mana: ${Math.floor(window.player.currentMana)}/${window.player.maxMana}</p>
-<p>Damage: ${window.player.baseDamage}</p>
+  let txt=`<strong>${window.player.name}</strong> (${window.player.race} ${window.player.class} Lv${window.player.level})<br>
+HP: ${Math.ceil(window.player.hp)}/${window.player.maxHp} | MP: ${Math.floor(window.player.currentMana)}/${window.player.maxMana} | Dmg: ${window.player.baseDamage}
 `;
-  document.getElementById("character-info").innerHTML=txt;
+  info.innerHTML=txt;
 }
 
 function showCharacterScreen() {

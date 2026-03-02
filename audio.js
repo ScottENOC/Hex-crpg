@@ -30,7 +30,7 @@ window.setAudioEnabled = function(enabled) {
         }
     } else {
         // Start constant track if enabled
-        tracks.constant.volume = 0.5; // Lower constant volume
+        tracks.constant.volume = 0.1; // Barely audible
         tracks.constant.play();
         
         // If we are currently in a state that needs music, it will be triggered by UI/Game calls

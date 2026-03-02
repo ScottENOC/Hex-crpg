@@ -28,6 +28,7 @@
     - **Scouting Eagle**: Implemented specialized scouting AI for the Eagle. It prioritizes tiles not seen for the longest time and searches for lost enemies. The Eagle is now non-combatant, always flying, and does not trigger enemy aggro.
     - **Flying Unit Persistence**: Refined the flying cheat logic. Characters are now persistent "flying units" when the cheat is active, gaining access to "Take Off" and "Land" action buttons.
     - **Fly Cheat Bonus**: While the flying cheat is active, characters receive a +10 TP per tick bonus.
+    - **Flying Visuals**: Added a vertical offset to characters and weapons while flying, providing clear visual feedback of their airborne state.
 - **Character & Skill Systems**:
     - **Cleric Spells**: Added `Divine Silence` (ongoing damage debuff until a spell is cast) and `Sanctuary` (triggers Time Point penalties on attackers).
     - **Trigger Penalties**: Added Cleric skills (`Divine Retribution`, `Divine Drain`, `Clouded Mind`, `Feeble Strike`, `Severed Grace`) that apply immediate or stackable penalties when trigger spells are activated.
@@ -40,10 +41,15 @@
         - Fighter: Added `Zone of Control` (penalize enemies moving out of melee reach).
     - **Weapon Masteries**: Rebalanced all weapon masteries to provide +2 damage per rank instead of +1.
     - **Quarterstaff Removal**: Removed all references to Quarterstaff from items, skills, and UI.
+    - **Starting Attributes Adjusted**: 
+        - Fighter: Weapons bonus reduced from 4 to 2.
+        - Wizard: Arcane bonus reduced from 5 to 4; Agility bonus increased from 0 to 1.
+        - Monk: Endurance bonus increased from 1 to 2; Weapons bonus reduced from 1 to 0.
     - **Character Creation Preview**: Added a dynamic preview window to the character creator that shows attribute/skill point growth per level for the selected race and class.
 - **UI & Interaction**:
     - **UI Optimization**: Removed the oversized "Hex RPG" title and the redundant character/inventory sidebars from the main screen to maximize screen real estate for the map.
-    - **Responsive Layout**: Implemented a responsive design where the map fills the available height. On narrow screens, the chat log moves to the bottom and action buttons are layered over the map.
+    - **Responsive Layout**: Implemented a robust responsive design. The map now fills 100% of the available vertical space. On narrow screens, the chat log adapts to the bottom and action buttons are layered over the map.
+    - **Sidebar Improvements**: Increased sidebar width to 350px and re-added a compact character summary (Name, HP, MP, Stats) for constant visibility.
     - **Entity Details**: Added an entity details popup modal. It can be triggered by clicking on portraits in the initiative tracker or by right-clicking (or long-pressing on touch devices) any visible entity on the map.
     - **Touch Support**: Added full touchscreen support, including panning, multi-finger pinch-to-zoom, and long-press for entity details.
     - **Top Menu**: Updated the top menu to wrap items cleanly on mobile and narrow displays.
@@ -54,7 +60,10 @@
 - **Audio Integration**:
     - **Dialogue Audio**: Implemented automatic audio playback for ambient dialogue. Audio files in `/audio/dialogue/` are now played when their corresponding dialogue lines appear.
     - **Parry Sound Effects**: Added randomized parry sound effects (`parry.wav` and `parry2.wav`) that play upon a successful parry or protector parry.
+    - **Volume Balancing**: Reduced the volume of the `constant.wav` background track to 0.1 (barely audible) to prevent it from overwhelming other sounds.
 - **Bug Fixes**:
+    - **UI Stability**: Fixed "Cannot set properties of null (setting 'innerHTML')" error in `ui.js` by adding proper element existence checks and re-integrating essential elements.
+    - **Canvas Resizing**: Added a window resize listener to ensure the battle map always fills its container correctly when the browser is resized.
     - **AI Re-arming**: Implemented logic for AI to prioritize picking up dropped weapons or drawing new ones from inventory when disarmed.
     - **Height Penalty**: Added Time Point penalties for moving up/down levels (e.g., Pedestals), with Monk-specific reductions.
     - **Syntax Error Fixed**: Resolved several redeclaration errors in `gameEngine.js`.
