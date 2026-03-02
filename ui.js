@@ -1180,6 +1180,10 @@ function updateTurnIndicator() {
                                     const hairImg = document.createElement('img');
                                     hairImg.src = 'images/humanfemalehair.png'; hairImg.classList.add('portrait-layer');
                                     applyHumanScaling(hairImg); hairImg.style.marginTop = "-3px"; portraitDiv.appendChild(hairImg);
+                                } else {
+                                    const hairImg = document.createElement('img');
+                                    hairImg.src = 'images/humanmalehair.png'; hairImg.classList.add('portrait-layer');
+                                    applyHumanScaling(hairImg); portraitDiv.appendChild(hairImg);
                                 }
                                 
                                 if (entity.equipped && entity.equipped.helmet === 'nasal_helm') {

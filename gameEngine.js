@@ -459,6 +459,7 @@ function startGameCore(isLoading = false) {
       // New Human Visuals
       humanBase: new Image(),
       humanHair: new Image(),
+      humanMaleHair: new Image(),
       humanLight: new Image(),
       humanMedium: new Image(),
       humanHeavy: new Image(),
@@ -513,6 +514,7 @@ function startGameCore(isLoading = false) {
   visuals.swordIcon.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.humanBase.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.humanHair.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.humanMaleHair.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.humanLight.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.humanMedium.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.humanHeavy.onload = () => { window.drawMap(); window.renderEntities(); };
@@ -568,6 +570,7 @@ function startGameCore(isLoading = false) {
   // Human Sources
   visuals.humanBase.src = 'images/humanfemale.png';
   visuals.humanHair.src = 'images/humanfemalehair.png';
+  visuals.humanMaleHair.src = 'images/humanmalehair.png';
   visuals.humanLight.src = 'images/humanlightarmour.png';
   visuals.humanMedium.src = 'images/humanmediumarmour.png';
   visuals.humanHeavy.src = 'images/humanheavyarmour.png';
@@ -761,9 +764,11 @@ function renderEntities() {
               if (baseImg.complete) {
                   window.mapCtx.drawImage(baseImg, x - humanSize/2, y - humanSize/2 + humanYOff, humanSize, (humanSize + humanHeightAdd));
               }
-              // LAYER: Human Hair (ONLY FOR FEMALE, MOVED UP 3px * z)
-              if (e.gender !== 'male' && window.gameVisuals.humanHair.complete) {
+              // LAYER: Human Hair
+              if (window.gameVisuals.humanHair.complete && e.gender !== 'male') {
                   window.mapCtx.drawImage(window.gameVisuals.humanHair, x - humanSize/2, y - humanSize/2 + humanYOff - (3 * z), humanSize, (humanSize + humanHeightAdd));
+              } else if (window.gameVisuals.humanMaleHair.complete && e.gender === 'male') {
+                  window.mapCtx.drawImage(window.gameVisuals.humanMaleHair, x - humanSize/2, y - humanSize/2 + humanYOff, humanSize, (humanSize + humanHeightAdd));
               }
                           // LAYER: Human Helmet
                           if (e.equipped && e.equipped.helmet === 'nasal_helm' && window.gameVisuals.nasal_helm.complete) {

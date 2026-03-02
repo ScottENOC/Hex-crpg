@@ -20,6 +20,7 @@
     - **Race Visuals**: 
         - Updated Elves to use standard human armor sprites for visual consistency.
         - Added hair overlays for Dwarf Female and Elf Male characters, ensuring all race/gender combinations have appropriate hair visual layers.
+        - Added `humanmalehair.png` overlay for Human Male characters in both the game world and portraits.
     - **Weapon Visuals**: 
         - Implemented dynamic scaling for daggers, which now use the sword icon at 50% size.
         - Shifted dagger positions by 16% of hex size down and right for better alignment with character hands.
@@ -86,7 +87,8 @@
     - **Parry Sound Effects**: Added randomized parry sound effects (`parry.wav` and `parry2.wav`) that play upon a successful parry or protector parry.
     - **Volume Balancing**: Significantly reduced the volume of the `constant.wav` background track to a 0.001 multiplier of music volume (near silent) to provide a subtle base layer.
 - **Bug Fixes**:
-    - **Stability Fixes**: Resolved "cannot read properties of undefined (reading 'id')" by adding optional chaining to weapon and target object access.
+    - **Cheat Max Skills Stability**: Resolved "cannot read properties of undefined (reading 'id')" error triggered by the max skills cheat. Added extensive optional chaining and defensive checks across `gameEngine.js`, `hexMap.js`, and `ui.js`.
+    - **Stability Fixes**: Added defensive null checks to various property accesses (e.g., weapon, target, entity IDs) to prevent crashes when objects are undefined.
     - **Combat Script Fix**: Resolved "uncaught referenceerror: roll is not defined" in `resolveAttack` and ensured it is properly scoped.
     - **Dialogue Modal Fixes**: Added a missing close button to the dialogue modal and ensured that closing it correctly resets the game's "paused for reaction" state, preventing input lockups.
     - **NPC Interaction Fix**:
