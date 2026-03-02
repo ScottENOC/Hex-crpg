@@ -15,6 +15,8 @@
     - **Eagle Fixes**: Ensured Eagles use their flying sprites and mechanics immediately upon being summoned.
     - **Eagle Size & Tracking**: Shrunk the Eagle image by 50% for better visual balance and updated the initiative tracker to correctly show the Eagle's flying or ground sprite based on its status.
     - **Painter's Algorithm**: Implemented Y-coordinate sorting in the map rendering loop. This ensures that objects closer to the "front" (South-West) are drawn on top of objects further "back" (North-East), fixing visual layering issues with pedestals and other terrain features.
+    - **Race Visuals**: Updated Elves to use standard human armor sprites for visual consistency.
+    - **Weapon Visuals**: Implemented dynamic scaling for daggers, which now use the sword icon at 50% size.
 - **Movement & Pathfinding**:
     - **Knowledge-Based Pathing**: Updated pathfinding to respect player knowledge. Characters now plan paths around known obstacles (explored walls and visible entities) but will attempt to move through unknown areas as if they were clear.
     - **Dynamic Move Cancellation**: Implemented logic to cancel auto-movement if a previously hidden obstacle (like an enemy or wall) is revealed during the player's journey.
@@ -25,6 +27,7 @@
     - **AI Adaptation**: AI now filters out un-attackable flying targets if they only have melee attacks and will choose alternative actions like moving toward favorable terrain or away from flyers.
     - **Scouting Eagle**: Implemented specialized scouting AI for the Eagle. It prioritizes tiles not seen for the longest time and searches for lost enemies. The Eagle is now non-combatant, always flying, and does not trigger enemy aggro.
     - **Flying Unit Persistence**: Refined the flying cheat logic. Characters are now persistent "flying units" when the cheat is active, gaining access to "Take Off" and "Land" action buttons.
+    - **Fly Cheat Bonus**: While the flying cheat is active, characters receive a +10 TP per tick bonus.
 - **Character & Skill Systems**:
     - **Cleric Spells**: Added `Divine Silence` (ongoing damage debuff until a spell is cast) and `Sanctuary` (triggers Time Point penalties on attackers).
     - **Trigger Penalties**: Added Cleric skills (`Divine Retribution`, `Divine Drain`, `Clouded Mind`, `Feeble Strike`, `Severed Grace`) that apply immediate or stackable penalties when trigger spells are activated.
@@ -32,11 +35,18 @@
         - Elf: Added `Keen Elf Sight` (+vision), `Elf Bow Mastery` (+range), and `Woodland Stride` (foliage expertise).
         - Dwarf: Added `Dwarven Axe Mastery` (+2 dmg) and `Solid as a Rock` (forced movement resistance).
     - **Class Skills**:
-        - Monk: Added `Pressure Point Strike` (unarmed reaction block), `Counter Trip` (reaction), `Agile Climber` (height penalty reduction), and `Disarm` (active ability).
+        - Monk: Added `Pressure Point Strike` (unarmed reaction block), `Counter Trip`, `Agile Climber` (height penalty reduction), and `Disarm`.
         - Rogue: Added `Assassinate` (high-accuracy stealth strike), `Sneak Attack` (+dmg from stealth), and `Pickpocket` (steal items).
         - Fighter: Added `Zone of Control` (penalize enemies moving out of melee reach).
     - **Weapon Masteries**: Rebalanced all weapon masteries to provide +2 damage per rank instead of +1.
     - **Quarterstaff Removal**: Removed all references to Quarterstaff from items, skills, and UI.
+    - **Character Creation Preview**: Added a dynamic preview window to the character creator that shows attribute/skill point growth per level for the selected race and class.
+- **UI & Interaction**:
+    - **UI Optimization**: Removed the oversized "Hex RPG" title and the redundant character/inventory sidebars from the main screen to maximize screen real estate for the map.
+    - **Responsive Layout**: Implemented a responsive design where the map fills the available height. On narrow screens, the chat log moves to the bottom and action buttons are layered over the map.
+    - **Entity Details**: Added an entity details popup modal. It can be triggered by clicking on portraits in the initiative tracker or by right-clicking (or long-pressing on touch devices) any visible entity on the map.
+    - **Touch Support**: Added full touchscreen support, including panning, multi-finger pinch-to-zoom, and long-press for entity details.
+    - **Top Menu**: Updated the top menu to wrap items cleanly on mobile and narrow displays.
 - **Persistence & Modes**:
     - **Auto-Save**: Implemented an auto-save function that triggers every time combat ends (unless in Iron Man mode).
     - **Iron Man Mode**: Added Iron Man mode, mandatory for Campaign 1 (Arena) and optional for others. It disables auto-save, deletes previous saves for the same character run upon saving, and returns the player to the title screen.
@@ -52,3 +62,4 @@
 - **Quality of Life & Cheats**:
     - **Fly All Cheat**: Added a new cheat button that toggles flying status for all friendly characters, including visual updates and button state changes.
     - **Terminology Polish**: Replaced "Teleporting" with "Heading back to" in the arena victory sequence for better thematic consistency.
+    - **Starting Gold**: Players now start Scenario 1 (Arena) with 100 gold.

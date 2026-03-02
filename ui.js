@@ -1132,9 +1132,15 @@ function updateTurnIndicator() {
     sortedEntities.forEach(entity => {
         const itemDiv = document.createElement('div');
         itemDiv.classList.add('turn-indicator-item');
+        itemDiv.style.cursor = 'pointer';
+        itemDiv.title = 'Click for details';
+        itemDiv.onclick = () => window.showEntityDetails(entity);
+
         if (entity === window.currentTurnEntity) itemDiv.classList.add('current-turn');
         const portraitDiv = document.createElement('div');
         portraitDiv.classList.add('turn-indicator-portrait');
+        if (entity.isFlying) portraitDiv.style.transform = "translateY(-5px)";
+
         const applyHorseScaling = (img) => {
             img.style.width = "300%"; img.style.height = "300%";
             img.style.left = "-100%"; img.style.top = "-50%";
@@ -1218,8 +1224,10 @@ function updateTurnIndicator() {
 
                 if (entity.equipped && entity.equipped.armor) {
                     const armorImg = document.createElement('img');
-                    const armorId = entity.equipped.armor;
-                    armorImg.src = (armorId === 'medium_armor' || armorId === 'heavy_armor') ? 'images/elfchainarmour.png' : 'images/elfleatherarmour.png';
+                    const aid = entity.equipped.armor;
+                    if (aid === 'light_armor') armorImg.src = 'images/humanlightarmour.png';
+                    else if (aid === 'medium_armor') armorImg.src = 'images/humanmediumarmour.png';
+                    else if (aid === 'heavy_armor') armorImg.src = 'images/humanheavyarmour.png';
                     armorImg.classList.add('portrait-layer'); 
                     if (scalingFactor !== 1.0) {
                         armorImg.style.width = `${100 * scalingFactor}%`;
@@ -1278,6 +1286,74 @@ function updateTurnIndicator() {
         indicatorBar.appendChild(itemDiv);
     });
 }
+
+function showEntityDetails(entity) {
+    const modal = document.getElementById("entity-details-modal");
+    const nameSpan = document.getElementById("entity-details-name");
+    const contentDiv = document.getElementById("entity-details-content");
+    if (!modal || !contentDiv) return;
+
+    nameSpan.innerText = entity.name;
+    
+    let html = `
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <div>
+                <p><strong>Race:</strong> ${entity.race || 'Unknown'}</p>
+                <p><strong>Class:</strong> ${entity.class || 'N/A'}</p>
+                <p><strong>HP:</strong> ${Math.ceil(entity.hp)} / ${entity.maxHp}</p>
+                ${entity.maxMana > 0 ? `<p><strong>Mana:</strong> ${Math.floor(entity.currentMana)} / ${entity.maxMana}</p>` : ''}
+                <p><strong>TP:</strong> ${Math.floor(entity.timePoints)}</p>
+                <p><strong>Initiative:</strong> ${entity.initiative}</p>
+            </div>
+            <div>
+                <p><strong>Equipped:</strong></p>
+                <ul style="padding-left: 20px; font-size: 0.9em;">
+    `;
+
+    if (entity.equipped) {
+        const slots = ['weapon', 'offhand', 'armor', 'helmet', 'accessory'];
+        slots.forEach(slot => {
+            const itemId = entity.equipped[slot];
+            if (itemId) {
+                const item = window.items[itemId];
+                html += `<li>${slot.charAt(0).toUpperCase() + slot.slice(1)}: ${item ? item.name : itemId}</li>`;
+            }
+        });
+    } else {
+        html += `<li>None</li>`;
+    }
+
+    html += `
+                </ul>
+            </div>
+        </div>
+        <hr style="border: 0; border-top: 1px solid #444; margin: 15px 0;">
+        <p><strong>Active Spells / Conditions:</strong></p>
+        <ul style="padding-left: 20px; font-size: 0.9em;">
+    `;
+
+    const effects = (window.activeSpells || []).filter(s => s.targetEntityId === entity.id || s.entityId === entity.id);
+    if (effects.length > 0) {
+        effects.forEach(s => {
+            html += `<li>${s.name} (from ${s.casterName})</li>`;
+        });
+    } else {
+        html += `<li>Normal</li>`;
+    }
+
+    if (entity.isStealthed) html += `<li>Stealthed (Score: ${Math.floor(entity.stealthScore)})</li>`;
+    if (entity.isFlying) html += `<li>Flying</li>`;
+    if (entity.poisonTicks > 0) html += `<li>Poisoned (${entity.poisonTicks} ticks)</li>`;
+    if (entity.webbedDuration > 0) html += `<li>Webbed (${Math.ceil(entity.webbedDuration)} TP)</li>`;
+    if (entity.reactionBlocked) html += `<li>Reactions Blocked</li>`;
+
+    html += `</ul>`;
+
+    contentDiv.innerHTML = html;
+    modal.style.display = "block";
+}
+
+window.showEntityDetails = showEntityDetails;
 
 function requestReaction(entity, options, callback, customMsg = null) {
     const isSentientAlly = entity.side === 'player' && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(entity.name);

@@ -55,11 +55,6 @@ const dialogueData = {
         mood: 'neutral',
         dialogue: "The sun shines brightly down on the open arena."
     },
-    'arena_victory_return': {
-        speaker: 'Narrator',
-        mood: 'neutral',
-        dialogue: "You have won the battle! Heading back to the lobby..."
-    },
     'grishnak_entry': {
         speaker: 'Arena Announcer',
         mood: 'neutral',

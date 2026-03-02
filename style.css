@@ -3,24 +3,37 @@ body {
     margin: 0;
 }
 
-#game-container {
+#gameContainer {
+    position: fixed;
+    top: 110px; /* Adjusted for turn indicator (60px) + menu (~50px) */
+    left: 0;
+    width: 100%;
+    bottom: 0;
     display: flex;
-    padding-top: 80px; /* Adjust for turn indicator and top menu */
+    flex-direction: column;
 }
 
-#game-board {
-    width: 900px; /* Adjusted for new hex dimensions */
-    height: 700px; /* Adjusted for new hex dimensions */
-    border: 1px solid black;
-    position: relative;
+#game-container {
+    display: flex;
+    flex: 1;
     overflow: hidden;
 }
 
+#game-board {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background-color: #000;
+}
+
 #ui-container {
-    margin-left: 20px;
-    width: 350px;
-    flex-shrink: 0;
-    overflow-wrap: break-word;
+    width: 300px;
+    background-color: #222;
+    border-left: 1px solid #444;
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+    box-sizing: border-box;
 }
 
 .hex {
@@ -59,6 +72,78 @@ body {
     background-color: red;
     color: white;
 }
+
+#ui-container h2 {
+    font-size: 1em;
+    margin: 5px 0;
+    color: #90caf9;
+}
+
+#active-spells-list {
+    max-height: 80px;
+    overflow-y: auto;
+    background: #111;
+    padding: 5px;
+    border: 1px solid #333;
+    font-size: 0.8em;
+    margin-bottom: 10px;
+}
+
+#message-log {
+    flex: 1;
+    overflow-y: auto;
+    background: #111;
+    padding: 10px;
+    border: 1px solid #444;
+    font-family: monospace;
+    font-size: 0.9em;
+    color: #ccc;
+}
+
+#actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 10px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 850px) {
+    #gameContainer {
+        top: 150px; /* More space for wrapped menu */
+    }
+    
+    #game-container {
+        flex-direction: column;
+    }
+
+    #ui-container {
+        width: 100%;
+        height: 200px;
+        border-left: none;
+        border-top: 1px solid #444;
+        position: relative;
+        padding: 5px;
+    }
+
+    #actions {
+        position: absolute;
+        bottom: 100%;
+        left: 0;
+        right: 0;
+        background: rgba(0,0,0,0.85);
+        padding: 10px;
+        margin-bottom: 0;
+        z-index: 10;
+        max-height: 120px;
+        overflow-y: auto;
+    }
+
+    #message-log {
+        height: 100%;
+    }
+}
+
 /* Basic styling for creation page - can be expanded */
 body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; background-color: #222; color: #eee; }
 .creation-container { background-color: #333; padding: 30px; border-radius: 8px; box-shadow: 0 0 15px rgba(0,0,0,0.5); width: 80%; max-width: 600px; }
@@ -176,6 +261,8 @@ button:hover { background-color: #3f51b5; }
     display: none; /* Managed by main.js */
     justify-content: center;
     gap: 10px;
+    flex-wrap: wrap; /* NEW */
+    box-sizing: border-box; /* NEW */
 }
 
 #top-menu button {

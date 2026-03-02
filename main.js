@@ -230,6 +230,29 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
     }
+
+    window.updateSelectionPreview = function() {
+        const race = document.getElementById("race-select").value;
+        const cls = document.getElementById("class-select").value;
+        const preview = document.getElementById("selection-preview");
+        if (!preview) return;
+
+        const rb = window.raceData[race].bonus;
+        const cb = window.classData[cls].bonus;
+
+        let html = `<h4 style="margin: 0 0 5px 0; color: #90caf9;">Growth per Level:</h4>`;
+        
+        html += `<p style="margin: 0 0 5px 0;"><strong>${race.charAt(0).toUpperCase() + race.slice(1)}:</strong> `;
+        html += Object.entries(rb).map(([k, v]) => `+${v} ${k.charAt(0).toUpperCase() + k.slice(1)}`).join(", ");
+        html += `</p>`;
+
+        html += `<p style="margin: 0;"><strong>${cls.charAt(0).toUpperCase() + cls.slice(1)}:</strong> `;
+        html += Object.entries(cb).map(([k, v]) => `+${v} ${k.charAt(0).toUpperCase() + k.slice(1)}`).join(", ");
+        html += `</p>`;
+
+        preview.innerHTML = html;
+    };
+    window.updateSelectionPreview(); // Initial call
 });
 
 window.toggleFlyCheat = function() {

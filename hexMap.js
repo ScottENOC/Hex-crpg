@@ -17,6 +17,15 @@ let lastMouseX = 0;
 let lastMouseY = 0;
 window.totalDragDistance = 0;
 
+// Touch tracking
+let lastTouchX = 0;
+let lastTouchY = 0;
+let lastPinchDist = 0;
+let touchStartTime = 0;
+let touchStartX = 0;
+let touchStartY = 0;
+let longPressTimer = null;
+
 // Flat-top hexToPixel formula - UPDATED for camera
 function hexToPixel(q, r) {
   const x = (hexSize * (3/2 * q) + mapOffsetX) * window.cameraZoom + window.cameraX;
@@ -487,6 +496,86 @@ function initHexMap() {
         drawMap();
         window.renderEntities();
     }, { passive: false });
+
+    // TOUCH SUPPORT
+    mapCanvas.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 1) {
+            isDragging = true;
+            lastTouchX = e.touches[0].clientX;
+            lastTouchY = e.touches[0].clientY;
+            touchStartX = lastTouchX;
+            touchStartY = lastTouchY;
+            touchStartTime = Date.now();
+            window.totalDragDistance = 0;
+
+            // Long press for details
+            if (longPressTimer) clearTimeout(longPressTimer);
+            longPressTimer = setTimeout(() => {
+                if (window.totalDragDistance < 10) {
+                    const clickedHex = window.screenToHex({x: touchStartX, y: touchStartY});
+                    const target = window.entities.find(ent => ent.alive && window.isVisibleToPlayer(ent.hex) && ent.getAllHexes().some(h => h.q === clickedHex.q && h.r === clickedHex.r));
+                    if (target) window.showEntityDetails(target);
+                }
+            }, 600);
+        } else if (e.touches.length === 2) {
+            isDragging = false;
+            lastPinchDist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+        }
+    }, { passive: false });
+
+    mapCanvas.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        if (e.touches.length === 1 && isDragging) {
+            const dx = e.touches[0].clientX - lastTouchX;
+            const dy = e.touches[0].clientY - lastTouchY;
+            window.cameraX += dx;
+            window.cameraY += dy;
+            window.totalDragDistance += Math.abs(dx) + Math.abs(dy);
+            lastTouchX = e.touches[0].clientX;
+            lastTouchY = e.touches[0].clientY;
+            
+            if (window.totalDragDistance > 10 && longPressTimer) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }
+
+            drawMap();
+            window.renderEntities();
+        } else if (e.touches.length === 2) {
+            const dist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+            const delta = dist / lastPinchDist;
+            lastPinchDist = dist;
+
+            const rect = mapCanvas.getBoundingClientRect();
+            const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+            const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+
+            const worldX = (centerX - window.cameraX) / window.cameraZoom;
+            const worldY = (centerY - window.cameraY) / window.cameraZoom;
+
+            window.cameraZoom = Math.min(Math.max(0.05, window.cameraZoom * delta), 5.0);
+            window.cameraX = centerX - worldX * window.cameraZoom;
+            window.cameraY = centerY - worldY * window.cameraZoom;
+
+            drawMap();
+            window.renderEntities();
+        }
+    }, { passive: false });
+
+    mapCanvas.addEventListener('touchend', (e) => {
+        if (longPressTimer) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+        }
+        if (e.touches.length < 2) lastPinchDist = 0;
+        if (e.touches.length === 0) isDragging = false;
+    });
 
     drawMap();
   }

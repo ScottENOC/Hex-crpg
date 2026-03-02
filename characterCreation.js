@@ -5,6 +5,8 @@ function initializePlayer(race, cls, gender, campaign = "3") {
   window.currentCampaign = campaign;
   
   const mainChar = createCharacterData(race, cls, "Player (Main)", gender);
+  if (campaign === "1") mainChar.gold = 100;
+  
   window.party.push(mainChar);
   window.player = mainChar; // Keep window.player as a reference to the selected one for compatibility
 }

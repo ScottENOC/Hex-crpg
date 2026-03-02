@@ -647,6 +647,17 @@ function startGameCore(isLoading = false) {
 
   document.addEventListener("keydown", window.handleMovement);
   window.mapCanvas.addEventListener("click", window.handleClick);
+  
+  // Right-click for entity details
+  window.mapCanvas.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      const clickedHex = window.screenToHex({x: e.clientX, y: e.clientY});
+      const target = getEntityAtHex(clickedHex.q, clickedHex.r);
+      if (target && target.alive && window.isVisibleToPlayer(target.hex)) {
+          window.showEntityDetails(target);
+      }
+  });
+
   if (!window.tickInterval) window.tickInterval = setInterval(tick, 10);
 }
 
@@ -716,6 +727,7 @@ function renderEntities() {
       
           if (e.isStealthed) window.mapCtx.globalAlpha = 0.5;
           const isSentientAlly = e.side === 'player' && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(e.name);
+          const flyOff = e.isFlying ? -20 * z : 0;
   
       if (isSentientAlly && window.gameVisuals) {
           const size = window.hexSize * 2.0 * z;
@@ -723,7 +735,7 @@ function renderEntities() {
           if (e.race === 'human') {
               const humanSizeMult = e.gender === 'male' ? 1.8 : 1.6; // 10% vs 20% smaller than 2.0
               const humanSize = window.hexSize * humanSizeMult * z;
-              const humanYOff = (humanSizeMult * -3) * z; // Proportional offset
+              const humanYOff = ((humanSizeMult * -3) * z) + flyOff; // Proportional offset
               const humanHeightAdd = (humanSizeMult * 6) * z;
   
               // LAYER: Human Base (Gendered)
@@ -761,7 +773,7 @@ function renderEntities() {
               // LAYER: Non-human (Elf/Dwarf) Base
               let baseImg = null;
               let currentSize = size;
-              let currentYOff = -6 * z;
+              let currentYOff = (-6 * z) + flyOff;
               let currentHeight = size + 12 * z;
   
               if (e.race === 'elf') {
@@ -771,7 +783,7 @@ function renderEntities() {
                   // Dwarf 20% smaller
                   currentSize = size * 0.8;
                   currentHeight = (size + 12 * z) * 0.8;
-                  currentYOff = -2 * z; 
+                  currentYOff = (-2 * z) + flyOff; 
               } else {
                   baseImg = window.gameVisuals.playerBase; // Fallback
               }
@@ -793,12 +805,13 @@ function renderEntities() {
               // LAYER: Non-human Armour
               let armorImg = null;
               if (e.equipped && e.equipped.armor) {
-                  const armorId = e.equipped.armor;
-                  if (armorId === 'medium_armor' || armorId === 'heavy_armor') armorImg = window.gameVisuals.chainArmor;
-                  else if (armorId === 'light_armor') armorImg = window.gameVisuals.leatherArmor;
+                  const aid = e.equipped.armor;
+                  if (aid === 'light_armor') armorImg = window.gameVisuals.humanLight;
+                  else if (aid === 'medium_armor') armorImg = window.gameVisuals.humanMedium;
+                  else if (aid === 'heavy_armor') armorImg = window.gameVisuals.humanHeavy;
               }
               if (armorImg && armorImg.complete) {
-                  window.mapCtx.drawImage(armorImg, x - currentSize/2, (y - currentSize/2) + (15 * z), currentSize, currentSize);
+                  window.mapCtx.drawImage(armorImg, x - currentSize/2, (y - currentSize/2) + currentYOff + (21 * z), currentSize, currentSize);
               }
               // LAYER: Shield (Elf/Dwarf Scale)
               if (e.equipped && e.equipped.offhand && window.items[e.equipped.offhand].type === 'shield' && window.gameVisuals.shield.complete) {
@@ -809,31 +822,34 @@ function renderEntities() {
           
                           // WEAPON LAYER: Sword, Axe, Spear or Club
                           let weaponImg = null;
+                          let weaponScale = 1.0;
                           const mainW = e.equipped?.weapon;
                           if (mainW === 'sword' || mainW === 'sword_arrow_deflection') weaponImg = window.gameVisuals.swordIcon;
                           else if (mainW === 'axe') weaponImg = window.gameVisuals.axe;
                           else if (mainW === 'spear') weaponImg = window.gameVisuals.spear;
                           else if (mainW === 'club') weaponImg = window.gameVisuals.club;
+                          else if (mainW === 'dagger') { weaponImg = window.gameVisuals.swordIcon; weaponScale = 0.5; }
                   
                           if (weaponImg && weaponImg.complete) {
-                              const weaponSize = window.hexSize * 1.0 * z; 
-                              window.mapCtx.drawImage(weaponImg, x - (window.hexSize/2 + 5) * z, y - weaponSize/2, weaponSize, weaponSize);
+                              const weaponSize = window.hexSize * weaponScale * z; 
+                              window.mapCtx.drawImage(weaponImg, x - (window.hexSize/2 + 5) * z, y - weaponSize/2 + flyOff, weaponSize, weaponSize);
                           }
                   
                           // OFF-HAND WEAPON LAYER
                           let offhandImg = null;
+                          let offhandScale = 1.0;
                           const offW = e.equipped?.offhand;
                           if (offW === 'sword' || offW === 'sword_arrow_deflection') offhandImg = window.gameVisuals.swordIcon;
                           else if (offW === 'axe') offhandImg = window.gameVisuals.axe;
                           else if (offW === 'spear') offhandImg = window.gameVisuals.spear;
                           else if (offW === 'club') offhandImg = window.gameVisuals.club;
-                          else if (offW === 'dagger') offhandImg = window.gameVisuals.swordIcon; // Daggers use sword icon for now
+                          else if (offW === 'dagger') { offhandImg = window.gameVisuals.swordIcon; offhandScale = 0.5; }
                   
                           if (offhandImg && offhandImg.complete && window.items[offW]?.type === 'weapon') {
-                              const weaponSize = window.hexSize * 1.0 * z;
+                              const weaponSize = window.hexSize * offhandScale * z;
                               window.mapCtx.save();
                               // Flip vertically and position on the right side
-                              window.mapCtx.translate(x + (window.hexSize/2 + 5) * z, y);
+                              window.mapCtx.translate(x + (window.hexSize/2 + 5) * z, y + flyOff);
                               window.mapCtx.scale(1, -1);
                               window.mapCtx.drawImage(offhandImg, -weaponSize/2, -weaponSize/2, weaponSize, weaponSize);
                               window.mapCtx.restore();
@@ -1055,7 +1071,8 @@ function runTickInternal(isSleepCycle = false) {
                 if (e.side === 'enemy' && e.aiState === 'idle') return;
 
                 if (e.timePoints < 150) {
-                    const tpGained = e.timePointsPerTick;
+                    let tpGained = e.timePointsPerTick;
+                    if (e.flyCheat) tpGained += 10;
                     e.timePoints += tpGained;
 
                     // POISON TICK
@@ -1123,7 +1140,7 @@ function runTickInternal(isSleepCycle = false) {
         // AMBIENT DIALOGUE (Arena Lobby)
         if (window.currentCampaign === "1" && !window.isInArena) {
             window.lobbyTPSpent = (window.lobbyTPSpent || 0) + 1;
-            if (window.lobbyTPSpent > 150 && !window.hasTriggeredImpatience) {
+            if (window.lobbyTPSpent > 250 && !window.hasTriggeredImpatience) {
                 window.triggerAmbientDialogue('arena_lobby_1');
                 window.hasTriggeredImpatience = true;
             }
@@ -2266,7 +2283,6 @@ function checkCombatEnd() {
         if (window.currentCampaign === "1" && window.isInArena) {
             window.isInArena = false;
             window.triggerAmbientDialogue('arena_victory');
-            window.triggerAmbientDialogue('arena_victory_return');
             
             // AUDIO: Victory fade out
             if (window.stopAllMusic) window.stopAllMusic(0.8);
@@ -2806,6 +2822,7 @@ function talkToNPC(npc) {
             { label: "Maybe later.", action: () => {} }
         ]);
     } else if (npc.name === "Mercenary Recruiter") {
+        window.triggerAmbientDialogue('arena_lobby_4');
         window.showDialogue(npc, "Looking for some extra muscle? 100 gold and I'll find you a capable fighter who matches your experience.", [
             { label: "I'd like to hire someone (100g).", action: () => window.startMercenaryHire() },
             { label: "Not right now.", action: () => {} }

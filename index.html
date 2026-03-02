@@ -108,7 +108,7 @@
             </div>
             <div class="form-group">
                 <label for="race-select">Race:</label>
-                <select id="race-select">
+                <select id="race-select" onchange="window.updateSelectionPreview()">
                     <option value="human">Human</option>
                     <option value="dwarf">Dwarf</option>
                     <option value="elf">Elf</option>
@@ -123,7 +123,7 @@
             </div>
             <div class="form-group">
                 <label for="class-select">Class:</label>
-                <select id="class-select">
+                <select id="class-select" onchange="window.updateSelectionPreview()">
                     <option value="fighter">Fighter</option>
                     <option value="rogue">Rogue</option>
                     <option value="cleric">Cleric</option>
@@ -131,6 +131,10 @@
                     <option value="druid">Druid</option>
                     <option value="monk">Monk</option>
                 </select>
+            </div>
+            
+            <div id="selection-preview" style="background: #222; padding: 10px; border: 1px solid #444; border-radius: 5px; margin-bottom: 15px; font-size: 0.85em; line-height: 1.4; color: #ccc;">
+                <!-- Filled by JS -->
             </div>
             <div class="form-group">
                 <label for="campaign-select">Campaign:</label>
@@ -171,16 +175,11 @@
     </div>
 
     <div id="gameContainer" style="display: none;">
-        <h1>Hex RPG</h1>
         <div id="game-container">
             <div id="game-board">
                 <canvas id="mapCanvas"></canvas>
             </div>
             <div id="ui-container">
-                <h2>Character</h2>
-                <div id="character-info"></div>
-                <h2>Inventory</h2>
-                <ul id="inventory-list"></ul>
                 <h2>Actions</h2>
                 <div id="actions">
                 </div>
@@ -338,6 +337,14 @@
             <h2>Run Ended</h2>
             <p id="end-run-message"></p>
             <div id="reward-choices" style="display: flex; gap: 20px; justify-content: space-around; margin-top: 20px;"></div>
+        </div>
+    </div>
+
+    <div id="entity-details-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close-btn" id="close-entity-details-modal">&times;</span>
+            <h2 id="entity-details-name">Entity Details</h2>
+            <div id="entity-details-content"></div>
         </div>
     </div>
 
