@@ -1162,83 +1162,95 @@ function updateTurnIndicator() {
             img.style.zIndex = "5";
         };
         if (entity.side === 'player' && entity.name !== 'Wolf' && entity.name !== 'Horse') {
-            if (entity.race === 'human') {
-                const sizePct = entity.gender === 'male' ? 90 : 80;
-                const offsetPct = (100 - sizePct) / 2;
-                const applyHumanScaling = (img) => { 
-                    img.style.width = `${sizePct}%`; 
-                    img.style.height = `${sizePct}%`; 
-                    img.style.left = `${offsetPct}%`; 
-                    img.style.top = `${offsetPct}%`; 
-                };
-                const baseImg = document.createElement('img');
-                baseImg.src = entity.gender === 'male' ? 'images/humanmale.png' : 'images/humanfemale.png'; 
-                baseImg.classList.add('portrait-layer');
-                applyHumanScaling(baseImg); portraitDiv.appendChild(baseImg);
-                
-                if (entity.gender !== 'male') {
-                    const hairImg = document.createElement('img');
-                    hairImg.src = 'images/humanfemalehair.png'; hairImg.classList.add('portrait-layer');
-                    applyHumanScaling(hairImg); hairImg.style.marginTop = "-3px"; portraitDiv.appendChild(hairImg);
-                }
-                
-                if (entity.equipped && entity.equipped.helmet === 'nasal_helm') {
-                    const helmImg = document.createElement('img');
-                    helmImg.src = 'images/nasalHelm.png'; helmImg.classList.add('portrait-layer');
-                    applyHumanScaling(helmImg); portraitDiv.appendChild(helmImg);
-                }
-
-                if (entity.equipped && entity.equipped.armor) {
-                    const armorImg = document.createElement('img');
-                    const aid = entity.equipped.armor;
-                    if (aid === 'light_armor') armorImg.src = 'images/humanlightarmour.png';
-                    else if (aid === 'medium_armor') armorImg.src = 'images/humanmediumarmour.png';
-                    else if (aid === 'heavy_armor') armorImg.src = 'images/humanheavyarmour.png';
-                    armorImg.classList.add('portrait-layer'); applyHumanScaling(armorImg);
-                    portraitDiv.appendChild(armorImg);
-                }
-            } else {
-                const baseImg = document.createElement('img');
-                let scalingFactor = 1.0;
-                if (entity.race === 'elf') {
-                    baseImg.src = entity.gender === 'male' ? 'images/elfmale.png' : 'images/elffemale.png';
-                } else if (entity.race === 'dwarf') {
-                    baseImg.src = entity.gender === 'male' ? 'images/dwarfmale.png' : 'images/dwarffemale.png';
-                    scalingFactor = 0.8;
-                } else {
-                    baseImg.src = 'images/elf.png';
-                }
-                baseImg.classList.add('portrait-layer');
-                if (scalingFactor !== 1.0) {
-                    baseImg.style.width = `${100 * scalingFactor}%`;
-                    baseImg.style.height = `${100 * scalingFactor}%`;
-                    baseImg.style.left = `${(100 - 100 * scalingFactor) / 2}%`;
-                    baseImg.style.top = `${(100 - 100 * scalingFactor) / 2}%`;
-                }
-                portraitDiv.appendChild(baseImg);
-
-                if (entity.race === 'elf' && entity.gender === 'female') {
-                    const hairImg = document.createElement('img');
-                    hairImg.src = 'images/elffemalehair.png';
-                    hairImg.classList.add('portrait-layer');
-                    portraitDiv.appendChild(hairImg);
-                }
-
-                if (entity.race === 'dwarf' && entity.gender === 'male') {
-                    const hairImg = document.createElement('img');
-                    hairImg.src = 'images/dwarfmalehair.png';
-                    hairImg.classList.add('portrait-layer');
-                    if (scalingFactor !== 1.0) {
-                        hairImg.style.width = `${100 * scalingFactor}%`;
-                        hairImg.style.height = `${100 * scalingFactor}%`;
-                        hairImg.style.left = `${(100 - 100 * scalingFactor) / 2}%`;
-                        hairImg.style.top = `${(100 - 100 * scalingFactor) / 2}%`;
-                    }
-                    portraitDiv.appendChild(hairImg);
-                }
-
-                if (entity.equipped && entity.equipped.armor) {
-                    const armorImg = document.createElement('img');
+                            if (entity.race === 'human') {
+                                const sizePct = entity.gender === 'male' ? 90 : 80;
+                                const offsetPct = (100 - sizePct) / 2;
+                                const applyHumanScaling = (img) => { 
+                                    img.style.width = `${sizePct}%`; 
+                                    img.style.height = `${sizePct}%`; 
+                                    img.style.left = `${offsetPct}%`; 
+                                    img.style.top = `${offsetPct}%`; 
+                                };
+                                const baseImg = document.createElement('img');
+                                baseImg.src = entity.gender === 'male' ? 'images/humanmale.png' : 'images/humanfemale.png'; 
+                                baseImg.classList.add('portrait-layer');
+                                applyHumanScaling(baseImg); portraitDiv.appendChild(baseImg);
+                                
+                                if (entity.gender !== 'male') {
+                                    const hairImg = document.createElement('img');
+                                    hairImg.src = 'images/humanfemalehair.png'; hairImg.classList.add('portrait-layer');
+                                    applyHumanScaling(hairImg); hairImg.style.marginTop = "-3px"; portraitDiv.appendChild(hairImg);
+                                }
+                                
+                                if (entity.equipped && entity.equipped.helmet === 'nasal_helm') {
+                                    const helmImg = document.createElement('img');
+                                    helmImg.src = 'images/nasalHelm.png'; helmImg.classList.add('portrait-layer');
+                                    applyHumanScaling(helmImg); portraitDiv.appendChild(helmImg);
+                                }
+            
+                                if (entity.equipped && entity.equipped.armor) {
+                                    const armorImg = document.createElement('img');
+                                    const aid = entity.equipped.armor;
+                                    if (aid === 'light_armor') armorImg.src = 'images/humanlightarmour.png';
+                                    else if (aid === 'medium_armor') armorImg.src = 'images/humanmediumarmour.png';
+                                    else if (aid === 'heavy_armor') armorImg.src = 'images/humanheavyarmour.png';
+                                    armorImg.classList.add('portrait-layer'); applyHumanScaling(armorImg);
+                                    portraitDiv.appendChild(armorImg);
+                                }
+                            } else {
+                                const baseImg = document.createElement('img');
+                                let scalingFactor = 1.0;
+                                if (entity.race === 'elf') {
+                                    baseImg.src = entity.gender === 'male' ? 'images/elfmale.png' : 'images/elffemale.png';
+                                } else if (entity.race === 'dwarf') {
+                                    baseImg.src = entity.gender === 'male' ? 'images/dwarfmale.png' : 'images/dwarffemale.png';
+                                    scalingFactor = 0.8;
+                                } else {
+                                    baseImg.src = 'images/elf.png';
+                                }
+                                baseImg.classList.add('portrait-layer');
+                                if (scalingFactor !== 1.0) {
+                                    baseImg.style.width = `${100 * scalingFactor}%`;
+                                    baseImg.style.height = `${100 * scalingFactor}%`;
+                                    baseImg.style.left = `${(100 - 100 * scalingFactor) / 2}%`;
+                                    baseImg.style.top = `${(100 - 100 * scalingFactor) / 2}%`;
+                                }
+                                portraitDiv.appendChild(baseImg);
+            
+                                // HAIR OVERLAYS
+                                if (entity.race === 'elf') {
+                                    const hairImg = document.createElement('img');
+                                    if (entity.gender === 'female') hairImg.src = 'images/elffemalehair.png';
+                                    else if (entity.gender === 'male') hairImg.src = 'images/elfmalehair.png';
+                                    
+                                    if (hairImg.src) {
+                                        hairImg.classList.add('portrait-layer');
+                                        if (scalingFactor !== 1.0) {
+                                            hairImg.style.width = `${100 * scalingFactor}%`;
+                                            hairImg.style.height = `${100 * scalingFactor}%`;
+                                            hairImg.style.left = `${(100 - 100 * scalingFactor) / 2}%`;
+                                            hairImg.style.top = `${(100 - 100 * scalingFactor) / 2}%`;
+                                        }
+                                        portraitDiv.appendChild(hairImg);
+                                    }
+                                } else if (entity.race === 'dwarf') {
+                                    const hairImg = document.createElement('img');
+                                    if (entity.gender === 'male') hairImg.src = 'images/dwarfmalehair.png';
+                                    else if (entity.gender === 'female') hairImg.src = 'images/dwarffemalehair.png';
+                                    
+                                    if (hairImg.src) {
+                                        hairImg.classList.add('portrait-layer');
+                                        if (scalingFactor !== 1.0) {
+                                            hairImg.style.width = `${100 * scalingFactor}%`;
+                                            hairImg.style.height = `${100 * scalingFactor}%`;
+                                            hairImg.style.left = `${(100 - 100 * scalingFactor) / 2}%`;
+                                            hairImg.style.top = `${(100 - 100 * scalingFactor) / 2}%`;
+                                        }
+                                        portraitDiv.appendChild(hairImg);
+                                    }
+                                }
+            
+                                if (entity.equipped && entity.equipped.armor) {                    const armorImg = document.createElement('img');
                     const aid = entity.equipped.armor;
                     if (aid === 'light_armor') armorImg.src = 'images/humanlightarmour.png';
                     else if (aid === 'medium_armor') armorImg.src = 'images/humanmediumarmour.png';
@@ -1276,6 +1288,8 @@ function updateTurnIndicator() {
             else if (entity.name === 'Skeleton') img.src = 'images/skeleton.svg';
             else if (entity.name === 'Zombie') img.src = 'images/zombie.svg';
             else if (entity.name === 'Imp') img.src = 'images/imp.svg';
+            else if (entity.name === 'Boar') img.src = 'images/boar.png';
+            else if (entity.name === 'Tiger') img.src = 'images/tiger.png';
             else if (entity.name === 'Eagle') {
                 img.src = entity.isFlying ? 'images/eagleflying.png' : 'images/eagle.png';
             }

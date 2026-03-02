@@ -5,6 +5,7 @@
     - **Optimized Upkeep**: Refined the mana upkeep logic to stop processing spell costs immediately once mana reaches zero, preventing negative mana values and log spam.
     - **Summon Vanish Fix**: Added unique IDs to all entities, ensuring summoned creatures are correctly identified and removed from the map when their upkeep spell expires or is cancelled.
     - **Multi-Target Spells**: Implemented "Fork" skills for Arcane, Divine, and Nature trees (6 ranks each). Single-target spells can now be modified to affect multiple targets, with increased mana and maintenance costs.
+    - **Upkeep Refinement**: Improved mana exhaustion handling. When mana runs out, the game now only cancels the single most expensive upkeep spell per tick, preventing all summons from vanishing simultaneously.
 - **Environment & Immersion**:
     - **Thematic Transitions**: Replaced "teleportation" terminology with more grounded descriptions of walking through corridors or using elevators to enter the arena.
     - **Time-Aware Atmosphere**: Implemented dynamic arena entrance text that correctly identifies if the Sun or the Moon/Stars are illuminating the outdoor matches based on the current world time and light level.
@@ -16,7 +17,9 @@
     - **Eagle Fixes**: Ensured Eagles use their flying sprites and mechanics immediately upon being summoned.
     - **Eagle Size & Tracking**: Shrunk the Eagle image by 50% for better visual balance and updated the initiative tracker to correctly show the Eagle's flying or ground sprite based on its status.
     - **Painter's Algorithm**: Implemented Y-coordinate sorting in the map rendering loop. This ensures that objects closer to the "front" (South-West) are drawn on top of objects further "back" (North-East), fixing visual layering issues with pedestals and other terrain features.
-    - **Race Visuals**: Updated Elves to use standard human armor sprites for visual consistency.
+    - **Race Visuals**: 
+        - Updated Elves to use standard human armor sprites for visual consistency.
+        - Added hair overlays for Dwarf Female and Elf Male characters, ensuring all race/gender combinations have appropriate hair visual layers.
     - **Weapon Visuals**: 
         - Implemented dynamic scaling for daggers, which now use the sword icon at 50% size.
         - Shifted dagger positions by 16% of hex size down and right for better alignment with character hands.
@@ -26,6 +29,7 @@
         - Shrunk Shopkeeper size to 1.215 (10% reduction).
         - Increased Shield size to 2.25x base (50% bigger).
         - Centered the Nasal Helm horizontally on characters.
+        - Shrunk large animal (Horse, Wolf, Boar, Tiger) visual size from 4.5x to 3.5x for better fit on the map.
 - **Movement & Pathfinding**:
     - **Knowledge-Based Pathing**: Updated pathfinding to respect player knowledge. Characters now plan paths around known obstacles (explored walls and visible entities) but will attempt to move through unknown areas as if they were clear.
     - **Dynamic Move Cancellation**: Implemented logic to cancel auto-movement if a previously hidden obstacle (like an enemy or wall) is revealed during the player's journey.
@@ -36,6 +40,7 @@
     - **Flying Melee Rules**: Implemented logic to block melee attacks from/against flyers unless both units are flying. Melee attacks against flyers now correctly show a message and do not consume Time Points.
     - **AI Adaptation**: AI now filters out un-attackable flying targets if they only have melee attacks and will choose alternative actions like moving toward favorable terrain or away from flyers.
     - **Scouting Eagle**: Implemented specialized scouting AI for the Eagle. It prioritizes tiles not seen for the longest time and searches for lost enemies. The Eagle is now non-combatant, always flying, and does not trigger enemy aggro.
+    - **Refined Eagle AI**: The Eagle now prioritizes scouting unexplored or fog-of-war terrain close to its summoner, rather than wandering off into empty distant areas.
     - **Flying Unit Persistence**: Refined the flying cheat logic. Characters are now persistent "flying units" when the cheat is active, gaining access to "Take Off" and "Land" action buttons.
     - **Fly Cheat Bonus**: While the flying cheat is active, characters receive a +10 TP per tick bonus.
     - **Flying Visuals**: Added a vertical offset to characters and weapons while flying, providing clear visual feedback of their airborne state.
@@ -68,6 +73,7 @@
     - **Settings Menu**: Added a new 'Settings' modal accessible from the top menu.
     - **Audio Volume Control**: Implemented granular volume sliders for Master, Music, Effects, and Dialogue in the Settings menu.
     - **Entity Details**: Added an entity details popup modal. It can be triggered by clicking on portraits in the initiative tracker or by right-clicking (or long-pressing on touch devices) any visible entity on the map.
+    - **Initiative Portraits**: Updated the initiative tracker to correctly display unique portraits for all summoned animals (Orc, Wolf, Horse, Skeleton, Zombie, Imp, Boar, Tiger, Eagle).
     - **Touch Support**: Added full touchscreen support, including panning, multi-finger pinch-to-zoom, and long-press for entity details.
     - **Top Menu**: Updated the top menu to wrap items cleanly on mobile and narrow displays.
 - **Audio & Voice System**:
@@ -80,8 +86,7 @@
     - **Parry Sound Effects**: Added randomized parry sound effects (`parry.wav` and `parry2.wav`) that play upon a successful parry or protector parry.
     - **Volume Balancing**: Significantly reduced the volume of the `constant.wav` background track to a 0.001 multiplier of music volume (near silent) to provide a subtle base layer.
 - **Bug Fixes**:
-    - **Cheat Max Skills Stability**: Resolved "cannot read properties of undefined (reading 'id')" error triggered by the max skills cheat. Added extensive optional chaining and defensive checks across `gameEngine.js`, `hexMap.js`, and `ui.js`.
-    - **Stability Fixes**: Added defensive null checks to various property accesses (e.g., weapon, target, entity IDs) to prevent crashes when objects are undefined.
+    - **Stability Fixes**: Resolved "cannot read properties of undefined (reading 'id')" by adding optional chaining to weapon and target object access.
     - **Combat Script Fix**: Resolved "uncaught referenceerror: roll is not defined" in `resolveAttack` and ensured it is properly scoped.
     - **Dialogue Modal Fixes**: Added a missing close button to the dialogue modal and ensured that closing it correctly resets the game's "paused for reaction" state, preventing input lockups.
     - **NPC Interaction Fix**:

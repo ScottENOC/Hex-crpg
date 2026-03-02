@@ -466,11 +466,13 @@ function startGameCore(isLoading = false) {
       nasal_helm: new Image(),
       humanMaleBase: new Image(),
       elfMaleBase: new Image(),
+      elfMaleHair: new Image(),
       elfFemaleBase: new Image(),
       elfFemaleHair: new Image(),
       dwarfMaleBase: new Image(),
-      dwarfFemaleBase: new Image(),
       dwarfMaleHair: new Image(),
+      dwarfFemaleBase: new Image(),
+      dwarfFemaleHair: new Image(),
       shield: new Image(),
       skeleton: new Image(),
       zombie: new Image(),
@@ -518,11 +520,13 @@ function startGameCore(isLoading = false) {
   visuals.nasal_helm.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.humanMaleBase.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.elfMaleBase.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.elfMaleHair.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.elfFemaleBase.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.elfFemaleHair.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.dwarfMaleBase.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.dwarfFemaleBase.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.dwarfMaleHair.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.dwarfFemaleBase.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.dwarfFemaleHair.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.shield.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.skeleton.onload = () => { window.drawMap(); window.renderEntities(); };
   visuals.zombie.onload = () => { window.drawMap(); window.renderEntities(); };
@@ -571,11 +575,13 @@ function startGameCore(isLoading = false) {
   visuals.nasal_helm.src = 'images/nasalHelm.png';
   visuals.humanMaleBase.src = 'images/humanmale.png';
   visuals.elfMaleBase.src = 'images/elfmale.png';
+  visuals.elfMaleHair.src = 'images/elfmalehair.png';
   visuals.elfFemaleBase.src = 'images/elffemale.png';
   visuals.elfFemaleHair.src = 'images/elffemalehair.png';
   visuals.dwarfMaleBase.src = 'images/dwarfmale.png';
-  visuals.dwarfFemaleBase.src = 'images/dwarffemale.png';
   visuals.dwarfMaleHair.src = 'images/dwarfmalehair.png';
+  visuals.dwarfFemaleBase.src = 'images/dwarffemale.png';
+  visuals.dwarfFemaleHair.src = 'images/dwarffemalehair.png';
   visuals.shield.src = 'images/shield.png';
   visuals.skeleton.src = 'images/skeleton.svg';
   visuals.zombie.src = 'images/zombie.svg';
@@ -805,14 +811,22 @@ function renderEntities() {
                   window.mapCtx.drawImage(baseImg, x - currentSize/2, y - currentSize/2 + currentYOff, currentSize, currentHeight);
               }
   
-              // LAYER: Dwarf Male Hair
-              if (e.race === 'dwarf' && e.gender === 'male' && window.gameVisuals.dwarfMaleHair.complete) {
-                  window.mapCtx.drawImage(window.gameVisuals.dwarfMaleHair, x - currentSize/2, y - currentSize/2 + currentYOff, currentSize, currentHeight);
+              // LAYER: Dwarf Hair
+              if (e.race === 'dwarf') {
+                  if (e.gender === 'male' && window.gameVisuals.dwarfMaleHair.complete) {
+                      window.mapCtx.drawImage(window.gameVisuals.dwarfMaleHair, x - currentSize/2, y - currentSize/2 + currentYOff, currentSize, currentHeight);
+                  } else if (e.gender === 'female' && window.gameVisuals.dwarfFemaleHair.complete) {
+                      window.mapCtx.drawImage(window.gameVisuals.dwarfFemaleHair, x - currentSize/2, y - currentSize/2 + currentYOff, currentSize, currentHeight);
+                  }
               }
   
-              // LAYER: Elf Female Hair
-              if (e.race === 'elf' && e.gender === 'female' && window.gameVisuals.elfFemaleHair.complete) {
-                  window.mapCtx.drawImage(window.gameVisuals.elfFemaleHair, x - currentSize/2, y - currentSize/2 + currentYOff, currentSize, currentHeight);
+              // LAYER: Elf Hair
+              if (e.race === 'elf') {
+                  if (e.gender === 'female' && window.gameVisuals.elfFemaleHair.complete) {
+                      window.mapCtx.drawImage(window.gameVisuals.elfFemaleHair, x - currentSize/2, y - currentSize/2 + currentYOff, currentSize, currentHeight);
+                  } else if (e.gender === 'male' && window.gameVisuals.elfMaleHair.complete) {
+                      window.mapCtx.drawImage(window.gameVisuals.elfMaleHair, x - currentSize/2, y - currentSize/2 + currentYOff, currentSize, currentHeight);
+                  }
               }
   
               // LAYER: Non-human Armour
@@ -885,7 +899,7 @@ function renderEntities() {
                           let widthMult = 1.0;
                   
                           if (e.name === 'Horse' || e.name === 'Wolf' || e.name === 'Boar' || e.name === 'Tiger') {
-                              size = window.hexSize * 4.5 * z; // Large animals
+                              size = window.hexSize * 3.5 * z; // Shrunk from 4.5
                           } else if (e.name === 'Troll') {
                               size = window.hexSize * 4.5 * z;
                           } else if (e.name === 'Eagle') {
@@ -1139,14 +1153,26 @@ function runTickInternal(isSleepCycle = false) {
 
                     // Ongoing Spell Costs (2.5% of core mana cost per TP gained)
                     const mySpells = (window.activeSpells || []).filter(s => s.casterName === e.name);
-                    for (const s of mySpells) {
-                        if (e.currentMana <= 0) break; 
-                        const cost = s.coreManaCost * 0.025 * tpGained;
-                        e.currentMana -= cost;
-                        if (e.currentMana <= 0) {
-                            e.currentMana = 0;
-                            window.showMessage(`Spell ${s.name} on ${e.name} faded due to lack of mana.`);
-                            window.cancelSpell(s.spellInstanceId);
+                    if (mySpells.length > 0) {
+                        // Sort by cost descending to cancel most expensive first if needed
+                        mySpells.sort((a, b) => b.coreManaCost - a.coreManaCost);
+                        
+                        for (const s of mySpells) {
+                            if (e.currentMana <= 0) {
+                                // If mana is ALREADY 0 and we have upkeep, cancel one and stop
+                                window.showMessage(`Spell ${s.name} on ${e.name} faded due to lack of mana.`);
+                                window.cancelSpell(s.spellInstanceId);
+                                break;
+                            }
+                            
+                            const cost = s.coreManaCost * 0.025 * tpGained;
+                            e.currentMana -= cost;
+                            if (e.currentMana <= 0) {
+                                e.currentMana = 0;
+                                window.showMessage(`Spell ${s.name} on ${e.name} faded due to lack of mana.`);
+                                window.cancelSpell(s.spellInstanceId);
+                                break; // Only cancel ONE per tick
+                            }
                         }
                     }
 
@@ -1419,15 +1445,34 @@ function aiProcess(entity) {
         if (lostEnemy) {
             scoutTarget = lostEnemy.hex;
         } else {
-            // 2. Oldest seen or never seen tiles within 20 hexes
-            const range = 20;
-            const candidates = window.getHexesInRange(entity.hex, range);
-            candidates.sort((a, b) => {
-                const ta = window.lastSeenTimeMap?.[`${a.q},${a.r}`] || 0;
-                const tb = window.lastSeenTimeMap?.[`${b.q},${b.r}`] || 0;
-                return ta - tb; // Prioritize lower (older) time
-            });
-            scoutTarget = candidates[0];
+            // 2. Unexplored/Fog near summoner
+            const summoner = window.entities.find(ent => ent.name === entity.summoner);
+            if (summoner) {
+                const searchRange = 35;
+                const localHexes = window.getHexesInRange(summoner.hex, searchRange);
+                const fogHexes = localHexes.filter(h => !window.isVisibleToPlayer(h));
+                if (fogHexes.length > 0) {
+                    // Prioritize oldest seen or never seen
+                    fogHexes.sort((a, b) => {
+                        const ta = window.lastSeenTimeMap?.[`${a.q},${a.r}`] || 0;
+                        const tb = window.lastSeenTimeMap?.[`${b.q},${b.r}`] || 0;
+                        return ta - tb;
+                    });
+                    scoutTarget = fogHexes[0];
+                }
+            }
+
+            if (!scoutTarget) {
+                // 3. Fallback: Oldest seen or never seen tiles within 20 hexes of current position
+                const range = 20;
+                const candidates = window.getHexesInRange(entity.hex, range);
+                candidates.sort((a, b) => {
+                    const ta = window.lastSeenTimeMap?.[`${a.q},${a.r}`] || 0;
+                    const tb = window.lastSeenTimeMap?.[`${b.q},${b.r}`] || 0;
+                    return ta - tb; // Prioritize lower (older) time
+                });
+                scoutTarget = candidates[0];
+            }
         }
 
         if (scoutTarget) {

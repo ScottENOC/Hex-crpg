@@ -145,6 +145,7 @@ const monsterTemplates = {
         expValue: 250,
         canLoot: false,
         mountSize: 3,
+        extraHexes: [{q: 0, r: 1}],
         tags: ['animal'],
         skills: {
             'health': 3,
@@ -161,6 +162,7 @@ const monsterTemplates = {
         expValue: 400,
         canLoot: false,
         mountSize: 3,
+        extraHexes: [{q: 0, r: 1}],
         tags: ['animal'],
         skills: {
             'health': 4,
