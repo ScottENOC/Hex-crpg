@@ -189,6 +189,7 @@ function showCharacterScreen() {
 
     const char = window.player;
     const contentDiv = document.getElementById("character-screen-content");
+    if (!contentDiv) return;
     contentDiv.innerHTML = ''; 
 
     // SHOW ALL SKILLS TOGGLE
@@ -725,7 +726,9 @@ function showSpellScreen() {
 
 function updateSpellPreview() {
     const player = window.player;
-    const baseId = document.getElementById("spell-base-select").value;
+    const baseSelect = document.getElementById("spell-base-select");
+    if (!baseSelect) return;
+    const baseId = baseSelect.value;
     const base = window.baseSpells[baseId];
     const options = player.unlockedCastingOptions[base.school] || {};
     let html = '';
@@ -786,17 +789,27 @@ function updateSpellPreview() {
             </div>
         `;
     }
-    document.getElementById("spell-options-container").innerHTML = html;
+    const optContainer = document.getElementById("spell-options-container");
+    if (optContainer) optContainer.innerHTML = html;
     window.renderSpellStats();
 }
 
 function renderSpellStats() {
     const player = window.player;
-    const baseId = document.getElementById("spell-base-select").value;
+    const baseSelect = document.getElementById("spell-base-select");
+    if (!baseSelect) return;
+    const baseId = baseSelect.value;
     const base = window.baseSpells[baseId];
-    const speed = document.getElementById("spell-speed-select").value;
-    const rangeBonus = parseInt(document.getElementById("spell-range-bonus").value) || 0;
-    const magBonus = parseInt(document.getElementById("spell-magnitude-bonus").value) || 0;
+    
+    const speedSelect = document.getElementById("spell-speed-select");
+    const speed = speedSelect ? speedSelect.value : 'default';
+    
+    const rangeInput = document.getElementById("spell-range-bonus");
+    const rangeBonus = rangeInput ? (parseInt(rangeInput.value) || 0) : 0;
+    
+    const magInput = document.getElementById("spell-magnitude-bonus");
+    const magBonus = magInput ? (parseInt(magInput.value) || 0) : 0;
+    
     const radBonusInput = document.getElementById("spell-radius-bonus");
     const radBonus = radBonusInput ? (parseInt(radBonusInput.value) || 0) : 0;
     const targetBonusInput = document.getElementById("spell-targets-bonus");
@@ -825,11 +838,7 @@ function renderSpellStats() {
     if (speed === 'quickened') { tpCost = 5; manaCost += Math.max(0, 5 - effSpeed); }
     if (speed === 'slowed') { tpCost = 20; manaCost -= 4; }
     
-    const castingManaMod = (manaCost - base.baseMana); // Speed cost
-    
     manaCost += Math.max(0, rangeBonus - effRange);
-    const rangeManaMod = Math.max(0, rangeBonus - effRange);
-
     manaCost += (magBonus * Math.max(0, 5 - effMag));
     manaCost += (radBonus * 10);
     manaCost += (targetBonus * 15);
@@ -847,7 +856,8 @@ function renderSpellStats() {
         ${base.baseRadius !== undefined ? `<p><strong>Radius:</strong> ${radius}</p>` : ''}
         ${extraTargets > 0 ? `<p><strong>Extra Targets:</strong> ${extraTargets}</p>` : ''}
     `;
-    document.getElementById("spell-stats-display").innerHTML = statsHtml;
+    const display = document.getElementById("spell-stats-display");
+    if (display) display.innerHTML = statsHtml;
     
     if (animalId === 'boar') {
         manaCost += 8;
@@ -869,7 +879,7 @@ function renderSpellStats() {
             ${base.baseRadius !== undefined ? `<p><strong>Radius:</strong> ${radius}</p>` : ''}
             ${extraTargets > 0 ? `<p><strong>Extra Targets:</strong> ${extraTargets}</p>` : ''}
         `;
-        document.getElementById("spell-stats-display").innerHTML = statsHtml;
+        if (display) display.innerHTML = statsHtml;
     }
 
     window.currentSpellCalc = { name: defaultName, school: base.school, manaCost, coreManaCost, tpCost, magnitude, range, radius, extraTargets, type: base.type, baseId, animalId };
@@ -1677,16 +1687,25 @@ window.syncMute = function(isMuted) {
     if (!isMuted) updateMusicState();
 };
 
+window.updateAudioSetting = function(type, value) {
+    if (window.audioSettings) {
+        window.audioSettings[type] = parseFloat(value);
+        if (window.updateVolumes) window.updateVolumes();
+    }
+};
+
 function updateMusicState() {
     if (!window.audioEnabled) return;
 
     const characterModal = document.getElementById("character-screen-modal");
     const spellModal = document.getElementById("spell-menu-modal");
     const inventoryModal = document.getElementById("inventory-modal");
+    const settingsModal = document.getElementById("settings-modal");
     
     const inMenu = (characterModal && characterModal.style.display === "block") ||
                    (spellModal && spellModal.style.display === "block") ||
                    (inventoryModal && inventoryModal.style.display === "block") ||
+                   (settingsModal && settingsModal.style.display === "block") ||
                    (document.getElementById("characterCreator").style.display === "block");
 
     if (inMenu) {

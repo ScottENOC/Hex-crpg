@@ -78,6 +78,7 @@
                 <button id="load-menu-btn" style="background-color: #9C27B0;">Load Game</button>
                 <button id="quick-save-btn" style="background-color: #1976D2;">Quick Save</button>
                 <button id="quick-load-btn" style="background-color: #7B1FA2;">Quick Load</button>
+                <button id="settings-menu-btn" style="background-color: #607d8b;">Settings</button>
                 <div style="padding: 10px; border-top: 1px solid #555; display: flex; align-items: center; gap: 5px;">
                     <input type="checkbox" id="mute-check-menu" onchange="window.syncMute(this.checked)" style="width: 15px; height: 15px;">
                     <label for="mute-check-menu" style="font-size: 0.8em; color: white;">Mute Music</label>
@@ -346,6 +347,32 @@
             <span class="close-btn" id="close-entity-details-modal">&times;</span>
             <h2 id="entity-details-name">Entity Details</h2>
             <div id="entity-details-content"></div>
+        </div>
+    </div>
+
+    <div id="settings-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 400px;">
+            <span class="close-btn" id="close-settings-modal">&times;</span>
+            <h2>Settings</h2>
+            <div id="settings-content">
+                <h3>Audio Volume</h3>
+                <div class="form-group">
+                    <label>Master Volume</label>
+                    <input type="range" id="volume-master" min="0" max="1" step="0.01" value="1" oninput="window.updateAudioSetting('master', this.value)">
+                </div>
+                <div class="form-group">
+                    <label>Music Volume</label>
+                    <input type="range" id="volume-music" min="0" max="1" step="0.01" value="0.7" oninput="window.updateAudioSetting('music', this.value)">
+                </div>
+                <div class="form-group">
+                    <label>Effects Volume</label>
+                    <input type="range" id="volume-effects" min="0" max="1" step="0.01" value="0.8" oninput="window.updateAudioSetting('effects', this.value)">
+                </div>
+                <div class="form-group">
+                    <label>Dialogue Volume</label>
+                    <input type="range" id="volume-dialogue" min="0" max="1" step="0.01" value="1" oninput="window.updateAudioSetting('dialogue', this.value)">
+                </div>
+            </div>
         </div>
     </div>
 

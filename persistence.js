@@ -121,7 +121,7 @@ function loadGame(saveName = "rpg_save_game") {
 
         // 2. Hide Creator, Show Game
         document.getElementById("characterCreator").style.display = "none";
-        document.getElementById("gameContainer").style.display = "block";
+        document.getElementById("gameContainer").style.display = "flex";
         document.getElementById("top-menu").style.display = "flex";
 
         // 3. Initialize Game Engine (Canvas, Listeners) if not already

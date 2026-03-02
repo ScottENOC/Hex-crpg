@@ -1,6 +1,13 @@
 // audio.js
 window.audioEnabled = false; // Muted by default
 
+window.audioSettings = {
+    master: 1.0,
+    music: 0.7,
+    effects: 0.8,
+    dialogue: 1.0
+};
+
 const tracks = {
     title: new Audio('audio/Title.wav'),
     constant: new Audio('audio/Constant.wav'),
@@ -30,18 +37,28 @@ window.setAudioEnabled = function(enabled) {
         }
     } else {
         // Start constant track if enabled
-        tracks.constant.volume = 0.1; // Barely audible
+        window.updateVolumes();
         tracks.constant.play();
-        
-        // If we are currently in a state that needs music, it will be triggered by UI/Game calls
     }
+};
+
+window.updateVolumes = function() {
+    const master = window.audioSettings.master;
+    // Music tracks
+    const musicVol = master * window.audioSettings.music;
+    ['title', 'lobby', 'preBattle', 'battle', 'deathTheme'].forEach(k => {
+        if (tracks[k].volume > 0 || !tracks[k].paused) tracks[k].volume = musicVol;
+    });
+    
+    // Constant is music but special low volume
+    tracks.constant.volume = musicVol * 0.005; // Extremely low
 };
 
 window.playMusic = function(trackName, fadeUp = 0.8, fadeDown = 0.6) {
     if (!window.audioEnabled) return;
     
     // If already playing, don't restart
-    if (!tracks[trackName].paused && tracks[trackName].volume > 0.1) return;
+    if (!tracks[trackName].paused && tracks[trackName].volume > 0.01) return;
 
     // Fade out everything else except constant
     for (const key in tracks) {
@@ -57,23 +74,24 @@ window.playSting = function(stingName = 'sting') {
     if (!window.audioEnabled) return;
     const s = tracks[stingName] || tracks['sting'];
     s.currentTime = 0;
-    s.volume = 1.0;
+    s.volume = window.audioSettings.master * window.audioSettings.effects;
     s.play();
 };
 
 function fadeIn(audio, duration) {
     if (!window.audioEnabled) return;
+    const targetVol = window.audioSettings.master * window.audioSettings.music;
     audio.volume = 0;
     audio.play();
     
     const steps = 20;
     const interval = (duration * 1000) / steps;
-    const volStep = 1 / steps;
+    const volStep = targetVol / steps;
 
     let currentStep = 0;
     const timer = setInterval(() => {
         currentStep++;
-        audio.volume = Math.min(1, currentStep * volStep);
+        audio.volume = Math.min(targetVol, currentStep * volStep);
         if (currentStep >= steps) clearInterval(timer);
     }, interval);
 }
@@ -116,6 +134,7 @@ window.playArenaMusic = (type, fade) => window.playMusic(type, fade);
 window.playDialogue = function(key) {
     if (!window.audioEnabled) return;
     const audio = new Audio(`audio/dialogue/${key}.wav`);
+    audio.volume = window.audioSettings.master * window.audioSettings.dialogue;
     audio.play().catch(e => console.error(`Failed to play dialogue audio: ${key}`, e));
 };
 
@@ -123,5 +142,6 @@ window.playParrySound = function() {
     if (!window.audioEnabled) return;
     const sound = Math.random() < 0.5 ? 'parry' : 'parry2';
     const audio = new Audio(`audio/effects/${sound}.wav`);
+    audio.volume = window.audioSettings.master * window.audioSettings.effects;
     audio.play().catch(e => console.error(`Failed to play parry sound: ${sound}`, e));
 };

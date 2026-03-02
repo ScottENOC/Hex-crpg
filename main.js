@@ -75,6 +75,12 @@ document.addEventListener("DOMContentLoaded", () => {
             window.saveGame("quick_save");
         } else if (btnId === "quick-load-btn") {
             window.loadGame("quick_save");
+        } else if (btnId === "settings-menu-btn") {
+            const modal = document.getElementById("settings-modal");
+            if (modal) {
+                modal.style.display = "block";
+                if (window.updateMusicState) window.updateMusicState();
+            }
         } else if (btnId === "confirm-hire-btn") {
             const mainChar = window.party[0];
             if (mainChar.gold < 100) {
@@ -317,7 +323,7 @@ window.startGame = function() {
   if (window.updatePartyTabs) window.updatePartyTabs();
 
   document.getElementById("characterCreator").style.display = "none";
-  document.getElementById("gameContainer").style.display = "block";
+  document.getElementById("gameContainer").style.display = "flex";
   document.getElementById("top-menu").style.display = "flex";
   
   // Flag that we are in the initial setup

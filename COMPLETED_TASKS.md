@@ -47,9 +47,12 @@
         - Monk: Endurance bonus increased from 1 to 2; Weapons bonus reduced from 1 to 0.
     - **Character Creation Preview**: Added a dynamic preview window to the character creator that shows attribute/skill point growth per level for the selected race and class.
 - **UI & Interaction**:
+    - **Layout Fixes**: Resolved an issue where the battle map height was collapsing to 0. Ensured `gameContainer` uses `display: flex` correctly.
     - **UI Optimization**: Removed the oversized "Hex RPG" title and the redundant character/inventory sidebars from the main screen to maximize screen real estate for the map.
     - **Responsive Layout**: Implemented a robust responsive design. The map now fills 100% of the available vertical space. On narrow screens, the chat log adapts to the bottom and action buttons are layered over the map.
     - **Sidebar Improvements**: Increased sidebar width to 350px and re-added a compact character summary (Name, HP, MP, Stats) for constant visibility.
+    - **Settings Menu**: Added a new 'Settings' modal accessible from the top menu.
+    - **Audio Volume Control**: Implemented granular volume sliders for Master, Music, Effects, and Dialogue in the Settings menu.
     - **Entity Details**: Added an entity details popup modal. It can be triggered by clicking on portraits in the initiative tracker or by right-clicking (or long-pressing on touch devices) any visible entity on the map.
     - **Touch Support**: Added full touchscreen support, including panning, multi-finger pinch-to-zoom, and long-press for entity details.
     - **Top Menu**: Updated the top menu to wrap items cleanly on mobile and narrow displays.
@@ -60,7 +63,7 @@
 - **Audio Integration**:
     - **Dialogue Audio**: Implemented automatic audio playback for ambient dialogue. Audio files in `/audio/dialogue/` are now played when their corresponding dialogue lines appear.
     - **Parry Sound Effects**: Added randomized parry sound effects (`parry.wav` and `parry2.wav`) that play upon a successful parry or protector parry.
-    - **Volume Balancing**: Reduced the volume of the `constant.wav` background track to 0.1 (barely audible) to prevent it from overwhelming other sounds.
+    - **Volume Balancing**: Significantly reduced the volume of the `constant.wav` background track to a 0.005 multiplier of music volume (barely audible) to provide a subtle base layer.
 - **Bug Fixes**:
     - **UI Stability**: Fixed "Cannot set properties of null (setting 'innerHTML')" error in `ui.js` by adding proper element existence checks and re-integrating essential elements.
     - **Canvas Resizing**: Added a window resize listener to ensure the battle map always fills its container correctly when the browser is resized.
