@@ -768,7 +768,9 @@ function renderEntities() {
               if (window.gameVisuals.humanHair.complete && e.gender !== 'male') {
                   window.mapCtx.drawImage(window.gameVisuals.humanHair, x - humanSize/2, y - humanSize/2 + humanYOff - (3 * z), humanSize, (humanSize + humanHeightAdd));
               } else if (window.gameVisuals.humanMaleHair.complete && e.gender === 'male') {
-                  window.mapCtx.drawImage(window.gameVisuals.humanMaleHair, x - humanSize/2, y - humanSize/2 + humanYOff, humanSize, (humanSize + humanHeightAdd));
+                  const hWidth = humanSize * 0.5;
+                  const hHeight = (humanSize + humanHeightAdd) * 0.5;
+                  window.mapCtx.drawImage(window.gameVisuals.humanMaleHair, x - hWidth/2, y + humanYOff - hHeight/2, hWidth, hHeight);
               }
                           // LAYER: Human Helmet
                           if (e.equipped && e.equipped.helmet === 'nasal_helm' && window.gameVisuals.nasal_helm.complete) {
@@ -887,7 +889,7 @@ function renderEntities() {
                               const weaponSize = window.hexSize * offhandScale * z;
                               window.mapCtx.save();
                               // Flip horizontally (scale -1, 1), position on the right side but shifted left
-                              let offX = x + (window.hexSize/2 + 5) * z - weaponSize;
+                              let offX = x + (window.hexSize/2 + 5) * z - (weaponSize / 2);
                               let offY = y + flyOff;
                               if (offW === 'dagger') {
                                   offX += (window.hexSize * 0.16) * z;
