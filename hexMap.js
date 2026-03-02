@@ -256,7 +256,7 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
             let baseCost = 5;
             if (entity.skills) {
                 if (entity.skills['fastMovement']) {
-                    const isLightOrNoArmor = !entity.equipped || !entity.equipped.armor || window.items[entity.equipped.armor].id === 'light_armor';
+                    const isLightOrNoArmor = !entity.equipped || !entity.equipped.armor || window.items[entity.equipped.armor]?.id === 'light_armor';
                     if (isLightOrNoArmor) baseCost -= entity.skills['fastMovement'];
                 }
                 if (entity.skills['swift_step']) {

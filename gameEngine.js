@@ -112,7 +112,7 @@ function playerMoveProcess(player, path) {
         }
         if (moveEntity.skills) {
             if (moveEntity.skills['fastMovement']) {
-                const isLightOrNoArmor = !moveEntity.equipped || !moveEntity.equipped.armor || window.items[moveEntity.equipped.armor].id === 'light_armor';
+                const isLightOrNoArmor = !moveEntity.equipped || !moveEntity.equipped.armor || window.items[moveEntity.equipped.armor]?.id === 'light_armor';
                 if (isLightOrNoArmor) baseMoveCost -= moveEntity.skills['fastMovement'];
             }
             if (moveEntity.skills['swift_step']) {
@@ -386,7 +386,7 @@ function updatePlayerUI() {
         let baseCost = 5;
         if (moveEntity.skills) {
             if (moveEntity.skills['fastMovement']) {
-                const isLightOrNoArmor = !moveEntity.equipped || !moveEntity.equipped.armor || window.items[moveEntity.equipped.armor].id === 'light_armor';
+                const isLightOrNoArmor = !moveEntity.equipped || !moveEntity.equipped.armor || window.items[moveEntity.equipped.armor]?.id === 'light_armor';
                 if (isLightOrNoArmor) baseCost -= moveEntity.skills['fastMovement'];
             }
             if (moveEntity.skills['swift_step']) {
@@ -1568,7 +1568,7 @@ function aiProcess(entity) {
                 const terrain = window.getTerrainAt(entity.hex.q, entity.hex.r);
                 let cost = 5;
                 if (moveEntity.skills['fastMovement']) {
-                    const isLightOrNoArmor = !moveEntity.equipped || !moveEntity.equipped.armor || window.items[moveEntity.equipped.armor].id === 'light_armor';
+                    const isLightOrNoArmor = !moveEntity.equipped || !moveEntity.equipped.armor || window.items[moveEntity.equipped.armor]?.id === 'light_armor';
                     if (isLightOrNoArmor) cost -= moveEntity.skills['fastMovement'];
                 }
                 if (moveEntity.skills['swift_step']) {
@@ -1853,7 +1853,7 @@ function handleClick(e){
                 const maxTargets = 1 + (spell.extraTargets || 0);
                 
                 // Add target if not already added
-                const alreadySelected = act.targets.some(t => t.id === (target ? target.id : null) && t.hex.q === clickedHex.q && t.hex.r === clickedHex.r);
+                const alreadySelected = act.targets.some(t => t?.id === (target ? target.id : null) && t.hex.q === clickedHex.q && t.hex.r === clickedHex.r);
                 if (!alreadySelected) {
                     act.targets.push({ id: target ? target.id : null, hex: clickedHex, entity: target });
                 }
@@ -1939,8 +1939,8 @@ function tryAttack(attacker, target, isFeint = false, isOffhand = false, bonusDa
     }
 
     // SANCTUARY TRIGGER
-    const sanctuary = (window.activeSpells || []).find(s => s.debuffType === 'sanctuary_protected' && s.targetEntityId === target.id);
-    if (sanctuary && attacker.side !== target.side) {
+    const sanctuary = (window.activeSpells || []).find(s => s.debuffType === 'sanctuary_protected' && s.targetEntityId === target?.id);
+    if (sanctuary && attacker.side !== target?.side) {
         const penalty = (sanctuary.magnitude || 1);
         attacker.timePoints -= penalty;
         window.showMessage(`${attacker.name} is hindered by Sanctuary! (-${penalty} TP)`);
@@ -1948,15 +1948,15 @@ function tryAttack(attacker, target, isFeint = false, isOffhand = false, bonusDa
     }
 
     // DIVINE PROTECTION: Attacker loses TP
-    const protections = (window.activeSpells || []).filter(s => s.baseId === 'divine_protection' && s.targetEntityId === target.id);
+    const protections = (window.activeSpells || []).filter(s => s.baseId === 'divine_protection' && s.targetEntityId === target?.id);
     protections.forEach(p => {
         attacker.timePoints -= (p.magnitude || 1);
         window.showMessage(`${attacker.name} is hindered by Divine Protection! (-${p.magnitude || 1} TP)`);
     });
 
     // BREAK SANCTUARY ON OFFENSIVE ACTION
-    const mySanctuary = (window.activeSpells || []).find(s => s.debuffType === 'sanctuary_protected' && s.targetEntityId === attacker.id);
-    if (mySanctuary && target.side !== attacker.side) {
+    const mySanctuary = (window.activeSpells || []).find(s => s.debuffType === 'sanctuary_protected' && s.targetEntityId === attacker?.id);
+    if (mySanctuary && target?.side !== attacker?.side) {
         window.showMessage(`${attacker.name}'s Sanctuary fades as they take offensive action.`);
         window.cancelSpell(mySanctuary.spellInstanceId);
     }
@@ -3065,17 +3065,16 @@ function resolveSpell(caster, spell, target, clickedHex) {
 
 function tryCastSpell(caster, spell, target, clickedHex) {
     // DIVINE SILENCE REMOVAL
-    const silence = (window.activeSpells || []).find(s => s.debuffType === 'silence_penalty' && s.targetEntityId === caster.id);
+    const silence = (window.activeSpells || []).find(s => s.debuffType === 'silence_penalty' && s.targetEntityId === caster?.id);
     if (silence) {
         window.showMessage(`${caster.name} breaks the Divine Silence by casting a spell!`);
         window.cancelSpell(silence.spellInstanceId);
     }
 
     // SANCTUARY TRIGGER (Target protection)
-    const targets = target ? [target] : []; // Handle multi-target? For simplicity, check clickedHex/target
     const targetEntity = target || getEntityAtHex(clickedHex.q, clickedHex.r);
-    if (targetEntity && targetEntity.side !== caster.side) {
-        const targetSanctuary = (window.activeSpells || []).find(s => s.debuffType === 'sanctuary_protected' && s.targetEntityId === targetEntity.id);
+    if (targetEntity && targetEntity.side !== caster?.side) {
+        const targetSanctuary = (window.activeSpells || []).find(s => s.debuffType === 'sanctuary_protected' && s.targetEntityId === targetEntity?.id);
         if (targetSanctuary) {
             const penalty = (targetSanctuary.magnitude || 1);
             caster.timePoints -= penalty;
@@ -3085,8 +3084,8 @@ function tryCastSpell(caster, spell, target, clickedHex) {
     }
 
     // BREAK SANCTUARY ON OFFENSIVE CAST
-    if (targetEntity && targetEntity.side !== caster.side) {
-        const mySanctuary = (window.activeSpells || []).find(s => s.debuffType === 'sanctuary_protected' && s.targetEntityId === caster.id);
+    if (targetEntity && targetEntity.side !== caster?.side) {
+        const mySanctuary = (window.activeSpells || []).find(s => s.debuffType === 'sanctuary_protected' && s.targetEntityId === caster?.id);
         if (mySanctuary) {
             window.showMessage(`${caster.name}'s Sanctuary fades as they cast an offensive spell.`);
             window.cancelSpell(mySanctuary.spellInstanceId);
@@ -3097,9 +3096,9 @@ function tryCastSpell(caster, spell, target, clickedHex) {
     if (spell.radius > 0) {
         const radius = spell.radius;
         const affectedHexes = window.getHexesInRange(clickedHex, radius);
-        const protectedEnemies = window.entities.filter(e => e.alive && e.side !== caster.side && affectedHexes.some(h => e.getAllHexes().some(eh => eh.q === h.q && eh.r === h.r)));
+        const protectedEnemies = window.entities.filter(e => e.alive && e.side !== caster?.side && affectedHexes.some(h => e.getAllHexes().some(eh => eh.q === h.q && eh.r === h.r)));
         for (let enemy of protectedEnemies) {
-            const sanc = (window.activeSpells || []).find(s => s.debuffType === 'sanctuary_protected' && s.targetEntityId === enemy.id);
+            const sanc = (window.activeSpells || []).find(s => s.debuffType === 'sanctuary_protected' && s.targetEntityId === enemy?.id);
             if (sanc) {
                 const penalty = (sanc.magnitude || 1);
                 caster.timePoints -= penalty;

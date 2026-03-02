@@ -1124,6 +1124,7 @@ function updateActiveSpellsUI() {
         if (s.targetEntityId) {
             const targetEnt = window.entities.find(e => e.id === s.targetEntityId);
             if (targetEnt) targetText = ` on ${targetEnt.name.split(' ')[0]}`;
+            else targetText = " (Target Gone)";
         }
 
         item.innerHTML = `

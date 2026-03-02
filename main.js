@@ -296,9 +296,10 @@ window.testVoice = function(voiceId) {
 
 window.cheatMaxSkills = function() {
     window.party.forEach(char => {
+        if (!char.attributes) char.attributes = { strength: 0, endurance: 0, agility: 0, wildcard: 0 };
         // Reset to base stats first to avoid double-application
-        char.maxHp = 10 + (char.attributes.endurance * 5);
-        char.baseDamage = 1 + (char.attributes.strength * 1); // Simple base
+        char.maxHp = 10 + ((char.attributes.endurance || 0) * 5);
+        char.baseDamage = 1 + ((char.attributes.strength || 0) * 1); // Simple base
         // (Other base stats could be reset here)
 
         for (const skillKey in window.skills) {
