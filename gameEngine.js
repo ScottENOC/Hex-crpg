@@ -768,7 +768,11 @@ function renderEntities() {
               if (window.gameVisuals.humanHair.complete && e.gender !== 'male') {
                   window.mapCtx.drawImage(window.gameVisuals.humanHair, x - humanSize/2, y - humanSize/2 + humanYOff - (3 * z), humanSize, (humanSize + humanHeightAdd));
               } else if (window.gameVisuals.humanMaleHair.complete && e.gender === 'male') {
-                  window.mapCtx.drawImage(window.gameVisuals.humanMaleHair, x - humanSize/2, y - humanSize/2 + humanYOff, humanSize, (humanSize + humanHeightAdd));
+                  const hWidth = humanSize * 0.1;
+                  const hHeight = (humanSize + humanHeightAdd) * 0.1;
+                  const hX = x - hWidth / 2;
+                  const hY = (y - humanSize / 2 + humanYOff) + (humanSize + humanHeightAdd) * 0.45;
+                  window.mapCtx.drawImage(window.gameVisuals.humanMaleHair, hX, hY, hWidth, hHeight);
               }
                           // LAYER: Human Helmet
                           if (e.equipped && e.equipped.helmet === 'nasal_helm' && window.gameVisuals.nasal_helm.complete) {
@@ -3078,7 +3082,26 @@ function resolveSpell(caster, spell, target, clickedHex) {
     } else {
         let spellHitBonus = 0;
         if (spell.baseId === 'firebolt' && caster.skills?.firebolt_hit) spellHitBonus = caster.skills.firebolt_hit * 5;
-        let hit = !spell.needsHitCheck || (target && Math.random() * 100 < (50 + caster.toHitSpell + spellHitBonus - target.passiveDodge));
+        
+        let hitChance = 50 + (caster.toHitSpell || 0) + spellHitBonus - (target ? target.passiveDodge : 0);
+        
+        // COVER: Pedestals
+        if (target && spell.baseId === 'firebolt') {
+            const blockedHexes = [{q: target.hex.q, r: target.hex.r-1}, {q: target.hex.q+1, r: target.hex.r-1}];
+            const isCovered = blockedHexes.some(bh => window.getTerrainAt(bh.q, bh.r).name === 'Pedestal');
+            if (isCovered) {
+                window.showMessage(`${target.name} is behind a pedestal (Cover bonus: -5 hit)`);
+                hitChance -= 5;
+            }
+        }
+
+        const roll = Math.floor(Math.random() * 100);
+        let hit = !spell.needsHitCheck || (target && roll < hitChance);
+
+        if (spell.needsHitCheck && target) {
+            window.showMessage(`${caster.name} casts ${spell.name} at ${target.name}: ${hit ? 'HIT' : 'MISS'} (Roll: ${roll} vs Need: <${hitChance})`);
+        }
+
         if (spell.type === 'damage' && target && target.side !== caster.side) {
             const baseSpell = window.baseSpells[spell.baseId];
             if (baseSpell && baseSpell.validTags) {

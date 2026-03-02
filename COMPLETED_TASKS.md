@@ -6,6 +6,10 @@
     - **Summon Vanish Fix**: Added unique IDs to all entities, ensuring summoned creatures are correctly identified and removed from the map when their upkeep spell expires or is cancelled.
     - **Multi-Target Spells**: Implemented "Fork" skills for Arcane, Divine, and Nature trees (6 ranks each). Single-target spells can now be modified to affect multiple targets, with increased mana and maintenance costs.
     - **Upkeep Refinement**: Improved mana exhaustion handling. When mana runs out, the game now only cancels the single most expensive upkeep spell per tick, preventing all summons from vanishing simultaneously.
+    - **Firebolt Enhancements**:
+        - Increased default range to 8.
+        - Implemented hit roll and target display in the message log.
+        - Applied cover bonuses (e.g., from pedestals) to Firebolt hit checks, matching physical ranged attacks.
 - **Environment & Immersion**:
     - **Thematic Transitions**: Replaced "teleportation" terminology with more grounded descriptions of walking through corridors or using elevators to enter the arena.
     - **Time-Aware Atmosphere**: Implemented dynamic arena entrance text that correctly identifies if the Sun or the Moon/Stars are illuminating the outdoor matches based on the current world time and light level.
@@ -20,7 +24,7 @@
     - **Race Visuals**: 
         - Updated Elves to use standard human armor sprites for visual consistency.
         - Added hair overlays for Dwarf Female and Elf Male characters, ensuring all race/gender combinations have appropriate hair visual layers.
-        - Added `humanmalehair.png` overlay for Human Male characters in both the game world and portraits.
+        - Added `humanmalehair.png` overlay for Human Male characters. Shrinked to 10% size and centered for both world rendering and portraits.
     - **Weapon Visuals**: 
         - Implemented dynamic scaling for daggers, which now use the sword icon at 50% size.
         - Shifted dagger positions by 16% of hex size down and right for better alignment with character hands.

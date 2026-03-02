@@ -6,6 +6,7 @@ const baseSpells = {
         school: 'arcane',
         baseMana: 5,
         baseMagnitude: 5,
+        baseRange: 8,
         type: 'damage',
         needsHitCheck: true
     },
