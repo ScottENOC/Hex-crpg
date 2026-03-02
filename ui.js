@@ -472,7 +472,9 @@ function showMessage(msg) {
         p.style.marginBottom = "2px";
         p.innerText = `> ${msg}`;
         logDiv.appendChild(p);
-        logDiv.scrollTop = logDiv.scrollHeight;
+        requestAnimationFrame(() => {
+            logDiv.scrollTop = logDiv.scrollHeight;
+        });
     }
 }
 
@@ -646,11 +648,13 @@ function updateActionButtons() {
         for (const skillKey in charData.skills) {
             const skill = window.skills[skillKey];
             if (skill && skill.active && charData.skills[skillKey] > 0) {
+                if (skill.tree === 'monster_skills') continue; // Handled specially (Fly/Land) or internal
+                
                 let weaponReqMet = true;
                 if (skillKey.endsWith('_feint')) {
                     const weaponType = skillKey.split('_')[0];
                     const eq = charData.equipped.weapon;
-                    if (!eq || !window.items[eq] || !window.items[eq].id.includes(weaponType)) weaponReqMet = false;
+                    if (!eq || !window.items[eq] || !window.items[eq]?.id.includes(weaponType)) weaponReqMet = false;
                 } else if (skillKey === 'disarm') {
                     const eq = charData.equipped.weapon;
                     if (!eq) weaponReqMet = false; // Need a weapon to disarm? Or maybe just unarmed. 

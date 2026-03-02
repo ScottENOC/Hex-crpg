@@ -91,11 +91,12 @@ document.addEventListener("DOMContentLoaded", () => {
             const race = document.getElementById("merc-race").value;
             const gender = document.getElementById("merc-gender").value;
             const cls = document.getElementById("merc-class").value;
+            const voice = document.getElementById("merc-voice-select").value;
             let name = document.getElementById("merc-name").value;
             if (!name) name = window.getRandomName(race, gender);
 
             mainChar.gold -= 100;
-            const merc = window.createCharacterData(race, cls, name, gender);
+            const merc = window.createCharacterData(race, cls, name, gender, voice);
             
             // Sync EXP
             const targetTotalExp = window.calculateTotalExp(mainChar.level, mainChar.exp);
@@ -289,31 +290,39 @@ window.toggleFlyCheat = function() {
     if (window.updateActionButtons) window.updateActionButtons();
 };
 
+window.testVoice = function(voiceId) {
+    if (window.playDialogue) window.playDialogue(`${voiceId}_enemy_seen`);
+};
+
 window.cheatMaxSkills = function() {
     window.party.forEach(char => {
+        // Reset to base stats first to avoid double-application
+        char.maxHp = 10 + (char.attributes.endurance * 5);
+        char.baseDamage = 1 + (char.attributes.strength * 1); // Simple base
+        // (Other base stats could be reset here)
+
         for (const skillKey in window.skills) {
             const skill = window.skills[skillKey];
             if (skill.tree === 'monster_skills') continue; // Skip flight/land
             const max = skill.maxRanks || 100;
             char.skills[skillKey] = max;
-            if (skill.apply) skill.apply(char);
+            if (skill.apply) {
+                // Apply skill rank benefits
+                for (let i = 0; i < max; i++) {
+                    skill.apply(char);
+                }
+            }
         }
-        // Re-calc HP based on endurance and health skill
-        char.maxHp = 10 + (char.attributes.endurance * 5);
-        if (char.skills['health']) char.maxHp += (char.skills['health'] * 10);
         char.hp = char.maxHp;
     });
     // Sync entities
     window.entities.forEach(ent => {
         const partyMember = window.party.find(p => p.name === ent.name);
         if (partyMember) {
-            ent.skills = partyMember.skills;
+            ent.skills = { ...partyMember.skills };
             ent.maxHp = partyMember.maxHp;
             ent.hp = partyMember.hp;
-            // Re-apply skill effects to entity
-            for (const sk in ent.skills) {
-                if (window.skills[sk]?.apply) window.skills[sk].apply(ent);
-            }
+            // No need to re-apply in loop here if we synced stats
         }
     });
     window.showMessage("Cheat: All skills maxed for the party!");
@@ -327,10 +336,11 @@ window.startGame = function() {
   const cls = document.getElementById("class-select").value;
   const gender = document.getElementById("gender-select").value;
   const campaign = document.getElementById("campaign-select").value;
+  const voice = document.getElementById("voice-select").value;
   let name = document.getElementById("character-name").value;
   if (!name) name = window.getRandomName(race, gender);
 
-  window.initializePlayer(race, cls, gender, campaign);
+  window.initializePlayer(race, cls, gender, campaign, voice);
   window.party[0].name = name; // Update with generated name if needed
   
   window.ironmanMode = document.getElementById("ironman-check").checked;

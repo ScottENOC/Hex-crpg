@@ -9,6 +9,7 @@
     - **Thematic Transitions**: Replaced "teleportation" terminology with more grounded descriptions of walking through corridors or using elevators to enter the arena.
     - **Time-Aware Atmosphere**: Implemented dynamic arena entrance text that correctly identifies if the Sun or the Moon/Stars are illuminating the outdoor matches based on the current world time and light level.
     - **Narrator Dialogue**: Moved flavor narration text (entering the arena, map descriptions, victory return, Grishnak's entry) to `dialogue.js` under a 'Narrator' speaker to support future audio integration.
+    - **Dialogue Pacing**: Updated `startArenaFight` to sequence dialogues properly: the Announcer speaks first, followed by a 2-second pause before the Narrator's entrance line.
 - **Visuals & Layering**:
     - **Water Rendering**: Implemented a two-pass rendering system where water images are layered with 50% transparency over the base terrain, allowing submerged features to remain visible.
     - **Foliage Integration**: Added `foliage.png` support for outdoor arenas, providing tactical cover and stealth benefits.
@@ -16,10 +17,14 @@
     - **Eagle Size & Tracking**: Shrunk the Eagle image by 50% for better visual balance and updated the initiative tracker to correctly show the Eagle's flying or ground sprite based on its status.
     - **Painter's Algorithm**: Implemented Y-coordinate sorting in the map rendering loop. This ensures that objects closer to the "front" (South-West) are drawn on top of objects further "back" (North-East), fixing visual layering issues with pedestals and other terrain features.
     - **Race Visuals**: Updated Elves to use standard human armor sprites for visual consistency.
-    - **Weapon Visuals**: Implemented dynamic scaling for daggers, which now use the sword icon at 50% size.
+    - **Weapon Visuals**: 
+        - Implemented dynamic scaling for daggers, which now use the sword icon at 50% size.
+        - Shifted dagger positions by 16% of hex size down and right for better alignment with character hands.
+        - Correctly mirrored off-hand weapons horizontally and vertically.
     - **Visual Polishing**:
-        - Shrunk Arena Mercenary width by 20% for better proportions.
-        - Increased Shield size by 50% for better visual impact.
+        - Shrunk Arena Mercenary width to 0.61 for better proportions.
+        - Shrunk Shopkeeper size to 1.215 (10% reduction).
+        - Increased Shield size to 2.25x base (50% bigger).
         - Centered the Nasal Helm horizontally on characters.
 - **Movement & Pathfinding**:
     - **Knowledge-Based Pathing**: Updated pathfinding to respect player knowledge. Characters now plan paths around known obstacles (explored walls and visible entities) but will attempt to move through unknown areas as if they were clear.
@@ -65,29 +70,34 @@
     - **Entity Details**: Added an entity details popup modal. It can be triggered by clicking on portraits in the initiative tracker or by right-clicking (or long-pressing on touch devices) any visible entity on the map.
     - **Touch Support**: Added full touchscreen support, including panning, multi-finger pinch-to-zoom, and long-press for entity details.
     - **Top Menu**: Updated the top menu to wrap items cleanly on mobile and narrow displays.
-- **Persistence & Modes**:
-    - **Auto-Save**: Implemented an auto-save function that triggers every time combat ends (unless in Iron Man mode).
-    - **Iron Man Mode**: Added Iron Man mode, mandatory for Campaign 1 (Arena) and optional for others. It disables auto-save, deletes previous saves for the same character run upon saving, and returns the player to the title screen.
-    - **Vision Tracking**: Added `lastSeenTimeMap` to track the last time each hex was seen, facilitating the Eagle's scouting behavior and persistence across saves.
-- **Audio Integration**:
+- **Audio & Voice System**:
+    - **Voice Customization**: Added a `voice` property to all characters and mercenaries. Players can now select a voice during character creation or hireling recruitment and use the "Test Voice" button to hear a sample.
+    - **Dynamic Combat Dialogue**: 
+        - **Player Party**: Trigger `pc_[voice]_enemy_seen` dialogue when a new enemy is revealed. Throttled to once every 10 seconds.
+        - **Enemies**: Orcs, Trolls, and Goblins assigned the `goblin_1` voice. Trigger `goblin_1_enemy_seen` when they first spot a player character.
+        - **Summoner Logic**: If a summoned creature spots an enemy, their summoner delivers the dialogue line.
     - **Dialogue Audio**: Implemented automatic audio playback for ambient dialogue. Audio files in `/audio/dialogue/` are now played when their corresponding dialogue lines appear.
     - **Parry Sound Effects**: Added randomized parry sound effects (`parry.wav` and `parry2.wav`) that play upon a successful parry or protector parry.
     - **Volume Balancing**: Significantly reduced the volume of the `constant.wav` background track to a 0.001 multiplier of music volume (near silent) to provide a subtle base layer.
 - **Bug Fixes**:
-    - **Combat Script Fix**: Resolved "uncaught referenceerror: roll is not defined" in `resolveAttack`.
+    - **Stability Fixes**: Resolved "cannot read properties of undefined (reading 'id')" by adding optional chaining to weapon and target object access.
+    - **Combat Script Fix**: Resolved "uncaught referenceerror: roll is not defined" in `resolveAttack` and ensured it is properly scoped.
     - **Dialogue Modal Fixes**: Added a missing close button to the dialogue modal and ensured that closing it correctly resets the game's "paused for reaction" state, preventing input lockups.
     - **NPC Interaction Fix**:
         - Exported `showDialogue`, `openShop`, and `startMercenaryHire` to the global `window` object.
-        - Fixed the Arena Shopkeeper dialogue trigger.
+        - Fixed the Arena Shopkeeper dialogue trigger by using a more robust name check.
     - **UI Stability**: Fixed "Cannot set properties of null (setting 'innerHTML')" error in `ui.js` by adding proper element existence checks and re-integrating essential elements.
     - **Canvas Resizing**: Added a window resize listener to ensure the battle map always fills its container correctly when the browser is resized.
     - **AI Re-arming**: Implemented logic for AI to prioritize picking up dropped weapons or drawing new ones from inventory when disarmed.
     - **Height Penalty**: Added Time Point penalties for moving up/down levels (e.g., Pedestals), with Monk-specific reductions.
     - **Syntax Error Fixed**: Resolved several redeclaration errors in `gameEngine.js`.
     - **Initialization Fix**: Fixed several "function is not defined" errors during game startup and loading.
+    - **Log Scrolling**: Added `requestAnimationFrame` to the message log scrolling logic to ensure it reliably snaps to the bottom after new messages are added.
 - **Quality of Life & Cheats**:
-    - **Cheat: Max Skills**: Added a new cheat button that instantly sets all skill ranks to maximum (or 100 for infinite skills) for all party members. Skips `monster_skills` tree to maintain intentional flight balance. Automatically updates max HP.
+    - **Cheat: Max Skills**: Added a new cheat button that instantly sets all skill ranks to maximum (or 100 for infinite skills) for all party members. 
+        - Correctly skips `monster_skills` tree to maintain intentional flight balance. 
+        - Properly re-calculates `maxHP` and `baseDamage` by iterating through skill benefits.
     - **Fly All Cheat**: Added a new cheat button that toggles flying status for all friendly characters, including visual updates and button state changes.
     - **Terminology Polish**: Replaced "Teleporting" with "Heading back to" in the arena victory sequence for better thematic consistency.
     - **Starting Gold**: Players now start Scenario 1 (Arena) with 100 gold.
-    - **Fast Forward**: Reduced processing delay by 50x when not in combat, speeding up Time Point distribution and regeneration.
+    - **Fast Forward**: Reduced processing delay by 200x when not in combat, speeding up Time Point distribution and regeneration.

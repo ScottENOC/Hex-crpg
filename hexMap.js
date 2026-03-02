@@ -412,7 +412,28 @@ function isVisibleToPlayer(targetHex) {
                 
                 // Mark any entity at this hex as seen
                 const ent = window.entities.find(e => e.alive && e.hex.q === targetHex.q && e.hex.r === targetHex.r);
-                if (ent) ent.hasBeenSeenByPlayer = true;
+                if (ent) {
+                    if (ent.side === 'enemy' && !ent.hasBeenSeenByPlayer) {
+                        // NEWLY SEEN ENEMY
+                        ent.hasBeenSeenByPlayer = true;
+                        
+                        // DIALOGUE: PC sees enemy
+                        const now = Date.now();
+                        if (!window.lastEnemySeenDialogueTime || (now - window.lastEnemySeenDialogueTime > 10000)) {
+                            let speaker = f;
+                            if (f.isSummoned || f.isCompanion) {
+                                const owner = window.entities.find(e => e.name === f.summoner);
+                                if (owner) speaker = owner;
+                            }
+                            if (speaker.voice && window.playDialogue) {
+                                window.playDialogue(`${speaker.voice}_enemy_seen`);
+                                window.lastEnemySeenDialogueTime = now;
+                            }
+                        }
+                    } else {
+                        ent.hasBeenSeenByPlayer = true;
+                    }
+                }
 
                 return true;
             }

@@ -410,10 +410,10 @@ function updatePlayerUI() {
     let isRanged = false;
     if (player.equipped && player.equipped.weapon) {
         const weapon = window.items[player.equipped.weapon];
-        let rangeBonus = (weapon.range || 0);
-        if (weapon.id === 'bow' && player.skills?.elf_bow_range) rangeBonus += (player.skills.elf_bow_range * 4);
+        let rangeBonus = (weapon?.range || 0);
+        if (weapon?.id === 'bow' && player.skills?.elf_bow_range) rangeBonus += (player.skills.elf_bow_range * 4);
         attackRange += rangeBonus;
-        isRanged = (weapon.subType === 'ranged');
+        isRanged = (weapon?.subType === 'ranged');
     }
     const attackHexes = getHexesInRange(player.hex, attackRange);
     attackHexes.forEach(h => {
@@ -762,7 +762,7 @@ function renderEntities() {
                           // LAYER: Human Helmet
                           if (e.equipped && e.equipped.helmet === 'nasal_helm' && window.gameVisuals.nasal_helm.complete) {
                               const helmSize = humanSize * 1.1;
-                              window.mapCtx.drawImage(window.gameVisuals.nasal_helm, x - helmSize/2, y - humanSize/2 + humanYOff + (2 * z), helmSize, (humanSize + humanHeightAdd));
+                              window.mapCtx.drawImage(window.gameVisuals.nasal_helm, x - helmSize/2 + (2 * z), y - humanSize/2 + humanYOff + (2 * z), helmSize, (humanSize + humanHeightAdd));
                           }
               
               // LAYER: Human Armour
@@ -779,7 +779,7 @@ function renderEntities() {
               
               // LAYER: Shield (Human Scale)
               if (e.equipped && e.equipped.offhand && window.items[e.equipped.offhand].type === 'shield' && window.gameVisuals.shield.complete) {
-                  const sSize = humanSize * 1.5;
+                  const sSize = humanSize * 2.25;
                   window.mapCtx.drawImage(window.gameVisuals.shield, x - sSize/2, y - sSize/2 + humanYOff, sSize, sSize);
               }
           } else {
@@ -828,7 +828,7 @@ function renderEntities() {
               }
               // LAYER: Shield (Elf/Dwarf Scale)
               if (e.equipped && e.equipped.offhand && window.items[e.equipped.offhand].type === 'shield' && window.gameVisuals.shield.complete) {
-                  const sSize = currentSize * 1.5;
+                  const sSize = currentSize * 2.25;
                   window.mapCtx.drawImage(window.gameVisuals.shield, x - sSize/2, y - sSize/2 + currentYOff, sSize, sSize);
               }
           }
@@ -845,7 +845,13 @@ function renderEntities() {
                   
                           if (weaponImg && weaponImg.complete) {
                               const weaponSize = window.hexSize * weaponScale * z; 
-                              window.mapCtx.drawImage(weaponImg, x - (window.hexSize/2 + 5) * z, y - weaponSize/2 + flyOff, weaponSize, weaponSize);
+                              let weaponX = x - (window.hexSize/2 + 5) * z;
+                              let weaponY = y - weaponSize/2 + flyOff;
+                              if (mainW === 'dagger') {
+                                  weaponX += (window.hexSize * 0.16) * z;
+                                  weaponY += (window.hexSize * 0.16) * z;
+                              }
+                              window.mapCtx.drawImage(weaponImg, weaponX, weaponY, weaponSize, weaponSize);
                           }
                   
                           // OFF-HAND WEAPON LAYER
@@ -861,9 +867,15 @@ function renderEntities() {
                           if (offhandImg && offhandImg.complete && window.items[offW]?.type === 'weapon') {
                               const weaponSize = window.hexSize * offhandScale * z;
                               window.mapCtx.save();
-                              // Flip vertically and position on the right side
-                              window.mapCtx.translate(x + (window.hexSize/2 + 5) * z, y + flyOff);
-                              window.mapCtx.scale(1, -1);
+                              // Flip vertically and horizontally, position on the right side
+                              let offX = x + (window.hexSize/2 + 5) * z;
+                              let offY = y + flyOff;
+                              if (offW === 'dagger') {
+                                  offX += (window.hexSize * 0.16) * z;
+                                  offY += (window.hexSize * 0.16) * z;
+                              }
+                              window.mapCtx.translate(offX, offY);
+                              window.mapCtx.scale(-1, -1);
                               window.mapCtx.drawImage(offhandImg, -weaponSize/2, -weaponSize/2, weaponSize, weaponSize);
                               window.mapCtx.restore();
                           }
@@ -879,9 +891,11 @@ function renderEntities() {
                           } else if (e.name === 'Eagle') {
                               size = window.hexSize * 1.5 * z;
                               yOffset = e.isFlying ? -20*z : 0;
+                          } else if (e.name === 'Shopkeeper') {
+                              size = window.hexSize * 1.215 * z; // 10% smaller than 1.35
                           }
                   
-                          if (e.customImage === 'arenamercenary') widthMult = 0.68;
+                          if (e.customImage === 'arenamercenary') widthMult = 0.61; // 5% smaller than 0.646 (rounding)
                   
                           let img = window.gameVisuals.monsterDefault;
                           if (e.name === 'Orc' && window.gameVisuals.orcBase.complete) img = window.gameVisuals.orcBase;
@@ -1067,7 +1081,7 @@ function tick() {
 
     if (window.gamePhase === 'WAITING') {
         const inCombat = window.entities.some(e => e.alive && e.side === 'enemy' && e.aiState === 'combat');
-        const numTicks = inCombat ? 1 : 50; 
+        const numTicks = inCombat ? 1 : 200; 
         for (let i = 0; i < numTicks; i++) {
             runTickInternal();
             if (window.gamePhase !== 'WAITING') break;
@@ -1361,6 +1375,17 @@ function aiProcess(entity) {
         if (visibleTarget) {
             wakeUp(entity);
             window.showMessage(`${entity.name} spotted a target and engages!`);
+            
+            // DIALOGUE: Enemy sees player
+            if (entity.voice) {
+                const now = Date.now();
+                if (!window.lastEnemySeenDialogueTime || (now - window.lastEnemySeenDialogueTime > 10000)) {
+                    if (window.playDialogue) {
+                        window.playDialogue(`${entity.voice}_enemy_seen`);
+                        window.lastEnemySeenDialogueTime = now;
+                    }
+                }
+            }
         } else {
             // ... search or wander ...
             if (Math.random() < 0.3) {
@@ -1492,8 +1517,8 @@ function aiProcess(entity) {
     let attackRange = 1;
     if (entity.equipped?.weapon) {
         const weapon = window.items[entity.equipped.weapon];
-        let rb = (weapon.range || 0);
-        if (weapon.id === 'bow' && entity.skills?.elf_bow_range) rb += (entity.skills.elf_bow_range * 4);
+        let rb = (weapon?.range || 0);
+        if (weapon?.id === 'bow' && entity.skills?.elf_bow_range) rb += (entity.skills.elf_bow_range * 4);
         attackRange += rb;
     }
     const dist = getMinDistance(entity, target || { getAllHexes: () => [huntTargetHex], hex: huntTargetHex });
@@ -2657,10 +2682,12 @@ function setupArenaLobby() {
 }
 
 function startArenaFight() {
-    window.triggerAmbientDialogue('arena_entrance');
+    window.triggerAmbientDialogue('arena_fight_start');
     window.playSting('teleportSting');
     window.isInArena = true;
-    window.triggerAmbientDialogue('arena_fight_start');
+    setTimeout(() => {
+        window.triggerAmbientDialogue('arena_entrance');
+    }, 2000);
     
     // Increment progress
     window.roguelikeData.fightsCompleted = (window.roguelikeData.fightsCompleted || 0) + 1;
@@ -2845,12 +2872,13 @@ function startArenaFight() {
 }
 
 function talkToNPC(npc) {
+    console.log("Talking to NPC:", npc.name);
     if (npc.name === "Arena Announcer") {
         window.showDialogue(npc, "Welcome to the pits! Are you ready for your next match?", [
             { label: "I am ready to fight!", action: () => startArenaFight() },
             { label: "Not yet.", action: () => {} }
         ]);
-    } else if (npc.name === "Shopkeeper") {
+    } else if (npc.name && npc.name.includes("Shopkeeper")) {
         window.triggerAmbientDialogue('arena_lobby_3');
         window.showDialogue(npc, "Got some coin? I've got the goods. Unlimited stock, best prices in the pits!", [
             { label: "Let me see your wares.", action: () => window.openShop() },
@@ -2928,6 +2956,7 @@ function resolveSpell(caster, spell, target, clickedHex) {
         }
 
         const s = window.createMonster(spell.animalId, finalHex, null, null, caster.side);
+        s.summoner = caster.name;
         if (spell.animalId === 'eagle') s.isFlying = true;
         s.maxTPAllowed = 0; 
         if (caster.side === 'player' && caster.skills?.animal_companion && !caster.animalCompanion) {
@@ -2938,6 +2967,7 @@ function resolveSpell(caster, spell, target, clickedHex) {
             window.entities.push(s);
             window.showMessage(`${caster.name} summons a permanent companion: ${s.name}!`);
         } else {
+            s.isSummoned = true;
             window.entities.push(s); 
             const instanceId = Date.now() + Math.random();
             window.activeSpells.push({

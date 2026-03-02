@@ -1,17 +1,17 @@
 // characterCreation.js
-function initializePlayer(race, cls, gender, campaign = "3") {
+function initializePlayer(race, cls, gender, campaign = "3", voice = "pc_1") {
   window.party = [];
   window.selectedCharacterIndex = 0;
   window.currentCampaign = campaign;
   
-  const mainChar = createCharacterData(race, cls, "Player (Main)", gender);
+  const mainChar = createCharacterData(race, cls, "Player (Main)", gender, voice);
   if (campaign === "1") mainChar.gold = 100;
   
   window.party.push(mainChar);
   window.player = mainChar; // Keep window.player as a reference to the selected one for compatibility
 }
 
-function createCharacterData(race, cls, name, gender = "female") {
+function createCharacterData(race, cls, name, gender = "female", voice = "pc_1") {
   // Gather all possible attribute keys to initialize them to 0
   const allAttributes = new Set(['strength', 'endurance', 'agility', 'weapons', 'divine', 'nature', 'arcane', 'wildcard', 'monk', 'Way of the open palm']);
   for (const r in window.raceData) {
@@ -35,6 +35,7 @@ function createCharacterData(race, cls, name, gender = "female") {
     race,
     gender,
     class: cls,
+    voice,
     level: 1,
     exp: 0,
     hp: 10,

@@ -8,6 +8,7 @@ const monsterTemplates = {
         expValue: 100,
         riderSize: 2,
         tags: ['humanoid'],
+        voice: 'goblin_1',
         skills: {
             'meleeDamage': 1,
             'health': 1,
@@ -22,6 +23,7 @@ const monsterTemplates = {
         expValue: 300,
         riderSize: 2,
         tags: ['humanoid'],
+        voice: 'goblin_1',
         skills: {
             'meleeDamage': 2,
             'health': 2,
@@ -40,6 +42,7 @@ const monsterTemplates = {
         expValue: 200,
         riderSize: 3,
         tags: ['humanoid'],
+        voice: 'goblin_1',
         skills: {
             'health': 3
         },
@@ -86,6 +89,7 @@ const monsterTemplates = {
         riderSize: 6,
         extraHexes: [{q: 0, r: 1}, {q: 1, r: 0}], 
         tags: ['giant'],
+        voice: 'goblin_1',
         skills: {
             'health': 5,
             'meleeDamage': 3,
@@ -211,6 +215,7 @@ function createMonster(type, hex, customSkills = null, customEquipment = null, s
     monster.riderSize = template.riderSize || 0;
     monster.mountSize = template.mountSize || 0;
     monster.tags = template.tags ? [...template.tags] : [];
+    monster.voice = template.voice || null;
     
     if (template.extraHexes) monster.extraHexes = template.extraHexes;
 
