@@ -15,6 +15,11 @@ const dialogueData = {
         mood: 'friendly',
         dialogue: "Need a sharper blade? Better armor? Don't be shy, your life depends on it!"
     },
+    'arena_lobby_4': {
+        speaker: 'LobbyMercenary',
+        mood: 'friendly',
+        dialogue: "Need a helping hand? I have contacts with an array of deadly people. You're better off fighting with them than against them."
+    },
     'arena_fight_start': {
         speaker: 'Arena Announcer',
         mood: 'booming',
@@ -23,7 +28,7 @@ const dialogueData = {
     'arena_fight_mid': {
         speaker: 'Arena Announcer',
         mood: 'bloodthirsty',
-        dialogue: "I love the smell of magic and sweat in the morning! Keep it coming!"
+        dialogue: "I love the smell of sweat and blood in the morning! Keep it coming!"
     },
     'arena_victory': {
         speaker: 'Arena Announcer',
@@ -56,9 +61,9 @@ const dialogueData = {
         dialogue: "You have won the battle! Heading back to the lobby..."
     },
     'grishnak_entry': {
-        speaker: 'Narrator',
+        speaker: 'Arena Announcer',
         mood: 'neutral',
-        dialogue: "A champion enters the arena: Grishnak!"
+        dialogue: "In one corner, the crowd favourite, the ferocious champion Grishnak! In the other corner, his prey."
     }
 };
 
