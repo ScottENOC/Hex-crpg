@@ -2143,6 +2143,8 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   if (attacker.equipped?.weapon && attacker.equipped?.offhand && window.items[attacker.equipped.offhand].type === 'weapon') hitChance -= 5;
   if (isOffhand) hitChance -= 5;
   if (weapon && attacker.skills[`${weapon.id}_hit`]) hitChance += 5;
+
+  const roll = Math.floor(Math.random() * 100);
       // If it's a miss, check for reactions
       const missCallbackFinal = () => {
           // SHIELD BASH (existing)

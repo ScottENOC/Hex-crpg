@@ -155,6 +155,8 @@ document.addEventListener("DOMContentLoaded", () => {
             window.addAllEquipment();
         } else if (btnId === "cheat-fly-btn") {
             window.toggleFlyCheat();
+        } else if (btnId === "cheat-max-skills-btn") {
+            window.cheatMaxSkills();
         } else if (btnId === "cancel-moves-btn") {
             window.cancelAllMoveOrders();
         } else if (btnId === "rest-btn") {
@@ -170,6 +172,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const modal = e.target.closest(".modal");
             if (modal) {
                 modal.style.display = "none";
+                window.isPausedForReaction = false;
                 if (window.updateMusicState) window.updateMusicState();
                 // If this was the first character screen close, start the game
                 if (modal.id === "character-screen-modal" && window.isInitialCharacterScreen) {
@@ -182,6 +185,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (e.target.classList.contains('modal')) {
             const modal = e.target;
             modal.style.display = "none";
+            window.isPausedForReaction = false;
             if (window.updateMusicState) window.updateMusicState();
             if (modal.id === "character-screen-modal" && window.isInitialCharacterScreen) {
                 window.isInitialCharacterScreen = false;
@@ -283,6 +287,31 @@ window.toggleFlyCheat = function() {
     window.renderEntities();
     window.updateTurnIndicator();
     if (window.updateActionButtons) window.updateActionButtons();
+};
+
+window.cheatMaxSkills = function() {
+    window.party.forEach(char => {
+        for (const skillKey in window.skills) {
+            const skill = window.skills[skillKey];
+            const max = skill.maxRanks || 100;
+            char.skills[skillKey] = max;
+            if (skill.apply) skill.apply(char);
+        }
+    });
+    // Sync entities
+    window.entities.forEach(ent => {
+        const partyMember = window.party.find(p => p.name === ent.name);
+        if (partyMember) {
+            ent.skills = partyMember.skills;
+            // Re-apply skill effects to entity
+            for (const sk in ent.skills) {
+                if (window.skills[sk]?.apply) window.skills[sk].apply(ent);
+            }
+        }
+    });
+    window.showMessage("Cheat: All skills maxed for the party!");
+    window.showCharacter();
+    window.showCharacterScreen();
 };
 
 window.startGame = function() {

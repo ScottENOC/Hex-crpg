@@ -51,7 +51,7 @@ window.updateVolumes = function() {
     });
     
     // Constant is music but special low volume
-    tracks.constant.volume = musicVol * 0.005; // Extremely low
+    tracks.constant.volume = musicVol * 0.001; // Extremely low (20% of previous 0.005)
 };
 
 window.playMusic = function(trackName, fadeUp = 0.8, fadeDown = 0.6) {

@@ -1758,6 +1758,9 @@ window.unequipItem = unequipItem;
 window.syncPlayerEntity = syncPlayerEntity;
 window.gainExp = gainExp;
 window.doLevelUp = doLevelUp;
+window.showDialogue = showDialogue;
+window.openShop = openShop;
+window.startMercenaryHire = startMercenaryHire;
 function highlightValidTargets(caster, spell) {
     const range = spell.range || 1;
     const type = spell.type;

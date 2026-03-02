@@ -63,8 +63,11 @@
 - **Audio Integration**:
     - **Dialogue Audio**: Implemented automatic audio playback for ambient dialogue. Audio files in `/audio/dialogue/` are now played when their corresponding dialogue lines appear.
     - **Parry Sound Effects**: Added randomized parry sound effects (`parry.wav` and `parry2.wav`) that play upon a successful parry or protector parry.
-    - **Volume Balancing**: Significantly reduced the volume of the `constant.wav` background track to a 0.005 multiplier of music volume (barely audible) to provide a subtle base layer.
+    - **Volume Balancing**: Significantly reduced the volume of the `constant.wav` background track to a 0.001 multiplier of music volume (near silent) to provide a very subtle base layer.
 - **Bug Fixes**:
+    - **Combat Script Fix**: Resolved "uncaught referenceerror: roll is not defined" in `resolveAttack`.
+    - **Dialogue Modal Fixes**: Added a missing close button to the dialogue modal and ensured that closing it correctly resets the game's "paused for reaction" state, preventing input lockups.
+    - **NPC Interaction Fix**: Exported `showDialogue`, `openShop`, and `startMercenaryHire` to the global `window` object, ensuring NPC triggers (like the Arena Shopkeeper) function correctly.
     - **UI Stability**: Fixed "Cannot set properties of null (setting 'innerHTML')" error in `ui.js` by adding proper element existence checks and re-integrating essential elements.
     - **Canvas Resizing**: Added a window resize listener to ensure the battle map always fills its container correctly when the browser is resized.
     - **AI Re-arming**: Implemented logic for AI to prioritize picking up dropped weapons or drawing new ones from inventory when disarmed.
@@ -72,6 +75,7 @@
     - **Syntax Error Fixed**: Resolved several redeclaration errors in `gameEngine.js`.
     - **Initialization Fix**: Fixed several "function is not defined" errors during game startup and loading.
 - **Quality of Life & Cheats**:
+    - **Cheat: Max Skills**: Added a new cheat button that instantly sets all skill ranks to maximum (or 100 for infinite skills) for all party members.
     - **Fly All Cheat**: Added a new cheat button that toggles flying status for all friendly characters, including visual updates and button state changes.
     - **Terminology Polish**: Replaced "Teleporting" with "Heading back to" in the arena victory sequence for better thematic consistency.
     - **Starting Gold**: Players now start Scenario 1 (Arena) with 100 gold.
