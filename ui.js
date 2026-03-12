@@ -528,7 +528,7 @@ function updateActionButtons() {
         waitBtn.style.backgroundColor = "#9e9e9e";
         waitBtn.onclick = () => {
             window.spendTP(player, 1);
-            window.finalizePlayerAction(player, true);
+            window.finalizePlayerAction(player, 'wait');
         };
         buttonsDiv.appendChild(waitBtn);
 

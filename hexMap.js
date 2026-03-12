@@ -88,9 +88,8 @@ function drawMap() {
       }
   }
 
-  // Painter's Algorithm: Sort by Y coordinate so things further "back" are drawn first.
-  // In our flat-top layout, Y increases with both 'r' and 'q'.
-  visibleAndExplored.sort((a, b) => (a.r + a.q/2) - (b.r + b.q/2));
+  // No sorting needed for flat-top hexes as long as we draw in a consistent order
+  // visibleAndExplored.sort((a, b) => (a.r + a.q/2) - (b.r + b.q/2));
 
   // 2. PASS 1: Base Terrain & Foliage
   visibleAndExplored.forEach(({q, r, visible}) => {
@@ -133,7 +132,10 @@ function drawMap() {
       if (!visible) drawHex(x, y, hexSize, { fill: "rgba(0,0,0,0.6)" });
   });
 
-  // 3. PASS 2: Water Overlay (50% Transparency)
+  // 3. PASS 2: Entities & Items
+  if (window.renderEntities) window.renderEntities();
+
+  // 4. PASS 3: Water Overlay (50% Transparency) - DRAWN ON TOP OF CHARACTERS
   visibleAndExplored.forEach(({q, r}) => {
       const terrain = window.getTerrainAt(q, r);
       if (terrain.name === 'Water' && window.gameVisuals.water.complete) {
@@ -145,6 +147,7 @@ function drawMap() {
       }
   });
 
+  // 5. PASS 4: Highlights
   highlightedHexes.forEach(hex => {
       const {x,y} = hexToPixel(hex.q, hex.r);
       if (hex.type === 'move') {
@@ -156,7 +159,7 @@ function drawMap() {
       }
   });
 
-  // NIGHT FILTER
+  // 6. PASS 5: Night Filter
   if (window.lightLevel < 1.0) {
       mapCtx.fillStyle = `rgba(0,0,0,${(1.0 - window.lightLevel) * 0.7})`; 
       mapCtx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);

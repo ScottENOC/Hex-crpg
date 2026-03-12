@@ -197,7 +197,7 @@ function playerMoveProcess(player, path) {
             const isSqueezing = window.entities.some(e => e.alive && e !== player && e !== player.riding && e.hex.q === player.hex.q && e.hex.r === player.hex.r);
 
             if ((player.timePoints > threshold && !mountExhausted && path.length > 0) || (isSqueezing && path.length > 0)) {
-                setTimeout(() => playerMoveProcess(player, path), 100);
+                setTimeout(() => playerMoveProcess(player, path), 20);
             } else {
                 finalizePlayerAction(player, true);
             }
@@ -217,7 +217,7 @@ function finalizePlayerAction(player, actionHandled) {
         threshold -= player.skills['quickRecovery'];
     }
 
-    const shouldEndTurn = (Math.floor(player.timePoints) <= threshold) || (actionHandled === true);
+    const shouldEndTurn = (Math.floor(player.timePoints) <= threshold) || (actionHandled === 'wait');
 
     if (shouldEndTurn) {
         window.clearHighlights();
@@ -372,39 +372,47 @@ function updatePlayerUI() {
     const moveEntity = player.riding || player;
     const availableTP = moveEntity.timePoints - (player.riding ? 80 : threshold); 
     
-    // Optimized UI: Only check visible range for movement highlights
-    // Instead of all mapCols, check a radius around player
-    const visibleRange = 20; // Optimization
-    const hexes = getHexesInRange(player.hex, visibleRange);
+    // BFS for reachable hexes
+    const reachable = new Map();
+    const queue = [{ hex: player.hex, cost: 0 }];
+    reachable.set(`${player.hex.q},${player.hex.r}`, 0);
 
-    hexes.forEach(h => {
-        if (h.q === player.hex.q && h.r === player.hex.r) return;
+    let baseMoveCost = 5;
+    if (moveEntity.skills) {
+        if (moveEntity.skills['fastMovement']) {
+            const isLightOrNoArmor = !moveEntity.equipped || !moveEntity.equipped.armor || window.items[moveEntity.equipped.armor]?.id === 'light_armor';
+            if (isLightOrNoArmor) baseMoveCost -= moveEntity.skills['fastMovement'];
+        }
+        if (moveEntity.skills['swift_step']) {
+            const isUnarmored = (!moveEntity.equipped || !moveEntity.equipped.armor) && (!moveEntity.equipped || !moveEntity.equipped.offhand || window.items[moveEntity.equipped.offhand].type !== 'shield');
+            if (isUnarmored) baseMoveCost -= 1;
+        }
+    }
+    baseMoveCost = Math.max(1, baseMoveCost);
+
+    while (queue.length > 0) {
+        const { hex, cost } = queue.shift();
+        const neighbors = window.getNeighbors(hex.q, hex.r);
         
-        const path = window.findPath(player.hex, h, availableTP, moveEntity);
-        const dist = window.distance(player.hex, h);
-        
-        let baseCost = 5;
-        if (moveEntity.skills) {
-            if (moveEntity.skills['fastMovement']) {
-                const isLightOrNoArmor = !moveEntity.equipped || !moveEntity.equipped.armor || window.items[moveEntity.equipped.armor]?.id === 'light_armor';
-                if (isLightOrNoArmor) baseCost -= moveEntity.skills['fastMovement'];
-            }
-            if (moveEntity.skills['swift_step']) {
-                const isUnarmored = (!moveEntity.equipped || !moveEntity.equipped.armor) && (!moveEntity.equipped || !moveEntity.equipped.offhand || window.items[moveEntity.equipped.offhand].type !== 'shield');
-                if (isUnarmored) baseCost -= 1;
+        for (const n of neighbors) {
+            if (getEntityAtHex(n.q, n.r)) continue;
+            
+            const terrain = window.getTerrainAt(n.q, n.r);
+            if (terrain.name === 'Wall') continue;
+
+            const stepCost = baseMoveCost * (player.isFlying ? 1 : terrain.moveCostMult);
+            const totalCost = cost + stepCost;
+
+            if (totalCost <= availableTP) {
+                const key = `${n.q},${n.r}`;
+                if (!reachable.has(key) || totalCost < reachable.get(key)) {
+                    reachable.set(key, totalCost);
+                    queue.push({ hex: n, cost: totalCost });
+                    window.highlightedHexes.push({ ...n, type: 'move' });
+                }
             }
         }
-        const terrain = window.getTerrainAt(h.q, h.r);
-        const minStepCost = Math.max(1, baseCost) * terrain.moveCostMult;
-
-        const canStep = availableTP >= minStepCost;
-
-        if (player.timePoints > threshold && (path || (dist === 1 && canStep))) {
-            if (!getEntityAtHex(h.q, h.r)) {
-                window.highlightedHexes.push({ ...h, type: 'move' });
-            }
-        }
-    });
+    }
 
     let attackRange = 1;
     let isRanged = false;
@@ -506,60 +514,60 @@ function startGameCore(isLoading = false) {
       eagleflying: new Image(),
       foliage: new Image()
   };
-  visuals.playerBase.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.leatherArmor.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.chainArmor.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.monsterDefault.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.orcBase.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.swordIcon.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.humanBase.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.humanHair.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.humanMaleHair.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.humanLight.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.humanMedium.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.humanHeavy.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.horse.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.nasal_helm.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.humanMaleBase.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.elfMaleBase.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.elfMaleHair.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.elfFemaleBase.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.elfFemaleHair.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.dwarfMaleBase.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.dwarfMaleHair.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.dwarfFemaleBase.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.dwarfFemaleHair.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.shield.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.skeleton.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.zombie.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.imp.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.wolf.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.torch_lit.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.fireplace.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.axe.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.troll.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.spear.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.club.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.spiderweb.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.spider1.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.spider2.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.arenaannouncer.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.arenamercenary.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.arenashopkeeper.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.grishnak.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.floor1.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.floor2.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.floor3.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.floor4.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.overlay_blood.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.overlay_skull.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.pedestal.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.water.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.boar.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.tiger.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.eagle.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.eagleflying.onload = () => { window.drawMap(); window.renderEntities(); };
-  visuals.foliage.onload = () => { window.drawMap(); window.renderEntities(); };
+  visuals.playerBase.onload = () => { window.drawMap(); };
+  visuals.leatherArmor.onload = () => { window.drawMap(); };
+  visuals.chainArmor.onload = () => { window.drawMap(); };
+  visuals.monsterDefault.onload = () => { window.drawMap(); };
+  visuals.orcBase.onload = () => { window.drawMap(); };
+  visuals.swordIcon.onload = () => { window.drawMap(); };
+  visuals.humanBase.onload = () => { window.drawMap(); };
+  visuals.humanHair.onload = () => { window.drawMap(); };
+  visuals.humanMaleHair.onload = () => { window.drawMap(); };
+  visuals.humanLight.onload = () => { window.drawMap(); };
+  visuals.humanMedium.onload = () => { window.drawMap(); };
+  visuals.humanHeavy.onload = () => { window.drawMap(); };
+  visuals.horse.onload = () => { window.drawMap(); };
+  visuals.nasal_helm.onload = () => { window.drawMap(); };
+  visuals.humanMaleBase.onload = () => { window.drawMap(); };
+  visuals.elfMaleBase.onload = () => { window.drawMap(); };
+  visuals.elfMaleHair.onload = () => { window.drawMap(); };
+  visuals.elfFemaleBase.onload = () => { window.drawMap(); };
+  visuals.elfFemaleHair.onload = () => { window.drawMap(); };
+  visuals.dwarfMaleBase.onload = () => { window.drawMap(); };
+  visuals.dwarfMaleHair.onload = () => { window.drawMap(); };
+  visuals.dwarfFemaleBase.onload = () => { window.drawMap(); };
+  visuals.dwarfFemaleHair.onload = () => { window.drawMap(); };
+  visuals.shield.onload = () => { window.drawMap(); };
+  visuals.skeleton.onload = () => { window.drawMap(); };
+  visuals.zombie.onload = () => { window.drawMap(); };
+  visuals.imp.onload = () => { window.drawMap(); };
+  visuals.wolf.onload = () => { window.drawMap(); };
+  visuals.torch_lit.onload = () => { window.drawMap(); };
+  visuals.fireplace.onload = () => { window.drawMap(); };
+  visuals.axe.onload = () => { window.drawMap(); };
+  visuals.troll.onload = () => { window.drawMap(); };
+  visuals.spear.onload = () => { window.drawMap(); };
+  visuals.club.onload = () => { window.drawMap(); };
+  visuals.spiderweb.onload = () => { window.drawMap(); };
+  visuals.spider1.onload = () => { window.drawMap(); };
+  visuals.spider2.onload = () => { window.drawMap(); };
+  visuals.arenaannouncer.onload = () => { window.drawMap(); };
+  visuals.arenamercenary.onload = () => { window.drawMap(); };
+  visuals.arenashopkeeper.onload = () => { window.drawMap(); };
+  visuals.grishnak.onload = () => { window.drawMap(); };
+  visuals.floor1.onload = () => { window.drawMap(); };
+  visuals.floor2.onload = () => { window.drawMap(); };
+  visuals.floor3.onload = () => { window.drawMap(); };
+  visuals.floor4.onload = () => { window.drawMap(); };
+  visuals.overlay_blood.onload = () => { window.drawMap(); };
+  visuals.overlay_skull.onload = () => { window.drawMap(); };
+  visuals.pedestal.onload = () => { window.drawMap(); };
+  visuals.water.onload = () => { window.drawMap(); };
+  visuals.boar.onload = () => { window.drawMap(); };
+  visuals.tiger.onload = () => { window.drawMap(); };
+  visuals.eagle.onload = () => { window.drawMap(); };
+  visuals.eagleflying.onload = () => { window.drawMap(); };
+  visuals.foliage.onload = () => { window.drawMap(); };
 
   visuals.playerBase.src = 'images/elf.png';
   visuals.leatherArmor.src = 'images/elfleatherarmour.png';
@@ -1061,7 +1069,7 @@ function tick() {
             if (ready.length > 0) {
                 ready.forEach(e => spendTP(e, 1));
             } else {
-                runTickInternal(true);
+                runTickInternal(true, true); // skipUI=true
             }
 
             // CHECK COMPLETION
@@ -1097,6 +1105,7 @@ function tick() {
             }
             sentientAllies.forEach(e => e.lastHp = e.hp);
         }
+        window.updateTurnIndicator();
         return; // Exit main tick loop after fast-forward
     }
 
@@ -1104,15 +1113,16 @@ function tick() {
         const inCombat = window.entities.some(e => e.alive && e.side === 'enemy' && e.aiState === 'combat');
         const numTicks = inCombat ? 1 : 200; 
         for (let i = 0; i < numTicks; i++) {
-            runTickInternal();
+            runTickInternal(false, true); // skipUI=true
             if (window.gamePhase !== 'WAITING') break;
         }
+        window.updateTurnIndicator();
     } else {
         runTickInternal();
     }
 }
 
-function runTickInternal(isSleepCycle = false) {
+function runTickInternal(isSleepCycle = false, skipUI = false) {
     if (window.currentTurnEntity && !isSleepCycle) return;
     
     const readyEntities = window.entities.filter(e => e.timePoints >= 100 && e.alive && !e.rider);
@@ -1184,6 +1194,7 @@ function runTickInternal(isSleepCycle = false) {
                     }
 
                     // REST INTERRUPT: Net negative mana
+                    const totalUpkeep = mySpells.reduce((acc, s) => acc + (s.coreManaCost * 0.025), 0);
                     if (window.isResting && e.side === 'player' && (totalUpkeep > regen * tpGained) && e.currentMana < e.maxMana * 0.1) {
                         window.isResting = false;
                         window.showMessage("Rest stopped: maintenance costs too high.");
@@ -1215,7 +1226,7 @@ function runTickInternal(isSleepCycle = false) {
             }
         }
     }
-    window.updateTurnIndicator();
+    if (!skipUI) window.updateTurnIndicator();
 }
 
 function takeTurn(entity) {
@@ -1253,7 +1264,7 @@ function takeTurn(entity) {
 
 function autoMoveProcess(entity) {
     if (window.isPausedForReaction) {
-        setTimeout(() => autoMoveProcess(entity), 100);
+        setTimeout(() => autoMoveProcess(entity), 20);
         return;
     }
 
@@ -1333,7 +1344,7 @@ function autoMoveProcess(entity) {
 
 function aiProcess(entity) {
     if (window.isPausedForReaction) {
-        setTimeout(() => aiProcess(entity), 100);
+        setTimeout(() => aiProcess(entity), 20);
         return;
     }
     if (entity.side === 'neutral') {
@@ -1354,7 +1365,7 @@ function aiProcess(entity) {
             target.webbedDuration = 40; // TP to spend
             entity.hasUsedWeb = true;
             spendTP(entity, 5);
-            setTimeout(() => aiProcess(entity), 100);
+            setTimeout(() => aiProcess(entity), 20);
             return;
         }
     }
@@ -1380,7 +1391,7 @@ function aiProcess(entity) {
             itemsInHex.splice(itemsInHex.indexOf(weaponInHex), 1);
             if (itemsInHex.length === 0) delete window.mapItems[coord];
             spendTP(entity, 5);
-            setTimeout(() => aiProcess(entity), 100);
+            setTimeout(() => aiProcess(entity), 20);
             return;
         }
         // No weapon in hex, check inventory
@@ -1391,7 +1402,7 @@ function aiProcess(entity) {
                 entity.equipped.weapon = weaponInInv;
                 entity.inventory.splice(entity.inventory.indexOf(weaponInInv), 1);
                 spendTP(entity, 5);
-                setTimeout(() => aiProcess(entity), 100);
+                setTimeout(() => aiProcess(entity), 20);
                 return;
             }
         }
@@ -1434,7 +1445,7 @@ function aiProcess(entity) {
             } else {
                 spendTP(entity, 10);
             }
-            setTimeout(() => aiProcess(entity), 100);
+            setTimeout(() => aiProcess(entity), 20);
             return;
         }
     }
@@ -1495,7 +1506,7 @@ function aiProcess(entity) {
         } else {
             spendTP(entity, 10);
         }
-        setTimeout(() => aiProcess(entity), 100);
+        setTimeout(() => aiProcess(entity), 20);
         return;
     }
 
@@ -1523,7 +1534,7 @@ function aiProcess(entity) {
             if (inRange) {
                 tryCastSpell(entity, attackSpell, inRange, inRange.hex);
                 spendTP(entity, 10);
-                setTimeout(() => aiProcess(entity), 100);
+                setTimeout(() => aiProcess(entity), 20);
                 return;
             }
         }
@@ -1561,7 +1572,7 @@ function aiProcess(entity) {
         const coord = `${entity.hex.q},${entity.hex.r}`;
         if (window.mapItems[coord]?.length > 0 && entity.timePoints >= 1) {
             window.lootItems(entity);
-            setTimeout(() => aiProcess(entity), 100);
+            setTimeout(() => aiProcess(entity), 20);
             return;
         }
     }
@@ -1589,7 +1600,7 @@ function aiProcess(entity) {
             tryAttack(entity, target);
             spendTP(entity, 10);
         }
-        setTimeout(() => aiProcess(entity), 100);
+        setTimeout(() => aiProcess(entity), 20);
     } else {
         const neighbors = window.getNeighbors(entity.hex.q, entity.hex.r);
         const bestHex = neighbors.map(h => {
@@ -1632,7 +1643,7 @@ function aiProcess(entity) {
                     if (entity.riding.timePoints > 80) {
                         spendTP(entity.riding, cost * terrain.moveCostMult);
                     } else {
-                        setTimeout(() => aiProcess(entity), 100);
+                        setTimeout(() => aiProcess(entity), 20);
                         return;
                     }
                 } else {
@@ -1640,11 +1651,11 @@ function aiProcess(entity) {
                 }
 
                 if (forceEnd) entity.timePoints = threshold;
-                setTimeout(() => aiProcess(entity), 100);
+                setTimeout(() => aiProcess(entity), 20);
             });
         } else { 
             entity.timePoints = threshold; 
-            setTimeout(() => aiProcess(entity), 100); 
+            setTimeout(() => aiProcess(entity), 20); 
         }
     }
 }
@@ -1978,7 +1989,7 @@ function handleClick(e){
         }
         // Force evaluation if it's currently their turn
         if (window.gamePhase === 'PLAYER_TURN' && window.currentTurnEntity === player) {
-            setTimeout(() => window.autoMoveProcess(player), 100);
+            setTimeout(() => window.autoMoveProcess(player), 20);
         }
     }
     finalizePlayerAction(player, actionHandled);

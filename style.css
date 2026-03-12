@@ -310,7 +310,7 @@ button:hover { background-color: #3f51b5; }
 .modal {
     display: none; 
     position: fixed; 
-    z-index: 100; 
+    z-index: 300; 
     left: 0;
     top: 0;
     width: 100%; 
