@@ -206,7 +206,7 @@ document.addEventListener("DOMContentLoaded", () => {
         fightsCompleted: 0
     }));
 
-    window.updateRoguelikePreview = function() {
+window.updateRoguelikePreview = function() {
         const campaign = document.getElementById("campaign-select").value;
         const relicsEnabled = document.getElementById("relics-activated-check").checked;
         const preview = document.getElementById("roguelike-benefits-preview");
@@ -272,6 +272,9 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
     }
+
+    
+    window.updateRoguelikePreview();
 
     window.updateSelectionPreview = function() {
         const race = document.getElementById("race-select").value;

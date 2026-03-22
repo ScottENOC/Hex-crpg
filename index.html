@@ -61,6 +61,11 @@
     <div id="turn-indicator-bar"></div>
 
     <div id="top-menu" style="display: none;">
+        <div id="world-time-display" style="color: #ffeb3b; font-family: monospace; font-size: 0.9em; margin-left: 10px; border-left: 1px solid #555; padding-left: 10px; align-self: center;"></div>
+        <div id="party-selection" style="display: flex; gap: 5px; margin-right: 15px; border-right: 1px solid #555; padding-right: 10px;">
+            <!-- Party member buttons will go here -->
+        </div>
+        
         <div class="dropdown">
             <button class="dropbtn">Menu</button>
             <div class="dropdown-content">
@@ -80,22 +85,18 @@
             </div>
         </div>
 
-        <div class="dropdown" id="cheat-menu-container">
-            <button class="dropbtn" style="background-color: #ff5722;">Cheats</button>
-            <div class="dropdown-content">
-                <button id="cheat-jerry-btn" style="background-color: #ff5722;">Add Jerry</button>
-                <button id="cheat-horse-btn" style="background-color: #8b4513;">Spawn Horse</button>
-                <button id="cheat-all-equip-btn" style="background-color: #607d8b;">Add All Equip</button>
-                <button id="cheat-fly-btn" style="background-color: #03a9f4;">Fly All</button>
-                <button id="cheat-max-skills-btn" style="background-color: #e91e63;">Max Skills</button>
-            </div>
-        </div>
-
         <button id="move-group-btn" style="background-color: #795548;">Move Group: OFF</button>
         <button id="cancel-moves-btn" style="background-color: #d32f2f; color: white;">Cancel Move Orders</button>
         <button id="rest-btn" style="background-color: #607d8b; color: white;">Rest until Restored</button>
         <button id="sleep-btn" style="background-color: #3f51b5; color: white;">Sleep</button>
-        </div>
+        
+        <button id="cheat-jerry-btn" style="background-color: #ff5722; font-size: 0.7em;">Cheat: Add Jerry</button>
+        <button id="cheat-horse-btn" style="background-color: #8b4513; font-size: 0.7em; color: white;">Cheat: Spawn Horse</button>
+        <button id="cheat-all-equip-btn" style="background-color: #607d8b; font-size: 0.7em; color: white;">Cheat: Add All Equipment</button>
+        <button id="cheat-fly-btn" style="background-color: #03a9f4; font-size: 0.7em; color: white;">Cheat: Fly All</button>
+        <button id="cheat-max-skills-btn" style="background-color: #e91e63; font-size: 0.7em; color: white;">Cheat: Max Skills</button>
+    </div>
+
     <div id="characterCreator">
         <div class="creation-container">
             <div style="text-align: right; margin-bottom: -30px;">
@@ -192,7 +193,6 @@
                 <canvas id="mapCanvas"></canvas>
             </div>
             <div id="ui-container">
-                <div id="character-info" style="font-size: 0.85em; border-bottom: 1px solid #444; padding-bottom: 5px; margin-bottom: 10px;"></div>
                 <h2>Actions</h2>
                 <div id="actions">
                 </div>
