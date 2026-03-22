@@ -206,6 +206,30 @@ document.addEventListener("DOMContentLoaded", () => {
         fightsCompleted: 0
     }));
 
+    window.updateRoguelikePreview = function() {
+        const campaign = document.getElementById("campaign-select").value;
+        const relicsEnabled = document.getElementById("relics-activated-check").checked;
+        const preview = document.getElementById("roguelike-benefits-preview");
+        if (!preview) return;
+
+        if (campaign === "1" && relicsEnabled) {
+            const bonuses = window.roguelikeData.permanentSkillBonuses;
+            const keys = Object.keys(bonuses);
+            if (keys.length > 0) {
+                let html = `<h4 style="margin: 0 0 5px 0; color: #ffeb3b;">Unlocked Roguelike Bonuses:</h4>`;
+                html += `<p style="margin: 0;">`;
+                html += keys.map(k => `+${bonuses[k]} ${k.charAt(0).toUpperCase() + k.slice(1)}`).join(", ");
+                html += `</p>`;
+                preview.innerHTML = html;
+                preview.style.display = "block";
+            } else {
+                preview.style.display = "none";
+            }
+        } else {
+            preview.style.display = "none";
+        }
+    };
+
     window.toggleArenaOptions = function() {
         const campaign = document.getElementById("campaign-select").value;
         const optionsDiv = document.getElementById("arena-roguelike-options");
@@ -248,31 +272,6 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
     }
-
-    window.updateRoguelikePreview = function() {
-        const campaign = document.getElementById("campaign-select").value;
-        const relicsEnabled = document.getElementById("relics-activated-check").checked;
-        const preview = document.getElementById("roguelike-benefits-preview");
-        if (!preview) return;
-
-        if (campaign === "1" && relicsEnabled) {
-            const bonuses = window.roguelikeData.permanentSkillBonuses;
-            const keys = Object.keys(bonuses);
-            if (keys.length > 0) {
-                let html = `<h4 style="margin: 0 0 5px 0; color: #ffeb3b;">Unlocked Roguelike Bonuses:</h4>`;
-                html += `<p style="margin: 0;">`;
-                html += keys.map(k => `+${bonuses[k]} ${k.charAt(0).toUpperCase() + k.slice(1)}`).join(", ");
-                html += `</p>`;
-                preview.innerHTML = html;
-                preview.style.display = "block";
-            } else {
-                preview.style.display = "none";
-            }
-        } else {
-            preview.style.display = "none";
-        }
-    };
-    window.updateRoguelikePreview();
 
     window.updateSelectionPreview = function() {
         const race = document.getElementById("race-select").value;
