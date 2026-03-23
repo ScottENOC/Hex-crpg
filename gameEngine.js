@@ -2778,32 +2778,29 @@ function startArenaFight() {
     // Filter to keep players AND their mounts/allies
     window.entities = window.entities.filter(e => e.side === 'player'); 
 
-    // 2. Create arena map (50x50 rectangle)
+    // 2. Create arena map (Hexagon area)
     const arenaSize = 25;
     const isWaterArena = Math.random() < 0.3;
     const isPedestalArena = Math.random() < 0.4;
     const isFoliageArena = !isIndoor && Math.random() < 0.5;
     
+    // Fill the arena area with terrain
     for (let q = -arenaSize; q <= arenaSize; q++) {
         for (let r = -arenaSize; r <= arenaSize; r++) {
-            if (Math.abs(q) === arenaSize || Math.abs(r) === arenaSize || Math.abs(q+r) === arenaSize) {
-                 window.setTerrainAt(q, r, 'Wall');
-            } else {
+            // Hexagonal constraint: max(abs(q), abs(r), abs(q+r)) <= arenaSize
+            if (Math.abs(q) <= arenaSize && Math.abs(r) <= arenaSize && Math.abs(q+r) <= arenaSize) {
                  let tType = 'Cave Floor';
                  
-                 // Random Water (Lakes/Rivers)
                  if (isWaterArena) {
                      const waterNoise = Math.abs(Math.sin(q * 0.2 + r * 0.15));
                      if (waterNoise > 0.8) tType = 'Water';
                  }
 
-                 // Random Pedestals (Lines or Clusters)
                  if (isPedestalArena && tType === 'Cave Floor') {
                      const pNoise = Math.abs(Math.sin(q * 0.5 + r * 0.05));
                      if (pNoise > 0.9) tType = 'Pedestal';
                  }
 
-                 // Random Foliage (Only outdoor)
                  if (isFoliageArena && tType === 'Cave Floor') {
                      const fNoise = Math.abs(Math.sin(q * 0.3 + r * 0.3 + 5));
                      if (fNoise > 0.85) tType = 'foliage';
@@ -2811,7 +2808,6 @@ function startArenaFight() {
 
                  window.setTerrainAt(q, r, tType);
                  
-                 // 50% chance for some campfires if indoor
                  if (isIndoor && Math.random() < 0.02 && tType === 'Cave Floor') {
                      window.tileObjects[`${q},${r}`] = { type: 'fireplace', lightRadius: 10 };
                  }
@@ -2823,6 +2819,15 @@ function startArenaFight() {
     const spawnClose = Math.random() < 0.15; // 15% chance to spawn close
     const spawnInSight = Math.random() < 0.3; // 30% chance to spawn in sight
 
+    // Helper to find valid player spawn hexes
+    const getValidPlayerHex = (targetQ, targetR) => {
+        const neighbors = [{q: targetQ, r: targetR}, ...window.getNeighbors(targetQ, targetR)];
+        return neighbors.find(h => {
+            const terrain = window.getTerrainAt(h.q, h.r);
+            return window.overrideTerrain[`${h.q},${h.r}`] && terrain.name !== 'Wall' && terrain.name !== 'Water' && !window.getEntityAtHex(h.q, h.r);
+        }) || {q: targetQ, r: targetR};
+    };
+
     window.entities.forEach((e, i) => {
         let q, r;
         if (spawnClose) {
@@ -2830,10 +2835,9 @@ function startArenaFight() {
             r = i - Math.floor(window.entities.length/2);
         } else {
             q = -arenaSize + 5 + Math.floor(Math.random() * 5);
-            // Limit r to be within reasonable bounds of the arena center
             r = (Math.random() * (arenaSize - 10)) - (arenaSize/2);
         }
-        e.hex = { q: Math.floor(q), r: Math.floor(r) };
+        e.hex = getValidPlayerHex(Math.floor(q), Math.floor(r));
         if (e.riding) e.riding.hex = { q: e.hex.q, r: e.hex.r };
     });
     if (window.entities.length > 0) {
@@ -2845,34 +2849,44 @@ function startArenaFight() {
     const maxSP = 16 + (window.roguelikeData.fightsCompleted - 1) * 5;
     const targetSP = minSP + Math.floor(Math.random() * (maxSP - minSP + 1));
 
+    // Helper to find valid hexes
+    const getAllValidSpawnHexes = () => {
+        const valid = [];
+        for (let q = -arenaSize + 1; q < arenaSize; q++) {
+            for (let r = -arenaSize + 1; r < arenaSize; r++) {
+                const hex = { q, r };
+                const terrain = window.getTerrainAt(q, r);
+                // Check accessible terrain: MUST HAVE AN OVERRIDE IN ARENA (to be inside the wall)
+                const hasOverride = window.overrideTerrain[`${q},${r}`];
+                if (hasOverride && terrain.name !== 'Wall' && terrain.name !== 'Water' && !getEntityAtHex(q, r)) {
+                    // Check distance from all players
+                    const nearPlayer = window.entities.some(e => e.side === 'player' && window.distance(e.hex, hex) < 3);
+                    if (!nearPlayer) {
+                        valid.push(hex);
+                    }
+                }
+            }
+        }
+        return valid;
+    };
+
+    const validHexes = getAllValidSpawnHexes();
+    let lastSpawnHex = validHexes.length > 0 ? validHexes[Math.floor(Math.random() * validHexes.length)] : { q: 0, r: 0 };
+
     // GRISHNAK ENCOUNTER (10% chance if not defeated)
     if (!window.grishnakDefeated && Math.random() < 0.1) {
         window.triggerAmbientDialogue('grishnak_entry');
-        let gPos = spawnClose ? {q: 0, r: 0} : { q: arenaSize - 5, r: 0 };
-        let gPosAttempts = 0;
-        while (gPosAttempts < 10) {
-            const terrain = window.getTerrainAt(gPos.q, gPos.r);
-            if (terrain.name !== 'Water' && terrain.name !== 'Wall' && !getEntityAtHex(gPos.q, gPos.r)) {
-                break; // Found a valid hex
-            }
-            // Try shifting by a small random amount.
-            gPos.q += (Math.random() - 0.5) * 2;
-            gPos.r += (Math.random() - 0.5) * 2;
-            gPosAttempts++;
-        }
-        const grishnak = window.createMonster('orc', gPos, null, null, 'enemy');
+        const grishnak = window.createMonster('orc', lastSpawnHex, null, null, 'enemy');
         grishnak.name = "Grishnak";
         grishnak.hp = 40;
         grishnak.maxHp = 40;
         grishnak.currentMana = 50;
         grishnak.maxMana = 50;
         
-        // 1 rank in each arcane and wizard skill
         const keys = Object.keys(window.skills).filter(k => window.skills[k].tree === 'arcane' || window.skills[k].tree === 'wizard');
         keys.forEach(k => grishnak.skills[k] = 1);
         grishnak.applySkills();
 
-        // Give Grishnak some spells
         grishnak.createdSpells.push({
             name: "Counterspell", baseId: 'counterspell', type: 'dispel', school: 'arcane', manaCost: 10, tpCost: 10, range: 8
         });
@@ -2881,50 +2895,36 @@ function startArenaFight() {
         });
 
         window.entities.push(grishnak);
+        console.log(`Spawned Grishnak at {q: ${lastSpawnHex.q}, r: ${lastSpawnHex.r}}`);
+
         for (let i = 0; i < 2; i++) {
-            let spawnHex = spawnClose ? {q: 2, r: (i === 0 ? -1 : 1)} : { q: arenaSize - 5, r: (i === 0 ? -2 : 2) };
-            let spawnHexAttempts = 0;
-            while (spawnHexAttempts < 10) {
-                const terrain = window.getTerrainAt(spawnHex.q, spawnHex.r);
-                if (terrain.name !== 'Water' && terrain.name !== 'Wall' && !getEntityAtHex(spawnHex.q, spawnHex.r)) {
-                    break; // Found a valid hex
-                }
-                // Try shifting by a small random amount.
-                spawnHex.q += (Math.random() - 0.5) * 2;
-                spawnHex.r += (Math.random() - 0.5) * 2;
-                spawnHexAttempts++;
-            }
-            window.entities.push(window.createMonster('orc', spawnHex, null, null, 'enemy'));
+            // Find hex near lastSpawnHex
+            const neighbors = window.getNeighbors(lastSpawnHex.q, lastSpawnHex.r);
+            const valid = neighbors.filter(h => validHexes.some(vh => vh.q === h.q && vh.r === h.r));
+            const spawnHex = valid.length > 0 ? valid[Math.floor(Math.random() * valid.length)] : lastSpawnHex;
+            const m = window.createMonster('orc', spawnHex, null, null, 'enemy');
+            window.entities.push(m);
+            console.log(`Spawned orc at {q: ${spawnHex.q}, r: ${spawnHex.r}}`);
         }
     } else {
-        // Normal encounter: spend targetSP on monsters
+        // Normal encounter
         let currentSP = 0;
         const monsterTypes = ['goblin', 'orc', 'skeleton', 'zombie', 'imp', 'spider', 'troll'];
-        let spawnIndex = 0;
 
         while (currentSP < targetSP) {
-            // Priority: Mercenary Graveyard (if any)
             if (window.roguelikeData.mercenaryGraveyard.length > 0 && Math.random() < 0.2) {
                 const snapshot = window.roguelikeData.mercenaryGraveyard.splice(Math.floor(Math.random() * window.roguelikeData.mercenaryGraveyard.length), 1)[0];
-                let spawnHex = spawnClose ? {q: 3, r: spawnIndex} : { q: arenaSize - 5, r: spawnIndex - 2 };
-                let spawnHexAttempts = 0;
-                while (spawnHexAttempts < 10) {
-                    const terrain = window.getTerrainAt(spawnHex.q, spawnHex.r);
-                    if (terrain.name !== 'Water' && terrain.name !== 'Wall' && !getEntityAtHex(spawnHex.q, spawnHex.r)) {
-                        break; // Found a valid hex
-                    }
-                    // Try shifting by a small random amount.
-                    spawnHex.q += (Math.random() - 0.5) * 2;
-                    spawnHex.r += (Math.random() - 0.5) * 2;
-                    spawnHexAttempts++;
-                }
+                const neighbors = window.getNeighbors(lastSpawnHex.q, lastSpawnHex.r);
+                const valid = neighbors.filter(h => validHexes.some(vh => vh.q === h.q && vh.r === h.r));
+                const spawnHex = valid.length > 0 ? valid[Math.floor(Math.random() * valid.length)] : lastSpawnHex;
                 const merc = new window.Enemy(snapshot.name, "purple", spawnHex, snapshot.attributes.agility + 10);
                 merc.side = 'enemy';
                 Object.assign(merc, snapshot);
                 merc.isGraveyardMerc = true;
                 window.entities.push(merc);
-                currentSP += 10; // Rough estimate
-                spawnIndex++;
+                console.log(`Spawned graveyard merc ${merc.name} at {q: ${spawnHex.q}, r: ${spawnHex.r}}`);
+                currentSP += 10;
+                lastSpawnHex = spawnHex;
                 continue;
             }
 
@@ -2934,18 +2934,11 @@ function startArenaFight() {
             
             if (currentSP + baseSP > targetSP + 10 && currentSP > 0) break;
 
-            let spawnHex = spawnClose ? {q: 4, r: spawnIndex} : { q: arenaSize - 5, r: spawnIndex - 2 };
-            let spawnHexAttempts = 0;
-            while (spawnHexAttempts < 10) {
-                const terrain = window.getTerrainAt(spawnHex.q, spawnHex.r);
-                if (terrain.name !== 'Water' && terrain.name !== 'Wall' && !getEntityAtHex(spawnHex.q, spawnHex.r)) {
-                    break; // Found a valid hex
-                }
-                // Try shifting by a small random amount.
-                spawnHex.q += (Math.random() - 0.5) * 2;
-                spawnHex.r += (Math.random() - 0.5) * 2;
-                spawnHexAttempts++;
-            }
+            const neighbors = window.getNeighbors(lastSpawnHex.q, lastSpawnHex.r);
+            const valid = neighbors.filter(h => validHexes.some(vh => vh.q === h.q && vh.r === h.r));
+            const spawnHex = valid.length > 0 ? valid[Math.floor(Math.random() * valid.length)] : lastSpawnHex;
+            const terrain = window.getTerrainAt(spawnHex.q, spawnHex.r);
+            console.log(`Spawned ${type} at {q: ${spawnHex.q}, r: ${spawnHex.r}} (${terrain.name})`);
             const m = window.createMonster(type, spawnHex, null, null, 'enemy');
             
             if (currentSP + baseSP < targetSP) {
@@ -2957,8 +2950,7 @@ function startArenaFight() {
 
             window.entities.push(m);
             currentSP += baseSP;
-            spawnIndex++;
-            if (spawnIndex > 10) break;
+            lastSpawnHex = spawnHex;
         }
     }
 

@@ -25,6 +25,7 @@ body {
     align-items: center;
     background-color: #222;
     z-index: 200;
+    overflow-y: auto;
 }
 
 #gameContainer {
@@ -43,7 +44,7 @@ body {
     flex-direction: row;
     flex: 1;
     min-height: 0;
-    overflow: hidden;
+    overflow: visible;
 }
 
 #game-board {
@@ -67,6 +68,7 @@ body {
     flex-direction: column;
     padding: 10px;
     box-sizing: border-box;
+    overflow-y: auto;
 }
 
 .hex {
@@ -201,7 +203,16 @@ body {
 }
 
 /* Basic styling for creation page - can be expanded */
-.creation-container { background-color: #333; padding: 30px; border-radius: 8px; box-shadow: 0 0 15px rgba(0,0,0,0.5); width: 80%; max-width: 600px; }
+.creation-container { 
+    background-color: #333; 
+    padding: 30px; 
+    border-radius: 8px; 
+    box-shadow: 0 0 15px rgba(0,0,0,0.5); 
+    width: 80%; 
+    max-width: 600px; 
+    max-height: 90vh; 
+    overflow-y: auto; 
+}
 h1 { text-align: center; margin-bottom: 20px; }
 .form-group { margin-bottom: 15px; }
 label { display: block; margin-bottom: 5px; font-weight: bold; }
@@ -345,11 +356,13 @@ button:hover { background-color: #3f51b5; }
 .modal-content {
     background-color: #333;
     color: #eee;
-    margin: 5% auto;
+    margin: 2% auto;
     padding: 20px;
     border: 1px solid #888;
     width: 80%;
     max-width: 800px;
+    max-height: 90vh;
+    overflow-y: auto;
     border-radius: 8px;
     position: relative;
 }

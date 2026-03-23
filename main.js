@@ -185,6 +185,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         if (e.target.classList.contains('modal')) {
             const modal = e.target;
+            if (modal.id === "end-run-modal") return; // Prevent closing the end-run-modal by clicking outside
             modal.style.display = "none";
             window.isPausedForReaction = false;
             if (window.updateMusicState) window.updateMusicState();

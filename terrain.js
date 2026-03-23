@@ -63,6 +63,9 @@ function getTerrainAt(q, r) {
     const key = `${q},${r}`;
     if (window.overrideTerrain[key]) return window.overrideTerrain[key];
 
+    // ROGUELIKE: If in arena and no override, it's effectively "void" (Wall)
+    if (window.isInArena) return terrainTypes['wall'];
+
     // 1. Determine World Biome
     const worldPos = battleToWorld(q, r);
     const biome = getBiomeAtWorldPos(worldPos.col, worldPos.row);
