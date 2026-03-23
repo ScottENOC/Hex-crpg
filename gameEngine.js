@@ -2476,7 +2476,7 @@ function spawnNewMonster() {
         let canSpawn = true;
         for (let sh of allSpawnHexes) {
             // Check water and occupation
-            if (window.getTerrainAt(sh.q, sh.r).name === 'Water' || getEntityAtHex(sh.q, sh.r)) {
+            if (window.getTerrainAt(sh.q, sh.r).name === 'Water' || getEntityAtHex(sh.q, sh.r) || window.getTerrainAt(sh.q, sh.r).name === 'Wall') {
                 canSpawn = false; break;
             }
         }
@@ -2848,7 +2848,18 @@ function startArenaFight() {
     // GRISHNAK ENCOUNTER (10% chance if not defeated)
     if (!window.grishnakDefeated && Math.random() < 0.1) {
         window.triggerAmbientDialogue('grishnak_entry');
-        const gPos = spawnClose ? {q: 0, r: 0} : { q: arenaSize - 5, r: 0 };
+        let gPos = spawnClose ? {q: 0, r: 0} : { q: arenaSize - 5, r: 0 };
+        let gPosAttempts = 0;
+        while (gPosAttempts < 10) {
+            const terrain = window.getTerrainAt(gPos.q, gPos.r);
+            if (terrain.name !== 'Water' && terrain.name !== 'Wall' && !getEntityAtHex(gPos.q, gPos.r)) {
+                break; // Found a valid hex
+            }
+            // Try shifting by a small random amount.
+            gPos.q += (Math.random() - 0.5) * 2;
+            gPos.r += (Math.random() - 0.5) * 2;
+            gPosAttempts++;
+        }
         const grishnak = window.createMonster('orc', gPos, null, null, 'enemy');
         grishnak.name = "Grishnak";
         grishnak.hp = 40;
@@ -2871,7 +2882,18 @@ function startArenaFight() {
 
         window.entities.push(grishnak);
         for (let i = 0; i < 2; i++) {
-            const spawnHex = spawnClose ? {q: 2, r: (i === 0 ? -1 : 1)} : { q: arenaSize - 5, r: (i === 0 ? -2 : 2) };
+            let spawnHex = spawnClose ? {q: 2, r: (i === 0 ? -1 : 1)} : { q: arenaSize - 5, r: (i === 0 ? -2 : 2) };
+            let spawnHexAttempts = 0;
+            while (spawnHexAttempts < 10) {
+                const terrain = window.getTerrainAt(spawnHex.q, spawnHex.r);
+                if (terrain.name !== 'Water' && terrain.name !== 'Wall' && !getEntityAtHex(spawnHex.q, spawnHex.r)) {
+                    break; // Found a valid hex
+                }
+                // Try shifting by a small random amount.
+                spawnHex.q += (Math.random() - 0.5) * 2;
+                spawnHex.r += (Math.random() - 0.5) * 2;
+                spawnHexAttempts++;
+            }
             window.entities.push(window.createMonster('orc', spawnHex, null, null, 'enemy'));
         }
     } else {
@@ -2884,7 +2906,18 @@ function startArenaFight() {
             // Priority: Mercenary Graveyard (if any)
             if (window.roguelikeData.mercenaryGraveyard.length > 0 && Math.random() < 0.2) {
                 const snapshot = window.roguelikeData.mercenaryGraveyard.splice(Math.floor(Math.random() * window.roguelikeData.mercenaryGraveyard.length), 1)[0];
-                const spawnHex = spawnClose ? {q: 3, r: spawnIndex} : { q: arenaSize - 5, r: spawnIndex - 2 };
+                let spawnHex = spawnClose ? {q: 3, r: spawnIndex} : { q: arenaSize - 5, r: spawnIndex - 2 };
+                let spawnHexAttempts = 0;
+                while (spawnHexAttempts < 10) {
+                    const terrain = window.getTerrainAt(spawnHex.q, spawnHex.r);
+                    if (terrain.name !== 'Water' && terrain.name !== 'Wall' && !getEntityAtHex(spawnHex.q, spawnHex.r)) {
+                        break; // Found a valid hex
+                    }
+                    // Try shifting by a small random amount.
+                    spawnHex.q += (Math.random() - 0.5) * 2;
+                    spawnHex.r += (Math.random() - 0.5) * 2;
+                    spawnHexAttempts++;
+                }
                 const merc = new window.Enemy(snapshot.name, "purple", spawnHex, snapshot.attributes.agility + 10);
                 merc.side = 'enemy';
                 Object.assign(merc, snapshot);
@@ -2901,7 +2934,18 @@ function startArenaFight() {
             
             if (currentSP + baseSP > targetSP + 10 && currentSP > 0) break;
 
-            const spawnHex = spawnClose ? {q: 4, r: spawnIndex} : { q: arenaSize - 5, r: spawnIndex - 2 };
+            let spawnHex = spawnClose ? {q: 4, r: spawnIndex} : { q: arenaSize - 5, r: spawnIndex - 2 };
+            let spawnHexAttempts = 0;
+            while (spawnHexAttempts < 10) {
+                const terrain = window.getTerrainAt(spawnHex.q, spawnHex.r);
+                if (terrain.name !== 'Water' && terrain.name !== 'Wall' && !getEntityAtHex(spawnHex.q, spawnHex.r)) {
+                    break; // Found a valid hex
+                }
+                // Try shifting by a small random amount.
+                spawnHex.q += (Math.random() - 0.5) * 2;
+                spawnHex.r += (Math.random() - 0.5) * 2;
+                spawnHexAttempts++;
+            }
             const m = window.createMonster(type, spawnHex, null, null, 'enemy');
             
             if (currentSP + baseSP < targetSP) {
