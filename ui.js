@@ -349,6 +349,16 @@ function showCharacterScreen() {
         contentDiv.appendChild(treeDiv);
         contentDiv.appendChild(document.createElement('hr'));
     });
+
+    // Add a 'Done' button at the bottom
+    const doneButton = document.createElement('button');
+    doneButton.innerText = 'Done';
+    doneButton.style.marginTop = '20px';
+    doneButton.style.padding = '10px 20px';
+    doneButton.style.fontSize = '1.2em';
+    doneButton.style.width = '100%';
+    doneButton.onclick = window.closeCharacterScreen;
+    contentDiv.appendChild(doneButton);
 }
 
 function learnSkill(skillKey) {
