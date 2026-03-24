@@ -1,5 +1,4 @@
 // hexMap.js
-let mapCanvas, mapCtx;
 let hexSize = 30;
 const mapOffsetX = 50;
 const mapOffsetY = 50;
@@ -35,26 +34,26 @@ function hexToPixel(q, r) {
 
 function drawHex(x, y, size, style = { stroke: "#555" }) {
   const zoomedSize = size * window.cameraZoom;
-  mapCtx.beginPath();
+  window.mapCtx.beginPath();
   for (let i=0; i<6; i++) {
     const angle = Math.PI/180 * (60 * i);
     const px = x + zoomedSize * Math.cos(angle);
     const py = y + zoomedSize * Math.sin(angle);
-    if (i===0) mapCtx.moveTo(px, py);
-    else mapCtx.lineTo(px, py);
+    if (i===0) window.mapCtx.moveTo(px, py);
+    else window.mapCtx.lineTo(px, py);
   }
-  mapCtx.closePath();
-  mapCtx.strokeStyle = style.stroke;
-  mapCtx.lineWidth = style.lineWidth || 1;
-  mapCtx.stroke();
+  window.mapCtx.closePath();
+  window.mapCtx.strokeStyle = style.stroke;
+  window.mapCtx.lineWidth = style.lineWidth || 1;
+  window.mapCtx.stroke();
   if (style.fill) {
-      mapCtx.fillStyle = style.fill;
-      mapCtx.fill();
+      window.mapCtx.fillStyle = style.fill;
+      window.mapCtx.fill();
   }
 }
 
 function getVisibleHexes() {
-    const rect = mapCanvas.getBoundingClientRect();
+    const rect = window.mapCanvas.getBoundingClientRect();
     const margin = 2 * hexSize * window.cameraZoom;
     
     // Corners of the screen in hex coords
@@ -73,8 +72,8 @@ function getVisibleHexes() {
 }
 
 function drawMap() {
-  if (!mapCtx) return;
-  mapCtx.clearRect(0,0,mapCanvas.width,mapCanvas.height);
+  if (!window.mapCtx) return;
+  window.mapCtx.clearRect(0,0,window.mapCanvas.width,window.mapCanvas.height);
   
   const bounds = getVisibleHexes();
   const visibleAndExplored = [];
@@ -103,26 +102,26 @@ function drawMap() {
           const floorNum = Math.floor(noise * 4) + 1;
           const floorImg = window.gameVisuals[`floor${floorNum}`];
           if (floorImg && floorImg.complete) {
-              mapCtx.drawImage(floorImg, x - zoomedSize, y - zoomedSize, zoomedSize * 2, zoomedSize * 2);
+              window.mapCtx.drawImage(floorImg, x - zoomedSize, y - zoomedSize, zoomedSize * 2, zoomedSize * 2);
           } else {
               drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
           }
 
           // Overlays (10% Blood, 1% Skull)
           if (noise < 0.1 && window.gameVisuals.overlay_blood.complete) {
-              mapCtx.drawImage(window.gameVisuals.overlay_blood, x - zoomedSize/2, y - zoomedSize/2, zoomedSize, zoomedSize);
+              window.mapCtx.drawImage(window.gameVisuals.overlay_blood, x - zoomedSize/2, y - zoomedSize/2, zoomedSize, zoomedSize);
           } else if (noise > 0.99 && window.gameVisuals.overlay_skull.complete) {
               const skullSize = zoomedSize * 0.25;
-              mapCtx.drawImage(window.gameVisuals.overlay_skull, x - skullSize/2, y - skullSize/2, skullSize, skullSize);
+              window.mapCtx.drawImage(window.gameVisuals.overlay_skull, x - skullSize/2, y - skullSize/2, skullSize, skullSize);
           }
       } else if (terrain.name === 'Pedestal' && window.gameVisuals.pedestal.complete) {
           const blockedHexes = [{q: q, r: r-1}, {q: q+1, r: r-1}];
           const needsTransparency = window.entities.some(e => e.alive && blockedHexes.some(bh => e.getAllHexes().some(h => h.q === bh.q && h.r === bh.r)));
-          if (needsTransparency) mapCtx.globalAlpha = 0.5;
-          mapCtx.drawImage(window.gameVisuals.pedestal, x - zoomedSize, y - zoomedSize, zoomedSize * 2, zoomedSize * 2);
-          if (needsTransparency) mapCtx.globalAlpha = 1.0;
+          if (needsTransparency) window.mapCtx.globalAlpha = 0.5;
+          window.mapCtx.drawImage(window.gameVisuals.pedestal, x - zoomedSize, y - zoomedSize, zoomedSize * 2, zoomedSize * 2);
+          if (needsTransparency) window.mapCtx.globalAlpha = 1.0;
       } else if (terrain.name === 'Foliage' && window.gameVisuals.foliage.complete) {
-          mapCtx.drawImage(window.gameVisuals.foliage, x - zoomedSize, y - zoomedSize, zoomedSize * 2, zoomedSize * 2);
+          window.mapCtx.drawImage(window.gameVisuals.foliage, x - zoomedSize, y - zoomedSize, zoomedSize * 2, zoomedSize * 2);
       } else if (terrain.name !== 'Water') {
           drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
       } else {
@@ -141,9 +140,9 @@ function drawMap() {
       if (terrain.name === 'Water' && window.gameVisuals.water.complete) {
           const {x, y} = hexToPixel(q, r);
           const zoomedSize = hexSize * window.cameraZoom;
-          mapCtx.globalAlpha = 0.5;
-          mapCtx.drawImage(window.gameVisuals.water, x - zoomedSize, y - zoomedSize, zoomedSize * 2, zoomedSize * 2);
-          mapCtx.globalAlpha = 1.0;
+          window.mapCtx.globalAlpha = 0.5;
+          window.mapCtx.drawImage(window.gameVisuals.water, x - zoomedSize, y - zoomedSize, zoomedSize * 2, zoomedSize * 2);
+          window.mapCtx.globalAlpha = 1.0;
       }
   });
 
@@ -161,8 +160,8 @@ function drawMap() {
 
   // 6. PASS 5: Night Filter
   if (window.lightLevel < 1.0) {
-      mapCtx.fillStyle = `rgba(0,0,0,${(1.0 - window.lightLevel) * 0.7})`; 
-      mapCtx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
+      window.mapCtx.fillStyle = `rgba(0,0,0,${(1.0 - window.lightLevel) * 0.7})`; 
+      window.mapCtx.fillRect(0, 0, window.mapCanvas.width, window.mapCanvas.height);
   }
 }
 
@@ -172,7 +171,7 @@ function clearHighlights() {
 
 // Corrected flat-top screenToHex formula - UPDATED for camera
 function screenToHex(pos){
-  const rect = mapCanvas.getBoundingClientRect();
+  const rect = window.mapCanvas.getBoundingClientRect();
   const screenX = pos.x - rect.left;
   const screenY = pos.y - rect.top;
 
