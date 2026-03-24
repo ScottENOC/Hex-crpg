@@ -3,7 +3,7 @@ let hexSize = 30;
 const mapOffsetX = 50;
 const mapOffsetY = 50;
 let playerPos = { q: 0, r: 0 };
-let highlightedHexes = [];
+window.highlightedHexes = [];
 
 let mapCanvas;
 let mapCtx;
@@ -637,7 +637,7 @@ window.cameraX = window.cameraX;
 window.cameraY = window.cameraY;
 window.cameraZoom = window.cameraZoom;
 window.playerPos = playerPos;
-window.highlightedHexes = highlightedHexes;
+
 window.hexToPixel = hexToPixel;
 window.drawHex = drawHex;
 window.drawMap = drawMap;
