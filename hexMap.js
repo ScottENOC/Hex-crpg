@@ -169,6 +169,7 @@ function drawMap() {
 }
 
 function clearHighlights() {
+    window.highlightedHexes = window.highlightedHexes || []; // Ensure it's an array
     window.highlightedHexes.length = 0;
 }
 
