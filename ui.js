@@ -120,11 +120,15 @@ function toggleRest() {
 function updateRestButton() {
     const btn = document.getElementById("rest-btn");
     if (!btn) return;
+    
+    // Check for mobile layout
+    const isMobile = window.innerWidth <= 850;
+    
     if (window.isResting) {
-        btn.innerText = "Stop Waiting";
+        btn.innerText = "Stop";
         btn.style.backgroundColor = "#f44336";
     } else {
-        btn.innerText = "Rest until Restored";
+        btn.innerText = isMobile ? "Rest" : "Rest until Restored";
         btn.style.backgroundColor = "#607d8b";
     }
 }
@@ -157,17 +161,18 @@ function toggleSleep() {
 function updateSleepButton() {
     const btn = document.getElementById("sleep-btn");
     if (!btn) return;
+    
     if (window.isSleeping) {
-        btn.innerText = "Stop Waiting";
+        btn.innerText = "Stop";
         btn.style.backgroundColor = "#f44336";
     } else {
         // Show remaining if any
         const sentient = window.entities.find(e => e.alive && e.side === 'player' && e.name !== 'Wolf' && e.name !== 'Horse');
         if (sentient && sentient.sleepRemainingSeconds > 0) {
             const hrs = (sentient.sleepRemainingSeconds / 3600).toFixed(1);
-            btn.innerText = `Resume Sleep (${hrs}h left)`;
+            btn.innerText = `💤 (${hrs}h)`;
         } else {
-            btn.innerText = "Sleep";
+            btn.innerText = "💤";
         }
         btn.style.backgroundColor = "#3f51b5";
     }
@@ -1841,3 +1846,13 @@ function highlightValidTargets(caster, spell) {
 }
 
 window.highlightValidTargets = highlightValidTargets;
+
+// Add a function to handle responsive UI shifts
+window.handleResponsiveUI = function() {
+    updateRestButton();
+    updateSleepButton();
+};
+
+window.addEventListener('resize', () => {
+    if (window.handleResponsiveUI) window.handleResponsiveUI();
+});
