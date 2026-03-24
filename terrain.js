@@ -109,6 +109,7 @@ function isHexExplored(q, r) {
 
 window.terrainTypes = terrainTypes;
 window.getTerrainAt = getTerrainAt;
+window.setTerrainAt = setTerrainAt;
 window.isHexExplored = isHexExplored;
 window.battleToWorld = battleToWorld;
 // generateTerrain is deprecated/removed
