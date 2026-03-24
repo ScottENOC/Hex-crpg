@@ -453,8 +453,6 @@ function startGameCore(isLoading = false) {
       }
   }
 
-  window.mapCanvas = document.getElementById("mapCanvas");
-  window.mapCtx = window.mapCanvas.getContext("2d");
   window.resizeCanvas();
 
   const visuals = {
