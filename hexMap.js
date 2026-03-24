@@ -5,6 +5,9 @@ const mapOffsetY = 50;
 let playerPos = { q: 0, r: 0 };
 let highlightedHexes = [];
 
+let mapCanvas;
+let mapCtx;
+
 // Camera variables
 window.cameraX = 0;
 window.cameraY = 0;
