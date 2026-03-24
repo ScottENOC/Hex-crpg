@@ -1791,6 +1791,16 @@ window.doLevelUp = doLevelUp;
 window.showDialogue = showDialogue;
 window.openShop = openShop;
 window.startMercenaryHire = startMercenaryHire;
+
+function closeCharacterScreen() {
+    const modal = document.getElementById("character-screen-modal");
+    if (modal) {
+        modal.style.display = "none";
+    }
+    window.updateMusicState(); // Ensure music state is updated after closing
+}
+
+window.closeCharacterScreen = closeCharacterScreen;
 function highlightValidTargets(caster, spell) {
     const range = spell.range || 1;
     const type = spell.type;
