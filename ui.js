@@ -1774,6 +1774,15 @@ document.addEventListener('DOMContentLoaded', () => {
     window.syncMute(true);
     // Initial music check
     setTimeout(updateMusicState, 500); 
+
+    // Setup close buttons for all relevant modals
+    setupModalCloseButton('character-screen-modal', window.closeCharacterScreen);
+    setupModalCloseButton('spell-menu-modal', window.closeSpellScreen);
+    setupModalCloseButton('inventory-modal', window.closeInventoryScreen);
+    setupModalCloseButton('entity-details-modal', window.closeEntityDetailsModal);
+    setupModalCloseButton('shop-modal', window.closeShopModal);
+    setupModalCloseButton('mercenary-creation-modal', window.closeMercenaryCreationModal);
+    setupModalCloseButton('end-run-modal', window.closeEndRunModal);
 });
 
 window.addAllEquipment = addAllEquipment;
@@ -1802,6 +1811,14 @@ window.showDialogue = showDialogue;
 window.openShop = openShop;
 window.startMercenaryHire = startMercenaryHire;
 
+// Add new close functions to window exports
+window.closeInventoryScreen = closeInventoryScreen;
+window.closeSpellScreen = closeSpellScreen;
+window.closeEntityDetailsModal = closeEntityDetailsModal;
+window.closeShopModal = closeShopModal;
+window.closeMercenaryCreationModal = closeMercenaryCreationModal;
+window.closeEndRunModal = closeEndRunModal;
+
 function closeCharacterScreen() {
     const modal = document.getElementById("character-screen-modal");
     if (modal) {
@@ -1811,6 +1828,85 @@ function closeCharacterScreen() {
 }
 
 window.closeCharacterScreen = closeCharacterScreen;
+
+// Add new close functions here
+function closeInventoryScreen() {
+    const modal = document.getElementById("inventory-modal");
+    if (modal) {
+        modal.style.display = "none";
+    }
+    window.updateMusicState();
+}
+window.closeInventoryScreen = closeInventoryScreen;
+
+function closeSpellScreen() {
+    const modal = document.getElementById("spell-menu-modal");
+    if (modal) {
+        modal.style.display = "none";
+    }
+    window.updateMusicState();
+}
+window.closeSpellScreen = closeSpellScreen;
+
+function closeEntityDetailsModal() {
+    const modal = document.getElementById("entity-details-modal");
+    if (modal) {
+        modal.style.display = "none";
+    }
+    window.updateMusicState();
+}
+window.closeEntityDetailsModal = closeEntityDetailsModal;
+
+function closeShopModal() {
+    const modal = document.getElementById("shop-modal");
+    if (modal) {
+        modal.style.display = "none";
+    }
+    window.updateMusicState();
+}
+window.closeShopModal = closeShopModal;
+
+function closeMercenaryCreationModal() {
+    const modal = document.getElementById("mercenary-creation-modal");
+    if (modal) {
+        modal.style.display = "none";
+    }
+    window.updateMusicState();
+}
+window.closeMercenaryCreationModal = closeMercenaryCreationModal;
+
+function closeEndRunModal() {
+    const modal = document.getElementById("end-run-modal");
+    if (modal) {
+        modal.style.display = "none";
+    }
+    window.updateMusicState();
+}
+window.closeEndRunModal = closeEndRunModal;
+
+// Helper function to set up modal close buttons
+function setupModalCloseButton(modalId, closeFn) {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        // Assuming the 'x' close button has a class 'modal-close-x'
+        const closeButton = modal.querySelector('.modal-close-x');
+        if (closeButton) {
+            closeButton.style.cursor = 'pointer'; // Visual cue for interactivity
+            closeButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                closeFn();
+            });
+            closeButton.addEventListener('touchstart', (e) => {
+                e.preventDefault(); // Prevent default touch behavior (e.g., scrolling, zoom)
+                e.stopPropagation();
+                closeFn();
+            }, { passive: false }); // Use passive: false to allow preventDefault
+        } else {
+            console.warn(`Close button with class 'modal-close-x' not found for modal: ${modalId}.`);
+        }
+    }
+}
+
 function highlightValidTargets(caster, spell) {
     const range = spell.range || 1;
     const type = spell.type;
