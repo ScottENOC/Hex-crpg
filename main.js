@@ -2,11 +2,99 @@
 console.log("--- MAIN.JS VERSION 2.0 LOADED ---");
 
 document.addEventListener("DOMContentLoaded", () => {
-    console.log("DOM Content Loaded - Setting up listeners");
+    console.log("DOM Content Loaded - Preloading assets and setting up listeners");
+    preloadAssets();
 
     const createCharacterButton = document.getElementById("createCharacterButton");
     if (createCharacterButton) {
         createCharacterButton.addEventListener("click", window.startGame);
+    }
+
+    // Asset Preloading Logic
+    async function preloadAssets() {
+        const priorityImages = [
+            {key: 'floor1', src: 'images/arenaHexFloor1.png'},
+            {key: 'floor2', src: 'images/arenaHexFloor2.png'},
+            {key: 'floor3', src: 'images/arenaHexFloor3.png'},
+            {key: 'floor4', src: 'images/arenaHexFloor4.png'}
+        ];
+        
+        const otherImages = [
+            {key: 'playerBase', src: 'images/elf.png'},
+            {key: 'leatherArmor', src: 'images/elfleatherarmour.png'},
+            {key: 'chainArmor', src: 'images/elfchainarmour.png'},
+            {key: 'monsterDefault', src: 'images/goblin.png'},
+            {key: 'orcBase', src: 'images/orc.png'},
+            {key: 'swordIcon', src: 'images/sword.png'},
+            {key: 'humanBase', src: 'images/humanfemale.png'},
+            {key: 'humanHair', src: 'images/humanfemalehair.png'},
+            {key: 'humanMaleHair', src: 'images/humanmalehair.png'},
+            {key: 'humanLight', src: 'images/humanlightarmour.png'},
+            {key: 'humanMedium', src: 'images/humanmediumarmour.png'},
+            {key: 'humanHeavy', src: 'images/humanheavyarmour.png'},
+            {key: 'horse', src: 'images/horse.png'},
+            {key: 'nasal_helm', src: 'images/nasalHelm.png'},
+            {key: 'humanMaleBase', src: 'images/humanmale.png'},
+            {key: 'elfMaleBase', src: 'images/elfmale.png'},
+            {key: 'elfMaleHair', src: 'images/elfmalehair.png'},
+            {key: 'elfFemaleBase', src: 'images/elffemale.png'},
+            {key: 'elfFemaleHair', src: 'images/elffemalehair.png'},
+            {key: 'dwarfMaleBase', src: 'images/dwarfmale.png'},
+            {key: 'dwarfMaleHair', src: 'images/dwarfmalehair.png'},
+            {key: 'dwarfFemaleBase', src: 'images/dwarffemale.png'},
+            {key: 'dwarfFemaleHair', src: 'images/dwarffemalehair.png'},
+            {key: 'shield', src: 'images/shield.png'},
+            {key: 'skeleton', src: 'images/skeleton.svg'},
+            {key: 'zombie', src: 'images/zombie.svg'},
+            {key: 'imp', src: 'images/imp.svg'},
+            {key: 'wolf', src: 'images/wolf.png'},
+            {key: 'torch_lit', src: 'images/torch_lit.svg'},
+            {key: 'fireplace', src: 'images/fireplace.svg'},
+            {key: 'axe', src: 'images/axe.png'},
+            {key: 'troll', src: 'images/troll.png'},
+            {key: 'spear', src: 'images/spear.png'},
+            {key: 'club', src: 'images/club.png'},
+            {key: 'spiderweb', src: 'images/spiderweb.png'},
+            {key: 'spider1', src: 'images/spider1.png'},
+            {key: 'spider2', src: 'images/spider2.png'},
+            {key: 'arenaannouncer', src: 'images/arenaannouncer.png'},
+            {key: 'arenamercenary', src: 'images/arenamercenary.png'},
+            {key: 'arenashopkeeper', src: 'images/arenashopkeeper.png'},
+            {key: 'grishnak', src: 'images/Grishnak.png'},
+            {key: 'overlay_blood', src: 'images/overlay blood.png'},
+            {key: 'overlay_skull', src: 'images/overlay skull.png'},
+            {key: 'pedestal', src: 'images/mediumpillar.png'},
+            {key: 'water', src: 'images/water.png'},
+            {key: 'boar', src: 'images/boar.png'},
+            {key: 'tiger', src: 'images/tiger.png'},
+            {key: 'eagle', src: 'images/eagle.png'},
+            {key: 'eagleflying', src: 'images/eagleflying.png'},
+            {key: 'foliage', src: 'images/foliage.png'}
+        ];
+
+        window.gameVisuals = {};
+
+        function load(asset) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => { window.gameVisuals[asset.key] = img; resolve(); };
+                img.onerror = () => { console.warn("Failed:", asset.src); resolve(); };
+                img.src = asset.src;
+            });
+        }
+
+        // Priority load
+        await Promise.all(priorityImages.map(load));
+        console.log("Priority assets loaded");
+        
+        // Background load
+        await Promise.all(otherImages.map(load));
+        console.log("All assets loaded");
+
+        // Audio pre-fetch (minimal)
+        if (typeof window.playMusic === 'function') {
+            console.log("Preloading audio buffers...");
+        }
     }
 
     // Global click listener for ANY button click in the window
