@@ -327,8 +327,6 @@ button:hover { background-color: #3f51b5; }
     display: flex;
     gap: 4px;
     margin-right: 10px;
-    border-right: 1px solid #555;
-    padding-right: 8px;
 }
 
 #top-menu button {
@@ -346,7 +344,7 @@ button:hover { background-color: #3f51b5; }
 
 #top-menu {
     position: fixed;
-    top: 60px;
+    top: 70px; /* 60px turn bar + 10px gap */
     left: 0;
     width: 100%;
     background-color: rgba(51, 51, 51, 0.4); 
@@ -420,14 +418,19 @@ button:hover { background-color: #3f51b5; }
     left: 0;
     width: 100%;
     background-color: #222;
-    padding: 5px;
+    padding: 2px 5px;
     display: flex;
     justify-content: flex-start;
     align-items: center;
     box-shadow: 0 2px 5px rgba(0,0,0,0.5);
     z-index: 102; /* Above top-menu */
-    height: 60px; /* Give it some height */
-    overflow-x: auto; /* Allow scrolling if too many entities */
+    height: 60px; 
+    overflow-x: auto; 
+    overflow-y: hidden; /* Prevent vertical scroll/wobble */
+    white-space: nowrap;
+    box-sizing: border-box; /* Include padding/border in 60px height */
+    -webkit-overflow-scrolling: touch; /* Smooth scroll on iOS */
+    touch-action: pan-x; /* Only allow horizontal gestures */
 }
 
 .turn-indicator-item {
@@ -436,12 +439,14 @@ button:hover { background-color: #3f51b5; }
     background-color: #333;
     border: 1px solid #555;
     border-radius: 5px;
-    padding: 5px 10px;
-    margin: 0 5px;
+    padding: 2px 8px;
+    margin: 0 4px;
     color: #eee;
     font-size: 0.9em;
-    min-width: 120px; /* Ensure some minimum width */
-    height: 50px;
+    min-width: 120px; 
+    height: 52px; /* Slightly taller but fits in 60px with padding */
+    box-sizing: border-box;
+    flex-shrink: 0; /* Don't squish items */
 }
 
 .turn-indicator-item.current-turn {
