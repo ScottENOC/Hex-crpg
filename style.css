@@ -401,6 +401,13 @@ button:hover { background-color: #3f51b5; }
     line-height: 1;
     user-select: none;
     z-index: 1000;
+    /* Reset button defaults in case we change to <button> */
+    background: none;
+    border: none;
+    outline: none;
+    /* iOS Safari Fix: Ensure backface is visible for touch events */
+    backface-visibility: visible !important;
+    -webkit-backface-visibility: visible !important;
 }
 
 .close-btn:hover,
