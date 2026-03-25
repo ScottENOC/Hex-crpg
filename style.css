@@ -137,14 +137,22 @@ body {
 /* Responsive adjustments */
 @media (max-width: 850px) {
     #gameContainer {
-        top: 0;
-        bottom: 0;
-        pointer-events: none;
+        top: 0 !important;
+        bottom: 0 !important;
+        pointer-events: none; /* Clicks pass through the container... */
     }
     
     #game-container {
         flex-direction: column;
         height: 100%;
+        pointer-events: none; /* ...and the flex-container... */
+    }
+
+    #game-board {
+        flex: 1;
+        pointer-events: auto; /* ...BUT ARE CAUGHT HERE (the map) */
+        position: relative;
+        z-index: 1;
     }
 
     #ui-container {
@@ -154,8 +162,13 @@ body {
         top: 0;
         left: 0;
         padding: 5px;
-        justify-content: flex-end; /* Push logs to bottom */
-        pointer-events: none;
+        justify-content: flex-end; 
+        pointer-events: none; /* Let clicks pass through UI empty space */
+        z-index: 10;
+    }
+
+    #actions, #message-log, #active-spells-list {
+        pointer-events: auto; /* UI elements themselves are clickable */
     }
 
     #actions {
@@ -303,6 +316,21 @@ button:hover { background-color: #3f51b5; }
 }
 
 /* New Menu Bar and Modal Styles */
+#world-time-display {
+    color: #ffeb3b;
+    font-family: monospace;
+    font-size: 0.9em;
+    align-self: center;
+}
+
+#party-selection {
+    display: flex;
+    gap: 4px;
+    margin-right: 10px;
+    border-right: 1px solid #555;
+    padding-right: 8px;
+}
+
 #top-menu button {
     background-color: #4caf50; 
     font-weight: bold;
