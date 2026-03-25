@@ -6,6 +6,37 @@ const mapOffsetY = 50;
 let playerPos = { q: 0, r: 0 };
 let highlightedHexes = [];
 
+// Offscreen tile cache
+const tileCache = {};
+
+function preRenderTile(terrainName, style) {
+    const canvas = document.createElement('canvas');
+    const size = hexSize * 2;
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    
+    // Flat-top hex drawing logic
+    ctx.beginPath();
+    for (let i=0; i<6; i++) {
+        const angle = Math.PI/180 * (60 * i);
+        const px = size/2 + hexSize * Math.cos(angle);
+        const py = size/2 + hexSize * Math.sin(angle);
+        if (i===0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    
+    if (style.fill) {
+        ctx.fillStyle = style.fill;
+        ctx.fill();
+    }
+    ctx.strokeStyle = style.stroke || "#555";
+    ctx.stroke();
+    
+    tileCache[terrainName] = canvas;
+}
+
 // Camera variables
 window.cameraX = 0;
 window.cameraY = 0;
