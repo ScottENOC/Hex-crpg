@@ -509,11 +509,13 @@ function updateActionButtons() {
             const offhandBtn = document.createElement('button');
             offhandBtn.innerText = "Off-hand Attack";
             offhandBtn.style.backgroundColor = "#ff5722";
-            offhandBtn.onclick = () => {
+            const offhandAction = () => {
                 window.playerAction = { type: 'offhand_attack' };
                 showMessage("Off-hand Attack ready. Click a target.");
                 updateActionButtons();
             };
+            offhandBtn.onclick = offhandAction;
+            offhandBtn.ontouchstart = (e) => { e.preventDefault(); offhandAction(); };
             buttonsDiv.appendChild(offhandBtn);
         }
 
@@ -524,6 +526,7 @@ function updateActionButtons() {
             lootBtn.style.backgroundColor = '#FFD700';
             lootBtn.style.color = '#000';
             lootBtn.onclick = () => { window.lootItems(player); };
+            lootBtn.ontouchstart = (e) => { e.preventDefault(); window.lootItems(player); };
             buttonsDiv.appendChild(lootBtn);
         }
 
@@ -531,10 +534,12 @@ function updateActionButtons() {
         waitBtn.id = 'wait-action-btn';
         waitBtn.innerText = "Wait (1 TP)";
         waitBtn.style.backgroundColor = "#9e9e9e";
-        waitBtn.onclick = () => {
+        const waitAction = () => {
             window.spendTP(player, 1);
             window.finalizePlayerAction(player, 'wait');
         };
+        waitBtn.onclick = waitAction;
+        waitBtn.ontouchstart = (e) => { e.preventDefault(); waitAction(); };
         buttonsDiv.appendChild(waitBtn);
 
         // STEALTH BUTTON
@@ -543,21 +548,25 @@ function updateActionButtons() {
             stealthBtn.innerText = "Stealth (5 TP)";
             stealthBtn.style.backgroundColor = "#607d8b";
             stealthBtn.disabled = (player.timePoints < 5);
-            stealthBtn.onclick = () => {
+            const stealthAction = () => {
                 if (window.tryStealth(player)) {
                     window.spendTP(player, 5);
                 }
                 window.finalizePlayerAction(player, true);
             };
+            stealthBtn.onclick = stealthAction;
+            stealthBtn.ontouchstart = (e) => { if(!stealthBtn.disabled) { e.preventDefault(); stealthAction(); } };
             buttonsDiv.appendChild(stealthBtn);
         } else {
             const breakBtn = document.createElement('button');
             breakBtn.innerText = "Break Stealth";
             breakBtn.style.backgroundColor = "#ff9800";
-            breakBtn.onclick = () => {
+            const breakAction = () => {
                 window.breakStealth(player);
                 window.finalizePlayerAction(player, true);
             };
+            breakBtn.onclick = breakAction;
+            breakBtn.ontouchstart = (e) => { e.preventDefault(); breakAction(); };
             buttonsDiv.appendChild(breakBtn);
         }
 
@@ -566,7 +575,7 @@ function updateActionButtons() {
             const dismissBtn = document.createElement('button');
             dismissBtn.innerText = `Dismiss ${player.animalCompanion.name}`;
             dismissBtn.style.backgroundColor = "#777";
-            dismissBtn.onclick = () => {
+            const dismissAction = () => {
                 player.animalCompanion.alive = false;
                 player.animalCompanion = null;
                 showMessage("Animal companion dismissed.");
@@ -574,6 +583,8 @@ function updateActionButtons() {
                 window.renderEntities();
                 updateActionButtons();
             };
+            dismissBtn.onclick = dismissAction;
+            dismissBtn.ontouchstart = (e) => { e.preventDefault(); dismissAction(); };
             buttonsDiv.appendChild(dismissBtn);
         }
 
@@ -584,22 +595,26 @@ function updateActionButtons() {
                 dismountBtn.id = 'dismount-action-btn';
                 dismountBtn.innerText = "Dismount";
                 dismountBtn.style.backgroundColor = "#795548";
-                dismountBtn.onclick = () => {
+                const dismountAction = () => {
                     window.playerAction = { type: 'dismount' };
                     showMessage("Click an adjacent empty hex to dismount.");
                     updateActionButtons();
                 };
+                dismountBtn.onclick = dismountAction;
+                dismountBtn.ontouchstart = (e) => { e.preventDefault(); dismountAction(); };
                 buttonsDiv.appendChild(dismountBtn);
             } else {
                 const mountBtn = document.createElement('button');
                 mountBtn.id = 'mount-action-btn';
                 mountBtn.innerText = "Mount";
                 mountBtn.style.backgroundColor = "#795548";
-                mountBtn.onclick = () => {
+                const mountAction = () => {
                     window.playerAction = { type: 'mount' };
                     showMessage("Click an adjacent mount to climb on.");
                     updateActionButtons();
                 };
+                mountBtn.onclick = mountAction;
+                mountBtn.ontouchstart = (e) => { e.preventDefault(); mountAction(); };
                 buttonsDiv.appendChild(mountBtn);
             }
         }

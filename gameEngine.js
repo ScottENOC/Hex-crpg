@@ -2966,8 +2966,13 @@ function startArenaFight() {
     window.drawMap();
     window.renderEntities();
     window.updateTurnIndicator();
+    
+    // Fix: Reset turn state so the engine re-evaluates initiative in the new map
+    window.currentTurnEntity = null;
+    window.isPausedForReaction = false; 
     window.gamePhase = 'WAITING';
-    window.runTickInternal();
+    
+    if (window.runTickInternal) window.runTickInternal();
 }
 
 function talkToNPC(npc) {

@@ -172,11 +172,13 @@ body {
     }
 
     #actions {
-        background: rgba(0,0,0,0.3);
+        background: rgba(0,0,0,0.6); /* Higher visibility */
         padding: 4px;
         margin-bottom: 2px;
         max-height: 110px;
         overflow-y: auto;
+        pointer-events: auto;
+        z-index: 20; /* Ensure it's above everything else in ui-container */
     }
 
     #message-log {
