@@ -2763,6 +2763,10 @@ function startArenaFight() {
     // 50/50 Indoor vs Outdoor
     const isIndoor = Math.random() < 0.5;
     window.indoorLightMult = isIndoor ? 0.0 : 1.0;
+    
+    // Force immediate light level recalculation
+    if (window.updateTime) window.updateTime(0);
+
     if (isIndoor) {
         window.triggerAmbientDialogue('arena_indoor');
     } else {
@@ -2777,6 +2781,12 @@ function startArenaFight() {
 
     // Filter to keep players AND their mounts/allies
     window.entities = window.entities.filter(e => e.side === 'player'); 
+    window.entities.forEach(e => {
+        e.destination = null; // Fix: Stop old movement orders
+    });
+    window.groupMoveMode = false;
+    window.groupLeader = null;
+    window.leaderPath = null;
 
     // 2. Create arena map (Hexagon area)
     const arenaSize = 25;
