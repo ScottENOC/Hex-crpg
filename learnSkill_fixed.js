@@ -8,7 +8,8 @@ function learnSkill(skillKey) {
 
     console.log(`[SkillSystem] Learning: ${skillKey}. Current Ranks: ${player.skills[skillKey] || 0}`);
 
-    const isExclusion = ['elf', 'dwarf', 'human', 'fighter', 'rogue', 'cleric', 'wizard', 'druid', 'paladin'].includes(skill.tree);
+    const standardTrees = ['arcane', 'divine', 'nature', 'strength', 'endurance', 'agility', 'weapons'];
+    const isStandard = standardTrees.includes(skill.tree);
 
     // Check if already maxed
     const currentRanks = player.skills[skillKey] || 0;
@@ -28,7 +29,7 @@ function learnSkill(skillKey) {
     // Deduct point
     if (player.attributes[skill.tree] > 0) {
         player.attributes[skill.tree]--;
-    } else if (player.attributes.wildcard > 0 && !isExclusion) {
+    } else if (player.attributes.wildcard > 0 && isStandard) {
         player.attributes.wildcard--;
     } else {
         showMessage("You don't have points to learn this skill.");

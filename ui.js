@@ -266,11 +266,11 @@ function showCharacterScreen() {
 
     const treesToShow = new Set();
     const hasWildcard = availablePoints.wildcard > 0;
-    const standardTrees = ['arcane', 'divine', 'nature', 'strength', 'endurance', 'agility', 'weapons', 'Way of the open palm', 'human', 'dwarf', 'elf', 'monk', 'rogue', 'fighter', 'cleric'];
+    const standardTrees = ['arcane', 'divine', 'nature', 'strength', 'endurance', 'agility', 'weapons'];
 
     if (window.showAllSkillsMode) {
         Object.keys(skillTrees).forEach(t => {
-            if (t !== 'paladin') treesToShow.add(t);
+            if (t !== 'paladin' && t !== 'monster_skills') treesToShow.add(t);
         });
     } else {
         for (const tree in availablePoints) {
@@ -331,7 +331,7 @@ function showCharacterScreen() {
 
                 const hasPoints = (availablePoints[tree] || 0) > 0;
                 const hasWildcardPoints = (availablePoints.wildcard || 0) > 0;
-                const canUseWildcard = hasWildcardPoints && !['elf', 'dwarf', 'human', 'fighter', 'rogue', 'cleric', 'wizard', 'druid'].includes(tree);
+                const canUseWildcard = hasWildcardPoints && standardTrees.includes(tree);
                 const canLearn = (hasPoints || canUseWildcard) && !isMaxed && prereqMet;
                 const buttonLabel = maxRanks === 1 ? 'Learn' : `+1 Rank (${currentRanks})`;
                 
@@ -364,7 +364,8 @@ function learnSkill(skillKey) {
         return;
     }
 
-    const isExclusion = ['elf', 'dwarf', 'human', 'fighter', 'rogue', 'cleric', 'wizard', 'druid'].includes(skill.tree);
+    const standardTrees = ['arcane', 'divine', 'nature', 'strength', 'endurance', 'agility', 'weapons'];
+    const isStandard = standardTrees.includes(skill.tree);
 
     const currentRanks = player.skills[skillKey] || 0;
     if (skill.maxRanks > 0 && currentRanks >= skill.maxRanks) {
@@ -381,7 +382,7 @@ function learnSkill(skillKey) {
 
     if (player.attributes[skill.tree] > 0) {
         player.attributes[skill.tree]--;
-    } else if (player.attributes.wildcard > 0 && !isExclusion) {
+    } else if (player.attributes.wildcard > 0 && isStandard) {
         player.attributes.wildcard--;
     } else {
         showMessage("You don't have points to learn this skill.");
@@ -1203,10 +1204,11 @@ function updateTurnIndicator() {
                                 } else {
                                     const hairImg = document.createElement('img');
                                     hairImg.src = 'images/humanmalehair.png'; hairImg.classList.add('portrait-layer');
-                                    hairImg.style.width = '45%';
-                                    hairImg.style.height = '45%';
-                                    hairImg.style.left = '27.5%';
-                                    hairImg.style.top = '27.5%';
+                                    // 40% smaller than 45% = 27%. Higher by 25% height = 2.5% top
+                                    hairImg.style.width = '27%';
+                                    hairImg.style.height = '27%';
+                                    hairImg.style.left = '36.5%';
+                                    hairImg.style.top = '2.5%';
                                     portraitDiv.appendChild(hairImg);
                                 }
                                 
@@ -1263,17 +1265,25 @@ function updateTurnIndicator() {
                                     }
                                 } else if (entity.race === 'dwarf') {
                                     const hairImg = document.createElement('img');
-                                    if (entity.gender === 'male') hairImg.src = 'images/dwarfmalehair.png';
-                                    else if (entity.gender === 'female') hairImg.src = 'images/dwarffemalehair.png';
+                                    if (entity.gender === 'male') {
+                                        hairImg.src = 'images/dwarfmalehair.png';
+                                        hairImg.classList.add('portrait-layer');
+                                        hairImg.style.width = `${100 * scalingFactor}%`;
+                                        hairImg.style.height = `${100 * scalingFactor}%`;
+                                        hairImg.style.left = `${(100 - 100 * scalingFactor) / 2}%`;
+                                        hairImg.style.top = `${(100 - 100 * scalingFactor) / 2}%`;
+                                    } else if (entity.gender === 'female') {
+                                        hairImg.src = 'images/dwarffemalehair.png';
+                                        hairImg.classList.add('portrait-layer');
+                                        // 31.25% scale (25% bigger than previous 25% scale)
+                                        // Dwarf scalingFactor is 0.8. 0.8 * 0.3125 = 0.25 (25%).
+                                        hairImg.style.width = '25%';
+                                        hairImg.style.height = '25%';
+                                        hairImg.style.left = '37.5%'; // Centered
+                                        hairImg.style.top = '40%';  // Dropped down by 25% height
+                                    }
                                     
                                     if (hairImg.src) {
-                                        hairImg.classList.add('portrait-layer');
-                                        if (scalingFactor !== 1.0) {
-                                            hairImg.style.width = `${100 * scalingFactor}%`;
-                                            hairImg.style.height = `${100 * scalingFactor}%`;
-                                            hairImg.style.left = `${(100 - 100 * scalingFactor) / 2}%`;
-                                            hairImg.style.top = `${(100 - 100 * scalingFactor) / 2}%`;
-                                        }
                                         portraitDiv.appendChild(hairImg);
                                     }
                                 }

@@ -776,9 +776,10 @@ function renderEntities() {
               if (window.gameVisuals.humanHair.complete && e.gender !== 'male') {
                   window.mapCtx.drawImage(window.gameVisuals.humanHair, x - humanSize/2, y - humanSize/2 + humanYOff - (3 * z), humanSize, (humanSize + humanHeightAdd));
               } else if (window.gameVisuals.humanMaleHair.complete && e.gender === 'male') {
-                  const hWidth = humanSize * 0.5;
-                  const hHeight = (humanSize + humanHeightAdd) * 0.5;
-                  window.mapCtx.drawImage(window.gameVisuals.humanMaleHair, x - hWidth/2, y + humanYOff - hHeight/2, hWidth, hHeight);
+                  const hWidth = humanSize * 0.3;
+                  const hHeight = (humanSize + humanHeightAdd) * 0.3;
+                  const yLift = (window.hexSize * 0.5) * z; 
+                  window.mapCtx.drawImage(window.gameVisuals.humanMaleHair, x - hWidth/2, y + humanYOff - hHeight/2 - yLift, hWidth, hHeight);
               }
                           // LAYER: Human Helmet
                           if (e.equipped && e.equipped.helmet === 'nasal_helm' && window.gameVisuals.nasal_helm.complete) {
@@ -831,7 +832,11 @@ function renderEntities() {
                   if (e.gender === 'male' && window.gameVisuals.dwarfMaleHair.complete) {
                       window.mapCtx.drawImage(window.gameVisuals.dwarfMaleHair, x - currentSize/2, y - currentSize/2 + currentYOff, currentSize, currentHeight);
                   } else if (e.gender === 'female' && window.gameVisuals.dwarfFemaleHair.complete) {
-                      window.mapCtx.drawImage(window.gameVisuals.dwarfFemaleHair, x - currentSize/2, y - currentSize/2 + currentYOff, currentSize, currentHeight);
+                      const hWidth = currentSize * 0.3125;
+                      const hHeight = currentHeight * 0.3125;
+                      // Lower position (dropped from 0.35 to 0.1 lift)
+                      const yLift = currentHeight * 0.1;
+                      window.mapCtx.drawImage(window.gameVisuals.dwarfFemaleHair, x - hWidth/2, y - currentSize/2 + currentYOff - yLift + hHeight/2, hWidth, hHeight);
                   }
               }
   
@@ -853,7 +858,17 @@ function renderEntities() {
                   else if (aid === 'heavy_armor') armorImg = window.gameVisuals.humanHeavy;
               }
               if (armorImg && armorImg.complete) {
-                  window.mapCtx.drawImage(armorImg, x - currentSize/2, (y - currentSize/2) + currentYOff + (21 * z), currentSize, currentSize);
+                  if (e.race === 'dwarf') {
+                      const aWidth = currentSize * 1.4;
+                      const topShift = (window.hexSize * 0.1) * z; // 5% of hex height
+                      window.mapCtx.drawImage(armorImg, x - aWidth/2, y - currentSize/2 + currentYOff + topShift, aWidth, currentHeight - topShift);
+                  } else if (e.race === 'elf') {
+                      const topShift = (window.hexSize * 0.3) * z; // 15% of hex height
+                      window.mapCtx.drawImage(armorImg, x - currentSize/2, y - currentSize/2 + currentYOff + topShift, currentSize, currentHeight - topShift);
+                  } else {
+                      // Standard alignment for humans and others
+                      window.mapCtx.drawImage(armorImg, x - currentSize/2, y - currentSize/2 + currentYOff, currentSize, currentHeight);
+                  }
               }
               // LAYER: Shield (Elf/Dwarf Scale)
               if (e.equipped && e.equipped.offhand && window.items[e.equipped.offhand].type === 'shield' && window.gameVisuals.shield.complete) {
@@ -874,8 +889,10 @@ function renderEntities() {
                   
                           if (weaponImg && weaponImg.complete) {
                               const weaponSize = window.hexSize * weaponScale * z; 
-                              let weaponX = x - (window.hexSize/2 + 5) * z;
-                              let weaponY = y - weaponSize/2 + flyOff;
+                              const xShift = (window.hexSize * 0.1) * z; // 5% of hex height
+                              const yShift = (window.hexSize * 0.3) * z; // 15% of hex height
+                              let weaponX = x - (window.hexSize/2 + 5) * z - xShift;
+                              let weaponY = y - weaponSize/2 + flyOff + yShift;
                               if (mainW === 'dagger') {
                                   weaponX += (window.hexSize * 0.16) * z;
                                   weaponY += (window.hexSize * 0.16) * z;
