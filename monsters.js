@@ -209,6 +209,65 @@ const monsterTemplates = {
     }
 };
 
+const arenaBosses = {
+    'Grishnak': {
+        base: 'orc',
+        color: '#a52a2a',
+        hp: 40,
+        mana: 50,
+        dialogue: 'grishnak_entry',
+        skills: { 'arcane_mana': 2, 'firebolt_hit': 1, 'arcane_regen': 1 },
+        spells: [
+            { name: "Counterspell", baseId: 'counterspell', type: 'dispel', school: 'arcane', manaCost: 10, tpCost: 10, range: 8 },
+            { name: "Firebolt", baseId: 'firebolt', type: 'damage', school: 'arcane', manaCost: 5, tpCost: 10, range: 10, magnitude: 8, needsHitCheck: true }
+        ],
+        equipment: ['light_armor']
+    },
+    'Sir Alistair': {
+        base: 'orc', 
+        color: '#ffd700',
+        gender: 'male',
+        hp: 50,
+        mana: 30,
+        dialogue: 'alistair_entry',
+        skills: { 'learn_heal': 1, 'divine_mana': 2, 'heavy_armor_training': 1, 'shield_proficiency': 1, 'sword_hit': 1, 'sword_dmg': 1, 'shield_bash': 1 },
+        spells: [
+            { name: "Heal", baseId: 'heal', type: 'heal', school: 'divine', manaCost: 10, tpCost: 10, range: 5, magnitude: 15 }
+        ],
+        equipment: ['heavy_armor', 'sword', 'wooden_shield']
+    },
+    'Viper': {
+        base: 'elite_goblin',
+        color: '#4b0082',
+        hp: 35,
+        dialogue: 'viper_entry',
+        skills: { 'stealth_rogue': 1, 'stealth_agility': 1, 'sneak_attack_dmg': 3, 'speedy_stealth': 1, 'dagger_hit': 1, 'dagger_dmg': 1 },
+        equipment: ['light_armor', 'dagger']
+    },
+    'Krog the Unstoppable': {
+        base: 'troll',
+        color: '#2f4f4f',
+        hp: 60,
+        dialogue: 'krog_entry',
+        skills: { 'shove': 1, 'health': 5, 'meleeDamage': 3, 'regeneration': 1, 'club_hit': 1 },
+        equipment: ['club']
+    },
+    'Sylvara the Huntress': {
+        base: 'goblin', 
+        color: '#228b22',
+        gender: 'female',
+        hp: 30,
+        mana: 40,
+        dialogue: 'sylvara_entry',
+        mount: 'tiger',
+        skills: { 'learn_summon_animal': 1, 'learn_tiger_summon': 1, 'nature_mana': 2, 'bow_hit': 1, 'elf_bow_range': 1, 'riding': 1 },
+        spells: [
+            { name: "Summon Tiger", baseId: 'summon_animal', type: 'summon', school: 'nature', manaCost: 25, tpCost: 10, range: 3 }
+        ],
+        equipment: ['light_armor', 'bow']
+    }
+};
+
 function createMonster(type, hex, customSkills = null, customEquipment = null, side = 'enemy') {
     const template = monsterTemplates[type] || monsterTemplates['goblin'];
     const monster = new window.Enemy(template.name, template.color, hex, 3, template.hp, template.expValue);

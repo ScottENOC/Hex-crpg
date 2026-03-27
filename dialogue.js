@@ -59,6 +59,26 @@ const dialogueData = {
         speaker: 'Arena Announcer',
         mood: 'neutral',
         dialogue: "In one corner, the crowd favourite, the ferocious champion Grishnak! In the other corner, his prey."
+    },
+    'alistair_entry': {
+        speaker: 'Arena Announcer',
+        mood: 'heroic',
+        dialogue: "Make way for the righteous! Sir Alistair enters the fray to purge the arena of weakness!"
+    },
+    'viper_entry': {
+        speaker: 'Arena Announcer',
+        mood: 'mysterious',
+        dialogue: "Watch your backs, folks. You won't see the Viper until his blade is already between your ribs."
+    },
+    'krog_entry': {
+        speaker: 'Arena Announcer',
+        mood: 'fearful',
+        dialogue: "HE'S HERE! Krog the Unstoppable! I hope you've all said your prayers, because he's not planning on stopping!"
+    },
+    'sylvara_entry': {
+        speaker: 'Arena Announcer',
+        mood: 'admiring',
+        dialogue: "The wild comes to the arena! Sylvara the Huntress and her deadly companion seek a new trophy!"
     }
 };
 

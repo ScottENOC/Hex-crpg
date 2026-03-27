@@ -1542,6 +1542,45 @@ function aiProcess(entity) {
         return isRanged || !eitherFlying || bothFlying;
     });
 
+    // BOSS AI: STEALTH PRIORITY (Viper / Rogues)
+    if (entity.skills?.stealth_rogue && !entity.isStealthed && entity.timePoints >= 5) {
+        const canSeeMe = opponents.some(o => window.distance(entity.hex, o.hex) < 20 && window.hasLineOfSight(entity.hex, o.hex));
+        if (!canSeeMe) {
+            if (window.tryStealth(entity)) {
+                setTimeout(() => aiProcess(entity), 20);
+                return;
+            }
+        }
+    }
+
+    // BOSS AI: HEALING PRIORITY (Alistair / Clerics)
+    if (entity.skills?.learn_heal && entity.hp < entity.maxHp * 0.6 && entity.timePoints >= 10 && entity.currentMana >= 10) {
+        const healSpell = entity.createdSpells?.find(s => s.baseId === 'heal');
+        if (healSpell) {
+            window.showMessage(`${entity.name} prays for healing!`);
+            tryCastSpell(entity, healSpell, entity, entity.hex);
+            spendTP(entity, 10);
+            setTimeout(() => aiProcess(entity), 20);
+            return;
+        }
+    }
+
+    // BOSS AI: SUMMONING PRIORITY (Sylvara / Beastmasters)
+    if (entity.skills?.learn_summon_animal && !entity.animalCompanion && entity.timePoints >= 10 && entity.currentMana >= 25) {
+        const summonSpell = entity.createdSpells?.find(s => s.baseId === 'summon_animal');
+        if (summonSpell) {
+            // Find empty adjacent hex
+            const neighbors = window.getNeighbors(entity.hex.q, entity.hex.r);
+            const spawnHex = neighbors.find(h => !getEntityAtHex(h.q, h.r) && window.getTerrainAt(h.q, h.r).name !== 'Wall' && window.getTerrainAt(h.q, h.r).name !== 'Water');
+            if (spawnHex) {
+                tryCastSpell(entity, summonSpell, null, spawnHex);
+                spendTP(entity, 10);
+                setTimeout(() => aiProcess(entity), 20);
+                return;
+            }
+        }
+    }
+
     // SPELLCASTING AI (Grishnak / Casters)
     if (entity.createdSpells && entity.createdSpells.length > 0 && entity.timePoints >= 10) {
         // ... (existing spell logic) ...
@@ -1591,6 +1630,17 @@ function aiProcess(entity) {
             window.lootItems(entity);
             setTimeout(() => aiProcess(entity), 20);
             return;
+        }
+    }
+
+    // BOSS AI: SHOVE PRIORITY (Krog / Juggernauts)
+    if (entity.skills?.shove && entity.timePoints >= 10) {
+        const adjacentPlayer = opponents.find(o => window.distance(entity.hex, o.hex) === 1);
+        if (adjacentPlayer && Math.random() < 0.4) { // 40% chance to shove instead of attack
+            if (window.tryShove(entity, adjacentPlayer)) {
+                setTimeout(() => aiProcess(entity), 20);
+                return;
+            }
         }
     }
 
@@ -2398,11 +2448,18 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
 }
 
 function checkCombatEnd() {
-    // Track Grishnak defeat
-    const grishnak = window.entities.find(e => e.name === "Grishnak");
-    if (grishnak && !grishnak.alive) {
-        window.grishnakDefeated = true;
-    }
+    // Track Boss defeats
+    if (!window.roguelikeData.bossesDefeated) window.roguelikeData.bossesDefeated = [];
+    
+    window.entities.forEach(e => {
+        if (e.side === 'enemy' && !e.alive) {
+            if (['Grishnak', 'Sir Alistair', 'Viper', 'Krog the Unstoppable', 'Sylvara the Huntress'].includes(e.name)) {
+                if (!window.roguelikeData.bossesDefeated.includes(e.name)) {
+                    window.roguelikeData.bossesDefeated.push(e.name);
+                }
+            }
+        }
+    });
 
     // Only check for ACTIVE enemies
     if (!window.entities.some(e => e.side === 'enemy' && e.alive)) {
@@ -2900,38 +2957,44 @@ function startArenaFight() {
     const validHexes = getAllValidSpawnHexes();
     let lastSpawnHex = validHexes.length > 0 ? validHexes[Math.floor(Math.random() * validHexes.length)] : { q: 0, r: 0 };
 
-    // GRISHNAK ENCOUNTER (10% chance if not defeated)
-    if (!window.grishnakDefeated && Math.random() < 0.1) {
-        window.triggerAmbientDialogue('grishnak_entry');
-        const grishnak = window.createMonster('orc', lastSpawnHex, null, null, 'enemy');
-        grishnak.name = "Grishnak";
-        grishnak.hp = 40;
-        grishnak.maxHp = 40;
-        grishnak.currentMana = 50;
-        grishnak.maxMana = 50;
+    // BOSS ENCOUNTER (15% chance if any bosses remain)
+    const bossesDefeated = window.roguelikeData.bossesDefeated || [];
+    const availableBosses = Object.keys(arenaBosses).filter(name => !bossesDefeated.includes(name));
+    
+    if (availableBosses.length > 0 && Math.random() < 0.15) {
+        const bossName = availableBosses[Math.floor(Math.random() * availableBosses.length)];
+        const config = arenaBosses[bossName];
         
-        const keys = Object.keys(window.skills).filter(k => window.skills[k].tree === 'arcane' || window.skills[k].tree === 'wizard');
-        keys.forEach(k => grishnak.skills[k] = 1);
-        grishnak.applySkills();
+        window.triggerAmbientDialogue(config.dialogue);
+        const boss = window.createMonster(config.base, lastSpawnHex, config.skills, config.equipment, 'enemy');
+        boss.name = bossName;
+        if (config.hp) { boss.hp = config.hp; boss.maxHp = config.hp; }
+        if (config.mana) { boss.currentMana = config.mana; boss.maxMana = config.mana; }
+        if (config.gender) boss.gender = config.gender;
+        if (config.color) boss.color = config.color;
+        
+        if (config.spells) {
+            boss.createdSpells = boss.createdSpells || [];
+            config.spells.forEach(s => boss.createdSpells.push({...s}));
+        }
 
-        grishnak.createdSpells.push({
-            name: "Counterspell", baseId: 'counterspell', type: 'dispel', school: 'arcane', manaCost: 10, tpCost: 10, range: 8
-        });
-        grishnak.createdSpells.push({
-            name: "Firebolt", baseId: 'firebolt', type: 'damage', school: 'arcane', manaCost: 5, tpCost: 10, range: 10, magnitude: 8, needsHitCheck: true
-        });
+        if (config.mount) {
+            const mount = window.createMonster(config.mount, lastSpawnHex, null, null, 'enemy');
+            boss.riding = mount;
+            mount.rider = boss;
+            window.entities.push(mount);
+        }
 
-        window.entities.push(grishnak);
-        console.log(`Spawned Grishnak at {q: ${lastSpawnHex.q}, r: ${lastSpawnHex.r}}`);
+        window.entities.push(boss);
+        console.log(`Spawned BOSS ${bossName} at {q: ${lastSpawnHex.q}, r: ${lastSpawnHex.r}}`);
 
+        // Spawn some guards
         for (let i = 0; i < 2; i++) {
-            // Find hex near lastSpawnHex
             const neighbors = window.getNeighbors(lastSpawnHex.q, lastSpawnHex.r);
             const valid = neighbors.filter(h => validHexes.some(vh => vh.q === h.q && vh.r === h.r));
             const spawnHex = valid.length > 0 ? valid[Math.floor(Math.random() * valid.length)] : lastSpawnHex;
-            const m = window.createMonster('orc', spawnHex, null, null, 'enemy');
+            const m = window.createMonster(config.base, spawnHex, null, null, 'enemy');
             window.entities.push(m);
-            console.log(`Spawned orc at {q: ${spawnHex.q}, r: ${spawnHex.r}}`);
         }
     } else {
         // Normal encounter

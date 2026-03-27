@@ -110,7 +110,8 @@ function loadGame(saveName = "rpg_save_game") {
         window.worldSeconds = gameState.worldSeconds || 0;
         window.tileObjects = gameState.tileObjects || {};
         window.activeSpells = gameState.activeSpells || [];
-        window.roguelikeData = gameState.roguelikeData || { fightsCompleted: 0, mercenaryGraveyard: [] };
+        window.roguelikeData = gameState.roguelikeData || { fightsCompleted: 0, mercenaryGraveyard: [], bossesDefeated: [] };
+        if (!window.roguelikeData.bossesDefeated) window.roguelikeData.bossesDefeated = [];
 
         // 2. Hide Creator, Show Game
         document.getElementById("characterCreator").style.display = "none";
