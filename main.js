@@ -138,7 +138,11 @@ document.addEventListener("DOMContentLoaded", () => {
             btn.innerText = `Move Group: ${window.groupMoveMode ? 'ON' : 'OFF'}`;
             btn.style.backgroundColor = window.groupMoveMode ? '#ff9800' : '#795548';
         } else if (btnId === "load-btn-initial") {
-            window.loadGame(); // Default load
+            const modal = document.getElementById("load-game-modal");
+            if (modal) {
+                window.updateSaveList();
+                modal.style.display = "block";
+            }
         } else if (btnId === "save-menu-btn") {
             const modal = document.getElementById("save-game-modal");
             if (modal) {

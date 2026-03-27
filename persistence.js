@@ -19,77 +19,62 @@ function saveGame(saveName = "rpg_save_game") {
         gamePhase: window.gamePhase,
         currentTurnIndex: window.entities.indexOf(window.currentTurnEntity),
         camera: { x: window.cameraX, y: window.cameraY, zoom: window.cameraZoom },
-        entities: window.entities.map(e => ({
-            name: e.name,
-            color: e.color,
-            hex: e.hex,
-            initiative: e.initiative,
-            hp: e.hp,
-            maxHp: e.maxHp,
-            currentMana: e.currentMana,
-            maxMana: e.maxMana,
-            timePoints: e.timePoints,
-            timePointsPerTick: e.timePointsPerTick,
-            expValue: e.expValue,
-            isEnemy: e instanceof window.Enemy,
-            isNPC: e.isNPC,
-            alive: e.alive,
-            equipped: e.equipped,
-            skills: e.skills,
-            baseDamage: e.baseDamage,
-            baseReduction: e.baseReduction,
-            toHitMelee: e.toHitMelee,
-            toHitRanged: e.toHitRanged,
-            toHitSpell: e.toHitSpell,
-            passiveDodge: e.passiveDodge,
-            gold: e.gold,
-            inventory: e.inventory,
-            side: e.side,
-            gender: e.gender,
-            race: e.race,
-            lastSeenTargetHex: e.lastSeenTargetHex,
-            isFlying: e.isFlying,
-            flyCheat: e.flyCheat,
-            forcedMoveResistance: e.forcedMoveResistance,
-            visionPenaltyStacks: e.visionPenaltyStacks,
-            dmgPenaltyStacks: e.dmgPenaltyStacks,
-            healingReduction: e.healingReduction,
-            reactionBlocked: e.reactionBlocked
-        })),
+        
+        // Global States
+        isInArena: window.isInArena,
+        indoorLightMult: window.indoorLightMult,
+        worldSeconds: window.worldSeconds,
+        tileObjects: window.tileObjects,
+        activeSpells: window.activeSpells,
+        roguelikeData: window.roguelikeData,
+
+        entities: window.entities.map(e => {
+            const data = {};
+            // Save all non-function properties
+            for (let key in e) {
+                if (typeof e[key] !== 'function') {
+                    if (key === 'riding') {
+                        data.ridingId = e.riding ? e.riding.id : null;
+                    } else if (key === 'rider') {
+                        data.riderId = e.rider ? e.rider.id : null;
+                    } else {
+                        data[key] = e[key];
+                    }
+                }
+            }
+            data.isEnemy = e instanceof window.Enemy;
+            return data;
+        }),
         saveDate: new Date().toISOString(),
         saveName: saveName
     };
 
-    const key = saveName.startsWith("rpg_save_") ? saveName : `rpg_save_${saveName}`;
+    const isQuickSave = (saveName === "quick_save");
+    const key = isQuickSave ? "rpg_save_quick_save" : `rpg_save_${saveName}`;
+    const displayName = isQuickSave ? `Quicksave - ${window.party[0].name}` : saveName;
 
     try {
         if (window.ironmanMode) {
-            // Delete all other saves for this character name
             const charName = window.party[0].name;
             const metadata = JSON.parse(localStorage.getItem('rpg_save_metadata') || "[]");
             const toDelete = metadata.filter(m => m.name.includes(charName) && m.key !== key);
-            
-            toDelete.forEach(d => {
-                localStorage.removeItem(d.key);
-            });
-            
+            toDelete.forEach(d => localStorage.removeItem(d.key));
             const newMetadata = metadata.filter(m => !toDelete.includes(m));
             localStorage.setItem('rpg_save_metadata', JSON.stringify(newMetadata));
         }
 
         localStorage.setItem(key, JSON.stringify(gameState));
         
-        // Update metadata list
         let metadata = JSON.parse(localStorage.getItem('rpg_save_metadata') || "[]");
         metadata = metadata.filter(m => m.key !== key);
-        metadata.push({ key: key, name: saveName, date: gameState.saveDate, ironman: window.ironmanMode });
+        metadata.push({ key: key, name: displayName, date: gameState.saveDate, ironman: window.ironmanMode });
         localStorage.setItem('rpg_save_metadata', JSON.stringify(metadata));
 
-        window.showMessage(`Game saved as "${saveName}"!`);
+        window.showMessage(`Game saved as "${displayName}"!`);
 
         if (window.ironmanMode && !saveName.includes("AutoSave")) {
             alert("Iron Man Save: Returning to title screen.");
-            location.reload(); // Simplest way to return to title
+            location.reload();
         }
     } catch (e) {
         console.error("Save failed", e);
@@ -101,7 +86,7 @@ function loadGame(saveName = "rpg_save_game") {
     const key = saveName.startsWith("rpg_save_") ? saveName : `rpg_save_${saveName}`;
     const savedData = localStorage.getItem(key);
     if (!savedData) {
-        window.showMessage(`No saved game found for "${saveName}".`);
+        window.showMessage(`No saved game found.`);
         return;
     }
 
@@ -119,14 +104,22 @@ function loadGame(saveName = "rpg_save_game") {
         window.ironmanMode = gameState.ironmanMode || false;
         window.mapItems = gameState.mapItems || {};
 
+        // Restore Global States
+        window.isInArena = gameState.isInArena || false;
+        window.indoorLightMult = (gameState.indoorLightMult !== undefined) ? gameState.indoorLightMult : 1.0;
+        window.worldSeconds = gameState.worldSeconds || 0;
+        window.tileObjects = gameState.tileObjects || {};
+        window.activeSpells = gameState.activeSpells || [];
+        window.roguelikeData = gameState.roguelikeData || { fightsCompleted: 0, mercenaryGraveyard: [] };
+
         // 2. Hide Creator, Show Game
         document.getElementById("characterCreator").style.display = "none";
         document.getElementById("gameContainer").style.display = "flex";
         document.getElementById("top-menu").style.display = "flex";
 
-        // 3. Initialize Game Engine (Canvas, Listeners) if not already
+        // 3. Initialize Game Engine if not already
         if (!window.mapCanvas) {
-            window.startGameCore(true); // Tell it we are loading
+            window.startGameCore(true);
         }
 
         // 4. Reconstruct Entities
@@ -137,9 +130,18 @@ function loadGame(saveName = "rpg_save_game") {
             } else {
                 ent = new window.Entity(d.name, d.color, d.hex, d.initiative);
             }
-            // Restore all properties
             Object.assign(ent, d);
             return ent;
+        });
+
+        // Relink riding/rider references
+        window.entities.forEach(ent => {
+            if (ent.ridingId) {
+                ent.riding = window.entities.find(e => e.id === ent.ridingId);
+            }
+            if (ent.riderId) {
+                ent.rider = window.entities.find(e => e.id === ent.riderId);
+            }
         });
 
         // Restore turn state
@@ -157,7 +159,8 @@ function loadGame(saveName = "rpg_save_game") {
             window.cameraZoom = gameState.camera.zoom;
         }
 
-        // 5. Refresh UI
+        // Force immediate UI and lighting refresh
+        if (window.updateTime) window.updateTime(0);
         window.resizeCanvas();
         window.drawMap();
         window.renderEntities();
@@ -165,14 +168,24 @@ function loadGame(saveName = "rpg_save_game") {
         window.updateActionButtons();
         window.updateTurnIndicator();
         
-        // Close modals
         document.getElementById("load-game-modal").style.display = "none";
-
-        window.showMessage(`Game "${gameState.saveName || saveName}" loaded successfully!`);
+        window.showMessage(`Game loaded successfully!`);
     } catch (e) {
         console.error("Load failed", e);
         window.showMessage("Failed to load game. Save data might be corrupted.");
     }
+}
+
+function deleteSave(key) {
+    if (!confirm("Are you sure you want to delete this save?")) return;
+    
+    localStorage.removeItem(key);
+    let metadata = JSON.parse(localStorage.getItem('rpg_save_metadata') || "[]");
+    metadata = metadata.filter(m => m.key !== key);
+    localStorage.setItem('rpg_save_metadata', JSON.stringify(metadata));
+    
+    updateSaveList();
+    window.showMessage("Save deleted.");
 }
 
 function updateSaveList() {
@@ -181,11 +194,10 @@ function updateSaveList() {
     listDiv.innerHTML = '';
 
     const metadata = JSON.parse(localStorage.getItem('rpg_save_metadata') || "[]");
-    // Sort by date (newest first)
     metadata.sort((a, b) => new Date(b.date) - new Date(a.date));
 
     if (metadata.length === 0) {
-        listDiv.innerHTML = '<p style="color: #888;">No saves found.</p>';
+        listDiv.innerHTML = '<p style="color: #888; text-align: center; padding: 20px;">No saves found.</p>';
         return;
     }
 
@@ -196,24 +208,40 @@ function updateSaveList() {
         div.style.alignItems = "center";
         div.style.padding = "10px";
         div.style.borderBottom = "1px solid #444";
+        div.style.background = "rgba(255,255,255,0.05)";
+        div.style.marginBottom = "5px";
+        div.style.borderRadius = "4px";
 
         const info = document.createElement("div");
         const date = new Date(m.date).toLocaleString();
-        info.innerHTML = `<strong>${m.name}</strong><br><small style="color: #aaa;">${date}</small>`;
+        info.innerHTML = `<strong style="color: #fff;">${m.name}</strong><br><small style="color: #aaa;">${date}</small>`;
         
+        const btnContainer = document.createElement("div");
+        btnContainer.style.display = "flex";
+        btnContainer.style.gap = "10px";
+
         const loadBtn = document.createElement("button");
         loadBtn.innerText = "Load";
+        loadBtn.style.backgroundColor = "#4caf50";
+        loadBtn.style.padding = "5px 15px";
         loadBtn.onclick = () => loadGame(m.key);
 
+        const delBtn = document.createElement("button");
+        delBtn.innerText = "Delete";
+        delBtn.style.backgroundColor = "#f44336";
+        delBtn.style.padding = "5px 10px";
+        delBtn.onclick = () => deleteSave(m.key);
+
+        btnContainer.appendChild(loadBtn);
+        btnContainer.appendChild(delBtn);
+        
         div.appendChild(info);
-        div.appendChild(loadBtn);
+        div.appendChild(btnContainer);
         listDiv.appendChild(div);
     });
 }
 
 window.saveGame = saveGame;
 window.loadGame = loadGame;
+window.deleteSave = deleteSave;
 window.updateSaveList = updateSaveList;
-
-window.saveGame = saveGame;
-window.loadGame = loadGame;
