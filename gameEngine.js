@@ -197,7 +197,9 @@ function playerMoveProcess(player, path) {
             const isSqueezing = window.entities.some(e => e.alive && e !== player && e !== player.riding && e.hex.q === player.hex.q && e.hex.r === player.hex.r);
 
             if ((player.timePoints > threshold && !mountExhausted && path.length > 0) || (isSqueezing && path.length > 0)) {
-                setTimeout(() => playerMoveProcess(player, path), 20);
+                // Out of combat: wait for duration. In combat: fast step.
+                const waitTime = window.isInCombat ? 20 : ((stepCost / moveEntity.timePointsPerTick) * 400);
+                setTimeout(() => playerMoveProcess(player, path), waitTime);
             } else {
                 finalizePlayerAction(player, true);
             }
@@ -726,23 +728,12 @@ function renderEntities() {
   });
 
           sorted.forEach(e => {
-          let {x,y} = window.hexToPixel(e.hex.q, e.hex.r);
+          let x = e.visualX !== undefined ? e.visualX : 0;
+          let y = e.visualY !== undefined ? e.visualY : 0;
           
-          // MULTI-HEX CENTERING: If the creature occupies multiple hexes, calculate the visual center
-          if (e.extraHexes && e.extraHexes.length > 0) {
-              const allHexes = [{q: e.hex.q, r: e.hex.r}, ...e.getAllHexes().filter(h => h.q !== e.hex.q || h.r !== e.hex.r)];
-              // We use getAllHexes to be safe, but filter to avoid double counting the origin if it's there
-              // Actually Entity.getAllHexes already includes origin. 
-              const uniqueHexes = e.getAllHexes(); 
-              let totalX = 0;
-              let totalY = 0;
-              uniqueHexes.forEach(h => {
-                  const p = window.hexToPixel(h.q, h.r);
-                  totalX += p.x;
-                  totalY += p.y;
-              });
-              x = totalX / uniqueHexes.length;
-              y = totalY / uniqueHexes.length;
+          if (e.visualX === undefined) {
+              const p = window.hexToPixel(e.hex.q, e.hex.r);
+              x = p.x; y = p.y;
           }
 
           // Basic off-screen culling for drawing
@@ -1072,10 +1063,23 @@ function triggerPenalty(casterName, victim, spell) {
     }
 }
 
+function checkInCombat() {
+    return window.entities.some(e => e.alive && e.side === 'enemy' && e.aiState === 'combat');
+}
+
+let lastTimestamp = performance.now();
+
 function tick() {
     if (window.isPausedForReaction) return;
 
-    // REST/SLEEP LOGIC
+    const now = performance.now();
+    const dt = (now - lastTimestamp) / 1000; // Delta time in seconds
+    lastTimestamp = now;
+
+    const inCombat = checkInCombat();
+    window.isInCombat = inCombat; // Expose globally for UI
+
+    // REST/SLEEP LOGIC (High speed)
     if (window.isResting || window.isSleeping) {
         const sentientAllies = window.entities.filter(e => e.alive && e.side === 'player' && e.name !== 'Wolf' && e.name !== 'Horse');
 
@@ -1087,6 +1091,8 @@ function tick() {
                 ready.forEach(e => spendTP(e, 1));
             } else {
                 runTickInternal(true, true); // skipUI=true
+                // Force time progression during high-speed rest
+                if (window.updateTime) window.updateTime(0.4); 
             }
 
             // CHECK COMPLETION
@@ -1123,23 +1129,83 @@ function tick() {
             sentientAllies.forEach(e => e.lastHp = e.hp);
         }
         window.updateTurnIndicator();
-        return; // Exit main tick loop after fast-forward
+        return; 
     }
 
-    if (window.gamePhase === 'WAITING') {
-        const inCombat = window.entities.some(e => e.alive && e.side === 'enemy' && e.aiState === 'combat');
-        const numTicks = inCombat ? 1 : 200; 
-        for (let i = 0; i < numTicks; i++) {
-            runTickInternal(false, true); // skipUI=true
-            if (window.gamePhase !== 'WAITING') break;
-        }
+    if (!inCombat) {
+        // REAL-TIME SYSTEM
+        // 1. Progress World Time (1s = 1s)
+        if (window.updateTime) window.updateTime(dt);
+
+        // 2. Process logical ticks (Mana/HP regen, Spell upkeep)
+        // Convert dt to game ticks (1 tick = 0.4s)
+        const fractionalTicks = dt / 0.4;
+        runTickInternal(false, true, fractionalTicks);
+
+        // 3. Smooth Visuals
+        updateVisualPositions(dt);
+        
         window.updateTurnIndicator();
     } else {
-        runTickInternal();
+        // TURN-BASED COMBAT SYSTEM
+        if (window.gamePhase === 'WAITING') {
+            runTickInternal(false, true); // 1 tick per interval in combat
+            window.updateTurnIndicator();
+        } else {
+            runTickInternal();
+        }
+        // Snap visuals in combat
+        updateVisualPositions(100); // High dt to snap
     }
 }
 
-function runTickInternal(isSleepCycle = false, skipUI = false) {
+function updateVisualPositions(dt) {
+    window.entities.forEach(e => {
+        // Multi-hex centering logic for target
+        let targetQ = e.hex.q;
+        let targetR = e.hex.r;
+        
+        if (e.extraHexes && e.extraHexes.length > 0) {
+            const uniqueHexes = e.getAllHexes(); 
+            let totalQ = 0; let totalR = 0;
+            uniqueHexes.forEach(h => {
+                totalQ += h.q; totalR += h.r;
+            });
+            targetQ = totalQ / uniqueHexes.length;
+            targetR = totalR / uniqueHexes.length;
+        }
+
+        if (e.visualQ === undefined || isNaN(e.visualQ)) {
+            e.visualQ = targetQ;
+            e.visualR = targetR;
+        }
+
+        const dq = targetQ - e.visualQ;
+        const dr = targetR - e.visualR;
+        const distHex = Math.sqrt(dq*dq + dr*dr);
+
+        if (distHex > 0.01) {
+            // Base move cost is 5 TP. At 1.0 rate, duration is 2s (5 * 0.4).
+            const moveCost = 5; 
+            const duration = (moveCost / (e.timePointsPerTick || 1.0)) * 0.4;
+            // speed in hex-units per second
+            const speedHex = 1.0 / Math.max(0.1, duration); 
+            
+            const moveDist = speedHex * dt;
+            if (moveDist >= distHex) {
+                e.visualQ = targetQ; e.visualR = targetR;
+            } else {
+                e.visualQ += (dq / distHex) * moveDist;
+                e.visualR += (dr / distHex) * moveDist;
+            }
+        } else {
+            e.visualQ = targetQ;
+            e.visualR = targetR;
+        }
+    });
+}
+
+function runTickInternal(isSleepCycle = false, skipUI = false, tickMultiplier = 1.0) {
     if (window.currentTurnEntity && !isSleepCycle) return;
     
     const readyEntities = window.entities.filter(e => e.timePoints >= 100 && e.alive && !e.rider);
@@ -1155,14 +1221,15 @@ function runTickInternal(isSleepCycle = false, skipUI = false) {
                 if (e.side === 'enemy' && e.aiState === 'idle') return;
 
                 if (e.timePoints < 150) {
-                    let tpGained = e.timePointsPerTick;
-                    if (e.flyCheat) tpGained += 10;
+                    let tpGained = e.timePointsPerTick * tickMultiplier;
+                    if (e.flyCheat) tpGained += 10 * tickMultiplier;
                     e.timePoints += tpGained;
 
                     // POISON TICK
                     if (e.poisonTicks > 0) {
-                        e.hp -= e.poisonDamage || 2;
-                        e.poisonTicks--;
+                        const poisonAmount = (e.poisonDamage || 2) * tickMultiplier;
+                        e.hp -= poisonAmount;
+                        e.poisonTicks -= tickMultiplier;
                         if (e.hp <= 0 && e.alive) {
                             e.alive = false;
                             window.showMessage(`${e.name} died from poison!`);
@@ -1188,12 +1255,10 @@ function runTickInternal(isSleepCycle = false, skipUI = false) {
                     // Ongoing Spell Costs (2.5% of core mana cost per TP gained)
                     const mySpells = (window.activeSpells || []).filter(s => s.casterName === e.name);
                     if (mySpells.length > 0) {
-                        // Sort by cost descending to cancel most expensive first if needed
                         mySpells.sort((a, b) => b.coreManaCost - a.coreManaCost);
                         
                         for (const s of mySpells) {
                             if (e.currentMana <= 0) {
-                                // If mana is ALREADY 0 and we have upkeep, cancel one and stop
                                 window.showMessage(`Spell ${s.name} on ${e.name} faded due to lack of mana.`);
                                 window.cancelSpell(s.spellInstanceId);
                                 break;
@@ -1205,7 +1270,7 @@ function runTickInternal(isSleepCycle = false, skipUI = false) {
                                 e.currentMana = 0;
                                 window.showMessage(`Spell ${s.name} on ${e.name} faded due to lack of mana.`);
                                 window.cancelSpell(s.spellInstanceId);
-                                break; // Only cancel ONE per tick
+                                break; 
                             }
                         }
                     }
@@ -1219,7 +1284,7 @@ function runTickInternal(isSleepCycle = false, skipUI = false) {
                     }
                 }
                 
-                if (e.skills['regeneration'] && Math.random() < 0.2) {
+                if (e.skills['regeneration'] && Math.random() < (0.2 * tickMultiplier)) {
                     e.hp = Math.min(e.maxHp, e.hp + 1);
                 }
 
@@ -1232,11 +1297,15 @@ function runTickInternal(isSleepCycle = false, skipUI = false) {
                 });
             }
         });
-        if (window.updateTime) window.updateTime(0.4);
+        if (window.updateTime && !window.isInCombat) {
+            // Already handled in main tick loop for real-time
+        } else if (window.updateTime) {
+            window.updateTime(0.4 * tickMultiplier);
+        }
 
         // AMBIENT DIALOGUE (Arena Lobby)
-        if (window.currentCampaign === "1" && !window.isInArena) {
-            window.lobbyTPSpent = (window.lobbyTPSpent || 0) + 1;
+        if (window.currentCampaign === "1" && !window.isInArena && !window.isInCombat) {
+            window.lobbyTPSpent = (window.lobbyTPSpent || 0) + tickMultiplier;
             if (window.lobbyTPSpent > 250 && !window.hasTriggeredImpatience) {
                 window.triggerAmbientDialogue('arena_lobby_1');
                 window.hasTriggeredImpatience = true;
@@ -1327,7 +1396,6 @@ function autoMoveProcess(entity) {
         const leaderRemainingDist = window.distance(window.groupLeader.hex, window.groupLeader.destination || window.groupLeader.hex);
         const myRemainingDist = window.distance(entity.hex, entity.destination);
         
-        // If I am significantly closer to target than leader is, WAIT
         if (distToLeader > 5 && myRemainingDist < leaderRemainingDist) {
             entity.timePoints = threshold;
             finalizePlayerAction(entity, true);
@@ -1335,22 +1403,31 @@ function autoMoveProcess(entity) {
         }
     }
 
-    // First check if ANY path exists regardless of current TP
     const fullPath = window.findPath(entity.hex, entity.destination, undefined, moveEntity, true, window.leaderPath);
     
     if (fullPath && fullPath.length > 1) {
-        // Path exists. Can we take at least one step?
         const stepPath = window.findPath(entity.hex, fullPath[1], availableTP, moveEntity, false, window.leaderPath);
         if (stepPath && stepPath.length > 1) {
-            // Yes, move as far as possible
-            playerMoveProcess(entity, fullPath.slice(1));
+            const nextHex = fullPath[1];
+            const terrain = window.getTerrainAt(nextHex.q, nextHex.r);
+            let stepCost = 5 * (terrain.moveCostMult || 1);
+            if (moveEntity.skills['fastMovement']) stepCost -= 1;
+
+            entity.hex = nextHex;
+            if (entity.riding) entity.riding.hex = { q: nextHex.q, r: nextHex.r };
+            spendTP(entity, stepCost);
+            
+            if (entity.hex.q === entity.destination.q && entity.hex.r === entity.destination.r) {
+                entity.destination = null;
+            }
+            
+            const waitTime = window.isInCombat ? 20 : ((stepCost / moveEntity.timePointsPerTick) * 400);
+            setTimeout(() => autoMoveProcess(entity), waitTime);
         } else {
-            // Path exists but not enough TP for even 1 step: AUTO PASS
             entity.timePoints = threshold;
             finalizePlayerAction(entity, true);
         }
     } else {
-        // Totally blocked
         if (window.distance(entity.hex, entity.destination) > 0) {
             window.showMessage(`${entity.name} path to destination is blocked.`);
             entity.destination = null;
@@ -1998,6 +2075,16 @@ function handleClick(e){
                             else if (result !== false) {
                                 spendTP(player, spell.tpCost);
                                 actionHandled = true;
+                                
+                                // Out of combat: wait for duration before turn ends
+                                if (!window.isInCombat) {
+                                    const waitTime = (spell.tpCost / player.timePointsPerTick) * 400;
+                                    setTimeout(() => {
+                                        window.playerAction = null;
+                                        finalizePlayerAction(player, actionHandled);
+                                    }, waitTime);
+                                    return; // Exit early, setTimeout handles finalization
+                                }
                             }
                         }
                     });

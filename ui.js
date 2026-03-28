@@ -184,7 +184,7 @@ function showCharacter(){
   if (!window.player){info.innerText="No character yet.";return;}
   
   let txt=`<strong>${window.player.name}</strong> (${window.player.race} ${window.player.class} Lv${window.player.level})<br>
-HP: ${Math.ceil(window.player.hp)}/${window.player.maxHp} | MP: ${Math.floor(window.player.currentMana)}/${window.player.maxMana} | Dmg: ${window.player.baseDamage}
+HP: ${Math.ceil(window.player.hp)}/${window.player.maxHp} | MP: ${Math.floor(window.player.currentMana)}/${window.player.maxMana} ${window.isInCombat ? `| TP: ${Math.floor(window.player.timePoints)}` : ''} | Dmg: ${window.player.baseDamage}
 `;
   info.innerHTML=txt;
 }
@@ -1341,11 +1341,11 @@ function updateTurnIndicator() {
         }
         const infoDiv = document.createElement('div');
         infoDiv.classList.add('turn-indicator-info');
-        let infoHtml = `<p><strong>${entity.name.split(' ')[0]}</strong></p><p>HP: ${Math.ceil(entity.hp)}/${entity.maxHp} | TP: ${Math.floor(entity.timePoints)}</p>`;
+        let infoHtml = `<p><strong>${entity.name.split(' ')[0]}</strong></p><p>HP: ${Math.ceil(entity.hp)}/${entity.maxHp} ${window.isInCombat ? `| TP: ${Math.floor(entity.timePoints)}` : ''}</p>`;
         if (entity.maxMana > 0 || entity.currentMana > 0) infoHtml += `<p>MP: ${Math.floor(entity.currentMana)}/${entity.maxMana || 0}</p>`;
         if (entity.riding) {
             const m = entity.riding;
-            infoHtml += `<p style="border-top: 1px solid #555; margin-top: 2px; padding-top: 2px; font-size: 0.9em; color: #aaa;">${m.name}: ${Math.ceil(m.hp)}/${m.maxHp} HP | ${Math.floor(m.timePoints)} TP</p>`;
+            infoHtml += `<p style="border-top: 1px solid #555; margin-top: 2px; padding-top: 2px; font-size: 0.9em; color: #aaa;">${m.name}: ${Math.ceil(m.hp)}/${m.maxHp} HP ${window.isInCombat ? `| ${Math.floor(m.timePoints)} TP` : ''}</p>`;
         }
         infoDiv.innerHTML = infoHtml;
         itemDiv.appendChild(portraitDiv);
@@ -1369,7 +1369,7 @@ function showEntityDetails(entity) {
                 <p><strong>Class:</strong> ${entity.class || 'N/A'}</p>
                 <p><strong>HP:</strong> ${Math.ceil(entity.hp)} / ${entity.maxHp}</p>
                 ${entity.maxMana > 0 ? `<p><strong>Mana:</strong> ${Math.floor(entity.currentMana)} / ${entity.maxMana}</p>` : ''}
-                <p><strong>TP:</strong> ${Math.floor(entity.timePoints)}</p>
+                ${window.isInCombat ? `<p><strong>TP:</strong> ${Math.floor(entity.timePoints)}</p>` : ''}
                 <p><strong>Initiative:</strong> ${entity.initiative}</p>
             </div>
             <div>
