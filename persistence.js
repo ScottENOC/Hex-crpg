@@ -162,6 +162,7 @@ function loadGame(saveName = "rpg_save_game") {
 
         // Force immediate UI and lighting refresh
         if (window.updateTime) window.updateTime(0);
+        if (window.snapVisuals) window.snapVisuals();
         window.resizeCanvas();
         window.drawMap();
         window.renderEntities();

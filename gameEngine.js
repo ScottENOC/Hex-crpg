@@ -198,7 +198,9 @@ function playerMoveProcess(player, path) {
 
             if ((player.timePoints > threshold && !mountExhausted && path.length > 0) || (isSqueezing && path.length > 0)) {
                 // Out of combat: wait for duration. In combat: fast step.
-                const waitTime = window.isInCombat ? 20 : ((stepCost / moveEntity.timePointsPerTick) * 400);
+                // 3x Speed adjustment: divide waitTime by 3
+                const baseWait = (stepCost / moveEntity.timePointsPerTick) * 400;
+                const waitTime = window.isInCombat ? 20 : (baseWait / 3.0);
                 setTimeout(() => playerMoveProcess(player, path), waitTime);
             } else {
                 finalizePlayerAction(player, true);
@@ -359,6 +361,12 @@ function getHexesInRange(startHex, range) {
 }
 
 function updatePlayerUI() {
+    if (!window.isInCombat) {
+        window.clearHighlights();
+        window.drawMap();
+        window.renderEntities();
+        return;
+    }
     if (!window.currentTurnEntity || window.currentTurnEntity.side !== 'player') return;
 
     window.clearHighlights();
@@ -727,23 +735,19 @@ function renderEntities() {
       return az - bz;
   });
 
-          sorted.forEach(e => {
-          let x = e.visualX !== undefined ? e.visualX : 0;
-          let y = e.visualY !== undefined ? e.visualY : 0;
-          
-          if (e.visualX === undefined) {
-              const p = window.hexToPixel(e.hex.q, e.hex.r);
-              x = p.x; y = p.y;
-          }
+  sorted.forEach(e => {
+      const vQ = e.visualQ !== undefined ? e.visualQ : e.hex.q;
+      const vR = e.visualR !== undefined ? e.visualR : e.hex.r;
+      let {x, y} = window.hexToPixel(vQ, vR);
 
-          // Basic off-screen culling for drawing
-          if (x < -100 || y < -100 || x > window.mapCanvas.width + 100 || y > window.mapCanvas.height + 100) return;
+      // Basic off-screen culling for drawing
+      if (x < -100 || y < -100 || x > window.mapCanvas.width + 100 || y > window.mapCanvas.height + 100) return;
       
-          // TERRAIN OFFSET: Stand on top of pedestals
-          const t = window.getTerrainAt(e.hex.q, e.hex.r);
-          if (t.name === 'Pedestal') {
-              y -= (window.hexSize * 0.6) * z; // 30% of hex height (2*size is full height)
-          }
+      // TERRAIN OFFSET: Stand on top of pedestals
+      const t = window.getTerrainAt(e.hex.q, e.hex.r);
+      if (t.name === 'Pedestal') {
+          y -= (window.hexSize * 0.6) * z; // 30% of hex height (2*size is full height)
+      }
       
           if (e.isStealthed) window.mapCtx.globalAlpha = 0.5;
           const isSentientAlly = e.side === 'player' && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(e.name);
@@ -1133,63 +1137,94 @@ function tick() {
     }
 
     if (!inCombat) {
-        // REAL-TIME SYSTEM
-        // 1. Progress World Time (1s = 1s)
-        if (window.updateTime) window.updateTime(dt);
+        const timeScale = 5.0;
+        const scaledDt = dt * timeScale;
 
-        // 2. Process logical ticks (Mana/HP regen, Spell upkeep)
-        // Convert dt to game ticks (1 tick = 0.4s)
-        const fractionalTicks = dt / 0.4;
-        runTickInternal(false, true, fractionalTicks);
+        if (window.updateTime) window.updateTime(scaledDt);
+        runTickInternal(false, true, scaledDt / 0.4);
 
-        // 3. Smooth Visuals
-        updateVisualPositions(dt);
-        
+        // REAL-TIME LOGICAL MOVEMENT
+        window.entities.forEach(ent => {
+            if (ent.alive && ent.destination && !ent.rider) {
+                ent.moveCooldown = (ent.moveCooldown || 0) - scaledDt;
+                if (ent.moveCooldown <= 0) {
+                    processRealTimeStep(ent);
+                }
+            } else {
+                ent.moveCooldown = 0;
+            }
+        });
+
+        updateVisualPositions(scaledDt);
+        window.drawMap();
+        window.renderEntities();
         window.updateTurnIndicator();
     } else {
-        // TURN-BASED COMBAT SYSTEM
+        // TURN-BASED COMBAT SYSTEM (1x Speed)
         if (window.gamePhase === 'WAITING') {
-            runTickInternal(false, true); // 1 tick per interval in combat
+            runTickInternal(false, true); 
             window.updateTurnIndicator();
         } else {
             runTickInternal();
         }
         // Snap visuals in combat
-        updateVisualPositions(100); // High dt to snap
+        updateVisualPositions(100); 
+    }
+}
+
+function processRealTimeStep(entity) {
+    const moveEntity = entity.riding || entity;
+    const fullPath = window.findPath(entity.hex, entity.destination, undefined, moveEntity, true, window.leaderPath);
+    
+    if (fullPath && fullPath.length > 1) {
+        const nextHex = fullPath[1];
+        const terrain = window.getTerrainAt(nextHex.q, nextHex.r);
+        let stepCost = 5 * (terrain.moveCostMult || 1);
+        if (moveEntity.skills?.fastMovement) stepCost -= moveEntity.skills.fastMovement;
+
+        entity.hex = nextHex;
+        if (entity.riding) entity.riding.hex = { q: nextHex.q, r: nextHex.r };
+        spendTP(entity, stepCost);
+        
+        // Set cooldown for next step (seconds)
+        entity.moveCooldown = (stepCost / moveEntity.timePointsPerTick) * 0.4;
+
+        if (entity.hex.q === entity.destination.q && entity.hex.r === entity.destination.r) {
+            entity.destination = null;
+        }
+    } else {
+        entity.destination = null;
+        entity.moveCooldown = 0;
     }
 }
 
 function updateVisualPositions(dt) {
+    if (isNaN(dt) || dt <= 0) return;
     window.entities.forEach(e => {
-        // Multi-hex centering logic for target
         let targetQ = e.hex.q;
         let targetR = e.hex.r;
         
         if (e.extraHexes && e.extraHexes.length > 0) {
             const uniqueHexes = e.getAllHexes(); 
             let totalQ = 0; let totalR = 0;
-            uniqueHexes.forEach(h => {
-                totalQ += h.q; totalR += h.r;
-            });
+            uniqueHexes.forEach(h => { totalQ += h.q; totalR += h.r; });
             targetQ = totalQ / uniqueHexes.length;
             targetR = totalR / uniqueHexes.length;
         }
 
-        if (e.visualQ === undefined || isNaN(e.visualQ)) {
-            e.visualQ = targetQ;
-            e.visualR = targetR;
-        }
+        if (e.visualQ === undefined || isNaN(e.visualQ)) e.visualQ = targetQ;
+        if (e.visualR === undefined || isNaN(e.visualR)) e.visualR = targetR;
 
         const dq = targetQ - e.visualQ;
         const dr = targetR - e.visualR;
         const distHex = Math.sqrt(dq*dq + dr*dr);
 
-        if (distHex > 0.01) {
-            // Base move cost is 5 TP. At 1.0 rate, duration is 2s (5 * 0.4).
+        if (distHex > 0.001) {
             const moveCost = 5; 
             const duration = (moveCost / (e.timePointsPerTick || 1.0)) * 0.4;
-            // speed in hex-units per second
-            const speedHex = 1.0 / Math.max(0.1, duration); 
+            // Corrected speed: dt is already scaled by 5x in tick loop, 
+            // so we use the base duration (game-time) to move 1 hex.
+            const speedHex = 1.0 / Math.max(0.01, duration); 
             
             const moveDist = speedHex * dt;
             if (moveDist >= distHex) {
@@ -1209,7 +1244,9 @@ function runTickInternal(isSleepCycle = false, skipUI = false, tickMultiplier = 
     if (window.currentTurnEntity && !isSleepCycle) return;
     
     const readyEntities = window.entities.filter(e => e.timePoints >= 100 && e.alive && !e.rider);
-    if (readyEntities.length > 0 && !isSleepCycle) {
+    
+    // Only trigger turn-based logic if in combat
+    if (window.isInCombat && readyEntities.length > 0 && !isSleepCycle) {
         readyEntities.sort((a, b) => (b.timePoints !== a.timePoints) ? (b.timePoints - a.timePoints) : (Math.random() - 0.5));
         window.currentTurnEntity = readyEntities[0];
         window.currentTurnEntity.parriesRemaining = 3;
@@ -1217,6 +1254,7 @@ function runTickInternal(isSleepCycle = false, skipUI = false, tickMultiplier = 
     } else {
         window.entities.forEach(e => { 
             if (e.alive) {
+                // ... rest of the ticking logic ...
                 // PASSIVE AI: Don't gain TP if idle enemy
                 if (e.side === 'enemy' && e.aiState === 'idle') return;
 
@@ -1326,7 +1364,7 @@ function takeTurn(entity) {
     if (entity.side === 'player') {
         window.gamePhase = isSentientAlly ? 'PLAYER_TURN' : 'AI_TURN';
         if (isSentientAlly) {
-            window.showMessage(`It is ${entity.name}'s turn!`);
+            if (window.isInCombat) window.showMessage(`It is ${entity.name}'s turn!`);
             window.selectCharacterByName(entity.name);
             // RE-CALC HIGHLIGHTS IMMEDIATELY
             window.updateActionButtons(); 
@@ -1357,7 +1395,13 @@ function autoMoveProcess(entity) {
     let threshold = 80;
     if (entity.skills && entity.skills['quickRecovery']) threshold -= entity.skills['quickRecovery'];
 
-    if (Math.floor(entity.timePoints) <= threshold || !entity.alive || !entity.destination) {
+    // In combat, we must have TP. Out of combat, we just need a destination.
+    const hasTP = Math.floor(entity.timePoints) > threshold;
+    if (window.isInCombat && (!hasTP || !entity.alive || !entity.destination)) {
+        finalizePlayerAction(entity, true);
+        return;
+    }
+    if (!window.isInCombat && (!entity.alive || !entity.destination)) {
         finalizePlayerAction(entity, true);
         return;
     }
@@ -1370,12 +1414,9 @@ function autoMoveProcess(entity) {
         return d <= visionCap && window.hasLineOfSight(entity.hex, e.hex);
     });
     
-    const isSqueezing = window.entities.some(e => e.alive && e !== entity && e !== entity.riding && e.hex.q === entity.hex.q && e.hex.r === entity.hex.r);
-
-    if (seenEnemy && !isSqueezing) {
+    if (seenEnemy && !window.isInCombat) {
         window.showMessage(`Enemy ${seenEnemy.name} spotted! Engaging combat.`);
         entity.destination = null;
-        entity.timePoints = 0; // Stop turn and reset
         if (seenEnemy.aiState === 'idle') wakeUp(seenEnemy);
         finalizePlayerAction(entity, true);
         return;
@@ -1388,47 +1429,27 @@ function autoMoveProcess(entity) {
     }
 
     const moveEntity = entity.riding || entity;
-    const availableTP = moveEntity.timePoints - (entity.riding ? 80 : threshold);
-
-    // STAY TOGETHER: Slow down if too far ahead of leader
-    if (window.groupLeader && entity !== window.groupLeader) {
-        const distToLeader = window.distance(entity.hex, window.groupLeader.hex);
-        const leaderRemainingDist = window.distance(window.groupLeader.hex, window.groupLeader.destination || window.groupLeader.hex);
-        const myRemainingDist = window.distance(entity.hex, entity.destination);
-        
-        if (distToLeader > 5 && myRemainingDist < leaderRemainingDist) {
-            entity.timePoints = threshold;
-            finalizePlayerAction(entity, true);
-            return;
-        }
-    }
-
     const fullPath = window.findPath(entity.hex, entity.destination, undefined, moveEntity, true, window.leaderPath);
     
     if (fullPath && fullPath.length > 1) {
-        const stepPath = window.findPath(entity.hex, fullPath[1], availableTP, moveEntity, false, window.leaderPath);
-        if (stepPath && stepPath.length > 1) {
-            const nextHex = fullPath[1];
-            const terrain = window.getTerrainAt(nextHex.q, nextHex.r);
-            let stepCost = 5 * (terrain.moveCostMult || 1);
-            if (moveEntity.skills['fastMovement']) stepCost -= 1;
+        const nextHex = fullPath[1];
+        const terrain = window.getTerrainAt(nextHex.q, nextHex.r);
+        let stepCost = 5 * (terrain.moveCostMult || 1);
+        if (moveEntity.skills['fastMovement']) stepCost -= 1;
 
-            entity.hex = nextHex;
-            if (entity.riding) entity.riding.hex = { q: nextHex.q, r: nextHex.r };
-            spendTP(entity, stepCost);
-            
-            if (entity.hex.q === entity.destination.q && entity.hex.r === entity.destination.r) {
-                entity.destination = null;
-            }
-            
-            const waitTime = window.isInCombat ? 20 : ((stepCost / moveEntity.timePointsPerTick) * 400);
-            setTimeout(() => autoMoveProcess(entity), waitTime);
-        } else {
-            entity.timePoints = threshold;
-            finalizePlayerAction(entity, true);
+        entity.hex = nextHex;
+        if (entity.riding) entity.riding.hex = { q: nextHex.q, r: nextHex.r };
+        spendTP(entity, stepCost);
+        
+        if (entity.hex.q === entity.destination.q && entity.hex.r === entity.destination.r) {
+            entity.destination = null;
         }
-    } else {
-        if (window.distance(entity.hex, entity.destination) > 0) {
+
+        // delay based on speed (3x Speed: divide baseWait by 3)
+        const baseWait = (stepCost / moveEntity.timePointsPerTick) * 400;
+        const waitTime = window.isInCombat ? 20 : (baseWait / 3.0);
+        setTimeout(() => autoMoveProcess(entity), waitTime);
+        } else {        if (window.distance(entity.hex, entity.destination) > 0) {
             window.showMessage(`${entity.name} path to destination is blocked.`);
             entity.destination = null;
         }
@@ -1874,12 +1895,35 @@ function checkDisappearance(entity) {
     }
 }
 
+function snapVisuals() {
+    window.entities.forEach(e => {
+        let targetQ = e.hex.q;
+        let targetR = e.hex.r;
+        if (e.extraHexes && e.extraHexes.length > 0) {
+            const uniqueHexes = e.getAllHexes(); 
+            let totalQ = 0; let totalR = 0;
+            uniqueHexes.forEach(h => { totalQ += h.q; totalR += h.r; });
+            e.visualQ = totalQ / uniqueHexes.length;
+            e.visualR = totalR / uniqueHexes.length;
+        } else {
+            e.visualQ = targetQ;
+            e.visualR = targetR;
+        }
+    });
+}
+
 function handleClick(e){
     // ABORT if we were dragging the camera
     if (window.totalDragDistance > 10) return;
 
-    if (window.gamePhase !== 'PLAYER_TURN' || !window.currentTurnEntity) return;
-    const player = window.currentTurnEntity;
+    if (window.isInCombat) {
+        if (window.gamePhase !== 'PLAYER_TURN' || !window.currentTurnEntity) return;
+    }
+    
+    // Out-of-combat: default to main character
+    const player = window.currentTurnEntity || window.entities.find(ent => ent.side === 'player' && !ent.rider);
+    if (!player) return;
+
     const clickedHex = window.screenToHex({x:e.clientX, y:e.clientY});
     const target = getEntityAtHex(clickedHex.q, clickedHex.r);
     let actionHandled = false;
@@ -2141,13 +2185,19 @@ function handleClick(e){
             player.destination = clickedHex;
             window.showMessage(`${player.name} destination set to ${clickedHex.q},${clickedHex.r}`);
         }
-        // Force evaluation if it's currently their turn
-        if (window.gamePhase === 'PLAYER_TURN' && window.currentTurnEntity === player) {
+        
+        // Out-of-combat: Start moving immediately
+        if (!window.isInCombat) {
+            setTimeout(() => window.autoMoveProcess(player), 20);
+        } else if (window.gamePhase === 'PLAYER_TURN' && window.currentTurnEntity === player) {
+            // Force evaluation if it's currently their turn in combat
             setTimeout(() => window.autoMoveProcess(player), 20);
         }
     }
     finalizePlayerAction(player, actionHandled);
 }
+
+window.snapVisuals = snapVisuals;
 
 function tryAttack(attacker, target, isFeint = false, isOffhand = false, bonusDamage = 0) {
     if (target.side === 'neutral') {
@@ -2902,6 +2952,7 @@ function setupArenaLobby() {
     window.drawMap();
     window.renderEntities();
     window.showCharacter();
+    if (window.snapVisuals) window.snapVisuals();
     window.runTickInternal();
 }
 
@@ -3471,3 +3522,4 @@ window.tryAttack = tryAttack;
 window.resolveAttack = resolveAttack;
 window.takeTurn = takeTurn;
 window.startGameCore = startGameCore;
+window.renderEntities = renderEntities;

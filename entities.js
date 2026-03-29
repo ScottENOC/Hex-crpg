@@ -54,6 +54,10 @@ class Entity {
     this.mountSize = 0;
     this.riding = null; // Reference to mount entity
     this.rider = null;  // Reference to rider entity
+
+    // Visual Interpolation
+    this.visualQ = hex.q;
+    this.visualR = hex.r;
   }
 
   // Helper to get all hexes occupied by this entity
