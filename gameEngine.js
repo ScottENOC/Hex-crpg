@@ -1916,6 +1916,19 @@ function handleClick(e){
     // ABORT if we were dragging the camera
     if (window.totalDragDistance > 10) return;
 
+    // Fix: Ghost Click Prevention (Ignore clicks immediately after a modal closes)
+    if (window.lastModalClosedTime && (Date.now() - window.lastModalClosedTime < 100)) {
+        return;
+    }
+
+    // ABORT if any modal is visible
+    const modals = document.querySelectorAll(".modal");
+    for (let m of modals) {
+        if (m.style.display === "block") return;
+    }
+
+    if (window.isPausedForReaction) return;
+
     if (window.isInCombat) {
         if (window.gamePhase !== 'PLAYER_TURN' || !window.currentTurnEntity) return;
     }
@@ -2166,7 +2179,7 @@ function handleClick(e){
             return; 
         }
     } else {
-        // NO ACTION/MOVE ACTIVE or CLICKED OUTSIDE HIGHLIGHTS: Set Destination for Auto-Move
+        // NO ACTION/MOVE ACTIVE: Set Destination for Auto-Move
         if (window.groupMoveMode) {
             const leader = player;
             const moveEntity = leader.riding || leader;
@@ -2179,6 +2192,7 @@ function handleClick(e){
                 const dq = f.hex.q - leader.hex.q;
                 const dr = f.hex.r - leader.hex.r;
                 f.destination = { q: clickedHex.q + dq, r: clickedHex.r + dr };
+                // tick() will pick this up via moveCooldown logic
             });
             window.showMessage(`Group destination set.`);
         } else {
@@ -2186,11 +2200,8 @@ function handleClick(e){
             window.showMessage(`${player.name} destination set to ${clickedHex.q},${clickedHex.r}`);
         }
         
-        // Out-of-combat: Start moving immediately
-        if (!window.isInCombat) {
-            setTimeout(() => window.autoMoveProcess(player), 20);
-        } else if (window.gamePhase === 'PLAYER_TURN' && window.currentTurnEntity === player) {
-            // Force evaluation if it's currently their turn in combat
+        // Combat turn evaluation
+        if (window.isInCombat && window.gamePhase === 'PLAYER_TURN' && window.currentTurnEntity === player) {
             setTimeout(() => window.autoMoveProcess(player), 20);
         }
     }
@@ -2906,6 +2917,8 @@ function setupArenaLobby() {
         playerEntities.forEach((e, i) => {
             e.hex = { q: -8 + Math.floor(i/3), r: -2 + (i%3) };
             if (e.riding) e.riding.hex = { q: e.hex.q, r: e.hex.r };
+            e.destination = null; // Fix: Clear stale destinations
+            e.moveCooldown = 0;
             window.entities.push(e);
         });
     } else {
@@ -2915,6 +2928,8 @@ function setupArenaLobby() {
             const playerEntity = new window.Entity(p.name, "red", spawnHex, p.attributes.agility + 10);
             playerEntity.side = 'player';
             Object.assign(playerEntity, p);
+            playerEntity.destination = null;
+            playerEntity.moveCooldown = 0;
             window.entities.push(playerEntity);
         });
     }
@@ -3200,6 +3215,9 @@ function startArenaFight() {
     window.isPausedForReaction = false; 
     window.gamePhase = 'WAITING';
     
+    // Instant visual snap for teleport
+    if (window.snapVisuals) window.snapVisuals();
+
     if (window.runTickInternal) window.runTickInternal();
 }
 

@@ -261,29 +261,25 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Modal Close Logic
     window.addEventListener('click', (e) => {
-        if (e.target.classList.contains('close-btn')) {
-            const modal = e.target.closest(".modal");
+        const isCloseBtn = e.target.classList.contains('close-btn');
+        const isModalOverlay = e.target.classList.contains('modal');
+        
+        if (isCloseBtn || isModalOverlay) {
+            const modal = isCloseBtn ? e.target.closest(".modal") : e.target;
             if (modal) {
+                if (modal.id === "end-run-modal" && isModalOverlay) return;
+                
                 modal.style.display = "none";
                 window.isPausedForReaction = false;
+                window.lastModalClosedTime = Date.now(); // Track for ghost click prevention
+                
                 if (window.updateMusicState) window.updateMusicState();
-                // If this was the first character screen close, start the game
+                
                 if (modal.id === "character-screen-modal" && window.isInitialCharacterScreen) {
                     window.isInitialCharacterScreen = false;
                     console.log("Initial character screen closed - Starting Core");
                     window.startGameCore();
                 }
-            }
-        }
-        if (e.target.classList.contains('modal')) {
-            const modal = e.target;
-            if (modal.id === "end-run-modal") return; // Prevent closing the end-run-modal by clicking outside
-            modal.style.display = "none";
-            window.isPausedForReaction = false;
-            if (window.updateMusicState) window.updateMusicState();
-            if (modal.id === "character-screen-modal" && window.isInitialCharacterScreen) {
-                window.isInitialCharacterScreen = false;
-                window.startGameCore();
             }
         }
     });
