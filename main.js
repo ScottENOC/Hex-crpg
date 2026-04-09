@@ -453,9 +453,12 @@ window.cheatMaxSkills = function() {
     window.showCharacter();
     window.showCharacterScreen();
 };
-
 window.startGame = function() {
-  console.log("Starting Game Setup...");
+  console.log("Starting game...");
+
+  // Set timestamp to prevent the click that started the game from bleeding through to the map
+  window.lastModalClosedTime = Date.now();
+
   const race = document.getElementById("race-select").value;
   const cls = document.getElementById("class-select").value;
   const gender = document.getElementById("gender-select").value;

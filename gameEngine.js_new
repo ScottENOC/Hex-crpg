@@ -1,0 +1,301 @@
+// gameEngine.js (Consolidated and Cleaned)
+
+window.gamePhase = 'WAITING'; // WAITING, PLAYER_TURN, AI_TURN
+window.isPausedForReaction = false;
+window.isInCombat = false;
+
+let lastTimestamp = performance.now();
+
+function checkInCombat() {
+    return window.entities.some(e => e.alive && e.side === 'enemy' && e.aiState === 'combat');
+}
+
+function tick() {
+    if (window.isPausedForReaction) return;
+
+    const now = performance.now();
+    const dt = (now - lastTimestamp) / 1000; 
+    lastTimestamp = now;
+
+    const inCombat = checkInCombat();
+    window.isInCombat = inCombat; 
+
+    if (window.isResting || window.isSleeping) {
+        const sentientAllies = window.entities.filter(e => e.alive && e.side === 'player' && e.name !== 'Wolf' && e.name !== 'Horse');
+        for(let i=0; i<1000; i++) {
+            if (!window.isResting && !window.isSleeping) break;
+            const ready = window.entities.filter(e => e.timePoints >= 100 && e.alive && e.side === 'player' && !e.rider);
+            if (ready.length > 0) ready.forEach(e => spendTP(e, 1));
+            else { runTickInternal(true, true); if (window.updateTime) window.updateTime(0.4); }
+            if (window.isResting) {
+                if (sentientAllies.every(e => e.hp >= e.maxHp && (e.maxMana === 0 || e.currentMana >= e.maxMana))) {
+                    window.isResting = false; window.showMessage("Rest complete."); window.updateRestButton();
+                }
+            }
+            if (window.isSleeping) {
+                const mc = window.entities.find(e => e.name === window.party[0].name);
+                if (!mc || (mc.sleepRemainingSeconds <= 0)) {
+                    window.isSleeping = false; window.showMessage("Sleep complete."); window.updateSleepButton();
+                }
+            }
+            const enemySeen = window.entities.some(e => e.alive && e.side === 'enemy' && window.isVisibleToPlayer(e.hex));
+            if (enemySeen) { window.isResting = false; window.isSleeping = false; window.showMessage("Interrupted!"); }
+        }
+        window.updateTurnIndicator();
+        return; 
+    }
+
+    if (!inCombat) {
+        const timeScale = 5.0;
+        const scaledDt = dt * timeScale;
+
+        if (window.updateTime) window.updateTime(scaledDt);
+        runTickInternal(false, true, scaledDt / 0.4);
+
+        // REAL-TIME LOGICAL MOVEMENT
+        window.entities.forEach(ent => {
+            if (ent.alive && ent.destination && !ent.rider) {
+                if (ent.moveCooldown === undefined) ent.moveCooldown = 0;
+                
+                ent.moveCooldown -= scaledDt;
+                while (ent.moveCooldown <= 0 && ent.destination) {
+                    const overage = Math.abs(ent.moveCooldown);
+                    const moved = processRealTimeStep(ent, overage);
+                    if (!moved) {
+                        ent.moveCooldown = 0;
+                        break;
+                    }
+                }
+            } else {
+                ent.moveCooldown = 0;
+                ent.moveTotalTime = 0;
+            }
+
+            // REAL-TIME AI SCOUTING
+            if (ent.alive && ent.side === 'enemy' && ent.aiState !== 'combat') {
+                const targets = window.entities.filter(e => e.alive && e.side === 'player' && e.name !== 'Eagle');
+                const visibleTarget = targets.find(t => canSee(ent, t));
+                if (visibleTarget) { wakeUp(ent); window.showMessage(`${ent.name} spotted ${visibleTarget.name}!`); }
+            }
+        });
+
+        updateVisualPositions(scaledDt);
+        window.drawMap();
+        window.renderEntities();
+        window.updateTurnIndicator();
+    } else {
+        if (window.gamePhase === 'WAITING') {
+            runTickInternal(false, true); 
+            window.updateTurnIndicator();
+        } else {
+            runTickInternal();
+        }
+        updateVisualPositions(100); 
+    }
+}
+
+function processRealTimeStep(entity, overage = 0) {
+    const moveEntity = entity.riding || entity;
+    const fullPath = window.findPath(entity.hex, entity.destination, undefined, moveEntity, true, window.leaderPath);
+    
+    if (fullPath && fullPath.length > 1) {
+        const nextHex = fullPath[1];
+        const terrain = window.getTerrainAt(nextHex.q, nextHex.r);
+        
+        let stepCost = 5 * (terrain.moveCostMult || 1);
+        if (moveEntity.skills?.fastMovement) stepCost -= moveEntity.skills.fastMovement;
+
+        // CRITICAL: Set start to current HEX center for perfectly smooth glide
+        entity.startQ = entity.hex.q;
+        entity.startR = entity.hex.r;
+        entity.lastStepCost = stepCost;
+
+        entity.hex = nextHex;
+        if (entity.riding) entity.riding.hex = { q: nextHex.q, r: nextHex.r };
+        spendTP(entity, stepCost);
+        
+        const duration = (stepCost / moveEntity.timePointsPerTick) * 0.4;
+        entity.moveTotalTime = duration;
+        entity.moveCooldown = Math.max(0, duration - overage);
+        return true;
+    } else {
+        entity.destination = null;
+        entity.moveCooldown = 0;
+        entity.moveTotalTime = 0;
+        return false;
+    }
+}
+
+function updateVisualPositions(dt) {
+    if (isNaN(dt) || dt <= 0) return;
+    window.entities.forEach(e => {
+        let targetQ = e.hex.q;
+        let targetR = e.hex.r;
+        
+        if (e.extraHexes && e.extraHexes.length > 0) {
+            const uniqueHexes = e.getAllHexes(); 
+            let totalQ = 0; let totalR = 0;
+            uniqueHexes.forEach(h => { totalQ += h.q; totalR += h.r; });
+            targetQ = totalQ / uniqueHexes.length;
+            targetR = totalR / uniqueHexes.length;
+        }
+
+        if (e.visualQ === undefined || isNaN(e.visualQ)) e.visualQ = targetQ;
+        if (e.visualR === undefined || isNaN(e.visualR)) e.visualR = targetR;
+
+        const dq = targetQ - e.visualQ;
+        const dr = targetR - e.visualR;
+        const distHex = Math.sqrt(dq*dq + dr*dr);
+
+        if (distHex > 0.001) {
+            const moveEntity = e.riding || e;
+            const cost = e.lastStepCost || 5;
+            const duration = (cost / (moveEntity.timePointsPerTick || 1.0)) * 0.4;
+            const speedHex = 1.0 / Math.max(0.01, duration); 
+            
+            const moveDist = speedHex * dt;
+            if (moveDist >= distHex) {
+                e.visualQ = targetQ; e.visualR = targetR;
+            } else {
+                e.visualQ += (dq / distHex) * moveDist;
+                e.visualR += (dr / distHex) * moveDist;
+            }
+        } else {
+            e.visualQ = targetQ;
+            e.visualR = targetR;
+        }
+    });
+}
+
+function runTickInternal(isSleepCycle = false, skipUI = false, tickMultiplier = 1.0) {
+    if (window.currentTurnEntity && !isSleepCycle) return;
+    
+    const readyEntities = window.entities.filter(e => e.timePoints >= 100 && e.alive && !e.rider);
+    
+    if (window.isInCombat && readyEntities.length > 0 && !isSleepCycle) {
+        readyEntities.sort((a, b) => (b.timePoints !== a.timePoints) ? (b.timePoints - a.timePoints) : (Math.random() - 0.5));
+        window.currentTurnEntity = readyEntities[0];
+        window.currentTurnEntity.parriesRemaining = 3;
+        takeTurn(window.currentTurnEntity);
+    } else {
+        window.entities.forEach(e => { 
+            if (e.alive) {
+                if (e.side === 'enemy' && e.aiState === 'idle') return;
+
+                if (e.timePoints < 150) {
+                    let tpGained = e.timePointsPerTick * tickMultiplier;
+                    if (e.flyCheat) tpGained += 10 * tickMultiplier;
+                    e.timePoints += tpGained;
+
+                    if (e.poisonTicks > 0) {
+                        const poisonAmount = (e.poisonDamage || 2) * tickMultiplier;
+                        e.hp -= poisonAmount;
+                        e.poisonTicks -= tickMultiplier;
+                        if (e.hp <= 0 && e.alive) {
+                            e.alive = false;
+                            window.showMessage(`${e.name} died from poison!`);
+                            checkCombatEnd();
+                        }
+                    }
+
+                    let regen = 0.1;
+                    if (e.skills?.arcane_regen) regen += e.skills.arcane_regen * 0.1;
+                    if (e.skills?.divine_regen) regen += e.skills.divine_regen * 0.1;
+                    if (e.skills?.nature_regen) regen += e.skills.nature_regen * 0.1;
+                    
+                    e.currentMana = Math.min(e.maxMana || 0, (e.currentMana || 0) + (regen * tpGained));
+
+                    let hRegen = 0.1;
+                    if (e.skills?.health_regen) hRegen += e.skills.health_regen * 0.1;
+                    if (e.side === 'player') {
+                        e.hp = Math.min(e.maxHp, e.hp + (hRegen * tpGained));
+                    }
+
+                    const mySpells = (window.activeSpells || []).filter(s => s.casterName === e.name);
+                    if (mySpells.length > 0) {
+                        mySpells.sort((a, b) => b.coreManaCost - a.coreManaCost);
+                        for (const s of mySpells) {
+                            if (e.currentMana <= 0) {
+                                window.showMessage(`Spell ${s.name} on ${e.name} faded due to lack of mana.`);
+                                window.cancelSpell(s.spellInstanceId);
+                                break;
+                            }
+                            const cost = s.coreManaCost * 0.025 * tpGained;
+                            e.currentMana -= cost;
+                            if (e.currentMana <= 0) {
+                                e.currentMana = 0;
+                                window.showMessage(`Spell ${s.name} on ${e.name} faded due to lack of mana.`);
+                                window.cancelSpell(s.spellInstanceId);
+                                break; 
+                            }
+                        }
+                    }
+
+                    const totalUpkeep = mySpells.reduce((acc, s) => acc + (s.coreManaCost * 0.025), 0);
+                    if (window.isResting && e.side === 'player' && (totalUpkeep > regen * tpGained) && e.currentMana < e.maxMana * 0.1) {
+                        window.isResting = false;
+                        window.showMessage("Rest stopped: maintenance costs too high.");
+                        window.updateRestButton();
+                    }
+                }
+                
+                if (e.skills['regeneration'] && Math.random() < (0.2 * tickMultiplier)) {
+                    e.hp = Math.min(e.maxHp, e.hp + 1);
+                }
+
+                const silenceEffects = (window.activeSpells || []).filter(s => s.debuffType === 'silence_penalty' && s.targetEntityId === e.id);
+                silenceEffects.forEach(s => {
+                    const dmg = (s.magnitude || 6) * 0.05 * tpGained; 
+                    e.hp -= dmg;
+                    if (e.hp <= 0 && e.alive) { e.alive = false; window.showMessage(`${e.name} succumbed to divine silence!`); checkCombatEnd(); }
+                });
+            }
+        });
+        if (window.updateTime && !window.isInCombat) {
+            // Handled in main tick loop
+        } else if (window.updateTime) {
+            window.updateTime(0.4 * tickMultiplier);
+        }
+
+        if (window.currentCampaign === "1" && !window.isInArena && !window.isInCombat) {
+            window.lobbyTPSpent = (window.lobbyTPSpent || 0) + tickMultiplier;
+            if (window.lobbyTPSpent > 250 && !window.hasTriggeredImpatience) {
+                window.triggerAmbientDialogue('arena_lobby_1');
+                window.hasTriggeredImpatience = true;
+            }
+        }
+    }
+    if (!skipUI) window.updateTurnIndicator();
+}
+
+function takeTurn(entity) {
+    entity.reactionBlocked = false; 
+    entity.parriesRemaining = 3;
+    entity.sidestepsRemaining = 3;
+    let threshold = 80;
+    if (entity.skills && entity.skills['quickRecovery']) threshold -= entity.skills['quickRecovery'];
+
+    const isSentientAlly = entity.side === 'player' && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(entity.name);
+    if (entity.side === 'player') {
+        window.gamePhase = isSentientAlly ? 'PLAYER_TURN' : 'AI_TURN';
+        if (isSentientAlly) {
+            if (window.isInCombat) window.showMessage(`It is ${entity.name}'s turn!`);
+            window.selectCharacterByName(entity.name);
+            window.updateActionButtons(); 
+        }
+
+        if (entity.destination) {
+            autoMoveProcess(entity);
+            return;
+        }
+
+        if (!isSentientAlly) aiProcess(entity);
+    } else {
+        window.gamePhase = 'AI_TURN';
+        aiProcess(entity);
+    }
+    window.updateTurnIndicator();
+}
+
+// ... rest of gameEngine.js functions (findPath, handleClick, tryCastSpell, resolveAttack, etc.)
+// Note: I will only replace the core logic sections to keep the file consistent.

@@ -1146,12 +1146,28 @@ function tick() {
         // REAL-TIME LOGICAL MOVEMENT
         window.entities.forEach(ent => {
             if (ent.alive && ent.destination && !ent.rider) {
-                ent.moveCooldown = (ent.moveCooldown || 0) - scaledDt;
-                if (ent.moveCooldown <= 0) {
-                    processRealTimeStep(ent);
+                if (ent.moveCooldown === undefined) ent.moveCooldown = 0;
+
+                ent.moveCooldown -= scaledDt;
+                // Loop to handle overage that might cover multiple hexes
+                while (ent.moveCooldown <= 0 && ent.destination) {
+                    const overage = Math.abs(ent.moveCooldown);
+                    const moved = processRealTimeStep(ent, overage);
+                    if (!moved) {
+                        ent.moveCooldown = 0;
+                        break;
+                    }
                 }
             } else {
                 ent.moveCooldown = 0;
+                ent.moveTotalTime = 0;
+            }
+
+            // REAL-TIME AI SCOUTING
+            if (ent.alive && ent.side === 'enemy' && ent.aiState !== 'combat') {
+                const targets = window.entities.filter(e => e.alive && e.side === 'player' && e.name !== 'Eagle');
+                const visibleTarget = targets.find(t => canSee(ent, t));
+                if (visibleTarget) { wakeUp(ent); window.showMessage(`${ent.name} spotted ${visibleTarget.name}!`); }
             }
         });
 
@@ -1172,32 +1188,6 @@ function tick() {
     }
 }
 
-function processRealTimeStep(entity) {
-    const moveEntity = entity.riding || entity;
-    const fullPath = window.findPath(entity.hex, entity.destination, undefined, moveEntity, true, window.leaderPath);
-    
-    if (fullPath && fullPath.length > 1) {
-        const nextHex = fullPath[1];
-        const terrain = window.getTerrainAt(nextHex.q, nextHex.r);
-        let stepCost = 5 * (terrain.moveCostMult || 1);
-        if (moveEntity.skills?.fastMovement) stepCost -= moveEntity.skills.fastMovement;
-
-        entity.hex = nextHex;
-        if (entity.riding) entity.riding.hex = { q: nextHex.q, r: nextHex.r };
-        spendTP(entity, stepCost);
-        
-        // Set cooldown for next step (seconds)
-        entity.moveCooldown = (stepCost / moveEntity.timePointsPerTick) * 0.4;
-
-        if (entity.hex.q === entity.destination.q && entity.hex.r === entity.destination.r) {
-            entity.destination = null;
-        }
-    } else {
-        entity.destination = null;
-        entity.moveCooldown = 0;
-    }
-}
-
 function updateVisualPositions(dt) {
     if (isNaN(dt) || dt <= 0) return;
     window.entities.forEach(e => {
@@ -1212,32 +1202,55 @@ function updateVisualPositions(dt) {
             targetR = totalR / uniqueHexes.length;
         }
 
-        if (e.visualQ === undefined || isNaN(e.visualQ)) e.visualQ = targetQ;
-        if (e.visualR === undefined || isNaN(e.visualR)) e.visualR = targetR;
-
-        const dq = targetQ - e.visualQ;
-        const dr = targetR - e.visualR;
-        const distHex = Math.sqrt(dq*dq + dr*dr);
-
-        if (distHex > 0.001) {
-            const moveCost = 5; 
-            const duration = (moveCost / (e.timePointsPerTick || 1.0)) * 0.4;
-            // Corrected speed: dt is already scaled by 5x in tick loop, 
-            // so we use the base duration (game-time) to move 1 hex.
-            const speedHex = 1.0 / Math.max(0.01, duration); 
-            
-            const moveDist = speedHex * dt;
-            if (moveDist >= distHex) {
-                e.visualQ = targetQ; e.visualR = targetR;
-            } else {
-                e.visualQ += (dq / distHex) * moveDist;
-                e.visualR += (dr / distHex) * moveDist;
-            }
-        } else {
+        // If no movement is happening, stay at target
+        if (e.moveCooldown === undefined || e.moveCooldown <= 0 || !e.moveTotalTime) {
             e.visualQ = targetQ;
             e.visualR = targetR;
+            return;
         }
+
+        // Percentage-based LERP
+        const elapsed = e.moveTotalTime - e.moveCooldown;
+        const t = Math.min(1.0, Math.max(0, elapsed / e.moveTotalTime));
+
+        // Use cached start position for perfect continuity
+        const sQ = e.startQ !== undefined ? e.startQ : targetQ;
+        const sR = e.startR !== undefined ? e.startR : targetR;
+
+        e.visualQ = sQ + (targetQ - sQ) * t;
+        e.visualR = sR + (targetR - sR) * t;
     });
+}
+
+function processRealTimeStep(entity, overage = 0) {
+    const moveEntity = entity.riding || entity;
+    const fullPath = window.findPath(entity.hex, entity.destination, undefined, moveEntity, true, window.leaderPath);
+    
+    if (fullPath && fullPath.length > 1) {
+        const nextHex = fullPath[1];
+        const terrain = window.getTerrainAt(nextHex.q, nextHex.r);
+        
+        let stepCost = 5 * (terrain.moveCostMult || 1);
+        if (moveEntity.skills?.fastMovement) stepCost -= moveEntity.skills.fastMovement;
+
+        // Set start point to current hex center for lerp
+        entity.startQ = entity.hex.q;
+        entity.startR = entity.hex.r;
+
+        entity.hex = nextHex;
+        if (entity.riding) entity.riding.hex = { q: nextHex.q, r: nextHex.r };
+        spendTP(entity, stepCost);
+        
+        const duration = (stepCost / moveEntity.timePointsPerTick) * 0.4;
+        entity.moveTotalTime = duration;
+        entity.moveCooldown = Math.max(0, duration - overage);
+        return true;
+    } else {
+        entity.destination = null;
+        entity.moveCooldown = 0;
+        entity.moveTotalTime = 0;
+        return false;
+    }
 }
 
 function runTickInternal(isSleepCycle = false, skipUI = false, tickMultiplier = 1.0) {
@@ -1837,10 +1850,14 @@ function wakeUp(entity) {
 
     entity.aiState = 'combat';
     
-    // Reset players initiative if this is the start of combat
-    if (!window.entities.some(e => e.side !== 'player' && e.aiState === 'combat' && e !== entity)) {
+    // Reset players initiative and cancel movement if this is the start of combat
+    if (firstAlert) {
         window.entities.forEach(e => {
-            if (e.side === 'player') e.timePoints = 0;
+            if (e.side === 'player') {
+                e.timePoints = 0;
+                e.destination = null;
+                e.moveCooldown = 0;
+            }
         });
     }
 
@@ -1917,7 +1934,7 @@ function handleClick(e){
     if (window.totalDragDistance > 10) return;
 
     // Fix: Ghost Click Prevention (Ignore clicks immediately after a modal closes)
-    if (window.lastModalClosedTime && (Date.now() - window.lastModalClosedTime < 100)) {
+    if (window.lastModalClosedTime && (Date.now() - window.lastModalClosedTime < 300)) {
         return;
     }
 

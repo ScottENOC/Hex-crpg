@@ -58,6 +58,9 @@ class Entity {
     // Visual Interpolation
     this.visualQ = hex.q;
     this.visualR = hex.r;
+    this.startQ = hex.q;
+    this.startR = hex.r;
+    this.moveTotalTime = 0;
   }
 
   // Helper to get all hexes occupied by this entity

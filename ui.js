@@ -1490,6 +1490,7 @@ function showDialogue(npc, message, options = []) {
         btn.onclick = () => {
             modal.style.display = "none";
             window.isPausedForReaction = false;
+            window.lastModalClosedTime = Date.now(); // Ghost click prevention
             opt.action();
         };
         optDiv.appendChild(btn);
@@ -1633,20 +1634,24 @@ function getRunMaxFriendlySkills() {
     const maxSkills = {};
     const friendlies = window.entities.filter(e => e.side === 'player');
     friendlies.forEach(f => {
+        const treeTotals = {};
+        // 1. Sum all ranks per tree
         for (const skillKey in window.skills) {
             const tree = window.skills[skillKey].tree;
             const ranks = f.skills[skillKey] || 0;
-            maxSkills[tree] = Math.max(maxSkills[tree] || 0, ranks);
+            treeTotals[tree] = (treeTotals[tree] || 0) + ranks;
         }
-        // Add unspent points
+        // 2. Add unspent points
         if (f.attributes) {
             for (const tree in f.attributes) {
-                if (tree === 'wildcard') continue;
-                maxSkills[tree] = Math.max(maxSkills[tree] || 0, f.attributes[tree]);
+                // 'wildcard' is its own type for permanent bonuses
+                treeTotals[tree] = (treeTotals[tree] || 0) + (f.attributes[tree] || 0);
             }
-            // Count wildcards as general bonus to their best tree?
-            // "Racial skill trees should be counted in this as normal, including counting how many wildcard skill points you have"
-            maxSkills['wildcard'] = Math.max(maxSkills['wildcard'] || 0, f.attributes['wildcard']);
+        }
+        
+        // 3. Update global max
+        for (const tree in treeTotals) {
+            maxSkills[tree] = Math.max(maxSkills[tree] || 0, treeTotals[tree]);
         }
     });
     return maxSkills;
@@ -1675,9 +1680,21 @@ function endArenaRun() {
     // 2. Generate Rewards
     const maxFriendly = getRunMaxFriendlySkills();
     const maxEnemy = window.runMaxEnemySkills || {};
+    const currentBonuses = window.roguelikeData.permanentSkillBonuses || {};
     
-    const validFriendlyTrees = Object.keys(maxFriendly).filter(t => maxFriendly[t] > (window.roguelikeData.permanentSkillBonuses[t] || 0));
-    const validEnemyTrees = Object.keys(maxEnemy).filter(t => maxEnemy[t] > (window.roguelikeData.permanentSkillBonuses[t] || 0));
+    // Rule: can only earn more if (current bonus) < (base points). 
+    // Base points = total - current bonus. 
+    // So: bonus < (total - bonus)  =>  2 * bonus < total
+    const validFriendlyTrees = Object.keys(maxFriendly).filter(t => {
+        const total = maxFriendly[t] || 0;
+        const bonus = currentBonuses[t] || 0;
+        return (2 * bonus) < total;
+    });
+    const validEnemyTrees = Object.keys(maxEnemy).filter(t => {
+        const total = maxEnemy[t] || 0;
+        const bonus = currentBonuses[t] || 0;
+        return (2 * bonus) < total;
+    });
 
     const choices = [];
     if (validFriendlyTrees.length > 0) {
