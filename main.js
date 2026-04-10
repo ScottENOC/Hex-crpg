@@ -102,7 +102,13 @@ document.addEventListener("DOMContentLoaded", () => {
         const btnId = e.target.id;
         if (btnId) console.log("Window clicked element ID:", btnId);
 
-        if (btnId === "character-screen-btn") {
+        if (btnId === "create-room-btn") {
+            window.createRoom();
+        } else if (btnId === "join-room-btn") {
+            window.joinRoom();
+        } else if (btnId === "leave-room-btn") {
+            window.leaveRoom();
+        } else if (btnId === "character-screen-btn") {
             const modal = document.getElementById("character-screen-modal");
             if (modal) {
                 modal.style.display = "block";
@@ -173,6 +179,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 modal.style.display = "block";
                 if (window.updateMusicState) window.updateMusicState();
             }
+        } else if (btnId === "host-game-btn") {
+            if (window.createRoom) window.createRoom();
         } else if (btnId === "confirm-hire-btn") {
             const mainChar = window.party[0];
             if (mainChar.gold < 100) {

@@ -1,4 +1,3 @@
-// name.js
 const names = {
     human: {
         male: ["Alden", "Bertram", "Cedric", "Doran", "Edmund", "Felix", "Gareth", "Harold", "Ivan", "Julian", "Kaelen", "Leopold", "Merrick", "Nathaniel", "Osmond", "Percival", "Quentin", "Roderick", "Silas", "Tobias"],
@@ -18,3 +17,5 @@ window.getRandomName = function(race, gender) {
     const list = names[race][gender];
     return list[Math.floor(Math.random() * list.length)];
 };
+
+window.generateName = window.getRandomName;

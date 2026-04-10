@@ -169,6 +169,11 @@ function loadGame(saveName = "rpg_save_game") {
         window.showCharacter();
         window.updateActionButtons();
         window.updateTurnIndicator();
+
+        // MULTIPLAYER SYNC: Tell all guests to update their worlds
+        if (window.broadcastFullState) {
+            window.broadcastFullState();
+        }
         
         document.getElementById("load-game-modal").style.display = "none";
         window.showMessage(`Game loaded successfully!`);

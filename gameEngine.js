@@ -1228,6 +1228,15 @@ function processRealTimeStep(entity, overage = 0) {
     
     if (fullPath && fullPath.length > 1) {
         const nextHex = fullPath[1];
+        
+        // Prevent walking onto occupied hexes (collision)
+        if (window.getEntityAtHex(nextHex.q, nextHex.r)) {
+            entity.destination = null;
+            entity.moveCooldown = 0;
+            entity.moveTotalTime = 0;
+            return false;
+        }
+
         const terrain = window.getTerrainAt(nextHex.q, nextHex.r);
         
         let stepCost = 5 * (terrain.moveCostMult || 1);
@@ -1446,6 +1455,15 @@ function autoMoveProcess(entity) {
     
     if (fullPath && fullPath.length > 1) {
         const nextHex = fullPath[1];
+        
+        // Prevent walking onto occupied hexes (collision)
+        if (window.getEntityAtHex(nextHex.q, nextHex.r)) {
+            entity.destination = null;
+            entity.moveCooldown = 0;
+            entity.moveTotalTime = 0;
+            return false;
+        }
+
         const terrain = window.getTerrainAt(nextHex.q, nextHex.r);
         let stepCost = 5 * (terrain.moveCostMult || 1);
         if (moveEntity.skills['fastMovement']) stepCost -= 1;
@@ -2215,6 +2233,14 @@ function handleClick(e){
         } else {
             player.destination = clickedHex;
             window.showMessage(`${player.name} destination set to ${clickedHex.q},${clickedHex.r}`);
+            
+            // MULTIPLAYER SYNC: Send destination to server
+            if (window.multiplayer && window.multiplayer.roomCode) {
+                window.multiplayer.socket.emit('move', { 
+                    roomCode: window.multiplayer.roomCode, 
+                    destination: clickedHex 
+                });
+            }
         }
         
         // Combat turn evaluation
