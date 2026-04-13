@@ -508,7 +508,7 @@ function initHexMap() {
         isDragging = true;
         lastMouseX = e.clientX;
         lastMouseY = e.clientY;
-        totalDragDistance = 0; // Reset
+        window.totalDragDistance = 0; // Reset
     });
 
     window.addEventListener('mousemove', (e) => {
@@ -517,7 +517,7 @@ function initHexMap() {
         const dy = e.clientY - lastMouseY;
         window.cameraX += dx;
         window.cameraY += dy;
-        totalDragDistance += Math.abs(dx) + Math.abs(dy); // Accumulate distance
+        window.totalDragDistance += Math.abs(dx) + Math.abs(dy); // Accumulate distance
         lastMouseX = e.clientX;
         lastMouseY = e.clientY;
         drawMap();

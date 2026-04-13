@@ -67,16 +67,23 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('broadcastState', ({ roomCode, worldSeconds, mapItems, entities }) => {
+    socket.on('broadcastState', ({ roomCode, worldSeconds, mapItems, entities, overrideTerrain, tileObjects, isInArena }) => {
         const room = rooms[roomCode];
         if (room) {
             room.gameState.worldSeconds = worldSeconds;
+            room.gameState.isInArena = isInArena;
+            room.gameState.overrideTerrain = overrideTerrain;
+            room.gameState.tileObjects = tileObjects;
+            
             io.to(roomCode).emit('syncFullState', { 
                 players: room.players, 
                 gameState: room.gameState,
                 entities,
                 mapItems,
-                worldSeconds
+                worldSeconds,
+                overrideTerrain,
+                tileObjects,
+                isInArena
             });
         }
     });
@@ -94,11 +101,11 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('move', ({ roomCode, destination }) => {
+    socket.on('move', ({ roomCode, hex, destination }) => {
         const room = rooms[roomCode];
         if (room && room.players[socket.id]) {
-            room.players[socket.id].hex = destination;
-            socket.to(roomCode).emit('playerMoved', { id: socket.id, destination });
+            if (hex) room.players[socket.id].hex = hex;
+            socket.to(roomCode).emit('playerMoved', { id: socket.id, hex, destination });
         }
     });
 

@@ -490,8 +490,10 @@ function updateActionButtons() {
     
     buttonsDiv.innerHTML = '';
 
-    if (window.currentTurnEntity && window.currentTurnEntity.side === "player") {
-        const player = window.currentTurnEntity;
+    const inCombat = window.isInCombat;
+    const player = inCombat ? window.currentTurnEntity : (window.entities ? window.entities.find(ent => ent.side === 'player' && !ent.rider) : null);
+    
+    if (player && player.side === "player") {
         const charData = window.player; 
         
         const isSentientAlly = player.side === 'player' && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(player.name);
@@ -531,17 +533,19 @@ function updateActionButtons() {
             buttonsDiv.appendChild(lootBtn);
         }
 
-        const waitBtn = document.createElement('button');
-        waitBtn.id = 'wait-action-btn';
-        waitBtn.innerText = "Wait (1 TP)";
-        waitBtn.style.backgroundColor = "#9e9e9e";
-        const waitAction = () => {
-            window.spendTP(player, 1);
-            window.finalizePlayerAction(player, 'wait');
-        };
-        waitBtn.onclick = waitAction;
-        waitBtn.ontouchstart = (e) => { e.preventDefault(); waitAction(); };
-        buttonsDiv.appendChild(waitBtn);
+        if (inCombat) {
+            const waitBtn = document.createElement('button');
+            waitBtn.id = 'wait-action-btn';
+            waitBtn.innerText = "Wait (1 TP)";
+            waitBtn.style.backgroundColor = "#9e9e9e";
+            const waitAction = () => {
+                window.spendTP(player, 1);
+                window.finalizePlayerAction(player, 'wait');
+            };
+            waitBtn.onclick = waitAction;
+            waitBtn.ontouchstart = (e) => { e.preventDefault(); waitAction(); };
+            buttonsDiv.appendChild(waitBtn);
+        }
 
         // STEALTH BUTTON
         if (!player.isStealthed) {
@@ -553,7 +557,8 @@ function updateActionButtons() {
                 if (window.tryStealth(player)) {
                     window.spendTP(player, 5);
                 }
-                window.finalizePlayerAction(player, true);
+                if (inCombat) window.finalizePlayerAction(player, true);
+                else updateActionButtons();
             };
             stealthBtn.onclick = stealthAction;
             stealthBtn.ontouchstart = (e) => { if(!stealthBtn.disabled) { e.preventDefault(); stealthAction(); } };
@@ -564,7 +569,8 @@ function updateActionButtons() {
             breakBtn.style.backgroundColor = "#ff9800";
             const breakAction = () => {
                 window.breakStealth(player);
-                window.finalizePlayerAction(player, true);
+                if (inCombat) window.finalizePlayerAction(player, true);
+                else updateActionButtons();
             };
             breakBtn.onclick = breakAction;
             breakBtn.ontouchstart = (e) => { e.preventDefault(); breakAction(); };

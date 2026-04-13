@@ -43,6 +43,10 @@ socket.on('roomJoined', ({ roomCode, players, gameState, savedCharacters }) => {
     window.multiplayer.availableSavedCharacters = savedCharacters || [];
 
     if (gameState.worldSeconds) window.worldSeconds = gameState.worldSeconds;
+    if (gameState.overrideTerrain) window.overrideTerrain = gameState.overrideTerrain;
+    if (gameState.tileObjects) window.tileObjects = gameState.tileObjects;
+    if (gameState.isInArena !== undefined) window.isInArena = gameState.isInArena;
+    
     updateMultiplayerUI();
 
     // AUTOMATIC JUMP-IN: If game already started AND no characters to claim, launch into world
@@ -71,12 +75,16 @@ socket.on('gameStarted', ({ players }) => {
     window.initializeMultiplayerGame(players);
 });
 
-socket.on('syncFullState', ({ players, gameState, entities, mapItems, worldSeconds }) => {
+socket.on('syncFullState', ({ players, gameState, entities, mapItems, worldSeconds, overrideTerrain, tileObjects, isInArena }) => {
     console.log("Full State Sync Received...");
     window.multiplayer.players = players;
     window.worldSeconds = worldSeconds;
     window.mapItems = mapItems;
     
+    if (overrideTerrain) window.overrideTerrain = overrideTerrain;
+    if (tileObjects) window.tileObjects = tileObjects;
+    if (isInArena !== undefined) window.isInArena = isInArena;
+
     window.entities = [];
     entities.forEach(data => {
         let ent;
@@ -84,6 +92,16 @@ socket.on('syncFullState', ({ players, gameState, entities, mapItems, worldSecon
         else ent = new window.Entity(data.name, data.color, data.hex, data.initiative);
         Object.assign(ent, data);
         window.entities.push(ent);
+        
+        // Re-link local player reference
+        if (ent.networkId === socket.id) {
+            window.player = ent;
+            if (window.party) {
+                const pIdx = window.party.findIndex(p => p.name === ent.name);
+                if (pIdx > -1) window.party[pIdx] = ent;
+                else window.party.push(ent);
+            }
+        }
     });
 
     if (document.getElementById('gameContainer').style.display !== 'flex') {
@@ -95,6 +113,7 @@ socket.on('syncFullState', ({ players, gameState, entities, mapItems, worldSecon
     } else {
         window.drawMap();
         window.renderEntities();
+        if (window.player && window.centerCameraOn) window.centerCameraOn(window.player.hex);
     }
 });
 
@@ -112,10 +131,11 @@ socket.on('playerLeft', (id) => {
     updateMultiplayerUI();
 });
 
-socket.on('playerMoved', ({ id, destination }) => {
+socket.on('playerMoved', ({ id, hex, destination }) => {
     const entity = window.entities.find(e => e.networkId === id);
     if (entity) {
-        entity.destination = destination;
+        if (hex) entity.hex = { ...hex };
+        if (destination !== undefined) entity.destination = destination;
     }
 });
 
@@ -346,6 +366,9 @@ window.broadcastFullState = () => {
         roomCode: window.multiplayer.roomCode,
         worldSeconds: window.worldSeconds,
         mapItems: window.mapItems,
+        overrideTerrain: window.overrideTerrain,
+        tileObjects: window.tileObjects,
+        isInArena: window.isInArena,
         entities: window.entities.map(e => {
             const data = { ...e };
             delete data.visualQ; delete data.visualR; 

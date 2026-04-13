@@ -1145,6 +1145,20 @@ function tick() {
 
         // REAL-TIME LOGICAL MOVEMENT
         window.entities.forEach(ent => {
+            if (ent.castCooldown > 0) {
+                ent.castCooldown -= scaledDt;
+                if (ent.castCooldown <= 0) {
+                    ent.castCooldown = 0;
+                    if (ent.pendingCast) {
+                        const { spell, target, hex } = ent.pendingCast;
+                        // Execute the spell
+                        window.tryCastSpell(ent, spell, target, hex, true); // true = bypass cooldown
+                        ent.pendingCast = null;
+                    }
+                }
+                return; // Cannot move while casting
+            }
+
             if (ent.alive && ent.destination && !ent.rider) {
                 if (ent.moveCooldown === undefined) ent.moveCooldown = 0;
 
@@ -1249,6 +1263,15 @@ function processRealTimeStep(entity, overage = 0) {
         entity.hex = nextHex;
         if (entity.riding) entity.riding.hex = { q: nextHex.q, r: nextHex.r };
         spendTP(entity, stepCost);
+
+        // MULTIPLAYER SYNC: Broadcast each step
+        if (window.multiplayer && window.multiplayer.roomCode && entity.networkId === window.multiplayer.socket.id) {
+            window.multiplayer.socket.emit('move', {
+                roomCode: window.multiplayer.roomCode,
+                hex: entity.hex,
+                destination: entity.destination
+            });
+        }
         
         const duration = (stepCost / moveEntity.timePointsPerTick) * 0.4;
         entity.moveTotalTime = duration;
@@ -1471,6 +1494,15 @@ function autoMoveProcess(entity) {
         entity.hex = nextHex;
         if (entity.riding) entity.riding.hex = { q: nextHex.q, r: nextHex.r };
         spendTP(entity, stepCost);
+
+        // MULTIPLAYER SYNC: Broadcast each step
+        if (window.multiplayer && window.multiplayer.roomCode && entity.networkId === window.multiplayer.socket.id) {
+            window.multiplayer.socket.emit('move', {
+                roomCode: window.multiplayer.roomCode,
+                hex: entity.hex,
+                destination: entity.destination
+            });
+        }
         
         if (entity.hex.q === entity.destination.q && entity.hex.r === entity.destination.r) {
             entity.destination = null;
@@ -2238,6 +2270,7 @@ function handleClick(e){
             if (window.multiplayer && window.multiplayer.roomCode) {
                 window.multiplayer.socket.emit('move', { 
                     roomCode: window.multiplayer.roomCode, 
+                    hex: player.hex,
                     destination: clickedHex 
                 });
             }
@@ -2921,6 +2954,15 @@ function setupArenaLobby() {
     window.gamePhase = 'WAITING';
     if (window.stopAllMusic) window.stopAllMusic(0.8);
     
+    // If we are already in the arena (multiplayer sync), don't reset the map
+    if (window.isInArena) {
+        window.drawMap();
+        window.renderEntities();
+        window.showCharacter();
+        if (window.snapVisuals) window.snapVisuals();
+        return;
+    }
+
     // Keep existing player entities (horses, summons) instead of just party data
     const playerEntities = window.entities.filter(e => e.side === 'player' && e.alive);
     
@@ -3262,6 +3304,9 @@ function startArenaFight() {
     if (window.snapVisuals) window.snapVisuals();
 
     if (window.runTickInternal) window.runTickInternal();
+
+    // Multiplayer: Sync the new arena state
+    if (window.broadcastFullState) window.broadcastFullState();
 }
 
 function talkToNPC(npc) {
@@ -3475,7 +3520,18 @@ function resolveSpell(caster, spell, target, clickedHex) {
     return actionHandled;
 }
 
-function tryCastSpell(caster, spell, target, clickedHex) {
+function tryCastSpell(caster, spell, target, clickedHex, bypassCooldown = false) {
+    // REAL-TIME CASTING DELAY
+    if (!window.isInCombat && !bypassCooldown) {
+        // Calculate duration based on TP cost (same ratio as movement)
+        const duration = (spell.tpCost / caster.timePointsPerTick) * 0.4;
+        caster.castCooldown = duration;
+        caster.pendingCast = { spell, target, hex: clickedHex };
+        caster.destination = null; // Cancel movement
+        window.showMessage(`${caster.name} starts casting ${spell.name}...`);
+        return true; 
+    }
+
     // DIVINE SILENCE REMOVAL
     const silence = (window.activeSpells || []).find(s => s.debuffType === 'silence_penalty' && s.targetEntityId === caster?.id);
     if (silence) {
