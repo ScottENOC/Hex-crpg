@@ -491,12 +491,21 @@ function updateActionButtons() {
     buttonsDiv.innerHTML = '';
 
     const inCombat = window.isInCombat;
-    const player = inCombat ? window.currentTurnEntity : (window.entities ? window.entities.find(ent => ent.side === 'player' && !ent.rider) : null);
+    let player = inCombat ? window.currentTurnEntity : window.player;
+    
+    // Fallback if window.player is missing for some reason
+    if (!player && !inCombat && window.entities) {
+        player = window.entities.find(ent => ent.side === 'player' && !ent.rider);
+    }
     
     if (player && player.side === "player") {
         const charData = window.player; 
         
         const isSentientAlly = player.side === 'player' && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(player.name);
+        
+        // Debug
+        // console.log("updateActionButtons for:", player.name, "isSentient:", isSentientAlly, "Skills:", player.skills);
+
         if (isSentientAlly) {
             if (!window.playerAction) {
                 window.updatePlayerUI();
@@ -595,7 +604,8 @@ function updateActionButtons() {
             buttonsDiv.appendChild(dismissBtn);
         }
 
-        const hasRiding = player.skills['riding'] || player.skills['riding_druid'] || player.skills['riding_paladin'];
+        const skills = player.skills || charData?.skills || {};
+        const hasRiding = skills['riding'] || skills['riding_druid'] || skills['riding_paladin'];
         if (hasRiding) {
             if (player.riding) {
                 const dismountBtn = document.createElement('button');
@@ -672,44 +682,46 @@ function updateActionButtons() {
             buttonsDiv.appendChild(cancelBtn);
         }
 
-        for (const skillKey in charData.skills) {
-            const skill = window.skills[skillKey];
-            if (skill && skill.active && charData.skills[skillKey] > 0) {
-                if (skill.tree === 'monster_skills') continue; // Handled specially (Fly/Land) or internal
-                
-                let weaponReqMet = true;
-                if (skillKey.endsWith('_feint')) {
-                    const weaponType = skillKey.split('_')[0];
-                    const eq = charData.equipped.weapon;
-                    if (!eq || !window.items[eq] || !window.items[eq]?.id.includes(weaponType)) weaponReqMet = false;
-                } else if (skillKey === 'disarm') {
-                    const eq = charData.equipped.weapon;
-                    if (!eq) weaponReqMet = false; // Need a weapon to disarm? Or maybe just unarmed. 
-                    // Let's say Disarm requires a weapon or "unarmed mastery"
-                } else if (skillKey === 'assassinate') {
-                    const eq = charData.equipped.weapon;
-                    if (!eq) weaponReqMet = false;
-                } else if (skillKey === 'dagger_throw') {
-                    const eq = charData.equipped.weapon;
-                    if (eq !== 'dagger') weaponReqMet = false;
-                }
-                
-                if (weaponReqMet) {
-                    const button = document.createElement('button');
-                    button.id = `skill-btn-${skillKey}`;
-                    let label = skill.name;
-                    if (skillKey.endsWith('_feint')) label = `${skillKey.split('_')[0].toUpperCase()} Feint`;
-                    button.innerText = label;
-                    button.onclick = () => {
-                        window.playerAction = { type: 'skill', id: skillKey };
-                        window.showMessage(`Action set to: ${skill.name}. Click on a target.`);
-                        updateActionButtons();
-                    };
-                    buttonsDiv.appendChild(button);
+        if (charData && charData.skills) {
+            for (const skillKey in charData.skills) {
+                const skill = window.skills[skillKey];
+                if (skill && skill.active && charData.skills[skillKey] > 0) {
+                    if (skill.tree === 'monster_skills') continue; // Handled specially (Fly/Land) or internal
+                    
+                    let weaponReqMet = true;
+                    if (skillKey.endsWith('_feint')) {
+                        const weaponType = skillKey.split('_')[0];
+                        const eq = charData.equipped.weapon;
+                        if (!eq || !window.items[eq] || !window.items[eq]?.id.includes(weaponType)) weaponReqMet = false;
+                    } else if (skillKey === 'disarm') {
+                        const eq = charData.equipped.weapon;
+                        if (!eq) weaponReqMet = false; 
+                    } else if (skillKey === 'assassinate') {
+                        const eq = charData.equipped.weapon;
+                        if (!eq) weaponReqMet = false;
+                    } else if (skillKey === 'dagger_throw') {
+                        const eq = charData.equipped.weapon;
+                        if (eq !== 'dagger') weaponReqMet = false;
+                    }
+                    
+                    if (weaponReqMet) {
+                        const button = document.createElement('button');
+                        button.id = `skill-btn-${skillKey}`;
+                        let label = skill.name;
+                        if (skillKey.endsWith('_feint')) label = `${skillKey.split('_')[0].toUpperCase()} Feint`;
+                        button.innerText = label;
+                        button.onclick = () => {
+                            window.playerAction = { type: 'skill', id: skillKey };
+                            window.showMessage(`Action set to: ${skill.name}. Click on a target.`);
+                            updateActionButtons();
+                        };
+                        buttonsDiv.appendChild(button);
+                    }
                 }
             }
         }
-        if (charData.createdSpells) {
+
+        if (charData && charData.createdSpells) {
             charData.createdSpells.forEach((spell, index) => {
                 const button = document.createElement('button');
                 button.id = `spell-btn-${index}`;

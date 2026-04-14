@@ -7,6 +7,38 @@ function getEntityAtHex(q, r) {
     return window.entities.find(e => e.alive && e.getAllHexes().some(h => h.q === q && h.r === r));
 }
 
+function findNearestPassableHex(startHex) {
+    // Breadth-first search for the nearest hex that is NOT water, NOT a wall, and NOT occupied
+    const queue = [startHex];
+    const visited = new Set([`${startHex.q},${startHex.r}`]);
+    
+    // Safety limit to prevent infinite loops
+    let iterations = 0;
+    while (queue.length > 0 && iterations < 200) {
+        iterations++;
+        const current = queue.shift();
+        const terrain = window.getTerrainAt(current.q, current.r);
+        const occupant = getEntityAtHex(current.q, current.r);
+        
+        // Passable = Not Wall, Not Water, Not occupied (unless occupant is ourselves)
+        const isPassable = terrain.name !== 'Wall' && terrain.name !== 'Water';
+        if (isPassable && !occupant) {
+            return current;
+        }
+        
+        // Add neighbors to queue
+        const neighbors = window.getNeighbors(current.q, current.r);
+        for (const n of neighbors) {
+            const key = `${n.q},${n.r}`;
+            if (!visited.has(key)) {
+                visited.add(key);
+                queue.push(n);
+            }
+        }
+    }
+    return startHex; // Fallback
+}
+
 function getMinDistance(entA, entB) {
     const hexesA = entA.getAllHexes();
     const hexesB = entB.getAllHexes();

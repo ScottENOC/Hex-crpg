@@ -7,7 +7,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: "*",
+        origin: ["http://localhost:3000", "https://scottenoc.github.io"],
         methods: ["GET", "POST"]
     }
 });
@@ -39,6 +39,22 @@ io.on('connection', (socket) => {
     socket.on('joinRoom', ({ roomCode, characterData }) => {
         const room = rooms[roomCode];
         if (room) {
+            // UNIQUE NAME ENFORCEMENT
+            let baseName = characterData.name;
+            let finalName = baseName;
+            let counter = 2;
+            
+            const isNameTaken = (name) => {
+                const playerNames = Object.values(room.players).map(p => p.name);
+                return playerNames.includes(name) || room.savedCharacters.includes(name);
+            };
+
+            while (isNameTaken(finalName)) {
+                finalName = `${baseName} (${counter})`;
+                counter++;
+            }
+            characterData.name = finalName;
+
             characterData.hex = characterData.hex || { q: 0, r: 0 };
             room.players[socket.id] = characterData;
             socket.join(roomCode);

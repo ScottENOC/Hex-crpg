@@ -1,5 +1,10 @@
 // network.js
-const socket = io();
+// If on GitHub Pages, connect to the hosted backend. Otherwise, connect to current origin.
+const backendUrl = window.location.hostname === 'scottenoc.github.io' 
+    ? 'https://your-rpg-backend.onrender.com' // Replace with your actual hosted backend URL
+    : window.location.origin;
+
+const socket = io(backendUrl);
 
 window.multiplayer = {
     roomCode: null,
@@ -256,14 +261,18 @@ window.initializeMultiplayerGame = (players) => {
         const name = myData ? myData.name : (document.getElementById('character-name').value || "Hero");
         
         // Use existing entity data if available (for claimed/resumed characters)
-        const existingEnt = window.entities.find(e => e.name === name);
+        // Ensure we don't grab an entity that already belongs to someone else
+        const existingEnt = window.entities.find(e => e.name === name && (!e.networkId || e.networkId === socket.id));
+        
         if (existingEnt) {
             console.log("Resuming existing entity:", name);
             window.party = [ existingEnt ];
             window.player = existingEnt;
+            existingEnt.networkId = socket.id; // Ensure it's set
         } else {
             window.initializePlayer(race, cls, gender, campaign, voice);
             window.party[0].name = name;
+            window.player = window.party[0];
         }
         
         document.getElementById("characterCreator").style.display = "none";
@@ -272,7 +281,7 @@ window.initializeMultiplayerGame = (players) => {
         
         window.startGameCore();
         
-        const localEnt = window.entities.find(e => e.name === name && !e.networkId);
+        const localEnt = window.entities.find(e => e.name === name && (!e.networkId || e.networkId === socket.id));
         if (localEnt) {
             localEnt.networkId = socket.id;
             if (myData && myData.hex) localEnt.hex = { ...myData.hex };
@@ -294,9 +303,10 @@ function getReadyCharacterData() {
     let charName = document.getElementById('character-name').value;
     if (!charName && window.generateName) {
         charName = window.generateName(race, gender);
-        document.getElementById('character-name').value = charName;
     }
+    
     if (!charName) charName = "Hero " + socket.id.substring(0,3);
+    document.getElementById('character-name').value = charName;
     
     return window.createCharacterData(race, cls, charName, gender, voice);
 }
