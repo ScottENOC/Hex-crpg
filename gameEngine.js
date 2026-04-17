@@ -3173,25 +3173,40 @@ function startArenaFight() {
     const spawnClose = Math.random() < 0.15; // 15% chance to spawn close
     const spawnInSight = Math.random() < 0.3; // 30% chance to spawn in sight
 
-    // Helper to find valid player spawn hexes
-    const getValidPlayerHex = (targetQ, targetR) => {
-        const neighbors = [{q: targetQ, r: targetR}, ...window.getNeighbors(targetQ, targetR)];
-        return neighbors.find(h => {
-            const terrain = window.getTerrainAt(h.q, h.r);
-            return window.overrideTerrain[`${h.q},${h.r}`] && terrain.name !== 'Wall' && terrain.name !== 'Water' && !window.getEntityAtHex(h.q, h.r);
-        }) || {q: targetQ, r: targetR};
+    // Pick a base spawn location for the party
+    let baseQ, baseR;
+    if (spawnClose) {
+        baseQ = -5;
+        baseR = 0;
+    } else {
+        baseQ = -arenaSize + 7;
+        baseR = 0;
+    }
+    
+    // Find a valid base hex that isn't water/wall
+    const findSafeHex = (startQ, startR, maxRadius) => {
+        for (let r = 0; r <= maxRadius; r++) {
+            for (let q = -r; q <= r; q++) {
+                for (let rr = Math.max(-r, -q - r); rr <= Math.min(r, -q + r); rr++) {
+                    const h = { q: startQ + q, r: startR + rr };
+                    const terrain = window.getTerrainAt(h.q, h.r);
+                    const hasOverride = window.overrideTerrain[`${h.q},${h.r}`];
+                    if (hasOverride && terrain.name !== 'Wall' && terrain.name !== 'Water' && !window.getEntityAtHex(h.q, h.r)) {
+                        return h;
+                    }
+                }
+            }
+        }
+        return { q: startQ, r: startR }; // Fallback
     };
 
-    window.entities.forEach((e, i) => {
-        let q, r;
-        if (spawnClose) {
-            q = -5 + Math.floor(Math.random() * 3);
-            r = i - Math.floor(window.entities.length/2);
-        } else {
-            q = -arenaSize + 5 + Math.floor(Math.random() * 5);
-            r = (Math.random() * (arenaSize - 10)) - (arenaSize/2);
-        }
-        e.hex = getValidPlayerHex(Math.floor(q), Math.floor(r));
+    const partyBase = findSafeHex(baseQ, baseR, 10);
+
+    window.entities.filter(e => e.side === 'player' && !e.rider).forEach((e, i) => {
+        const offset = window.getNeighbors(0, 0)[i % 6] || {q:0, r:0};
+        const targetQ = partyBase.q + (i > 0 ? offset.q : 0);
+        const targetR = partyBase.r + (i > 0 ? offset.r : 0);
+        e.hex = findSafeHex(targetQ, targetR, 5);
         if (e.riding) e.riding.hex = { q: e.hex.q, r: e.hex.r };
     });
     if (window.entities.length > 0) {
