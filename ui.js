@@ -500,6 +500,7 @@ function updateActionButtons() {
     
     if (player && player.side === "player") {
         const charData = window.player; 
+        const isCasting = player.castCooldown > 0;
         
         const isSentientAlly = player.side === 'player' && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(player.name);
         
@@ -521,6 +522,7 @@ function updateActionButtons() {
             const offhandBtn = document.createElement('button');
             offhandBtn.innerText = "Off-hand Attack";
             offhandBtn.style.backgroundColor = "#ff5722";
+            offhandBtn.disabled = isCasting;
             const offhandAction = () => {
                 window.playerAction = { type: 'offhand_attack' };
                 showMessage("Off-hand Attack ready. Click a target.");
@@ -537,6 +539,7 @@ function updateActionButtons() {
             lootBtn.innerText = `Loot Hex (${window.mapItems[coord].length} items)`;
             lootBtn.style.backgroundColor = '#FFD700';
             lootBtn.style.color = '#000';
+            lootBtn.disabled = isCasting;
             lootBtn.onclick = () => { window.lootItems(player); };
             lootBtn.ontouchstart = (e) => { e.preventDefault(); window.lootItems(player); };
             buttonsDiv.appendChild(lootBtn);
@@ -547,6 +550,7 @@ function updateActionButtons() {
             waitBtn.id = 'wait-action-btn';
             waitBtn.innerText = "Wait (1 TP)";
             waitBtn.style.backgroundColor = "#9e9e9e";
+            waitBtn.disabled = isCasting;
             const waitAction = () => {
                 window.spendTP(player, 1);
                 window.finalizePlayerAction(player, 'wait');
@@ -561,7 +565,7 @@ function updateActionButtons() {
             const stealthBtn = document.createElement('button');
             stealthBtn.innerText = "Stealth (5 TP)";
             stealthBtn.style.backgroundColor = "#607d8b";
-            stealthBtn.disabled = (player.timePoints < 5);
+            stealthBtn.disabled = isCasting || (player.timePoints < 5);
             const stealthAction = () => {
                 if (window.tryStealth(player)) {
                     window.spendTP(player, 5);
@@ -576,6 +580,7 @@ function updateActionButtons() {
             const breakBtn = document.createElement('button');
             breakBtn.innerText = "Break Stealth";
             breakBtn.style.backgroundColor = "#ff9800";
+            breakBtn.disabled = isCasting;
             const breakAction = () => {
                 window.breakStealth(player);
                 if (inCombat) window.finalizePlayerAction(player, true);
@@ -591,6 +596,7 @@ function updateActionButtons() {
             const dismissBtn = document.createElement('button');
             dismissBtn.innerText = `Dismiss ${player.animalCompanion.name}`;
             dismissBtn.style.backgroundColor = "#777";
+            dismissBtn.disabled = isCasting;
             const dismissAction = () => {
                 player.animalCompanion.alive = false;
                 player.animalCompanion = null;
@@ -612,6 +618,7 @@ function updateActionButtons() {
                 dismountBtn.id = 'dismount-action-btn';
                 dismountBtn.innerText = "Dismount";
                 dismountBtn.style.backgroundColor = "#795548";
+                dismountBtn.disabled = isCasting;
                 const dismountAction = () => {
                     window.playerAction = { type: 'dismount' };
                     showMessage("Click an adjacent empty hex to dismount.");
@@ -625,6 +632,7 @@ function updateActionButtons() {
                 mountBtn.id = 'mount-action-btn';
                 mountBtn.innerText = "Mount";
                 mountBtn.style.backgroundColor = "#795548";
+                mountBtn.disabled = isCasting;
                 const mountAction = () => {
                     window.playerAction = { type: 'mount' };
                     showMessage("Click an adjacent mount to climb on.");
@@ -643,7 +651,7 @@ function updateActionButtons() {
                 const flyBtn = document.createElement('button');
                 flyBtn.innerText = "Take Off (1 TP)";
                 flyBtn.style.backgroundColor = "#03a9f4";
-                flyBtn.disabled = player.timePoints < 1;
+                flyBtn.disabled = isCasting || player.timePoints < 1;
                 flyBtn.onclick = () => {
                     player.isFlying = true;
                     window.spendTP(player, 1);
@@ -655,7 +663,7 @@ function updateActionButtons() {
                 const landBtn = document.createElement('button');
                 landBtn.innerText = "Land (1 TP)";
                 landBtn.style.backgroundColor = "#8bc34a";
-                landBtn.disabled = player.timePoints < 1;
+                landBtn.disabled = isCasting || player.timePoints < 1;
                 landBtn.onclick = () => {
                     player.isFlying = false;
                     window.spendTP(player, 1);
@@ -710,6 +718,7 @@ function updateActionButtons() {
                         let label = skill.name;
                         if (skillKey.endsWith('_feint')) label = `${skillKey.split('_')[0].toUpperCase()} Feint`;
                         button.innerText = label;
+                        button.disabled = isCasting;
                         button.onclick = () => {
                             window.playerAction = { type: 'skill', id: skillKey };
                             window.showMessage(`Action set to: ${skill.name}. Click on a target.`);
@@ -726,6 +735,7 @@ function updateActionButtons() {
                 const button = document.createElement('button');
                 button.id = `spell-btn-${index}`;
                 button.innerText = spell.name;
+                button.disabled = isCasting || (player.timePoints < spell.tpCost);
                 button.onclick = () => {
                     window.playerAction = { type: 'spell', index: index, targets: [] };
                     const targetStr = (spell.extraTargets || 0) > 0 ? `Select up to ${1 + spell.extraTargets} targets.` : "Click a target.";

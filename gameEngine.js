@@ -1104,6 +1104,7 @@ function checkInCombat() {
 }
 
 let lastTimestamp = performance.now();
+let tickCounter = 0;
 
 function tick() {
     if (window.isPausedForReaction) return;
@@ -1114,6 +1115,15 @@ function tick() {
 
     const inCombat = checkInCombat();
     window.isInCombat = inCombat; // Expose globally for UI
+
+    // PERIODIC UI REFRESH (Out of combat)
+    if (!inCombat && window.updateActionButtons) {
+        tickCounter++;
+        if (tickCounter >= 50) {
+            window.updateActionButtons();
+            tickCounter = 0;
+        }
+    }
 
     // REST/SLEEP LOGIC (High speed)
     if (window.isResting || window.isSleeping) {
@@ -1186,6 +1196,7 @@ function tick() {
                         // Execute the spell
                         window.tryCastSpell(ent, spell, target, hex, true); // true = bypass cooldown
                         ent.pendingCast = null;
+                        if (ent.side === 'player' && window.updateActionButtons) window.updateActionButtons();
                     }
                 }
                 return; // Cannot move while casting
@@ -1941,6 +1952,7 @@ function wakeUp(entity) {
                 e.moveCooldown = 0;
             }
         });
+        if (window.updateActionButtons) window.updateActionButtons();
     }
 
     // Chain reaction: Alert allies within 10 hexes
@@ -2035,6 +2047,11 @@ function handleClick(e){
     // Out-of-combat: default to main character
     const player = window.currentTurnEntity || window.entities.find(ent => ent.side === 'player' && !ent.rider);
     if (!player) return;
+
+    if (player.castCooldown > 0) {
+        window.showMessage("You are currently casting a spell.");
+        return;
+    }
 
     const clickedHex = window.screenToHex({x:e.clientX, y:e.clientY});
     const target = getEntityAtHex(clickedHex.q, clickedHex.r);
@@ -2738,11 +2755,13 @@ function checkCombatEnd() {
                 if (window.entities.length > 0) {
                     window.centerCameraOn(window.entities[0].hex);
                 }
+                if (window.updateActionButtons) window.updateActionButtons();
             }, 2000);
             return;
         }
 
         // ... (existing logic)
+        if (window.updateActionButtons) window.updateActionButtons();
     }
 
     // AUDIO: If staying in arena but combat ended (no active combat AI states)
@@ -3576,9 +3595,9 @@ function tryCastSpell(caster, spell, target, clickedHex, bypassCooldown = false)
         caster.pendingCast = { spell, target, hex: clickedHex };
         caster.destination = null; // Cancel movement
         window.showMessage(`${caster.name} starts casting ${spell.name}...`);
-        return true; 
-    }
-
+        if (window.updateActionButtons) window.updateActionButtons();
+        return true;
+        }
     // DIVINE SILENCE REMOVAL
     const silence = (window.activeSpells || []).find(s => s.debuffType === 'silence_penalty' && s.targetEntityId === caster?.id);
     if (silence) {
