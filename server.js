@@ -71,6 +71,14 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('updateCharacter', ({ roomCode, characterData }) => {
+        const room = rooms[roomCode];
+        if (room && room.players[socket.id]) {
+            room.players[socket.id] = characterData;
+            socket.to(roomCode).emit('characterUpdated', { id: socket.id, characterData });
+        }
+    });
+
     socket.on('claimCharacter', ({ roomCode, name }) => {
         const room = rooms[roomCode];
         if (room) {

@@ -75,6 +75,16 @@ socket.on('playerJoined', ({ id, characterData }) => {
     }
 });
 
+socket.on('characterUpdated', ({ id, characterData }) => {
+    window.multiplayer.players[id] = characterData;
+    updateMultiplayerUI();
+    
+    // If game already started, update the entity too
+    if (document.getElementById('gameContainer').style.display === 'flex') {
+        syncRemotePlayerEntity(id, characterData);
+    }
+});
+
 socket.on('gameStarted', ({ players }) => {
     window.multiplayer.players = players;
     window.initializeMultiplayerGame(players);
@@ -384,6 +394,14 @@ window.broadcastFullState = () => {
             delete data.visualQ; delete data.visualR; 
             return data;
         })
+    });
+};
+
+window.syncCharacterToServer = () => {
+    if (!window.multiplayer.roomCode) return;
+    socket.emit('updateCharacter', {
+        roomCode: window.multiplayer.roomCode,
+        characterData: getReadyCharacterData()
     });
 };
 
