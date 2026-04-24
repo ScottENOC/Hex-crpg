@@ -491,12 +491,15 @@ function updateActionButtons() {
     buttonsDiv.innerHTML = '';
 
     const inCombat = window.isInCombat;
-    let player = inCombat ? window.currentTurnEntity : window.player;
+    let player = inCombat ? window.currentTurnEntity : null;
     
-    // Fallback if window.player is missing for some reason
-    if (!player && !inCombat && window.entities) {
+    // Always try to find the actual world entity for the player side
+    if (!player && window.entities) {
         player = window.entities.find(ent => ent.side === 'player' && !ent.rider);
     }
+    
+    // Fallback to window.player if no entity found (might be just data, but better than null)
+    if (!player) player = window.player;
     
     if (player && player.side === "player") {
         const charData = window.player; 
@@ -533,16 +536,18 @@ function updateActionButtons() {
             buttonsDiv.appendChild(offhandBtn);
         }
 
-        const coord = `${player.hex.q},${player.hex.r}`;
-        if (window.mapItems[coord] && window.mapItems[coord].length > 0) {
-            const lootBtn = document.createElement('button');
-            lootBtn.innerText = `Loot Hex (${window.mapItems[coord].length} items)`;
-            lootBtn.style.backgroundColor = '#FFD700';
-            lootBtn.style.color = '#000';
-            lootBtn.disabled = isCasting;
-            lootBtn.onclick = () => { window.lootItems(player); };
-            lootBtn.ontouchstart = (e) => { e.preventDefault(); window.lootItems(player); };
-            buttonsDiv.appendChild(lootBtn);
+        if (player.hex) {
+            const coord = `${player.hex.q},${player.hex.r}`;
+            if (window.mapItems[coord] && window.mapItems[coord].length > 0) {
+                const lootBtn = document.createElement('button');
+                lootBtn.innerText = `Loot Hex (${window.mapItems[coord].length} items)`;
+                lootBtn.style.backgroundColor = '#FFD700';
+                lootBtn.style.color = '#000';
+                lootBtn.disabled = isCasting;
+                lootBtn.onclick = () => { window.lootItems(player); };
+                lootBtn.ontouchstart = (e) => { e.preventDefault(); window.lootItems(player); };
+                buttonsDiv.appendChild(lootBtn);
+            }
         }
 
         if (inCombat) {
