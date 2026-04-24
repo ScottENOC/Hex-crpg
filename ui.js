@@ -661,6 +661,7 @@ function updateActionButtons() {
                     player.isFlying = true;
                     window.spendTP(player, 1);
                     showMessage(`${player.name} takes to the air!`);
+                    if (window.syncCharacterToServer) window.syncCharacterToServer();
                     window.finalizePlayerAction(player, true);
                 };
                 buttonsDiv.appendChild(flyBtn);
@@ -673,6 +674,7 @@ function updateActionButtons() {
                     player.isFlying = false;
                     window.spendTP(player, 1);
                     showMessage(`${player.name} lands.`);
+                    if (window.syncCharacterToServer) window.syncCharacterToServer();
                     window.finalizePlayerAction(player, true);
                 };
                 buttonsDiv.appendChild(landBtn);

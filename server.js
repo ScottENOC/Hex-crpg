@@ -91,13 +91,15 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('broadcastState', ({ roomCode, worldSeconds, mapItems, entities, overrideTerrain, tileObjects, isInArena }) => {
+    socket.on('broadcastState', ({ roomCode, worldSeconds, mapItems, entities, overrideTerrain, tileObjects, isInArena, indoorLightMult, exploredHexes }) => {
         const room = rooms[roomCode];
         if (room) {
             room.gameState.worldSeconds = worldSeconds;
             room.gameState.isInArena = isInArena;
             room.gameState.overrideTerrain = overrideTerrain;
             room.gameState.tileObjects = tileObjects;
+            room.gameState.indoorLightMult = indoorLightMult;
+            room.gameState.exploredHexes = exploredHexes;
             
             io.to(roomCode).emit('syncFullState', { 
                 players: room.players, 
@@ -107,7 +109,9 @@ io.on('connection', (socket) => {
                 worldSeconds,
                 overrideTerrain,
                 tileObjects,
-                isInArena
+                isInArena,
+                indoorLightMult,
+                exploredHexes
             });
         }
     });

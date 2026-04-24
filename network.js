@@ -90,7 +90,7 @@ socket.on('gameStarted', ({ players }) => {
     window.initializeMultiplayerGame(players);
 });
 
-socket.on('syncFullState', ({ players, gameState, entities, mapItems, worldSeconds, overrideTerrain, tileObjects, isInArena }) => {
+socket.on('syncFullState', ({ players, gameState, entities, mapItems, worldSeconds, overrideTerrain, tileObjects, isInArena, indoorLightMult, exploredHexes }) => {
     console.log("Full State Sync Received...");
     window.multiplayer.players = players;
     window.worldSeconds = worldSeconds;
@@ -99,6 +99,10 @@ socket.on('syncFullState', ({ players, gameState, entities, mapItems, worldSecon
     if (overrideTerrain) window.overrideTerrain = overrideTerrain;
     if (tileObjects) window.tileObjects = tileObjects;
     if (isInArena !== undefined) window.isInArena = isInArena;
+    if (indoorLightMult !== undefined) window.indoorLightMult = indoorLightMult;
+    if (exploredHexes) {
+        window.exploredHexes = new Set(exploredHexes);
+    }
 
     window.entities = [];
     entities.forEach(data => {
@@ -389,6 +393,8 @@ window.broadcastFullState = () => {
         overrideTerrain: window.overrideTerrain,
         tileObjects: window.tileObjects,
         isInArena: window.isInArena,
+        indoorLightMult: window.indoorLightMult,
+        exploredHexes: Array.from(window.exploredHexes || []),
         entities: window.entities.map(e => {
             const data = { ...e };
             delete data.visualQ; delete data.visualR; 
