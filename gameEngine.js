@@ -279,6 +279,8 @@ function finalizePlayerAction(player, actionHandled) {
         const wp = window.battleToWorld(player.hex.q, player.hex.r);
         window.playerWorldPos = { x: wp.col, y: wp.row };
     }
+
+    if (window.broadcastFullState) window.broadcastFullState();
 }
 
 function checkMovementReactions(movingEntity, nextHex, callback) {
@@ -1120,6 +1122,7 @@ function tick() {
     if (!inCombat && window.updateActionButtons) {
         tickCounter++;
         if (tickCounter >= 50) {
+            if (window.multiplayer.isHost && window.updateExploration) window.updateExploration();
             window.updateActionButtons();
             tickCounter = 0;
         }
@@ -3022,6 +3025,7 @@ function setupArenaLobby() {
     window.overrideTerrain = {};
     window.tileObjects = {};
     window.exploredHexes = new Set(); 
+    window.lastSeenTimeMap = {};
     window.indoorLightMult = 0.0; // Lobby is 0% daylight
     window.lobbyTPSpent = 0;
     window.hasTriggeredImpatience = false;
@@ -3105,6 +3109,8 @@ function setupArenaLobby() {
     window.showCharacter();
     if (window.snapVisuals) window.snapVisuals();
     window.runTickInternal();
+
+    if (window.broadcastFullState) window.broadcastFullState();
 }
 
 function startArenaFight() {
@@ -3122,6 +3128,7 @@ function startArenaFight() {
     window.overrideTerrain = {}; 
     window.tileObjects = {}; 
     window.exploredHexes = new Set(); 
+    window.lastSeenTimeMap = {};
     
     // 50/50 Indoor vs Outdoor
     const isIndoor = Math.random() < 0.5;

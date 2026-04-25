@@ -421,57 +421,86 @@ function hasLineOfEffect(start, end) {
 function isVisibleToPlayer(targetHex) {
     const friendlies = window.entities.filter(e => e.alive && e.side === 'player');
     for (let f of friendlies) {
-        // Player entities are always seen
-        f.hasBeenSeenByPlayer = true;
-
         const myHexes = f.getAllHexes();
         for (let fh of myHexes) {
             const dist = distance(fh, targetHex);
-            
+
             // Vision Range affected by light
             let visionRange = 30 + (f.visionBonus || 0);
             const light = window.lightLevel || 1.0;
-            
+
             // Elf Darkvision: treat light as 1.0 for range if they have the skill
             const effectiveLight = (f.skills?.elf_darkvision) ? 1.0 : light;
             const finalRange = visionRange * Math.max(0.2, effectiveLight);
 
             if (dist <= finalRange && hasLineOfSight(fh, targetHex)) {
-                window.exploredHexes.add(`${targetHex.q},${targetHex.r}`);
-                if (!window.lastSeenTimeMap) window.lastSeenTimeMap = {};
-                window.lastSeenTimeMap[`${targetHex.q},${targetHex.r}`] = window.worldSeconds;
-                
-                // Mark any entity at this hex as seen
-                const ent = window.entities.find(e => e.alive && e.hex.q === targetHex.q && e.hex.r === targetHex.r);
-                if (ent) {
-                    if (ent.side === 'enemy' && !ent.hasBeenSeenByPlayer) {
-                        // NEWLY SEEN ENEMY
-                        ent.hasBeenSeenByPlayer = true;
-                        
-                        // DIALOGUE: PC sees enemy
-                        const now = Date.now();
-                        if (!window.lastEnemySeenDialogueTime || (now - window.lastEnemySeenDialogueTime > 10000)) {
-                            let speaker = f;
-                            if (f.isSummoned || f.isCompanion) {
-                                const owner = window.entities.find(e => e.name === f.summoner);
-                                if (owner) speaker = owner;
-                            }
-                            if (speaker.voice && window.playDialogue) {
-                                window.playDialogue(`${speaker.voice}_enemy_seen`);
-                                window.lastEnemySeenDialogueTime = now;
-                            }
-                        }
-                    } else {
-                        ent.hasBeenSeenByPlayer = true;
-                    }
-                }
-
                 return true;
             }
         }
     }
     return false;
 }
+
+function updateExploration() {
+    if (!window.entities || !window.exploredHexes) return;
+    const friendlies = window.entities.filter(e => e.alive && e.side === 'player');
+    const light = window.lightLevel || 1.0;
+
+    for (let f of friendlies) {
+        f.hasBeenSeenByPlayer = true;
+        const myHexes = f.getAllHexes();
+        const visionRange = 30 + (f.visionBonus || 0);
+        const effectiveLight = (f.skills?.elf_darkvision) ? 1.0 : light;
+        const finalRange = visionRange * Math.max(0.2, effectiveLight);
+        const intRange = Math.ceil(finalRange);
+
+        for (let q = -intRange; q <= intRange; q++) {
+            for (let r = Math.max(-intRange, -q - intRange); r <= Math.min(intRange, -q + intRange); r++) {
+                const targetHex = { q: f.hex.q + q, r: f.hex.r + r };
+                const dist = distance(f.hex, targetHex); 
+                if (dist > finalRange) continue;
+                if (!window.isHexInBounds(targetHex.q, targetHex.r)) continue;
+
+                let canSeeThis = false;
+                for (let fh of myHexes) {
+                    if (hasLineOfSight(fh, targetHex)) {
+                        canSeeThis = true;
+                        break;
+                    }
+                }
+
+                if (canSeeThis) {
+                    const key = `${targetHex.q},${targetHex.r}`;
+                    window.exploredHexes.add(key);
+                    if (!window.lastSeenTimeMap) window.lastSeenTimeMap = {};
+                    window.lastSeenTimeMap[key] = window.worldSeconds;
+
+                    const ent = window.getEntityAtHex(targetHex.q, targetHex.r);
+                    if (ent) {
+                        if (ent.side === 'enemy' && !ent.hasBeenSeenByPlayer) {
+                            ent.hasBeenSeenByPlayer = true;
+                            const now = Date.now();
+                            if (!window.lastEnemySeenDialogueTime || (now - window.lastEnemySeenDialogueTime > 10000)) {
+                                let speaker = f;
+                                if (f.isSummoned || f.isCompanion) {
+                                    const owner = window.entities.find(e => e.name === f.summoner);
+                                    if (owner) speaker = owner;
+                                }
+                                if (speaker.voice && window.playDialogue) {
+                                    window.playDialogue(`${speaker.voice}_enemy_seen`);
+                                    window.lastEnemySeenDialogueTime = now;
+                                }
+                            }
+                        } else {
+                            ent.hasBeenSeenByPlayer = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 
 function getHexBehind(origin, target) {
     const dir = { q: target.q - origin.q, r: target.r - origin.r };
