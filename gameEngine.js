@@ -2755,8 +2755,9 @@ function checkCombatEnd() {
                 setupArenaLobby();
                 window.drawMap();
                 window.renderEntities();
-                if (window.entities.length > 0) {
-                    window.centerCameraOn(window.entities[0].hex);
+                const firstPlayer = window.entities.find(e => e.side === 'player' && !e.rider);
+                if (firstPlayer) {
+                    window.centerCameraOn(firstPlayer.hex);
                 }
                 if (window.updateActionButtons) window.updateActionButtons();
             }, 2000);
@@ -3235,8 +3236,9 @@ function startArenaFight() {
         e.hex = findSafeHex(targetQ, targetR, 5);
         if (e.riding) e.riding.hex = { q: e.hex.q, r: e.hex.r };
     });
-    if (window.entities.length > 0) {
-        window.centerCameraOn(window.entities[0].hex);
+    const firstPlayer = window.entities.find(e => e.side === 'player' && !e.rider);
+    if (firstPlayer) {
+        window.centerCameraOn(firstPlayer.hex);
     }
 
     // 4. Spawn enemies based on scaled difficulty

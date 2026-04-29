@@ -132,7 +132,8 @@ socket.on('syncFullState', ({ players, gameState, entities, mapItems, worldSecon
     } else {
         window.drawMap();
         window.renderEntities();
-        if (window.player && window.centerCameraOn) window.centerCameraOn(window.player.hex);
+        const localPlayerEnt = window.entities.find(e => e.networkId === socket.id);
+        if (localPlayerEnt && window.centerCameraOn) window.centerCameraOn(localPlayerEnt.hex);
     }
 });
 

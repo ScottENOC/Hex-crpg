@@ -664,6 +664,7 @@ function initHexMap() {
 }
 
 function centerCameraOn(hex) {
+    if (!hex || hex.q === undefined || hex.r === undefined) return;
     const {x, y} = hexToPixel(hex.q, hex.r);
     // hexToPixel already includes current cameraX/Y and zoom
     // We want to adjust cameraX/Y so that (x,y) is at the center of the canvas
