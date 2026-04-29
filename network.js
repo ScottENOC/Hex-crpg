@@ -238,17 +238,21 @@ socket.on('characterClaimed', ({ id, name }) => {
 function syncRemotePlayerEntity(socketId, data) {
     if (socketId === socket.id) return;
     
-    const existing = window.entities.find(e => e.name === data.name);
+    // 1. Try to find by networkId first
+    let existing = window.entities.find(e => e.networkId === socketId);
+    
+    // 2. Fallback to finding by name if it's a remote entity
+    if (!existing) {
+        existing = window.entities.find(e => e.name === data.name && (e.isRemote || e.side === 'player'));
+    }
+
     if (existing) {
         existing.networkId = socketId;
         existing.isRemote = true;
+        existing.side = 'player'; // Ensure they are on player side
         if (data.hex) existing.hex = { ...data.hex };
-        return;
-    }
-
-    if (window.entities.some(e => e.networkId === socketId)) {
-        const ent = window.entities.find(e => e.networkId === socketId);
-        if (data.hex) ent.hex = { ...data.hex };
+        // Sync other important data
+        Object.assign(existing, data);
         return;
     }
 

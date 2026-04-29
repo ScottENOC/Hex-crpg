@@ -3054,26 +3054,28 @@ function setupArenaLobby() {
         }
     }
 
-    if (playerEntities.length > 0) {
-        playerEntities.forEach((e, i) => {
-            e.hex = { q: -8 + Math.floor(i/3), r: -2 + (i%3) };
-            if (e.riding) e.riding.hex = { q: e.hex.q, r: e.hex.r };
-            e.destination = null; // Fix: Clear stale destinations
-            e.moveCooldown = 0;
-            window.entities.push(e);
-        });
-    } else {
-        // First time initialization: spawn from party data
-        window.party.forEach((p, i) => {
+    // 1. Initialize from party data first to ensure main characters exist
+    window.party.forEach((p, i) => {
+        // Only create if it doesn't already exist in playerEntities
+        if (!playerEntities.some(e => e.name === p.name)) {
             const spawnHex = { q: -8 + Math.floor(i/3), r: -2 + (i%3) };
-            const playerEntity = new window.Entity(p.name, "red", spawnHex, p.attributes.agility + 10);
+            const playerEntity = new window.Entity(p.name, "red", spawnHex, (p.attributes?.agility || 10) + 10);
             playerEntity.side = 'player';
             Object.assign(playerEntity, p);
             playerEntity.destination = null;
             playerEntity.moveCooldown = 0;
-            window.entities.push(playerEntity);
-        });
-    }
+            playerEntities.push(playerEntity);
+        }
+    });
+
+    // 2. Put all player entities (including any new ones from party) into the world
+    playerEntities.forEach((e, i) => {
+        e.hex = { q: -8 + Math.floor(i/3), r: -2 + (i%3) };
+        if (e.riding) e.riding.hex = { q: e.hex.q, r: e.hex.r };
+        e.destination = null; 
+        e.moveCooldown = 0;
+        window.entities.push(e);
+    });
 
     // Spawn NPCs in the right room
     const announcer = new window.Entity("Arena Announcer", "yellow", {q: 6, r: -3}, 10);
