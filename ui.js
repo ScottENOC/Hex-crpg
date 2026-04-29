@@ -491,14 +491,14 @@ function updateActionButtons() {
     buttonsDiv.innerHTML = '';
 
     const inCombat = window.isInCombat;
-    let player = inCombat ? window.currentTurnEntity : null;
+    let player = inCombat ? window.currentTurnEntity : window.player;
     
     // Always try to find the actual world entity for the player side
     if (!player && window.entities) {
         player = window.entities.find(ent => ent.side === 'player' && !ent.rider);
     }
     
-    // Fallback to window.player if no entity found (might be just data, but better than null)
+    // Fallback to window.player if no entity found
     if (!player) player = window.player;
     
     if (player && player.side === "player") {
@@ -507,9 +507,7 @@ function updateActionButtons() {
         
         const isSentientAlly = player.side === 'player' && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(player.name);
         
-        // Debug
-        // console.log("updateActionButtons for:", player.name, "isSentient:", isSentientAlly, "Skills:", player.skills);
-
+        // Ensure sentient logic uses the current resolved player entity
         if (isSentientAlly) {
             if (!window.playerAction) {
                 window.updatePlayerUI();

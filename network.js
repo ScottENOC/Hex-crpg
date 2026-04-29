@@ -116,9 +116,14 @@ socket.on('syncFullState', ({ players, gameState, entities, mapItems, worldSecon
         if (ent.networkId === socket.id) {
             window.player = ent;
             if (window.party) {
+                // Ensure we don't duplicate or mis-index the local player in the party array
                 const pIdx = window.party.findIndex(p => p.name === ent.name);
-                if (pIdx > -1) window.party[pIdx] = ent;
-                else window.party.push(ent);
+                if (pIdx > -1) {
+                    window.party[pIdx] = ent;
+                } else {
+                    // This case should be rare if party was initialized correctly
+                    window.party.push(ent);
+                }
             }
         }
     });

@@ -2047,8 +2047,14 @@ function handleClick(e){
         if (window.gamePhase !== 'PLAYER_TURN' || !window.currentTurnEntity) return;
     }
     
-    // Out-of-combat: default to main character
-    const player = window.currentTurnEntity || window.entities.find(ent => ent.side === 'player' && !ent.rider);
+    // Out-of-combat: default to LOCAL player
+    let player = window.currentTurnEntity;
+    if (!player) {
+        player = window.player;
+    }
+    // Fallback if window.player is just data or missing
+    if (!player || !player.hex) player = window.entities.find(ent => ent.side === 'player' && !ent.rider);
+    
     if (!player) return;
 
     if (player.castCooldown > 0) {
@@ -3057,15 +3063,19 @@ function setupArenaLobby() {
     // 1. Initialize from party data first to ensure main characters exist
     window.party.forEach((p, i) => {
         // Only create if it doesn't already exist in playerEntities
-        if (!playerEntities.some(e => e.name === p.name)) {
+        let ent = playerEntities.find(e => e.name === p.name);
+        if (!ent) {
             const spawnHex = { q: -8 + Math.floor(i/3), r: -2 + (i%3) };
-            const playerEntity = new window.Entity(p.name, "red", spawnHex, (p.attributes?.agility || 10) + 10);
-            playerEntity.side = 'player';
-            Object.assign(playerEntity, p);
-            playerEntity.destination = null;
-            playerEntity.moveCooldown = 0;
-            playerEntities.push(playerEntity);
+            ent = new window.Entity(p.name, "red", spawnHex, (p.attributes?.agility || 10) + 10);
+            ent.side = 'player';
+            Object.assign(ent, p);
+            ent.destination = null;
+            ent.moveCooldown = 0;
+            playerEntities.push(ent);
         }
+        
+        // Ensure local player reference is updated if this is the first (main) character
+        if (i === 0) window.player = ent;
     });
 
     // 2. Put all player entities (including any new ones from party) into the world
