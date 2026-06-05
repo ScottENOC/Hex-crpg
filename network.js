@@ -161,6 +161,8 @@ socket.on('playerMoved', ({ id, hex, destination }) => {
     if (entity) {
         if (hex) entity.hex = { ...hex };
         if (destination !== undefined) entity.destination = destination;
+        if (window.drawMap) window.drawMap();
+        if (window.renderEntities) window.renderEntities();
     }
 });
 
@@ -284,6 +286,9 @@ window.initializeMultiplayerGame = (players) => {
         
         const name = myData ? myData.name : (document.getElementById('character-name').value || "Hero");
         
+        // Set initializing flag to prevent early partial broadcasts
+        if (window.multiplayer) window.multiplayer.initializing = true;
+        
         // Use existing entity data if available (for claimed/resumed characters)
         // Ensure we don't grab an entity that already belongs to someone else
         const existingEnt = window.entities.find(e => e.name === name && (!e.networkId || e.networkId === socket.id));
@@ -315,6 +320,15 @@ window.initializeMultiplayerGame = (players) => {
 
     for (const id in players) {
         syncRemotePlayerEntity(id, players[id]);
+    }
+
+    // Reset initializing flag and broadcast completed, correct state from host
+    if (window.multiplayer) {
+        window.multiplayer.initializing = false;
+        if (window.multiplayer.isHost && window.broadcastFullState) {
+            console.log("Initialization complete. Broadcasting full state...");
+            window.broadcastFullState();
+        }
     }
 };
 

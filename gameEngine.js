@@ -2043,6 +2043,15 @@ function handleClick(e){
 
     if (window.isPausedForReaction) return;
 
+    if (window.multiplayer && window.multiplayer.roomCode) {
+        if (window.isInCombat) {
+            // In combat: abort click/actions if it's not the local player's turn
+            if (window.currentTurnEntity && window.currentTurnEntity.networkId !== window.multiplayer.socket.id) {
+                return;
+            }
+        }
+    }
+
     if (window.isInCombat) {
         if (window.gamePhase !== 'PLAYER_TURN' || !window.currentTurnEntity) return;
     }
@@ -2054,6 +2063,13 @@ function handleClick(e){
     }
     // Fallback if window.player is just data or missing
     if (!player || !player.hex) player = window.entities.find(ent => ent.side === 'player' && !ent.rider);
+    
+    // In multiplayer exploration mode, ensure player represents our local player character
+    if (window.multiplayer && window.multiplayer.roomCode && !window.isInCombat) {
+        if (player && player.networkId !== window.multiplayer.socket.id) {
+            player = window.entities.find(ent => ent.networkId === window.multiplayer.socket.id);
+        }
+    }
     
     if (!player) return;
 
@@ -3123,7 +3139,9 @@ function setupArenaLobby() {
     if (window.snapVisuals) window.snapVisuals();
     window.runTickInternal();
 
-    if (window.broadcastFullState) window.broadcastFullState();
+    if (window.broadcastFullState && (!window.multiplayer || !window.multiplayer.initializing)) {
+        window.broadcastFullState();
+    }
 }
 
 function startArenaFight() {
@@ -3393,7 +3411,9 @@ function startArenaFight() {
     if (window.runTickInternal) window.runTickInternal();
 
     // Multiplayer: Sync the new arena state
-    if (window.broadcastFullState) window.broadcastFullState();
+    if (window.broadcastFullState && (!window.multiplayer || !window.multiplayer.initializing)) {
+        window.broadcastFullState();
+    }
 }
 
 function talkToNPC(npc) {
