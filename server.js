@@ -133,6 +133,15 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('combatTurnResult', ({ roomCode, entities, gamePhase, currentTurnEntityName, isInCombat, overrideTerrain, isInArena, tileObjects }) => {
+        const room = rooms[roomCode];
+        if (room && room.hostSocketId) {
+            io.to(room.hostSocketId).emit('combatTurnResultReceived', {
+                senderId: socket.id, entities, gamePhase, currentTurnEntityName, isInCombat, overrideTerrain, isInArena, tileObjects
+            });
+        }
+    });
+
     socket.on('move', ({ roomCode, hex, destination }) => {
         const room = rooms[roomCode];
         if (room && room.players[socket.id]) {

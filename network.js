@@ -184,6 +184,34 @@ socket.on('playerMoved', ({ id, hex, destination }) => {
     }
 });
 
+socket.on('combatTurnResultReceived', ({ senderId, entities, gamePhase, currentTurnEntityName, isInCombat, overrideTerrain, isInArena, tileObjects }) => {
+    if (!window.multiplayer.isHost) return;
+
+    // Apply terrain/arena state from the acting player (handles arena victory transitions)
+    if (overrideTerrain !== undefined) window.overrideTerrain = overrideTerrain;
+    if (isInArena !== undefined) window.isInArena = isInArena;
+    if (tileObjects !== undefined) window.tileObjects = tileObjects;
+
+    // Re-build entities from the acting player's reported state
+    window.entities = [];
+    entities.forEach(entData => {
+        let ent;
+        if (entData.isEnemy) ent = new window.Enemy(entData.name, entData.color, entData.hex, entData.initiative);
+        else ent = new window.Entity(entData.name, entData.color, entData.hex, entData.initiative);
+        Object.assign(ent, entData);
+        window.entities.push(ent);
+        if (ent.networkId === socket.id) window.player = ent;
+    });
+
+    if (gamePhase !== undefined) window.gamePhase = gamePhase;
+    if (isInCombat !== undefined) window.isInCombat = isInCombat;
+    window.currentTurnEntity = currentTurnEntityName
+        ? window.entities.find(e => e.name === currentTurnEntityName)
+        : null;
+
+    if (window.broadcastFullState) window.broadcastFullState();
+});
+
 socket.on('startArenaFightRequest', () => {
     if (window.multiplayer && window.multiplayer.isHost && window.startArenaFight) {
         console.log("Start Arena Fight requested by client. Executing...");
@@ -430,6 +458,20 @@ window.startMultiplayerGame = () => {
 
 window.leaveRoom = () => {
     location.reload(); 
+};
+
+window.submitCombatTurnResult = () => {
+    if (!window.multiplayer?.roomCode || window.multiplayer.isHost) return;
+    socket.emit('combatTurnResult', {
+        roomCode: window.multiplayer.roomCode,
+        entities: window.entities.map(e => { const d = { ...e }; delete d.visualQ; delete d.visualR; return d; }),
+        gamePhase: window.gamePhase,
+        currentTurnEntityName: window.currentTurnEntity ? window.currentTurnEntity.name : null,
+        isInCombat: window.isInCombat,
+        overrideTerrain: window.overrideTerrain,
+        isInArena: window.isInArena,
+        tileObjects: window.tileObjects
+    });
 };
 
 window.broadcastFullState = () => {

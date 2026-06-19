@@ -280,7 +280,11 @@ function finalizePlayerAction(player, actionHandled) {
         window.playerWorldPos = { x: wp.col, y: wp.row };
     }
 
-    if (window.broadcastFullState) window.broadcastFullState();
+    if (window.multiplayer && window.multiplayer.roomCode && !window.multiplayer.isHost && window.isInCombat) {
+        if (window.submitCombatTurnResult) window.submitCombatTurnResult();
+    } else {
+        if (window.broadcastFullState) window.broadcastFullState();
+    }
 }
 
 function checkMovementReactions(movingEntity, nextHex, callback) {
@@ -1296,9 +1300,10 @@ function processRealTimeStep(entity, overage = 0) {
     
     if (fullPath && fullPath.length > 1) {
         const nextHex = fullPath[1];
-        
-        // Prevent walking onto occupied hexes (collision)
-        if (window.getEntityAtHex(nextHex.q, nextHex.r)) {
+
+        // Prevent walking onto occupied hexes (collision) — enemies only; friendlies don't block
+        const nextOccupant = window.getEntityAtHex(nextHex.q, nextHex.r);
+        if (nextOccupant && nextOccupant.side !== entity.side) {
             entity.destination = null;
             entity.moveCooldown = 0;
             entity.moveTotalTime = 0;
@@ -1306,7 +1311,7 @@ function processRealTimeStep(entity, overage = 0) {
         }
 
         const terrain = window.getTerrainAt(nextHex.q, nextHex.r);
-        
+
         let stepCost = 5 * (terrain.moveCostMult || 1);
         if (moveEntity.skills?.fastMovement) stepCost -= moveEntity.skills.fastMovement;
 
@@ -1536,9 +1541,10 @@ function autoMoveProcess(entity) {
     
     if (fullPath && fullPath.length > 1) {
         const nextHex = fullPath[1];
-        
-        // Prevent walking onto occupied hexes (collision)
-        if (window.getEntityAtHex(nextHex.q, nextHex.r)) {
+
+        // Prevent walking onto occupied hexes (collision) — enemies only; friendlies don't block
+        const nextOccupant = window.getEntityAtHex(nextHex.q, nextHex.r);
+        if (nextOccupant && nextOccupant.side !== entity.side) {
             entity.destination = null;
             entity.moveCooldown = 0;
             entity.moveTotalTime = 0;
