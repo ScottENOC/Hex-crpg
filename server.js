@@ -23,6 +23,7 @@ io.on('connection', (socket) => {
         const roomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
         characterData.hex = characterData.hex || { q: 0, r: 0 };
         rooms[roomCode] = {
+            hostSocketId: socket.id,
             players: { [socket.id]: characterData },
             savedCharacters: savedCharacters || [],
             gameState: {
@@ -91,27 +92,23 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('broadcastState', ({ roomCode, worldSeconds, mapItems, entities, overrideTerrain, tileObjects, isInArena, indoorLightMult, exploredHexes }) => {
-        const room = rooms[roomCode];
+    socket.on('broadcastState', (payload) => {
+        const room = rooms[payload.roomCode];
         if (room) {
-            room.gameState.worldSeconds = worldSeconds;
-            room.gameState.isInArena = isInArena;
-            room.gameState.overrideTerrain = overrideTerrain;
-            room.gameState.tileObjects = tileObjects;
-            room.gameState.indoorLightMult = indoorLightMult;
-            room.gameState.exploredHexes = exploredHexes;
+            room.gameState.worldSeconds = payload.worldSeconds;
+            room.gameState.isInArena = payload.isInArena;
+            room.gameState.overrideTerrain = payload.overrideTerrain;
+            room.gameState.tileObjects = payload.tileObjects;
+            room.gameState.indoorLightMult = payload.indoorLightMult;
+            room.gameState.exploredHexes = payload.exploredHexes;
+            room.gameState.currentTurnEntityName = payload.currentTurnEntityName;
+            room.gameState.gamePhase = payload.gamePhase;
+            room.gameState.isInCombat = payload.isInCombat;
             
-            io.to(roomCode).emit('syncFullState', { 
+            io.to(payload.roomCode).emit('syncFullState', { 
+                ...payload,
                 players: room.players, 
-                gameState: room.gameState,
-                entities,
-                mapItems,
-                worldSeconds,
-                overrideTerrain,
-                tileObjects,
-                isInArena,
-                indoorLightMult,
-                exploredHexes
+                gameState: room.gameState
             });
         }
     });
@@ -126,6 +123,13 @@ io.on('connection', (socket) => {
                 }
             }
             io.to(roomCode).emit('gameStarted', { players: room.players });
+        }
+    });
+
+    socket.on('requestStartArenaFight', ({ roomCode }) => {
+        const room = rooms[roomCode];
+        if (room && room.hostSocketId) {
+            io.to(room.hostSocketId).emit('startArenaFightRequest');
         }
     });
 

@@ -90,7 +90,8 @@ socket.on('gameStarted', ({ players }) => {
     window.initializeMultiplayerGame(players);
 });
 
-socket.on('syncFullState', ({ players, gameState, entities, mapItems, worldSeconds, overrideTerrain, tileObjects, isInArena, indoorLightMult, exploredHexes }) => {
+socket.on('syncFullState', (data) => {
+    const { players, gameState, entities, mapItems, worldSeconds, overrideTerrain, tileObjects, isInArena, indoorLightMult, exploredHexes, currentTurnEntityName, gamePhase, isInCombat } = data;
     console.log("Full State Sync Received...");
     window.multiplayer.players = players;
     window.worldSeconds = worldSeconds;
@@ -103,13 +104,19 @@ socket.on('syncFullState', ({ players, gameState, entities, mapItems, worldSecon
     if (exploredHexes) {
         window.exploredHexes = new Set(exploredHexes);
     }
+    if (isInCombat !== undefined) {
+        window.isInCombat = isInCombat;
+    }
+    if (gamePhase !== undefined) {
+        window.gamePhase = gamePhase;
+    }
 
     window.entities = [];
-    entities.forEach(data => {
+    entities.forEach(entData => {
         let ent;
-        if (data.isEnemy) ent = new window.Enemy(data.name, data.color, data.hex, data.initiative);
-        else ent = new window.Entity(data.name, data.color, data.hex, data.initiative);
-        Object.assign(ent, data);
+        if (entData.isEnemy) ent = new window.Enemy(entData.name, entData.color, entData.hex, entData.initiative);
+        else ent = new window.Entity(entData.name, entData.color, entData.hex, entData.initiative);
+        Object.assign(ent, entData);
         window.entities.push(ent);
         
         // Re-link local player reference
@@ -128,6 +135,15 @@ socket.on('syncFullState', ({ players, gameState, entities, mapItems, worldSecon
         }
     });
 
+    // Resolve currentTurnEntity on client
+    if (currentTurnEntityName !== undefined) {
+        if (currentTurnEntityName) {
+            window.currentTurnEntity = window.entities.find(e => e.name === currentTurnEntityName);
+        } else {
+            window.currentTurnEntity = null;
+        }
+    }
+
     if (document.getElementById('gameContainer').style.display !== 'flex') {
         // Only auto-initialize if we aren't already in the world
         // If we ARE in the lobby and there are saved characters, we wait for a claim or manual join
@@ -140,6 +156,8 @@ socket.on('syncFullState', ({ players, gameState, entities, mapItems, worldSecon
         const localPlayerEnt = window.entities.find(e => e.networkId === socket.id);
         if (localPlayerEnt && window.centerCameraOn) window.centerCameraOn(localPlayerEnt.hex);
     }
+    
+    if (window.updateTurnIndicator) window.updateTurnIndicator();
 });
 
 socket.on('playerLeft', (id) => {
@@ -163,6 +181,13 @@ socket.on('playerMoved', ({ id, hex, destination }) => {
         if (destination !== undefined) entity.destination = destination;
         if (window.drawMap) window.drawMap();
         if (window.renderEntities) window.renderEntities();
+    }
+});
+
+socket.on('startArenaFightRequest', () => {
+    if (window.multiplayer && window.multiplayer.isHost && window.startArenaFight) {
+        console.log("Start Arena Fight requested by client. Executing...");
+        window.startArenaFight();
     }
 });
 
@@ -419,6 +444,9 @@ window.broadcastFullState = () => {
         isInArena: window.isInArena,
         indoorLightMult: window.indoorLightMult,
         exploredHexes: Array.from(window.exploredHexes || []),
+        currentTurnEntityName: window.currentTurnEntity ? window.currentTurnEntity.name : null,
+        gamePhase: window.gamePhase,
+        isInCombat: window.isInCombat,
         entities: window.entities.map(e => {
             const data = { ...e };
             delete data.visualQ; delete data.visualR; 

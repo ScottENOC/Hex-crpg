@@ -1122,7 +1122,15 @@ function tick() {
     if (!inCombat && window.updateActionButtons) {
         tickCounter++;
         if (tickCounter >= 50) {
-            if (window.multiplayer.isHost && window.updateExploration) window.updateExploration();
+            const isMultiplayer = window.multiplayer && window.multiplayer.roomCode;
+            if (isMultiplayer) {
+                if (window.multiplayer.isHost) {
+                    if (window.updateExploration) window.updateExploration();
+                    if (window.broadcastFullState) window.broadcastFullState();
+                }
+            } else {
+                if (window.updateExploration) window.updateExploration();
+            }
             window.updateActionButtons();
             tickCounter = 0;
         }
@@ -1332,6 +1340,9 @@ function processRealTimeStep(entity, overage = 0) {
 }
 
 function runTickInternal(isSleepCycle = false, skipUI = false, tickMultiplier = 1.0) {
+    if (window.multiplayer && window.multiplayer.roomCode && !window.multiplayer.isHost) {
+        return;
+    }
     if (window.currentTurnEntity && !isSleepCycle) return;
     
     const readyEntities = window.entities.filter(e => e.timePoints >= 100 && e.alive && !e.rider);
@@ -1475,6 +1486,7 @@ function takeTurn(entity) {
         aiProcess(entity);
     }
     window.updateTurnIndicator();
+    if (window.broadcastFullState) window.broadcastFullState();
 }
 
 function autoMoveProcess(entity) {
@@ -3420,7 +3432,13 @@ function talkToNPC(npc) {
     console.log("Talking to NPC:", npc.name);
     if (npc.name === "Arena Announcer") {
         window.showDialogue(npc, "Welcome to the pits! Are you ready for your next match?", [
-            { label: "I am ready to fight!", action: () => startArenaFight() },
+            { label: "I am ready to fight!", action: () => {
+                if (window.multiplayer && window.multiplayer.roomCode) {
+                    window.multiplayer.socket.emit('requestStartArenaFight', { roomCode: window.multiplayer.roomCode });
+                } else {
+                    window.startArenaFight();
+                }
+            }},
             { label: "Not yet.", action: () => {} }
         ]);
     } else if (npc.name && npc.name.includes("Shopkeeper")) {
