@@ -96,7 +96,7 @@ socket.on('syncFullState', (data) => {
     window.multiplayer.players = players;
     window.worldSeconds = worldSeconds;
     window.mapItems = mapItems;
-    
+
     if (overrideTerrain) window.overrideTerrain = overrideTerrain;
     if (tileObjects) window.tileObjects = tileObjects;
     if (isInArena !== undefined) window.isInArena = isInArena;
@@ -111,6 +111,20 @@ socket.on('syncFullState', (data) => {
         window.gamePhase = gamePhase;
     }
 
+    // Snapshot local player's movement state before the entity rebuild wipes it.
+    // The host strips visualQ/R and doesn't track mid-step cooldowns for remote entities,
+    // so without this the non-host's character snaps back to the host's stale position.
+    const prevLocal = window.player ? {
+        hex:          window.player.hex ? { ...window.player.hex } : null,
+        destination:  window.player.destination,
+        moveCooldown: window.player.moveCooldown,
+        moveTotalTime:window.player.moveTotalTime,
+        startQ:       window.player.startQ,
+        startR:       window.player.startR,
+        visualQ:      window.player.visualQ,
+        visualR:      window.player.visualR,
+    } : null;
+
     window.entities = [];
     entities.forEach(entData => {
         let ent;
@@ -118,10 +132,24 @@ socket.on('syncFullState', (data) => {
         else ent = new window.Entity(entData.name, entData.color, entData.hex, entData.initiative);
         Object.assign(ent, entData);
         window.entities.push(ent);
-        
+
         // Re-link local player reference
         if (ent.networkId === socket.id) {
             window.player = ent;
+
+            // If the player was mid-move, restore their local movement state so the
+            // sync doesn't snap them back to the host's last-known (lagging) position.
+            if (prevLocal && (prevLocal.destination || (prevLocal.moveCooldown > 0))) {
+                ent.hex          = prevLocal.hex;
+                ent.destination  = prevLocal.destination;
+                ent.moveCooldown = prevLocal.moveCooldown;
+                ent.moveTotalTime= prevLocal.moveTotalTime;
+                ent.startQ       = prevLocal.startQ;
+                ent.startR       = prevLocal.startR;
+                ent.visualQ      = prevLocal.visualQ;
+                ent.visualR      = prevLocal.visualR;
+            }
+
             if (window.party) {
                 // Ensure we don't duplicate or mis-index the local player in the party array
                 const pIdx = window.party.findIndex(p => p.name === ent.name);
