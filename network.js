@@ -153,8 +153,8 @@ socket.on('syncFullState', (data) => {
     } else {
         window.drawMap();
         window.renderEntities();
-        const localPlayerEnt = window.entities.find(e => e.networkId === socket.id);
-        if (localPlayerEnt && window.centerCameraOn) window.centerCameraOn(localPlayerEnt.hex);
+        // Camera follow is handled by smoothFollowPlayer in the tick loop.
+        // centerCameraOn would snap the camera on every broadcast (~500ms) causing visible jumps.
     }
     
     if (window.updateTurnIndicator) window.updateTurnIndicator();

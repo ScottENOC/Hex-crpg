@@ -1244,6 +1244,7 @@ function tick() {
         });
 
         updateVisualPositions(scaledDt);
+        if (window.smoothFollowPlayer) window.smoothFollowPlayer(dt);
         window.drawMap();
         window.renderEntities();
         window.updateTurnIndicator();

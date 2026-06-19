@@ -651,12 +651,23 @@ function initHexMap() {
     }, { passive: false });
 
     mapCanvas.addEventListener('touchend', (e) => {
+        const wasTap = e.changedTouches.length === 1 &&
+                       window.totalDragDistance < 10 &&
+                       (Date.now() - touchStartTime) < 600;
+
         if (longPressTimer) {
             clearTimeout(longPressTimer);
             longPressTimer = null;
         }
         if (e.touches.length < 2) lastPinchDist = 0;
         if (e.touches.length === 0) isDragging = false;
+
+        // iOS suppresses the synthetic click when touchmove calls preventDefault,
+        // so fire handleClick directly for short taps.
+        if (wasTap && window.handleClick) {
+            const t = e.changedTouches[0];
+            window.handleClick({ clientX: t.clientX, clientY: t.clientY });
+        }
     });
 
     drawMap();
@@ -684,6 +695,38 @@ function centerCameraOn(hex) {
 }
 
 window.centerCameraOn = centerCameraOn;
+
+// Smoothly follow the local multiplayer player's visual position while they are moving.
+// Only active when the entity has a destination so the user can still drag to look around
+// when the player is stationary.
+window.smoothFollowPlayer = function(dt) {
+    if (!window.multiplayer || !window.multiplayer.roomCode) return;
+    const localEnt = window.entities &&
+        window.entities.find(e => e.networkId === window.multiplayer.socket.id);
+    if (!localEnt) return;
+
+    const isMoving = localEnt.destination ||
+                     (localEnt.moveCooldown !== undefined && localEnt.moveCooldown > 0);
+    if (!isMoving) return;
+
+    const vQ = (localEnt.visualQ !== undefined) ? localEnt.visualQ : localEnt.hex.q;
+    const vR = (localEnt.visualR !== undefined) ? localEnt.visualR : localEnt.hex.r;
+
+    const rect = mapCanvas.getBoundingClientRect();
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+
+    const worldX = (hexSize * (3/2 * vQ) + mapOffsetX) * window.cameraZoom;
+    const worldY = (hexSize * (Math.sqrt(3) * vR + Math.sqrt(3)/2 * vQ) + mapOffsetY) * window.cameraZoom;
+
+    const targetX = cx - worldX;
+    const targetY = cy - worldY;
+
+    // Exponential lerp — reaches target in ~0.4s at speed=8
+    const t = Math.min(1, dt * 8);
+    window.cameraX += (targetX - window.cameraX) * t;
+    window.cameraY += (targetY - window.cameraY) * t;
+};
 window.mapCanvas = mapCanvas;
 window.mapCtx = mapCtx;
 window.hexSize = hexSize;
