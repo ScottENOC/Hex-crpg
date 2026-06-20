@@ -224,6 +224,14 @@
         </div>
     </div>
 
+    <!-- Disconnect overlay — shown in-game when socket drops -->
+    <div id="disconnect-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:9999; flex-direction:column; align-items:center; justify-content:center; gap:16px; color:#fff; font-family:sans-serif;">
+        <div style="font-size:2em;">⚠ Disconnected</div>
+        <div id="disconnect-msg" style="font-size:1em; color:#bbb;">Attempting to reconnect…</div>
+        <button id="disconnect-rejoin-btn" style="display:none; padding:10px 28px; font-size:1em; background:#27ae60; color:#fff; border:none; border-radius:6px; cursor:pointer;">Rejoin Room</button>
+        <button id="disconnect-lobby-btn" style="padding:8px 20px; font-size:0.9em; background:#555; color:#fff; border:none; border-radius:6px; cursor:pointer;">Return to Lobby</button>
+    </div>
+
     <div id="gameContainer" style="display: none;">
         <div id="game-container">
             <div id="game-board">

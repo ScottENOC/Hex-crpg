@@ -124,6 +124,9 @@ function drawMap() {
   // No sorting needed for flat-top hexes as long as we draw in a consistent order
   // visibleAndExplored.sort((a, b) => (a.r + a.q/2) - (b.r + b.q/2));
 
+  // Guard: complete=true on both loaded AND broken images; naturalWidth===0 means broken
+  const imgOk = img => img && img.complete && img.naturalWidth !== 0;
+
   // 2. PASS 1: Base Terrain & Foliage
   visibleAndExplored.forEach(({q, r, visible}) => {
       const terrain = window.getTerrainAt(q, r);
@@ -135,26 +138,26 @@ function drawMap() {
           const noise = Math.abs(Math.sin(q * 12.9898 + r * 78.233));
           const floorNum = Math.floor(noise * 4) + 1;
           const floorImg = window.gameVisuals[`floor${floorNum}`];
-          if (floorImg && floorImg.complete) {
+          if (imgOk(floorImg)) {
               mapCtx.drawImage(floorImg, x - zoomedSize, y - zoomedSize, zoomedSize * 2, zoomedSize * 2);
           } else {
               drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
           }
 
           // Overlays (10% Blood, 1% Skull)
-          if (noise < 0.1 && window.gameVisuals.overlay_blood.complete) {
+          if (noise < 0.1 && imgOk(window.gameVisuals.overlay_blood)) {
               mapCtx.drawImage(window.gameVisuals.overlay_blood, x - zoomedSize/2, y - zoomedSize/2, zoomedSize, zoomedSize);
-          } else if (noise > 0.99 && window.gameVisuals.overlay_skull.complete) {
+          } else if (noise > 0.99 && imgOk(window.gameVisuals.overlay_skull)) {
               const skullSize = zoomedSize * 0.25;
               mapCtx.drawImage(window.gameVisuals.overlay_skull, x - skullSize/2, y - skullSize/2, skullSize, skullSize);
           }
-      } else if (terrain.name === 'Pedestal' && window.gameVisuals.pedestal.complete) {
+      } else if (terrain.name === 'Pedestal' && imgOk(window.gameVisuals.pedestal)) {
           const blockedHexes = [{q: q, r: r-1}, {q: q+1, r: r-1}];
           const needsTransparency = window.entities.some(e => e.alive && blockedHexes.some(bh => e.getAllHexes().some(h => h.q === bh.q && h.r === bh.r)));
           if (needsTransparency) mapCtx.globalAlpha = 0.5;
           mapCtx.drawImage(window.gameVisuals.pedestal, x - zoomedSize, y - zoomedSize, zoomedSize * 2, zoomedSize * 2);
           if (needsTransparency) mapCtx.globalAlpha = 1.0;
-      } else if (terrain.name === 'Foliage' && window.gameVisuals.foliage.complete) {
+      } else if (terrain.name === 'Foliage' && imgOk(window.gameVisuals.foliage)) {
           mapCtx.drawImage(window.gameVisuals.foliage, x - zoomedSize, y - zoomedSize, zoomedSize * 2, zoomedSize * 2);
       } else if (terrain.name !== 'Water') {
           drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
@@ -171,7 +174,7 @@ function drawMap() {
   // 4. PASS 3: Water Overlay (50% Transparency) - DRAWN ON TOP OF CHARACTERS
   visibleAndExplored.forEach(({q, r}) => {
       const terrain = window.getTerrainAt(q, r);
-      if (terrain.name === 'Water' && window.gameVisuals.water.complete) {
+      if (terrain.name === 'Water' && imgOk(window.gameVisuals.water)) {
           const {x, y} = hexToPixel(q, r);
           const zoomedSize = hexSize * window.cameraZoom;
           mapCtx.globalAlpha = 0.5;

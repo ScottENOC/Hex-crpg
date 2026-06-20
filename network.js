@@ -15,12 +15,73 @@ window.multiplayer = {
     gameState: {}
 };
 
+// Saved character data used to rejoin a room after reconnect
+let _savedRejoinData = null;
+
+function showDisconnectOverlay(msg, showRejoinBtn) {
+    const overlay = document.getElementById('disconnect-overlay');
+    if (!overlay) return;
+    overlay.style.display = 'flex';
+    document.getElementById('disconnect-msg').innerText = msg;
+    document.getElementById('disconnect-rejoin-btn').style.display = showRejoinBtn ? 'block' : 'none';
+}
+
+function hideDisconnectOverlay() {
+    const overlay = document.getElementById('disconnect-overlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
+// Wire up overlay buttons once DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('disconnect-rejoin-btn')?.addEventListener('click', () => {
+        if (!_savedRejoinData || !window.multiplayer.roomCode) return;
+        socket.emit('joinRoom', { roomCode: window.multiplayer.roomCode, characterData: _savedRejoinData });
+        document.getElementById('disconnect-msg').innerText = 'Rejoining…';
+        document.getElementById('disconnect-rejoin-btn').style.display = 'none';
+    });
+    document.getElementById('disconnect-lobby-btn')?.addEventListener('click', () => {
+        hideDisconnectOverlay();
+        window.multiplayer.roomCode = null;
+        window.multiplayer.isHost = false;
+        // Let the user start fresh from the lobby
+        document.getElementById('gameContainer').style.display = 'none';
+        document.getElementById('mainMenu').style.display = 'flex';
+    });
+});
+
 socket.on('connect', () => {
     document.getElementById('multiplayer-status').innerText = 'Status: Online';
     document.getElementById('multiplayer-status').style.color = '#27ae60';
+
+    // Auto-rejoin after reconnect if we were in a room
+    if (window.multiplayer.roomCode && _savedRejoinData) {
+        document.getElementById('disconnect-msg').innerText = 'Reconnected — rejoining room…';
+        document.getElementById('disconnect-rejoin-btn').style.display = 'none';
+        socket.emit('joinRoom', { roomCode: window.multiplayer.roomCode, characterData: _savedRejoinData });
+    } else {
+        hideDisconnectOverlay();
+    }
+});
+
+socket.on('disconnect', () => {
+    document.getElementById('multiplayer-status').innerText = 'Status: Offline';
+    document.getElementById('multiplayer-status').style.color = '#e74c3c';
+
+    // Only show the overlay if we were actively in a game
+    if (document.getElementById('gameContainer').style.display === 'flex') {
+        showDisconnectOverlay('Connection lost — attempting to reconnect…', false);
+    }
+});
+
+socket.on('connect_error', () => {
+    // After multiple failed reconnect attempts, offer manual rejoin button
+    if (document.getElementById('disconnect-overlay').style.display === 'flex') {
+        showDisconnectOverlay('Unable to reach server. Check your connection.', !!window.multiplayer.roomCode);
+    }
 });
 
 socket.on('roomCreated', ({ roomCode, players }) => {
+    _savedRejoinData = players[socket.id] || null;
     window.multiplayer.roomCode = roomCode;
     window.multiplayer.isHost = true;
     window.multiplayer.players = players;
@@ -41,6 +102,9 @@ socket.on('roomCreated', ({ roomCode, players }) => {
 });
 
 socket.on('roomJoined', ({ roomCode, players, gameState, savedCharacters }) => {
+    hideDisconnectOverlay();
+    // Save character data so we can rejoin if we disconnect
+    _savedRejoinData = players[socket.id] || null;
     window.multiplayer.roomCode = roomCode;
     window.multiplayer.isHost = false;
     window.multiplayer.players = players;
@@ -98,6 +162,7 @@ socket.on('syncFullState', (data) => {
     window.mapItems = mapItems;
 
     const wasInArena = window.isInArena;
+    const wasInCombat = window.isInCombat;
     if (overrideTerrain) window.overrideTerrain = overrideTerrain;
     if (tileObjects) window.tileObjects = tileObjects;
     if (isInArena !== undefined) window.isInArena = isInArena;
@@ -117,7 +182,9 @@ socket.on('syncFullState', (data) => {
     // so without this the non-host's character snaps back to the host's stale position.
     // Exception: during area transitions (entering/leaving the arena) we must use the
     // server's authoritative spawn position rather than the stale lobby position.
-    const isAreaTransition = (isInArena !== undefined && isInArena !== wasInArena);
+    // Force server position on arena entry/exit or when combat first begins (spawn placement)
+    const isAreaTransition = (isInArena !== undefined && isInArena !== wasInArena) ||
+                             (isInCombat && !wasInCombat);
     const prevLocal = (!isAreaTransition && window.player) ? {
         hex:          window.player.hex ? { ...window.player.hex } : null,
         destination:  window.player.destination,
@@ -141,10 +208,12 @@ socket.on('syncFullState', (data) => {
         if (ent.networkId === socket.id) {
             window.player = ent;
 
-            // If the player was mid-move, restore their local movement state so the
-            // sync doesn't snap them back to the host's last-known (lagging) position.
-            // (prevLocal is null during area transitions so the server position is used.)
-            if (prevLocal && (prevLocal.destination || (prevLocal.moveCooldown > 0))) {
+            // Always keep the local player's position during exploration syncs — the host
+            // position lags by a network round-trip and causes snapback if we accept it.
+            // During combat, position is set by turn results not syncFullState, so it's
+            // safe to preserve here too. isAreaTransition (above) sets prevLocal=null for
+            // arena entry/combat-start so server spawn positions are used in those cases.
+            if (prevLocal) {
                 ent.hex          = prevLocal.hex;
                 ent.destination  = prevLocal.destination;
                 ent.moveCooldown = prevLocal.moveCooldown;
@@ -154,6 +223,9 @@ socket.on('syncFullState', (data) => {
                 ent.visualQ      = prevLocal.visualQ;
                 ent.visualR      = prevLocal.visualR;
             }
+
+            // Keep rejoin snapshot fresh with latest character state from server
+            _savedRejoinData = { ...ent };
 
             if (window.party) {
                 // Ensure we don't duplicate or mis-index the local player in the party array
@@ -569,6 +641,8 @@ window.submitCombatTurnResult = () => {
 
 window.broadcastFullState = () => {
     if (!window.multiplayer.isHost || !window.multiplayer.roomCode) return;
+    // Keep rejoin snapshot current so reconnecting players have fresh data
+    if (window.player) _savedRejoinData = { ...window.player };
     
     socket.emit('broadcastState', {
         roomCode: window.multiplayer.roomCode,
