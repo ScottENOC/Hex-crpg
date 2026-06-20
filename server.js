@@ -146,11 +146,11 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('move', ({ roomCode, hex, destination }) => {
+    socket.on('move', ({ roomCode, hex, destination, moveTotalTime, fromQ, fromR }) => {
         const room = rooms[roomCode];
         if (room && room.players[socket.id]) {
             if (hex) room.players[socket.id].hex = hex;
-            socket.to(roomCode).emit('playerMoved', { id: socket.id, hex, destination });
+            socket.to(roomCode).emit('playerMoved', { id: socket.id, hex, destination, moveTotalTime, fromQ, fromR });
         }
     });
 

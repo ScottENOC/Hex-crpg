@@ -232,13 +232,18 @@ socket.on('playerLeft', (id) => {
     updateMultiplayerUI();
 });
 
-socket.on('playerMoved', ({ id, hex, destination }) => {
+socket.on('playerMoved', ({ id, hex, destination, moveTotalTime, fromQ, fromR }) => {
     const entity = window.entities.find(e => e.networkId === id);
-    if (entity) {
-        if (hex) entity.hex = { ...hex };
-        if (destination !== undefined) entity.destination = destination;
-        if (window.drawMap) window.drawMap();
-        if (window.renderEntities) window.renderEntities();
+    if (entity && hex) {
+        // Capture start position for lerp (use current visual pos for continuity)
+        entity.startQ = fromQ !== undefined ? fromQ : (entity.visualQ !== undefined ? entity.visualQ : entity.hex.q);
+        entity.startR = fromR !== undefined ? fromR : (entity.visualR !== undefined ? entity.visualR : entity.hex.r);
+        entity.hex = { ...hex };
+        // Don't set destination — remote movement is purely visual lerp, not pathfinding
+        if (moveTotalTime) {
+            entity.moveTotalTime = moveTotalTime;
+            entity.moveCooldown = moveTotalTime;
+        }
     }
 });
 

@@ -1,4 +1,4 @@
-// gameEngine.js
+﻿// gameEngine.js
 
 window.gamePhase = 'WAITING'; // WAITING, PLAYER_TURN, AI_TURN
 window.isPausedForReaction = false;
@@ -749,6 +749,143 @@ function startGameCore(isLoading = false) {
   if (!window.tickInterval) window.tickInterval = setInterval(tick, 10);
 }
 
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// CHARACTER RENDERING CONFIG
+// All values in hexSize units unless noted. Edit these to tune visuals;
+// press ` (backtick) in-game to toggle the debug overlay showing anchor dots.
+//
+// bodyW/bodyH : rendered size = bodyW/bodyH * hexSize * zoom
+// yOff        : vertical shift in hexSize units (negative = up)
+// hair.type   : 'full' = overlay at body rect | 'small' = cap at head
+// hair.yRaw   : extra y shift in raw pixels * zoom (full hair only)
+// hair.topFrac: where small hair center sits (0=body top, 1=body bottom)
+// armour.topShift: drop armour from body top by this many hexSize units
+// armour.wMult   : armour width as multiple of body width
+// mainHand/offHand: normalised (0â€“1) position within body rect for weapon hilt
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const CHAR_CONFIG = {
+    human_male:   { bodyW:1.80, bodyH:2.16, yOff:-0.18, baseKey:'humanMaleBase',  hair:{ key:'humanMaleHair',   type:'small', wFrac:0.30, hFrac:0.30, topFrac:0.19 }, armour:{ wMult:1.0, topShift:0   }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.35, y:0.64 }, offHand:{ x:0.59, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:2.25 },
+    human_female: { bodyW:1.60, bodyH:1.92, yOff:-0.16, baseKey:'humanBase',       hair:{ key:'humanHair',       type:'full',  yRaw:-3                              }, armour:{ wMult:1.0, topShift:0   }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.40, y:0.66 }, offHand:{ x:0.60, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:2.25 },
+    elf_male:     { bodyW:2.00, bodyH:2.40, yOff:-0.20, baseKey:'elfMaleBase',     hair:{ key:'elfMaleHair',     type:'full'                                        }, armour:{ wMult:1.0, topShift:0.3 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.37, y:0.63 }, offHand:{ x:0.58, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:2.25 },
+    elf_female:   { bodyW:2.00, bodyH:2.40, yOff:-0.20, baseKey:'elfFemaleBase',   hair:{ key:'elfFemaleHair',   type:'full'                                        }, armour:{ wMult:1.0, topShift:0.3 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.37, y:0.63 }, offHand:{ x:0.58, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:2.25 },
+    dwarf_male:   { bodyW:1.60, bodyH:1.92, yOff:-0.07, baseKey:'dwarfMaleBase',   hair:{ key:'dwarfMaleHair',   type:'full'                                        }, armour:{ wMult:1.4, topShift:0.1 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.33, y:0.61 }, offHand:{ x:0.52, y:0.45 }, weaponSizeMult:1.0, shieldSizeMult:2.00 },
+    dwarf_female: { bodyW:1.60, bodyH:1.92, yOff:-0.07, baseKey:'dwarfFemaleBase', hair:{ key:'dwarfFemaleHair', type:'small', wFrac:0.31, hFrac:0.31, topFrac:0.21 }, armour:{ wMult:1.4, topShift:0.1 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.33, y:0.61 }, offHand:{ x:0.52, y:0.45 }, weaponSizeMult:1.0, shieldSizeMult:2.00 },
+};
+
+function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
+    const cfg = CHAR_CONFIG[`${e.race}_${e.gender}`];
+    if (!cfg || !window.gameVisuals) return;
+
+    const hs = window.hexSize;
+    const bW = cfg.bodyW * hs * z;
+    const bH = cfg.bodyH * hs * z;
+    const yOff = cfg.yOff * hs * z + flyOff;
+
+    // Body top uses bW/2 as vertical anchor (matches original per-race convention)
+    const left = x - bW / 2;
+    const top  = y - bW / 2 + yOff;
+
+    // BASE BODY
+    const baseImg = window.gameVisuals[cfg.baseKey];
+    if (baseImg?.complete) ctx.drawImage(baseImg, left, top, bW, bH);
+
+    // HAIR
+    const hc = cfg.hair;
+    const hairImg = window.gameVisuals[hc.key];
+    if (hairImg?.complete) {
+        if (hc.type === 'full') {
+            ctx.drawImage(hairImg, left, top + (hc.yRaw || 0) * z, bW, bH);
+        } else {
+            const hW = bW * hc.wFrac;
+            const hH = bH * hc.hFrac;
+            const topFrac = hc.topFrac !== undefined ? hc.topFrac : 0.2;
+            ctx.drawImage(hairImg, x - hW / 2, top + topFrac * bH - hH / 2, hW, hH);
+        }
+    }
+
+    // HELMET
+    if (e.equipped?.helmet === 'nasal_helm' && window.gameVisuals.nasal_helm?.complete) {
+        const hW = bW * cfg.helm.sizeMult;
+        ctx.drawImage(window.gameVisuals.nasal_helm, x - hW / 2 + cfg.helm.xOff * hs * z, top + cfg.helm.yOff * hs * z, hW, bH);
+    }
+
+    // ARMOUR (humanoid armour images scale to fit each race)
+    if (e.equipped?.armor) {
+        let armorImg = null;
+        const aid = e.equipped.armor;
+        if (aid === 'light_armor')  armorImg = window.gameVisuals.humanLight;
+        if (aid === 'medium_armor') armorImg = window.gameVisuals.humanMedium;
+        if (aid === 'heavy_armor')  armorImg = window.gameVisuals.humanHeavy;
+        if (armorImg?.complete) {
+            const aW = bW * cfg.armour.wMult;
+            const aTopShift = cfg.armour.topShift * hs * z;
+            ctx.drawImage(armorImg, x - aW / 2, top + aTopShift, aW, bH - aTopShift);
+        }
+    }
+
+    // SHIELD (offhand slot)
+    if (e.equipped?.offhand && window.items[e.equipped.offhand]?.type === 'shield' && window.gameVisuals.shield?.complete) {
+        const sSize = bW * cfg.shieldSizeMult;
+        ctx.drawImage(window.gameVisuals.shield, x - sSize / 2, y + yOff - sSize / 2, sSize, sSize);
+    }
+
+    // MAIN-HAND WEAPON
+    let weaponImg = null;
+    let weaponScale = 1.0;
+    const mainW = e.equipped?.weapon;
+    if (mainW === 'sword' || mainW === 'sword_arrow_deflection') weaponImg = window.gameVisuals.swordIcon;
+    else if (mainW === 'axe')    weaponImg = window.gameVisuals.axe;
+    else if (mainW === 'spear')  weaponImg = window.gameVisuals.spear;
+    else if (mainW === 'club')   weaponImg = window.gameVisuals.club;
+    else if (mainW === 'dagger') { weaponImg = window.gameVisuals.swordIcon; weaponScale = 0.5; }
+
+    if (weaponImg?.complete) {
+        const wSize = hs * cfg.weaponSizeMult * weaponScale * z;
+        const mhX = left + cfg.mainHand.x * bW;
+        const mhY = top  + cfg.mainHand.y * bH;
+        ctx.drawImage(weaponImg, mhX - wSize / 2, mhY - wSize / 2, wSize, wSize);
+    }
+
+    // OFF-HAND WEAPON (mirrored)
+    let offhandImg = null;
+    let offhandScale = 1.0;
+    const offW = e.equipped?.offhand;
+    if (offW === 'sword' || offW === 'sword_arrow_deflection') offhandImg = window.gameVisuals.swordIcon;
+    else if (offW === 'axe')    offhandImg = window.gameVisuals.axe;
+    else if (offW === 'spear')  offhandImg = window.gameVisuals.spear;
+    else if (offW === 'club')   offhandImg = window.gameVisuals.club;
+    else if (offW === 'dagger') { offhandImg = window.gameVisuals.swordIcon; offhandScale = 0.5; }
+
+    if (offhandImg?.complete && window.items[offW]?.type === 'weapon') {
+        const wSize = hs * cfg.weaponSizeMult * offhandScale * z;
+        const ohX = left + cfg.offHand.x * bW;
+        const ohY = top  + cfg.offHand.y * bH;
+        ctx.save();
+        ctx.translate(ohX, ohY);
+        ctx.scale(-1, 1);
+        ctx.drawImage(offhandImg, -wSize / 2, -wSize / 2, wSize, wSize);
+        ctx.restore();
+    }
+
+    // DEBUG OVERLAY â€” press ` to toggle window.charDebugMode
+    if (window.charDebugMode) {
+        ctx.strokeStyle = '#0f0';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(left, top, bW, bH);
+        const dot = (px, py, color, label) => {
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(px, py, 3 * z, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.font = `${9 * z}px monospace`;
+            ctx.fillText(label, px + 4 * z, py + 3 * z);
+        };
+        dot(left + cfg.mainHand.x * bW, top + cfg.mainHand.y * bH, '#f44', 'M');
+        dot(left + cfg.offHand.x  * bW, top + cfg.offHand.y  * bH, '#44f', 'O');
+    }
+}
+
 function renderEntities() {
   const z = window.cameraZoom || 1.0;
   
@@ -803,173 +940,8 @@ function renderEntities() {
           const flyOff = e.isFlying ? -20 * z : 0;
   
       if (isSentientAlly && window.gameVisuals) {
-          const size = window.hexSize * 2.0 * z;
-          
-          if (e.race === 'human') {
-              const humanSizeMult = e.gender === 'male' ? 1.8 : 1.6; // 10% vs 20% smaller than 2.0
-              const humanSize = window.hexSize * humanSizeMult * z;
-              const humanYOff = ((humanSizeMult * -3) * z) + flyOff; // Proportional offset
-              const humanHeightAdd = (humanSizeMult * 6) * z;
-  
-              // LAYER: Human Base (Gendered)
-              const baseImg = e.gender === 'male' ? window.gameVisuals.humanMaleBase : window.gameVisuals.humanBase;
-              if (baseImg.complete) {
-                  window.mapCtx.drawImage(baseImg, x - humanSize/2, y - humanSize/2 + humanYOff, humanSize, (humanSize + humanHeightAdd));
-              }
-              // LAYER: Human Hair
-              if (window.gameVisuals.humanHair.complete && e.gender !== 'male') {
-                  window.mapCtx.drawImage(window.gameVisuals.humanHair, x - humanSize/2, y - humanSize/2 + humanYOff - (3 * z), humanSize, (humanSize + humanHeightAdd));
-              } else if (window.gameVisuals.humanMaleHair.complete && e.gender === 'male') {
-                  const hWidth = humanSize * 0.3;
-                  const hHeight = (humanSize + humanHeightAdd) * 0.3;
-                  const yLift = (window.hexSize * 0.5) * z; 
-                  window.mapCtx.drawImage(window.gameVisuals.humanMaleHair, x - hWidth/2, y + humanYOff - hHeight/2 - yLift, hWidth, hHeight);
-              }
-                          // LAYER: Human Helmet
-                          if (e.equipped && e.equipped.helmet === 'nasal_helm' && window.gameVisuals.nasal_helm.complete) {
-                              const helmSize = humanSize * 1.1;
-                              window.mapCtx.drawImage(window.gameVisuals.nasal_helm, x - helmSize/2 + (2 * z), y - humanSize/2 + humanYOff + (2 * z), helmSize, (humanSize + humanHeightAdd));
-                          }
-              
-              // LAYER: Human Armour
-              let armorImg = null;
-              if (e.equipped && e.equipped.armor) {
-                  const aid = e.equipped.armor;
-                  if (aid === 'light_armor') armorImg = window.gameVisuals.humanLight;
-                  else if (aid === 'medium_armor') armorImg = window.gameVisuals.humanMedium;
-                  else if (aid === 'heavy_armor') armorImg = window.gameVisuals.humanHeavy;
-              }
-              if (armorImg && armorImg.complete) {
-                  window.mapCtx.drawImage(armorImg, x - humanSize/2, y - humanSize/2 + humanYOff, humanSize, (humanSize + humanHeightAdd));
-              }
-              
-              // LAYER: Shield (Human Scale)
-              if (e.equipped && e.equipped.offhand && window.items[e.equipped.offhand].type === 'shield' && window.gameVisuals.shield.complete) {
-                  const sSize = humanSize * 2.25;
-                  window.mapCtx.drawImage(window.gameVisuals.shield, x - sSize/2, y - sSize/2 + humanYOff, sSize, sSize);
-              }
-          } else {
-              // LAYER: Non-human (Elf/Dwarf) Base
-              let baseImg = null;
-              let currentSize = size;
-              let currentYOff = (-6 * z) + flyOff;
-              let currentHeight = size + 12 * z;
-  
-              if (e.race === 'elf') {
-                  baseImg = e.gender === 'male' ? window.gameVisuals.elfMaleBase : window.gameVisuals.elfFemaleBase;
-              } else if (e.race === 'dwarf') {
-                  baseImg = e.gender === 'male' ? window.gameVisuals.dwarfMaleBase : window.gameVisuals.dwarfFemaleBase;
-                  // Dwarf 20% smaller
-                  currentSize = size * 0.8;
-                  currentHeight = (size + 12 * z) * 0.8;
-                  currentYOff = (-2 * z) + flyOff; 
-              } else {
-                  baseImg = window.gameVisuals.playerBase; // Fallback
-              }
-  
-              if (baseImg && baseImg.complete) {
-                  window.mapCtx.drawImage(baseImg, x - currentSize/2, y - currentSize/2 + currentYOff, currentSize, currentHeight);
-              }
-  
-              // LAYER: Dwarf Hair
-              if (e.race === 'dwarf') {
-                  if (e.gender === 'male' && window.gameVisuals.dwarfMaleHair.complete) {
-                      window.mapCtx.drawImage(window.gameVisuals.dwarfMaleHair, x - currentSize/2, y - currentSize/2 + currentYOff, currentSize, currentHeight);
-                  } else if (e.gender === 'female' && window.gameVisuals.dwarfFemaleHair.complete) {
-                      const hWidth = currentSize * 0.3125;
-                      const hHeight = currentHeight * 0.3125;
-                      // Lower position (dropped from 0.35 to 0.1 lift)
-                      const yLift = currentHeight * 0.1;
-                      window.mapCtx.drawImage(window.gameVisuals.dwarfFemaleHair, x - hWidth/2, y - currentSize/2 + currentYOff - yLift + hHeight/2, hWidth, hHeight);
-                  }
-              }
-  
-              // LAYER: Elf Hair
-              if (e.race === 'elf') {
-                  if (e.gender === 'female' && window.gameVisuals.elfFemaleHair.complete) {
-                      window.mapCtx.drawImage(window.gameVisuals.elfFemaleHair, x - currentSize/2, y - currentSize/2 + currentYOff, currentSize, currentHeight);
-                  } else if (e.gender === 'male' && window.gameVisuals.elfMaleHair.complete) {
-                      window.mapCtx.drawImage(window.gameVisuals.elfMaleHair, x - currentSize/2, y - currentSize/2 + currentYOff, currentSize, currentHeight);
-                  }
-              }
-  
-              // LAYER: Non-human Armour
-              let armorImg = null;
-              if (e.equipped && e.equipped.armor) {
-                  const aid = e.equipped.armor;
-                  if (aid === 'light_armor') armorImg = window.gameVisuals.humanLight;
-                  else if (aid === 'medium_armor') armorImg = window.gameVisuals.humanMedium;
-                  else if (aid === 'heavy_armor') armorImg = window.gameVisuals.humanHeavy;
-              }
-              if (armorImg && armorImg.complete) {
-                  if (e.race === 'dwarf') {
-                      const aWidth = currentSize * 1.4;
-                      const topShift = (window.hexSize * 0.1) * z; // 5% of hex height
-                      window.mapCtx.drawImage(armorImg, x - aWidth/2, y - currentSize/2 + currentYOff + topShift, aWidth, currentHeight - topShift);
-                  } else if (e.race === 'elf') {
-                      const topShift = (window.hexSize * 0.3) * z; // 15% of hex height
-                      window.mapCtx.drawImage(armorImg, x - currentSize/2, y - currentSize/2 + currentYOff + topShift, currentSize, currentHeight - topShift);
-                  } else {
-                      // Standard alignment for humans and others
-                      window.mapCtx.drawImage(armorImg, x - currentSize/2, y - currentSize/2 + currentYOff, currentSize, currentHeight);
-                  }
-              }
-              // LAYER: Shield (Elf/Dwarf Scale)
-              if (e.equipped && e.equipped.offhand && window.items[e.equipped.offhand].type === 'shield' && window.gameVisuals.shield.complete) {
-                  const sSize = currentSize * 2.25;
-                  window.mapCtx.drawImage(window.gameVisuals.shield, x - sSize/2, y - sSize/2 + currentYOff, sSize, sSize);
-              }
-          }
-          
-                          // WEAPON LAYER: Sword, Axe, Spear or Club
-                          let weaponImg = null;
-                          let weaponScale = 1.0;
-                          const mainW = e.equipped?.weapon;
-                          if (mainW === 'sword' || mainW === 'sword_arrow_deflection') weaponImg = window.gameVisuals.swordIcon;
-                          else if (mainW === 'axe') weaponImg = window.gameVisuals.axe;
-                          else if (mainW === 'spear') weaponImg = window.gameVisuals.spear;
-                          else if (mainW === 'club') weaponImg = window.gameVisuals.club;
-                          else if (mainW === 'dagger') { weaponImg = window.gameVisuals.swordIcon; weaponScale = 0.5; }
-                  
-                          if (weaponImg && weaponImg.complete) {
-                              const weaponSize = window.hexSize * weaponScale * z; 
-                              const xShift = (window.hexSize * 0.1) * z; // 5% of hex height
-                              const yShift = (window.hexSize * 0.3) * z; // 15% of hex height
-                              let weaponX = x - (window.hexSize/2 + 5) * z - xShift;
-                              let weaponY = y - weaponSize/2 + flyOff + yShift;
-                              if (mainW === 'dagger') {
-                                  weaponX += (window.hexSize * 0.16) * z;
-                                  weaponY += (window.hexSize * 0.16) * z;
-                              }
-                              window.mapCtx.drawImage(weaponImg, weaponX, weaponY, weaponSize, weaponSize);
-                          }
-                  
-                          // OFF-HAND WEAPON LAYER
-                          let offhandImg = null;
-                          let offhandScale = 1.0;
-                          const offW = e.equipped?.offhand;
-                          if (offW === 'sword' || offW === 'sword_arrow_deflection') offhandImg = window.gameVisuals.swordIcon;
-                          else if (offW === 'axe') offhandImg = window.gameVisuals.axe;
-                          else if (offW === 'spear') offhandImg = window.gameVisuals.spear;
-                          else if (offW === 'club') offhandImg = window.gameVisuals.club;
-                          else if (offW === 'dagger') { offhandImg = window.gameVisuals.swordIcon; offhandScale = 0.5; }
-                  
-                          if (offhandImg && offhandImg.complete && window.items[offW]?.type === 'weapon') {
-                              const weaponSize = window.hexSize * offhandScale * z;
-                              window.mapCtx.save();
-                              // Flip horizontally (scale -1, 1), position on the right side but shifted left
-                              let offX = x + (window.hexSize/2 + 5) * z - (weaponSize / 2);
-                              let offY = y + flyOff;
-                              if (offW === 'dagger') {
-                                  offX += (window.hexSize * 0.16) * z;
-                                  offY += (window.hexSize * 0.16) * z;
-                              }
-                              window.mapCtx.translate(offX, offY);
-                              window.mapCtx.scale(-1, 1);
-                              window.mapCtx.drawImage(offhandImg, -weaponSize/2, -weaponSize/2, weaponSize, weaponSize);
-                              window.mapCtx.restore();
-                          }
-                      } else if ((e instanceof window.Enemy || e.customImage) && window.gameVisuals) {
+          drawPlayerCharacter(window.mapCtx, e, x, y, z, flyOff);
+      } else if ((e instanceof window.Enemy || e.customImage) && window.gameVisuals) {
                           let size = window.hexSize * 1.5 * z;
                           let yOffset = 0;
                           let widthMult = 1.0;
@@ -1293,6 +1265,11 @@ function updateVisualPositions(dt) {
             targetR = totalR / uniqueHexes.length;
         }
 
+        // Remote entities aren't driven by processRealTimeStep, so tick their cooldown here
+        if (e.isRemote && e.moveCooldown > 0) {
+            e.moveCooldown = Math.max(0, e.moveCooldown - dt);
+        }
+
         // If no movement is happening, stay at target
         if (e.moveCooldown === undefined || e.moveCooldown <= 0 || !e.moveTotalTime) {
             e.visualQ = targetQ;
@@ -1320,7 +1297,7 @@ function processRealTimeStep(entity, overage = 0) {
     if (fullPath && fullPath.length > 1) {
         const nextHex = fullPath[1];
 
-        // Prevent walking onto occupied hexes (collision) — enemies only; friendlies don't block
+        // Prevent walking onto occupied hexes (collision) â€” enemies only; friendlies don't block
         const nextOccupant = window.getEntityAtHex(nextHex.q, nextHex.r);
         if (nextOccupant && nextOccupant.side !== entity.side) {
             entity.destination = null;
@@ -1342,12 +1319,15 @@ function processRealTimeStep(entity, overage = 0) {
         if (entity.riding) entity.riding.hex = { q: nextHex.q, r: nextHex.r };
         spendTP(entity, stepCost);
 
-        // MULTIPLAYER SYNC: Broadcast each step
+        // MULTIPLAYER SYNC: Broadcast each step with lerp data so remotes animate smoothly
         if (window.multiplayer && window.multiplayer.roomCode && entity.networkId === window.multiplayer.socket.id) {
             window.multiplayer.socket.emit('move', {
                 roomCode: window.multiplayer.roomCode,
                 hex: entity.hex,
-                destination: entity.destination
+                destination: entity.destination,
+                moveTotalTime: duration,
+                fromQ: entity.startQ,
+                fromR: entity.startR,
             });
         }
         
@@ -1561,7 +1541,7 @@ function autoMoveProcess(entity) {
     if (fullPath && fullPath.length > 1) {
         const nextHex = fullPath[1];
 
-        // Prevent walking onto occupied hexes (collision) — enemies only; friendlies don't block
+        // Prevent walking onto occupied hexes (collision) â€” enemies only; friendlies don't block
         const nextOccupant = window.getEntityAtHex(nextHex.q, nextHex.r);
         if (nextOccupant && nextOccupant.side !== entity.side) {
             entity.destination = null;
@@ -1578,12 +1558,15 @@ function autoMoveProcess(entity) {
         if (entity.riding) entity.riding.hex = { q: nextHex.q, r: nextHex.r };
         spendTP(entity, stepCost);
 
-        // MULTIPLAYER SYNC: Broadcast each step
+        // MULTIPLAYER SYNC: Broadcast each step with lerp data so remotes animate smoothly
         if (window.multiplayer && window.multiplayer.roomCode && entity.networkId === window.multiplayer.socket.id) {
             window.multiplayer.socket.emit('move', {
                 roomCode: window.multiplayer.roomCode,
                 hex: entity.hex,
-                destination: entity.destination
+                destination: entity.destination,
+                moveTotalTime: duration,
+                fromQ: entity.startQ,
+                fromR: entity.startR,
             });
         }
         
@@ -2798,7 +2781,7 @@ function checkCombatEnd() {
 
     // Only check for ACTIVE enemies
     const aliveEnemies = window.entities.filter(e => e.side === 'enemy' && e.alive);
-    console.log(`[ARENA] checkCombatEnd — isInArena=${window.isInArena} aliveEnemies=${aliveEnemies.length} totalEntities=${window.entities.length}`);
+    console.log(`[ARENA] checkCombatEnd â€” isInArena=${window.isInArena} aliveEnemies=${aliveEnemies.length} totalEntities=${window.entities.length}`);
     if (aliveEnemies.length > 0) console.log('[ARENA] checkCombatEnd: enemies still alive, no transition');
     if (!window.entities.some(e => e.side === 'enemy' && e.alive)) {
         // Combat Ended Auto-save
@@ -3068,7 +3051,7 @@ window.tryAttack = tryAttack;
 window.cancelSpell = cancelSpell;
 
 function setupArenaLobby() {
-    console.log(`[ARENA] setupArenaLobby called — isInArena=${window.isInArena}`);
+    console.log(`[ARENA] setupArenaLobby called â€” isInArena=${window.isInArena}`);
     console.trace('[ARENA] setupArenaLobby call stack');
     window.gamePhase = 'WAITING';
     if (window.stopAllMusic) window.stopAllMusic(0.8);
@@ -3505,6 +3488,14 @@ window.lootItems = lootItems;
 window.spendTP = spendTP;
 window.finalizePlayerAction = finalizePlayerAction;
 window.handleMovement = (e) => {};
+
+window.charDebugMode = false;
+document.addEventListener('keydown', (ev) => {
+    if (ev.key === '`') {
+        window.charDebugMode = !window.charDebugMode;
+        window.renderEntities && window.renderEntities();
+    }
+});
 window.tryShove = tryShove;
 
 function resolveSpell(caster, spell, target, clickedHex) {
