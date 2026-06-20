@@ -132,7 +132,7 @@ socket.on('syncFullState', (data) => {
     window.entities = [];
     entities.forEach(entData => {
         let ent;
-        if (entData.isEnemy) ent = new window.Enemy(entData.name, entData.color, entData.hex, entData.initiative);
+        if (entData.side === 'enemy') ent = new window.Enemy(entData.name, entData.color, entData.hex, entData.initiative);
         else ent = new window.Entity(entData.name, entData.color, entData.hex, entData.initiative);
         Object.assign(ent, entData);
         window.entities.push(ent);
@@ -171,10 +171,18 @@ socket.on('syncFullState', (data) => {
     // Resolve currentTurnEntity on client
     if (currentTurnEntityName !== undefined) {
         if (currentTurnEntityName) {
-            window.currentTurnEntity = window.entities.find(e => e.name === currentTurnEntityName);
+            window.currentTurnEntity = window.entities.find(e => e.name === currentTurnEntityName) || null;
         } else {
             window.currentTurnEntity = null;
         }
+    }
+
+    // When it's the local player's turn, trigger combat highlights and action buttons
+    if (window.currentTurnEntity && window.player &&
+        window.currentTurnEntity.name === window.player.name &&
+        gamePhase === 'PLAYER_TURN' &&
+        window.updateActionButtons) {
+        window.updateActionButtons();
     }
 
     if (document.getElementById('gameContainer').style.display !== 'flex') {
@@ -251,16 +259,24 @@ socket.on('combatTurnResultReceived', ({ senderId, entities, gamePhase, currentT
     const reportedIds = new Set(entities.map(e => e.id).filter(Boolean));
     const unreportedEnemies = window.entities.filter(e => e.side === 'enemy' && !reportedIds.has(e.id));
 
+    // Save the host's authoritative death states before the rebuild — the non-host's
+    // submission can lag behind (e.g., Theodora died from poison after Gwen's turn
+    // started), so we must not let stale "alive" data resurrect dead entities.
+    const hostDeadNames = new Set(window.entities.filter(e => !e.alive).map(e => e.name));
+
     // Re-build entities from the acting player's reported state
     window.entities = [];
     entities.forEach(entData => {
         let ent;
-        if (entData.isEnemy) ent = new window.Enemy(entData.name, entData.color, entData.hex, entData.initiative);
+        if (entData.side === 'enemy') ent = new window.Enemy(entData.name, entData.color, entData.hex, entData.initiative);
         else ent = new window.Entity(entData.name, entData.color, entData.hex, entData.initiative);
         Object.assign(ent, entData);
         window.entities.push(ent);
         if (ent.networkId === socket.id) window.player = ent;
     });
+
+    // Re-apply death states the host already recorded — don't let non-host data revive them
+    window.entities.forEach(e => { if (hostDeadNames.has(e.name)) e.alive = false; });
 
     // Re-add any enemies not reported by the non-host (defensive — shouldn't normally happen)
     unreportedEnemies.forEach(e => window.entities.push(e));
@@ -268,7 +284,7 @@ socket.on('combatTurnResultReceived', ({ senderId, entities, gamePhase, currentT
     if (gamePhase !== undefined) window.gamePhase = gamePhase;
     if (isInCombat !== undefined) window.isInCombat = isInCombat;
     window.currentTurnEntity = currentTurnEntityName
-        ? window.entities.find(e => e.name === currentTurnEntityName)
+        ? (window.entities.find(e => e.name === currentTurnEntityName) || null)
         : null;
 
     if (window.broadcastFullState) window.broadcastFullState();

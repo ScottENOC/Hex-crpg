@@ -75,9 +75,11 @@ function drawHex(x, y, size, style = { stroke: "#555" }) {
     else mapCtx.lineTo(px, py);
   }
   mapCtx.closePath();
-  mapCtx.strokeStyle = style.stroke;
-  mapCtx.lineWidth = style.lineWidth || 1;
-  mapCtx.stroke();
+  if (style.stroke !== undefined) {
+      mapCtx.strokeStyle = style.stroke;
+      mapCtx.lineWidth = style.lineWidth || 1;
+      mapCtx.stroke();
+  }
   if (style.fill) {
       mapCtx.fillStyle = style.fill;
       mapCtx.fill();
