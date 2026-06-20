@@ -87,7 +87,9 @@ window.dialogueData = dialogueData;
 window.triggerAmbientDialogue = function(key) {
     const data = window.dialogueData[key];
     if (data) {
-        window.showMessage(`${data.speaker} (${data.mood}): "${data.dialogue}"`);
+        const text = `${data.speaker} (${data.mood}): "${data.dialogue}"`;
+        window.showMessage(text);
+        if (window.broadcastGameMessage) window.broadcastGameMessage(text);
         if (window.playDialogue) window.playDialogue(key);
     }
 };

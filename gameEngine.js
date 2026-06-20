@@ -3,6 +3,14 @@
 window.gamePhase = 'WAITING'; // WAITING, PLAYER_TURN, AI_TURN
 window.isPausedForReaction = false;
 
+// Broadcast a message to all connected clients. On non-host or single-player
+// this is identical to showMessage. On host in multiplayer the text is also
+// emitted so every instance sees the same combat/narrative log.
+function sharedMessage(text) {
+    window.showMessage(text);
+    if (window.broadcastGameMessage) window.broadcastGameMessage(text);
+}
+
 function getEntityAtHex(q, r) {
     return window.entities.find(e => e.alive && e.getAllHexes().some(h => h.q === q && h.r === r));
 }
@@ -1078,7 +1086,7 @@ function triggerPenalty(casterName, victim, spell) {
     if (caster.skills?.cleric_trigger_damage) {
         const dmg = caster.skills.cleric_trigger_damage;
         victim.hp -= dmg;
-        window.showMessage(`${victim.name} takes ${dmg} divine retribution damage!`);
+        sharedMessage(`${victim.name} takes ${dmg} divine retribution damage!`);
     }
     if (caster.skills?.cleric_trigger_mana) {
         const manaLoss = caster.skills.cleric_trigger_mana;
@@ -1243,7 +1251,7 @@ function tick() {
                 if (!window.multiplayer || !window.multiplayer.roomCode || window.multiplayer.isHost) {
                     const targets = window.entities.filter(e => e.alive && e.side === 'player' && e.name !== 'Eagle');
                     const visibleTarget = targets.find(t => canSee(ent, t));
-                    if (visibleTarget) { wakeUp(ent); window.showMessage(`${ent.name} spotted ${visibleTarget.name}!`); }
+                    if (visibleTarget) { wakeUp(ent); sharedMessage(`${ent.name} spotted ${visibleTarget.name}!`); }
                 }
             }
         });
@@ -1388,7 +1396,7 @@ function runTickInternal(isSleepCycle = false, skipUI = false, tickMultiplier = 
                         e.poisonTicks -= tickMultiplier;
                         if (e.hp <= 0 && e.alive) {
                             e.alive = false;
-                            window.showMessage(`${e.name} died from poison!`);
+                            sharedMessage(`${e.name} died from poison!`);
                             checkCombatEnd();
                         }
                     }
@@ -1482,7 +1490,7 @@ function takeTurn(entity) {
     if (entity.side === 'player') {
         window.gamePhase = isSentientAlly ? 'PLAYER_TURN' : 'AI_TURN';
         if (isSentientAlly) {
-            if (window.isInCombat) window.showMessage(`It is ${entity.name}'s turn!`);
+            if (window.isInCombat) sharedMessage(`It is ${entity.name}'s turn!`);
             window.selectCharacterByName(entity.name);
             // RE-CALC HIGHLIGHTS IMMEDIATELY
             window.updateActionButtons(); 
@@ -1534,7 +1542,7 @@ function autoMoveProcess(entity) {
     });
     
     if (seenEnemy && !window.isInCombat) {
-        window.showMessage(`Enemy ${seenEnemy.name} spotted! Engaging combat.`);
+        sharedMessage(`Enemy ${seenEnemy.name} spotted! Engaging combat.`);
         entity.destination = null;
         if (seenEnemy.aiState === 'idle') wakeUp(seenEnemy);
         finalizePlayerAction(entity, true);
@@ -1671,7 +1679,7 @@ function aiProcess(entity) {
 
         if (visibleTarget) {
             wakeUp(entity);
-            window.showMessage(`${entity.name} spotted a target and engages!`);
+            sharedMessage(`${entity.name} spotted a target and engages!`);
             
             // DIALOGUE: Enemy sees player
             if (entity.voice) {
@@ -1992,7 +2000,7 @@ function wakeUp(entity) {
     const allies = window.entities.filter(e => e.alive && e.side === entity.side && e !== entity && e.aiState !== 'combat');
     allies.forEach(a => {
         if (window.distance(a.hex, entity.hex) <= 10) {
-            window.showMessage(`${a.name} is alerted by ${entity.name}!`);
+            sharedMessage(`${a.name} is alerted by ${entity.name}!`);
             wakeUp(a); // Recursive chain
         }
     });
@@ -2135,7 +2143,7 @@ function handleClick(e){
                             window.showMessage(`${player.name} trips ${target.name}!`);
                             target.timePoints = Math.max(0, target.timePoints - 5);
                         } else {
-                            window.showMessage(`${player.name} tries to trip ${target.name} but misses!`);
+                            sharedMessage(`${player.name} tries to trip ${target.name} but misses!`);
                         }
                         spendTP(player, 5); actionHandled = true;
                     } else { window.showMessage("Target out of range."); }
@@ -2231,7 +2239,7 @@ function handleClick(e){
                     const dist = getMinDistance(player, target);
                     if (dist <= 4) {
                         if (Math.random() * 100 < (50 + player.toHitRanged - target.passiveDodge)) resolveAttack(player, target, false);
-                        else window.showMessage(`${player.name} throws a dagger but misses!`);
+                        else sharedMessage(`${player.name} throws a dagger but misses!`);
                         
                         const daggerId = player.equipped.weapon;
                         player.equipped.weapon = null;
@@ -2539,16 +2547,16 @@ function tryAttack(attacker, target, isFeint = false, isOffhand = false, bonusDa
                         window.requestReaction(target, [{id:'shield_bash', name:'Shield Bash', tpCost:3}], (bashChoice) => {
                             if (bashChoice === 'shield_bash') {
                                 spendTP(target, 3);
-                                window.showMessage(`${target.name} counter-attacks with a Shield Bash!`);
+                                sharedMessage(`${target.name} counter-attacks with a Shield Bash!`);
                                 // Basic attack: no weapon, no skills
                                 const hitChance = 50 + target.toHitMelee - attacker.passiveDodge;
                                 if (Math.random() * 100 < hitChance) {
                                     const dmg = target.baseDamage || 1;
-                                    window.showMessage(`Shield Bash hits for ${dmg} damage!`);
+                                    sharedMessage(`Shield Bash hits for ${dmg} damage!`);
                                     attacker.hp -= dmg;
-                                    if (attacker.hp <= 0) { attacker.alive = false; window.showMessage(`${attacker.name} defeated!`); checkCombatEnd(); }
+                                    if (attacker.hp <= 0) { attacker.alive = false; sharedMessage(`${attacker.name} defeated!`); checkCombatEnd(); }
                                 } else {
-                                    window.showMessage("Shield Bash misses!");
+                                    sharedMessage("Shield Bash misses!");
                                 }
                             }
                         }, "The enemy missed! Use Shield Bash?");
@@ -2660,13 +2668,13 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
                   window.requestReaction(target, [{id:'shield_bash', name:'Shield Bash', tpCost:3}], (bashChoice) => {
                       if (bashChoice === 'shield_bash') {
                           spendTP(target, 3);
-                          window.showMessage(`${target.name} counter-attacks with a Shield Bash!`);
+                          sharedMessage(`${target.name} counter-attacks with a Shield Bash!`);
                           const hitChance = 50 + target.toHitMelee - attacker.passiveDodge;
                           if (Math.random() * 100 < hitChance) {
                               const dmg = target.baseDamage || 1;
                               attacker.hp -= dmg;
-                              if (attacker.hp <= 0) { attacker.alive = false; window.showMessage(`${attacker.name} defeated!`); checkCombatEnd(); }
-                          } else { window.showMessage("Shield Bash misses!"); }
+                              if (attacker.hp <= 0) { attacker.alive = false; sharedMessage(`${attacker.name} defeated!`); checkCombatEnd(); }
+                          } else { sharedMessage("Shield Bash misses!"); }
                       }
                   }, "The enemy missed! Use Shield Bash?");
               }
@@ -2689,7 +2697,7 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
       };
 
       if (roll >= hitChance) {
-          window.showMessage(`${attacker.name} misses ${target.name}! (Roll: ${roll} vs Need: <${hitChance})`);
+          sharedMessage(`${attacker.name} misses ${target.name}! (Roll: ${roll} vs Need: <${hitChance})`);
           if (!isOffhand) attacker.offhandAttackAvailable = (attacker.equipped?.offhand && window.items[attacker.equipped.offhand].type === 'weapon');
           missCallbackFinal();
           return;
@@ -2707,7 +2715,7 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
       if (!isSeen) {
           const saBonus = attacker.skills.sneak_attack_dmg * 4;
           dmg += saBonus;
-          window.showMessage(`Sneak Attack! (+${saBonus} damage)`);
+          sharedMessage(`Sneak Attack! (+${saBonus} damage)`);
       }
   }
 
@@ -2720,20 +2728,20 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   
   // HEALING REDUCTION / PENALTIES (Not applicable to damage directly but noted)
 
-  window.showMessage(`${attacker.name} hits ${target.name} for ${fd} damage! (${dmg} base - ${red} reduction)`);
+  sharedMessage(`${attacker.name} hits ${target.name} for ${fd} damage! (${dmg} base - ${red} reduction)`);
   target.hp -= fd; syncBackToPlayer(target);
   
   // UNARMED REACTION BLOCK
   if (!weapon && attacker.skills?.unarmed_reaction_block) {
       target.reactionBlocked = true;
-      window.showMessage(`${target.name}'s pressure points were struck! Reactions blocked.`);
+      sharedMessage(`${target.name}'s pressure points were struck! Reactions blocked.`);
   }
 
   // POISON LOGIC
   if (attacker.skills?.poison_bite && Math.random() < 0.5) {
       target.poisonTicks = 10;
       target.poisonDamage = 2;
-      window.showMessage(`${target.name} is poisoned!`);
+      sharedMessage(`${target.name} is poisoned!`);
   }
 
   // Set last seen hex so they can search if stealthed
@@ -2985,7 +2993,7 @@ function tryShove(shover, target) {
     const hitChance = 50 + shover.toHitMelee + attackerTerrain.hitBonus - (target.passiveDodge + targetTerrain.dodgeBonus);
     const roll = Math.floor(Math.random() * 100);
     if (roll >= hitChance) {
-        window.showMessage(`${shover.name} tries to shove ${target.name} but misses! (Roll: ${roll} vs Need: <${hitChance})`);
+        sharedMessage(`${shover.name} tries to shove ${target.name} but misses! (Roll: ${roll} vs Need: <${hitChance})`);
         spendTP(shover, 5);
         window.playerAction = null;
         return true; 

@@ -194,6 +194,17 @@ socket.on('syncFullState', (data) => {
     if (window.updateTurnIndicator) window.updateTurnIndicator();
 });
 
+// Broadcast a combat/narrative message from the host to all other clients.
+// Non-hosts and single-player: this is a no-op.
+window.broadcastGameMessage = (text) => {
+    if (!window.multiplayer?.roomCode || !window.multiplayer.isHost) return;
+    socket.emit('broadcastGameMessage', { roomCode: window.multiplayer.roomCode, text });
+};
+
+socket.on('gameMessage', ({ text }) => {
+    if (window.showMessage) window.showMessage(text);
+});
+
 socket.on('playerLeft', (id) => {
     const data = window.multiplayer.players[id];
     if (data) {

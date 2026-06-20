@@ -133,6 +133,10 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('broadcastGameMessage', ({ roomCode, text }) => {
+        socket.to(roomCode).emit('gameMessage', { text });
+    });
+
     socket.on('combatTurnResult', ({ roomCode, entities, gamePhase, currentTurnEntityName, isInCombat, overrideTerrain, isInArena, tileObjects }) => {
         const room = rooms[roomCode];
         if (room && room.hostSocketId) {
