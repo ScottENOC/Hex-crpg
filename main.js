@@ -370,6 +370,51 @@ window.updateRoguelikePreview = function() {
         });
     }
 
+    const exportBtn = document.getElementById("export-roguelike-btn");
+    if (exportBtn) {
+        exportBtn.addEventListener("click", () => {
+            const data = localStorage.getItem('rpg_roguelike_data') || JSON.stringify(window.roguelikeData);
+            const blob = new Blob([data], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'rpg_progression.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+    }
+
+    const importFileInput = document.getElementById("import-roguelike-file");
+    const importBtn = document.getElementById("import-roguelike-btn");
+    if (importBtn && importFileInput) {
+        importBtn.addEventListener("click", () => importFileInput.click());
+        importFileInput.addEventListener("change", (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                try {
+                    const parsed = JSON.parse(ev.target.result);
+                    if (typeof parsed !== 'object' || parsed === null) throw new Error("Invalid format");
+                    window.roguelikeData = {
+                        permanentSkillBonuses: parsed.permanentSkillBonuses || {},
+                        relics: parsed.relics || [],
+                        mercenaryGraveyard: parsed.mercenaryGraveyard || [],
+                        fightsCompleted: parsed.fightsCompleted || 0,
+                        bossesDefeated: parsed.bossesDefeated || []
+                    };
+                    localStorage.setItem('rpg_roguelike_data', JSON.stringify(window.roguelikeData));
+                    window.updateRoguelikePreview();
+                    alert("Progression imported successfully!");
+                } catch {
+                    alert("Failed to import: file is not valid progression data.");
+                }
+                importFileInput.value = '';
+            };
+            reader.readAsText(file);
+        });
+    }
+
     
     window.updateRoguelikePreview();
 

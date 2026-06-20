@@ -191,7 +191,12 @@
                     <input type="checkbox" id="relics-activated-check" checked style="width: 20px; height: 20px;">
                     <label for="relics-activated-check" style="margin-bottom: 0;">Roguelike Rewards Activated</label>
                 </div>
-                <button id="reset-roguelike-btn" style="background-color: #f44336; font-size: 0.8em; margin-top: 5px;">Reset Roguelike Progress</button>
+                <div style="display: flex; gap: 6px; margin-top: 5px; flex-wrap: wrap;">
+                    <button id="reset-roguelike-btn" style="background-color: #f44336; font-size: 0.8em;">Reset Progress</button>
+                    <button id="export-roguelike-btn" style="background-color: #2196F3; font-size: 0.8em;">Export Progression</button>
+                    <button id="import-roguelike-btn" style="background-color: #ff9800; font-size: 0.8em;">Import Progression</button>
+                    <input type="file" id="import-roguelike-file" accept=".json" style="display: none;">
+                </div>
             </div>
             <div id="ironman-option" style="margin-bottom: 15px;">
                 <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
