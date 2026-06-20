@@ -115,7 +115,10 @@ socket.on('syncFullState', (data) => {
     // Snapshot local player's movement state before the entity rebuild wipes it.
     // The host strips visualQ/R and doesn't track mid-step cooldowns for remote entities,
     // so without this the non-host's character snaps back to the host's stale position.
-    const prevLocal = window.player ? {
+    // Exception: during area transitions (entering/leaving the arena) we must use the
+    // server's authoritative spawn position rather than the stale lobby position.
+    const isAreaTransition = (isInArena !== undefined && isInArena !== wasInArena);
+    const prevLocal = (!isAreaTransition && window.player) ? {
         hex:          window.player.hex ? { ...window.player.hex } : null,
         destination:  window.player.destination,
         moveCooldown: window.player.moveCooldown,
@@ -140,6 +143,7 @@ socket.on('syncFullState', (data) => {
 
             // If the player was mid-move, restore their local movement state so the
             // sync doesn't snap them back to the host's last-known (lagging) position.
+            // (prevLocal is null during area transitions so the server position is used.)
             if (prevLocal && (prevLocal.destination || (prevLocal.moveCooldown > 0))) {
                 ent.hex          = prevLocal.hex;
                 ent.destination  = prevLocal.destination;
@@ -182,6 +186,7 @@ socket.on('syncFullState', (data) => {
     } else {
         // Snap camera when transitioning areas (entering/leaving arena)
         if (isInArena !== undefined && isInArena !== wasInArena) {
+            console.log(`[ARENA] syncFullState: isInArena changed ${wasInArena} → ${isInArena}. entities=${window.entities.length} enemies=${window.entities.filter(e=>e.side==='enemy'&&e.alive).length}`);
             const localEnt = window.entities.find(e => e.networkId === socket.id);
             if (localEnt && window.centerCameraOn) window.centerCameraOn(localEnt.hex);
         }
@@ -232,10 +237,19 @@ socket.on('playerMoved', ({ id, hex, destination }) => {
 socket.on('combatTurnResultReceived', ({ senderId, entities, gamePhase, currentTurnEntityName, isInCombat, overrideTerrain, isInArena, tileObjects }) => {
     if (!window.multiplayer.isHost) return;
 
-    // Apply terrain/arena state from the acting player (handles arena victory transitions)
-    if (overrideTerrain !== undefined) window.overrideTerrain = overrideTerrain;
-    if (isInArena !== undefined) window.isInArena = isInArena;
+    // Host is authoritative on arena transitions — never let a non-host's potentially
+    // stale isInArena:false overwrite the host mid-fight.
+    // Only accept terrain if the non-host's arena state matches the host's current state;
+    // this prevents stale lobby terrain from overwriting arena terrain.
+    if (overrideTerrain !== undefined && (!window.isInArena || isInArena)) {
+        window.overrideTerrain = overrideTerrain;
+    }
     if (tileObjects !== undefined) window.tileObjects = tileObjects;
+
+    // Track enemies the non-host didn't include so we can keep them.
+    // This prevents a stale or partial submission from wiping arena enemies off the host.
+    const reportedIds = new Set(entities.map(e => e.id).filter(Boolean));
+    const unreportedEnemies = window.entities.filter(e => e.side === 'enemy' && !reportedIds.has(e.id));
 
     // Re-build entities from the acting player's reported state
     window.entities = [];
@@ -248,6 +262,9 @@ socket.on('combatTurnResultReceived', ({ senderId, entities, gamePhase, currentT
         if (ent.networkId === socket.id) window.player = ent;
     });
 
+    // Re-add any enemies not reported by the non-host (defensive — shouldn't normally happen)
+    unreportedEnemies.forEach(e => window.entities.push(e));
+
     if (gamePhase !== undefined) window.gamePhase = gamePhase;
     if (isInCombat !== undefined) window.isInCombat = isInCombat;
     window.currentTurnEntity = currentTurnEntityName
@@ -257,10 +274,19 @@ socket.on('combatTurnResultReceived', ({ senderId, entities, gamePhase, currentT
     if (window.broadcastFullState) window.broadcastFullState();
 });
 
-socket.on('startArenaFightRequest', () => {
-    if (window.multiplayer && window.multiplayer.isHost && window.startArenaFight) {
-        console.log("Start Arena Fight requested by client. Executing...");
+socket.on('startArenaFightRequest', ({ requesterId } = {}) => {
+    if (!window.multiplayer?.isHost || !window.startArenaFight) return;
+
+    if (requesterId === socket.id) {
+        // Host's own request — start immediately
         window.startArenaFight();
+    } else {
+        // Non-host requested — ask the host before committing
+        const requesterData = window.multiplayer.players[requesterId];
+        const name = requesterData?.name || 'Another player';
+        if (confirm(`${name} wants to start the arena fight. Begin now?`)) {
+            window.startArenaFight();
+        }
     }
 });
 

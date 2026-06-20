@@ -2785,7 +2785,7 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
 function checkCombatEnd() {
     // Track Boss defeats
     if (!window.roguelikeData.bossesDefeated) window.roguelikeData.bossesDefeated = [];
-    
+
     window.entities.forEach(e => {
         if (e.side === 'enemy' && !e.alive) {
             if (['Grishnak', 'Sir Alistair', 'Viper', 'Krog the Unstoppable', 'Sylvara the Huntress'].includes(e.name)) {
@@ -2797,6 +2797,9 @@ function checkCombatEnd() {
     });
 
     // Only check for ACTIVE enemies
+    const aliveEnemies = window.entities.filter(e => e.side === 'enemy' && e.alive);
+    console.log(`[ARENA] checkCombatEnd — isInArena=${window.isInArena} aliveEnemies=${aliveEnemies.length} totalEntities=${window.entities.length}`);
+    if (aliveEnemies.length > 0) console.log('[ARENA] checkCombatEnd: enemies still alive, no transition');
     if (!window.entities.some(e => e.side === 'enemy' && e.alive)) {
         // Combat Ended Auto-save
         if (window.saveGame && !window.ironmanMode) {
@@ -3065,17 +3068,22 @@ window.tryAttack = tryAttack;
 window.cancelSpell = cancelSpell;
 
 function setupArenaLobby() {
+    console.log(`[ARENA] setupArenaLobby called — isInArena=${window.isInArena}`);
+    console.trace('[ARENA] setupArenaLobby call stack');
     window.gamePhase = 'WAITING';
     if (window.stopAllMusic) window.stopAllMusic(0.8);
-    
+
     // If we are already in the arena (multiplayer sync), don't reset the map
     if (window.isInArena) {
+        console.log('[ARENA] setupArenaLobby: isInArena=true, redrawing only (no lobby reset)');
         window.drawMap();
         window.renderEntities();
         window.showCharacter();
         if (window.snapVisuals) window.snapVisuals();
         return;
     }
+    console.log(`[ARENA] setupArenaLobby: resetting to lobby. entities=${JSON.stringify(window.entities.map(e=>({name:e.name,side:e.side,alive:e.alive})))}`);
+
 
     // Keep existing player entities (horses, summons) instead of just party data
     const playerEntities = window.entities.filter(e => e.side === 'player' && e.alive);
@@ -3182,6 +3190,7 @@ function setupArenaLobby() {
 }
 
 function startArenaFight() {
+    console.log('[ARENA] startArenaFight called');
     window.triggerAmbientDialogue('arena_fight_start');
     window.playSting('teleportSting');
     window.isInArena = true;
@@ -3423,6 +3432,10 @@ function startArenaFight() {
             lastSpawnHex = spawnHex;
         }
     }
+
+    const spawnedEnemies = window.entities.filter(e => e.side === 'enemy' && e.alive);
+    console.log(`[ARENA] startArenaFight: spawned ${spawnedEnemies.length} enemies: ${spawnedEnemies.map(e=>e.name).join(', ')}`);
+    console.log(`[ARENA] startArenaFight: total entities=${window.entities.length}`);
 
     // AUDIO: Play music based on immediate visibility
     const anyEnemySeen = window.entities.some(e => e.alive && e.side === 'enemy' && window.isVisibleToPlayer(e.hex));

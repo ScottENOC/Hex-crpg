@@ -129,7 +129,7 @@ io.on('connection', (socket) => {
     socket.on('requestStartArenaFight', ({ roomCode }) => {
         const room = rooms[roomCode];
         if (room && room.hostSocketId) {
-            io.to(room.hostSocketId).emit('startArenaFightRequest');
+            io.to(room.hostSocketId).emit('startArenaFightRequest', { requesterId: socket.id });
         }
     });
 
