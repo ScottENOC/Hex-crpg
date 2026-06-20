@@ -1319,6 +1319,10 @@ function processRealTimeStep(entity, overage = 0) {
         if (entity.riding) entity.riding.hex = { q: nextHex.q, r: nextHex.r };
         spendTP(entity, stepCost);
 
+        const duration = (stepCost / moveEntity.timePointsPerTick) * 0.4;
+        entity.moveTotalTime = duration;
+        entity.moveCooldown = Math.max(0, duration - overage);
+
         // MULTIPLAYER SYNC: Broadcast each step with lerp data so remotes animate smoothly
         if (window.multiplayer && window.multiplayer.roomCode && entity.networkId === window.multiplayer.socket.id) {
             window.multiplayer.socket.emit('move', {
@@ -1330,10 +1334,6 @@ function processRealTimeStep(entity, overage = 0) {
                 fromR: entity.startR,
             });
         }
-        
-        const duration = (stepCost / moveEntity.timePointsPerTick) * 0.4;
-        entity.moveTotalTime = duration;
-        entity.moveCooldown = Math.max(0, duration - overage);
         return true;
     } else {
         entity.destination = null;
@@ -1554,29 +1554,33 @@ function autoMoveProcess(entity) {
         let stepCost = 5 * (terrain.moveCostMult || 1);
         if (moveEntity.skills['fastMovement']) stepCost -= 1;
 
+        entity.startQ = entity.hex.q;
+        entity.startR = entity.hex.r;
         entity.hex = nextHex;
         if (entity.riding) entity.riding.hex = { q: nextHex.q, r: nextHex.r };
         spendTP(entity, stepCost);
 
+        // delay based on speed (3x Speed: divide baseWait by 3)
+        const baseWait = (stepCost / moveEntity.timePointsPerTick) * 400;
+        const waitTime = window.isInCombat ? 20 : (baseWait / 3.0);
+
         // MULTIPLAYER SYNC: Broadcast each step with lerp data so remotes animate smoothly
         if (window.multiplayer && window.multiplayer.roomCode && entity.networkId === window.multiplayer.socket.id) {
+            const moveDuration = (stepCost / moveEntity.timePointsPerTick) * 0.4;
             window.multiplayer.socket.emit('move', {
                 roomCode: window.multiplayer.roomCode,
                 hex: entity.hex,
                 destination: entity.destination,
-                moveTotalTime: duration,
+                moveTotalTime: moveDuration,
                 fromQ: entity.startQ,
                 fromR: entity.startR,
             });
         }
-        
+
         if (entity.hex.q === entity.destination.q && entity.hex.r === entity.destination.r) {
             entity.destination = null;
         }
 
-        // delay based on speed (3x Speed: divide baseWait by 3)
-        const baseWait = (stepCost / moveEntity.timePointsPerTick) * 400;
-        const waitTime = window.isInCombat ? 20 : (baseWait / 3.0);
         setTimeout(() => autoMoveProcess(entity), waitTime);
         } else {        if (window.distance(entity.hex, entity.destination) > 0) {
             window.showMessage(`${entity.name} path to destination is blocked.`);
