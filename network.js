@@ -168,7 +168,10 @@ socket.on('syncFullState', (data) => {
     if (isInArena !== undefined) window.isInArena = isInArena;
     if (indoorLightMult !== undefined) window.indoorLightMult = indoorLightMult;
     if (exploredHexes) {
-        window.exploredHexes = new Set(exploredHexes);
+        // Union, not replace — never remove explored tiles. Replacing caused fog to flash
+        // as the server's set differed slightly from what the client had just added locally.
+        if (!window.exploredHexes) window.exploredHexes = new Set();
+        exploredHexes.forEach(h => window.exploredHexes.add(h));
     }
     if (isInCombat !== undefined) {
         window.isInCombat = isInCombat;
@@ -208,12 +211,11 @@ socket.on('syncFullState', (data) => {
         if (ent.networkId === socket.id) {
             window.player = ent;
 
-            // Always keep the local player's position during exploration syncs — the host
-            // position lags by a network round-trip and causes snapback if we accept it.
-            // During combat, position is set by turn results not syncFullState, so it's
-            // safe to preserve here too. isAreaTransition (above) sets prevLocal=null for
-            // arena entry/combat-start so server spawn positions are used in those cases.
-            if (prevLocal) {
+            // If the player was mid-move, restore their local movement state so the
+            // sync doesn't snap them back to the host's last-known (lagging) position.
+            // isAreaTransition (above) sets prevLocal=null for arena entry and combat-start
+            // so server spawn positions are correctly applied in those cases.
+            if (prevLocal && (prevLocal.destination || (prevLocal.moveCooldown > 0))) {
                 ent.hex          = prevLocal.hex;
                 ent.destination  = prevLocal.destination;
                 ent.moveCooldown = prevLocal.moveCooldown;

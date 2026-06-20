@@ -1591,6 +1591,9 @@ function autoMoveProcess(entity) {
 }
 
 function aiProcess(entity) {
+    // If another entity's turn started while this AI was mid-chain (stale timeout), abort.
+    if (window.currentTurnEntity && window.currentTurnEntity !== entity) return;
+
     if (window.isPausedForReaction) {
         setTimeout(() => aiProcess(entity), 20);
         return;
