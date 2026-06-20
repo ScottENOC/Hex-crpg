@@ -535,6 +535,552 @@ const skills = {
         maxRanks: 1,
         prereq: 'animal_companion',
         apply: (player) => {}
+    },
+
+    // STRENGTH ADDITIONS
+    'powerful_shove': {
+        name: 'Powerful Shove',
+        description: 'Passive: Your Shove pushes the target 1 additional hex.',
+        tree: 'strength',
+        maxRanks: 1,
+        prereq: 'shove',
+        apply: (player) => {}
+    },
+    'bull_rush': {
+        name: 'Bull Rush',
+        description: 'Active (12 TP): Move up to 2 hexes and shove the target on the final hex as one combined action.',
+        tree: 'strength',
+        maxRanks: 1,
+        prereq: 'shove',
+        active: true,
+        apply: (player) => {}
+    },
+
+    // AGILITY ADDITIONS
+    'slip_away': {
+        name: 'Slip Away',
+        description: 'Reaction (5 TP): When you are successfully hit, immediately move to any adjacent unoccupied hex.',
+        tree: 'agility',
+        maxRanks: 1,
+        prereq: 'sidestep',
+        reaction: true,
+        apply: (player) => {}
+    },
+    'acrobatics': {
+        name: 'Acrobatics',
+        description: 'Passive: You can move through hexes occupied by enemies at +3 TP per such hex crossed.',
+        tree: 'agility',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+
+    // ENDURANCE ADDITIONS
+    'second_wind': {
+        name: 'Second Wind',
+        description: 'Active (10 TP): Heal yourself for 9 HP.',
+        tree: 'endurance',
+        maxRanks: 1,
+        prereq: 'health',
+        active: true,
+        apply: (player) => {}
+    },
+    'grit': {
+        name: 'Grit',
+        description: 'Passive: While below 50% HP, all your actions cost 1 fewer TP.',
+        tree: 'endurance',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+    'hardened': {
+        name: 'Hardened',
+        description: 'Passive: The first hit each combat dealing 4 or more damage is reduced by 2.',
+        tree: 'endurance',
+        maxRanks: 1,
+        prereq: 'second_wind',
+        apply: (player) => {}
+    },
+    'unwavering': {
+        name: 'Unwavering',
+        description: 'Passive: While below 50% HP, you cannot be shoved, tripped, or forcibly moved.',
+        tree: 'endurance',
+        maxRanks: 1,
+        prereq: 'hardened',
+        apply: (player) => {}
+    },
+
+    // FIGHTER ADDITIONS
+    'counter_attack': {
+        name: 'Counter-Attack',
+        description: 'Reaction (3 TP): After a successful parry or Shield Bash, immediately make a basic attack against the attacker.',
+        tree: 'fighter',
+        maxRanks: 1,
+        prereq_eval: (p) => !!(p.skills['sword_parry'] || p.skills['dagger_parry'] || p.skills['shield_bash']),
+        reaction: true,
+        apply: (player) => {}
+    },
+    'brace': {
+        name: 'Brace',
+        description: 'Active (3 TP): Enter a readied stance. Your next reaction this turn costs 1 fewer TP.',
+        tree: 'fighter',
+        maxRanks: 1,
+        active: true,
+        apply: (player) => {}
+    },
+    'suppression': {
+        name: 'Suppression',
+        description: 'Passive: Enemies leaving your Zone of Control also lose 3 TP immediately, on top of the movement penalty.',
+        tree: 'fighter',
+        maxRanks: 1,
+        prereq: 'zone_of_control',
+        apply: (player) => {}
+    },
+    'rally': {
+        name: 'Rally',
+        description: 'Active (15 TP): Target an adjacent ally. They immediately gain 10 TP.',
+        tree: 'fighter',
+        maxRanks: 1,
+        active: true,
+        apply: (player) => {}
+    },
+    'press_the_advantage': {
+        name: 'Press the Advantage',
+        description: 'Passive: After hitting a target, your next attack against the same target this turn costs 2 fewer TP.',
+        tree: 'fighter',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+    'weapon_swap': {
+        name: 'Weapon Swap',
+        description: 'Passive: Switching equipped weapons costs 0 TP.',
+        tree: 'fighter',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+
+    // MONK ADDITIONS
+    'iron_shirt': {
+        name: 'Iron Shirt',
+        description: 'Passive: Reduce damage received from unarmed attacks by 1.',
+        tree: 'monk',
+        maxRanks: 1,
+        prereq: 'swift_step',
+        apply: (player) => {}
+    },
+    'joint_lock': {
+        name: 'Joint Lock',
+        description: 'Reaction (3 TP): After hitting an adjacent enemy with an unarmed strike, prevent them from moving away until their next action.',
+        tree: 'monk',
+        maxRanks: 1,
+        reaction: true,
+        apply: (player) => {}
+    },
+    'focused_strike': {
+        name: 'Focused Strike',
+        description: 'Active (12 TP): An unarmed strike that, on hit, forces the target to lose 8 TP. No bonus damage.',
+        tree: 'monk',
+        maxRanks: 1,
+        active: true,
+        apply: (player) => {}
+    },
+
+    // WAY OF THE OPEN PALM ADDITIONS
+    'palm_strike': {
+        name: 'Palm Strike',
+        description: 'Active (8 TP): Push an adjacent target 1 hex in any direction. Deals no damage.',
+        tree: 'Way of the open palm',
+        maxRanks: 1,
+        active: true,
+        apply: (player) => {}
+    },
+    'nerve_strike': {
+        name: 'Nerve Strike',
+        description: 'Passive: On an unarmed hit, 30% chance the target cannot use reactions until their next action.',
+        tree: 'Way of the open palm',
+        maxRanks: 1,
+        prereq: 'unarmed_reaction_block',
+        apply: (player) => {}
+    },
+    'redirect': {
+        name: 'Redirect',
+        description: 'Reaction (3 TP): After deflecting a ranged attack, fire it at any target within range at base hit chance.',
+        tree: 'Way of the open palm',
+        maxRanks: 1,
+        prereq: 'deflect_arrows',
+        reaction: true,
+        apply: (player) => {}
+    },
+
+    // CLERIC ADDITIONS
+    'extended_sentence': {
+        name: 'Extended Sentence',
+        description: 'Passive: Your trigger spell effects last 2 additional TP ticks per rank.',
+        tree: 'cleric',
+        maxRanks: 2,
+        prereq: 'cleric_trigger_damage',
+        apply: (player) => {}
+    },
+    'holy_ground': {
+        name: 'Holy Ground',
+        description: 'Active (12 TP): Sanctify your current hex for 30 ticks. Enemies entering lose 2 TP per move into the zone; allies ending their turn there regain 1 HP.',
+        tree: 'cleric',
+        maxRanks: 1,
+        active: true,
+        apply: (player) => {}
+    },
+    'armistice': {
+        name: 'Armistice',
+        description: 'Passive: When a trigger spell activates, the attacker must spend 5 extra TP before their next attack (once per activation).',
+        tree: 'cleric',
+        maxRanks: 1,
+        prereq: 'cleric_trigger_damage',
+        apply: (player) => {}
+    },
+    'divine_judgment': {
+        name: 'Divine Judgment',
+        description: 'Passive: After being attacked 3 consecutive times without retaliating, your next divine spell costs 0 mana.',
+        tree: 'cleric',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+
+    // DRUID ADDITIONS
+    'barkskin_active': {
+        name: 'Barkskin',
+        description: 'Active (8 TP): Harden the skin of yourself or an adjacent ally, reducing incoming damage by 1 for 25 ticks.',
+        tree: 'druid',
+        maxRanks: 1,
+        active: true,
+        apply: (player) => {}
+    },
+    'wild_shape_adaptation': {
+        name: 'Wild Shape Adaptation',
+        description: 'Passive: While outdoors (no indoor light penalty), movement costs 1 fewer TP.',
+        tree: 'druid',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+    'natures_bond': {
+        name: "Nature's Bond",
+        description: "Passive: Your animal companion acts immediately after your turn completes, regardless of their accumulated TP.",
+        tree: 'druid',
+        maxRanks: 1,
+        prereq: 'animal_companion',
+        apply: (player) => {}
+    },
+    'venomous_summon': {
+        name: 'Venomous Summon',
+        description: 'Passive: Your summoned animal companion gains the Poison Bite ability.',
+        tree: 'druid',
+        maxRanks: 1,
+        prereq: 'animal_companion',
+        apply: (player) => {}
+    },
+    'natural_senses': {
+        name: 'Natural Senses',
+        description: 'Active: Spend your movement action this turn to sense the position of all living entities within 6 hexes, even through walls.',
+        tree: 'druid',
+        maxRanks: 1,
+        active: true,
+        apply: (player) => {}
+    },
+
+    // DWARF ADDITIONS
+    'stonewall': {
+        name: 'Stonewall',
+        description: 'Passive: Reduce all forced movement (shove, trip) by 1 additional hex.',
+        tree: 'dwarf',
+        maxRanks: 1,
+        prereq: 'dwarf_solid',
+        apply: (player) => {
+            player.forcedMoveResistance = (player.forcedMoveResistance || 0) + 10;
+        }
+    },
+    'grudge': {
+        name: 'Grudge',
+        description: 'Passive: The first time each combat you attack the enemy who most recently hit you, deal +2 damage.',
+        tree: 'dwarf',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+    'deep_sense': {
+        name: 'Deep Sense',
+        description: 'Passive: In underground or indoor environments, gain +4 vision range from cave awareness.',
+        tree: 'dwarf',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+    'battle_endurance': {
+        name: 'Battle Endurance',
+        description: 'Passive: Once per combat, when you would reach 0 HP, survive at 1 HP instead.',
+        tree: 'dwarf',
+        maxRanks: 1,
+        prereq: 'dwarf_solid',
+        apply: (player) => {}
+    },
+
+    // ELF ADDITIONS
+    'keen_hearing': {
+        name: 'Keen Hearing',
+        description: 'Passive: Cannot be flanked or surprised. Initiative is never penalised by a hidden approach.',
+        tree: 'elf',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+    'elven_grace': {
+        name: 'Elven Grace',
+        description: 'Passive: Sidestep and other reaction movements cost 1 fewer TP.',
+        tree: 'elf',
+        maxRanks: 1,
+        prereq_eval: (p) => !!(p.skills['elf_foliage_expertise'] || p.skills['elf_darkvision']),
+        apply: (player) => {}
+    },
+    'whisper_step': {
+        name: 'Whisper Step',
+        description: 'Passive: Moving in foliage does not break stealth and costs 1 fewer TP.',
+        tree: 'elf',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+    'ageless_patience': {
+        name: 'Ageless Patience',
+        description: 'Passive: Feinting costs 1 fewer TP.',
+        tree: 'elf',
+        maxRanks: 1,
+        prereq: 'elf_vision',
+        apply: (player) => {}
+    },
+
+    // ROGUE ADDITIONS
+    'vanish': {
+        name: 'Vanish',
+        description: 'Active (15 TP): Enter stealth immediately, even in combat, as long as no enemy is adjacent.',
+        tree: 'rogue',
+        maxRanks: 1,
+        prereq: 'speedy_stealth',
+        active: true,
+        apply: (player) => {}
+    },
+    'dirty_fighting': {
+        name: 'Dirty Fighting',
+        description: 'Passive: When attacking a target who cannot see you, that target cannot use reactions this turn regardless of whether you hit.',
+        tree: 'rogue',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+    'trap_setting': {
+        name: 'Trap Setting',
+        description: 'Active (15 TP): Place a hidden trap on your current hex. The next enemy to step on it triggers a free basic attack at +10% hit chance.',
+        tree: 'rogue',
+        maxRanks: 1,
+        active: true,
+        apply: (player) => {}
+    },
+
+    // NEW ARCANE SPELLS
+    'learn_blink': {
+        name: 'Learn Blink',
+        description: 'Unlocks Blink: Teleport to any unoccupied hex within 4 hexes (10 mana, 8 TP). As a reaction when targeted by melee, costs +5 mana.',
+        tree: 'arcane',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedBaseSpells) player.unlockedBaseSpells = [];
+            player.unlockedBaseSpells.push('blink');
+        }
+    },
+    'learn_slow': {
+        name: 'Learn Slow',
+        description: "Unlocks Slow: Halve a target's TP accumulation rate for 30 ticks (10 mana, 10 TP).",
+        tree: 'arcane',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedBaseSpells) player.unlockedBaseSpells = [];
+            player.unlockedBaseSpells.push('slow');
+        }
+    },
+    'learn_force_push': {
+        name: 'Learn Force Push',
+        description: 'Unlocks Force Push: Push a target 2 hexes in any direction with no damage (8 mana, 8 TP).',
+        tree: 'arcane',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedBaseSpells) player.unlockedBaseSpells = [];
+            player.unlockedBaseSpells.push('force_push');
+        }
+    },
+    'learn_haste': {
+        name: 'Learn Haste',
+        description: 'Unlocks Haste: Target ally immediately gains 20 TP (15 mana, 10 TP).',
+        tree: 'arcane',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedBaseSpells) player.unlockedBaseSpells = [];
+            player.unlockedBaseSpells.push('haste');
+        }
+    },
+    'learn_chain_lightning': {
+        name: 'Learn Chain Lightning',
+        description: 'Unlocks Chain Lightning: Strike a target for 3 damage; arc to nearest enemy for 2, then 1 (12 mana, 10 TP).',
+        tree: 'arcane',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedBaseSpells) player.unlockedBaseSpells = [];
+            player.unlockedBaseSpells.push('chain_lightning');
+        }
+    },
+    'learn_energy_shield': {
+        name: 'Learn Energy Shield',
+        description: 'Unlocks Energy Shield: Absorb the next 6 points of incoming damage for 20 ticks (10 mana, 8 TP).',
+        tree: 'arcane',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedBaseSpells) player.unlockedBaseSpells = [];
+            player.unlockedBaseSpells.push('energy_shield');
+        }
+    },
+    'learn_temporal_rift': {
+        name: 'Learn Temporal Rift',
+        description: 'Unlocks Temporal Rift: Target entity skips their next turn, briefly displaced in time (20 mana, 15 TP).',
+        tree: 'arcane',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedBaseSpells) player.unlockedBaseSpells = [];
+            player.unlockedBaseSpells.push('temporal_rift');
+        }
+    },
+    'learn_gravity_well': {
+        name: 'Learn Gravity Well',
+        description: 'Unlocks Gravity Well: Pull all entities within a 2-hex radius 1 hex toward a target hex (14 mana, 12 TP).',
+        tree: 'arcane',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedBaseSpells) player.unlockedBaseSpells = [];
+            player.unlockedBaseSpells.push('gravity_well');
+        }
+    },
+
+    // NEW DIVINE SPELLS
+    'learn_curse': {
+        name: 'Learn Curse',
+        description: 'Unlocks Curse: If the target takes any hostile action in the next 20 ticks, they take 2 divine damage (8 mana, 8 TP).',
+        tree: 'divine',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedBaseSpells) player.unlockedBaseSpells = [];
+            player.unlockedBaseSpells.push('curse');
+        }
+    },
+    'learn_command': {
+        name: 'Learn Command',
+        description: 'Unlocks Command: If the target attacks any ally in the next 10 ticks, they take 3 divine damage (10 mana, 10 TP).',
+        tree: 'divine',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedBaseSpells) player.unlockedBaseSpells = [];
+            player.unlockedBaseSpells.push('command');
+        }
+    },
+    'learn_mark_of_guilt': {
+        name: 'Learn Mark of Guilt',
+        description: 'Unlocks Mark of Guilt: If the target attacks anyone other than the caster in 20 ticks, they take 2 divine damage (8 mana, 8 TP).',
+        tree: 'divine',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedBaseSpells) player.unlockedBaseSpells = [];
+            player.unlockedBaseSpells.push('mark_of_guilt');
+        }
+    },
+    'learn_divine_wrath': {
+        name: 'Learn Divine Wrath',
+        description: 'Unlocks Divine Wrath: Deal 1 damage now; if the target advances toward the caster within 15 ticks, deal 3 more (10 mana, 10 TP).',
+        tree: 'divine',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedBaseSpells) player.unlockedBaseSpells = [];
+            player.unlockedBaseSpells.push('divine_wrath');
+        }
+    },
+    'learn_excommunicate': {
+        name: 'Learn Excommunicate',
+        description: "Unlocks Excommunicate: The target's allies within 3 hexes cannot receive healing for 20 ticks (14 mana, 12 TP).",
+        tree: 'divine',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedBaseSpells) player.unlockedBaseSpells = [];
+            player.unlockedBaseSpells.push('excommunicate');
+        }
+    },
+    'learn_condemn': {
+        name: 'Learn Condemn',
+        description: "Unlocks Condemn: If the target's next attack misses, they take 3 divine damage from divine rejection (10 mana, 10 TP).",
+        tree: 'divine',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedBaseSpells) player.unlockedBaseSpells = [];
+            player.unlockedBaseSpells.push('condemn');
+        }
+    },
+
+    // NEW NATURE SPELLS
+    'learn_root': {
+        name: 'Learn Root',
+        description: 'Unlocks Root: Target cannot move for 5 TP ticks but can still act and cast (8 mana, 8 TP).',
+        tree: 'nature',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedBaseSpells) player.unlockedBaseSpells = [];
+            player.unlockedBaseSpells.push('root');
+        }
+    },
+    'learn_barkskin_spell': {
+        name: 'Learn Barkskin (Spell)',
+        description: 'Unlocks Barkskin spell: Target ally reduces all incoming damage by 1 for 30 ticks (10 mana, 8 TP).',
+        tree: 'nature',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedBaseSpells) player.unlockedBaseSpells = [];
+            player.unlockedBaseSpells.push('barkskin_spell');
+        }
+    },
+    'learn_natures_vigor': {
+        name: "Learn Nature's Vigor",
+        description: "Unlocks Nature's Vigor: Target ally regenerates 1 HP per 10 TP ticks for 30 ticks (8 mana, 8 TP).",
+        tree: 'nature',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedBaseSpells) player.unlockedBaseSpells = [];
+            player.unlockedBaseSpells.push('natures_vigor');
+        }
+    },
+    'learn_spore_cloud': {
+        name: 'Learn Spore Cloud',
+        description: "Unlocks Spore Cloud: All enemies in a 2-hex radius have TP accumulation reduced by 25% for 10 ticks (10 mana, 10 TP).",
+        tree: 'nature',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedBaseSpells) player.unlockedBaseSpells = [];
+            player.unlockedBaseSpells.push('spore_cloud');
+        }
+    },
+    'learn_call_of_the_wild': {
+        name: 'Learn Call of the Wild',
+        description: 'Unlocks Call of the Wild: Empower your active summon with +2 attack damage and +6 HP for 20 ticks (12 mana, 10 TP).',
+        tree: 'nature',
+        maxRanks: 1,
+        prereq: 'learn_summon_animal',
+        apply: (player) => {
+            if (!player.unlockedBaseSpells) player.unlockedBaseSpells = [];
+            player.unlockedBaseSpells.push('call_of_the_wild');
+        }
+    },
+    'learn_camouflage': {
+        name: 'Learn Camouflage',
+        description: 'Unlocks Camouflage: Target ally gains +15 to stealth for 20 ticks (8 mana, 8 TP).',
+        tree: 'nature',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedBaseSpells) player.unlockedBaseSpells = [];
+            player.unlockedBaseSpells.push('camouflage');
+        }
     }
 };
 
@@ -627,6 +1173,152 @@ function generateWeaponSkills(id, label, maxDmgRanks = 1) {
             maxRanks: 1,
             prereq: dmgId,
             reaction: true,
+            apply: (player) => {}
+        };
+    }
+
+    if (id === 'sword') {
+        s[`sword_riposte`] = {
+            name: 'Riposte',
+            description: 'Reaction (5 TP): After a successful parry, immediately make a basic attack against the attacker.',
+            tree: 'weapons',
+            maxRanks: 1,
+            prereq: `sword_parry`,
+            reaction: true,
+            apply: (player) => {}
+        };
+        s[`sword_footwork`] = {
+            name: "Duelist's Footwork",
+            description: 'Passive: After successfully parrying, move 1 hex for free if an adjacent hex is unoccupied.',
+            tree: 'weapons',
+            maxRanks: 1,
+            prereq: `sword_parry`,
+            apply: (player) => {}
+        };
+        s[`threatening_presence`] = {
+            name: 'Threatening Presence',
+            description: "Passive: Enemies within sword reach must spend 3 extra TP to cast spells.",
+            tree: 'weapons',
+            maxRanks: 1,
+            prereq: dmgId,
+            apply: (player) => {}
+        };
+        s[`in_the_way`] = {
+            name: 'In the Way',
+            description: 'Reaction (2 TP): When an adjacent ally moves away from their hex, immediately step into the hex they vacated.',
+            tree: 'weapons',
+            maxRanks: 1,
+            prereq: `sword_parry`,
+            reaction: true,
+            apply: (player) => {}
+        };
+        s[`bladestorm`] = {
+            name: 'Bladestorm',
+            description: 'Active (20 TP): Sweep your sword at all adjacent enemies simultaneously at base hit chance and damage.',
+            tree: 'weapons',
+            maxRanks: 1,
+            active: true,
+            apply: (player) => {}
+        };
+    }
+
+    if (id === 'axe') {
+        s[`axe_rend`] = {
+            name: 'Rend',
+            description: 'Passive: On a hit, target bleeds for 1 damage per 10 TP ticks for 5 cycles.',
+            tree: 'weapons',
+            maxRanks: 1,
+            prereq: dmgId,
+            apply: (player) => {}
+        };
+        s[`axe_cleave`] = {
+            name: 'Armor Cleave',
+            description: 'Passive: Axe attacks ignore 1 point of armor per rank (max 2 ranks).',
+            tree: 'weapons',
+            maxRanks: 2,
+            prereq_eval: (p) => ((p.skills[dmgId] || 0) >= 2),
+            apply: (player) => {}
+        };
+        s[`headsmans_blow`] = {
+            name: "Headsman's Blow",
+            description: 'Active (25 TP): A deliberate heavy chop dealing +5 damage on hit.',
+            tree: 'weapons',
+            maxRanks: 1,
+            prereq_eval: (p) => ((p.skills[dmgId] || 0) >= 3),
+            active: true,
+            apply: (player) => {}
+        };
+        s[`hack_and_slash`] = {
+            name: 'Hack and Slash',
+            description: 'Active (16 TP): Attack two different adjacent enemies in sequence at base hit chance and damage.',
+            tree: 'weapons',
+            maxRanks: 1,
+            prereq: dmgId,
+            active: true,
+            apply: (player) => {}
+        };
+    }
+
+    if (id === 'bow') {
+        s[`bow_point_blank`] = {
+            name: 'Point Blank',
+            description: 'Passive: No range penalty when shooting an adjacent target.',
+            tree: 'weapons',
+            maxRanks: 1,
+            prereq: hitId,
+            apply: (player) => {}
+        };
+        s[`bow_aimed_shot`] = {
+            name: 'Aimed Shot',
+            description: 'Active (20 TP): Your next shot this turn deals +2 damage and, on hit, the target loses 5 TP.',
+            tree: 'weapons',
+            maxRanks: 1,
+            active: true,
+            apply: (player) => {}
+        };
+        s[`bow_suppressive`] = {
+            name: 'Suppressive Fire',
+            description: 'Reaction (8 TP): When an enemy ends movement adjacent to an ally you can see, take a free shot at them.',
+            tree: 'weapons',
+            maxRanks: 1,
+            prereq: dmgId,
+            reaction: true,
+            apply: (player) => {}
+        };
+        s[`bow_cover`] = {
+            name: 'Cover Fire',
+            description: 'Active (15 TP): Declare a 3-hex zone. Enemies entering pay 4 extra TP to move through it until your next turn.',
+            tree: 'weapons',
+            maxRanks: 1,
+            active: true,
+            apply: (player) => {}
+        };
+    }
+
+    if (id === 'club') {
+        s[`club_stun`] = {
+            name: 'Stun Strike',
+            description: 'Active (15 TP): On a hit, target loses 10 TP immediately.',
+            tree: 'weapons',
+            maxRanks: 1,
+            active: true,
+            apply: (player) => {}
+        };
+        s[`club_concuss`] = {
+            name: 'Concuss',
+            description: 'Passive: When you deal 5 or more damage in a single hit, the target cannot use reactions until their next action.',
+            tree: 'weapons',
+            maxRanks: 1,
+            prereq: `club_stun`,
+            apply: (player) => {}
+        };
+        s[`club_knockdown`] = {
+            name: 'Knockdown',
+            description: 'Active (12 TP): Swing at the target\'s legs. On a hit, automatically applies a trip attempt.',
+            tree: 'weapons',
+            maxRanks: 1,
+            prereq: dmgId,
+            active: true,
             apply: (player) => {}
         };
     }

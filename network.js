@@ -97,6 +97,7 @@ socket.on('syncFullState', (data) => {
     window.worldSeconds = worldSeconds;
     window.mapItems = mapItems;
 
+    const wasInArena = window.isInArena;
     if (overrideTerrain) window.overrideTerrain = overrideTerrain;
     if (tileObjects) window.tileObjects = tileObjects;
     if (isInArena !== undefined) window.isInArena = isInArena;
@@ -179,6 +180,11 @@ socket.on('syncFullState', (data) => {
             window.initializeMultiplayerGame(players);
         }
     } else {
+        // Snap camera when transitioning areas (entering/leaving arena)
+        if (isInArena !== undefined && isInArena !== wasInArena) {
+            const localEnt = window.entities.find(e => e.networkId === socket.id);
+            if (localEnt && window.centerCameraOn) window.centerCameraOn(localEnt.hex);
+        }
         window.drawMap();
         window.renderEntities();
         // Camera follow is handled by smoothFollowPlayer in the tick loop.
@@ -396,6 +402,7 @@ window.initializeMultiplayerGame = (players) => {
             localEnt.networkId = socket.id;
             if (myData && myData.hex) localEnt.hex = { ...myData.hex };
             if (window.snapVisuals) window.snapVisuals();
+            if (window.centerCameraOn) window.centerCameraOn(localEnt.hex);
         }
     }
 

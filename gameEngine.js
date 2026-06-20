@@ -691,6 +691,8 @@ function startGameCore(isLoading = false) {
       document.addEventListener("keydown", window.handleMovement);
       window.mapCanvas.addEventListener("click", window.handleClick);
       if (!window.tickInterval) window.tickInterval = setInterval(tick, 10);
+      const fp = window.entities.find(e => e.side === 'player' && !e.rider);
+      if (fp && window.centerCameraOn) window.centerCameraOn(fp.hex);
       return;
   }
 
@@ -717,6 +719,7 @@ function startGameCore(isLoading = false) {
   window.drawMap();
   window.renderEntities();
   window.showCharacter();
+  if (window.centerCameraOn) window.centerCameraOn(playerEntity.hex);
 
   if (playerEntity.skills['initiativeBonus']) {
       playerEntity.timePoints += (playerEntity.skills['initiativeBonus'] * 5);
@@ -1235,11 +1238,13 @@ function tick() {
                 ent.moveTotalTime = 0;
             }
 
-            // REAL-TIME AI SCOUTING
+            // REAL-TIME AI SCOUTING (host-authoritative in multiplayer)
             if (ent.alive && ent.side === 'enemy' && ent.aiState !== 'combat') {
-                const targets = window.entities.filter(e => e.alive && e.side === 'player' && e.name !== 'Eagle');
-                const visibleTarget = targets.find(t => canSee(ent, t));
-                if (visibleTarget) { wakeUp(ent); window.showMessage(`${ent.name} spotted ${visibleTarget.name}!`); }
+                if (!window.multiplayer || !window.multiplayer.roomCode || window.multiplayer.isHost) {
+                    const targets = window.entities.filter(e => e.alive && e.side === 'player' && e.name !== 'Eagle');
+                    const visibleTarget = targets.find(t => canSee(ent, t));
+                    if (visibleTarget) { wakeUp(ent); window.showMessage(`${ent.name} spotted ${visibleTarget.name}!`); }
+                }
             }
         });
 
@@ -1257,7 +1262,12 @@ function tick() {
             runTickInternal();
         }
         // Snap visuals in combat
-        updateVisualPositions(100); 
+        updateVisualPositions(100);
+        // Non-hosts need explicit redraws; host draws via runTickInternal/finalizePlayerAction
+        if (window.multiplayer && window.multiplayer.roomCode && !window.multiplayer.isHost) {
+            window.drawMap();
+            window.renderEntities();
+        }
     }
 }
 
