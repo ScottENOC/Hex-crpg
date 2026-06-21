@@ -770,6 +770,11 @@ const CHAR_CONFIG = {
     elf_female:   { bodyW:2.00, bodyH:2.40, yOff:-0.20, baseKey:'elfFemaleBase',   hair:{ key:'elfFemaleHair',   type:'full'                                        }, armour:{ wMult:1.0, topShift:0.3 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.37, y:0.63 }, offHand:{ x:0.58, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:2.25 },
     dwarf_male:   { bodyW:1.60, bodyH:1.92, yOff:-0.07, baseKey:'dwarfMaleBase',   hair:{ key:'dwarfMaleHair',   type:'full'                                        }, armour:{ wMult:1.4, topShift:0.1 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.33, y:0.61 }, offHand:{ x:0.52, y:0.45 }, weaponSizeMult:1.0, shieldSizeMult:2.00 },
     dwarf_female: { bodyW:1.60, bodyH:1.92, yOff:-0.07, baseKey:'dwarfFemaleBase', hair:{ key:'dwarfFemaleHair', type:'small', wFrac:0.31, hFrac:0.31, topFrac:0.21 }, armour:{ wMult:1.4, topShift:0.1 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.33, y:0.61 }, offHand:{ x:0.52, y:0.45 }, weaponSizeMult:1.0, shieldSizeMult:2.00 },
+
+    // ENEMY HUMANOIDS — sprite keys need matching images (e.g. gameVisuals.revenantBase)
+    // Use backtick debug overlay to tune anchor dots once sprites are loaded.
+    revenant_male:   { bodyW:1.85, bodyH:2.20, yOff:-0.18, baseKey:'revenantBase', hair:{ key:null }, armour:{ wMult:1.05, topShift:0 }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.35, y:0.64 }, offHand:{ x:0.59, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:2.25 },
+    revenant_female: { bodyW:1.65, bodyH:1.96, yOff:-0.16, baseKey:'revenantBase', hair:{ key:null }, armour:{ wMult:1.05, topShift:0 }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.40, y:0.66 }, offHand:{ x:0.60, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:2.25 },
 };
 
 function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
@@ -939,7 +944,9 @@ function renderEntities() {
           const isSentientAlly = e.side === 'player' && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(e.name);
           const flyOff = e.isFlying ? -20 * z : 0;
   
-      if (isSentientAlly && window.gameVisuals) {
+      // Enemy humanoids with sprite config are drawn the same way as player characters
+      const hasEnemySpriteCfg = !isSentientAlly && e.race && e.gender && CHAR_CONFIG[`${e.race}_${e.gender}`];
+      if ((isSentientAlly || hasEnemySpriteCfg) && window.gameVisuals) {
           drawPlayerCharacter(window.mapCtx, e, x, y, z, flyOff);
       } else if ((e instanceof window.Enemy || e.customImage) && window.gameVisuals) {
                           let size = window.hexSize * 1.5 * z;
@@ -1466,6 +1473,35 @@ function takeTurn(entity) {
     let threshold = 80;
     if (entity.skills && entity.skills['quickRecovery']) threshold -= entity.skills['quickRecovery'];
 
+    // PETRIFIED: entity is frozen — burn all remaining TP and skip turn
+    if (entity.petrifiedTicks > 0) {
+        sharedMessage(`${entity.name} is petrified and cannot act! (${Math.ceil(entity.petrifiedTicks)} TP remaining)`);
+        spendTP(entity, entity.timePoints - threshold);
+        window.currentTurnEntity = null;
+        window.gamePhase = 'WAITING';
+        window.updateTurnIndicator();
+        if (window.broadcastFullState) window.broadcastFullState();
+        return;
+    }
+
+    // CHARMED: entity must spend this turn stumbling toward the charming harpy
+    if (entity.charmedByHarpy && entity.charmedByHarpy.alive) {
+        const charmer = entity.charmedByHarpy;
+        sharedMessage(`${entity.name} is entranced by the Harpy's song and stumbles toward it!`);
+        const neighbors = window.getNeighbors(entity.hex.q, entity.hex.r);
+        const best = neighbors
+            .filter(h => !window.getTerrainAt(h.q, h.r)?.name?.match(/Wall/) && !getEntityAtHex(h.q, h.r))
+            .sort((a, b) => window.distance(a, charmer.hex) - window.distance(b, charmer.hex))[0];
+        if (best) entity.hex = best;
+        entity.charmedByHarpy = null; // charm lasts one full turn
+        spendTP(entity, entity.timePoints - threshold);
+        window.currentTurnEntity = null;
+        window.gamePhase = 'WAITING';
+        window.updateTurnIndicator();
+        if (window.broadcastFullState) window.broadcastFullState();
+        return;
+    }
+
     const isSentientAlly = entity.side === 'player' && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(entity.name);
     if (entity.side === 'player') {
         window.gamePhase = isSentientAlly ? 'PLAYER_TURN' : 'AI_TURN';
@@ -1603,6 +1639,44 @@ function aiProcess(entity) {
         window.currentTurnEntity = null;
         window.gamePhase = 'WAITING';
         return;
+    }
+
+    // BASILISK PETRIFYING GAZE (once per combat, costs 10 TP)
+    if (entity.skills?.petrify_gaze && !entity.hasUsedGaze && entity.timePoints >= 10) {
+        const opponentSide = entity.side === 'player' ? 'enemy' : 'player';
+        const targets = window.entities.filter(e =>
+            e.alive && e.side === opponentSide &&
+            !e.petrifiedTicks &&
+            window.distance(entity.hex, e.hex) <= 8 &&
+            window.hasLineOfSight(entity.hex, e.hex)
+        );
+        if (targets.length > 0) {
+            targets.sort((a, b) => window.distance(entity.hex, a.hex) - window.distance(entity.hex, b.hex));
+            const target = targets[0];
+            sharedMessage(`${entity.name} fixes its gaze on ${target.name}! ${target.name} is petrified!`);
+            target.petrifiedTicks = 30;
+            entity.hasUsedGaze = true;
+            spendTP(entity, 10);
+            setTimeout(() => aiProcess(entity), 20);
+            return;
+        }
+    }
+
+    // HARPY SIREN SONG (once per combat, costs 8 TP, affects all nearby players)
+    if (entity.skills?.siren_song && !entity.hasUsedSong && entity.timePoints >= 8) {
+        const opponentSide = entity.side === 'player' ? 'enemy' : 'player';
+        const charmed = window.entities.filter(e =>
+            e.alive && e.side === opponentSide &&
+            window.distance(entity.hex, e.hex) <= 8
+        );
+        if (charmed.length > 0) {
+            sharedMessage(`${entity.name} unleashes an enchanting song! ${charmed.map(c => c.name).join(', ')} ${charmed.length > 1 ? 'are' : 'is'} entranced!`);
+            charmed.forEach(c => { c.charmedByHarpy = entity; });
+            entity.hasUsedSong = true;
+            spendTP(entity, 8);
+            setTimeout(() => aiProcess(entity), 20);
+            return;
+        }
     }
 
     // SPIDER WEB FLING PRIORITY
@@ -1867,6 +1941,26 @@ function aiProcess(entity) {
         }
     }
 
+    // GORE CHARGE (Minotaur) — charge at an opponent 2–5 hexes away, then shove them back
+    if (entity.skills?.gore_charge && entity.timePoints >= 10 && target) {
+        const dist = window.distance(entity.hex, target.hex);
+        if (dist >= 2 && dist <= 5) {
+            const neighbors = window.getNeighbors(target.hex.q, target.hex.r);
+            const chargeHex = neighbors
+                .filter(h => !getEntityAtHex(h.q, h.r) || getEntityAtHex(h.q, h.r) === entity)
+                .sort((a, b) => window.distance(a, entity.hex) - window.distance(b, entity.hex))[0];
+            if (chargeHex && window.findPath(entity.hex, chargeHex, 100, entity)?.length > 1) {
+                entity.hex = chargeHex;
+                sharedMessage(`${entity.name} charges ${target.name} with a vicious gore!`);
+                tryAttack(entity, target, false, false, 6); // +6 bonus damage
+                window.tryShove(entity, target);           // knock target back
+                spendTP(entity, 10);
+                setTimeout(() => aiProcess(entity), 20);
+                return;
+            }
+        }
+    }
+
     // BOSS AI: SHOVE PRIORITY (Krog / Juggernauts)
     if (entity.skills?.shove && entity.timePoints >= 10) {
         const adjacentPlayer = opponents.find(o => window.distance(entity.hex, o.hex) === 1);
@@ -2003,6 +2097,10 @@ function spendTP(entity, amount) {
     if (entity.webbedDuration > 0) {
         entity.webbedDuration = Math.max(0, entity.webbedDuration - amount);
         if (entity.webbedDuration <= 0) window.showMessage(`${entity.name} is no longer webbed.`);
+    }
+    if (entity.petrifiedTicks > 0) {
+        entity.petrifiedTicks = Math.max(0, entity.petrifiedTicks - amount);
+        if (entity.petrifiedTicks <= 0) window.showMessage(`${entity.name} shatters free from the petrification!`);
     }
     
     // Stealth Penalty for movement/actions
@@ -2709,11 +2807,12 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
       }
   }
 
-  let red = (target.baseReduction || 0) + 
-            (target.equipped?.armor && window.items[target.equipped.armor] ? window.items[target.equipped.armor].reduction : 0) + 
+  let red = (target.baseReduction || 0) +
+            (target.equipped?.armor && window.items[target.equipped.armor] ? window.items[target.equipped.armor].reduction : 0) +
             (target.equipped?.offhand && window.items[target.equipped.offhand] && window.items[target.equipped.offhand].type === 'shield' ? (window.items[target.equipped.offhand].reduction + (target.skills?.shield_proficiency || 0)) : 0) +
             (target.equipped?.helmet && window.items[target.equipped.helmet] ? (window.items[target.equipped.helmet].reduction || 0) : 0) +
-            (target.tempReduction || 0);
+            (target.tempReduction || 0) +
+            (target.skills?.spectral_form ? 2 : 0);
   let fd = Math.max(1, dmg - red);
   
   // HEALING REDUCTION / PENALTIES (Not applicable to damage directly but noted)
@@ -2734,6 +2833,13 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
       sharedMessage(`${target.name} is poisoned!`);
   }
 
+  // LIFE DRAIN (Wraith)
+  if (attacker.skills?.life_drain) {
+      const drained = Math.min(fd, 2);
+      attacker.hp = Math.min(attacker.maxHp, attacker.hp + drained);
+      sharedMessage(`${attacker.name} drains ${drained} HP from ${target.name}!`);
+  }
+
   // Set last seen hex so they can search if stealthed
   target.lastSeenTargetHex = { q: attacker.hex.q, r: attacker.hex.r };
   
@@ -2745,6 +2851,15 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
 
   attacker.offhandAttackAvailable = !isOffhand && (attacker.equipped?.offhand && window.items[attacker.equipped.offhand].type === 'weapon');
   if (target.hp <= 0 && target.alive) {
+      // REVENANT: Rise again once at half HP before marking truly dead
+      if (target.skills?.revenant_revive && !target.revenantRevived) {
+          target.revenantRevived = true;
+          target.alive = true;
+          target.hp = Math.ceil(target.maxHp / 2);
+          sharedMessage(`${target.name} refuses to stay dead — it rises again at half health!`);
+          return; // abort normal death processing this time
+      }
+
       target.alive = false; window.showMessage(`${target.name} defeated!`);
       const side = target.side;
       

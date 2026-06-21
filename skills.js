@@ -496,6 +496,48 @@ const skills = {
         maxRanks: 1,
         apply: (player) => {}
     },
+    'life_drain': {
+        name: 'Life Drain',
+        description: 'Passive: Each melee hit steals 2 HP from the target.',
+        tree: 'monster_skills',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+    'spectral_form': {
+        name: 'Spectral Form',
+        description: 'Passive: All incoming damage is reduced by 2 (innate resistance from being partially incorporeal).',
+        tree: 'monster_skills',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+    'petrify_gaze': {
+        name: 'Petrifying Gaze',
+        description: 'Active (once per combat): Gaze at a target in line of sight to petrify them, preventing all actions for 30 TP ticks.',
+        tree: 'monster_skills',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+    'siren_song': {
+        name: 'Siren Song',
+        description: 'Active (once per combat): Charm all players within 8 hexes, forcing them to spend their next turn moving toward the Harpy.',
+        tree: 'monster_skills',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+    'gore_charge': {
+        name: 'Gore Charge',
+        description: 'Active: Charge 2–5 hexes, deal +6 damage on hit, and shove the target 1 hex back.',
+        tree: 'monster_skills',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+    'revenant_revive': {
+        name: 'Revenant Undying',
+        description: 'Passive: The first time this creature reaches 0 HP, it rises again at half health with renewed fury.',
+        tree: 'monster_skills',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
     'furious_charge': {
         name: 'Furious Charge',
         description: 'Active: Charge an enemy 3-5 hexes away and attack for +4 damage. (10 TP)',

@@ -190,6 +190,90 @@ const monsterTemplates = {
         },
         defaultEquipment: []
     },
+    // ── NEW MONSTERS ──────────────────────────────────────────────────────────
+
+    'wraith': {
+        name: 'Wraith',
+        color: '#7b2d8b',
+        hp: 22,
+        expValue: 400,
+        tags: ['undead', 'flying'],
+        skills: {
+            'health': 1,
+            'meleeDamage': 2,
+            'life_drain': 1,
+            'spectral_form': 1,
+            'fastMovement': 2,
+            'timePointRate': 4
+        },
+        defaultEquipment: []
+    },
+
+    'basilisk': {
+        name: 'Basilisk',
+        color: '#6b7c2d',
+        hp: 35,
+        expValue: 500,
+        tags: ['animal', 'reptile'],
+        skills: {
+            'health': 3,
+            'meleeDamage': 3,
+            'petrify_gaze': 1
+        },
+        defaultEquipment: []
+    },
+
+    'harpy': {
+        name: 'Harpy',
+        color: '#c97c5d',
+        hp: 18,
+        expValue: 350,
+        tags: ['humanoid', 'flying'],
+        skills: {
+            'health': 1,
+            'meleeDamage': 1,
+            'siren_song': 1,
+            'fastMovement': 1,
+            'timePointRate': 3
+        },
+        defaultEquipment: []
+    },
+
+    'minotaur': {
+        name: 'Minotaur',
+        color: '#4a2c0a',
+        hp: 10,
+        expValue: 600,
+        riderSize: 5,
+        extraHexes: [{ q: 0, r: 1 }],
+        tags: ['humanoid', 'giant'],
+        skills: {
+            'health': 5,
+            'meleeDamage': 4,
+            'gore_charge': 1,
+            'club_hit': 1
+        },
+        defaultEquipment: ['club']
+    },
+
+    'revenant': {
+        name: 'Revenant',
+        color: '#b0c4de',
+        hp: 10,
+        expValue: 550,
+        tags: ['undead', 'humanoid'],
+        skills: {
+            'health': 3,
+            'meleeDamage': 2,
+            'revenant_revive': 1,
+            'sword_hit': 1,
+            'sword_dmg': 1,
+            'heavy_armor_training': 1
+        },
+        defaultEquipment: ['sword', 'heavy_armor']
+    },
+
+    // ──────────────────────────────────────────────────────────────────────────
     'wolf_rider_goblin': {
         name: 'Wolf Rider Goblin',
         color: '#2e8b57',
@@ -284,6 +368,15 @@ function createMonster(type, hex, customSkills = null, customEquipment = null, s
     if (type === 'spider') {
         monster.spiderImage = Math.random() < 0.5 ? 'spider1' : 'spider2';
         monster.hasUsedWeb = false;
+    }
+    // One-shot ability flags
+    if (type === 'basilisk') monster.hasUsedGaze = false;
+    if (type === 'harpy')    monster.hasUsedSong = false;
+    if (type === 'revenant') {
+        monster.revenantRevived = false;
+        // Race/gender so CHAR_CONFIG sprite layering works when revenantBase sprite is added
+        monster.race   = 'revenant';
+        monster.gender = template.gender || 'male';
     }
 
     // 1. Assign Equipment First
