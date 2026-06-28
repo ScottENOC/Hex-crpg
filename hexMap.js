@@ -41,6 +41,9 @@ function preRenderTile(terrainName, style) {
 window.cameraX = 0;
 window.cameraY = 0;
 window.cameraZoom = 1.0;
+// true  = camera follows the local player while moving
+// false = user panned manually; camera stays put until player stops or Space is pressed
+window.cameraFollowEnabled = true;
 
 // Mouse tracking for panning
 let isDragging = false;
@@ -549,6 +552,7 @@ function initHexMap() {
         window.cameraX += dx;
         window.cameraY += dy;
         window.totalDragDistance += Math.abs(dx) + Math.abs(dy); // Accumulate distance
+        if (window.totalDragDistance > 10) window.cameraFollowEnabled = false;
         lastMouseX = e.clientX;
         lastMouseY = e.clientY;
         drawMap();
@@ -623,7 +627,8 @@ function initHexMap() {
             window.totalDragDistance += Math.abs(dx) + Math.abs(dy);
             lastTouchX = e.touches[0].clientX;
             lastTouchY = e.touches[0].clientY;
-            
+
+            if (window.totalDragDistance > 10) window.cameraFollowEnabled = false;
             if (window.totalDragDistance > 10 && longPressTimer) {
                 clearTimeout(longPressTimer);
                 longPressTimer = null;
@@ -712,7 +717,14 @@ window.smoothFollowPlayer = function(dt) {
 
     const isMoving = localEnt.destination ||
                      (localEnt.moveCooldown !== undefined && localEnt.moveCooldown > 0);
-    if (!isMoving) return;
+
+    // Re-enable follow automatically when the player stops so the next move re-engages it.
+    if (!isMoving) {
+        window.cameraFollowEnabled = true;
+        return;
+    }
+
+    if (!window.cameraFollowEnabled) return;
 
     const vQ = (localEnt.visualQ !== undefined) ? localEnt.visualQ : localEnt.hex.q;
     const vR = (localEnt.visualR !== undefined) ? localEnt.visualR : localEnt.hex.r;

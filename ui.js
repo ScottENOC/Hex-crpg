@@ -1195,7 +1195,7 @@ function updateTurnIndicator() {
     if (!indicatorBar) return;
     indicatorBar.innerHTML = '';
     const sortedEntities = [...window.entities]
-        .filter(e => e.alive && e.hasBeenSeenByPlayer && !e.rider && !e.isNPC)
+        .filter(e => e.alive && (e.side === 'player' || e.hasBeenSeenByPlayer) && !e.rider && !e.isNPC)
         .sort((a, b) => b.timePoints - a.timePoints);
 
     sortedEntities.forEach(entity => {
@@ -1374,7 +1374,8 @@ function updateTurnIndicator() {
         }
         const infoDiv = document.createElement('div');
         infoDiv.classList.add('turn-indicator-info');
-        let infoHtml = `<p><strong>${entity.name.split(' ')[0]}</strong></p><p>HP: ${Math.ceil(entity.hp)}/${entity.maxHp} ${window.isInCombat ? `| TP: ${Math.floor(entity.timePoints)}` : ''}</p>`;
+        const dcTag = entity.disconnected ? ' <span style="color:#f44336;font-size:0.8em">(offline)</span>' : '';
+        let infoHtml = `<p><strong>${entity.name.split(' ')[0]}</strong>${dcTag}</p><p>HP: ${Math.ceil(entity.hp)}/${entity.maxHp} ${window.isInCombat ? `| TP: ${Math.floor(entity.timePoints)}` : ''}</p>`;
         if (entity.maxMana > 0 || entity.currentMana > 0) infoHtml += `<p>MP: ${Math.floor(entity.currentMana)}/${entity.maxMana || 0}</p>`;
         if (entity.riding) {
             const m = entity.riding;
@@ -1455,7 +1456,70 @@ function showEntityDetails(entity) {
 
 window.showEntityDetails = showEntityDetails;
 
+function showDisconnectedPlayerPanel(ent) {
+    const existing = document.getElementById('disconnected-panel');
+    if (existing) existing.remove();
+
+    // Re-check: may have been resolved already
+    if (!ent.disconnected) return;
+
+    const panel = document.createElement('div');
+    panel.id = 'disconnected-panel';
+    panel.style.cssText = [
+        'position:fixed', 'top:50%', 'left:50%', 'transform:translate(-50%,-50%)',
+        'background:#2a2a2a', 'border:2px solid #f44336', 'border-radius:8px',
+        'padding:20px', 'z-index:9999', 'min-width:300px', 'text-align:center',
+        'color:#fff', 'font-family:sans-serif', 'box-shadow:0 4px 20px rgba(0,0,0,0.8)'
+    ].join(';');
+
+    panel.innerHTML = `
+        <h3 style="color:#f44336;margin:0 0 8px">${ent.name} — Disconnected</h3>
+        <p style="color:#aaa;margin:0 0 16px;font-size:0.9em">They've been offline for 10 seconds. What should happen?</p>
+        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+            <button id="dc-take" style="padding:8px 16px;background:#4CAF50;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.95em">Take Control</button>
+            <button id="dc-pause" style="padding:8px 16px;background:#607D8B;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.95em">Leave Paused</button>
+            <button id="dc-kick" style="padding:8px 16px;background:#f44336;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.95em">Kick from Game</button>
+        </div>
+    `;
+    document.body.appendChild(panel);
+
+    document.getElementById('dc-take').onclick = () => {
+        delete ent.disconnected;
+        delete ent.disconnectedAt;
+        window.showMessage(`${ent.name} is now under host control.`);
+        // If it's currently their turn, restore the action UI so the host can act
+        if (window.currentTurnEntity === ent) {
+            window.selectCharacterByName(ent.name);
+            if (window.updateActionButtons) window.updateActionButtons();
+        }
+        if (window.broadcastFullState) window.broadcastFullState();
+        panel.remove();
+    };
+
+    document.getElementById('dc-pause').onclick = () => {
+        window.showMessage(`${ent.name} remains paused in the game.`);
+        panel.remove();
+    };
+
+    document.getElementById('dc-kick').onclick = () => {
+        ent.alive = false;
+        delete ent.disconnected;
+        window.showMessage(`${ent.name} has been kicked from the game.`);
+        if (window.currentTurnEntity === ent) {
+            window.currentTurnEntity = null;
+            window.gamePhase = 'WAITING';
+            if (window.updateTurnIndicator) window.updateTurnIndicator();
+        }
+        if (window.broadcastFullState) window.broadcastFullState();
+        panel.remove();
+    };
+}
+
+window.showDisconnectedPlayerPanel = showDisconnectedPlayerPanel;
+
 function requestReaction(entity, options, callback, customMsg = null) {
+    // Disconnected player: auto-pass all reactions
+    if (entity.disconnected) { callback(null); return; }
     const isSentientAlly = entity.side === 'player' && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(entity.name);
     if (!isSentientAlly) {
         if (options.length > 0 && Math.random() < 0.7) callback(options[0].id);

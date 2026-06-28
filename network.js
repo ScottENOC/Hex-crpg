@@ -115,6 +115,12 @@ socket.on('roomJoined', ({ roomCode, players, gameState, savedCharacters }) => {
     if (gameState.overrideTerrain) window.overrideTerrain = gameState.overrideTerrain;
     if (gameState.tileObjects) window.tileObjects = gameState.tileObjects;
     if (gameState.isInArena !== undefined) window.isInArena = gameState.isInArena;
+    if (gameState.indoorLightMult !== undefined) window.indoorLightMult = gameState.indoorLightMult;
+    // Restore explored hexes immediately so fog-of-war is correct before the first syncFullState
+    if (gameState.exploredHexes && gameState.exploredHexes.length > 0) {
+        if (!window.exploredHexes) window.exploredHexes = new Set();
+        gameState.exploredHexes.forEach(h => window.exploredHexes.add(h));
+    }
     
     updateMultiplayerUI();
 
@@ -134,6 +140,31 @@ socket.on('playerJoined', ({ id, characterData }) => {
 
     if (document.getElementById('gameContainer').style.display === 'flex') {
         syncRemotePlayerEntity(id, characterData);
+
+        // When joining mid-arena-fight, assign the late-joiner a real arena spawn hex
+        // so they don't materialise at the world-map default {q:0,r:0}.
+        if (window.multiplayer.isHost && window.isInArena) {
+            const ent = window.entities.find(e => e.networkId === id);
+            if (ent) {
+                const anchor = window.entities.find(e => e.side === 'player' && e.networkId !== id && e.alive && e.hex);
+                const anchorHex = anchor ? anchor.hex : { q: -15, r: 0 };
+                const candidates = (window.getHexesInRange ? window.getHexesInRange(anchorHex, 4) : [])
+                    .sort((a, b) => window.distance(a, anchorHex) - window.distance(b, anchorHex));
+                const safeHex = candidates.find(h => {
+                    const t = window.getTerrainAt && window.getTerrainAt(h.q, h.r);
+                    return t && t.name !== 'Wall' && t.name !== 'Water' && !window.getEntityAtHex(h.q, h.r);
+                });
+                if (safeHex) {
+                    ent.hex     = safeHex;
+                    ent.visualQ = safeHex.q;
+                    ent.visualR = safeHex.r;
+                    ent.startQ  = safeHex.q;
+                    ent.startR  = safeHex.r;
+                }
+                ent.hasBeenSeenByPlayer = true;
+            }
+        }
+
         // Host should re-broadcast state to the new joiner
         if (window.multiplayer.isHost) window.broadcastFullState();
     }
@@ -155,6 +186,12 @@ socket.on('gameStarted', ({ players }) => {
 });
 
 socket.on('syncFullState', (data) => {
+    // The host is the source of truth — it must never process its own broadcasts.
+    // The server uses io.to(room) which echoes back to the sender; ignoring here
+    // prevents the host from rebuilding its own entities from a stale snapshot and
+    // resetting combat state (e.g. enemies flipping back to idle after wakeUp).
+    if (window.multiplayer?.isHost) return;
+
     const { players, gameState, entities, mapItems, worldSeconds, overrideTerrain, tileObjects, isInArena, indoorLightMult, exploredHexes, currentTurnEntityName, gamePhase, isInCombat } = data;
     console.log("Full State Sync Received...");
     window.multiplayer.players = players;
@@ -199,12 +236,25 @@ socket.on('syncFullState', (data) => {
         visualR:      window.player.visualR,
     } : null;
 
+    // Preserve race/gender from the existing entity list so they survive a rebuild
+    // from a host broadcast that stripped them (e.g. entity created via minimal characterData).
+    const knownRaceGender = {};
+    window.entities.forEach(e => {
+        if (e.id && (e.race || e.gender)) knownRaceGender[e.id] = { race: e.race, gender: e.gender };
+    });
+
     window.entities = [];
     entities.forEach(entData => {
+        if (!entData.hex) {
+            console.warn('[syncFullState] Skipping entity with null hex:', entData.name);
+            return;
+        }
         let ent;
         if (entData.side === 'enemy') ent = new window.Enemy(entData.name, entData.color, entData.hex, entData.initiative);
         else ent = new window.Entity(entData.name, entData.color, entData.hex, entData.initiative);
         Object.assign(ent, entData);
+        // Players are always visible (hasBeenSeenByPlayer gates the initiative tracker)
+        if (ent.side === 'player') ent.hasBeenSeenByPlayer = true;
         window.entities.push(ent);
 
         // Re-link local player reference
@@ -241,6 +291,20 @@ socket.on('syncFullState', (data) => {
             }
         }
     });
+
+    // Restore race/gender from the pre-sync snapshot for entities that lost them
+    // (can happen when a broadcast was built from minimal characterData).
+    window.entities.forEach(e => {
+        const rg = e.id ? knownRaceGender[e.id] : null;
+        if (rg) {
+            if (!e.race   && rg.race)   e.race   = rg.race;
+            if (!e.gender && rg.gender) e.gender = rg.gender;
+        }
+    });
+
+    // On arena entry snap all visual positions to their logical hex so nothing
+    // renders at a stale pre-transition position.
+    if (isAreaTransition && window.snapVisuals) window.snapVisuals();
 
     // Resolve currentTurnEntity on client
     if (currentTurnEntityName !== undefined) {
@@ -294,14 +358,31 @@ socket.on('gameMessage', ({ text }) => {
 
 socket.on('playerLeft', (id) => {
     const data = window.multiplayer.players[id];
-    if (data) {
-        window.showMessage(`${data.name} left the room.`);
+    const entName = data?.name || 'Unknown';
+
+    window.showMessage(`⚠ ${entName} has disconnected. Their character remains in the game.`);
+
+    if (window.entities) {
         const ent = window.entities.find(e => e.networkId === id);
         if (ent) {
-            delete ent.networkId; 
+            ent.disconnected = true;
+            ent.disconnectedAt = Date.now();
+            delete ent.networkId;
             ent.isRemote = false;
+
+            // Notify all clients that game may be paused at this entity's turn
+            if (window.multiplayer.isHost && window.broadcastFullState) window.broadcastFullState();
+
+            // After 10 s give the host a management panel
+            if (window.multiplayer.isHost) {
+                setTimeout(() => {
+                    const still = window.entities.find(e => e.name === ent.name && e.disconnected);
+                    if (still && window.showDisconnectedPlayerPanel) window.showDisconnectedPlayerPanel(still);
+                }, 10000);
+            }
         }
     }
+
     delete window.multiplayer.players[id];
     updateMultiplayerUI();
 });
@@ -333,10 +414,27 @@ socket.on('combatTurnResultReceived', ({ senderId, entities, gamePhase, currentT
     }
     if (tileObjects !== undefined) window.tileObjects = tileObjects;
 
-    // Track enemies the non-host didn't include so we can keep them.
-    // This prevents a stale or partial submission from wiping arena enemies off the host.
+    // Track entities the non-host didn't include so we can keep them.
+    // This prevents a stale or partial submission (e.g. submitted before the non-host received
+    // a newly-joined player's entity) from wiping those entities off the host.
     const reportedIds = new Set(entities.map(e => e.id).filter(Boolean));
     const unreportedEnemies = window.entities.filter(e => e.side === 'enemy' && !reportedIds.has(e.id));
+    // Preserve player entities from OTHER sessions that the submitter didn't know about yet
+    const unreportedOtherPlayers = window.entities.filter(
+        e => e.side === 'player' && e.networkId && e.networkId !== senderId && !reportedIds.has(e.id)
+    );
+
+    // Preserve host-authoritative visibility & race/gender — the non-host's submission can
+    // have hasBeenSeenByPlayer=false if updateExploration hadn't run on their side yet, and
+    // race/gender can be absent from entities rebuilt from minimal characterData.
+    const hostEntityMeta = {};
+    window.entities.forEach(e => {
+        if (e.id) hostEntityMeta[e.id] = {
+            seen:   e.hasBeenSeenByPlayer,
+            race:   e.race,
+            gender: e.gender,
+        };
+    });
 
     // Save the host's authoritative death states before the rebuild — the non-host's
     // submission can lag behind (e.g., Theodora died from poison after Gwen's turn
@@ -346,10 +444,15 @@ socket.on('combatTurnResultReceived', ({ senderId, entities, gamePhase, currentT
     // Re-build entities from the acting player's reported state
     window.entities = [];
     entities.forEach(entData => {
+        if (!entData.hex) {
+            console.warn('[combatTurnResult] Skipping entity with null hex:', entData.name);
+            return;
+        }
         let ent;
         if (entData.side === 'enemy') ent = new window.Enemy(entData.name, entData.color, entData.hex, entData.initiative);
         else ent = new window.Entity(entData.name, entData.color, entData.hex, entData.initiative);
         Object.assign(ent, entData);
+        if (ent.side === 'player') ent.hasBeenSeenByPlayer = true;
         window.entities.push(ent);
         if (ent.networkId === socket.id) window.player = ent;
     });
@@ -357,8 +460,21 @@ socket.on('combatTurnResultReceived', ({ senderId, entities, gamePhase, currentT
     // Re-apply death states the host already recorded — don't let non-host data revive them
     window.entities.forEach(e => { if (hostDeadNames.has(e.name)) e.alive = false; });
 
-    // Re-add any enemies not reported by the non-host (defensive — shouldn't normally happen)
+    // Restore host-authoritative visibility and race/gender.
+    // The non-host's submission can have hasBeenSeenByPlayer=false (updateExploration lag)
+    // and may omit race/gender when entities were rebuilt from minimal characterData.
+    window.entities.forEach(e => {
+        const meta = e.id ? hostEntityMeta[e.id] : null;
+        if (meta) {
+            if (meta.seen) e.hasBeenSeenByPlayer = true;
+            if (!e.race   && meta.race)   e.race   = meta.race;
+            if (!e.gender && meta.gender) e.gender = meta.gender;
+        }
+    });
+
+    // Re-add any enemies or other-session players not reported by this non-host submission
     unreportedEnemies.forEach(e => window.entities.push(e));
+    unreportedOtherPlayers.forEach(e => window.entities.push(e));
 
     if (gamePhase !== undefined) window.gamePhase = gamePhase;
     if (isInCombat !== undefined) window.isInCombat = isInCombat;
@@ -487,8 +603,9 @@ function syncRemotePlayerEntity(socketId, data) {
     remoteEntity.side = 'player';
     remoteEntity.networkId = socketId;
     Object.assign(remoteEntity, data);
-    remoteEntity.isRemote = true; 
-    
+    remoteEntity.isRemote = true;
+    remoteEntity.hasBeenSeenByPlayer = true; // Players are always visible in the initiative tracker
+
     window.entities.push(remoteEntity);
     window.renderEntities();
 }

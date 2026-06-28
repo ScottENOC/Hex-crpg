@@ -105,9 +105,11 @@ io.on('connection', (socket) => {
             room.gameState.gamePhase = payload.gamePhase;
             room.gameState.isInCombat = payload.isInCombat;
             
-            io.to(payload.roomCode).emit('syncFullState', { 
+            // socket.to() excludes the sender (the host) — host is the authority and must
+            // not rebuild its own entities from a broadcast it just generated.
+            socket.to(payload.roomCode).emit('syncFullState', {
                 ...payload,
-                players: room.players, 
+                players: room.players,
                 gameState: room.gameState
             });
         }

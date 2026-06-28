@@ -4,7 +4,6 @@ class Entity {
     this.id = Date.now() + Math.random();
     this.name = name;
     this.color = color;
-    this.hex = hex;
     this.initiative = initiative;
     this.initialTimePoints = 0;
     this.timePoints = this.initialTimePoints;
@@ -55,16 +54,18 @@ class Entity {
     this.riding = null; // Reference to mount entity
     this.rider = null;  // Reference to rider entity
 
-    // Visual Interpolation
-    this.visualQ = hex.q;
-    this.visualR = hex.r;
-    this.startQ = hex.q;
-    this.startR = hex.r;
+    // Visual Interpolation — guard against null hex from a corrupt sync payload
+    this.hex = hex || { q: 0, r: 0 };
+    this.visualQ = this.hex.q;
+    this.visualR = this.hex.r;
+    this.startQ  = this.hex.q;
+    this.startR  = this.hex.r;
     this.moveTotalTime = 0;
   }
 
   // Helper to get all hexes occupied by this entity
   getAllHexes() {
+      if (!this.hex) return [];
       const hexes = [{ q: this.hex.q, r: this.hex.r }];
       this.extraHexes.forEach(offset => {
           hexes.push({ q: this.hex.q + offset.q, r: this.hex.r + offset.r });

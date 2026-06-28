@@ -779,7 +779,18 @@ const CHAR_CONFIG = {
 
 function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
     const cfg = CHAR_CONFIG[`${e.race}_${e.gender}`];
-    if (!cfg || !window.gameVisuals) return;
+    if (!cfg || !window.gameVisuals) {
+        // Fallback: draw a colored circle so the entity is always visible
+        const r = window.hexSize * 0.45 * z;
+        ctx.beginPath();
+        ctx.arc(x, y + flyOff, r, 0, Math.PI * 2);
+        ctx.fillStyle = e.color || '#9c27b0';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.5 * z;
+        ctx.stroke();
+        return;
+    }
 
     const hs = window.hexSize;
     const bW = cfg.bodyW * hs * z;
@@ -1121,6 +1132,12 @@ function tick() {
                 if (window.multiplayer.isHost) {
                     if (window.updateExploration) window.updateExploration();
                     if (window.broadcastFullState) window.broadcastFullState();
+                } else {
+                    // Non-host: update exploration locally so hexes the player can see
+                    // are recorded as explored. Without this, if the entity briefly blinks
+                    // (e.g. due to a stale combat submission from another player), those
+                    // hexes go to "never seen" black instead of "seen" dim fog.
+                    if (window.updateExploration) window.updateExploration();
                 }
             } else {
                 if (window.updateExploration) window.updateExploration();
@@ -1472,6 +1489,14 @@ function takeTurn(entity) {
     entity.sidestepsRemaining = 3;
     let threshold = 80;
     if (entity.skills && entity.skills['quickRecovery']) threshold -= entity.skills['quickRecovery'];
+
+    // DISCONNECTED: player is offline — hold their turn until host acts
+    if (entity.disconnected) {
+        window.gamePhase = 'PLAYER_TURN';
+        window.updateTurnIndicator();
+        if (window.broadcastFullState) window.broadcastFullState();
+        return; // Don't spend TP — game waits indefinitely here
+    }
 
     // PETRIFIED: entity is frozen — burn all remaining TP and skip turn
     if (entity.petrifiedTicks > 0) {
@@ -2066,9 +2091,14 @@ function wakeUp(entity) {
     }
 
     entity.aiState = 'combat';
-    
+
     // Reset players initiative and cancel movement if this is the start of combat
     if (firstAlert) {
+        // Mark all currently-visible enemies as seen so they appear in the initiative tracker.
+        // updateExploration only runs in the out-of-combat tick; calling it here ensures the
+        // first combat broadcast already carries hasBeenSeenByPlayer=true for visible enemies.
+        if (window.updateExploration) window.updateExploration();
+
         window.entities.forEach(e => {
             if (e.side === 'player') {
                 e.timePoints = 0;
@@ -3391,21 +3421,40 @@ function startArenaFight() {
         baseR = 0;
     }
     
-    // Find a valid base hex that isn't water/wall
+    // Find a valid base hex that isn't wall/water/pedestal.
+    // Relies solely on getTerrainAt — no separate hasOverride gate needed, because
+    // getTerrainAt already returns Wall for any undefined hex when isInArena is true
+    // (terrain.js line: if (window.isInArena) return terrainTypes['wall']).
+    // The old hasOverride guard caused the fallback to fire whenever overrideTerrain
+    // was unexpectedly empty, landing both players on the raw (-18,0) fallback which
+    // appeared impassable because it had no terrain override.
     const findSafeHex = (startQ, startR, maxRadius) => {
         for (let r = 0; r <= maxRadius; r++) {
             for (let q = -r; q <= r; q++) {
                 for (let rr = Math.max(-r, -q - r); rr <= Math.min(r, -q + r); rr++) {
                     const h = { q: startQ + q, r: startR + rr };
                     const terrain = window.getTerrainAt(h.q, h.r);
-                    const hasOverride = window.overrideTerrain[`${h.q},${h.r}`];
-                    if (hasOverride && terrain.name !== 'Wall' && terrain.name !== 'Water' && !window.getEntityAtHex(h.q, h.r)) {
+                    if (terrain.name !== 'Wall' && terrain.name !== 'Water' &&
+                        terrain.name !== 'Pedestal' && !window.getEntityAtHex(h.q, h.r)) {
                         return h;
                     }
                 }
             }
         }
-        return { q: startQ, r: startR }; // Fallback
+        // Broad fallback: scan from center so we always find something valid
+        for (let r = 0; r <= 20; r++) {
+            for (let q = -r; q <= r; q++) {
+                for (let rr = Math.max(-r, -q - r); rr <= Math.min(r, -q + r); rr++) {
+                    const h = { q: q, r: rr };
+                    const terrain = window.getTerrainAt(h.q, h.r);
+                    if (terrain.name !== 'Wall' && terrain.name !== 'Water' &&
+                        terrain.name !== 'Pedestal' && !window.getEntityAtHex(h.q, h.r)) {
+                        return h;
+                    }
+                }
+            }
+        }
+        return { q: startQ, r: startR };
     };
 
     const partyBase = findSafeHex(baseQ, baseR, 10);
@@ -3427,17 +3476,17 @@ function startArenaFight() {
     const maxSP = 16 + (window.roguelikeData.fightsCompleted - 1) * 5;
     const targetSP = minSP + Math.floor(Math.random() * (maxSP - minSP + 1));
 
-    // Helper to find valid hexes
+    // Helper to find valid hexes — relies on getTerrainAt returning Wall for
+    // undefined hexes when isInArena=true, so no separate hasOverride guard needed.
     const getAllValidSpawnHexes = () => {
         const valid = [];
         for (let q = -arenaSize + 1; q < arenaSize; q++) {
             for (let r = -arenaSize + 1; r < arenaSize; r++) {
+                if (Math.abs(q) + Math.abs(r) + Math.abs(q+r) > arenaSize * 2) continue; // outside hex shape
                 const hex = { q, r };
                 const terrain = window.getTerrainAt(q, r);
-                // Check accessible terrain: MUST HAVE AN OVERRIDE IN ARENA (to be inside the wall)
-                const hasOverride = window.overrideTerrain[`${q},${r}`];
-                if (hasOverride && terrain.name !== 'Wall' && terrain.name !== 'Water' && !getEntityAtHex(q, r)) {
-                    // Check distance from all players
+                if (terrain.name !== 'Wall' && terrain.name !== 'Water' &&
+                    terrain.name !== 'Pedestal' && !getEntityAtHex(q, r)) {
                     const nearPlayer = window.entities.some(e => e.side === 'player' && window.distance(e.hex, hex) < 3);
                     if (!nearPlayer) {
                         valid.push(hex);
@@ -3616,6 +3665,15 @@ document.addEventListener('keydown', (ev) => {
     if (ev.key === '`') {
         window.charDebugMode = !window.charDebugMode;
         window.renderEntities && window.renderEntities();
+    }
+
+    // Space: re-center camera on local player and re-enable follow
+    if (ev.key === ' ' && document.getElementById('gameContainer')?.style.display === 'flex') {
+        ev.preventDefault();
+        window.cameraFollowEnabled = true;
+        const local = window.player ||
+            window.entities?.find(e => e.alive && e.side === 'player' && !e.rider);
+        if (local && window.centerCameraOn) window.centerCameraOn(local.hex);
     }
 });
 window.tryShove = tryShove;
