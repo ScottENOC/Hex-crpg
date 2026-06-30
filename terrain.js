@@ -66,6 +66,11 @@ function getTerrainAt(q, r) {
     // ROGUELIKE: If in arena and no override, it's effectively "void" (Wall)
     if (window.isInArena) return terrainTypes['wall'];
 
+    // CAMPAIGN 2: hand-crafted small world, no procedural biome map exists.
+    // Unpainted hexes default to grass instead of falling through to the
+    // out-of-bounds water fallback below.
+    if (window.currentCampaign === '2') return terrainTypes['grass'];
+
     // 1. Determine World Biome
     const worldPos = battleToWorld(q, r);
     const biome = getBiomeAtWorldPos(worldPos.col, worldPos.row);

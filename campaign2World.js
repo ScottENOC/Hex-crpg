@@ -1,0 +1,113 @@
+// campaign2World.js
+// Builds the seamless Hollowmere village + Hollow Tankard tavern interior for
+// Campaign 2. Reuses the exact "paint terrain via overrideTerrain, no
+// teleport" pattern proven by the arena lobby (see setupArenaLobby in
+// gameEngine.js) — same hex grid throughout, no loading screen.
+
+function setupVillageScene() {
+    window.overrideTerrain = {};
+    window.tileObjects = {};
+    window.exploredHexes = new Set();
+    window.lastSeenTimeMap = {};
+    window.entities = [];
+
+    // --- Village exterior: hand-painted grass with light variety ---
+    for (let q = -30; q <= 30; q++) {
+        for (let r = -30; r <= 30; r++) {
+            // Inside the tavern footprint is handled below; everything else
+            // outside that is grass (terrain.js also grass-falls-back for
+            // campaign 2, this is just explicit/deliberate village ground).
+            const noise = Math.abs(Math.sin(q * 12.9898 + r * 78.233)) % 1;
+            if (noise > 0.93) window.setTerrainAt(q, r, 'Forest');
+            else window.setTerrainAt(q, r, 'Grass');
+        }
+    }
+
+    // --- Tavern: walls q:-6..6, r:-4..4; floor carved q:-5..5, r:-3..3 ---
+    for (let q = -6; q <= 6; q++) {
+        for (let r = -4; r <= 4; r++) {
+            window.setTerrainAt(q, r, 'Wall');
+        }
+    }
+    for (let q = -5; q <= 5; q++) {
+        for (let r = -3; r <= 3; r++) {
+            window.setTerrainAt(q, r, 'Cave Floor');
+        }
+    }
+    // Door gap at {0,4} — exterior grass, connects floor to village.
+    window.setTerrainAt(0, 4, 'Grass');
+
+    // Register the interior region for hex-local indoor lighting (see worldTime.js).
+    window.interiorRegions = [
+        { minQ: -5, maxQ: 5, minR: -3, maxR: 3, lightMult: 0.15 }
+    ];
+
+    // Fireplace for cozy interior lighting + visual marker for the door.
+    window.tileObjects['-4,0'] = { type: 'fireplace', lightRadius: 6 };
+    window.tileObjects['0,4'] = { type: 'door', lightRadius: 0 };
+
+    // --- Party: spawn seated at a table inside the tavern ---
+    window.party.forEach((p, i) => {
+        const spawnHex = { q: i, r: 0 };
+        const ent = new window.Entity(p.name, 'red', spawnHex, (p.attributes?.agility || 10) + 10);
+        ent.side = 'player';
+        Object.assign(ent, p);
+        ent.hex = spawnHex;
+        ent.visualQ = spawnHex.q; ent.visualR = spawnHex.r;
+        ent.startQ = spawnHex.q; ent.startR = spawnHex.r;
+        ent.destination = null;
+        ent.moveCooldown = 0;
+        window.entities.push(ent);
+        if (i === 0) window.player = ent;
+    });
+
+    // --- Faction standings seeded from the player's race ---
+    if (window.seedFactionStandings) window.seedFactionStandings(window.party[0].race);
+
+    // --- NPC roster ---
+    const npcHexes = {
+        'Garrick Holt': { q: -3, r: -2 },
+        'Mira Ashbrook': { q: 2, r: -2 },
+        'Oskar Vinn': { q: 3, r: -2 }
+    };
+    (window.campaign2Npcs || []).forEach(spec => {
+        const hex = npcHexes[spec.name] || { q: 0, r: -2 };
+        const ent = window.buildNPC({ ...spec, hex });
+        // Soldiers wait outside until the scripted event brings them in.
+        if (spec.factionId === 'ironbond_company') {
+            ent.hex = { q: 0, r: 6 };
+            ent.visualQ = ent.hex.q; ent.visualR = ent.hex.r;
+            ent.startQ = ent.hex.q; ent.startR = ent.hex.r;
+            ent.pendingEntry = true;
+        }
+        window.entities.push(ent);
+    });
+
+    (window.campaign2BackgroundPatrons || []).forEach((spec, i) => {
+        const ent = window.buildNPC({
+            ...spec,
+            hex: { q: -2 + i, r: 2 },
+            classLevels: [],
+            skillPicks: [],
+            equipment: [],
+            side: 'neutral'
+        });
+        window.entities.push(ent);
+    });
+
+    window.hollowmereEventFired = false;
+
+    window.drawMap();
+    window.renderEntities();
+    window.showCharacter();
+    if (window.snapVisuals) window.snapVisuals();
+
+    // "After a while" — the soldiers walk in a short delay after the scene
+    // loads, mirroring the existing setTimeout-chained dialogue precedent
+    // used by startArenaFight.
+    setTimeout(() => {
+        if (window.startHollowmereShakedown) window.startHollowmereShakedown();
+    }, 8000);
+}
+
+window.setupVillageScene = setupVillageScene;

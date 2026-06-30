@@ -54,8 +54,9 @@ function loadWorldMap() {
                 }
                 window.worldMapData.push(row);
             }
-            // Add a small city in the middle
-            window.worldMapData[6][6] = { t: 'G', f: 'h', o: 'C', p: 1, n: 'Small Town' };
+            // Add Hollowmere in the middle. Note: cell.f is the marker SHAPE ('C'/'T'/'V'),
+            // cell.o is the faction-color code — see drawWorldHex, which reads them this way.
+            window.worldMapData[6][6] = { t: 'G', f: 'C', o: 'h', p: 1, n: 'Hollowmere' };
             window.playerWorldPos = { x: 6, y: 6 };
             return;
         }

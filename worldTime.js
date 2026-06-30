@@ -8,8 +8,25 @@ const MONTH_NAMES = [
     "Deepwinter", "Starrynight", "Frostmelt", "Greenbud"
 ];
 
+// Campaign 2: hex-local indoor lighting. Recomputes window.indoorLightMult
+// each tick based on whether the player's current hex falls inside a
+// registered interior region, instead of a global on/off flag like the
+// arena's isInArena-driven lighting.
+function computeIndoorLightMult() {
+    if (!window.interiorRegions || window.interiorRegions.length === 0) return 1.0;
+    const p = window.entities && window.entities.find(e => e.side === 'player' && !e.rider);
+    if (!p || !p.hex) return 1.0;
+    const region = window.interiorRegions.find(r =>
+        p.hex.q >= r.minQ && p.hex.q <= r.maxQ && p.hex.r >= r.minR && p.hex.r <= r.maxR
+    );
+    return region ? region.lightMult : 1.0;
+}
+
 function updateTime(delta) {
     window.worldSeconds += delta;
+    if (window.currentCampaign === '2') {
+        window.indoorLightMult = computeIndoorLightMult();
+    }
     window.lightLevel = getLightLevel() * (window.indoorLightMult !== undefined ? window.indoorLightMult : 1.0);
     
     // Fatigue tracking

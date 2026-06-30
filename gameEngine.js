@@ -704,6 +704,16 @@ function startGameCore(isLoading = false) {
       return;
   }
 
+  if (window.currentCampaign === "2") {
+      window.setupVillageScene();
+      document.addEventListener("keydown", window.handleMovement);
+      window.mapCanvas.addEventListener("click", window.handleClick);
+      if (!window.tickInterval) window.tickInterval = setInterval(tick, 10);
+      const fp = window.entities.find(e => e.side === 'player' && !e.rider);
+      if (fp && window.centerCameraOn) window.centerCameraOn(fp.hex);
+      return;
+  }
+
   const playerEntity = new window.Entity(window.party[0].name, "red", {q: window.playerPos.q, r: window.playerPos.r}, window.party[0].attributes.agility + 10);
   playerEntity.side = 'player';
   Object.assign(playerEntity, window.party[0]);
@@ -2942,6 +2952,17 @@ function checkCombatEnd() {
              window.saveGame("AutoSave_CombatEnd");
         }
 
+        if (window.currentCampaign === "2" && window.hollowmereEventFired && window.factions?.ironbond_company) {
+            // Small extra goodwill bump from Hollowmere's locals for winning the brawl.
+            const silverhart = window.factions.silverhart_kingdom;
+            const garrick = window.entities.find(e => e.name === 'Garrick Holt');
+            if (silverhart && !window.hollowmereVictoryBonusGiven) {
+                window.adjustReputation(silverhart, 5, 5);
+                if (garrick) window.adjustReputation(garrick.reputation, 5, 5);
+                window.hollowmereVictoryBonusGiven = true;
+            }
+        }
+
         if (window.currentCampaign === "1" && window.isInArena) {
             window.isInArena = false;
             window.triggerAmbientDialogue('arena_victory');
@@ -3623,6 +3644,10 @@ function startArenaFight() {
 
 function talkToNPC(npc) {
     console.log("Talking to NPC:", npc.name);
+    if (npc.dialogueId && window.npcDialogueTrees && window.npcDialogueTrees[npc.dialogueId]) {
+        window.npcDialogueTrees[npc.dialogueId](npc);
+        return;
+    }
     if (npc.name === "Arena Announcer") {
         window.showDialogue(npc, "Welcome to the pits! Are you ready for your next match?", [
             { label: "I am ready to fight!", action: () => {
@@ -3965,6 +3990,8 @@ function tryCastSpell(caster, spell, target, clickedHex, bypassCooldown = false)
 // GLOBAL EXPORTS
 window.updatePlayerUI = updatePlayerUI;
 window.autoMoveProcess = autoMoveProcess;
+window.drawPlayerCharacter = drawPlayerCharacter;
+window.CHAR_CONFIG = CHAR_CONFIG;
 window.handleClick = handleClick;
 window.getEntityAtHex = getEntityAtHex;
 window.getHexesInRange = getHexesInRange;

@@ -1559,22 +1559,38 @@ function showDialogue(npc, message, options = []) {
     msg.innerText = message;
     optDiv.innerHTML = '';
 
-    // Create a mini portrait
+    // Create a mini portrait. NPCs with real equipment use the same layered
+    // body-part renderer as their map sprite, so gear shown in conversation
+    // matches their stat block. Unique customImage NPCs (e.g. arena cast)
+    // keep their flat art.
     portrait.innerHTML = '';
-    const baseImg = document.createElement('img');
-    if (npc.customImage && window.gameVisuals[npc.customImage]?.complete) {
-        baseImg.src = window.gameVisuals[npc.customImage].src;
-    } else if (npc.race === 'human') {
-        baseImg.src = npc.gender === 'male' ? 'images/humanmale.png' : 'images/humanfemale.png';
-    } else if (npc.race === 'elf') {
-        baseImg.src = npc.gender === 'male' ? 'images/elfmale.png' : 'images/elffemale.png';
-    } else if (npc.race === 'dwarf') {
-        baseImg.src = npc.gender === 'male' ? 'images/dwarfmale.png' : 'images/dwarffemale.png';
+    if (!npc.customImage && npc.equipped && window.drawPlayerCharacter && window.CHAR_CONFIG?.[`${npc.race}_${npc.gender}`]) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 100;
+        canvas.height = 100;
+        canvas.classList.add('portrait-layer');
+        portrait.appendChild(canvas);
+        const ctx = canvas.getContext('2d');
+        const hs = window.hexSize || 40;
+        const cfg = window.CHAR_CONFIG[`${npc.race}_${npc.gender}`];
+        const z = (100 * 0.65) / (cfg.bodyH * hs);
+        window.drawPlayerCharacter(ctx, npc, 50, 65, z, 0);
     } else {
-        baseImg.src = 'images/elf.png';
+        const baseImg = document.createElement('img');
+        if (npc.customImage && window.gameVisuals[npc.customImage]?.complete) {
+            baseImg.src = window.gameVisuals[npc.customImage].src;
+        } else if (npc.race === 'human') {
+            baseImg.src = npc.gender === 'male' ? 'images/humanmale.png' : 'images/humanfemale.png';
+        } else if (npc.race === 'elf') {
+            baseImg.src = npc.gender === 'male' ? 'images/elfmale.png' : 'images/elffemale.png';
+        } else if (npc.race === 'dwarf') {
+            baseImg.src = npc.gender === 'male' ? 'images/dwarfmale.png' : 'images/dwarffemale.png';
+        } else {
+            baseImg.src = 'images/elf.png';
+        }
+        baseImg.classList.add('portrait-layer');
+        portrait.appendChild(baseImg);
     }
-    baseImg.classList.add('portrait-layer');
-    portrait.appendChild(baseImg);
 
     if (options.length === 0) {
         options.push({ label: "Goodbye", action: () => {} });

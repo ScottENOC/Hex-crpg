@@ -437,3 +437,4 @@ function assignRandomEquipment(monster) {
 
 window.monsterTemplates = monsterTemplates;
 window.createMonster = createMonster;
+window.equipToMonster = equipToMonster;
