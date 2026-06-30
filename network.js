@@ -135,10 +135,24 @@ socket.on('roomJoined', ({ roomCode, players, gameState, savedCharacters }) => {
 
 socket.on('playerJoined', ({ id, characterData }) => {
     window.multiplayer.players[id] = characterData;
-    window.showMessage(`${characterData.name} joined the room!`);
     updateMultiplayerUI();
 
     if (document.getElementById('gameContainer').style.display === 'flex') {
+        // If this is a reconnect, restore the existing entity rather than spawning a new one
+        if (characterData.isReconnect && window.entities) {
+            const existing = window.entities.find(e => e.name === characterData.name && e.disconnected);
+            if (existing) {
+                existing.networkId = id;
+                existing.isRemote = true;
+                existing.disconnected = false;
+                delete existing.disconnectedAt;
+                window.showMessage(`${characterData.name} reconnected!`);
+                if (window.multiplayer.isHost && window.broadcastFullState) window.broadcastFullState();
+                updateMultiplayerUI();
+                return;
+            }
+        }
+        window.showMessage(`${characterData.name} joined the room!`);
         syncRemotePlayerEntity(id, characterData);
 
         // When joining mid-arena-fight, assign the late-joiner a real arena spawn hex
@@ -378,7 +392,7 @@ socket.on('playerLeft', (id) => {
                 setTimeout(() => {
                     const still = window.entities.find(e => e.name === ent.name && e.disconnected);
                     if (still && window.showDisconnectedPlayerPanel) window.showDisconnectedPlayerPanel(still);
-                }, 10000);
+                }, 30000);
             }
         }
     }
