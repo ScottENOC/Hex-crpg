@@ -1877,8 +1877,9 @@ function aiProcess(entity) {
 
     // BOSS AI: STEALTH PRIORITY (Viper / Rogues)
     if (entity.skills?.stealth_rogue && !entity.isStealthed && entity.timePoints >= 5) {
-        const canSeeMe = opponents.some(o => window.distance(entity.hex, o.hex) < 20 && window.hasLineOfSight(entity.hex, o.hex));
-        if (!canSeeMe) {
+        // Use the same canSee check tryStealth uses internally so there is no mismatch
+        const isSeen = opponents.some(o => canSee(o, entity));
+        if (!isSeen) {
             if (window.tryStealth(entity)) {
                 setTimeout(() => aiProcess(entity), 20);
                 return;
@@ -3655,6 +3656,7 @@ window.setupArenaLobby = setupArenaLobby;
 window.startArenaFight = startArenaFight;
 window.tryStealth = tryStealth;
 window.breakStealth = breakStealth;
+window.canSee = canSee;
 window.lootItems = lootItems;
 window.spendTP = spendTP;
 window.finalizePlayerAction = finalizePlayerAction;
