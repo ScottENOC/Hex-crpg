@@ -31,6 +31,22 @@ function seedFactionStandings(playerRace) {
     }
 }
 
+// Feudal reputation cascade: an action mostly affects the nearest tier (e.g.
+// the person directly involved), with a shrinking ripple up the chain of
+// authority above them (village elder -> baron -> kingdom). falloff=0.4 means
+// each tier up feels ~40% of the tier below it — heavily dampened, not
+// independent and not fully propagated. Pass targets in order from most to
+// least directly involved; missing/undefined tiers (e.g. no baron placed
+// yet) are simply skipped.
+function cascadeReputation(chain, standingDelta, knowledgeDelta, falloff = 0.4) {
+    chain.forEach((target, i) => {
+        if (!target) return;
+        const mult = Math.pow(falloff, i);
+        adjustReputation(target, standingDelta * mult, knowledgeDelta * mult);
+    });
+}
+
 window.seedStanding = seedStanding;
 window.adjustReputation = adjustReputation;
 window.seedFactionStandings = seedFactionStandings;
+window.cascadeReputation = cascadeReputation;

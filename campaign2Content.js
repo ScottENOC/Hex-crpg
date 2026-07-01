@@ -85,3 +85,32 @@ window.campaign2BackgroundPatrons = [
     { name: 'Tavern Patron', title: 'Tavern Patron', race: 'human', gender: 'female', color: '#cfa8d8' },
     { name: 'Tavern Patron', title: 'Tavern Patron', race: 'human', gender: 'male', color: '#cfcf8a' }
 ];
+
+// The feudal chain of authority above Hollowmere's residents. The elder is
+// placed in the village (the House building); the baron rules the barony
+// Hollowmere sits in and isn't physically present yet — a reputation-only
+// NPC for now, a natural next step being to actually build his holding.
+window.campaign2Elder = {
+    name: 'Elder Marta Wynfield',
+    title: 'Village Elder',
+    race: 'human', gender: 'female',
+    classLevels: ['cleric'],
+    skillPicks: ['health'],
+    equipment: [],
+    side: 'neutral',
+    factionId: 'silverhart_kingdom',
+    color: '#cccc99',
+    dialogueId: 'marta_wynfield'
+};
+
+window.campaign2Baron = {
+    name: 'Baron Corwin Aldervale',
+    title: 'Baron of Aldervale',
+    race: 'human', gender: 'male',
+    classLevels: ['fighter', 'fighter'],
+    skillPicks: ['health', 'sword_hit', 'sword_dmg'],
+    equipment: ['sword', 'medium_armor'],
+    side: 'neutral',
+    factionId: 'silverhart_kingdom',
+    color: '#4444aa'
+};

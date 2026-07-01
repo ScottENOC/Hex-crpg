@@ -35,6 +35,9 @@ function saveGame(saveName = "rpg_save_game") {
         hollowmereQuestOfferFired: window.hollowmereQuestOfferFired,
         questLog: window.questLog,
         worldMapNotes: window.worldMapNotes,
+        // The baron is a reputation-only NPC not placed in window.entities
+        // (never rendered/AI-processed), so he needs his own save/load slot.
+        regionalNPCBaron: window.regionalNPCs?.baron || null,
 
         entities: window.entities.map(e => {
             const data = {};
@@ -128,6 +131,10 @@ function loadGame(saveName = "rpg_save_game") {
         window.hollowmereQuestOfferFired = gameState.hollowmereQuestOfferFired || false;
         window.questLog = gameState.questLog || [];
         window.worldMapNotes = gameState.worldMapNotes || {};
+        if (gameState.regionalNPCBaron) {
+            window.regionalNPCs = window.regionalNPCs || {};
+            window.regionalNPCs.baron = gameState.regionalNPCBaron;
+        }
 
         // 2. Hide Creator, Show Game
         document.getElementById("characterCreator").style.display = "none";
@@ -160,6 +167,14 @@ function loadGame(saveName = "rpg_save_game") {
                 ent.rider = window.entities.find(e => e.id === ent.riderId);
             }
         });
+
+        // Re-link the elder (she lives in window.entities and was just
+        // reconstructed above) back onto window.regionalNPCs.
+        const restoredElder = window.entities.find(e => e.name === 'Elder Marta Wynfield');
+        if (restoredElder) {
+            window.regionalNPCs = window.regionalNPCs || {};
+            window.regionalNPCs.elder = restoredElder;
+        }
 
         // Restore turn state
         window.gamePhase = gameState.gamePhase || 'WAITING';

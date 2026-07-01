@@ -6,7 +6,7 @@
 // window.Enemy instance instead of a plain party-data object, and is meant
 // for hand-authored, static NPC rosters rather than the character creator UI.
 
-function buildNPC({ name, title, race, gender, hex, classLevels, skillPicks, equipment, side, factionId, color, voice }) {
+function buildNPC({ name, title, race, gender, hex, classLevels, skillPicks, equipment, side, factionId, color, voice, dialogueId }) {
     const ent = new window.Enemy(name, color || 'white', hex, 10, 10, 0);
     ent.title = title;
     ent.race = race;
@@ -16,6 +16,7 @@ function buildNPC({ name, title, race, gender, hex, classLevels, skillPicks, equ
     ent.tags = ['humanoid'];
     ent.voice = voice || 'pc_1';
     ent.factionId = factionId || null;
+    ent.dialogueId = dialogueId || null;
 
     const playerRace = window.party && window.party[0] ? window.party[0].race : race;
     ent.reputation = {

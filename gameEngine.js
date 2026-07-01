@@ -3002,11 +3002,15 @@ function checkCombatEnd() {
         if (window.currentCampaign === "2" && window.hollowmereEventFired && window.factions?.ironbond_company && !window.hollowmereVictoryBonusGiven) {
             window.hollowmereVictoryBonusGiven = true;
 
-            // Small extra goodwill bump from Hollowmere's locals for winning the brawl.
+            // Small extra goodwill bump from Hollowmere's locals for winning the
+            // brawl, cascaded up the same feudal chain as the dialogue choice.
             const silverhart = window.factions.silverhart_kingdom;
             const garrick = window.entities.find(e => e.name === 'Garrick Holt');
-            if (silverhart) window.adjustReputation(silverhart, 5, 5);
-            if (garrick) window.adjustReputation(garrick.reputation, 5, 5);
+            const elder = window.regionalNPCs?.elder;
+            const baron = window.regionalNPCs?.baron;
+            if (window.cascadeReputation) {
+                window.cascadeReputation([garrick?.reputation, elder?.reputation, baron?.reputation, silverhart], 5, 5);
+            }
 
             // Force a clean, explicit return to real-time exploration mode —
             // don't just rely on the next tick's implicit recomputation — and

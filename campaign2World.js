@@ -136,6 +136,23 @@ function setupVillageScene() {
         window.entities.push(ent);
     });
 
+    // --- Feudal chain of authority above Hollowmere ---
+    // The elder lives in the village (the House) and is reachable like any
+    // other NPC. The baron rules the wider barony and isn't placed on the
+    // map yet — a reputation-only figure, not pushed into window.entities,
+    // so he never renders/AI-processes/collides with anything.
+    if (window.campaign2Elder) {
+        const elder = window.buildNPC({ ...window.campaign2Elder, hex: { q: 0, r: -12 } });
+        window.entities.push(elder);
+        window.regionalNPCs = window.regionalNPCs || {};
+        window.regionalNPCs.elder = elder;
+    }
+    if (window.campaign2Baron) {
+        const baron = window.buildNPC({ ...window.campaign2Baron, hex: { q: 0, r: 0 } });
+        window.regionalNPCs = window.regionalNPCs || {};
+        window.regionalNPCs.baron = baron;
+    }
+
     window.hollowmereEventFired = false;
 
     window.drawMap();

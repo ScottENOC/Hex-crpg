@@ -53,6 +53,22 @@ window.npcDialogueTrees = {
         window.showDialogue(npc, "First time in Hollowmere? Mind the Ironbond lot if they're about.", [
             { label: "Noted.", action: () => {} }
         ]);
+    },
+    marta_wynfield: (npc) => {
+        if (!window.hollowmereEventFired) {
+            window.showDialogue(npc, "Welcome, traveler. Hollowmere's a small place, but an honest one.", [
+                { label: "Good to know.", action: () => {} }
+            ]);
+            return;
+        }
+        const standing = npc.reputation?.standing ?? 0;
+        let line;
+        if (standing >= 15) line = "Word of what you did at the Tankard reached me. Hollowmere doesn't forget a favor like that.";
+        else if (standing <= -5) line = "I heard about the Tankard. Garrick's a proud man — I imagine that stung him more than you know.";
+        else line = "I heard the Ironbond men were in the village again. Nothing's changed there, I'm afraid.";
+        window.showDialogue(npc, line, [
+            { label: "Noted.", action: () => {} }
+        ]);
     }
 };
 
@@ -102,26 +118,33 @@ function resolveShakedown(branch) {
     const enforcers = window.entities.filter(e => e.factionId === 'ironbond_company' && e !== dray);
     const ironbond = window.factions.ironbond_company;
     const silverhart = window.factions.silverhart_kingdom;
+    const elder = window.regionalNPCs?.elder;
+    const baron = window.regionalNPCs?.baron;
+
+    // Garrick's case is the one that plausibly reaches the authorities above
+    // him (he's the wronged business owner) — the elder hears about it, the
+    // baron gets a much fainter impression, and word barely reaches the
+    // kingdom at all. Patrons' personal opinions stay local (no cascade).
+    const authorityChain = [garrick?.reputation, elder?.reputation, baron?.reputation, silverhart];
 
     const patrons = [mira, oskar].filter(Boolean);
 
     if (branch === 'stay_out') {
-        window.adjustReputation(garrick?.reputation, -10, 10);
+        window.cascadeReputation(authorityChain, -10, 10);
         patrons.forEach(p => window.adjustReputation(p.reputation, -5, 5));
         window.adjustReputation(ironbond, 5, 5);
         window.showMessage("Garrick pays up, shoulders slumped. The soldiers leave with their due.");
         exitSoldiersPeacefully(dray, enforcers);
     } else if (branch === 'encourage_pay') {
-        window.adjustReputation(garrick?.reputation, 5, 15);
+        window.cascadeReputation(authorityChain, 5, 15);
         patrons.forEach(p => window.adjustReputation(p.reputation, 0, 10));
         window.adjustReputation(ironbond, 15, 15);
         window.showMessage("You back the demand with a hard stare. The soldiers take their due and leave without further trouble.");
         exitSoldiersPeacefully(dray, enforcers);
     } else if (branch === 'fight') {
-        window.adjustReputation(garrick?.reputation, 25, 20);
+        window.cascadeReputation(authorityChain, 25, 20);
         patrons.forEach(p => window.adjustReputation(p.reputation, 20, 20));
         window.adjustReputation(ironbond, -35, 25);
-        window.adjustReputation(silverhart, 10, 10);
         window.showMessage("Steel rings out! Garrick grabs his club — this is happening.");
 
         // Allies stay side:'player' (so all the existing friend/foe checks treat
