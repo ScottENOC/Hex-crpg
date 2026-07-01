@@ -21,6 +21,10 @@ Object.assign(window.dialogueData, {
     hollowmere_dray_threat: {
         speaker: 'Dray Coltayne', mood: 'menacing',
         dialogue: "It can't. Pay up, or this place finds out what an 'accident' looks like."
+    },
+    hollowmere_victory: {
+        speaker: 'Garrick Holt', mood: 'relieved',
+        dialogue: "It's over... thank you. I didn't think anyone would stand with us against the Company."
     }
 });
 

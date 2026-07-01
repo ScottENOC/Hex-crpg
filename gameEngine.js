@@ -2999,15 +2999,39 @@ function checkCombatEnd() {
              window.saveGame("AutoSave_CombatEnd");
         }
 
-        if (window.currentCampaign === "2" && window.hollowmereEventFired && window.factions?.ironbond_company) {
+        if (window.currentCampaign === "2" && window.hollowmereEventFired && window.factions?.ironbond_company && !window.hollowmereVictoryBonusGiven) {
+            window.hollowmereVictoryBonusGiven = true;
+
             // Small extra goodwill bump from Hollowmere's locals for winning the brawl.
             const silverhart = window.factions.silverhart_kingdom;
             const garrick = window.entities.find(e => e.name === 'Garrick Holt');
-            if (silverhart && !window.hollowmereVictoryBonusGiven) {
-                window.adjustReputation(silverhart, 5, 5);
-                if (garrick) window.adjustReputation(garrick.reputation, 5, 5);
-                window.hollowmereVictoryBonusGiven = true;
-            }
+            if (silverhart) window.adjustReputation(silverhart, 5, 5);
+            if (garrick) window.adjustReputation(garrick.reputation, 5, 5);
+
+            // Force a clean, explicit return to real-time exploration mode —
+            // don't just rely on the next tick's implicit recomputation — and
+            // release the allies from combat posture now that the fight is won.
+            window.isInCombat = false;
+            window.gamePhase = 'WAITING';
+            window.currentTurnEntity = null;
+            ['Garrick Holt', 'Mira Ashbrook', 'Oskar Vinn'].forEach(name => {
+                const ally = window.entities.find(e => e.name === name && e.alive);
+                if (ally) {
+                    // Settle back into being ordinary tavern NPCs rather than
+                    // staying in the player's directly-controllable party.
+                    ally.side = 'neutral';
+                    ally.isNPC = true;
+                    ally.aiState = 'idle';
+                    ally.aiControlled = false;
+                    ally.timePoints = 0;
+                }
+            });
+
+            window.triggerAmbientDialogue('hollowmere_victory');
+            if (window.updateActionButtons) window.updateActionButtons();
+            if (window.updateTurnIndicator) window.updateTurnIndicator();
+            window.drawMap();
+            window.renderEntities();
         }
 
         if (window.currentCampaign === "1" && window.isInArena) {
@@ -3905,9 +3929,10 @@ function resolveSpell(caster, spell, target, clickedHex) {
                 let fd = Math.max(1, (spell.magnitude || 0) - red);
                 target.hp -= fd; syncBackToPlayer(target);
                 wakeUp(target);
-                if (target.hp <= 0 && target.alive) { 
-                    target.alive = false; window.showMessage(`${target.name} defeated!`); 
-                    if (caster.side === 'player' && target.expValue) window.gainExp(target.expValue); 
+                if (target.hp <= 0 && target.alive) {
+                    target.alive = false; window.showMessage(`${target.name} defeated!`);
+                    if (caster.side === 'player' && target.expValue) window.gainExp(target.expValue);
+                    if (target.side === 'enemy') checkCombatEnd();
                 }
             }
             actionHandled = true;
