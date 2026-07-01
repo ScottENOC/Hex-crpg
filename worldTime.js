@@ -130,3 +130,4 @@ function renderTime() {
 
 window.updateTime = updateTime;
 window.getFormattedTime = getFormattedTime;
+window.getLightLevel = getLightLevel;

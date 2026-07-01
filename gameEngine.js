@@ -1976,22 +1976,8 @@ function aiProcess(entity) {
 
     let target = null;
     if (attackableOpponents.length > 0) {
-        // Deprioritize unconscious (downed but not yet truly dead) opponents —
-        // unless the opposing side has a healer, in which case finishing off
-        // a downed target before they can be saved is the smart play instead.
-        const opponentsHaveHealer = opponents.some(o =>
-            o.alive && !o.unconscious && (o.skills?.learn_heal || (o.unlockedBaseSpells || []).includes('heal'))
-        );
-        attackableOpponents.sort((a, b) => {
-            const distDiff = getMinDistance(entity, a) - getMinDistance(entity, b);
-            const aDown = !!a.unconscious, bDown = !!b.unconscious;
-            if (aDown !== bDown) {
-                const downedIsBetter = opponentsHaveHealer; // finish them off before the healer saves them
-                if (downedIsBetter) return aDown ? -1 : 1;
-                return aDown ? 1 : -1; // otherwise leave downed targets alone
-            }
-            return distDiff;
-        });
+        const opponentsHaveHealer = opponentsHaveHealerCapability(opponents);
+        attackableOpponents.sort((a, b) => targetPriorityCompare(entity, a, b, opponentsHaveHealer));
         target = attackableOpponents[0];
         entity.lastSeenTargetHex = { q: target.hex.q, r: target.hex.r };
     }
@@ -2968,6 +2954,31 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
       handleLethalDamage(target, attacker);
   }
 }
+
+// Does any (conscious, alive) entity in this opponent list have heal
+// capability? Reuses the exact same skill key the AI's own self-heal check
+// already keys off (learn_heal). Extracted as a named function so it can be
+// tested directly rather than re-derived in test code.
+function opponentsHaveHealerCapability(opponents) {
+    return opponents.some(o =>
+        o.alive && !o.unconscious && (o.skills?.learn_heal || (o.unlockedBaseSpells || []).includes('heal'))
+    );
+}
+
+// Target-priority comparator for aiProcess's attack target selection.
+// Deprioritizes unconscious (downed but not yet truly dead) opponents unless
+// the opposing side has a healer, in which case finishing off a downed
+// target before they can be saved becomes the priority instead.
+function targetPriorityCompare(entity, a, b, opponentsHaveHealer) {
+    const aDown = !!a.unconscious, bDown = !!b.unconscious;
+    if (aDown !== bDown) {
+        if (opponentsHaveHealer) return aDown ? -1 : 1; // finish them off before the healer saves them
+        return aDown ? 1 : -1; // otherwise leave downed targets alone
+    }
+    return getMinDistance(entity, a) - getMinDistance(entity, b);
+}
+window.opponentsHaveHealerCapability = opponentsHaveHealerCapability;
+window.targetPriorityCompare = targetPriorityCompare;
 
 // Shared by both the melee/ranged death check (above) and the spell-damage
 // death check below, so the two paths can't drift out of sync. Player-side
