@@ -143,6 +143,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 modal.style.display = "block";
                 window.renderWorldMap();
             }
+        } else if (btnId === "quest-log-btn") {
+            const modal = document.getElementById("quest-log-modal");
+            if (modal) {
+                modal.style.display = "block";
+                window.renderQuestLog();
+            }
         } else if (btnId === "move-group-btn") {
             window.groupMoveMode = !window.groupMoveMode;
             const btn = document.getElementById("move-group-btn");

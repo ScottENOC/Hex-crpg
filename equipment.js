@@ -19,7 +19,10 @@ const items = {
     // Magic Items
     'sword_arrow_deflection': { id: 'sword_arrow_deflection', name: 'Sword of Arrow Deflection', type: 'weapon', subType: 'melee', damage: 3, range: 0, hands: 1, canOffhand: true, buyPrice: 500, skills: { 'deflect_arrows': 1 } },
     'potion_health': { id: 'potion_health', name: 'Potion of Health', type: 'consumable', subType: 'potion', buyPrice: 50 },
-    'glowing_ring': { id: 'glowing_ring', name: 'Glowing Ring', type: 'accessory', buyPrice: 200, lightRadius: 10 }
+    'glowing_ring': { id: 'glowing_ring', name: 'Glowing Ring', type: 'accessory', buyPrice: 200, lightRadius: 10 },
+
+    // Quest items — no buyPrice, so they never show up in the shop.
+    'elder_locket': { id: 'elder_locket', name: 'Tarnished Locket', type: 'quest_item' }
 };
 
 window.items = items;

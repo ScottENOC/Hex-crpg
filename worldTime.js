@@ -44,6 +44,17 @@ function updateTime(delta) {
             }
         }
         _wasPlayerInsideInterior = isInsideNow;
+
+        // Oskar's Wager: a friendly, non-lethal duel. Watched here (rather
+        // than hooked into the shared attack-resolution code) so it can end
+        // safely the moment Oskar drops below the threshold, without any
+        // risk of the generic combat/death code treating it as a real kill.
+        if (window.oskarDuelActive) {
+            const oskar = window.entities.find(e => e.name === 'Oskar Vinn');
+            if (oskar && oskar.alive && oskar.hp <= oskar.maxHp * 0.7 && window.endOskarDuel) {
+                window.endOskarDuel();
+            }
+        }
     }
     window.lightLevel = getLightLevel() * (window.indoorLightMult !== undefined ? window.indoorLightMult : 1.0);
     

@@ -29,6 +29,10 @@ Object.assign(window.dialogueData, {
     hollowmere_dray_approach: {
         speaker: 'Dray Coltayne', mood: 'businesslike',
         dialogue: "You there — a word, before you go."
+    },
+    wren_intro: {
+        speaker: 'Wren Talbot', mood: 'cheerful',
+        dialogue: "Well, here we are then. Try not to get us both killed, yeah?"
     }
 });
 
@@ -50,23 +54,84 @@ window.npcDialogueTrees = {
         ]);
     },
     oskar_vinn: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'oskars_wager');
+        if (quest && quest.status === 'completed') {
+            window.showDialogue(npc, "Good bout, that. I'll get my revenge one of these days.", [
+                { label: "We'll see.", action: () => {} }
+            ]);
+            return;
+        }
         window.showDialogue(npc, "First time in Hollowmere? Mind the Ironbond lot if they're about.", [
+            {
+                label: "Care to spar? Friendly bout.",
+                action: () => {
+                    window.showDialogue(npc, "Ha! Thought you'd never ask. Don't hold back on my account.", [
+                        { label: "Let's go.", action: () => window.startOskarDuel() },
+                        { label: "Maybe later.", action: () => {} }
+                    ]);
+                }
+            },
             { label: "Noted.", action: () => {} }
         ]);
     },
     marta_wynfield: (npc) => {
+        let opening;
         if (!window.hollowmereEventFired) {
-            window.showDialogue(npc, "Welcome, traveler. Hollowmere's a small place, but an honest one.", [
-                { label: "Good to know.", action: () => {} }
+            opening = "Welcome, traveler. Hollowmere's a small place, but an honest one.";
+        } else {
+            const standing = npc.reputation?.standing ?? 0;
+            if (standing >= 15) opening = "Word of what you did at the Tankard reached me. Hollowmere doesn't forget a favor like that.";
+            else if (standing <= -5) opening = "I heard about the Tankard. Garrick's a proud man — I imagine that stung him more than you know.";
+            else opening = "I heard the Ironbond men were in the village again. Nothing's changed there, I'm afraid.";
+        }
+
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'elder_locket');
+        const player = window.party[0];
+        const hasLocket = player?.inventory?.includes('elder_locket');
+
+        if (quest && quest.status === 'active' && hasLocket) {
+            window.showDialogue(npc, "Is that... you found it! My mother's locket, after all these years.", [
+                { label: "Here you go.", action: () => {
+                    player.inventory = player.inventory.filter(i => i !== 'elder_locket');
+                    quest.status = 'completed';
+                    window.adjustReputation(npc.reputation, 15, 20);
+                    player.gold = (player.gold || 0) + 20;
+                    window.showMessage('Quest complete: A Missing Locket. (+20 gold)');
+                }}
             ]);
             return;
         }
-        const standing = npc.reputation?.standing ?? 0;
-        let line;
-        if (standing >= 15) line = "Word of what you did at the Tankard reached me. Hollowmere doesn't forget a favor like that.";
-        else if (standing <= -5) line = "I heard about the Tankard. Garrick's a proud man — I imagine that stung him more than you know.";
-        else line = "I heard the Ironbond men were in the village again. Nothing's changed there, I'm afraid.";
-        window.showDialogue(npc, line, [
+        if (quest && quest.status === 'active') {
+            window.showDialogue(npc, "Still keeping an eye out for that locket, I hope? I lost it somewhere near the old chapel.", [
+                { label: "I'll find it.", action: () => {} }
+            ]);
+            return;
+        }
+        if (quest && quest.status === 'completed') {
+            window.showDialogue(npc, opening, [{ label: "Noted.", action: () => {} }]);
+            return;
+        }
+
+        window.showDialogue(npc, opening, [
+            {
+                label: "Need any help around the village?",
+                action: () => {
+                    window.showDialogue(npc, "As it happens... I lost my mother's locket years back, somewhere near the old chapel. Silly to still hope, but if you ever spot it...", [
+                        { label: "I'll keep an eye out.", action: () => {
+                            window.questLog.push({
+                                id: 'elder_locket',
+                                title: 'A Missing Locket',
+                                giver: 'Elder Marta Wynfield',
+                                status: 'active',
+                                description: "Find Elder Marta's mother's locket, lost somewhere near the old chapel."
+                            });
+                            window.showMessage('Quest added: A Missing Locket.');
+                        }}
+                    ]);
+                }
+            },
             { label: "Noted.", action: () => {} }
         ]);
     }
@@ -256,7 +321,61 @@ function parleyWithEnemy(target) {
     }
 }
 
+// "Oskar's Wager" — a friendly, non-lethal sparring match. Flips Oskar
+// hostile just long enough to fight through the real turn-based combat
+// engine, then the tick-watcher in worldTime.js ends it safely once he's
+// taken enough of a beating, before any real death-handling code could ever
+// see him drop to 0 HP.
+function startOskarDuel() {
+    const oskar = window.entities.find(e => e.name === 'Oskar Vinn');
+    if (!oskar) return;
+    window.oskarDuelActive = true;
+    oskar.side = 'enemy';
+    oskar.aiState = 'combat';
+    oskar.isNPC = false;
+    oskar.hasBeenSeenByPlayer = true;
+    window.wakeUp(oskar);
+    window.showMessage('Oskar grins and squares up. "Don\'t hold back!"');
+}
+
+function endOskarDuel() {
+    if (!window.oskarDuelActive) return;
+    window.oskarDuelActive = false;
+
+    const oskar = window.entities.find(e => e.name === 'Oskar Vinn');
+    if (oskar) {
+        oskar.side = 'neutral';
+        oskar.isNPC = true;
+        oskar.aiState = 'idle';
+        oskar.hp = oskar.maxHp;
+        oskar.timePoints = 0;
+        window.adjustReputation(oskar.reputation, 10, 15);
+    }
+
+    window.isInCombat = false;
+    window.gamePhase = 'WAITING';
+    window.currentTurnEntity = null;
+
+    if (!window.questLog) window.questLog = [];
+    const existing = window.questLog.find(q => q.id === 'oskars_wager');
+    if (existing) existing.status = 'completed';
+    else window.questLog.push({
+        id: 'oskars_wager',
+        title: "Oskar's Wager",
+        giver: 'Oskar Vinn',
+        status: 'completed',
+        description: 'A friendly sparring match with Oskar Vinn.'
+    });
+
+    window.showMessage('Oskar raises a hand. "Alright, alright — you win! Not bad at all."');
+    if (window.updateActionButtons) window.updateActionButtons();
+    window.drawMap();
+    window.renderEntities();
+}
+
 window.startHollowmereShakedown = startHollowmereShakedown;
 window.resolveShakedown = resolveShakedown;
 window.parleyWithEnemy = parleyWithEnemy;
 window.triggerHollowmereQuestOffer = triggerHollowmereQuestOffer;
+window.startOskarDuel = startOskarDuel;
+window.endOskarDuel = endOskarDuel;

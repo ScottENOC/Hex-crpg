@@ -73,6 +73,7 @@
                 <button id="spell-menu-btn">Spell Menu</button>
                 <button id="inventory-btn">Inventory</button>
                 <button id="world-map-btn" style="background-color: #4CAF50;">World Map</button>
+                <button id="quest-log-btn" style="background-color: #8d6e63;">Quest Log</button>
                 <button id="save-menu-btn" style="background-color: #2196F3;">Save Game</button>
                 <button id="load-menu-btn" style="background-color: #9C27B0;">Load Game</button>
                 <button id="quick-save-btn" style="background-color: #1976D2;">Quick Save</button>
@@ -299,6 +300,14 @@
         </div>
     </div>
 
+    <div id="quest-log-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="width: 500px; max-width: 90%;">
+            <button class="close-btn" id="close-quest-log-modal">&times;</button>
+            <h2>Quest Log</h2>
+            <div id="quest-log-list" style="max-height: 60vh; overflow-y: auto;"></div>
+        </div>
+    </div>
+
     <div id="reaction-modal" class="modal" style="display: none;">
         <div class="modal-content">
             <h2 id="reaction-title">Reaction!</h2>
@@ -460,6 +469,7 @@
     <script src="data.js"></script>
     <script src="name.js"></script>
     <script src="dialogue.js"></script>
+    <script src="questLog.js"></script>
     <script src="worldTime.js"></script>
     <script src="world_map_data.js"></script>
     <script src="worldMap.js"></script>

@@ -69,6 +69,9 @@ function setupVillageScene() {
     const chapelRegion = carveBuilding(-14, 0, 3, 3, { q: -11, r: 0 }, 'Wood Floor');
     const houseRegion = carveBuilding(0, -12, 3, 2, { q: 0, r: -10 }, 'Wood Floor');
 
+    // Quest item for "A Missing Locket" (Elder Marta) — tucked in the chapel.
+    window.mapItems['-14,0'] = ['elder_locket'];
+
     // Register interior regions for hex-local indoor lighting (see worldTime.js).
     window.interiorRegions = [
         { minQ: -5, maxQ: 5, minR: -3, maxR: 3, lightMult: 0.15 },
@@ -86,6 +89,28 @@ function setupVillageScene() {
     window.tileObjects['1,2'] = { type: 'bench', lightRadius: 0 };
     window.tileObjects['-2,1'] = { type: 'table', lightRadius: 0 };
     window.tileObjects['-2,2'] = { type: 'bench', lightRadius: 0 };
+
+    // --- Permanent companion: a real party member (not a conditional tavern
+    // ally like Garrick/Mira/Oskar) who stays regardless of what the player
+    // does in the shakedown. Built through the same createCharacterData path
+    // as the player character, then hand skills are purchased from her
+    // starting attribute pool exactly like npcBuilder.js does for NPCs.
+    if (!window.party.some(p => p.name === 'Wren Talbot')) {
+        const companion = window.createCharacterData('human', 'fighter', 'Wren Talbot', 'female', 'pc_1');
+        ['health', 'sword_hit', 'sword_dmg'].forEach(skillKey => {
+            const skill = window.skills[skillKey];
+            if (!skill) return;
+            if (companion.attributes[skill.tree] > 0) companion.attributes[skill.tree]--;
+            else if (companion.attributes.wildcard > 0) companion.attributes.wildcard--;
+            companion.skills[skillKey] = (companion.skills[skillKey] || 0) + 1;
+        });
+        if (companion.skills.health) {
+            const bonus = 10 * companion.skills.health;
+            companion.hp += bonus;
+            companion.maxHp += bonus;
+        }
+        window.party.push(companion);
+    }
 
     // --- Party: spawn seated at a table inside the tavern ---
     window.party.forEach((p, i) => {
@@ -159,6 +184,10 @@ function setupVillageScene() {
     window.renderEntities();
     window.showCharacter();
     if (window.snapVisuals) window.snapVisuals();
+
+    setTimeout(() => {
+        if (window.triggerAmbientDialogue) window.triggerAmbientDialogue('wren_intro');
+    }, 2000);
 
     // "After a while" — the soldiers walk in a short delay after the scene
     // loads, mirroring the existing setTimeout-chained dialogue precedent
