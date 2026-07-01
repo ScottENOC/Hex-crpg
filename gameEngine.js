@@ -504,6 +504,15 @@ function startGameCore(isLoading = false) {
   if (!isLoading) {
       if (window.currentCampaign === "3") {
           window.worldSeconds = 18 * 3600; // 18:00
+      } else if (window.currentCampaign === "2") {
+          // 11:00, not 08:00 — the day-length formula (getLightLevel in
+          // worldTime.js) gives short winter months a "full day" window as
+          // narrow as ~2 hours either side of noon; starting at 8am landed
+          // outside that window in the starting month, so the whole early
+          // game was rendered at full-night vision range (30 * 0.2) despite
+          // the clock reading morning. 11:00 is safely inside the daylight
+          // window for every month.
+          window.worldSeconds = 11 * 3600;
       } else {
           window.worldSeconds = 8 * 3600; // 08:00
       }
@@ -985,6 +994,7 @@ function renderEntities() {
       }
       
           if (e.isStealthed) window.mapCtx.globalAlpha = 0.5;
+          if (e.unconscious) window.mapCtx.globalAlpha = 0.4;
           const isSentientAlly = e.side === 'player' && !e.aiControlled && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(e.name);
           const flyOff = e.isFlying ? -20 * z : 0;
   
@@ -1148,6 +1158,7 @@ let tickCounter = 0;
 
 function tick() {
     if (window.isPausedForReaction) return;
+    if (window.gameOver) return;
 
     const now = performance.now();
     const dt = (now - lastTimestamp) / 1000; // Delta time in seconds
@@ -1187,7 +1198,7 @@ function tick() {
         for(let i=0; i<1000; i++) {
             if (!window.isResting && !window.isSleeping) break;
 
-            const ready = window.entities.filter(e => e.timePoints >= 100 && e.alive && e.side === 'player' && !e.rider);
+            const ready = window.entities.filter(e => e.timePoints >= 100 && e.alive && !e.unconscious && e.side === 'player' && !e.rider);
             if (ready.length > 0) {
                 ready.forEach(e => spendTP(e, 1));
             } else {
@@ -1406,7 +1417,7 @@ function runTickInternal(isSleepCycle = false, skipUI = false, tickMultiplier = 
     }
     if (window.currentTurnEntity && !isSleepCycle) return;
     
-    const readyEntities = window.entities.filter(e => e.timePoints >= 100 && e.alive && !e.rider);
+    const readyEntities = window.entities.filter(e => e.timePoints >= 100 && e.alive && !e.unconscious && !e.rider);
     
     // Only trigger turn-based logic if in combat
     if (window.isInCombat && readyEntities.length > 0 && !isSleepCycle) {
@@ -1965,7 +1976,22 @@ function aiProcess(entity) {
 
     let target = null;
     if (attackableOpponents.length > 0) {
-        attackableOpponents.sort((a, b) => getMinDistance(entity, a) - getMinDistance(entity, b));
+        // Deprioritize unconscious (downed but not yet truly dead) opponents —
+        // unless the opposing side has a healer, in which case finishing off
+        // a downed target before they can be saved is the smart play instead.
+        const opponentsHaveHealer = opponents.some(o =>
+            o.alive && !o.unconscious && (o.skills?.learn_heal || (o.unlockedBaseSpells || []).includes('heal'))
+        );
+        attackableOpponents.sort((a, b) => {
+            const distDiff = getMinDistance(entity, a) - getMinDistance(entity, b);
+            const aDown = !!a.unconscious, bDown = !!b.unconscious;
+            if (aDown !== bDown) {
+                const downedIsBetter = opponentsHaveHealer; // finish them off before the healer saves them
+                if (downedIsBetter) return aDown ? -1 : 1;
+                return aDown ? 1 : -1; // otherwise leave downed targets alone
+            }
+            return distDiff;
+        });
         target = attackableOpponents[0];
         entity.lastSeenTargetHex = { q: target.hex.q, r: target.hex.r };
     }
@@ -2939,41 +2965,83 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
 
   attacker.offhandAttackAvailable = !isOffhand && (attacker.equipped?.offhand && window.items[attacker.equipped.offhand].type === 'weapon');
   if (target.hp <= 0 && target.alive) {
-      // REVENANT: Rise again once at half HP before marking truly dead
-      if (target.skills?.revenant_revive && !target.revenantRevived) {
-          target.revenantRevived = true;
-          target.alive = true;
-          target.hp = Math.ceil(target.maxHp / 2);
-          sharedMessage(`${target.name} refuses to stay dead — it rises again at half health!`);
-          return; // abort normal death processing this time
-      }
-
-      target.alive = false; window.showMessage(`${target.name} defeated!`);
-      const side = target.side;
-      
-      // ROGUELIKE: Remove from graveyard if a graveyard merc dies
-      if (target.isGraveyardMerc) {
-          window.roguelikeData.mercenaryGraveyard = window.roguelikeData.mercenaryGraveyard.filter(m => m.name !== target.name);
-          localStorage.setItem('rpg_roguelike_data', JSON.stringify(window.roguelikeData));
-      }
-
-      // ROGUELIKE: Track max enemy skills for rewards
-      if (attacker.side === 'player' && target.side === 'enemy') {
-          if (!window.runMaxEnemySkills) window.runMaxEnemySkills = {};
-          for (const tree in window.skills) {
-              const ranks = target.skills[tree] || 0;
-              window.runMaxEnemySkills[tree] = Math.max(window.runMaxEnemySkills[tree] || 0, ranks);
-          }
-      }
-
-      if (attacker.side === 'player') {
-          if (target.expValue) window.gainExp(target.expValue);
-          if (target.gold) window.player.gold += target.gold;
-          target.inventory.forEach(i => window.player.inventory.push(i));
-      }
-      if (side === 'enemy') checkCombatEnd();
+      handleLethalDamage(target, attacker);
   }
 }
+
+// Shared by both the melee/ranged death check (above) and the spell-damage
+// death check below, so the two paths can't drift out of sync. Player-side
+// entities go unconscious at 0 HP (stay alive:true — still a valid target,
+// still rendered, just excluded from turn order) and only truly die at
+// -50% max HP; everyone else keeps the original defeat/loot/XP behavior.
+function handleLethalDamage(target, attacker) {
+    // REVENANT: Rise again once at half HP before marking truly dead
+    if (target.skills?.revenant_revive && !target.revenantRevived) {
+        target.revenantRevived = true;
+        target.alive = true;
+        target.hp = Math.ceil(target.maxHp / 2);
+        sharedMessage(`${target.name} refuses to stay dead — it rises again at half health!`);
+        return; // abort normal death processing this time
+    }
+
+    if (target.side === 'player') {
+        const trueDeathThreshold = -(target.maxHp * 0.5);
+        if (target.hp <= trueDeathThreshold) {
+            target.alive = false;
+            target.unconscious = false;
+            window.showMessage(`${target.name} has fallen...`);
+            if (window.checkGameOverState) window.checkGameOverState(target);
+        } else if (!target.unconscious) {
+            target.unconscious = true;
+            window.showMessage(`${target.name} is knocked unconscious!`);
+            if (window.updateActionButtons) window.updateActionButtons();
+        }
+        return;
+    }
+
+    target.alive = false; window.showMessage(`${target.name} defeated!`);
+    const side = target.side;
+
+    // ROGUELIKE: Remove from graveyard if a graveyard merc dies
+    if (target.isGraveyardMerc) {
+        window.roguelikeData.mercenaryGraveyard = window.roguelikeData.mercenaryGraveyard.filter(m => m.name !== target.name);
+        localStorage.setItem('rpg_roguelike_data', JSON.stringify(window.roguelikeData));
+    }
+
+    // ROGUELIKE: Track max enemy skills for rewards
+    if (attacker.side === 'player' && target.side === 'enemy') {
+        if (!window.runMaxEnemySkills) window.runMaxEnemySkills = {};
+        for (const tree in window.skills) {
+            const ranks = target.skills[tree] || 0;
+            window.runMaxEnemySkills[tree] = Math.max(window.runMaxEnemySkills[tree] || 0, ranks);
+        }
+    }
+
+    if (attacker.side === 'player') {
+        if (target.expValue) window.gainExp(target.expValue);
+        if (target.gold) window.player.gold += target.gold;
+        target.inventory.forEach(i => window.player.inventory.push(i));
+    }
+    if (side === 'enemy') checkCombatEnd();
+}
+
+// Game Over triggers specifically on the main character's (window.party[0])
+// true death — not a full-party wipe. If only companions/allies go down the
+// fight continues; this matches "my main character died, that's game over"
+// rather than requiring every ally to fall too.
+function checkGameOverState(target) {
+    if (window.gameOver) return;
+    const mainCharName = window.party && window.party[0] && window.party[0].name;
+    if (!mainCharName || target.name !== mainCharName) return;
+
+    window.gameOver = true;
+    const modal = document.getElementById('game-over-modal');
+    const msg = document.getElementById('game-over-message');
+    if (msg) msg.innerText = `${target.name} has fallen.`;
+    if (modal) modal.style.display = 'block';
+}
+window.checkGameOverState = checkGameOverState;
+window.handleLethalDamage = handleLethalDamage;
 
 function checkCombatEnd() {
     // Track Boss defeats
@@ -3934,14 +4002,16 @@ function resolveSpell(caster, spell, target, clickedHex) {
                 target.hp -= fd; syncBackToPlayer(target);
                 wakeUp(target);
                 if (target.hp <= 0 && target.alive) {
-                    target.alive = false; window.showMessage(`${target.name} defeated!`);
-                    if (caster.side === 'player' && target.expValue) window.gainExp(target.expValue);
-                    if (target.side === 'enemy') checkCombatEnd();
+                    handleLethalDamage(target, caster);
                 }
             }
             actionHandled = true;
         } else if (spell.type === 'heal' && target) {
             target.hp = Math.min(target.maxHp, target.hp + spell.magnitude);
+            if (target.unconscious && target.hp > 0) {
+                target.unconscious = false;
+                window.showMessage(`${target.name} regains consciousness!`);
+            }
             syncBackToPlayer(target); actionHandled = true;
         } else if ((spell.type === 'buff' || spell.type === 'debuff') && target) {
             const instanceId = Date.now() + Math.random();

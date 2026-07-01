@@ -39,6 +39,7 @@ class Entity {
     this.sleepRemainingSeconds = 0;
     this.isStealthed = false;
     this.stealthScore = 0; // Calculated when stealthing
+    this.unconscious = false; // Player-side "downed" state — still alive:true, just can't act (see gameEngine.js handleLethalDamage)
     this.lastMoveTime = 0; // To track movement penalties
     
     // NEW SYSTEM STATS

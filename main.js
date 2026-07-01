@@ -170,12 +170,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 document.getElementById("save-name-input").value = `${charName}_${i}`;
                 modal.style.display = "block";
             }
-        } else if (btnId === "load-menu-btn") {
+        } else if (btnId === "load-menu-btn" || btnId === "game-over-load-btn") {
+            document.getElementById("game-over-modal").style.display = "none";
             const modal = document.getElementById("load-game-modal");
             if (modal) {
                 window.updateSaveList();
                 modal.style.display = "block";
             }
+        } else if (btnId === "game-over-menu-btn") {
+            document.getElementById("game-over-modal").style.display = "none";
+            window.gameOver = false;
+            location.reload();
         } else if (btnId === "confirm-save-btn") {
             const saveName = document.getElementById("save-name-input").value || "ManualSave";
             window.saveGame(saveName);

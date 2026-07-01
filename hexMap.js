@@ -708,13 +708,23 @@ function centerCameraOn(hex) {
 
 window.centerCameraOn = centerCameraOn;
 
-// Smoothly follow the local multiplayer player's visual position while they are moving.
-// Only active when the entity has a destination so the user can still drag to look around
-// when the player is stationary.
+// Smoothly follow the locally-controlled player's visual position while they
+// are moving. Only active when the entity has a destination so the user can
+// still drag to look around when the player is stationary. Works the same
+// way in single-player as in multiplayer — previously this only ever
+// resolved a "local" entity via networkId, so solo games got no camera
+// follow at all outside of the fixed scene-setup recenters, leaving anyone
+// who walked far from the last recenter point staring at a static camera.
 window.smoothFollowPlayer = function(dt) {
-    if (!window.multiplayer || !window.multiplayer.roomCode) return;
-    const localEnt = window.entities &&
-        window.entities.find(e => e.networkId === window.multiplayer.socket.id);
+    if (!window.entities) return;
+    let localEnt;
+    if (window.multiplayer && window.multiplayer.roomCode) {
+        localEnt = window.entities.find(e => e.networkId === window.multiplayer.socket.id);
+    } else {
+        const selected = window.party && window.party[window.selectedCharacterIndex || 0];
+        localEnt = (selected && window.entities.find(e => e.name === selected.name && e.side === 'player'))
+            || window.entities.find(e => e.side === 'player' && !e.rider && !e.aiControlled);
+    }
     if (!localEnt) return;
 
     const isMoving = localEnt.destination ||

@@ -131,6 +131,11 @@ function loadGame(saveName = "rpg_save_game") {
         window.hollowmereQuestOfferFired = gameState.hollowmereQuestOfferFired || false;
         window.questLog = gameState.questLog || [];
         window.worldMapNotes = gameState.worldMapNotes || {};
+        // Always false on load, regardless of what was saved — loading a
+        // save is exactly how the player is meant to recover from Game Over.
+        window.gameOver = false;
+        const gameOverModal = document.getElementById('game-over-modal');
+        if (gameOverModal) gameOverModal.style.display = 'none';
         if (gameState.regionalNPCBaron) {
             window.regionalNPCs = window.regionalNPCs || {};
             window.regionalNPCs.baron = gameState.regionalNPCBaron;
