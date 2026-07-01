@@ -31,6 +31,10 @@ function saveGame(saveName = "rpg_save_game") {
         interiorRegions: window.interiorRegions,
         hollowmereEventFired: window.hollowmereEventFired,
         hollowmereVictoryBonusGiven: window.hollowmereVictoryBonusGiven,
+        hollowmereSoldiersWaitingOutside: window.hollowmereSoldiersWaitingOutside,
+        hollowmereQuestOfferFired: window.hollowmereQuestOfferFired,
+        questLog: window.questLog,
+        worldMapNotes: window.worldMapNotes,
 
         entities: window.entities.map(e => {
             const data = {};
@@ -120,6 +124,10 @@ function loadGame(saveName = "rpg_save_game") {
         window.interiorRegions = gameState.interiorRegions || [];
         window.hollowmereEventFired = gameState.hollowmereEventFired || false;
         window.hollowmereVictoryBonusGiven = gameState.hollowmereVictoryBonusGiven || false;
+        window.hollowmereSoldiersWaitingOutside = gameState.hollowmereSoldiersWaitingOutside || false;
+        window.hollowmereQuestOfferFired = gameState.hollowmereQuestOfferFired || false;
+        window.questLog = gameState.questLog || [];
+        window.worldMapNotes = gameState.worldMapNotes || {};
 
         // 2. Hide Creator, Show Game
         document.getElementById("characterCreator").style.display = "none";

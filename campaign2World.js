@@ -4,6 +4,30 @@
 // teleport" pattern proven by the arena lobby (see setupArenaLobby in
 // gameEngine.js) — same hex grid throughout, no loading screen.
 
+// Carves a simple rectangular building: walls on the border, floor inside,
+// one open door hex. Same overrideTerrain technique as the tavern — same
+// hex grid, no separate interior map. Returns the interior bounding box so
+// callers can register it for hex-local lighting.
+function carveBuilding(centerQ, centerR, halfW, halfH, doorHex, floorType) {
+    for (let dq = -halfW; dq <= halfW; dq++) {
+        for (let dr = -halfH; dr <= halfH; dr++) {
+            window.setTerrainAt(centerQ + dq, centerR + dr, 'Wall');
+        }
+    }
+    for (let dq = -halfW + 1; dq <= halfW - 1; dq++) {
+        for (let dr = -halfH + 1; dr <= halfH - 1; dr++) {
+            window.setTerrainAt(centerQ + dq, centerR + dr, floorType);
+        }
+    }
+    window.setTerrainAt(doorHex.q, doorHex.r, floorType);
+    window.tileObjects[`${doorHex.q},${doorHex.r}`] = { type: 'door_open', lightRadius: 0 };
+    return {
+        minQ: centerQ - halfW + 1, maxQ: centerQ + halfW - 1,
+        minR: centerR - halfH + 1, maxR: centerR + halfH - 1,
+        lightMult: 0.3
+    };
+}
+
 function setupVillageScene() {
     window.overrideTerrain = {};
     window.tileObjects = {};
@@ -38,9 +62,19 @@ function setupVillageScene() {
     // soldiers' entrance is a real event, not just a permanent gap.
     window.setTerrainAt(0, 4, 'Wall');
 
-    // Register the interior region for hex-local indoor lighting (see worldTime.js).
+    // --- A handful of other small buildings around the tavern, forming the
+    // start of Hollowmere village proper. Empty inside for now — a start,
+    // not fully furnished/staffed yet.
+    const storeRegion = carveBuilding(14, 0, 4, 3, { q: 10, r: 0 }, 'Wood Floor');
+    const chapelRegion = carveBuilding(-14, 0, 3, 3, { q: -11, r: 0 }, 'Wood Floor');
+    const houseRegion = carveBuilding(0, -12, 3, 2, { q: 0, r: -10 }, 'Wood Floor');
+
+    // Register interior regions for hex-local indoor lighting (see worldTime.js).
     window.interiorRegions = [
-        { minQ: -5, maxQ: 5, minR: -3, maxR: 3, lightMult: 0.15 }
+        { minQ: -5, maxQ: 5, minR: -3, maxR: 3, lightMult: 0.15 },
+        storeRegion,
+        chapelRegion,
+        houseRegion
     ];
 
     // Fireplace for cozy interior lighting + visual marker for the door.

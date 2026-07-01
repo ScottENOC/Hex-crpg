@@ -25,6 +25,10 @@ Object.assign(window.dialogueData, {
     hollowmere_victory: {
         speaker: 'Garrick Holt', mood: 'relieved',
         dialogue: "It's over... thank you. I didn't think anyone would stand with us against the Company."
+    },
+    hollowmere_dray_approach: {
+        speaker: 'Dray Coltayne', mood: 'businesslike',
+        dialogue: "You there — a word, before you go."
     }
 });
 
@@ -106,11 +110,13 @@ function resolveShakedown(branch) {
         patrons.forEach(p => window.adjustReputation(p.reputation, -5, 5));
         window.adjustReputation(ironbond, 5, 5);
         window.showMessage("Garrick pays up, shoulders slumped. The soldiers leave with their due.");
+        exitSoldiersPeacefully(dray, enforcers);
     } else if (branch === 'encourage_pay') {
         window.adjustReputation(garrick?.reputation, 5, 15);
         patrons.forEach(p => window.adjustReputation(p.reputation, 0, 10));
         window.adjustReputation(ironbond, 15, 15);
         window.showMessage("You back the demand with a hard stare. The soldiers take their due and leave without further trouble.");
+        exitSoldiersPeacefully(dray, enforcers);
     } else if (branch === 'fight') {
         window.adjustReputation(garrick?.reputation, 25, 20);
         patrons.forEach(p => window.adjustReputation(p.reputation, 20, 20));
@@ -147,6 +153,68 @@ function resolveShakedown(branch) {
     if (window.updateActionButtons) window.updateActionButtons();
 }
 
+// The soldiers leave the same way they came in — through the front door,
+// not teleporting away — then wait just outside for the player to leave too.
+function exitSoldiersPeacefully(dray, enforcers) {
+    if (window.toggleDoor) window.toggleDoor(0, 4);
+
+    const waitHexes = [{ q: -1, r: 6 }, { q: 0, r: 6 }, { q: 1, r: 6 }];
+    [dray, ...enforcers].forEach((e, i) => {
+        if (!e) return;
+        e.destination = waitHexes[i] || waitHexes[0];
+    });
+
+    setTimeout(() => {
+        if (window.toggleDoor && window.getTerrainAt(0, 4).name !== 'Wall') window.toggleDoor(0, 4);
+    }, 3000);
+
+    window.hollowmereSoldiersWaitingOutside = true;
+    window.hollowmereQuestOfferFired = false;
+}
+
+// Watched from worldTime.js each tick: fires once, the first time the player
+// crosses back outside after the soldiers left peacefully.
+function triggerHollowmereQuestOffer() {
+    if (window.hollowmereQuestOfferFired) return;
+    window.hollowmereQuestOfferFired = true;
+
+    const dray = window.entities.find(e => e.name === 'Dray Coltayne' && e.alive);
+    const player = window.entities.find(e => e.side === 'player' && !e.rider);
+    if (!dray || !player) return;
+
+    dray.destination = { q: player.hex.q, r: player.hex.r + 1 };
+
+    window.triggerAmbientDialogue('hollowmere_dray_approach');
+    setTimeout(() => {
+        window.showDialogue(dray, "You handled that back there without making a mess of it. The Company can use people like that.", [
+            {
+                label: "What do you need?",
+                action: () => {
+                    window.showDialogue(dray, "A courier of ours went dark on the North Road with a satchel of signed contracts. Bring it back, and there's coin in it for you.", [
+                        { label: "Accept the job.", action: () => {
+                            if (!window.questLog) window.questLog = [];
+                            window.questLog.push({
+                                id: 'ironbond_missing_courier',
+                                title: 'The Missing Courier',
+                                giver: 'Dray Coltayne',
+                                factionId: 'ironbond_company',
+                                status: 'active',
+                                description: "Find the Ironbond courier who went missing on the North Road and recover the satchel of contracts."
+                            });
+                            window.adjustReputation(window.factions.ironbond_company, 10, 10);
+                            window.showMessage("Quest added: The Missing Courier.");
+                        }},
+                        { label: "Not interested.", action: () => {
+                            window.showMessage(`${dray.name}: "Suit yourself."`);
+                        }}
+                    ]);
+                }
+            },
+            { label: "Walk away.", action: () => {} }
+        ]);
+    }, 1500);
+}
+
 // Mid-combat parley: talk to a hostile instead of attacking. Humanoid enemies
 // get a "demand surrender" option; for now it's always declined (no mechanical
 // effect) per design — a place to hook morale/negotiation mechanics later.
@@ -168,3 +236,4 @@ function parleyWithEnemy(target) {
 window.startHollowmereShakedown = startHollowmereShakedown;
 window.resolveShakedown = resolveShakedown;
 window.parleyWithEnemy = parleyWithEnemy;
+window.triggerHollowmereQuestOffer = triggerHollowmereQuestOffer;

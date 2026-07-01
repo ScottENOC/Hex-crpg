@@ -35,6 +35,7 @@ const factionColors = {
 };
 
 function loadWorldMap() {
+    if (!window.worldMapNotes) window.worldMapNotes = {};
     try {
         if (window.currentCampaign === "1") {
             window.worldMapData = [];
@@ -216,15 +217,71 @@ function centerOnPlayer() {
     window.worldCameraY = (canvas.height / 2) - targetY;
 }
 
+// Nearest-cell lookup — the layout (worldHexToPixel) uses an odd-q offset
+// formula rather than pure axial rounding, so the simplest robust inverse is
+// to find the closest cell center to the click, not solve it analytically.
+function getWorldCellAtScreenPos(mouseX, mouseY) {
+    if (!window.worldMapData || window.worldMapData.length === 0) return null;
+    let best = null;
+    let bestDist = Infinity;
+    for (let y = 0; y < window.worldMapHeight; y++) {
+        for (let x = 0; x < window.worldMapWidth; x++) {
+            const { x: px, y: py } = worldHexToPixel(x, y);
+            const d = (px - mouseX) * (px - mouseX) + (py - mouseY) * (py - mouseY);
+            if (d < bestDist) { bestDist = d; best = { x, y }; }
+        }
+    }
+    const zoomedSize = 15 * window.worldCameraZoom;
+    if (bestDist > (zoomedSize * zoomedSize)) return null; // clicked empty space between hexes
+    return best;
+}
+
+function selectWorldMapCell(x, y) {
+    const cell = window.worldMapData[y] && window.worldMapData[y][x];
+    if (!cell) return;
+    if (!window.worldMapNotes) window.worldMapNotes = {};
+    const key = `${x},${y}`;
+
+    const panel = document.getElementById('world-map-details');
+    const nameEl = document.getElementById('world-map-details-name');
+    const infoEl = document.getElementById('world-map-details-info');
+    const notesEl = document.getElementById('world-map-details-notes');
+    const saveBtn = document.getElementById('world-map-details-save');
+    if (!panel) return;
+
+    const factionNames = { h: 'Human', e: 'Elven', d: 'Dwarven', o: 'Orc', g: 'Goblin', n: 'Neutral' };
+    const settlementNames = { C: 'City', T: 'Town', V: 'Village' };
+
+    nameEl.innerText = cell.n || `Unnamed hex (${x}, ${y})`;
+    const parts = [];
+    // cell.f is the settlement-shape code ('C'/'T'/'V'), cell.o is the
+    // faction-color code — see drawWorldHex, which reads them this way.
+    if (cell.f && settlementNames[cell.f]) parts.push(settlementNames[cell.f]);
+    if (cell.o && factionNames[cell.o]) parts.push(`${factionNames[cell.o]} territory`);
+    if (cell.p) parts.push(`Population level ${cell.p}`);
+    infoEl.innerText = parts.length ? parts.join(' — ') : 'Uncharted terrain.';
+    notesEl.value = window.worldMapNotes[key] || '';
+    panel.style.display = 'block';
+
+    saveBtn.onclick = () => {
+        window.worldMapNotes[key] = notesEl.value;
+        window.showMessage('Map note saved.');
+    };
+}
+
 function initWorldMapEvents() {
     const canvas = document.getElementById("worldMapCanvas");
     const container = document.getElementById("world-map-container");
     if (!canvas || !container) return;
 
+    let mouseDownX = 0, mouseDownY = 0;
+
     canvas.addEventListener('mousedown', (e) => {
         worldIsDragging = true;
         worldLastMouseX = e.clientX;
         worldLastMouseY = e.clientY;
+        mouseDownX = e.clientX;
+        mouseDownY = e.clientY;
     });
 
     window.addEventListener('mousemove', (e) => {
@@ -238,8 +295,17 @@ function initWorldMapEvents() {
         renderWorldMap();
     });
 
-    window.addEventListener('mouseup', () => {
+    window.addEventListener('mouseup', (e) => {
         worldIsDragging = false;
+        // Only treat as a hex-select click if the mouse barely moved (not a drag-pan)
+        const moved = Math.abs(e.clientX - mouseDownX) + Math.abs(e.clientY - mouseDownY);
+        if (moved < 5) {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            const cell = getWorldCellAtScreenPos(mouseX, mouseY);
+            if (cell) selectWorldMapCell(cell.x, cell.y);
+        }
     });
 
     canvas.addEventListener('wheel', (e) => {
@@ -268,3 +334,5 @@ function initWorldMapEvents() {
 window.loadWorldMap = loadWorldMap;
 window.renderWorldMap = renderWorldMap;
 window.initWorldMapEvents = initWorldMapEvents;
+window.getWorldCellAtScreenPos = getWorldCellAtScreenPos;
+window.selectWorldMapCell = selectWorldMapCell;
