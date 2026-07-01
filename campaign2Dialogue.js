@@ -56,21 +56,26 @@ function startHollowmereShakedown() {
     const enforcers = window.entities.filter(e => e.factionId === 'ironbond_company' && e !== dray);
     const garrick = window.entities.find(e => e.name === 'Garrick Holt');
 
-    // Walk the soldiers in from outside the door to just inside the tavern.
+    // Open the door, then have the soldiers walk in for real (destination +
+    // the engine's own autoMoveProcess/lerp — see gameEngine.js — rather than
+    // teleporting), closing it again once they're through.
+    if (window.toggleDoor) window.toggleDoor(0, 4);
+
+    const entryHexes = [{ q: -2, r: 3 }, { q: 0, r: 3 }, { q: 2, r: 3 }];
     [dray, ...enforcers].forEach((e, i) => {
         if (!e) return;
         e.pendingEntry = false;
-        e.hex = { q: -1 + i, r: -3 };
-        e.visualQ = e.hex.q; e.visualR = e.hex.r;
-        e.startQ = e.hex.q; e.startR = e.hex.r;
+        e.destination = entryHexes[i] || entryHexes[0];
     });
-    window.drawMap();
-    window.renderEntities();
+
+    setTimeout(() => {
+        if (window.toggleDoor && window.getTerrainAt(0, 4).name !== 'Wall') window.toggleDoor(0, 4);
+    }, 3000);
 
     window.triggerAmbientDialogue('hollowmere_soldiers_enter');
-    setTimeout(() => window.triggerAmbientDialogue('hollowmere_dray_demand'), 2500);
-    setTimeout(() => window.triggerAmbientDialogue('hollowmere_garrick_protest'), 5000);
-    setTimeout(() => window.triggerAmbientDialogue('hollowmere_dray_threat'), 7500);
+    setTimeout(() => window.triggerAmbientDialogue('hollowmere_dray_demand'), 4500);
+    setTimeout(() => window.triggerAmbientDialogue('hollowmere_garrick_protest'), 7000);
+    setTimeout(() => window.triggerAmbientDialogue('hollowmere_dray_threat'), 9500);
 
     setTimeout(() => {
         window.showDialogue(dray || garrick, "What do you do?", [
@@ -78,7 +83,7 @@ function startHollowmereShakedown() {
             { label: "Tell Garrick to pay — and back it with a threat.", action: () => window.resolveShakedown('encourage_pay') },
             { label: "Side with Garrick. Fight them.", action: () => window.resolveShakedown('fight') }
         ]);
-    }, 10000);
+    }, 12000);
 }
 
 function resolveShakedown(branch) {
@@ -109,7 +114,23 @@ function resolveShakedown(branch) {
         window.adjustReputation(silverhart, 10, 10);
         window.showMessage("Steel rings out! Garrick grabs his club — this is happening.");
 
-        [garrick, ...patrons].forEach(p => { if (p) p.side = 'player'; });
+        // Allies stay side:'player' (so all the existing friend/foe checks treat
+        // them correctly) but are flagged aiControlled so they fight on their own
+        // instead of being manually puppeted — same mechanism the game already
+        // uses for mounts (see the isSentientAlly exclusion in gameEngine.js).
+        [garrick, ...patrons].forEach(p => {
+            if (!p) return;
+            p.side = 'player';
+            p.aiControlled = true;
+            p.aiState = 'combat';
+            p.isNPC = false;
+            p.hasBeenSeenByPlayer = true;
+        });
+        [dray, ...enforcers].forEach(e => {
+            if (!e) return;
+            e.isNPC = false;
+            e.hasBeenSeenByPlayer = true;
+        });
         if (dray) {
             dray.side = 'enemy';
             window.wakeUp(dray); // chain-alerts the enforcers within range automatically
@@ -122,5 +143,24 @@ function resolveShakedown(branch) {
     if (window.updateActionButtons) window.updateActionButtons();
 }
 
+// Mid-combat parley: talk to a hostile instead of attacking. Humanoid enemies
+// get a "demand surrender" option; for now it's always declined (no mechanical
+// effect) per design — a place to hook morale/negotiation mechanics later.
+function parleyWithEnemy(target) {
+    if (target.tags && target.tags.includes('humanoid')) {
+        window.showDialogue(target, "They eye you warily, weapon still raised.", [
+            { label: "Demand they surrender.", action: () => {
+                window.showMessage(`${target.name}: "Not a chance."`);
+            }},
+            { label: "Never mind.", action: () => {} }
+        ]);
+    } else {
+        window.showDialogue(target, "It doesn't seem interested in talking.", [
+            { label: "Never mind.", action: () => {} }
+        ]);
+    }
+}
+
 window.startHollowmereShakedown = startHollowmereShakedown;
 window.resolveShakedown = resolveShakedown;
+window.parleyWithEnemy = parleyWithEnemy;

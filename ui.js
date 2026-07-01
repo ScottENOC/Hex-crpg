@@ -501,11 +501,11 @@ function updateActionButtons() {
     // Fallback to window.player if no entity found
     if (!player) player = window.player;
     
-    if (player && player.side === "player") {
-        const charData = window.player; 
+    if (player && player.side === "player" && !player.aiControlled) {
+        const charData = window.player;
         const isCasting = player.castCooldown > 0;
-        
-        const isSentientAlly = player.side === 'player' && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(player.name);
+
+        const isSentientAlly = player.side === 'player' && !player.aiControlled && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(player.name);
         
         // Ensure sentient logic uses the current resolved player entity
         if (isSentientAlly) {
@@ -532,6 +532,34 @@ function updateActionButtons() {
             offhandBtn.onclick = offhandAction;
             offhandBtn.ontouchstart = (e) => { e.preventDefault(); offhandAction(); };
             buttonsDiv.appendChild(offhandBtn);
+        }
+
+        if (inCombat) {
+            const forceAttackBtn = document.createElement('button');
+            forceAttackBtn.innerText = "Attack Target";
+            forceAttackBtn.style.backgroundColor = "#c62828";
+            forceAttackBtn.disabled = isCasting;
+            const forceAttackAction = () => {
+                window.playerAction = { type: 'force_attack' };
+                showMessage("Attack ready — click any target, including a neutral or friendly one.");
+                updateActionButtons();
+            };
+            forceAttackBtn.onclick = forceAttackAction;
+            forceAttackBtn.ontouchstart = (e) => { e.preventDefault(); forceAttackAction(); };
+            buttonsDiv.appendChild(forceAttackBtn);
+
+            const parleyBtn = document.createElement('button');
+            parleyBtn.innerText = "Parley";
+            parleyBtn.style.backgroundColor = "#6d4c41";
+            parleyBtn.disabled = isCasting;
+            const parleyAction = () => {
+                window.playerAction = { type: 'parley' };
+                showMessage("Click a hostile within range to talk instead of fight.");
+                updateActionButtons();
+            };
+            parleyBtn.onclick = parleyAction;
+            parleyBtn.ontouchstart = (e) => { e.preventDefault(); parleyAction(); };
+            buttonsDiv.appendChild(parleyBtn);
         }
 
         if (player.hex) {

@@ -69,7 +69,12 @@ document.addEventListener("DOMContentLoaded", () => {
             {key: 'tiger', src: 'images/tiger.png'},
             {key: 'eagle', src: 'images/eagle.png'},
             {key: 'eagleflying', src: 'images/eagleflying.png'},
-            {key: 'foliage', src: 'images/foliage.png'}
+            {key: 'foliage', src: 'images/foliage.png'},
+            {key: 'wood_floor', src: 'images/wood_floor.svg'},
+            {key: 'table', src: 'images/table.svg'},
+            {key: 'bench', src: 'images/bench.svg'},
+            {key: 'door_open', src: 'images/door_open.svg'},
+            {key: 'door_closed', src: 'images/door_closed.svg'}
         ];
 
         window.gameVisuals = {};

@@ -31,11 +31,12 @@ function setupVillageScene() {
     }
     for (let q = -5; q <= 5; q++) {
         for (let r = -3; r <= 3; r++) {
-            window.setTerrainAt(q, r, 'Cave Floor');
+            window.setTerrainAt(q, r, 'Wood Floor');
         }
     }
-    // Door gap at {0,4} — exterior grass, connects floor to village.
-    window.setTerrainAt(0, 4, 'Grass');
+    // Door at {0,4}: starts CLOSED (Wall — blocks LOS/movement) so the
+    // soldiers' entrance is a real event, not just a permanent gap.
+    window.setTerrainAt(0, 4, 'Wall');
 
     // Register the interior region for hex-local indoor lighting (see worldTime.js).
     window.interiorRegions = [
@@ -44,7 +45,13 @@ function setupVillageScene() {
 
     // Fireplace for cozy interior lighting + visual marker for the door.
     window.tileObjects['-4,0'] = { type: 'fireplace', lightRadius: 6 };
-    window.tileObjects['0,4'] = { type: 'door', lightRadius: 0 };
+    window.tileObjects['0,4'] = { type: 'door_closed', lightRadius: 0 };
+
+    // Furniture, placed clear of spawn hexes and the door.
+    window.tileObjects['1,1'] = { type: 'table', lightRadius: 0 };
+    window.tileObjects['1,2'] = { type: 'bench', lightRadius: 0 };
+    window.tileObjects['-2,1'] = { type: 'table', lightRadius: 0 };
+    window.tileObjects['-2,2'] = { type: 'bench', lightRadius: 0 };
 
     // --- Party: spawn seated at a table inside the tavern ---
     window.party.forEach((p, i) => {
@@ -110,4 +117,22 @@ function setupVillageScene() {
     }, 8000);
 }
 
+// Toggles a door hex between open (walkable Wood Floor) and closed (Wall,
+// blocks line-of-sight/movement via the existing wall-terrain LOS check —
+// no new LOS logic needed).
+function toggleDoor(q, r) {
+    const key = `${q},${r}`;
+    const isOpen = window.getTerrainAt(q, r).name !== 'Wall';
+    if (isOpen) {
+        window.setTerrainAt(q, r, 'Wall');
+        window.tileObjects[key] = { type: 'door_closed', lightRadius: 0 };
+    } else {
+        window.setTerrainAt(q, r, 'Wood Floor');
+        window.tileObjects[key] = { type: 'door_open', lightRadius: 0 };
+    }
+    window.drawMap();
+    window.renderEntities();
+}
+
 window.setupVillageScene = setupVillageScene;
+window.toggleDoor = toggleDoor;

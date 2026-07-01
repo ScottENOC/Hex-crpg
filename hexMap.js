@@ -162,6 +162,8 @@ function drawMap() {
           if (needsTransparency) mapCtx.globalAlpha = 1.0;
       } else if (terrain.name === 'Foliage' && imgOk(window.gameVisuals.foliage)) {
           mapCtx.drawImage(window.gameVisuals.foliage, x - zoomedSize, y - zoomedSize, zoomedSize * 2, zoomedSize * 2);
+      } else if (terrain.name === 'Wood Floor' && imgOk(window.gameVisuals.wood_floor)) {
+          mapCtx.drawImage(window.gameVisuals.wood_floor, x - zoomedSize, y - zoomedSize, zoomedSize * 2, zoomedSize * 2);
       } else if (terrain.name !== 'Water') {
           drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
       } else {

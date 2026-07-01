@@ -327,9 +327,9 @@ function checkMovementReactions(movingEntity, nextHex, callback) {
     });
 
     if (allOptions.length > 0) {
-        const playerOption = allOptions.find(o => o.reactor.side === 'player' && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(o.reactor.name));
+        const playerOption = allOptions.find(o => o.reactor.side === 'player' && !o.reactor.aiControlled && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(o.reactor.name));
         if (playerOption) {
-            window.requestReaction(playerOption.reactor, allOptions.filter(o => o.reactor.side === 'player'), (choiceId) => {
+            window.requestReaction(playerOption.reactor, allOptions.filter(o => o.reactor.side === 'player' && !o.reactor.aiControlled), (choiceId) => {
                 if (choiceId) {
                     const opt = allOptions.find(o => o.id === choiceId);
                     if (choiceId.startsWith('intercept')) {
@@ -568,7 +568,12 @@ function startGameCore(isLoading = false) {
       tiger: new Image(),
       eagle: new Image(),
       eagleflying: new Image(),
-      foliage: new Image()
+      foliage: new Image(),
+      wood_floor: new Image(),
+      table: new Image(),
+      bench: new Image(),
+      door_open: new Image(),
+      door_closed: new Image()
   };
   visuals.playerBase.onload = () => { window.drawMap(); };
   visuals.leatherArmor.onload = () => { window.drawMap(); };
@@ -624,6 +629,11 @@ function startGameCore(isLoading = false) {
   visuals.eagle.onload = () => { window.drawMap(); };
   visuals.eagleflying.onload = () => { window.drawMap(); };
   visuals.foliage.onload = () => { window.drawMap(); };
+  visuals.wood_floor.onload = () => { window.drawMap(); };
+  visuals.table.onload = () => { window.drawMap(); };
+  visuals.bench.onload = () => { window.drawMap(); };
+  visuals.door_open.onload = () => { window.drawMap(); };
+  visuals.door_closed.onload = () => { window.drawMap(); };
 
   visuals.playerBase.src = 'images/elf.png';
   visuals.leatherArmor.src = 'images/elfleatherarmour.png';
@@ -680,7 +690,12 @@ function startGameCore(isLoading = false) {
   visuals.eagle.src = 'images/eagle.png';
   visuals.eagleflying.src = 'images/eagleflying.png';
   visuals.foliage.src = 'images/foliage.png';
-  
+  visuals.wood_floor.src = 'images/wood_floor.svg';
+  visuals.table.src = 'images/table.svg';
+  visuals.bench.src = 'images/bench.svg';
+  visuals.door_open.src = 'images/door_open.svg';
+  visuals.door_closed.src = 'images/door_closed.svg';
+
   window.gameVisuals = visuals;
 
   if (window.loadWorldMap) window.loadWorldMap();
@@ -936,6 +951,14 @@ function renderEntities() {
           const size = window.hexSize * 1.5 * z;
           if (obj.type === 'fireplace' && window.gameVisuals.fireplace.complete) {
               window.mapCtx.drawImage(window.gameVisuals.fireplace, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'table' && window.gameVisuals.table.complete) {
+              window.mapCtx.drawImage(window.gameVisuals.table, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'bench' && window.gameVisuals.bench.complete) {
+              window.mapCtx.drawImage(window.gameVisuals.bench, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'door_open' && window.gameVisuals.door_open.complete) {
+              window.mapCtx.drawImage(window.gameVisuals.door_open, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'door_closed' && window.gameVisuals.door_closed.complete) {
+              window.mapCtx.drawImage(window.gameVisuals.door_closed, x - size/2, y - size/2, size, size);
           }
       }
   }
@@ -962,7 +985,7 @@ function renderEntities() {
       }
       
           if (e.isStealthed) window.mapCtx.globalAlpha = 0.5;
-          const isSentientAlly = e.side === 'player' && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(e.name);
+          const isSentientAlly = e.side === 'player' && !e.aiControlled && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(e.name);
           const flyOff = e.isFlying ? -20 * z : 0;
   
       // Enemy humanoids with sprite config are drawn the same way as player characters
@@ -1537,7 +1560,7 @@ function takeTurn(entity) {
         return;
     }
 
-    const isSentientAlly = entity.side === 'player' && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(entity.name);
+    const isSentientAlly = entity.side === 'player' && !entity.aiControlled && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(entity.name);
     if (entity.side === 'player') {
         window.gamePhase = isSentientAlly ? 'PLAYER_TURN' : 'AI_TURN';
         if (isSentientAlly) {
@@ -2248,15 +2271,39 @@ function handleClick(e){
     const target = getEntityAtHex(clickedHex.q, clickedHex.r);
     let actionHandled = false;
 
-    // TALK TO NPC (Campaign 1)
-    if (target && target.isNPC && window.distance(player.hex, clickedHex) <= 3) {
+    // DOOR TOGGLE — takes priority over talk/attack/move when clicking an adjacent door
+    const doorObj = window.tileObjects && window.tileObjects[`${clickedHex.q},${clickedHex.r}`];
+    if (doorObj && (doorObj.type === 'door_open' || doorObj.type === 'door_closed') && window.distance(player.hex, clickedHex) <= 1) {
+        if (window.toggleDoor) window.toggleDoor(clickedHex.q, clickedHex.r);
+        return;
+    }
+
+    // TALK TO NPC — suppressed during combat so clicks default to attacking instead
+    if (!window.isInCombat && target && target.isNPC && window.distance(player.hex, clickedHex) <= 3) {
         talkToNPC(target);
         return;
     }
 
     if (window.playerAction) {
         const act = window.playerAction;
-        if (act.type === 'skill') {
+        if (act.type === 'force_attack') {
+            if (target && target.alive && target !== player) {
+                tryAttack(player, target, false, false, 0, true);
+                spendTP(player, 10);
+                actionHandled = 'main_attack';
+            }
+            window.playerAction = null;
+            if (actionHandled) finalizePlayerAction(player, actionHandled);
+            window.updateActionButtons();
+            return;
+        } else if (act.type === 'parley') {
+            if (target && target.alive && target.side === 'enemy' && window.distance(player.hex, clickedHex) <= 3) {
+                if (window.parleyWithEnemy) window.parleyWithEnemy(target);
+            }
+            window.playerAction = null;
+            window.updateActionButtons();
+            return;
+        } else if (act.type === 'skill') {
             if (act.id === 'shove' || act.id.endsWith('_feint')) {
                 if (target && target.side !== player.side && window.distance(player.hex, clickedHex) === 1) {
                     if (act.id === 'shove') actionHandled = window.tryShove(player, target);
@@ -2526,8 +2573,8 @@ function handleClick(e){
 
 window.snapVisuals = snapVisuals;
 
-function tryAttack(attacker, target, isFeint = false, isOffhand = false, bonusDamage = 0) {
-    if (target.side === 'neutral') {
+function tryAttack(attacker, target, isFeint = false, isOffhand = false, bonusDamage = 0, ignoreNeutralCheck = false) {
+    if (target.side === 'neutral' && !ignoreNeutralCheck) {
         if (attacker.side === 'player') window.showMessage("You cannot attack a neutral character!");
         return;
     }
