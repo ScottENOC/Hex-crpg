@@ -254,6 +254,7 @@ function setupVillageScene() {
     window.drawMap();
     window.renderEntities();
     window.showCharacter();
+    if (window.updatePartyTabs) window.updatePartyTabs(); // populate the character-select tab (main char + Wren)
     if (window.snapVisuals) window.snapVisuals();
 
     setTimeout(() => {

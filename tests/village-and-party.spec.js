@@ -9,6 +9,27 @@ test.describe('village and party-movement changes', () => {
         await createCharacter(page);
     });
 
+    test('regression: the character-select tab is populated on scene load, without any manual updatePartyTabs() call', async ({ page }) => {
+        const names = await page.evaluate(() =>
+            Array.from(document.getElementById('party-selection').children).map(b => b.innerText));
+        expect(names).toHaveLength(2); // main character + Wren
+        expect(names).toEqual(expect.arrayContaining(['Wren']));
+    });
+
+    test('regression: clicking a party tab button (e.g. Wren) freely switches the selected character out of combat', async ({ page }) => {
+        const wrenBtn = (await page.$$('#party-selection button'))[1];
+        await wrenBtn.click();
+        expect(await page.evaluate(() => window.player.name)).toBe('Wren Talbot');
+    });
+
+    test('regression: the Menu dropdown opens on a real click (not just CSS :hover)', async ({ page }) => {
+        await page.click('.dropbtn');
+        const isShown = await page.evaluate(() => document.querySelector('.dropdown-content').classList.contains('show'));
+        expect(isShown).toBe(true);
+        await page.click('#character-screen-btn');
+        expect(await page.evaluate(() => document.getElementById('character-screen-modal').style.display)).toBe('block');
+    });
+
     test('temporary combat allies never appear in the movement tab, only real party members', async ({ page }) => {
         await resolveShakedownDirectly(page, 'fight');
         const names = await page.evaluate(() => {

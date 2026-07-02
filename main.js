@@ -105,6 +105,20 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    // Menu/Cheat dropdowns rely on CSS :hover, which is unreliable on
+    // trackpads/touch — also toggle them on click, closing any other open
+    // dropdown and closing when the click lands outside of one entirely.
+    window.addEventListener('click', (e) => {
+        const clickedDropbtn = e.target.classList && e.target.classList.contains('dropbtn');
+        document.querySelectorAll('.dropdown-content.show').forEach(dc => {
+            if (!clickedDropbtn || dc !== e.target.nextElementSibling) dc.classList.remove('show');
+        });
+        if (clickedDropbtn) {
+            const content = e.target.nextElementSibling;
+            if (content) content.classList.toggle('show');
+        }
+    });
+
     // Global click listener for ANY button click in the window
     window.addEventListener('click', (e) => {
         const btnId = e.target.id;
