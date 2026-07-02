@@ -103,4 +103,18 @@ test.describe('village map and vision', () => {
         const timeOfDayLight = await page.evaluate(() => window.getLightLevel());
         expect(timeOfDayLight).toBe(1);
     });
+
+    test('regression: an open door lets daytime light spill into an indoor room', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            window.worldSeconds = 12 * 3600; // noon, full daylight
+            window.setTerrainAt(0, 4, 'Wall'); // start closed
+            window.updateTime(0);
+            const closedMult = window.indoorLightMult;
+            window.toggleDoor(0, 4); // open it
+            window.updateTime(0);
+            const openMult = window.indoorLightMult;
+            return { closedMult, openMult };
+        });
+        expect(result.openMult).toBeGreaterThan(result.closedMult);
+    });
 });

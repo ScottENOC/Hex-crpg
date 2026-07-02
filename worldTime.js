@@ -22,7 +22,13 @@ function findInteriorRegion(hex) {
 function computeIndoorLightMult() {
     const p = window.entities && window.entities.find(e => e.side === 'player' && !e.rider);
     const region = p ? findInteriorRegion(p.hex) : null;
-    return region ? region.lightMult : 1.0;
+    if (!region) return 1.0;
+
+    // An open door lets daylight spill in — boosted by how bright it is
+    // outside right now, not just a flat indoor floor value.
+    const doorOpen = region.doorHex && window.getTerrainAt(region.doorHex.q, region.doorHex.r).name !== 'Wall';
+    const daylightSpill = doorOpen ? getLightLevel() * 0.5 : 0;
+    return Math.min(1, region.lightMult + daylightSpill);
 }
 
 let _wasPlayerInsideInterior = true;

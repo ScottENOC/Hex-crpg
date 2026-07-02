@@ -12,8 +12,21 @@ window.campaign2Landmarks = {
     northVillage: 'Millbrook',       // the next village on the road north, before the capital
     eastTown: 'Reddale',
     farmstead: "Old Mac's Farmstead",
-    crossroads: { q: 6, r: 24 }
+    crossroads: { q: 8, r: 24 } // q=8 keeps the long roads clear of the tavern's east wall (q:-6..6)
 };
+
+// Forest as scattered clumps rather than individual random hexes: a coarse
+// grid decides whether a 4x4-hex cell has a patch at all (~40% do), and only
+// within a patch cell does per-hex noise decide Forest vs Grass. Reuses
+// terrain.js's pseudoRandom (a proper hash) rather than a raw sin() plane
+// wave, which produced visible straight-line banding artifacts.
+function isForestClump(q, r) {
+    const cellSize = 4;
+    const cellQ = Math.floor(q / cellSize);
+    const cellR = Math.floor(r / cellSize);
+    if (window.pseudoRandom(cellQ * 3.7 + 11, cellR * 5.3 + 17) >= 0.4) return false;
+    return window.pseudoRandom(q * 1.3 + 4, r * 1.7 + 9) < 0.55;
+}
 
 // Carves a simple rectangular building: walls on the border, floor inside,
 // one open door hex. Same overrideTerrain technique as the tavern — same
@@ -35,7 +48,8 @@ function carveBuilding(centerQ, centerR, halfW, halfH, doorHex, floorType) {
     return {
         minQ: centerQ - halfW + 1, maxQ: centerQ + halfW - 1,
         minR: centerR - halfH + 1, maxR: centerR + halfH - 1,
-        lightMult: 0.3
+        lightMult: 0.3,
+        doorHex: { q: doorHex.q, r: doorHex.r }
     };
 }
 
@@ -46,16 +60,22 @@ function setupVillageScene() {
     window.lastSeenTimeMap = {};
     window.entities = [];
 
-    // --- Village exterior: hand-painted grass with light variety ---
+    // --- Village exterior: grass with scattered forest clumps ---
     for (let q = -30; q <= 30; q++) {
         for (let r = -30; r <= 30; r++) {
             // Inside the tavern footprint is handled below; everything else
             // outside that is grass (terrain.js also grass-falls-back for
             // campaign 2, this is just explicit/deliberate village ground).
-            const noise = Math.abs(Math.sin(q * 12.9898 + r * 78.233)) % 1;
-            if (noise > 0.93) window.setTerrainAt(q, r, 'Forest');
-            else window.setTerrainAt(q, r, 'Grass');
+            window.setTerrainAt(q, r, isForestClump(q, r) ? 'Forest' : 'Grass');
         }
+    }
+
+    // --- A small stream just north of the village, crossed by a bridge
+    // where the north road passes over it (the road is painted later in
+    // this function and simply overwrites the water at the crossing hex,
+    // which is exactly what a bridge deck looks like here). ---
+    for (let q = -20; q <= 28; q++) {
+        window.setTerrainAt(q, -25, 'Water');
     }
 
     // --- Tavern: walls q:-6..6, r:-4..4; floor carved q:-5..5, r:-3..3 ---
@@ -92,7 +112,7 @@ function setupVillageScene() {
 
     // Register interior regions for hex-local indoor lighting (see worldTime.js).
     window.interiorRegions = [
-        { minQ: -5, maxQ: 5, minR: -3, maxR: 3, lightMult: 0.15 },
+        { minQ: -5, maxQ: 5, minR: -3, maxR: 3, lightMult: 0.15, doorHex: { q: 0, r: 4 } },
         storeRegion,
         chapelRegion,
         houseRegion,
@@ -224,21 +244,28 @@ function setupVillageScene() {
     window.setTerrainAt(CP.q, CP.r, 'Path');
     window.tileObjects[`${CP.q},${CP.r}`] = { type: 'signpost', lightRadius: 0 };
 
-    const paintRoad = (dq, dr, length, wiggleAfter = 45, wiggleAmplitude = 2) => {
+    // Walks actual hex-adjacent steps (the same neighbor offsets getNeighbors
+    // uses) so the road is always contiguous — no gaps from a wiggle jumping
+    // more than one hex sideways in axial coordinates. The "wiggle" is an
+    // occasional one-hex lateral side-step folded into the walk itself,
+    // rather than an independent offset recomputed each step.
+    const paintRoad = (primary, length, wiggleAfter = 45, wiggleChance = 0.12) => {
+        const laterals = primary.r !== 0 ? [{ q: 1, r: 0 }, { q: -1, r: 0 }] : [{ q: 0, r: 1 }, { q: 0, r: -1 }];
+        let q = CP.q, r = CP.r;
         for (let i = 1; i <= length; i++) {
-            let q = CP.q + dq * i;
-            let r = CP.r + dr * i;
-            if (i > wiggleAfter) {
-                const wig = Math.round(Math.sin(i * 0.25) * wiggleAmplitude);
-                if (dq === 0) q += wig; else r += wig; // wiggle perpendicular to travel direction
-            }
+            q += primary.q; r += primary.r;
             window.setTerrainAt(q, r, 'Path');
+            if (i > wiggleAfter && Math.abs(Math.sin(i * 0.37)) < wiggleChance) {
+                const lat = laterals[Math.sin(i * 1.7) > 0 ? 0 : 1];
+                q += lat.q; r += lat.r;
+                window.setTerrainAt(q, r, 'Path');
+            }
         }
     };
-    paintRoad(0, -1, 130); // North: back past the village, on to Millbrook and the capital, Silverhart
-    paintRoad(0, 1, 130);  // South: Old Mac's Farmstead
-    paintRoad(1, 0, 130);  // East: Reddale
-    paintRoad(-1, 0, 130); // West: unmarked but for a skull and crossbones
+    paintRoad({ q: 0, r: -1 }, 130); // North: back past the village, on to Millbrook and the capital, Silverhart
+    paintRoad({ q: 0, r: 1 }, 130);  // South: Old Mac's Farmstead
+    paintRoad({ q: 1, r: 0 }, 130);  // East: Reddale
+    paintRoad({ q: -1, r: 0 }, 130); // West: unmarked but for a skull and crossbones
 
     window.hollowmereEventFired = false;
 

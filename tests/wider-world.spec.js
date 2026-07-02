@@ -93,6 +93,61 @@ test.describe('crossroads, signpost, and roads', () => {
         expect(found.east).toBe(true);
         expect(found.west).toBe(true);
     });
+
+    test('regression: the north road does not overwrite the tavern\'s east wall', async ({ page }) => {
+        const wallIntact = await page.evaluate(() =>
+            [-4, -3, -2, -1, 0, 1, 2, 3, 4].every(r => window.getTerrainAt(6, r).name === 'Wall'));
+        expect(wallIntact).toBe(true);
+    });
+
+    test('regression: roads are fully contiguous (no hex-skipping gaps from the wiggle)', async ({ page }) => {
+        // Walk 100 hexes north from the crossroads; at every step, some hex
+        // within a small radius must be Path — a real gap (nothing painted
+        // for that whole row) would mean the wiggle jumped a column.
+        const gaps = await page.evaluate(() => {
+            const cp = window.campaign2Landmarks.crossroads;
+            let gapCount = 0;
+            for (let i = 1; i <= 100; i++) {
+                const r = cp.r - i;
+                let found = false;
+                for (let dq = -2; dq <= 2 && !found; dq++) {
+                    if (window.getTerrainAt(cp.q + dq, r).name === 'Path') found = true;
+                }
+                if (!found) gapCount++;
+            }
+            return gapCount;
+        });
+        expect(gaps).toBe(0);
+    });
+
+    test('regression: a stream north of the village is crossed by a bridge where the north road passes', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const cp = window.campaign2Landmarks.crossroads;
+            return {
+                streamHasWater: window.getTerrainAt(cp.q - 15, -25).name === 'Water',
+                bridgeIsPath: window.getTerrainAt(cp.q, -25).name === 'Path',
+            };
+        });
+        expect(result.streamHasWater).toBe(true);
+        expect(result.bridgeIsPath).toBe(true);
+    });
+
+    test('regression: forest is scattered clumps, not a straight-line noise artifact', async ({ page }) => {
+        // A raw sin()-plane-wave noise produces long, perfectly straight runs
+        // of Forest along one diagonal. Check no single row has forest in
+        // every hex across a wide span (which the old bug would produce).
+        const hasFullRowOfForest = await page.evaluate(() => {
+            for (let r = -20; r <= 20; r++) {
+                let allForest = true;
+                for (let q = -15; q <= 15; q++) {
+                    if (window.getTerrainAt(q, r).name !== 'Forest') { allForest = false; break; }
+                }
+                if (allForest) return true;
+            }
+            return false;
+        });
+        expect(hasFullRowOfForest).toBe(false);
+    });
 });
 
 test.describe('The Missing Boy (time-gated wilderness quest)', () => {
