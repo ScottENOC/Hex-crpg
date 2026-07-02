@@ -9,9 +9,36 @@ function renderQuestLog() {
     if (!listDiv) return;
     listDiv.innerHTML = '';
 
+    // Companion attitude meters (BG3-style approval) — shown above the quest
+    // list itself, since it's a standing readout rather than a task.
+    const attitudes = window.companionAttitude || {};
+    const trackedNames = Object.keys(attitudes).filter(name => window.party && window.party.some(p => p.name === name));
+    if (trackedNames.length > 0) {
+        const attitudeDiv = document.createElement('div');
+        attitudeDiv.style.marginBottom = '12px';
+        trackedNames.forEach(name => {
+            const value = Math.round(attitudes[name]);
+            const row = document.createElement('div');
+            row.style.marginBottom = '6px';
+            row.innerHTML = `
+                <div style="display:flex; justify-content:space-between; color:#fff; font-size:0.9em;">
+                    <span>${name}</span><span>${value}/100</span>
+                </div>
+                <div style="background:#333; border-radius:3px; height:6px; overflow:hidden;">
+                    <div style="width:${value}%; height:100%; background:${value >= 50 ? '#4caf50' : value >= 20 ? '#ffb300' : '#c62828'};"></div>
+                </div>
+            `;
+            attitudeDiv.appendChild(row);
+        });
+        listDiv.appendChild(attitudeDiv);
+    }
+
     const quests = window.questLog || [];
     if (quests.length === 0) {
-        listDiv.innerHTML = '<p style="color: #888; text-align: center; padding: 20px;">No quests yet. Talk to people around the village.</p>';
+        const emptyMsg = document.createElement('p');
+        emptyMsg.style.cssText = 'color: #888; text-align: center; padding: 20px;';
+        emptyMsg.innerText = 'No quests yet. Talk to people around the village.';
+        listDiv.appendChild(emptyMsg);
         return;
     }
 

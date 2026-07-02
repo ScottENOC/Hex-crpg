@@ -124,6 +124,50 @@ window.campaign2OldMac = {
     dialogueId: 'old_mac'
 };
 
+// --- The Skarn-tooth goblin tribe, camped a long way west (see
+// buildGoblinCamp in campaign2World.js — placed at the very end of the west
+// road, at this world hex's border). Built from monsters.js's goblin/
+// elite_goblin templates via window.createMonster (not buildNPC — goblins
+// aren't a playable race with a raceData attribute pool), with custom
+// skills/equipment layered on to distinguish the named elites from rank-
+// and-file guards. All start side:'neutral' — the player can assault, sneak,
+// or negotiate; nothing is hostile until the player (or a quest branch)
+// makes it so.
+window.campaign2GoblinChief = {
+    name: 'Chief Skarnub', title: 'Goblin Chief', monsterType: 'elite_goblin',
+    customSkills: { health: 3, sword_hit: 2, sword_dmg: 2, sword_parry: 1, stealth_rogue: 1 },
+    customEquipment: ['sword', 'medium_armor', 'wooden_shield'],
+    dialogueId: 'chief_skarnub'
+};
+window.campaign2GoblinLieutenant = {
+    // Wants the tribe to move on rather than keep pressing its luck this
+    // close to a human village — the one who can broker a peaceful
+    // departure if the chief is removed (see the stealth/assassination path).
+    name: 'Nix Sharpear', title: 'Goblin Lieutenant', monsterType: 'elite_goblin',
+    customSkills: { health: 1, dagger_hit: 2, stealth_rogue: 2, stealth_agility: 1 },
+    customEquipment: ['dagger', 'light_armor'],
+    dialogueId: 'nix_sharpear'
+};
+window.campaign2GoblinShaman = {
+    name: 'Gralk the Bonecaster', title: 'Goblin Shaman', monsterType: 'elite_goblin',
+    customSkills: { health: 2, learn_heal: 1, club_hit: 1 },
+    customEquipment: ['club'],
+    dialogueId: null
+};
+window.campaign2GoblinGuards = [
+    { name: 'Goblin Warrior', title: 'Goblin Warrior', monsterType: 'goblin', customSkills: { health: 1, sword_hit: 1, sword_dmg: 1 }, customEquipment: ['sword'] },
+    { name: 'Goblin Warrior', title: 'Goblin Warrior', monsterType: 'goblin', customSkills: { health: 1, spear_hit: 1, spear_dmg: 1 }, customEquipment: ['spear'] },
+    { name: 'Goblin Skulker', title: 'Goblin Skulker', monsterType: 'goblin', customSkills: { health: 1, dagger_hit: 1, stealth_rogue: 2 }, customEquipment: ['dagger'] }
+];
+
+// Ser Aldric Thorne: a captive paladin, tied up at the goblin camp, rescued
+// by whichever resolution path the player takes. Built like Wren Talbot
+// (createCharacterData + manual skill purchase, real window.party member) —
+// not via buildNPC/createMonster, since he's a companion, not an NPC/enemy.
+// Level-1 fighter + level-1 cleric (his class bonuses are combined into one
+// attribute pool in campaign2World.js's buildGoblinCamp/rescue logic).
+window.campaign2Paladin = { name: 'Ser Aldric Thorne', title: 'Wandering Paladin', race: 'human', gender: 'male', color: '#d4c9a8', voice: 'pc_1' };
+
 // The feudal chain of authority above Hollowmere's residents. The elder is
 // placed in the village (the House building); the baron rules the barony
 // Hollowmere sits in and isn't physically present yet — a reputation-only

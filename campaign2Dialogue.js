@@ -210,6 +210,83 @@ window.npcDialogueTrees = {
 
         window.showDialogue(npc, "Pasture's quiet now, thanks to you.", [{ label: "Good.", action: () => {} }]);
     },
+    ser_aldric_captive: (npc) => {
+        if (window.party.some(p => p.name === window.campaign2Paladin.name)) return; // already rescued
+        window.showDialogue(npc, "Please... cut me loose. I came out here to deal with this goblin problem myself, and, well — here we are. Whatever you decide to do about them, I intend to see them gone from this land. I'll owe you a debt either way.", [
+            { label: "I'll free you now.", action: () => window.rescuePaladin() },
+            { label: "Not yet.", action: () => {} }
+        ]);
+    },
+    chief_skarnub: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'goblin_threat');
+        const goblinRep = window.factions.goblin_tribe.standing;
+
+        if (quest && quest.resolution) {
+            window.showDialogue(npc, "We have nothing left to discuss.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+
+        if (goblinRep >= 40) {
+            window.showDialogue(npc, "You've done right by us. Truth told, this land's more trouble than it's worth — humans always come eventually. Guarantee us safe passage and supplies, and we'll move on. No more blood spilled, on either side.", [
+                {
+                    label: "Agreed. Take what you need and go.",
+                    action: () => {
+                        if (!quest) window.questLog.push({ id: 'goblin_threat', title: 'The Skarn-tooth Tribe', giver: 'Elder Marta Wynfield', status: 'active', description: '' });
+                        const q = window.questLog.find(q2 => q2.id === 'goblin_threat');
+                        q.status = 'completed';
+                        q.resolution = 'goblin_diplomacy';
+                        window.adjustReputation(window.factions.silverhart_kingdom, -10, 10); // letting a raiding tribe walk away paid off, doesn't sit well with the kingdom
+                        window.adjustReputation(window.factions.goblin_tribe, 15, 15);
+                        if (window.adjustRegionStat) window.adjustRegionStat('hollowmere', 'security', 8);
+                        if (window.gainExp) window.gainExp(150);
+                        window.rescuePaladin();
+                        if (window.adjustCompanionAttitude) window.adjustCompanionAttitude(window.campaign2Paladin.name, -10, "let the goblins go free instead of answering for what they've done");
+                        window.showMessage('The Skarn-tooth tribe breaks camp and moves on. Quest complete: The Skarn-tooth Tribe.');
+                    }
+                },
+                { label: "Not yet.", action: () => {} }
+            ]);
+            return;
+        }
+
+        window.showDialogue(npc, "Another human, come to gawk or to fight? Speak quick.", [
+            {
+                label: "I could help you, for the right price.",
+                action: () => {
+                    if (!quest) {
+                        window.questLog.push({ id: 'goblin_threat', title: 'The Skarn-tooth Tribe', giver: 'Elder Marta Wynfield', status: 'active', description: '' });
+                    }
+                    window.showDialogue(npc, "Hah. A human with sense. Bring me what I ask, and we'll get along fine.", [
+                        { label: "What do you need?", action: () => window.offerGoblinFavor(npc) }
+                    ]);
+                }
+            },
+            {
+                label: "Leave this land, or face us.",
+                action: () => window.showMessage('Chief Skarnub bares his teeth. "Face us, then — see how far that gets you."')
+            },
+            { label: "Just looking.", action: () => {} }
+        ]);
+    },
+    nix_sharpear: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'goblin_threat');
+        if (quest && quest.chiefAssassinated && !quest.resolution) {
+            window.showDialogue(npc, "You... you killed him. Skarnub was going to get us all killed clinging to this ground anyway. Truth told, I've wanted to move on for moons now. Let's not make enemies over this — we'll go, quietly, if you let us.", [
+                { label: "Take your people and go.", action: () => window.resolveGoblinSuccession() },
+                { label: "...", action: () => {} }
+            ]);
+            return;
+        }
+        if (quest && quest.resolution) {
+            window.showDialogue(npc, "We're already gone from here, or will be soon enough.", [{ label: "Good.", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "Something you need? Speak quick, this isn't a place for wandering humans.", [
+            { label: "Just passing through.", action: () => {} }
+        ]);
+    },
     marta_wynfield: (npc) => {
         let opening;
         if (!window.hollowmereEventFired) {
@@ -246,6 +323,32 @@ window.npcDialogueTrees = {
             return;
         }
         if (quest && quest.status === 'completed') {
+            const completedCount = (window.questLog || []).filter(q =>
+                ['elder_locket', 'oskars_wager', 'farm_wolves', 'missing_child'].includes(q.id) && q.status === 'completed'
+            ).length;
+            const goblinQuest = window.questLog.find(q => q.id === 'goblin_threat');
+            if (completedCount >= 2 && !goblinQuest) {
+                window.showDialogue(npc, "You've done more for Hollowmere than most ever do. There's... one more thing, if you're willing to hear it. West of here, past the crossroads, a goblin tribe has made camp. So far they've kept their distance, traded a little, even — but they're hungry more often than not, and hungry goblins raid. I fear it's only a matter of time before Hollowmere's their next target.", [
+                    {
+                        label: "Tell me more.",
+                        action: () => {
+                            window.questLog.push({
+                                id: 'goblin_threat',
+                                title: 'The Skarn-tooth Tribe',
+                                giver: 'Elder Marta Wynfield',
+                                status: 'active',
+                                description: "A goblin tribe has camped a long way west, past the crossroads. Deal with them however you see fit."
+                            });
+                            window.showMessage('Quest added: The Skarn-tooth Tribe.');
+                            window.showDialogue(npc, "How you handle it is your business — fight them off, talk them down, whatever ends with Hollowmere safe. Just... be careful. They're not mindless, whatever the stories say.", [
+                                { label: "I'll see what I can do.", action: () => {} }
+                            ]);
+                        }
+                    },
+                    { label: "Not my concern.", action: () => {} }
+                ]);
+                return;
+            }
             window.showDialogue(npc, opening, [{ label: "Noted.", action: () => {} }]);
             return;
         }
@@ -647,6 +750,212 @@ function checkWildernessEncounter(playerEntity, delta) {
     }
 }
 window.checkWildernessEncounter = checkWildernessEncounter;
+
+// --- Companion attitude (BG3-style approval): a 0-100 meter per companion
+// name, moved by tagged actions and shown to the player as a toast message
+// every time it changes. Currently only Ser Aldric uses it, but the
+// mechanism is generic. ---
+window.companionAttitude = window.companionAttitude || {};
+
+function adjustCompanionAttitude(name, delta, reason) {
+    if (window.companionAttitude[name] === undefined) window.companionAttitude[name] = 50;
+    window.companionAttitude[name] = Math.max(0, Math.min(100, window.companionAttitude[name] + delta));
+    if (delta > 0) window.showMessage(`${name} approves. (${reason})`);
+    else if (delta < 0) window.showMessage(`${name} disapproves. (${reason})`);
+    if (window.companionAttitude[name] <= 0 && window.party.some(p => p.name === name)) {
+        window.handleCompanionDeparture(name);
+    }
+}
+window.adjustCompanionAttitude = adjustCompanionAttitude;
+
+function handleCompanionDeparture(name) {
+    window.party = window.party.filter(p => p.name !== name);
+    window.entities = window.entities.filter(e => e.name !== name);
+    window.showMessage(`${name} has left your party.`);
+    if (window.updatePartyTabs) window.updatePartyTabs();
+}
+window.handleCompanionDeparture = handleCompanionDeparture;
+
+// Very slow attitude decay while the goblin problem sits unresolved and
+// Ser Aldric has already joined — "leaving due to inaction should be very
+// slow," not a hard timer. Checked from worldTime.js's tick.
+function tickCompanionPatience(deltaSeconds) {
+    const name = window.campaign2Paladin?.name;
+    if (!name || !window.party.some(p => p.name === name)) return;
+    const quest = (window.questLog || []).find(q => q.id === 'goblin_threat');
+    if (!quest || quest.resolution) return; // resolved (any way) — no more waiting to be patient about
+    const days = deltaSeconds / (24 * 3600);
+    const before = window.companionAttitude[name] ?? 50;
+    window.companionAttitude[name] = Math.max(0, before - 0.15 * days); // ~1 point per ~7 in-game days
+    if (window.companionAttitude[name] <= 0 && before > 0) {
+        window.handleCompanionDeparture(name);
+        window.showMessage(`${name} has run out of patience and left to deal with the goblins alone.`);
+    }
+}
+window.tickCompanionPatience = tickCompanionPatience;
+
+// Converts the tied-up captive entity into a real party member — the
+// physical rescue, available any time the player reaches him (independent
+// of which resolution path, if any, is chosen for the tribe as a whole).
+function rescuePaladin() {
+    const name = window.campaign2Paladin.name;
+    if (window.party.some(p => p.name === name)) return; // already rescued
+    const captiveEnt = window.entities.find(e => e.name === name && e.tiedUp);
+    if (!captiveEnt) return;
+
+    const companion = window.createCharacterData('human', 'fighter', name, window.campaign2Paladin.gender, window.campaign2Paladin.voice);
+    const clericBonus = window.classData.cleric.bonus; // fold in the cleric class-level too (fighter + cleric)
+    for (const k in clericBonus) companion.attributes[k] = (companion.attributes[k] || 0) + clericBonus[k];
+
+    ['health', 'sword_hit', 'sword_dmg', 'sword_parry', 'learn_heal'].forEach(skillKey => {
+        const skill = window.skills[skillKey];
+        if (!skill) return;
+        if (companion.attributes[skill.tree] > 0) companion.attributes[skill.tree]--;
+        else if (companion.attributes.wildcard > 0) companion.attributes.wildcard--;
+        companion.skills[skillKey] = (companion.skills[skillKey] || 0) + 1;
+    });
+    if (companion.skills.health) {
+        const bonus = 10 * companion.skills.health;
+        companion.hp += bonus; companion.maxHp += bonus;
+    }
+    companion.inventory.push('wooden_shield');
+    companion.equipped.offhand = 'wooden_shield';
+
+    window.party.push(companion);
+    const ent = new window.Entity(companion.name, 'red', captiveEnt.hex, (companion.attributes.agility || 10) + 10);
+    ent.side = 'player';
+    Object.assign(ent, companion);
+    ent.hex = captiveEnt.hex;
+    ent.visualQ = ent.hex.q; ent.visualR = ent.hex.r;
+    ent.startQ = ent.hex.q; ent.startR = ent.hex.r;
+    ent.destination = null; ent.moveCooldown = 0;
+
+    window.entities = window.entities.filter(e => e !== captiveEnt);
+    window.entities.push(ent);
+
+    window.companionAttitude[name] = 60; // grateful, but still watching how this plays out
+    if (window.updatePartyTabs) window.updatePartyTabs();
+    window.showMessage(`${name} joins your party, freed at last.`);
+    window.drawMap();
+    window.renderEntities();
+}
+window.rescuePaladin = rescuePaladin;
+
+// --- Goblin-reputation / diplomacy path: small favors for the chief raise
+// goblin_tribe standing (and cost the kingdom's), building toward a peaceful
+// departure once trust is high enough (see chief_skarnub's tree above). One
+// tier is a deliberate point of no return — helping the goblins move
+// against Hollowmere itself. ---
+function offerGoblinFavor(npc) {
+    const goblinRep = window.factions.goblin_tribe.standing;
+    const options = [
+        { label: "Scout the human village's patrols for you.", action: () => resolveGoblinFavor('scout') },
+        { label: "\"Borrow\" supplies from the farm to the south.", action: () => resolveGoblinFavor('steal') }
+    ];
+    if (goblinRep >= 25) {
+        options.push({ label: "Help you take the fight to Hollowmere itself.", action: () => resolveGoblinFavor('raid') });
+    }
+    options.push({ label: "Actually, never mind.", action: () => {} });
+    window.showDialogue(npc, "Plenty a human could do for us, if they've the stomach for it.", options);
+}
+window.offerGoblinFavor = offerGoblinFavor;
+
+function resolveGoblinFavor(kind) {
+    if (kind === 'scout') {
+        window.adjustReputation(window.factions.goblin_tribe, 10, 10);
+        window.adjustReputation(window.factions.silverhart_kingdom, -8, 10);
+        if (window.adjustRegionStat) window.adjustRegionStat('hollowmere', 'security', -4);
+        if (window.gainExp) window.gainExp(40);
+        if (window.adjustCompanionAttitude) window.adjustCompanionAttitude(window.campaign2Paladin.name, -8, "scouted your own people for the goblins");
+        window.showMessage("You pass word of Hollowmere's patrol routes to the goblins.");
+    } else if (kind === 'steal') {
+        window.adjustReputation(window.factions.goblin_tribe, 8, 10);
+        window.adjustReputation(window.factions.silverhart_kingdom, -5, 10);
+        if (window.adjustRegionStat) window.adjustRegionStat('hollowmere', 'prosperity', -5);
+        if (window.gainExp) window.gainExp(30);
+        if (window.adjustCompanionAttitude) window.adjustCompanionAttitude(window.campaign2Paladin.name, -5, "stole from decent folk to feed the goblins");
+        window.showMessage("You raid Old Mac's stores and bring the goods back to the tribe.");
+    } else if (kind === 'raid') {
+        // The point of no return: helping the goblins move against
+        // Hollowmere itself. Severe on every axis.
+        window.adjustReputation(window.factions.goblin_tribe, 30, 20);
+        window.adjustReputation(window.factions.silverhart_kingdom, -60, 30);
+        if (window.adjustRegionStat) {
+            window.adjustRegionStat('hollowmere', 'security', -30);
+            window.adjustRegionStat('hollowmere', 'prosperity', -30);
+        }
+        if (!window.questLog) window.questLog = [];
+        let quest = window.questLog.find(q => q.id === 'goblin_threat');
+        if (!quest) { quest = { id: 'goblin_threat', title: 'The Skarn-tooth Tribe', giver: 'Elder Marta Wynfield', status: 'active', description: '' }; window.questLog.push(quest); }
+        quest.status = 'completed';
+        quest.resolution = 'betrayal';
+        const paladinName = window.campaign2Paladin.name;
+        window.companionAttitude[paladinName] = 0;
+        if (window.party.some(p => p.name === paladinName)) {
+            window.handleCompanionDeparture(paladinName);
+            window.showMessage(`${paladinName} looks at you with open contempt. "Then you're no better than they are." He leaves, and does not look back.`);
+        }
+        window.showMessage('You lead the goblins toward Hollowmere. Whatever happens next, there is no going back from this.');
+    }
+    window.drawMap();
+}
+window.resolveGoblinFavor = resolveGoblinFavor;
+
+// --- Assault resolution: watched from worldTime.js's tick rather than a
+// specific attack call site, so it fires regardless of exactly how the
+// chief died in open combat (spell, melee, ally kill, etc). ---
+function checkGoblinAssaultResolution() {
+    if (!window.questLog) return;
+    const quest = window.questLog.find(q => q.id === 'goblin_threat');
+    if (!quest || quest.resolution) return;
+    const chief = window.entities.find(e => e.name === 'Chief Skarnub');
+    if (!chief || chief.alive || chief.diedByAssassination) return; // assassination is handled by its own path
+
+    quest.status = 'completed';
+    quest.resolution = 'assault';
+    window.adjustReputation(window.factions.silverhart_kingdom, 20, 20);
+    window.adjustReputation(window.factions.goblin_tribe, -30, 20);
+    if (window.adjustRegionStat) window.adjustRegionStat('hollowmere', 'security', 15);
+    if (window.gainExp) window.gainExp(300);
+    window.rescuePaladin();
+    if (window.adjustCompanionAttitude) window.adjustCompanionAttitude(window.campaign2Paladin.name, 25, 'cleared the goblins out by force');
+    window.showMessage('With Chief Skarnub fallen and the camp broken, the Skarn-tooth threat to Hollowmere is over. Quest complete: The Skarn-tooth Tribe.');
+}
+window.checkGoblinAssaultResolution = checkGoblinAssaultResolution;
+
+// --- Stealth/assassination resolution: a stealthed player adjacent to the
+// still-unaware chief can end the whole camp's leadership in one stroke
+// (triggered from gameEngine.js's handleClick, ahead of normal talk/attack
+// handling). Opens a peaceful succession instead of a fight, via Nix's
+// dialogue tree above. ---
+function handleChiefAssassination(chief) {
+    chief.alive = false;
+    chief.diedByAssassination = true;
+    if (!window.questLog) window.questLog = [];
+    let quest = window.questLog.find(q => q.id === 'goblin_threat');
+    if (!quest) { quest = { id: 'goblin_threat', title: 'The Skarn-tooth Tribe', giver: 'Elder Marta Wynfield', status: 'active', description: '' }; window.questLog.push(quest); }
+    quest.chiefAssassinated = true;
+    window.showMessage("A single silent strike, and Chief Skarnub falls without a sound. The camp doesn't yet know its chief is dead.");
+    window.drawMap();
+    window.renderEntities();
+}
+window.handleChiefAssassination = handleChiefAssassination;
+
+function resolveGoblinSuccession() {
+    const quest = window.questLog.find(q => q.id === 'goblin_threat');
+    quest.status = 'completed';
+    quest.resolution = 'stealth_succession';
+    window.adjustReputation(window.factions.silverhart_kingdom, 15, 15);
+    window.adjustReputation(window.factions.goblin_tribe, 5, 10); // a clean, low-blood transition earns modest goodwill even from the tribe
+    if (window.adjustRegionStat) window.adjustRegionStat('hollowmere', 'security', 12);
+    if (window.gainExp) window.gainExp(250);
+    window.rescuePaladin();
+    if (window.adjustCompanionAttitude) window.adjustCompanionAttitude(window.campaign2Paladin.name, 20, "found a way to remove the goblins without a massacre");
+    window.showMessage("Under Nix's lead, the Skarn-tooth tribe breaks camp and leaves the area for good. Quest complete: The Skarn-tooth Tribe.");
+    window.drawMap();
+    window.renderEntities();
+}
+window.resolveGoblinSuccession = resolveGoblinSuccession;
 
 window.startHollowmereShakedown = startHollowmereShakedown;
 window.resolveShakedown = resolveShakedown;

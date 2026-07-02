@@ -89,6 +89,14 @@ function updateTime(delta) {
             window.checkWildernessEncounter(p, delta);
         }
 
+        // The Skarn-tooth Tribe: resolves itself once the chief dies in open
+        // combat (the assassination path resolves separately, via dialogue —
+        // see campaign2Dialogue.js), and Ser Aldric's patience with an
+        // unresolved goblin problem wears down, very slowly, once he's
+        // already in the party.
+        if (window.checkGoblinAssaultResolution) window.checkGoblinAssaultResolution();
+        if (window.tickCompanionPatience) window.tickCompanionPatience(delta);
+
         // Faction agendas advance on their own clock, independent of whether
         // the player is engaging with them (see factions.js).
         if (window.tickFactionAgendas) window.tickFactionAgendas(delta);

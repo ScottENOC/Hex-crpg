@@ -87,6 +87,72 @@ function buildFarmstead(roadEnd) {
     }
 }
 
+// Wraps window.createMonster with the NPC-ish fields buildNPC normally
+// provides (reputation, isNPC, dialogueId, factionId) — goblins aren't a
+// playable race with a raceData attribute pool, so they're built as
+// monsters (which already support custom skills/equipment) rather than
+// through buildNPC's class/race attribute-purchase system.
+function buildGoblinNPC({ name, title, monsterType, hex, customSkills, customEquipment, side, dialogueId }) {
+    const ent = window.createMonster(monsterType, hex, customSkills || null, customEquipment || null, side || 'neutral');
+    ent.name = name;
+    ent.title = title || null;
+    ent.isNPC = true;
+    ent.dialogueId = dialogueId || null;
+    ent.factionId = 'goblin_tribe';
+    const playerRace = window.party && window.party[0] ? window.party[0].race : 'human';
+    ent.reputation = { knowledge: 0, standing: window.seedStanding ? window.seedStanding('goblin', playerRace) : 0 };
+    return ent;
+}
+
+// The Skarn-tooth goblin camp: huts on a dirt clearing at the very end of
+// the west road (see the "unmarked but for a skull and crossbones"
+// signpost entry) — deliberately as far from Hollowmere as the road goes,
+// since a threat the village could reasonably ignore wouldn't justify the
+// village's own existence. Everyone here starts side:'neutral'; nothing is
+// hostile until the player (or a quest branch) makes it so.
+function buildGoblinCamp(roadEnd) {
+    const center = { q: roadEnd.q, r: roadEnd.r };
+    const CLEARING_RADIUS = 6;
+    for (let dq = -CLEARING_RADIUS; dq <= CLEARING_RADIUS; dq++) {
+        for (let dr = -CLEARING_RADIUS; dr <= CLEARING_RADIUS; dr++) {
+            const hex = { q: center.q + dq, r: center.r + dr };
+            if (window.distance(center, hex) <= CLEARING_RADIUS) window.setTerrainAt(hex.q, hex.r, 'Dirt');
+        }
+    }
+
+    window.tileObjects[`${center.q},${center.r - 2}`] = { type: 'hut_large', lightRadius: 0 }; // chief's hut
+    [[-3, -1], [3, -1], [-3, 2], [3, 2], [0, 3]].forEach(([dq, dr]) => {
+        window.tileObjects[`${center.q + dq},${center.r + dr}`] = { type: 'hut', lightRadius: 0 };
+    });
+    window.tileObjects[`${center.q},${center.r}`] = { type: 'fireplace', lightRadius: 6 }; // central campfire
+
+    window.campaign2GoblinCampCenter = center;
+
+    const chief = buildGoblinNPC({ ...window.campaign2GoblinChief, hex: { q: center.q, r: center.r - 1 } });
+    const lieutenant = buildGoblinNPC({ ...window.campaign2GoblinLieutenant, hex: { q: center.q - 2, r: center.r } });
+    const shaman = buildGoblinNPC({ ...window.campaign2GoblinShaman, hex: { q: center.q + 2, r: center.r } });
+    window.entities.push(chief, lieutenant, shaman);
+
+    const guardHexes = [{ q: center.q - 3, r: center.r + 1 }, { q: center.q + 3, r: center.r + 1 }, { q: center.q, r: center.r + 2 }];
+    (window.campaign2GoblinGuards || []).forEach((spec, i) => {
+        window.entities.push(buildGoblinNPC({ ...spec, hex: guardHexes[i] || { q: center.q, r: center.r + 2 } }));
+    });
+
+    // Ser Aldric, tied up, one hex from the campfire — a real rescue target,
+    // not yet a party member. See campaign2Dialogue.js for the rescue logic
+    // (assault/stealth/diplomacy all eventually free him).
+    if (window.campaign2Paladin) {
+        const captive = new window.Entity(window.campaign2Paladin.name, window.campaign2Paladin.color, { q: center.q + 1, r: center.r - 1 }, 10);
+        captive.side = 'neutral';
+        captive.isNPC = true;
+        captive.race = window.campaign2Paladin.race;
+        captive.gender = window.campaign2Paladin.gender;
+        captive.tiedUp = true;
+        captive.dialogueId = 'ser_aldric_captive';
+        window.entities.push(captive);
+    }
+}
+
 function setupVillageScene() {
     window.overrideTerrain = {};
     window.tileObjects = {};
@@ -306,9 +372,10 @@ function setupVillageScene() {
     paintRoad({ q: 0, r: -1 }, WORLD_HEX_SIZE); // North: back past the village, on to Millbrook and the capital, Silverhart
     const farmRoadEnd = paintRoad({ q: 0, r: 1 }, WORLD_HEX_SIZE + 40); // South: past the hex border, to Old Mac's Farmstead
     paintRoad({ q: 1, r: 0 }, WORLD_HEX_SIZE); // East: Reddale
-    paintRoad({ q: -1, r: 0 }, WORLD_HEX_SIZE); // West: unmarked but for a skull and crossbones
+    const westRoadEnd = paintRoad({ q: -1, r: 0 }, WORLD_HEX_SIZE); // West: unmarked but for a skull and crossbones
 
     buildFarmstead(farmRoadEnd);
+    buildGoblinCamp(westRoadEnd);
 
     window.hollowmereEventFired = false;
 

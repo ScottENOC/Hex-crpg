@@ -29,6 +29,7 @@ function saveGame(saveName = "rpg_save_game") {
         roguelikeData: window.roguelikeData,
         factions: window.factions,
         regions: window.regions,
+        companionAttitude: window.companionAttitude,
         interiorRegions: window.interiorRegions,
         hollowmereEventFired: window.hollowmereEventFired,
         hollowmereVictoryBonusGiven: window.hollowmereVictoryBonusGiven,
@@ -126,6 +127,7 @@ function loadGame(saveName = "rpg_save_game") {
         if (!window.roguelikeData.bossesDefeated) window.roguelikeData.bossesDefeated = [];
         if (gameState.factions) window.factions = gameState.factions;
         if (gameState.regions) window.regions = gameState.regions;
+        if (gameState.companionAttitude) window.companionAttitude = gameState.companionAttitude;
         window.interiorRegions = gameState.interiorRegions || [];
         window.hollowmereEventFired = gameState.hollowmereEventFired || false;
         window.hollowmereVictoryBonusGiven = gameState.hollowmereVictoryBonusGiven || false;

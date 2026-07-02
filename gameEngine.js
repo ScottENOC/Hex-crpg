@@ -587,7 +587,10 @@ function startGameCore(isLoading = false) {
       signpost: new Image(),
       corpse_marker: new Image(),
       fence_h: new Image(),
-      fence_v: new Image()
+      fence_v: new Image(),
+      dirt: new Image(),
+      hut: new Image(),
+      hut_large: new Image()
   };
   visuals.playerBase.onload = () => { window.drawMap(); };
   visuals.leatherArmor.onload = () => { window.drawMap(); };
@@ -653,6 +656,9 @@ function startGameCore(isLoading = false) {
   visuals.corpse_marker.onload = () => { window.drawMap(); };
   visuals.fence_h.onload = () => { window.drawMap(); };
   visuals.fence_v.onload = () => { window.drawMap(); };
+  visuals.dirt.onload = () => { window.drawMap(); };
+  visuals.hut.onload = () => { window.drawMap(); };
+  visuals.hut_large.onload = () => { window.drawMap(); };
 
   visuals.playerBase.src = 'images/elf.png';
   visuals.leatherArmor.src = 'images/elfleatherarmour.png';
@@ -719,6 +725,9 @@ function startGameCore(isLoading = false) {
   visuals.corpse_marker.src = 'images/corpse_marker.svg';
   visuals.fence_h.src = 'images/fence_h.svg';
   visuals.fence_v.src = 'images/fence_v.svg';
+  visuals.dirt.src = 'images/dirt.svg';
+  visuals.hut.src = 'images/hut.svg';
+  visuals.hut_large.src = 'images/hut_large.svg';
 
   window.gameVisuals = visuals;
 
@@ -991,6 +1000,10 @@ function renderEntities() {
               window.mapCtx.drawImage(window.gameVisuals.fence_h, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'fence_v' && window.gameVisuals.fence_v.complete) {
               window.mapCtx.drawImage(window.gameVisuals.fence_v, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'hut' && window.gameVisuals.hut.complete) {
+              window.mapCtx.drawImage(window.gameVisuals.hut, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'hut_large' && window.gameVisuals.hut_large.complete) {
+              window.mapCtx.drawImage(window.gameVisuals.hut_large, x - size/2, y - size/2, size, size);
           }
       }
   }
@@ -2316,6 +2329,18 @@ function handleClick(e){
     // READ SIGNPOST — same priority tier as the door toggle above
     if (doorObj && doorObj.type === 'signpost' && window.distance(player.hex, clickedHex) <= 1) {
         if (window.readSignpost) window.readSignpost();
+        return;
+    }
+
+    // ASSASSINATE THE GOBLIN CHIEF — a stealthed player adjacent to the
+    // still-unaware chief can end the whole camp's leadership in one
+    // stroke, ahead of the normal talk/attack handling below.
+    if (target && target.name === 'Chief Skarnub' && target.alive && player.isStealthed &&
+        target.aiState !== 'combat' && window.distance(player.hex, clickedHex) <= 1) {
+        window.showDialogue({ name: 'Assassination' }, "Chief Skarnub's back is turned. One clean strike could end this without a fight.", [
+            { label: "Strike now.", action: () => { if (window.handleChiefAssassination) window.handleChiefAssassination(target); } },
+            { label: "Not yet.", action: () => {} }
+        ]);
         return;
     }
 

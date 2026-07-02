@@ -11,7 +11,12 @@ window.factions = {
     // (0-100, keyed by kingdom id). Tracked from here on but not yet wired
     // into anything else in the world — quests can move it, nothing reads
     // it back yet.
-    ironbond_company:   { id: 'ironbond_company',   name: 'The Ironbond Company',   race: 'human', knowledge: 0, standing: 0, merchantInfluence: { silverhart_kingdom: 30 } }
+    ironbond_company:   { id: 'ironbond_company',   name: 'The Ironbond Company',   race: 'human', knowledge: 0, standing: 0, merchantInfluence: { silverhart_kingdom: 30 } },
+    // The goblin tribe camped west of Hollowmere. Its standing moves opposite
+    // to the Silverhart Kingdom's on purpose in most quest resolutions —
+    // strengthening/earning favor with the goblins tends to come at the
+    // human kingdom's expense (see campaign2Dialogue.js's goblin questline).
+    goblin_tribe:       { id: 'goblin_tribe',       name: 'The Skarn-tooth Tribe',  race: 'goblin', knowledge: 0, standing: 0 }
 };
 
 function seedStanding(race, playerRace) {
