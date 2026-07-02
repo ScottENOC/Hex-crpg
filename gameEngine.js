@@ -862,9 +862,15 @@ function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
     const left = x - bW / 2;
     const top  = y - bW / 2 + yOff;
 
-    // BASE BODY
+    // BASE BODY — clothing recolored per-character (see spriteRecolor.js) so
+    // not every human/elf/dwarf wears the exact same tunic. Deterministic
+    // from the entity's name, so it's stable without needing a stored field.
     const baseImg = window.gameVisuals[cfg.baseKey];
-    if (baseImg?.complete) ctx.drawImage(baseImg, left, top, bW, bH);
+    if (baseImg?.complete) {
+        if (e.tintHue === undefined && window.hashStringToHue) e.tintHue = window.hashStringToHue(e.name || 'x');
+        const bodyImg = (e.tintHue !== undefined && window.getRecoloredSprite) ? window.getRecoloredSprite(baseImg, e.tintHue) : baseImg;
+        ctx.drawImage(bodyImg || baseImg, left, top, bW, bH);
+    }
 
     // HAIR
     const hc = cfg.hair;
