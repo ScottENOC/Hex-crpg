@@ -100,6 +100,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // Priority load
         await Promise.all(priorityImages.map(load));
         console.log("Priority assets loaded");
+        if (window.updateAppearancePreview) window.updateAppearancePreview(); // sprites just finished loading — refresh the (until-now-blank) preview
         
         // Background load
         await Promise.all(otherImages.map(load));
@@ -459,6 +460,46 @@ window.updateRoguelikePreview = function() {
     
     window.updateRoguelikePreview();
 
+    // Live preview of the chosen race/gender/clothing-color combo — color
+    // only, never shape/race (see spriteRecolor.js for the recolor itself).
+    // Self-contained (doesn't depend on window.gameVisuals/CHAR_CONFIG,
+    // which aren't populated until startGameCore runs after character
+    // creation) — loads base body sprites directly the first time they're
+    // needed and caches them.
+    const APPEARANCE_BASE_SRC = {
+        human_female: 'images/humanfemale.png', human_male: 'images/humanmale.png',
+        elf_female: 'images/elffemale.png', elf_male: 'images/elfmale.png',
+        dwarf_female: 'images/dwarffemale.png', dwarf_male: 'images/dwarfmale.png'
+    };
+    const _appearancePreviewImages = {};
+    window.updateAppearancePreview = function() {
+        const canvas = document.getElementById("appearance-preview-canvas");
+        const hueSlider = document.getElementById("tunic-hue-slider");
+        const raceSelect = document.getElementById("race-select");
+        const genderSelect = document.getElementById("gender-select");
+        if (!canvas || !hueSlider || !raceSelect || !genderSelect || !window.getRecoloredSprite) return;
+
+        const src = APPEARANCE_BASE_SRC[`${raceSelect.value}_${genderSelect.value}`];
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (!src) return;
+
+        let img = _appearancePreviewImages[src];
+        if (!img) {
+            img = new Image();
+            img.onload = () => window.updateAppearancePreview();
+            img.src = src;
+            _appearancePreviewImages[src] = img;
+        }
+        if (!img.complete || !img.naturalWidth) return; // redraws via onload once loaded
+
+        const tinted = window.getRecoloredSprite(img, parseInt(hueSlider.value, 10));
+        const scale = Math.min(canvas.width / img.naturalWidth, canvas.height / img.naturalHeight);
+        const w = img.naturalWidth * scale, h = img.naturalHeight * scale;
+        ctx.drawImage(tinted, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
+    };
+    window.updateAppearancePreview();
+
     window.updateSelectionPreview = function() {
         const race = document.getElementById("race-select").value;
         const cls = document.getElementById("class-select").value;
@@ -563,6 +604,12 @@ window.startGame = function() {
 
   window.initializePlayer(race, cls, gender, campaign, voice);
   window.party[0].name = name; // Update with generated name if needed
+
+  // Player's chosen clothing color (see the character creator's tunic-hue
+  // slider) — set explicitly so drawPlayerCharacter uses it instead of the
+  // name-derived default every other character gets (see spriteRecolor.js).
+  const hueSlider = document.getElementById("tunic-hue-slider");
+  if (hueSlider) window.party[0].tintHue = parseInt(hueSlider.value, 10);
   
   window.ironmanMode = document.getElementById("ironman-check").checked;
 
