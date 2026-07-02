@@ -583,7 +583,9 @@ function startGameCore(isLoading = false) {
       bench: new Image(),
       door_open: new Image(),
       door_closed: new Image(),
-      path: new Image()
+      path: new Image(),
+      signpost: new Image(),
+      corpse_marker: new Image()
   };
   visuals.playerBase.onload = () => { window.drawMap(); };
   visuals.leatherArmor.onload = () => { window.drawMap(); };
@@ -645,6 +647,8 @@ function startGameCore(isLoading = false) {
   visuals.door_open.onload = () => { window.drawMap(); };
   visuals.door_closed.onload = () => { window.drawMap(); };
   visuals.path.onload = () => { window.drawMap(); };
+  visuals.signpost.onload = () => { window.drawMap(); };
+  visuals.corpse_marker.onload = () => { window.drawMap(); };
 
   visuals.playerBase.src = 'images/elf.png';
   visuals.leatherArmor.src = 'images/elfleatherarmour.png';
@@ -707,6 +711,8 @@ function startGameCore(isLoading = false) {
   visuals.door_open.src = 'images/door_open.svg';
   visuals.door_closed.src = 'images/door_closed.svg';
   visuals.path.src = 'images/path.svg';
+  visuals.signpost.src = 'images/signpost.svg';
+  visuals.corpse_marker.src = 'images/corpse_marker.svg';
 
   window.gameVisuals = visuals;
 
@@ -971,6 +977,10 @@ function renderEntities() {
               window.mapCtx.drawImage(window.gameVisuals.door_open, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'door_closed' && window.gameVisuals.door_closed.complete) {
               window.mapCtx.drawImage(window.gameVisuals.door_closed, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'signpost' && window.gameVisuals.signpost.complete) {
+              window.mapCtx.drawImage(window.gameVisuals.signpost, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'corpse_marker' && window.gameVisuals.corpse_marker.complete) {
+              window.mapCtx.drawImage(window.gameVisuals.corpse_marker, x - size/2, y - size/2, size, size);
           }
       }
   }
@@ -2290,6 +2300,12 @@ function handleClick(e){
     const doorObj = window.tileObjects && window.tileObjects[`${clickedHex.q},${clickedHex.r}`];
     if (doorObj && (doorObj.type === 'door_open' || doorObj.type === 'door_closed') && window.distance(player.hex, clickedHex) <= 1) {
         if (window.toggleDoor) window.toggleDoor(clickedHex.q, clickedHex.r);
+        return;
+    }
+
+    // READ SIGNPOST — same priority tier as the door toggle above
+    if (doorObj && doorObj.type === 'signpost' && window.distance(player.hex, clickedHex) <= 1) {
+        if (window.readSignpost) window.readSignpost();
         return;
     }
 

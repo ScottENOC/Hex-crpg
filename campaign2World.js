@@ -4,6 +4,17 @@
 // teleport" pattern proven by the arena lobby (see setupArenaLobby in
 // gameEngine.js) — same hex grid throughout, no loading screen.
 
+// Named destinations the crossroads signpost points toward — kept here so
+// quest/dialogue code referencing them (e.g. the missing-child quest) stays
+// consistent with what the sign actually says.
+window.campaign2Landmarks = {
+    capital: 'Silverhart',           // the kingdom's capital; shares the kingdom's name
+    northVillage: 'Millbrook',       // the next village on the road north, before the capital
+    eastTown: 'Reddale',
+    farmstead: "Old Mac's Farmstead",
+    crossroads: { q: 6, r: 24 }
+};
+
 // Carves a simple rectangular building: walls on the border, floor inside,
 // one open door hex. Same overrideTerrain technique as the tavern — same
 // hex grid, no separate interior map. Returns the interior bounding box so
@@ -203,6 +214,32 @@ function setupVillageScene() {
         window.regionalNPCs.baron = baron;
     }
 
+    // --- Crossroads: a short connector from the village out to a signpost,
+    // then four roads running a good distance out toward the edges of this
+    // world-map hex (mostly straight, with a gentle wiggle once well clear
+    // of the village itself). Hollowmere sits right where the north-south
+    // road passes it, with the crossroads just south of the general store.
+    const CP = window.campaign2Landmarks.crossroads;
+    for (let r = 7; r <= CP.r - 1; r++) window.setTerrainAt(CP.q, r, 'Path'); // village ring -> crossroads
+    window.setTerrainAt(CP.q, CP.r, 'Path');
+    window.tileObjects[`${CP.q},${CP.r}`] = { type: 'signpost', lightRadius: 0 };
+
+    const paintRoad = (dq, dr, length, wiggleAfter = 45, wiggleAmplitude = 2) => {
+        for (let i = 1; i <= length; i++) {
+            let q = CP.q + dq * i;
+            let r = CP.r + dr * i;
+            if (i > wiggleAfter) {
+                const wig = Math.round(Math.sin(i * 0.25) * wiggleAmplitude);
+                if (dq === 0) q += wig; else r += wig; // wiggle perpendicular to travel direction
+            }
+            window.setTerrainAt(q, r, 'Path');
+        }
+    };
+    paintRoad(0, -1, 130); // North: back past the village, on to Millbrook and the capital, Silverhart
+    paintRoad(0, 1, 130);  // South: Old Mac's Farmstead
+    paintRoad(1, 0, 130);  // East: Reddale
+    paintRoad(-1, 0, 130); // West: unmarked but for a skull and crossbones
+
     window.hollowmereEventFired = false;
 
     // Outside combat, the party should mostly move together — flip the
@@ -248,5 +285,18 @@ function toggleDoor(q, r) {
     window.renderEntities();
 }
 
+// Reads the crossroads signpost — pure flavor/navigation text, no state.
+function readSignpost() {
+    const l = window.campaign2Landmarks;
+    window.showDialogue({ name: 'Signpost' },
+        `A weathered signpost creaks at the crossroads.\n` +
+        `North: ${l.northVillage}, then the capital, ${l.capital}.\n` +
+        `South: ${l.farmstead}.\n` +
+        `East: ${l.eastTown}.\n` +
+        `West: no name — just a skull and crossbones carved into the wood.`
+    );
+}
+
 window.setupVillageScene = setupVillageScene;
 window.toggleDoor = toggleDoor;
+window.readSignpost = readSignpost;

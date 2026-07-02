@@ -91,6 +91,67 @@ window.npcDialogueTrees = {
             { label: "Just looking.", action: () => {} }
         ]);
     },
+    hendra_wells: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'missing_child');
+
+        if (!quest) {
+            window.showDialogue(npc, "My boy Tam's always off exploring — never listens. But it's been since yesterday, and he always comes home by dark. He was headed out past the crossroads, west along the old road.", [
+                {
+                    label: "I'll go look for him.",
+                    action: () => {
+                        window.questLog.push({
+                            id: 'missing_child',
+                            title: 'The Missing Boy',
+                            giver: 'Hendra Wells',
+                            status: 'active',
+                            description: "Find Tam Wells — last seen heading west along the old road, past the crossroads.",
+                            offeredAt: window.worldSeconds
+                        });
+                        window.showMessage('Quest added: The Missing Boy.');
+                    }
+                },
+                { label: "I'm sure he's fine.", action: () => {} }
+            ]);
+            return;
+        }
+
+        if (quest.status === 'active' && !quest.encounterState) {
+            window.showDialogue(npc, "Please, if you find anything out there...", [{ label: "I'm still looking.", action: () => {} }]);
+            return;
+        }
+        if (quest.status === 'active' && quest.encounterState === 'wolves') {
+            window.showDialogue(npc, "Tam! Oh, thank the gods!", [
+                {
+                    label: "Found him just in time.",
+                    action: () => {
+                        quest.status = 'completed';
+                        window.adjustReputation(npc.reputation, 20, 20);
+                        window.party[0].gold = (window.party[0].gold || 0) + 30;
+                        if (window.gainExp) window.gainExp(200);
+                        window.showMessage('Quest complete: The Missing Boy. (+30 gold)');
+                    }
+                }
+            ]);
+            return;
+        }
+        if (quest.status === 'active' && quest.encounterState === 'corpse') {
+            window.showDialogue(npc, "You... you found him. Oh, Tam.", [
+                {
+                    label: "I'm so sorry.",
+                    action: () => {
+                        quest.status = 'completed';
+                        window.adjustReputation(npc.reputation, 5, 20);
+                        window.party[0].gold = (window.party[0].gold || 0) + 10;
+                        if (window.gainExp) window.gainExp(80);
+                        window.showMessage('Quest complete: The Missing Boy. (+10 gold)');
+                    }
+                }
+            ]);
+            return;
+        }
+        window.showDialogue(npc, "Thank you again, for what it's worth now.", [{ label: "...", action: () => {} }]);
+    },
     marta_wynfield: (npc) => {
         let opening;
         if (!window.hollowmereEventFired) {
@@ -114,6 +175,7 @@ window.npcDialogueTrees = {
                     quest.status = 'completed';
                     window.adjustReputation(npc.reputation, 15, 20);
                     player.gold = (player.gold || 0) + 20;
+                    if (window.gainExp) window.gainExp(100);
                     window.showMessage('Quest complete: A Missing Locket. (+20 gold)');
                 }}
             ]);
@@ -391,6 +453,9 @@ function endOskarDuel() {
         window.adjustReputation(oskar.reputation, 10, 15);
     }
 
+    if (window.party && window.party[0]) window.party[0].gold = (window.party[0].gold || 0) + 10;
+    if (window.gainExp) window.gainExp(50);
+
     window.isInCombat = false;
     window.gamePhase = 'WAITING';
     window.currentTurnEntity = null;
@@ -406,11 +471,52 @@ function endOskarDuel() {
         description: 'A friendly sparring match with Oskar Vinn.'
     });
 
-    window.showMessage('Oskar raises a hand. "Alright, alright — you win! Not bad at all."');
+    window.showMessage('Oskar raises a hand. "Alright, alright — you win! Not bad at all." (+10 gold)');
     if (window.updateActionButtons) window.updateActionButtons();
     window.drawMap();
     window.renderEntities();
 }
+
+// Fixed wilderness spot out along the west road (see campaign2World.js's
+// crossroads) where Tam went exploring. Checked from worldTime.js's tick —
+// once the player wanders within range, this resolves the encounter based
+// on how long it's been since the quest was offered: within 3 in-game days,
+// he's found alive but under attack; after that, only a corpse remains.
+window.campaign2TamEncounterHex = { q: -60, r: 26 };
+
+function triggerMissingChildEncounter() {
+    if (!window.questLog) return;
+    const quest = window.questLog.find(q => q.id === 'missing_child');
+    if (!quest || quest.status !== 'active' || quest.encounterState) return;
+
+    const daysPassed = (window.worldSeconds - (quest.offeredAt || 0)) / (24 * 3600);
+    const hex = window.campaign2TamEncounterHex;
+
+    if (daysPassed < 3) {
+        quest.encounterState = 'wolves';
+        const tam = window.buildNPC({ ...window.campaign2Tam, hex: { q: hex.q, r: hex.r - 1 }, classLevels: [], skillPicks: [], equipment: [], side: 'neutral' });
+        window.entities.push(tam);
+        [{ q: hex.q - 1, r: hex.r }, { q: hex.q + 1, r: hex.r }].forEach(wolfHex => {
+            const wolf = window.createMonster('wolf', wolfHex, null, null, 'enemy');
+            window.entities.push(wolf);
+            window.wakeUp(wolf);
+        });
+        window.showMessage("A child's scream, close by — and the snarl of wolves!");
+    } else {
+        quest.encounterState = 'corpse';
+        window.tileObjects[`${hex.q},${hex.r}`] = { type: 'corpse_marker', lightRadius: 0 };
+        const knowsNature = window.party && window.party.some(p => window.hasKnowledgeNature(p));
+        if (knowsNature) {
+            window.showMessage("You find Tam's body, wolf tracks all around — a pack got to him days ago.");
+        } else {
+            window.showMessage("You find Tam's body. Something got to him, out here alone.");
+        }
+    }
+
+    window.drawMap();
+    window.renderEntities();
+}
+window.triggerMissingChildEncounter = triggerMissingChildEncounter;
 
 window.startHollowmereShakedown = startHollowmereShakedown;
 window.resolveShakedown = resolveShakedown;

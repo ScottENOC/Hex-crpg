@@ -400,6 +400,22 @@ const skills = {
         anti_prereq: 'elf_foliage_expertise',
         apply: (player) => {}
     },
+    'druid_knowledge_nature': {
+        name: 'Knowledge: Nature',
+        description: 'A trained eye for tracks, kills, and the wild in general — lets you read details others would miss. (Anti-requisite: elf Knowledge: Nature)',
+        tree: 'druid',
+        maxRanks: 1,
+        anti_prereq: 'elf_knowledge_nature',
+        apply: (player) => {}
+    },
+    'elf_knowledge_nature': {
+        name: 'Knowledge: Nature',
+        description: 'A trained eye for tracks, kills, and the wild in general — lets you read details others would miss. (Anti-requisite: druid Knowledge: Nature)',
+        tree: 'elf',
+        maxRanks: 1,
+        anti_prereq: 'druid_knowledge_nature',
+        apply: (player) => {}
+    },
     'dwarf_axe_mastery': {
         name: 'Dwarven Axe Mastery',
         description: 'Grants +2 damage when using an Axe.',
@@ -1498,3 +1514,11 @@ function generateMagicSkills(school, spellName, spellId) {
 }
 
 window.skills = skills;
+
+// Either the druid or elf pickup of Knowledge: Nature (mutually exclusive
+// via anti_prereq, but functionally identical) — checked wherever the game
+// wants to know "does this party member understand what happened here."
+function hasKnowledgeNature(entity) {
+    return !!(entity?.skills?.druid_knowledge_nature || entity?.skills?.elf_knowledge_nature);
+}
+window.hasKnowledgeNature = hasKnowledgeNature;

@@ -66,7 +66,8 @@ window.campaign2Npcs = [
         side: 'neutral',
         factionId: 'ironbond_company',
         color: '#7a1f1f',
-        dialogueId: 'dray_coltayne'
+        dialogueId: 'dray_coltayne',
+        expValue: 300, gold: 15
     },
     {
         name: 'Tomlin Brask',
@@ -77,7 +78,8 @@ window.campaign2Npcs = [
         equipment: ['spear', 'light_armor'],
         side: 'neutral',
         factionId: 'ironbond_company',
-        color: '#8c4b4b'
+        color: '#8c4b4b',
+        expValue: 150, gold: 10
     },
     {
         name: 'Hask Greel',
@@ -87,6 +89,7 @@ window.campaign2Npcs = [
         skillPicks: ['health', 'axe_hit', 'axe_dmg'],
         equipment: ['axe', 'light_armor'],
         side: 'neutral',
+        expValue: 150, gold: 10,
         factionId: 'ironbond_company',
         color: '#8c4b4b'
     }
@@ -97,8 +100,14 @@ window.campaign2Npcs = [
 // not a quest yet, just a reason to look north eventually.
 window.campaign2BackgroundPatrons = [
     { name: 'Yvette Marlow', title: 'Tavern Patron', race: 'human', gender: 'female', color: '#cfa8d8', dialogueId: 'yvette_marlow' },
+    { name: 'Hendra Wells', title: 'Worried Mother', race: 'human', gender: 'female', color: '#c9a06a', dialogueId: 'hendra_wells' },
     { name: 'Tavern Patron', title: 'Tavern Patron', race: 'human', gender: 'male', color: '#cfcf8a' }
 ];
+
+// Tam Wells, Hendra's son — not placed in the world at scene setup; spawned
+// dynamically out along the west road once the "missing_child" quest's
+// wilderness encounter triggers (see campaign2Dialogue.js).
+window.campaign2Tam = { name: 'Tam Wells', title: 'Village Boy', race: 'human', gender: 'male', color: '#e0c080' };
 
 // The feudal chain of authority above Hollowmere's residents. The elder is
 // placed in the village (the House building); the baron rules the barony

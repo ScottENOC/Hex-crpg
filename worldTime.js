@@ -56,6 +56,18 @@ function updateTime(delta) {
             }
         }
 
+        // The Missing Boy: wandering within range of Tam's last-known spot
+        // out along the west road resolves the encounter (see
+        // campaign2Dialogue.js's triggerMissingChildEncounter for the
+        // wolves-vs-corpse time gate).
+        if (window.campaign2TamEncounterHex && window.triggerMissingChildEncounter && p) {
+            const quest = (window.questLog || []).find(q => q.id === 'missing_child');
+            if (quest && quest.status === 'active' && !quest.encounterState &&
+                window.distance(p.hex, window.campaign2TamEncounterHex) <= 8) {
+                window.triggerMissingChildEncounter();
+            }
+        }
+
         // Faction agendas advance on their own clock, independent of whether
         // the player is engaging with them (see factions.js).
         if (window.tickFactionAgendas) window.tickFactionAgendas(delta);
