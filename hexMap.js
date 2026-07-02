@@ -99,7 +99,53 @@ function drawHex(x, y, size, style = { stroke: "#555" }) {
 // wedge on one side, and the thin seam between vertically stacked hexes —
 // all the same root cause. Clipping to the actual hex polygon fixes all of
 // them at once, regardless of what the source image looks like.
-function drawHexImage(img, x, y, zoomedSize) {
+//
+// The clip+drawImage work itself is repeated for every single hex of a
+// given terrain, every frame — with thousands of grass/path/forest hexes
+// on screen at once (especially zoomed way out), that's real per-frame
+// cost for pixel-identical output. `hexTileCache` composites each unique
+// (image, pixel size) combination into its own small offscreen canvas once,
+// and every later hex of that terrain/zoom just blits the cached canvas —
+// a single drawImage, no clip/path setup. Sizes are rounded to the nearest
+// pixel so a slowly-changing zoom reuses the same handful of cache entries
+// instead of growing unbounded.
+const hexTileCache = {};
+function getCachedHexTile(cacheKey, img, zoomedSize) {
+    const sizeKey = Math.round(zoomedSize);
+    const key = `${cacheKey}_${sizeKey}`;
+    let tile = hexTileCache[key];
+    if (tile) return tile;
+
+    const w = sizeKey * 2;
+    const h = Math.round(sizeKey * Math.sqrt(3));
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    const cx = w / 2, cy = h / 2;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+        const angle = Math.PI / 180 * (60 * i);
+        const px = cx + sizeKey * Math.cos(angle);
+        const py = cy + sizeKey * Math.sin(angle);
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.clip();
+    ctx.drawImage(img, cx - sizeKey, cy - h / 2, w, h);
+
+    hexTileCache[key] = canvas;
+    return canvas;
+}
+
+function drawHexImage(img, x, y, zoomedSize, cacheKey) {
+    if (cacheKey) {
+        const tile = getCachedHexTile(cacheKey, img, zoomedSize);
+        mapCtx.drawImage(tile, x - tile.width / 2, y - tile.height / 2);
+        return;
+    }
+    // No stable cache key (e.g. per-hex-random arena floor variants) —
+    // fall back to drawing directly, clipped but uncached.
     mapCtx.save();
     mapCtx.beginPath();
     for (let i = 0; i < 6; i++) {
@@ -169,7 +215,7 @@ function drawMap() {
           const floorNum = Math.floor(noise * 4) + 1;
           const floorImg = window.gameVisuals[`floor${floorNum}`];
           if (imgOk(floorImg)) {
-              drawHexImage(floorImg, x, y, zoomedSize);
+              drawHexImage(floorImg, x, y, zoomedSize, `floor${floorNum}`);
           } else {
               drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
           }
@@ -186,16 +232,16 @@ function drawMap() {
           const blockedHexes = [{q: q, r: r-1}, {q: q+1, r: r-1}];
           const needsTransparency = window.entities.some(e => e.alive && blockedHexes.some(bh => e.getAllHexes().some(h => h.q === bh.q && h.r === bh.r)));
           if (needsTransparency) mapCtx.globalAlpha = 0.5;
-          drawHexImage(window.gameVisuals.pedestal, x, y, zoomedSize);
+          drawHexImage(window.gameVisuals.pedestal, x, y, zoomedSize, 'pedestal');
           if (needsTransparency) mapCtx.globalAlpha = 1.0;
       } else if (terrain.name === 'Foliage' && imgOk(window.gameVisuals.foliage)) {
-          drawHexImage(window.gameVisuals.foliage, x, y, zoomedSize);
+          drawHexImage(window.gameVisuals.foliage, x, y, zoomedSize, 'foliage');
       } else if (terrain.name === 'Wood Floor' && imgOk(window.gameVisuals.wood_floor)) {
-          drawHexImage(window.gameVisuals.wood_floor, x, y, zoomedSize);
+          drawHexImage(window.gameVisuals.wood_floor, x, y, zoomedSize, 'wood_floor');
       } else if (terrain.name === 'Path' && imgOk(window.gameVisuals.path)) {
-          drawHexImage(window.gameVisuals.path, x, y, zoomedSize);
+          drawHexImage(window.gameVisuals.path, x, y, zoomedSize, 'path');
       } else if (terrain.name === 'Dirt' && imgOk(window.gameVisuals.dirt)) {
-          drawHexImage(window.gameVisuals.dirt, x, y, zoomedSize);
+          drawHexImage(window.gameVisuals.dirt, x, y, zoomedSize, 'dirt');
       } else if (terrain.name !== 'Water') {
           drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
       } else {
@@ -215,7 +261,7 @@ function drawMap() {
           const {x, y} = hexToPixel(q, r);
           const zoomedSize = hexSize * window.cameraZoom;
           mapCtx.globalAlpha = 0.5;
-          drawHexImage(window.gameVisuals.water, x, y, zoomedSize);
+          drawHexImage(window.gameVisuals.water, x, y, zoomedSize, 'water');
           mapCtx.globalAlpha = 1.0;
       }
   });
@@ -610,7 +656,7 @@ function initHexMap() {
         const worldX = (mouseX - window.cameraX) / window.cameraZoom;
         const worldY = (mouseY - window.cameraY) / window.cameraZoom;
 
-        const newZoom = Math.min(Math.max(0.05, window.cameraZoom * delta), 5.0);
+        const newZoom = Math.min(Math.max(0.15, window.cameraZoom * delta), 5.0);
         
         window.cameraZoom = newZoom;
 
@@ -685,7 +731,7 @@ function initHexMap() {
             const worldX = (centerX - window.cameraX) / window.cameraZoom;
             const worldY = (centerY - window.cameraY) / window.cameraZoom;
 
-            window.cameraZoom = Math.min(Math.max(0.05, window.cameraZoom * delta), 5.0);
+            window.cameraZoom = Math.min(Math.max(0.15, window.cameraZoom * delta), 5.0);
             window.cameraX = centerX - worldX * window.cameraZoom;
             window.cameraY = centerY - worldY * window.cameraZoom;
 
