@@ -223,6 +223,25 @@ window.hollowmereStoreStock = {
     torch: 5, potion_health: 4
 };
 
+// Ironvein: a mining settlement two world-hexes west of Hollowmere, past
+// the Skarn-tooth goblin camp on the same road. Placed by buildIronvein()
+// in campaign2World.js; dialogue branches on the goblin_threat quest's
+// resolution state (see campaign2Dialogue.js).
+window.campaign2IronveinForeman = {
+    name: 'Corran Vale', title: 'Foreman of Ironvein',
+    race: 'human', gender: 'male',
+    classLevels: ['fighter'], skillPicks: ['health', 'sword_hit'], equipment: ['sword', 'light_armor'],
+    side: 'neutral', factionId: 'silverhart_kingdom', color: '#8a6d4a',
+    dialogueId: 'corran_vale'
+};
+window.campaign2IronveinMiner = {
+    name: 'Bettina Marrow', title: 'Miner',
+    race: 'dwarf', gender: 'female',
+    classLevels: ['fighter'], skillPicks: ['health'], equipment: ['club'],
+    side: 'neutral', factionId: 'silverhart_kingdom', color: '#5a5a5a',
+    dialogueId: 'ironvein_miner'
+};
+
 window.campaign2Baron = {
     name: 'Baron Corwin Aldervale',
     title: 'Baron of Aldervale',

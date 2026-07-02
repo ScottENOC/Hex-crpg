@@ -112,6 +112,9 @@ function updateTime(delta) {
         // unresolved goblin problem wears down, very slowly, once he's
         // already in the party.
         if (window.checkGoblinAssaultResolution) window.checkGoblinAssaultResolution();
+
+        // Ore Road Reopened: resolves once the ambush stragglers (if any) are down.
+        if (window.checkIronveinEscortResolution) window.checkIronveinEscortResolution();
         if (window.tickCompanionPatience) window.tickCompanionPatience(delta);
 
         // Faction agendas advance on their own clock, independent of whether

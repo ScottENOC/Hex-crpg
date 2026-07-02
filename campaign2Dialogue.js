@@ -327,6 +327,86 @@ window.npcDialogueTrees = {
             }
         ]);
     },
+    corran_vale: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const goblinQuest = window.questLog.find(q => q.id === 'goblin_threat');
+        const resolvedSafe = !!(goblinQuest && goblinQuest.resolution && goblinQuest.resolution !== 'betrayal');
+        const betrayed = !!(goblinQuest && goblinQuest.resolution === 'betrayal');
+        let buriedRoad = window.questLog.find(q => q.id === 'buried_road');
+        let oreRoad = window.questLog.find(q => q.id === 'ore_road_reopened');
+
+        if (betrayed) {
+            window.showDialogue(npc, "Whatever's happening with the goblins now, it's worse, not better. We've pulled everyone we can spare back behind the hall doors. Ironvein isn't shipping anything until this passes.", [
+                { label: "I'm sorry.", action: () => {} }
+            ]);
+            return;
+        }
+
+        if (oreRoad && oreRoad.status === 'completed') {
+            window.showDialogue(npc, "First wagon home safe, thanks to you. We'll remember that, out here.", [
+                { label: "Glad to help.", action: () => {} }
+            ]);
+            return;
+        }
+        if (oreRoad && oreRoad.status === 'active') {
+            window.showDialogue(npc, "Wagon's loaded and hitched whenever you're ready to see it down the road.", [
+                { label: "I'll get it moving.", action: () => window.startIronveinEscort() },
+                { label: "Not yet.", action: () => {} }
+            ]);
+            return;
+        }
+        if (resolvedSafe) {
+            if (buriedRoad) buriedRoad.status = 'completed';
+            window.showDialogue(npc, "Word reached us the Skarn-tooth business is settled. Can't tell you what that's worth to us — we've been running half-crews and losing carts for a season. First shipment in weeks, and I'd feel a lot better with an escort. Interested?", [
+                {
+                    label: "I'll see it there safely.",
+                    action: () => {
+                        window.questLog.push({
+                            id: 'ore_road_reopened', title: 'Ore Road Reopened', giver: 'Corran Vale', status: 'active',
+                            description: 'Escort Ironvein\'s first ore wagon safely down the road to Hollowmere.',
+                            offeredAt: window.worldSeconds
+                        });
+                        window.showMessage("Corran claps you on the shoulder. \"Wagon's being loaded now. Come find me when you're ready.\"");
+                    }
+                },
+                { label: "Maybe later.", action: () => {} }
+            ]);
+            return;
+        }
+
+        if (!buriedRoad) {
+            window.showDialogue(npc, "You're not from around here. Careful on that road — the Skarn-tooth tribe's dug in east of here, and they've taken three carts off us this month alone. Half my crew won't run it anymore.", [
+                {
+                    label: "I'll see what I can do about the goblins.",
+                    action: () => {
+                        window.questLog.push({
+                            id: 'buried_road', title: 'The Buried Road', giver: 'Corran Vale', status: 'active',
+                            description: "Deal with the Skarn-tooth tribe so Ironvein's ore carts can run the west road again."
+                        });
+                        window.showMessage('Corran nods, grim. "Do that, and Ironvein owes you a debt."');
+                    }
+                },
+                { label: "Not my problem.", action: () => {} }
+            ]);
+        } else {
+            window.showDialogue(npc, "Still no word the road's any safer. Whatever you're doing about those goblins, we're all hoping it works.", [
+                { label: "Working on it.", action: () => {} }
+            ]);
+        }
+    },
+    ironvein_miner: (npc) => {
+        const goblinQuest = window.questLog && window.questLog.find(q => q.id === 'goblin_threat');
+        const resolvedSafe = !!(goblinQuest && goblinQuest.resolution && goblinQuest.resolution !== 'betrayal');
+        if (resolvedSafe) {
+            window.showDialogue(npc, "First good night's sleep I've had in a season, knowing the road's clear. Corran says we might even be back to full crews by next month.", [
+                { label: "Good to hear.", action: () => {} }
+            ]);
+        } else {
+            window.showDialogue(npc, "Ore's still in the ground same as ever — it's getting it out that's the trouble. Nobody wants to run the west road with the Skarn-tooth camp sitting right on it.", [
+                { label: "Hang in there.", action: () => {} }
+            ]);
+        }
+    },
     marta_wynfield: (npc) => {
         let opening;
         if (!window.hollowmereEventFired) {
@@ -1064,6 +1144,60 @@ function resolveGoblinSuccession() {
     window.renderEntities();
 }
 window.resolveGoblinSuccession = resolveGoblinSuccession;
+
+// --- Ore Road Reopened: escorting Ironvein's first wagon home after the
+// goblin_threat quest is resolved. A peaceful (diplomacy) resolution means
+// the tribe is actually gone and the road really is clear; the other
+// resolutions leave a few Skarn-tooth stragglers behind who didn't get the
+// word — a small ambush partway back, same pattern as the farm's wolves
+// (triggerFarmWolfEncounter). ---
+function startIronveinEscort() {
+    const quest = window.questLog && window.questLog.find(q => q.id === 'ore_road_reopened');
+    if (!quest || quest.status !== 'active') return;
+    quest.encounterState = 'departed';
+    window.showMessage("The wagon creaks into motion, wheels finding the ruts of the old road east.");
+
+    const goblinQuest = window.questLog.find(q => q.id === 'goblin_threat');
+    const peaceful = goblinQuest && goblinQuest.resolution === 'goblin_diplomacy';
+    if (peaceful) {
+        completeIronveinEscort();
+        return;
+    }
+
+    const ambushHex = window.campaign2IronveinAmbushHex;
+    [{ q: ambushHex.q - 1, r: ambushHex.r - 1 }, { q: ambushHex.q + 1, r: ambushHex.r }].forEach(hex => {
+        const goblin = window.createMonster('goblin', hex, null, null, 'enemy');
+        goblin.ironveinAmbushGoblin = true;
+        window.entities.push(goblin);
+        window.wakeUp(goblin);
+    });
+    window.showMessage("Skarn-tooth stragglers burst from the brush — the tribe's gone, but not everyone got the message!");
+    window.drawMap();
+    window.renderEntities();
+}
+window.startIronveinEscort = startIronveinEscort;
+
+function completeIronveinEscort() {
+    const quest = window.questLog && window.questLog.find(q => q.id === 'ore_road_reopened');
+    if (!quest || quest.status === 'completed') return;
+    quest.status = 'completed';
+    if (window.gainExp) window.gainExp(60);
+    if (window.party && window.party[0]) window.party[0].gold = (window.party[0].gold || 0) + 40;
+    if (window.cascadeRegionStat) window.cascadeRegionStat('hollowmere', 'prosperity', 8);
+    if (window.adjustRegionStat) window.adjustRegionStat('ironvein', 'prosperity', 15);
+    window.showMessage("The wagon rolls safely into Hollowmere — Ironvein's ore is moving again. (+40 gold, quest complete: Ore Road Reopened)");
+}
+window.completeIronveinEscort = completeIronveinEscort;
+
+// Watched from worldTime.js's tick, same pattern as checkGoblinAssaultResolution.
+function checkIronveinEscortResolution() {
+    if (!window.questLog) return;
+    const quest = window.questLog.find(q => q.id === 'ore_road_reopened');
+    if (!quest || quest.status !== 'active' || quest.encounterState !== 'departed') return;
+    const ambushGoblinsAlive = window.entities.some(e => e.ironveinAmbushGoblin && e.alive);
+    if (!ambushGoblinsAlive) completeIronveinEscort();
+}
+window.checkIronveinEscortResolution = checkIronveinEscortResolution;
 
 window.startHollowmereShakedown = startHollowmereShakedown;
 window.resolveShakedown = resolveShakedown;

@@ -440,12 +440,21 @@ function setupVillageScene() {
     });
     const farmRoadEnd = paintRoad({ q: 0, r: 1 }, WORLD_HEX_SIZE + 40); // South: past the hex border, to Old Mac's Farmstead
     paintRoad({ q: 1, r: 0 }, WORLD_HEX_SIZE); // East: Reddale
-    const westRoadEnd = paintRoad({ q: -1, r: 0 }, WORLD_HEX_SIZE); // West: unmarked but for a skull and crossbones
+    // West: runs a full two world hexes now — the goblin camp sits at the
+    // original one-hex border (captured via onStep so its position is
+    // unchanged from before), and Ironvein (village + gold mine) sits a
+    // second hex further out, the same "extend the road, add a stub
+    // settlement at the new end" pattern used for Millbrook up north.
+    let goblinCampWaypoint = null;
+    const westRoadEnd = paintRoad({ q: -1, r: 0 }, WORLD_HEX_SIZE * 2, 45, 0.12, (i, hex) => {
+        if (i === WORLD_HEX_SIZE) goblinCampWaypoint = hex;
+    });
 
     buildFarmstead(farmRoadEnd);
-    buildGoblinCamp(westRoadEnd);
+    buildGoblinCamp(goblinCampWaypoint);
     buildAbandonedHouse(abandonedHouseWaypoint);
     buildMillbrook(northRoadEnd);
+    buildIronvein(westRoadEnd);
 
     window.hollowmereEventFired = false;
 
@@ -505,6 +514,57 @@ function readSignpost() {
     );
 }
 
+// Ironvein: a larger settlement two world-hexes west of Hollowmere (a full
+// world-hex further out than the goblin camp, which sits at the first
+// border — see setupVillageScene's westRoadEnd/goblinCampWaypoint split).
+// A foreman's hall, a bunkhouse, and a small carved mine-tunnel interior
+// with a ledger to read. Before the Skarn-tooth goblins are dealt with
+// (window.questLog's goblin_threat quest, still unresolved), the road here
+// is too dangerous to run ore carts on and the mine is short-staffed; once
+// resolved (any path), the road reopens (see readIronveinLedger/the
+// "Ore Road Reopened" quest in campaign2Dialogue.js).
+// Each building sits on its own arm off the road's endpoint (hall to the
+// west, bunkhouse south, mine north) rather than clustered together, so no
+// spur's straight-line path ever has to cross another building's footprint.
+function buildIronvein(roadEnd) {
+    const center = { q: roadEnd.q - 4, r: roadEnd.r };
+
+    const hallDoor = { q: center.q + 3, r: center.r };
+    const hallRegion = carveBuilding(center.q, center.r, 3, 2, hallDoor, 'Wood Floor');
+    window.interiorRegions.push(hallRegion);
+    window.tileObjects[`${center.q},${center.r}`] = { type: 'fireplace', lightRadius: 6 };
+    for (let q = hallDoor.q + 1; q < roadEnd.q; q++) window.setTerrainAt(q, roadEnd.r, 'Path');
+
+    const bunkCenter = { q: roadEnd.q, r: roadEnd.r + 6 };
+    const bunkDoor = { q: bunkCenter.q, r: bunkCenter.r - 2 };
+    const bunkRegion = carveBuilding(bunkCenter.q, bunkCenter.r, 3, 2, bunkDoor, 'Wood Floor');
+    window.interiorRegions.push(bunkRegion);
+    for (let r = roadEnd.r + 1; r < bunkDoor.r; r++) window.setTerrainAt(roadEnd.q, r, 'Path');
+
+    const mineCenter = { q: roadEnd.q, r: roadEnd.r - 6 };
+    const mineDoor = { q: mineCenter.q, r: mineCenter.r + 2 };
+    const mineRegion = carveBuilding(mineCenter.q, mineCenter.r, 3, 2, mineDoor, 'Cave Floor');
+    window.interiorRegions.push(mineRegion);
+    window.tileObjects[`${mineCenter.q},${mineCenter.r}`] = { type: 'journal', lightRadius: 0, readId: 'ironvein_ledger' };
+    for (let r = mineDoor.r + 1; r < roadEnd.r; r++) window.setTerrainAt(roadEnd.q, r, 'Path');
+
+    window.campaign2IronveinCenter = center;
+    window.campaign2IronveinAmbushHex = { q: roadEnd.q + 15, r: roadEnd.r }; // partway back toward Hollowmere
+
+    if (window.campaign2IronveinForeman) {
+        window.entities.push(window.buildNPC({ ...window.campaign2IronveinForeman, hex: { q: center.q - 1, r: center.r } }));
+    }
+    if (window.campaign2IronveinMiner) {
+        window.entities.push(window.buildNPC({ ...window.campaign2IronveinMiner, hex: { q: bunkCenter.q - 1, r: bunkCenter.r } }));
+    }
+
+    // Two world-hexes west of Hollowmere [6][6] (Millbrook, three hexes
+    // north, registers at [3][6] the same way — one row/col per world-hex).
+    if (window.worldMapData && window.worldMapData[6] && window.worldMapData[6][4] !== undefined) {
+        window.worldMapData[6][4] = { t: 'G', f: 'V', o: 'h', p: 1, n: 'Ironvein' };
+    }
+}
+
 // Reads the journal at the abandoned house — the first breadcrumb toward
 // the necromancer/lichdom plot arc. Knowledge: Religion reveals specifics
 // (phylactery, a soul-binding ritual) that the vague version only hints at.
@@ -537,6 +597,22 @@ function readGoblinScoutNote() {
     );
 }
 window.readGoblinScoutNote = readGoblinScoutNote;
+
+// Ironvein's production ledger — reads differently once the goblin_threat
+// quest is resolved (any path), since that's what actually reopens the road.
+function readIronveinLedger() {
+    const quest = window.questLog && window.questLog.find(q => q.id === 'goblin_threat');
+    if (quest && quest.resolution) {
+        window.showDialogue({ name: 'Ledger' },
+            "The most recent entries are a different hand than the rest — steadier. Cart counts climbing week over week, a note in the margin: \"Road's clear again. Back to full crews by the new moon.\""
+        );
+    } else {
+        window.showDialogue({ name: 'Ledger' },
+            "Weeks of thin entries: half-crews, carts turned back, one line just reading \"lost another cart to the greenskins — Corran says hold the line.\" Whatever this mine used to produce, it isn't producing it now."
+        );
+    }
+}
+window.readIronveinLedger = readIronveinLedger;
 
 window.setupVillageScene = setupVillageScene;
 window.toggleDoor = toggleDoor;
