@@ -2358,10 +2358,10 @@ function handleClick(e){
     }
 
     // READ JOURNAL — same priority tier, used by the abandoned house and
-    // (via readId) the goblin camp's foreign-make note and Ironvein's ledger
+    // (via readId) the goblin camp's foreign-make note and Emberlode's ledger
     if (doorObj && doorObj.type === 'journal' && window.distance(player.hex, clickedHex) <= 1) {
         if (doorObj.readId === 'goblin_scout_note' && window.readGoblinScoutNote) { window.readGoblinScoutNote(); return; }
-        if (doorObj.readId === 'ironvein_ledger' && window.readIronveinLedger) { window.readIronveinLedger(); return; }
+        if (doorObj.readId === 'emberlode_ledger' && window.readEmberlodeLedger) { window.readEmberlodeLedger(); return; }
         if (window.readAbandonedHouseJournal) window.readAbandonedHouseJournal();
         return;
     }

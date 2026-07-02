@@ -89,6 +89,33 @@ function drawHex(x, y, size, style = { stroke: "#555" }) {
   }
 }
 
+// Draws a terrain image clipped to the true flat-top hex shape. A flat-top
+// hex with "radius" size is 2*size wide but only sqrt(3)*size tall — drawing
+// a plain square image at 2*size square (as terrain rendering used to)
+// overflows above/below the hex into neighboring hexes' screen space, and
+// since hexes are drawn in column-major order, later-drawn neighbors then
+// partially overwrite earlier ones. That's what caused the path tile's
+// "chevron"/vertical-line artifact, the fog-of-war shadow overlay missing a
+// wedge on one side, and the thin seam between vertically stacked hexes —
+// all the same root cause. Clipping to the actual hex polygon fixes all of
+// them at once, regardless of what the source image looks like.
+function drawHexImage(img, x, y, zoomedSize) {
+    mapCtx.save();
+    mapCtx.beginPath();
+    for (let i = 0; i < 6; i++) {
+        const angle = Math.PI / 180 * (60 * i);
+        const px = x + zoomedSize * Math.cos(angle);
+        const py = y + zoomedSize * Math.sin(angle);
+        if (i === 0) mapCtx.moveTo(px, py);
+        else mapCtx.lineTo(px, py);
+    }
+    mapCtx.closePath();
+    mapCtx.clip();
+    const h = zoomedSize * Math.sqrt(3);
+    mapCtx.drawImage(img, x - zoomedSize, y - h / 2, zoomedSize * 2, h);
+    mapCtx.restore();
+}
+
 function getVisibleHexes() {
     const rect = mapCanvas.getBoundingClientRect();
     const margin = 2 * hexSize * window.cameraZoom;
@@ -142,12 +169,13 @@ function drawMap() {
           const floorNum = Math.floor(noise * 4) + 1;
           const floorImg = window.gameVisuals[`floor${floorNum}`];
           if (imgOk(floorImg)) {
-              mapCtx.drawImage(floorImg, x - zoomedSize, y - zoomedSize, zoomedSize * 2, zoomedSize * 2);
+              drawHexImage(floorImg, x, y, zoomedSize);
           } else {
               drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
           }
 
-          // Overlays (10% Blood, 1% Skull)
+          // Overlays (10% Blood, 1% Skull) — already smaller than the hex,
+          // so no clipping needed.
           if (noise < 0.1 && imgOk(window.gameVisuals.overlay_blood)) {
               mapCtx.drawImage(window.gameVisuals.overlay_blood, x - zoomedSize/2, y - zoomedSize/2, zoomedSize, zoomedSize);
           } else if (noise > 0.99 && imgOk(window.gameVisuals.overlay_skull)) {
@@ -158,16 +186,16 @@ function drawMap() {
           const blockedHexes = [{q: q, r: r-1}, {q: q+1, r: r-1}];
           const needsTransparency = window.entities.some(e => e.alive && blockedHexes.some(bh => e.getAllHexes().some(h => h.q === bh.q && h.r === bh.r)));
           if (needsTransparency) mapCtx.globalAlpha = 0.5;
-          mapCtx.drawImage(window.gameVisuals.pedestal, x - zoomedSize, y - zoomedSize, zoomedSize * 2, zoomedSize * 2);
+          drawHexImage(window.gameVisuals.pedestal, x, y, zoomedSize);
           if (needsTransparency) mapCtx.globalAlpha = 1.0;
       } else if (terrain.name === 'Foliage' && imgOk(window.gameVisuals.foliage)) {
-          mapCtx.drawImage(window.gameVisuals.foliage, x - zoomedSize, y - zoomedSize, zoomedSize * 2, zoomedSize * 2);
+          drawHexImage(window.gameVisuals.foliage, x, y, zoomedSize);
       } else if (terrain.name === 'Wood Floor' && imgOk(window.gameVisuals.wood_floor)) {
-          mapCtx.drawImage(window.gameVisuals.wood_floor, x - zoomedSize, y - zoomedSize, zoomedSize * 2, zoomedSize * 2);
+          drawHexImage(window.gameVisuals.wood_floor, x, y, zoomedSize);
       } else if (terrain.name === 'Path' && imgOk(window.gameVisuals.path)) {
-          mapCtx.drawImage(window.gameVisuals.path, x - zoomedSize, y - zoomedSize, zoomedSize * 2, zoomedSize * 2);
+          drawHexImage(window.gameVisuals.path, x, y, zoomedSize);
       } else if (terrain.name === 'Dirt' && imgOk(window.gameVisuals.dirt)) {
-          mapCtx.drawImage(window.gameVisuals.dirt, x - zoomedSize, y - zoomedSize, zoomedSize * 2, zoomedSize * 2);
+          drawHexImage(window.gameVisuals.dirt, x, y, zoomedSize);
       } else if (terrain.name !== 'Water') {
           drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
       } else {
@@ -187,7 +215,7 @@ function drawMap() {
           const {x, y} = hexToPixel(q, r);
           const zoomedSize = hexSize * window.cameraZoom;
           mapCtx.globalAlpha = 0.5;
-          mapCtx.drawImage(window.gameVisuals.water, x - zoomedSize, y - zoomedSize, zoomedSize * 2, zoomedSize * 2);
+          drawHexImage(window.gameVisuals.water, x, y, zoomedSize);
           mapCtx.globalAlpha = 1.0;
       }
   });

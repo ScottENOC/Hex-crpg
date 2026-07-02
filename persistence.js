@@ -38,6 +38,7 @@ function saveGame(saveName = "rpg_save_game") {
         hollowmereQuestOfferFired: window.hollowmereQuestOfferFired,
         campaign2AbandonedHouseTriggered: window.campaign2AbandonedHouseTriggered,
         goblinScoutNoteRead: window.goblinScoutNoteRead,
+        emberlodeRaided: window.emberlodeRaided,
         questLog: window.questLog,
         worldMapNotes: window.worldMapNotes,
         // The baron is a reputation-only NPC not placed in window.entities
@@ -139,6 +140,7 @@ function loadGame(saveName = "rpg_save_game") {
         window.hollowmereQuestOfferFired = gameState.hollowmereQuestOfferFired || false;
         window.campaign2AbandonedHouseTriggered = gameState.campaign2AbandonedHouseTriggered || false;
         window.goblinScoutNoteRead = gameState.goblinScoutNoteRead || false;
+        window.emberlodeRaided = gameState.emberlodeRaided || false;
         window.questLog = gameState.questLog || [];
         window.worldMapNotes = gameState.worldMapNotes || {};
         // Always false on load, regardless of what was saved — loading a

@@ -489,7 +489,7 @@ function setupVillageScene() {
     paintRoad({ q: 1, r: 0 }, WORLD_HEX_SIZE); // East: Reddale
     // West: runs a full two world hexes now — the goblin camp sits at the
     // original one-hex border (captured via onStep so its position is
-    // unchanged from before), and Ironvein (village + gold mine) sits a
+    // unchanged from before), and Emberlode (village + gold mine) sits a
     // second hex further out, the same "extend the road, add a stub
     // settlement at the new end" pattern used for Millbrook up north.
     let goblinCampWaypoint = null;
@@ -501,7 +501,7 @@ function setupVillageScene() {
     buildGoblinCamp(goblinCampWaypoint);
     buildAbandonedHouse(abandonedHouseWaypoint);
     buildMillbrook(northRoadEnd);
-    buildIronvein(westRoadEnd);
+    buildEmberlode(westRoadEnd);
 
     window.hollowmereEventFired = false;
 
@@ -552,7 +552,7 @@ function toggleDoor(q, r) {
 // Reads the crossroads signpost — pure flavor/navigation text, no state.
 function readSignpost() {
     const l = window.campaign2Landmarks;
-    window.showDialogue({ name: 'Signpost' },
+    window.showDialogue({ name: 'Signpost', customImage: 'journal' },
         `A weathered signpost creaks at the crossroads.\n` +
         `North: ${l.northVillage}, then the capital, ${l.capital}.\n` +
         `South: ${l.farmstead}.\n` +
@@ -561,19 +561,19 @@ function readSignpost() {
     );
 }
 
-// Ironvein: a larger settlement two world-hexes west of Hollowmere (a full
+// Emberlode: a larger settlement two world-hexes west of Hollowmere (a full
 // world-hex further out than the goblin camp, which sits at the first
 // border — see setupVillageScene's westRoadEnd/goblinCampWaypoint split).
 // A foreman's hall, a bunkhouse, and a small carved mine-tunnel interior
 // with a ledger to read. Before the Skarn-tooth goblins are dealt with
 // (window.questLog's goblin_threat quest, still unresolved), the road here
 // is too dangerous to run ore carts on and the mine is short-staffed; once
-// resolved (any path), the road reopens (see readIronveinLedger/the
+// resolved (any path), the road reopens (see readEmberlodeLedger/the
 // "Ore Road Reopened" quest in campaign2Dialogue.js).
 // Each building sits on its own arm off the road's endpoint (hall to the
 // west, bunkhouse south, mine north) rather than clustered together, so no
 // spur's straight-line path ever has to cross another building's footprint.
-function buildIronvein(roadEnd) {
+function buildEmberlode(roadEnd) {
     const center = { q: roadEnd.q - 4, r: roadEnd.r };
 
     const hallDoor = { q: center.q + 3, r: center.r };
@@ -592,23 +592,23 @@ function buildIronvein(roadEnd) {
     const mineDoor = { q: mineCenter.q, r: mineCenter.r + 2 };
     const mineRegion = carveBuilding(mineCenter.q, mineCenter.r, 3, 2, mineDoor, 'Cave Floor');
     window.interiorRegions.push(mineRegion);
-    window.tileObjects[`${mineCenter.q},${mineCenter.r}`] = { type: 'journal', lightRadius: 0, readId: 'ironvein_ledger' };
+    window.tileObjects[`${mineCenter.q},${mineCenter.r}`] = { type: 'journal', lightRadius: 0, readId: 'emberlode_ledger' };
     for (let r = mineDoor.r + 1; r < roadEnd.r; r++) window.setTerrainAt(roadEnd.q, r, 'Path');
 
-    window.campaign2IronveinCenter = center;
-    window.campaign2IronveinAmbushHex = { q: roadEnd.q + 15, r: roadEnd.r }; // partway back toward Hollowmere
+    window.campaign2EmberlodeCenter = center;
+    window.campaign2EmberlodeAmbushHex = { q: roadEnd.q + 15, r: roadEnd.r }; // partway back toward Hollowmere
 
-    if (window.campaign2IronveinForeman) {
-        window.entities.push(window.buildNPC({ ...window.campaign2IronveinForeman, hex: { q: center.q - 1, r: center.r } }));
+    if (window.campaign2EmberlodeForeman) {
+        window.entities.push(window.buildNPC({ ...window.campaign2EmberlodeForeman, hex: { q: center.q - 1, r: center.r } }));
     }
-    if (window.campaign2IronveinMiner) {
-        window.entities.push(window.buildNPC({ ...window.campaign2IronveinMiner, hex: { q: bunkCenter.q - 1, r: bunkCenter.r } }));
+    if (window.campaign2EmberlodeMiner) {
+        window.entities.push(window.buildNPC({ ...window.campaign2EmberlodeMiner, hex: { q: bunkCenter.q - 1, r: bunkCenter.r } }));
     }
 
     // Two world-hexes west of Hollowmere [6][6] (Millbrook, three hexes
     // north, registers at [3][6] the same way — one row/col per world-hex).
     if (window.worldMapData && window.worldMapData[6] && window.worldMapData[6][4] !== undefined) {
-        window.worldMapData[6][4] = { t: 'G', f: 'V', o: 'h', p: 1, n: 'Ironvein' };
+        window.worldMapData[6][4] = { t: 'G', f: 'V', o: 'h', p: 1, n: 'Emberlode' };
     }
 }
 
@@ -618,11 +618,11 @@ function buildIronvein(roadEnd) {
 function readAbandonedHouseJournal() {
     const knowsReligion = window.party && window.party.some(p => window.hasKnowledgeReligion(p));
     if (knowsReligion) {
-        window.showDialogue({ name: 'Journal' },
+        window.showDialogue({ name: 'Journal', customImage: 'journal' },
             "The handwriting is frantic in places, careful in others. Early pages complain of neighbors and bad harvests. Later ones turn strange: notes on binding a soul to a vessel, on preparing \"the vessel\" before the body fails, half-finished diagrams that look uncomfortably like a phylactery. Whoever lived here wasn't just killed by the skeletons outside — they were close, terribly close, to becoming something that doesn't die at all."
         );
     } else {
-        window.showDialogue({ name: 'Journal' },
+        window.showDialogue({ name: 'Journal', customImage: 'journal' },
             "A journal, water-stained and half-legible. Pages of ordinary complaints — bad harvests, noisy neighbors — give way to frantic, cramped handwriting you can't make sense of: something about \"the vessel,\" about being almost ready. Whatever it means, it isn't good."
         );
     }
@@ -639,27 +639,27 @@ function readGoblinScoutNote() {
         window.goblinScoutNoteRead = true;
         if (window.cascadeRegionStat) window.cascadeRegionStat('hollowmere', 'security', -3);
     }
-    window.showDialogue({ name: 'Note' },
+    window.showDialogue({ name: 'Note', customImage: 'journal' },
         "A scrap of oilcloth, tucked inside the hut — not goblin make, and not goblin script. A crude map marks Hollowmere and the roads around it with small tally marks, dated across several months. At the bottom, in a different hand: \"Count their walls. Count their swords. Report back before the frost.\""
     );
 }
 window.readGoblinScoutNote = readGoblinScoutNote;
 
-// Ironvein's production ledger — reads differently once the goblin_threat
+// Emberlode's production ledger — reads differently once the goblin_threat
 // quest is resolved (any path), since that's what actually reopens the road.
-function readIronveinLedger() {
+function readEmberlodeLedger() {
     const quest = window.questLog && window.questLog.find(q => q.id === 'goblin_threat');
     if (quest && quest.resolution) {
-        window.showDialogue({ name: 'Ledger' },
+        window.showDialogue({ name: 'Ledger', customImage: 'journal' },
             "The most recent entries are a different hand than the rest — steadier. Cart counts climbing week over week, a note in the margin: \"Road's clear again. Back to full crews by the new moon.\""
         );
     } else {
-        window.showDialogue({ name: 'Ledger' },
+        window.showDialogue({ name: 'Ledger', customImage: 'journal' },
             "Weeks of thin entries: half-crews, carts turned back, one line just reading \"lost another cart to the greenskins — Corran says hold the line.\" Whatever this mine used to produce, it isn't producing it now."
         );
     }
 }
-window.readIronveinLedger = readIronveinLedger;
+window.readEmberlodeLedger = readEmberlodeLedger;
 
 window.setupVillageScene = setupVillageScene;
 window.toggleDoor = toggleDoor;

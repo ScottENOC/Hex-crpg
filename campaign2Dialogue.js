@@ -335,8 +335,15 @@ window.npcDialogueTrees = {
         let buriedRoad = window.questLog.find(q => q.id === 'buried_road');
         let oreRoad = window.questLog.find(q => q.id === 'ore_road_reopened');
 
+        if (window.emberlodeRaided) {
+            window.showDialogue(npc, "Goblins came down out of nowhere and cleaned us out — strongbox, ore stores, the lot. Nobody killed, small mercy, but we've nothing left to run carts with even if the road were safe.", [
+                { label: "That's rough.", action: () => {} }
+            ]);
+            return;
+        }
+
         if (betrayed) {
-            window.showDialogue(npc, "Whatever's happening with the goblins now, it's worse, not better. We've pulled everyone we can spare back behind the hall doors. Ironvein isn't shipping anything until this passes.", [
+            window.showDialogue(npc, "Whatever's happening with the goblins now, it's worse, not better. We've pulled everyone we can spare back behind the hall doors. Emberlode isn't shipping anything until this passes.", [
                 { label: "I'm sorry.", action: () => {} }
             ]);
             return;
@@ -350,7 +357,7 @@ window.npcDialogueTrees = {
         }
         if (oreRoad && oreRoad.status === 'active') {
             window.showDialogue(npc, "Wagon's loaded and hitched whenever you're ready to see it down the road.", [
-                { label: "I'll get it moving.", action: () => window.startIronveinEscort() },
+                { label: "I'll get it moving.", action: () => window.startEmberlodeEscort() },
                 { label: "Not yet.", action: () => {} }
             ]);
             return;
@@ -363,7 +370,7 @@ window.npcDialogueTrees = {
                     action: () => {
                         window.questLog.push({
                             id: 'ore_road_reopened', title: 'Ore Road Reopened', giver: 'Corran Vale', status: 'active',
-                            description: 'Escort Ironvein\'s first ore wagon safely down the road to Hollowmere.',
+                            description: 'Escort Emberlode\'s first ore wagon safely down the road to Hollowmere.',
                             offeredAt: window.worldSeconds
                         });
                         window.showMessage("Corran claps you on the shoulder. \"Wagon's being loaded now. Come find me when you're ready.\"");
@@ -381,9 +388,9 @@ window.npcDialogueTrees = {
                     action: () => {
                         window.questLog.push({
                             id: 'buried_road', title: 'The Buried Road', giver: 'Corran Vale', status: 'active',
-                            description: "Deal with the Skarn-tooth tribe so Ironvein's ore carts can run the west road again."
+                            description: "Deal with the Skarn-tooth tribe so Emberlode's ore carts can run the west road again."
                         });
-                        window.showMessage('Corran nods, grim. "Do that, and Ironvein owes you a debt."');
+                        window.showMessage('Corran nods, grim. "Do that, and Emberlode owes you a debt."');
                     }
                 },
                 { label: "Not my problem.", action: () => {} }
@@ -394,7 +401,7 @@ window.npcDialogueTrees = {
             ]);
         }
     },
-    ironvein_miner: (npc) => {
+    emberlode_miner: (npc) => {
         const goblinQuest = window.questLog && window.questLog.find(q => q.id === 'goblin_threat');
         const resolvedSafe = !!(goblinQuest && goblinQuest.resolution && goblinQuest.resolution !== 'betrayal');
         if (resolvedSafe) {
@@ -1038,7 +1045,8 @@ function offerGoblinFavor(npc) {
     const goblinRep = window.factions.goblin_tribe.standing;
     const options = [
         { label: "Scout the human village's patrols for you.", action: () => resolveGoblinFavor('scout') },
-        { label: "\"Borrow\" supplies from the farm to the south.", action: () => resolveGoblinFavor('steal') }
+        { label: "\"Borrow\" supplies from the farm to the south.", action: () => resolveGoblinFavor('steal') },
+        { label: "Help you raid the mining camp down the west road for its shinies.", action: () => resolveGoblinFavor('raid_mine') }
     ];
     if (goblinRep >= 25) {
         options.push({ label: "Help you take the fight to Hollowmere itself.", action: () => resolveGoblinFavor('raid') });
@@ -1063,6 +1071,24 @@ function resolveGoblinFavor(kind) {
         if (window.gainExp) window.gainExp(30);
         if (window.adjustCompanionAttitude) window.adjustCompanionAttitude(window.campaign2Paladin.name, -5, "stole from decent folk to feed the goblins");
         window.showMessage("You raid Old Mac's stores and bring the goods back to the tribe.");
+    } else if (kind === 'raid_mine') {
+        // Emberlode is right down the road from the camp — an obvious, much
+        // lower-stakes target than Hollowmere itself, but still a real
+        // betrayal of the people who live there. Marked distinctly from
+        // 'betrayal' (which is specifically the Hollowmere raid) so
+        // Emberlode's own dialogue can react to it without implying the
+        // player turned on the whole region.
+        window.adjustReputation(window.factions.goblin_tribe, 15, 15);
+        window.adjustReputation(window.factions.silverhart_kingdom, -15, 15);
+        if (window.adjustRegionStat) {
+            window.adjustRegionStat('emberlode', 'security', -20);
+            window.adjustRegionStat('emberlode', 'prosperity', -25);
+        }
+        window.emberlodeRaided = true;
+        if (window.party && window.party[0]) window.party[0].gold = (window.party[0].gold || 0) + 60;
+        if (window.gainExp) window.gainExp(50);
+        if (window.adjustCompanionAttitude) window.adjustCompanionAttitude(window.campaign2Paladin.name, -15, "helped goblins raid a mining camp for plunder");
+        window.showMessage("You lead a raiding party down the west road. Emberlode's strongbox and ore stores are picked clean before anyone can raise the alarm. (+60 gold)");
     } else if (kind === 'raid') {
         // The point of no return: helping the goblins move against
         // Hollowmere itself. Severe on every axis.
@@ -1145,13 +1171,13 @@ function resolveGoblinSuccession() {
 }
 window.resolveGoblinSuccession = resolveGoblinSuccession;
 
-// --- Ore Road Reopened: escorting Ironvein's first wagon home after the
+// --- Ore Road Reopened: escorting Emberlode's first wagon home after the
 // goblin_threat quest is resolved. A peaceful (diplomacy) resolution means
 // the tribe is actually gone and the road really is clear; the other
 // resolutions leave a few Skarn-tooth stragglers behind who didn't get the
 // word — a small ambush partway back, same pattern as the farm's wolves
 // (triggerFarmWolfEncounter). ---
-function startIronveinEscort() {
+function startEmberlodeEscort() {
     const quest = window.questLog && window.questLog.find(q => q.id === 'ore_road_reopened');
     if (!quest || quest.status !== 'active') return;
     quest.encounterState = 'departed';
@@ -1160,14 +1186,14 @@ function startIronveinEscort() {
     const goblinQuest = window.questLog.find(q => q.id === 'goblin_threat');
     const peaceful = goblinQuest && goblinQuest.resolution === 'goblin_diplomacy';
     if (peaceful) {
-        completeIronveinEscort();
+        completeEmberlodeEscort();
         return;
     }
 
-    const ambushHex = window.campaign2IronveinAmbushHex;
+    const ambushHex = window.campaign2EmberlodeAmbushHex;
     [{ q: ambushHex.q - 1, r: ambushHex.r - 1 }, { q: ambushHex.q + 1, r: ambushHex.r }].forEach(hex => {
         const goblin = window.createMonster('goblin', hex, null, null, 'enemy');
-        goblin.ironveinAmbushGoblin = true;
+        goblin.emberlodeAmbushGoblin = true;
         window.entities.push(goblin);
         window.wakeUp(goblin);
     });
@@ -1175,29 +1201,29 @@ function startIronveinEscort() {
     window.drawMap();
     window.renderEntities();
 }
-window.startIronveinEscort = startIronveinEscort;
+window.startEmberlodeEscort = startEmberlodeEscort;
 
-function completeIronveinEscort() {
+function completeEmberlodeEscort() {
     const quest = window.questLog && window.questLog.find(q => q.id === 'ore_road_reopened');
     if (!quest || quest.status === 'completed') return;
     quest.status = 'completed';
     if (window.gainExp) window.gainExp(60);
     if (window.party && window.party[0]) window.party[0].gold = (window.party[0].gold || 0) + 40;
     if (window.cascadeRegionStat) window.cascadeRegionStat('hollowmere', 'prosperity', 8);
-    if (window.adjustRegionStat) window.adjustRegionStat('ironvein', 'prosperity', 15);
-    window.showMessage("The wagon rolls safely into Hollowmere — Ironvein's ore is moving again. (+40 gold, quest complete: Ore Road Reopened)");
+    if (window.adjustRegionStat) window.adjustRegionStat('emberlode', 'prosperity', 15);
+    window.showMessage("The wagon rolls safely into Hollowmere — Emberlode's ore is moving again. (+40 gold, quest complete: Ore Road Reopened)");
 }
-window.completeIronveinEscort = completeIronveinEscort;
+window.completeEmberlodeEscort = completeEmberlodeEscort;
 
 // Watched from worldTime.js's tick, same pattern as checkGoblinAssaultResolution.
-function checkIronveinEscortResolution() {
+function checkEmberlodeEscortResolution() {
     if (!window.questLog) return;
     const quest = window.questLog.find(q => q.id === 'ore_road_reopened');
     if (!quest || quest.status !== 'active' || quest.encounterState !== 'departed') return;
-    const ambushGoblinsAlive = window.entities.some(e => e.ironveinAmbushGoblin && e.alive);
-    if (!ambushGoblinsAlive) completeIronveinEscort();
+    const ambushGoblinsAlive = window.entities.some(e => e.emberlodeAmbushGoblin && e.alive);
+    if (!ambushGoblinsAlive) completeEmberlodeEscort();
 }
-window.checkIronveinEscortResolution = checkIronveinEscortResolution;
+window.checkEmberlodeEscortResolution = checkEmberlodeEscortResolution;
 
 window.startHollowmereShakedown = startHollowmereShakedown;
 window.resolveShakedown = resolveShakedown;

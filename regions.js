@@ -28,8 +28,8 @@ window.regions = {
         security: 50, prosperity: 40,
         localSecurityFloor: 35, localProsperityFloor: 25
     },
-    ironvein: {
-        id: 'ironvein', name: 'Ironvein', tier: 'village', parentId: 'aldervale',
+    emberlode: {
+        id: 'emberlode', name: 'Emberlode', tier: 'village', parentId: 'aldervale',
         security: 30, prosperity: 20,
         localSecurityFloor: 20, localProsperityFloor: 15
     },

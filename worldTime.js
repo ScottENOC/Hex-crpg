@@ -114,7 +114,7 @@ function updateTime(delta) {
         if (window.checkGoblinAssaultResolution) window.checkGoblinAssaultResolution();
 
         // Ore Road Reopened: resolves once the ambush stragglers (if any) are down.
-        if (window.checkIronveinEscortResolution) window.checkIronveinEscortResolution();
+        if (window.checkEmberlodeEscortResolution) window.checkEmberlodeEscortResolution();
         if (window.tickCompanionPatience) window.tickCompanionPatience(delta);
 
         // Faction agendas advance on their own clock, independent of whether
