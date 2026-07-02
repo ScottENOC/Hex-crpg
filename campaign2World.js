@@ -240,7 +240,14 @@ function buildMillbrook(roadEnd) {
     }
 }
 
-function setupVillageScene() {
+// `forLoadOnly` (see gameEngine.js's startGameCore) means this call exists
+// purely to regenerate the deterministic terrain/tileObjects/NPC baseline
+// for a save being loaded — the NPCs/party seating it creates get thrown
+// away moments later when the save's own entities replace them, but the
+// scripted intro (Wren's banter, the tavern shakedown timer) must NOT be
+// re-scheduled, or loading a save from hours into the game would replay
+// the opening scene.
+function setupVillageScene(forLoadOnly = false) {
     window.overrideTerrain = {};
     window.tileObjects = {};
     window.exploredHexes = new Set();
@@ -503,6 +510,17 @@ function setupVillageScene() {
     buildMillbrook(northRoadEnd);
     buildEmberlode(westRoadEnd);
 
+    // Campaign 2's entire world is this one deterministic layout, regenerated
+    // by this function every time it runs (fresh game or the "engine not
+    // initialized yet" branch of loading a save). There's no reason to store
+    // the thousands of terrain hexes and tileObjects it just painted in every
+    // save — only whatever a player actually changes afterward (a door left
+    // open, a future "burned house" effect, etc.) needs saving. Snapshotting
+    // the result right here gives saveGame()/loadGame() (persistence.js) a
+    // baseline to diff against instead.
+    window._campaign2TerrainBaseline = { ...window.overrideTerrain };
+    window._campaign2TileObjectsBaseline = { ...window.tileObjects };
+
     window.hollowmereEventFired = false;
 
     // Outside combat, the party should mostly move together — flip the
@@ -519,6 +537,8 @@ function setupVillageScene() {
     window.showCharacter();
     if (window.updatePartyTabs) window.updatePartyTabs(); // populate the character-select tab (main char + Wren)
     if (window.snapVisuals) window.snapVisuals();
+
+    if (forLoadOnly) return; // terrain/tileObjects baseline is all a load needs — skip the scripted intro entirely
 
     setTimeout(() => {
         if (window.triggerAmbientDialogue) window.triggerAmbientDialogue('wren_intro');

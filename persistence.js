@@ -1,17 +1,42 @@
 // persistence.js
 
+// Campaign 2's world is one fixed, deterministic layout (see
+// setupVillageScene, campaign2World.js) — regenerated identically by code
+// every time, with a snapshot of the result stashed in
+// window._campaign2TerrainBaseline/_campaign2TileObjectsBaseline right after
+// it runs. Rather than saving the whole (large, and only growing as more
+// content gets added) terrain/tileObjects dicts, only the entries that
+// differ from that baseline — an opened door, a burned-down house, whatever
+// a player actually changes — need to be stored at all.
+function diffAgainstBaseline(current, baseline) {
+    const diff = {};
+    for (const key in current) {
+        const a = current[key], b = baseline[key];
+        // Terrain values are singleton objects from terrainTypes, so
+        // reference equality is exact and cheap; tileObjects are plain data
+        // records, so compare by value instead.
+        const changed = (a === b) ? false : JSON.stringify(a) !== JSON.stringify(b);
+        if (changed) diff[key] = a;
+    }
+    return diff;
+}
+
 function saveGame(saveName = "rpg_save_game") {
     if (!window.player) {
         window.showMessage("Nothing to save yet!");
         return;
     }
 
+    const isCampaign2WithBaseline = window.currentCampaign === '2' && window._campaign2TerrainBaseline;
+
     const gameState = {
         player: window.player,
         party: window.party,
         currentCampaign: window.currentCampaign,
         selectedCharacterIndex: window.selectedCharacterIndex,
-        overrideTerrain: window.overrideTerrain,
+        overrideTerrain: isCampaign2WithBaseline
+            ? diffAgainstBaseline(window.overrideTerrain, window._campaign2TerrainBaseline)
+            : window.overrideTerrain,
         exploredHexes: Array.from(window.exploredHexes),
         lastSeenTimeMap: window.lastSeenTimeMap || {},
         ironmanMode: window.ironmanMode || false,
@@ -19,12 +44,14 @@ function saveGame(saveName = "rpg_save_game") {
         gamePhase: window.gamePhase,
         currentTurnIndex: window.entities.indexOf(window.currentTurnEntity),
         camera: { x: window.cameraX, y: window.cameraY, zoom: window.cameraZoom },
-        
+
         // Global States
         isInArena: window.isInArena,
         indoorLightMult: window.indoorLightMult,
         worldSeconds: window.worldSeconds,
-        tileObjects: window.tileObjects,
+        tileObjects: isCampaign2WithBaseline
+            ? diffAgainstBaseline(window.tileObjects, window._campaign2TileObjectsBaseline)
+            : window.tileObjects,
         activeSpells: window.activeSpells,
         roguelikeData: window.roguelikeData,
         factions: window.factions,
@@ -109,13 +136,31 @@ function loadGame(saveName = "rpg_save_game") {
 
     try {
         const gameState = JSON.parse(savedData);
-        
-        // 1. Restore Player, Party, and Campaign Data
+
+        // 1. Restore Player, Party, and Campaign Data — set early, before
+        // startGameCore(true) below, since it needs window.currentCampaign/
+        // window.party to regenerate Campaign 2's deterministic world if the
+        // engine hasn't been initialized yet this session.
         window.player = gameState.player;
         window.party = gameState.party || [window.player];
         window.currentCampaign = gameState.currentCampaign || "3";
         window.selectedCharacterIndex = gameState.selectedCharacterIndex || 0;
-        window.overrideTerrain = gameState.overrideTerrain || {};
+
+        // 2. Hide Creator, Show Game
+        document.getElementById("characterCreator").style.display = "none";
+        document.getElementById("gameContainer").style.display = "flex";
+        document.getElementById("top-menu").style.display = "flex";
+
+        // 3. Initialize Game Engine if not already, BEFORE restoring the
+        // rest of the save's state below — for Campaign 2 this regenerates
+        // the deterministic world (setupVillageScene) and seeds fresh
+        // faction standings/terrain/tileObjects/NPC entities, all of which
+        // the save's real values need to override afterward, not the other
+        // way around.
+        if (!window.mapCanvas) {
+            window.startGameCore(true);
+        }
+
         window.exploredHexes = new Set(gameState.exploredHexes || []);
         window.lastSeenTimeMap = gameState.lastSeenTimeMap || {};
         window.ironmanMode = gameState.ironmanMode || false;
@@ -125,7 +170,6 @@ function loadGame(saveName = "rpg_save_game") {
         window.isInArena = gameState.isInArena || false;
         window.indoorLightMult = (gameState.indoorLightMult !== undefined) ? gameState.indoorLightMult : 1.0;
         window.worldSeconds = gameState.worldSeconds || 0;
-        window.tileObjects = gameState.tileObjects || {};
         window.activeSpells = gameState.activeSpells || [];
         window.roguelikeData = gameState.roguelikeData || { fightsCompleted: 0, mercenaryGraveyard: [], bossesDefeated: [] };
         if (!window.roguelikeData.bossesDefeated) window.roguelikeData.bossesDefeated = [];
@@ -153,14 +197,23 @@ function loadGame(saveName = "rpg_save_game") {
             window.regionalNPCs.baron = gameState.regionalNPCBaron;
         }
 
-        // 2. Hide Creator, Show Game
-        document.getElementById("characterCreator").style.display = "none";
-        document.getElementById("gameContainer").style.display = "flex";
-        document.getElementById("top-menu").style.display = "flex";
-
-        // 3. Initialize Game Engine if not already
-        if (!window.mapCanvas) {
-            window.startGameCore(true);
+        // Terrain/tileObjects: for Campaign 2, reset to the deterministic
+        // baseline (just regenerated above, or already present from earlier
+        // this session) and layer the save's diff on top, rather than
+        // trusting the save's dict wholesale — this also correctly discards
+        // any changes made during the *current* session that aren't part of
+        // the save being loaded (e.g. loading an earlier save after opening
+        // a door this session should show that door closed again). Other
+        // campaigns don't have a baseline to diff against, so keep restoring
+        // their terrain/tileObjects in full, as before.
+        if (window.currentCampaign === '2' && window._campaign2TerrainBaseline) {
+            window.overrideTerrain = { ...window._campaign2TerrainBaseline };
+            window.tileObjects = { ...window._campaign2TileObjectsBaseline };
+            Object.assign(window.overrideTerrain, gameState.overrideTerrain || {});
+            Object.assign(window.tileObjects, gameState.tileObjects || {});
+        } else {
+            window.overrideTerrain = gameState.overrideTerrain || {};
+            window.tileObjects = gameState.tileObjects || {};
         }
 
         // 4. Reconstruct Entities

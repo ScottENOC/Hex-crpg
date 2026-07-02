@@ -737,6 +737,16 @@ function startGameCore(isLoading = false) {
   if (window.loadWorldMap) window.loadWorldMap();
 
   if (isLoading) {
+      // Campaign 2's world is one fixed, deterministic layout — regenerate
+      // it via setupVillageScene() even when loading, so persistence.js has
+      // a real baseline to diff/merge the save's terrain changes onto
+      // (rather than needing to store the whole world in every save). Its
+      // NPC entities/party seating get thrown away moments later when
+      // loadGame() replaces window.entities with the save's own array, so
+      // this is exactly as harmless as it is on a fresh game start.
+      if (window.currentCampaign === "2") {
+          window.setupVillageScene(true);
+      }
       document.addEventListener("keydown", window.handleMovement);
       window.mapCanvas.addEventListener("click", window.handleClick);
       if (!window.tickInterval) window.tickInterval = setInterval(tick, 10);

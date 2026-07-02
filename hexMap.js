@@ -110,9 +110,34 @@ function drawHex(x, y, size, style = { stroke: "#555" }) {
 // pixel so a slowly-changing zoom reuses the same handful of cache entries
 // instead of growing unbounded.
 const hexTileCache = {};
-function getCachedHexTile(cacheKey, img, zoomedSize) {
+
+// Animated tiles (e.g. a multi-frame water sprite sheet): register a
+// terrain's cacheKey here once with how many frames its image contains
+// (laid out left-to-right in one sheet, like a filmstrip) and how long each
+// frame holds. Nothing else has to change at the call site — drawHexImage
+// looks this up automatically. A tile that's never registered here behaves
+// exactly as a static one (frameCount 1), so this adds real animation
+// support without touching the cost of anything that doesn't use it.
+window.animatedTileConfig = {};
+function registerAnimatedTile(cacheKey, frameCount, frameDurationMs) {
+    window.animatedTileConfig[cacheKey] = { frameCount, frameDurationMs };
+}
+window.registerAnimatedTile = registerAnimatedTile;
+
+// One shared clock for every animated tile, so all water hexes (say) are
+// always on the same frame — looks like one body of water animating
+// together, not a field of independently-flickering hexes, and it also
+// means there's still only ever (frame count) cache entries total for that
+// terrain, not one per hex.
+function currentAnimationFrame(cacheKey) {
+    const cfg = window.animatedTileConfig[cacheKey];
+    if (!cfg) return { frame: 0, frameCount: 1 };
+    return { frame: Math.floor(performance.now() / cfg.frameDurationMs) % cfg.frameCount, frameCount: cfg.frameCount };
+}
+
+function getCachedHexTile(cacheKey, img, zoomedSize, frame, frameCount) {
     const sizeKey = Math.round(zoomedSize);
-    const key = `${cacheKey}_${sizeKey}`;
+    const key = `${cacheKey}_${sizeKey}_${frame}`;
     let tile = hexTileCache[key];
     if (tile) return tile;
 
@@ -132,7 +157,12 @@ function getCachedHexTile(cacheKey, img, zoomedSize) {
     }
     ctx.closePath();
     ctx.clip();
-    ctx.drawImage(img, cx - sizeKey, cy - h / 2, w, h);
+    if (frameCount > 1) {
+        const frameW = img.naturalWidth / frameCount;
+        ctx.drawImage(img, frame * frameW, 0, frameW, img.naturalHeight, cx - sizeKey, cy - h / 2, w, h);
+    } else {
+        ctx.drawImage(img, cx - sizeKey, cy - h / 2, w, h);
+    }
 
     hexTileCache[key] = canvas;
     return canvas;
@@ -140,7 +170,8 @@ function getCachedHexTile(cacheKey, img, zoomedSize) {
 
 function drawHexImage(img, x, y, zoomedSize, cacheKey) {
     if (cacheKey) {
-        const tile = getCachedHexTile(cacheKey, img, zoomedSize);
+        const { frame, frameCount } = currentAnimationFrame(cacheKey);
+        const tile = getCachedHexTile(cacheKey, img, zoomedSize, frame, frameCount);
         mapCtx.drawImage(tile, x - tile.width / 2, y - tile.height / 2);
         return;
     }
