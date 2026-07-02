@@ -45,6 +45,18 @@ window.campaign2Npcs = [
         dialogueId: 'oskar_vinn'
     },
     {
+        name: 'Wick Hallow',
+        title: 'Storekeeper',
+        race: 'human', gender: 'male',
+        classLevels: ['fighter'],
+        skillPicks: ['health'],
+        equipment: [],
+        side: 'neutral',
+        factionId: 'silverhart_kingdom',
+        color: '#a67c4e',
+        dialogueId: 'wick_hallow'
+    },
+    {
         name: 'Dray Coltayne',
         title: 'Ironbond Sergeant',
         race: 'human', gender: 'male',
@@ -103,6 +115,17 @@ window.campaign2Elder = {
     factionId: 'silverhart_kingdom',
     color: '#cccc99',
     dialogueId: 'marta_wynfield'
+};
+
+// Hollowmere's general store: soldier-tier gear at the same prices as the
+// roguelike (equipment.js's buyPrice is shared, not duplicated here), but
+// with limited stock — a village store, not an unlimited armory. Heavier
+// pieces (medium armor, the helm) are scarcer than basic weapons.
+window.hollowmereStoreItems = ['club', 'sword', 'axe', 'spear', 'dagger', 'light_armor', 'medium_armor', 'wooden_shield', 'nasal_helm', 'torch', 'potion_health'];
+window.hollowmereStoreStock = {
+    club: 3, sword: 2, axe: 2, spear: 2, dagger: 3,
+    light_armor: 2, medium_armor: 1, wooden_shield: 2, nasal_helm: 1,
+    torch: 5, potion_health: 4
 };
 
 window.campaign2Baron = {

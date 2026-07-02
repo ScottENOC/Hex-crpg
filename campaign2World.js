@@ -69,6 +69,13 @@ function setupVillageScene() {
     const chapelRegion = carveBuilding(-14, 0, 3, 3, { q: -11, r: 0 }, 'Wood Floor');
     const houseRegion = carveBuilding(0, -12, 3, 2, { q: 0, r: -10 }, 'Wood Floor');
 
+    // General store: placed directly south of the tavern with its door
+    // facing the tavern's door across a short stretch of path, so the two
+    // busiest buildings read as facing each other rather than the tavern's
+    // only entrance opening onto nothing.
+    const generalStoreRegion = carveBuilding(0, 16, 4, 3, { q: 0, r: 13 }, 'Wood Floor');
+    window.tileObjects['0,15'] = { type: 'table', lightRadius: 0 }; // counter
+
     // Quest item for "A Missing Locket" (Elder Marta) — tucked in the chapel.
     window.mapItems['-14,0'] = ['elder_locket'];
 
@@ -77,7 +84,8 @@ function setupVillageScene() {
         { minQ: -5, maxQ: 5, minR: -3, maxR: 3, lightMult: 0.15 },
         storeRegion,
         chapelRegion,
-        houseRegion
+        houseRegion,
+        generalStoreRegion
     ];
 
     // Fireplace for cozy interior lighting + visual marker for the door.
@@ -89,6 +97,22 @@ function setupVillageScene() {
     window.tileObjects['1,2'] = { type: 'bench', lightRadius: 0 };
     window.tileObjects['-2,1'] = { type: 'table', lightRadius: 0 };
     window.tileObjects['-2,2'] = { type: 'bench', lightRadius: 0 };
+
+    // --- Outdoor paths: a ring around the tavern (clear of every building's
+    // footprint) with a short spur connecting each door to it, so the
+    // village reads as one place instead of four disconnected buildings.
+    const paintPath = (hexes) => hexes.forEach(([q, r]) => window.setTerrainAt(q, r, 'Path'));
+    for (let q = -8; q <= 8; q++) {
+        paintPath([[q, -6], [q, 6]]); // north/south ring edges
+    }
+    for (let r = -6; r <= 6; r++) {
+        paintPath([[-8, r], [8, r]]); // west/east ring edges
+    }
+    paintPath([[0, 5]]); // tavern door (0,4) -> south ring
+    paintPath([[0, -9], [0, -8], [0, -7]]); // house door (0,-10) -> north ring
+    paintPath([[9, 0]]); // store door (10,0) -> east ring
+    paintPath([[-10, 0], [-9, 0]]); // chapel door (-11,0) -> west ring
+    paintPath([[0, 7], [0, 8], [0, 9], [0, 10], [0, 11], [0, 12]]); // general store door (0,13) -> south ring
 
     // --- Permanent companion: a real party member (not a conditional tavern
     // ally like Garrick/Mira/Oskar) who stays regardless of what the player
@@ -134,7 +158,8 @@ function setupVillageScene() {
     const npcHexes = {
         'Garrick Holt': { q: -3, r: -2 },
         'Mira Ashbrook': { q: 2, r: -2 },
-        'Oskar Vinn': { q: 3, r: -2 }
+        'Oskar Vinn': { q: 3, r: -2 },
+        'Wick Hallow': { q: 0, r: 16 }
     };
     (window.campaign2Npcs || []).forEach(spec => {
         const hex = npcHexes[spec.name] || { q: 0, r: -2 };
@@ -179,6 +204,15 @@ function setupVillageScene() {
     }
 
     window.hollowmereEventFired = false;
+
+    // Outside combat, the party should mostly move together — flip the
+    // existing group-move toggle on by default here and sync its button.
+    window.groupMoveMode = true;
+    const moveGroupBtn = document.getElementById('move-group-btn');
+    if (moveGroupBtn) {
+        moveGroupBtn.innerText = 'Move Group: ON';
+        moveGroupBtn.style.backgroundColor = '#ff9800';
+    }
 
     window.drawMap();
     window.renderEntities();

@@ -5,13 +5,53 @@ window.selectCharacterByName = selectCharacterByName;
 window.addJerry = addJerry;
 window.requestReaction = requestReaction;
 
+// --- Party formation (used by the group-move click handler in gameEngine.js) ---
+// 'close' keeps each follower's current relative position to the leader (the
+// original behavior — no reshuffling, whatever spacing they're already in).
+// 'line'/'wedge' assign a fixed offset by the follower's stable party order
+// instead, so the arrangement stays consistent across moves.
+window.partyFormation = window.partyFormation || 'close';
+
+function getFormationOffset(entity, leader) {
+    if (window.partyFormation === 'close' || !window.party) {
+        return { q: entity.hex.q - leader.hex.q, r: entity.hex.r - leader.hex.r };
+    }
+    const followers = window.party
+        .map(p => window.entities.find(e => e.name === p.name))
+        .filter(e => e && e.alive && e.side === 'player' && e !== leader && !e.rider);
+    const idx = followers.indexOf(entity);
+    if (idx === -1) return { q: entity.hex.q - leader.hex.q, r: entity.hex.r - leader.hex.r };
+
+    if (window.partyFormation === 'line') {
+        return { q: 0, r: idx + 1 }; // single file, south of the leader
+    }
+    if (window.partyFormation === 'wedge') {
+        const side = idx % 2 === 0 ? 1 : -1;
+        const rank = Math.floor(idx / 2) + 1;
+        return { q: side * rank, r: rank }; // alternating behind-and-out-to-the-side
+    }
+    return { q: entity.hex.q - leader.hex.q, r: entity.hex.r - leader.hex.r };
+}
+window.getFormationOffset = getFormationOffset;
+
+function cyclePartyFormation() {
+    const order = ['close', 'line', 'wedge'];
+    const idx = order.indexOf(window.partyFormation || 'close');
+    window.partyFormation = order[(idx + 1) % order.length];
+    const btn = document.getElementById('party-formation-btn');
+    if (btn) btn.innerText = `Formation: ${window.partyFormation}`;
+}
+window.cyclePartyFormation = cyclePartyFormation;
+
 function updatePartyTabs() {
     const partyDiv = document.getElementById("party-selection");
     if (!partyDiv) return;
     partyDiv.innerHTML = '';
 
-    // All living friendly entities
-    const friendlies = window.entities.filter(e => e.alive && e.side === 'player');
+    // Real party members, pets/summons/mounts — never temporary combat allies
+    // (e.g. Garrick/Mira/Oskar during the Hollowmere shakedown fight, who are
+    // side:'player' + aiControlled but never join window.party).
+    const friendlies = window.entities.filter(e => e.alive && e.side === 'player' && !e.aiControlled);
 
     friendlies.forEach((ent, index) => {
         const btn = document.createElement("button");
@@ -1640,13 +1680,26 @@ function showDialogue(npc, message, options = []) {
     modal.style.display = "block";
 }
 
-function openShop() {
+// options (all optional):
+//   itemIds: array of item ids to restrict the buy list to (default: every
+//            item in window.items that has a buyPrice — the roguelike's
+//            unlimited general-goods behavior)
+//   stock:   a mutable { itemId: remainingCount } object shared across calls
+//            (e.g. window.hollowmereStoreStock) — decremented on purchase,
+//            hidden once it hits 0. Omit for unlimited stock.
+//   mounts:  whether to offer the Horse/Boar mounts (default true)
+function openShop(options) {
+    options = options || {};
+    const restrictedIds = options.itemIds || null;
+    const stock = options.stock || null;
+    const showMounts = options.mounts !== false;
+
     const modal = document.getElementById("shop-modal");
     const buyList = document.getElementById("shop-buy-list");
     const sellList = document.getElementById("shop-sell-list");
     const goldDisplay = document.getElementById("shop-player-gold");
 
-    const player = window.party ? window.party[0] : null; 
+    const player = window.party ? window.party[0] : null;
     if (!player) {
         showMessage("You need a character to trade!");
         return;
@@ -1655,13 +1708,17 @@ function openShop() {
 
     buyList.innerHTML = '';
     for (const id in window.items) {
+        if (restrictedIds && !restrictedIds.includes(id)) continue;
         const item = window.items[id];
         if (item.buyPrice === undefined) continue;
+        if (stock && (stock[id] === undefined || stock[id] <= 0)) continue;
+
         const div = document.createElement("div");
         div.style.display = "flex";
         div.style.justifyContent = "space-between";
         div.style.marginBottom = "5px";
-        div.innerHTML = `<span>${item.name} (${item.buyPrice}g)</span>`;
+        const stockLabel = stock ? ` [${stock[id]} left]` : '';
+        div.innerHTML = `<span>${item.name} (${item.buyPrice}g)${stockLabel}</span>`;
         const btn = document.createElement("button");
         btn.innerText = "Buy";
         btn.style.fontSize = "0.8em";
@@ -1669,12 +1726,14 @@ function openShop() {
         btn.onclick = () => {
             player.gold -= item.buyPrice;
             player.inventory.push(id);
-            openShop(); // Refresh
+            if (stock) stock[id]--;
+            openShop(options); // Refresh
         };
         div.appendChild(btn);
         buyList.appendChild(div);
     }
 
+    if (showMounts) {
     // Add Horse to shop
     const horseDiv = document.createElement("div");
     horseDiv.style.display = "flex";
@@ -1700,7 +1759,7 @@ function openShop() {
         } else {
             window.showMessage("No space for a horse!");
         }
-        openShop(); // Refresh
+        openShop(options); // Refresh
     };
     horseDiv.appendChild(buyHorseBtn);
     buyList.appendChild(horseDiv);
@@ -1729,10 +1788,11 @@ function openShop() {
         } else {
             window.showMessage("No space for a boar!");
         }
-        openShop();
+        openShop(options);
     };
     boarDiv.appendChild(buyBoarBtn);
     buyList.appendChild(boarDiv);
+    }
 
     sellList.innerHTML = '';
     const inventory = player.inventory || [];
@@ -1757,7 +1817,7 @@ function openShop() {
             player.gold += sellPrice;
             const idx = player.inventory.indexOf(id);
             if (idx > -1) player.inventory.splice(idx, 1);
-            openShop(); // Refresh
+            openShop(options); // Refresh
         };
         div.appendChild(btn);
         sellList.appendChild(div);

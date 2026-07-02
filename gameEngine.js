@@ -582,7 +582,8 @@ function startGameCore(isLoading = false) {
       table: new Image(),
       bench: new Image(),
       door_open: new Image(),
-      door_closed: new Image()
+      door_closed: new Image(),
+      path: new Image()
   };
   visuals.playerBase.onload = () => { window.drawMap(); };
   visuals.leatherArmor.onload = () => { window.drawMap(); };
@@ -643,6 +644,7 @@ function startGameCore(isLoading = false) {
   visuals.bench.onload = () => { window.drawMap(); };
   visuals.door_open.onload = () => { window.drawMap(); };
   visuals.door_closed.onload = () => { window.drawMap(); };
+  visuals.path.onload = () => { window.drawMap(); };
 
   visuals.playerBase.src = 'images/elf.png';
   visuals.leatherArmor.src = 'images/elfleatherarmour.png';
@@ -704,6 +706,7 @@ function startGameCore(isLoading = false) {
   visuals.bench.src = 'images/bench.svg';
   visuals.door_open.src = 'images/door_open.svg';
   visuals.door_closed.src = 'images/door_closed.svg';
+  visuals.path.src = 'images/path.svg';
 
   window.gameVisuals = visuals;
 
@@ -2553,11 +2556,13 @@ function handleClick(e){
             window.leaderPath = fullPath ? fullPath.map(h => `${h.q},${h.r}`) : [];
             window.groupLeader = leader;
 
-            const friendlies = window.entities.filter(e => e.alive && e.side === 'player' && !e.rider);
+            // Real party members, pets/summons/mounts only — never temporary
+            // combat allies (aiControlled), who should never be dragged around
+            // or puppeted outside the fight they belong to.
+            const friendlies = window.entities.filter(e => e.alive && e.side === 'player' && !e.rider && !e.aiControlled);
             friendlies.forEach(f => {
-                const dq = f.hex.q - leader.hex.q;
-                const dr = f.hex.r - leader.hex.r;
-                f.destination = { q: clickedHex.q + dq, r: clickedHex.r + dr };
+                const offset = f === leader ? { q: 0, r: 0 } : window.getFormationOffset(f, leader);
+                f.destination = { q: clickedHex.q + offset.q, r: clickedHex.r + offset.r };
                 // tick() will pick this up via moveCooldown logic
             });
             window.showMessage(`Group destination set.`);

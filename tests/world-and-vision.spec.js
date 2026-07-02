@@ -18,13 +18,30 @@ test.describe('village map and vision', () => {
             storeInterior: window.getTerrainAt(14, 0).name,
             chapelInterior: window.getTerrainAt(-14, 0).name,
             houseInterior: window.getTerrainAt(0, -12).name,
+            generalStoreInterior: window.getTerrainAt(0, 16).name,
             interiorRegionCount: window.interiorRegions.length,
         }));
         expect(check.tavernFloor).toBe('Wood Floor');
         expect(check.storeInterior).toBe('Wood Floor');
         expect(check.chapelInterior).toBe('Wood Floor');
         expect(check.houseInterior).toBe('Wood Floor');
-        expect(check.interiorRegionCount).toBe(4);
+        expect(check.generalStoreInterior).toBe('Wood Floor');
+        expect(check.interiorRegionCount).toBe(5);
+    });
+
+    test('outdoor paths connect every building door to a ring around the tavern', async ({ page }) => {
+        const check = await page.evaluate(() => ({
+            tavernSpur: window.getTerrainAt(0, 5).name,
+            houseSpur: window.getTerrainAt(0, -8).name,
+            storeSpur: window.getTerrainAt(9, 0).name,
+            chapelSpur: window.getTerrainAt(-9, 0).name,
+            generalStoreSpur: window.getTerrainAt(0, 9).name,
+            ringNorth: window.getTerrainAt(0, -6).name,
+            ringSouth: window.getTerrainAt(0, 6).name,
+            ringEast: window.getTerrainAt(8, 0).name,
+            ringWest: window.getTerrainAt(-8, 0).name,
+        }));
+        Object.values(check).forEach(name => expect(name).toBe('Path'));
     });
 
     test('the tavern door starts closed (blocks terrain/LOS) and toggleDoor opens it', async ({ page }) => {

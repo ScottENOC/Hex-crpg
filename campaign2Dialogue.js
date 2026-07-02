@@ -85,6 +85,12 @@ window.npcDialogueTrees = {
             { label: "Noted.", action: () => {} }
         ]);
     },
+    wick_hallow: (npc) => {
+        window.showDialogue(npc, "Welcome to Hallow's Goods. Soldier-grade gear, fair prices — what's left of my stock, anyway.", [
+            { label: "Let me see your wares.", action: () => window.openShop({ itemIds: window.hollowmereStoreItems, stock: window.hollowmereStoreStock, mounts: false }) },
+            { label: "Just looking.", action: () => {} }
+        ]);
+    },
     marta_wynfield: (npc) => {
         let opening;
         if (!window.hollowmereEventFired) {

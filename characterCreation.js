@@ -6,6 +6,7 @@ function initializePlayer(race, cls, gender, campaign = "3", voice = "pc_1") {
   
   const mainChar = createCharacterData(race, cls, "Player (Main)", gender, voice);
   if (campaign === "1") mainChar.gold = 100;
+  if (campaign === "2") mainChar.gold = 40; // enough for a basic weapon/armor piece at Hollowmere's general store, not a full loadout
   
   window.party.push(mainChar);
   window.player = mainChar; // Keep window.player as a reference to the selected one for compatibility

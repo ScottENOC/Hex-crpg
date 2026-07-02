@@ -74,7 +74,8 @@ document.addEventListener("DOMContentLoaded", () => {
             {key: 'table', src: 'images/table.svg'},
             {key: 'bench', src: 'images/bench.svg'},
             {key: 'door_open', src: 'images/door_open.svg'},
-            {key: 'door_closed', src: 'images/door_closed.svg'}
+            {key: 'door_closed', src: 'images/door_closed.svg'},
+            {key: 'path', src: 'images/path.svg'}
         ];
 
         window.gameVisuals = {};
@@ -154,6 +155,8 @@ document.addEventListener("DOMContentLoaded", () => {
             const btn = document.getElementById("move-group-btn");
             btn.innerText = `Move Group: ${window.groupMoveMode ? 'ON' : 'OFF'}`;
             btn.style.backgroundColor = window.groupMoveMode ? '#ff9800' : '#795548';
+        } else if (btnId === "party-formation-btn") {
+            window.cyclePartyFormation();
         } else if (btnId === "load-btn-initial") {
             const modal = document.getElementById("load-game-modal");
             if (modal) {
