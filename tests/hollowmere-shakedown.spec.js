@@ -64,6 +64,15 @@ test.describe('Hollowmere shakedown branches', () => {
         expect(state.silverhart).toBeLessThan(8); // kingdom-level effect should stay small
     });
 
+    test('merchant influence over the kingdom moves a little with the branch chosen', async ({ page }) => {
+        const before = await page.evaluate(() => window.factions.ironbond_company.merchantInfluence.silverhart_kingdom);
+        await resolveShakedownDirectly(page, 'fight');
+        const after = await page.evaluate(() => window.factions.ironbond_company.merchantInfluence.silverhart_kingdom);
+        // Allow tiny slop from the autonomous agenda tick running in the background
+        // between these two reads (see factions.js tickFactionAgendas).
+        expect(after).toBeCloseTo(before - 2, 1); // siding with the tavern keeper costs the Company a little ground
+    });
+
     test('all 6 fight participants appear in the initiative tracker after the fight branch', async ({ page }) => {
         await resolveShakedownDirectly(page, 'fight');
         const inTracker = await page.evaluate(() => {

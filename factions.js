@@ -7,7 +7,11 @@
 
 window.factions = {
     silverhart_kingdom: { id: 'silverhart_kingdom', name: 'The Silverhart Kingdom', race: 'human', knowledge: 0, standing: 0 },
-    ironbond_company:   { id: 'ironbond_company',   name: 'The Ironbond Company',   race: 'human', knowledge: 0, standing: 0 }
+    // merchantInfluence: the Company's grip on each kingdom it operates in
+    // (0-100, keyed by kingdom id). Tracked from here on but not yet wired
+    // into anything else in the world — quests can move it, nothing reads
+    // it back yet.
+    ironbond_company:   { id: 'ironbond_company',   name: 'The Ironbond Company',   race: 'human', knowledge: 0, standing: 0, merchantInfluence: { silverhart_kingdom: 30 } }
 };
 
 function seedStanding(race, playerRace) {
@@ -46,7 +50,47 @@ function cascadeReputation(chain, standingDelta, knowledgeDelta, falloff = 0.4) 
     });
 }
 
+// Nudges a faction's influence over one kingdom (clamped 0-100). Small,
+// direct player-driven deltas (a quest outcome) go through here; the
+// autonomous drift below also uses it so both paths stay clamped the same way.
+function adjustMerchantInfluence(faction, kingdomId, delta) {
+    if (!faction || !faction.merchantInfluence) return;
+    const current = faction.merchantInfluence[kingdomId] || 0;
+    faction.merchantInfluence[kingdomId] = Math.max(0, Math.min(100, current + delta));
+}
+
+// Autonomous agenda ticking: each faction here nudges its own world-state
+// (currently just merchantInfluence) on its own clock, independent of
+// whether the player is engaging with it at all. If the player never
+// touches the Ironbond thread, this is what keeps it moving instead of
+// freezing in place.
+window.factionAgendas = {
+    ironbond_company: {
+        // Drift is intentionally tiny and driven by the Company's own
+        // standing trend (a proxy for "is it currently thriving or
+        // struggling"), not by anything the player has to manage directly.
+        tick(deltaSeconds) {
+            const f = window.factions.ironbond_company;
+            if (!f) return;
+            const drift = f.standing > 10 ? 0.02 : f.standing < -10 ? -0.02 : 0;
+            if (!drift) return;
+            const hours = deltaSeconds / 3600;
+            for (const kingdomId in f.merchantInfluence) {
+                adjustMerchantInfluence(f, kingdomId, drift * hours);
+            }
+        }
+    }
+};
+
+function tickFactionAgendas(deltaSeconds) {
+    for (const id in window.factionAgendas) {
+        window.factionAgendas[id].tick(deltaSeconds);
+    }
+}
+
 window.seedStanding = seedStanding;
 window.adjustReputation = adjustReputation;
 window.seedFactionStandings = seedFactionStandings;
 window.cascadeReputation = cascadeReputation;
+window.adjustMerchantInfluence = adjustMerchantInfluence;
+window.tickFactionAgendas = tickFactionAgendas;

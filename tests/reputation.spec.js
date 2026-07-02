@@ -84,4 +84,39 @@ test.describe('reputation math (factions.js)', () => {
         expect(result.first).toBeCloseTo(10, 5);
         expect(result.third).toBeCloseTo(1.6, 5); // tier index 2 -> 0.4^2
     });
+
+    test('adjustMerchantInfluence clamps to [0, 100] and is additive', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const f = { merchantInfluence: { silverhart_kingdom: 50 } };
+            window.adjustMerchantInfluence(f, 'silverhart_kingdom', 10);
+            window.adjustMerchantInfluence(f, 'silverhart_kingdom', 100);
+            const high = f.merchantInfluence.silverhart_kingdom;
+            window.adjustMerchantInfluence(f, 'silverhart_kingdom', -1000);
+            const low = f.merchantInfluence.silverhart_kingdom;
+            return { high, low };
+        });
+        expect(result.high).toBe(100);
+        expect(result.low).toBe(0);
+    });
+
+    test('tickFactionAgendas drifts merchant influence based on the Company\'s own standing trend, not while neutral', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const before = window.factions.ironbond_company.merchantInfluence.silverhart_kingdom;
+            window.tickFactionAgendas(3600); // 1 in-game hour, standing still at its seeded default (0-5, not >10)
+            const neutralAfter = window.factions.ironbond_company.merchantInfluence.silverhart_kingdom;
+
+            window.factions.ironbond_company.standing = 50; // thriving
+            window.tickFactionAgendas(3600);
+            const thrivingAfter = window.factions.ironbond_company.merchantInfluence.silverhart_kingdom;
+
+            window.factions.ironbond_company.standing = -50; // struggling
+            window.tickFactionAgendas(3600);
+            const strugglingAfter = window.factions.ironbond_company.merchantInfluence.silverhart_kingdom;
+
+            return { before, neutralAfter, thrivingAfter, strugglingAfter };
+        });
+        expect(result.neutralAfter).toBe(result.before);
+        expect(result.thrivingAfter).toBeGreaterThan(result.neutralAfter);
+        expect(result.strugglingAfter).toBeLessThan(result.thrivingAfter);
+    });
 });

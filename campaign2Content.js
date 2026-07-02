@@ -80,9 +80,11 @@ window.campaign2Npcs = [
     }
 ];
 
-// A few unnamed background patrons rounding out the room (no unique dialogue).
+// Background patrons rounding out the room. Yvette carries a breadcrumb for
+// the borderlands/orc-raider thread (see npcDialogueTrees.yvette_marlow) —
+// not a quest yet, just a reason to look north eventually.
 window.campaign2BackgroundPatrons = [
-    { name: 'Tavern Patron', title: 'Tavern Patron', race: 'human', gender: 'female', color: '#cfa8d8' },
+    { name: 'Yvette Marlow', title: 'Tavern Patron', race: 'human', gender: 'female', color: '#cfa8d8', dialogueId: 'yvette_marlow' },
     { name: 'Tavern Patron', title: 'Tavern Patron', race: 'human', gender: 'male', color: '#cfcf8a' }
 ];
 

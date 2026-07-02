@@ -50,6 +50,11 @@ window.npcDialogueTrees = {
     },
     mira_ashbrook: (npc) => {
         window.showDialogue(npc, "Quiet little village, Hollowmere. Most days, anyway.", [
+            { label: "Any news from further out?", action: () => {
+                window.showDialogue(npc, "My cousin rode with the Silverhart levy up to the borderlands, fighting off orc raiders. Last letter said the raids have gotten worse — bigger warbands than the old stories tell. I try not to think on it too much.", [
+                    { label: "I hope she's alright.", action: () => {} }
+                ]);
+            }},
             { label: "Good to know.", action: () => {} }
         ]);
     },
@@ -72,6 +77,11 @@ window.npcDialogueTrees = {
                     ]);
                 }
             },
+            { label: "Heard anything worth knowing?", action: () => {
+                window.showDialogue(npc, "Only that the levies keep marching north. Orc raiders on the border, apparently — worse than usual this year. Half tempted to go make a name for myself up there instead of sparring with tavern drunks.", [
+                    { label: "Maybe I'll head that way myself.", action: () => {} }
+                ]);
+            }},
             { label: "Noted.", action: () => {} }
         ]);
     },
@@ -134,6 +144,22 @@ window.npcDialogueTrees = {
             },
             { label: "Noted.", action: () => {} }
         ]);
+    },
+    // Breadcrumb for the borderlands/orc-raider thread — a worried mother,
+    // not a quest giver yet. No flags set, nothing tracked; just a reason
+    // to go looking north eventually.
+    yvette_marlow: (npc) => {
+        window.showDialogue(npc, "Oh — sorry, didn't mean to stare. My boy Tomas went off with the border levy three months back. Fighting orc raiders up past Aldervale.", [
+            {
+                label: "Have you heard from him?",
+                action: () => {
+                    window.showDialogue(npc, "A letter, once, back in Brightsun. Said the raids were getting worse — more of them, better organized than the raiding parties used to be. Nothing since. I try to tell myself the roads are just slow this time of year.", [
+                        { label: "I'm sure he's fine.", action: () => {} }
+                    ]);
+                }
+            },
+            { label: "I'm sorry to hear that.", action: () => {} }
+        ]);
     }
 };
 
@@ -194,22 +220,29 @@ function resolveShakedown(branch) {
 
     const patrons = [mira, oskar].filter(Boolean);
 
+    // The Company's kingdom-wide influence barely moves on the back of one
+    // tavern's dues — a handful of points either way, not the reputation
+    // swings above. See factions.js: this is tracked but nothing else reads
+    // it yet.
     if (branch === 'stay_out') {
         window.cascadeReputation(authorityChain, -10, 10);
         patrons.forEach(p => window.adjustReputation(p.reputation, -5, 5));
         window.adjustReputation(ironbond, 5, 5);
+        window.adjustMerchantInfluence(ironbond, 'silverhart_kingdom', 1);
         window.showMessage("Garrick pays up, shoulders slumped. The soldiers leave with their due.");
         exitSoldiersPeacefully(dray, enforcers);
     } else if (branch === 'encourage_pay') {
         window.cascadeReputation(authorityChain, 5, 15);
         patrons.forEach(p => window.adjustReputation(p.reputation, 0, 10));
         window.adjustReputation(ironbond, 15, 15);
+        window.adjustMerchantInfluence(ironbond, 'silverhart_kingdom', 2);
         window.showMessage("You back the demand with a hard stare. The soldiers take their due and leave without further trouble.");
         exitSoldiersPeacefully(dray, enforcers);
     } else if (branch === 'fight') {
         window.cascadeReputation(authorityChain, 25, 20);
         patrons.forEach(p => window.adjustReputation(p.reputation, 20, 20));
         window.adjustReputation(ironbond, -35, 25);
+        window.adjustMerchantInfluence(ironbond, 'silverhart_kingdom', -2);
         window.showMessage("Steel rings out! Garrick grabs his club — this is happening.");
 
         // Allies stay side:'player' (so all the existing friend/foe checks treat
