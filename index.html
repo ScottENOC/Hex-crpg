@@ -130,13 +130,25 @@
                 </select>
             </div>
             <div class="form-group">
-                <label for="tunic-hue-slider">Clothing Color:</label>
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <input type="range" id="tunic-hue-slider" min="0" max="359" value="30" style="flex: 1;"
-                           oninput="if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
+                <label>Appearance:</label>
+                <div style="display: flex; align-items: flex-start; gap: 10px;">
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 6px;">
+                        <label for="shirt-hue-slider" style="font-weight: normal; font-size: 0.85em;">Shirt Color</label>
+                        <input type="range" id="shirt-hue-slider" min="0" max="359" value="30"
+                               oninput="if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
+                        <label for="pants-hue-slider" style="font-weight: normal; font-size: 0.85em;">Pants Color</label>
+                        <input type="range" id="pants-hue-slider" min="0" max="359" value="220"
+                               oninput="if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
+                        <label for="hair-hue-slider" style="font-weight: normal; font-size: 0.85em;">Hair Color</label>
+                        <input type="range" id="hair-hue-slider" min="0" max="359" value="25"
+                               oninput="if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
+                        <label for="skin-hue-slider" style="font-weight: normal; font-size: 0.85em;">Skin Tone</label>
+                        <input type="range" id="skin-hue-slider" min="5" max="45" value="20"
+                               oninput="if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
+                    </div>
                     <canvas id="appearance-preview-canvas" width="70" height="90" style="background:#222; border:1px solid #444; border-radius:4px; flex-shrink:0;"></canvas>
                 </div>
-                <small style="color: #aaa; display: block; margin-top: 3px;">Changes tunic/clothing color only — no shape or race changes.</small>
+                <small style="color: #aaa; display: block; margin-top: 3px;">Color only — no shape or race changes.</small>
             </div>
             <div class="form-group">
                 <label for="class-select">Class:</label>

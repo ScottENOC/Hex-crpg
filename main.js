@@ -471,19 +471,13 @@ window.updateRoguelikePreview = function() {
         elf_female: 'images/elffemale.png', elf_male: 'images/elfmale.png',
         dwarf_female: 'images/dwarffemale.png', dwarf_male: 'images/dwarfmale.png'
     };
+    const APPEARANCE_HAIR_SRC = {
+        human_female: 'images/humanfemalehair.png', human_male: 'images/humanmalehair.png',
+        elf_female: 'images/elffemalehair.png', elf_male: 'images/elfmalehair.png',
+        dwarf_female: 'images/dwarffemalehair.png', dwarf_male: 'images/dwarfmalehair.png'
+    };
     const _appearancePreviewImages = {};
-    window.updateAppearancePreview = function() {
-        const canvas = document.getElementById("appearance-preview-canvas");
-        const hueSlider = document.getElementById("tunic-hue-slider");
-        const raceSelect = document.getElementById("race-select");
-        const genderSelect = document.getElementById("gender-select");
-        if (!canvas || !hueSlider || !raceSelect || !genderSelect || !window.getRecoloredSprite) return;
-
-        const src = APPEARANCE_BASE_SRC[`${raceSelect.value}_${genderSelect.value}`];
-        const ctx = canvas.getContext("2d");
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        if (!src) return;
-
+    function loadAppearancePreviewImage(src) {
         let img = _appearancePreviewImages[src];
         if (!img) {
             img = new Image();
@@ -491,12 +485,45 @@ window.updateRoguelikePreview = function() {
             img.src = src;
             _appearancePreviewImages[src] = img;
         }
-        if (!img.complete || !img.naturalWidth) return; // redraws via onload once loaded
+        return img;
+    }
+    window.updateAppearancePreview = function() {
+        const canvas = document.getElementById("appearance-preview-canvas");
+        const shirtSlider = document.getElementById("shirt-hue-slider");
+        const pantsSlider = document.getElementById("pants-hue-slider");
+        const hairSlider = document.getElementById("hair-hue-slider");
+        const skinSlider = document.getElementById("skin-hue-slider");
+        const raceSelect = document.getElementById("race-select");
+        const genderSelect = document.getElementById("gender-select");
+        if (!canvas || !shirtSlider || !pantsSlider || !hairSlider || !skinSlider || !raceSelect || !genderSelect || !window.getRecoloredSprite) return;
 
-        const tinted = window.getRecoloredSprite(img, parseInt(hueSlider.value, 10));
-        const scale = Math.min(canvas.width / img.naturalWidth, canvas.height / img.naturalHeight);
-        const w = img.naturalWidth * scale, h = img.naturalHeight * scale;
-        ctx.drawImage(tinted, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
+        const key = `${raceSelect.value}_${genderSelect.value}`;
+        const bodySrc = APPEARANCE_BASE_SRC[key];
+        const hairSrc = APPEARANCE_HAIR_SRC[key];
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (!bodySrc) return;
+
+        const bodyImg = loadAppearancePreviewImage(bodySrc);
+        if (!bodyImg.complete || !bodyImg.naturalWidth) return; // redraws via onload once loaded
+
+        const tintedBody = window.getRecoloredSprite(bodyImg, {
+            shirtHue: parseInt(shirtSlider.value, 10),
+            pantsHue: parseInt(pantsSlider.value, 10),
+            skinHue: parseInt(skinSlider.value, 10)
+        });
+        const scale = Math.min(canvas.width / bodyImg.naturalWidth, canvas.height / bodyImg.naturalHeight);
+        const w = bodyImg.naturalWidth * scale, h = bodyImg.naturalHeight * scale;
+        const drawX = (canvas.width - w) / 2, drawY = (canvas.height - h) / 2;
+        ctx.drawImage(tintedBody, drawX, drawY, w, h);
+
+        if (hairSrc && window.getRecoloredHairSprite) {
+            const hairImg = loadAppearancePreviewImage(hairSrc);
+            if (hairImg.complete && hairImg.naturalWidth) {
+                const tintedHair = window.getRecoloredHairSprite(hairImg, parseInt(hairSlider.value, 10));
+                ctx.drawImage(tintedHair, drawX, drawY, w, h);
+            }
+        }
     };
     window.updateAppearancePreview();
 
@@ -605,11 +632,18 @@ window.startGame = function() {
   window.initializePlayer(race, cls, gender, campaign, voice);
   window.party[0].name = name; // Update with generated name if needed
 
-  // Player's chosen clothing color (see the character creator's tunic-hue
-  // slider) — set explicitly so drawPlayerCharacter uses it instead of the
-  // name-derived default every other character gets (see spriteRecolor.js).
-  const hueSlider = document.getElementById("tunic-hue-slider");
-  if (hueSlider) window.party[0].tintHue = parseInt(hueSlider.value, 10);
+  // Player's chosen shirt/pants/hair/skin colors (see the character
+  // creator's sliders) — set explicitly so drawPlayerCharacter uses them
+  // instead of the name-derived defaults every other character gets
+  // (see spriteRecolor.js).
+  const shirtSlider = document.getElementById("shirt-hue-slider");
+  const pantsSlider = document.getElementById("pants-hue-slider");
+  const hairSlider = document.getElementById("hair-hue-slider");
+  const skinSlider = document.getElementById("skin-hue-slider");
+  if (shirtSlider) window.party[0].shirtHue = parseInt(shirtSlider.value, 10);
+  if (pantsSlider) window.party[0].pantsHue = parseInt(pantsSlider.value, 10);
+  if (hairSlider) window.party[0].hairHue = parseInt(hairSlider.value, 10);
+  if (skinSlider) window.party[0].skinHue = parseInt(skinSlider.value, 10);
   
   window.ironmanMode = document.getElementById("ironman-check").checked;
 

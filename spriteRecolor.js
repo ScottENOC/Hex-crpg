@@ -1,16 +1,17 @@
 // spriteRecolor.js
-// Cheap visual variety without new art: recolors a base body sprite's
-// clothing (identified by a lightness band, and only below a head-region
-// cutoff so faces/skin are never touched) to a different hue. This is real
-// per-pixel canvas work, so results are cached per (image, hue) pair rather
-// than redone every render frame.
+// Cheap visual variety without new art: recolors a base body sprite's shirt,
+// pants, and skin (each identified by its own lightness band) independently,
+// plus a separate full-image recolor for the hair overlay sprite. Real
+// per-pixel canvas work, so results are cached per (image, hues) combination
+// rather than redone every render frame.
 //
 // Why lightness, not a color-distance/hue match: sampling the actual sprite
 // (images/humanmale.png) showed skin and clothing share almost the same hue
 // (~20-26°) — these are all "warm brown" pixel art assets. They separate
-// cleanly by lightness instead: skin sits around L=0.6-0.73, the tunic
-// around L=0.38-0.42, and the pants/shading around L=0.12-0.33. Recoloring
-// by lightness band (not hue distance) is what actually isolates clothing.
+// cleanly by lightness instead. Sampling a center-column strip down the body:
+// shirt/tunic sits around L=0.43-0.45, pants around L=0.17-0.18, boots drop
+// below L=0.12 (left unrecolored — a small trade-off to stay clear of pure-
+// black outline strokes), and skin (face, forearms, hands) sits at L=0.55+.
 
 const _recolorCache = {};
 
@@ -57,12 +58,24 @@ function rgbToHsl(r, g, b) {
     return [h, s, l];
 }
 
-// Returns a canvas with clothing recolored to targetHue (0-360). Falls back
-// to the original image if it isn't loaded yet (matches the imgOk-style
-// guards used elsewhere for not-yet-loaded assets).
-function getRecoloredSprite(img, targetHue) {
+// The head/face region is excluded from the shirt/pants bands (so a dark
+// eyebrow/mouth pixel never gets recolored as clothing) but skin recoloring
+// deliberately covers the whole image, since skin includes the face.
+const HEAD_CUTOFF_FRAC = 0.32;
+const SHIRT_BAND = [0.36, 0.50];
+const PANTS_BAND = [0.12, 0.36];
+const SKIN_BAND_MIN = 0.55;
+
+// Returns a canvas with shirt/pants/skin recolored per the given hues.
+// `hues` is `{ shirtHue, pantsHue, skinHue }` — any subset may be omitted
+// to leave that band untouched. Falls back to the original image if it
+// isn't loaded yet.
+function getRecoloredSprite(img, hues) {
     if (!img || !img.complete || !img.naturalWidth) return img;
-    const cacheKey = `${img.src}::${targetHue}`;
+    const { shirtHue, pantsHue, skinHue } = hues || {};
+    if (shirtHue === undefined && pantsHue === undefined && skinHue === undefined) return img;
+
+    const cacheKey = `${img.src}::s${shirtHue ?? 'x'}:p${pantsHue ?? 'x'}:k${skinHue ?? 'x'}`;
     if (_recolorCache[cacheKey]) return _recolorCache[cacheKey];
 
     const canvas = document.createElement('canvas');
@@ -71,22 +84,39 @@ function getRecoloredSprite(img, targetHue) {
     const ctx = canvas.getContext('2d');
     ctx.drawImage(img, 0, 0);
 
-    const headCutoffY = Math.floor(canvas.height * 0.32); // never touch the face/head region
-    const bodyHeight = canvas.height - headCutoffY;
-    if (bodyHeight > 0) {
-        const imageData = ctx.getImageData(0, headCutoffY, canvas.width, bodyHeight);
+    if (shirtHue !== undefined || pantsHue !== undefined) {
+        const headCutoffY = Math.floor(canvas.height * HEAD_CUTOFF_FRAC);
+        const bodyHeight = canvas.height - headCutoffY;
+        if (bodyHeight > 0) {
+            const imageData = ctx.getImageData(0, headCutoffY, canvas.width, bodyHeight);
+            const data = imageData.data;
+            for (let i = 0; i < data.length; i += 4) {
+                if (data[i + 3] < 50) continue; // skip transparent pixels
+                const [, s, l] = rgbToHsl(data[i], data[i + 1], data[i + 2]);
+                if (shirtHue !== undefined && l >= SHIRT_BAND[0] && l <= SHIRT_BAND[1]) {
+                    const [r2, g2, b2] = hslToRgb(shirtHue, s, l);
+                    data[i] = r2; data[i + 1] = g2; data[i + 2] = b2;
+                } else if (pantsHue !== undefined && l >= PANTS_BAND[0] && l < PANTS_BAND[1]) {
+                    const [r2, g2, b2] = hslToRgb(pantsHue, s, l);
+                    data[i] = r2; data[i + 1] = g2; data[i + 2] = b2;
+                }
+            }
+            ctx.putImageData(imageData, 0, headCutoffY);
+        }
+    }
+
+    if (skinHue !== undefined) {
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const data = imageData.data;
         for (let i = 0; i < data.length; i += 4) {
-            if (data[i + 3] < 50) continue; // skip transparent pixels
+            if (data[i + 3] < 50) continue;
             const [, s, l] = rgbToHsl(data[i], data[i + 1], data[i + 2]);
-            // Clothing band: tunic + pants + shading. Skin (forearms, hands,
-            // feet — L > ~0.55) stays untouched even below the head cutoff.
-            if (l >= 0.12 && l <= 0.5) {
-                const [r2, g2, b2] = hslToRgb(targetHue, s, l);
+            if (l >= SKIN_BAND_MIN) {
+                const [r2, g2, b2] = hslToRgb(skinHue, s, l);
                 data[i] = r2; data[i + 1] = g2; data[i + 2] = b2;
             }
         }
-        ctx.putImageData(imageData, 0, headCutoffY);
+        ctx.putImageData(imageData, 0, 0);
     }
 
     _recolorCache[cacheKey] = canvas;
@@ -94,8 +124,40 @@ function getRecoloredSprite(img, targetHue) {
 }
 window.getRecoloredSprite = getRecoloredSprite;
 
-// Deterministic hue per name, so a given character always looks the same
+// Hair overlay sprites (e.g. images/humanmalehair.png) are almost entirely
+// transparent except the hair strands themselves, so — unlike the body —
+// every opaque pixel can be recolored without any lightness banding or
+// head-cutoff exclusion.
+function getRecoloredHairSprite(img, targetHue) {
+    if (!img || !img.complete || !img.naturalWidth || targetHue === undefined) return img;
+    const cacheKey = `${img.src}::hair:${targetHue}`;
+    if (_recolorCache[cacheKey]) return _recolorCache[cacheKey];
+
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] < 50) continue;
+        const [, s, l] = rgbToHsl(data[i], data[i + 1], data[i + 2]);
+        const [r2, g2, b2] = hslToRgb(targetHue, s, l);
+        data[i] = r2; data[i + 1] = g2; data[i + 2] = b2;
+    }
+    ctx.putImageData(imageData, 0, 0);
+
+    _recolorCache[cacheKey] = canvas;
+    return canvas;
+}
+window.getRecoloredHairSprite = getRecoloredHairSprite;
+
+// Deterministic hue per string, so a given character always looks the same
 // (across renders and save/load) without needing an explicit stored field.
+// Callers salt the string per band (e.g. name+'_shirt' vs name+'_pants') so
+// a character's bands don't all collapse to the same hue.
 function hashStringToHue(str) {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {

@@ -862,13 +862,18 @@ function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
     const left = x - bW / 2;
     const top  = y - bW / 2 + yOff;
 
-    // BASE BODY — clothing recolored per-character (see spriteRecolor.js) so
-    // not every human/elf/dwarf wears the exact same tunic. Deterministic
-    // from the entity's name, so it's stable without needing a stored field.
+    // BASE BODY — shirt/pants/skin each recolored independently (see
+    // spriteRecolor.js) so not every human/elf/dwarf looks identical.
+    // Deterministic per entity name (salted per band so they don't all
+    // collapse to the same hue), so it's stable without a stored field.
+    // Skin stays within a believable tan/brown range rather than the full
+    // hue wheel clothing gets.
     const baseImg = window.gameVisuals[cfg.baseKey];
     if (baseImg?.complete) {
-        if (e.tintHue === undefined && window.hashStringToHue) e.tintHue = window.hashStringToHue(e.name || 'x');
-        const bodyImg = (e.tintHue !== undefined && window.getRecoloredSprite) ? window.getRecoloredSprite(baseImg, e.tintHue) : baseImg;
+        if (e.shirtHue === undefined && window.hashStringToHue) e.shirtHue = window.hashStringToHue((e.name || 'x') + '_shirt');
+        if (e.pantsHue === undefined && window.hashStringToHue) e.pantsHue = window.hashStringToHue((e.name || 'x') + '_pants');
+        if (e.skinHue === undefined && window.hashStringToHue) e.skinHue = 5 + window.hashStringToHue((e.name || 'x') + '_skin') % 40;
+        const bodyImg = window.getRecoloredSprite ? window.getRecoloredSprite(baseImg, { shirtHue: e.shirtHue, pantsHue: e.pantsHue, skinHue: e.skinHue }) : baseImg;
         ctx.drawImage(bodyImg || baseImg, left, top, bW, bH);
     }
 
@@ -876,13 +881,16 @@ function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
     const hc = cfg.hair;
     const hairImg = window.gameVisuals[hc.key];
     if (hairImg?.complete) {
+        if (e.hairHue === undefined && window.hashStringToHue) e.hairHue = window.hashStringToHue((e.name || 'x') + '_hair');
+        const tintedHair = window.getRecoloredHairSprite ? window.getRecoloredHairSprite(hairImg, e.hairHue) : hairImg;
+        const drawHair = tintedHair || hairImg;
         if (hc.type === 'full') {
-            ctx.drawImage(hairImg, left, top + (hc.yRaw || 0) * z, bW, bH);
+            ctx.drawImage(drawHair, left, top + (hc.yRaw || 0) * z, bW, bH);
         } else {
             const hW = bW * hc.wFrac;
             const hH = bH * hc.hFrac;
             const topFrac = hc.topFrac !== undefined ? hc.topFrac : 0.2;
-            ctx.drawImage(hairImg, x - hW / 2, top + topFrac * bH - hH / 2, hW, hH);
+            ctx.drawImage(drawHair, x - hW / 2, top + topFrac * bH - hH / 2, hW, hH);
         }
     }
 
