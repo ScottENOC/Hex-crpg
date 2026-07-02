@@ -89,6 +89,16 @@ function updateTime(delta) {
             window.checkWildernessEncounter(p, delta);
         }
 
+        // The abandoned house's skeletons are placed dormant at world-build
+        // time (waking them all up immediately would make window.isInCombat
+        // true for the whole game) and only aggro once the player actually
+        // gets close.
+        if (window.campaign2AbandonedHouseCenter && !window.campaign2AbandonedHouseTriggered && p &&
+            window.distance(p.hex, window.campaign2AbandonedHouseCenter) <= 5) {
+            window.campaign2AbandonedHouseTriggered = true;
+            window.entities.filter(e => e.name === 'Skeleton' && e.alive).forEach(s => window.wakeUp(s));
+        }
+
         // Ambient character personality lines (see characterBanter.js).
         if (window.checkCharacterBanter) window.checkCharacterBanter(delta);
 

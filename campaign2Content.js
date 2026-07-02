@@ -168,6 +168,21 @@ window.campaign2GoblinGuards = [
 // attribute pool in campaign2World.js's buildGoblinCamp/rescue logic).
 window.campaign2Paladin = { name: 'Ser Aldric Thorne', title: 'Wandering Paladin', race: 'human', gender: 'male', color: '#d4c9a8', voice: 'pc_1' };
 
+// The abandoned house partway up the north road: three skeletons left
+// behind, positioned around the journal at its center (offsets relative to
+// buildAbandonedHouse's house center).
+window.campaign2AbandonedHouseSkeletons = [
+    { q: -1, r: -1 }, { q: 1, r: -1 }, { q: 0, r: 1 }
+];
+
+// Millbrook, three world hexes north — a minimal stub for now.
+window.campaign2MillbrookVillager = {
+    name: 'Petra Hollis', title: 'Millbrook Villager', race: 'human', gender: 'female',
+    classLevels: ['rogue'], skillPicks: ['health'], equipment: [],
+    side: 'neutral', factionId: 'silverhart_kingdom', color: '#a8c8d8',
+    dialogueId: 'petra_hollis'
+};
+
 // The feudal chain of authority above Hollowmere's residents. The elder is
 // placed in the village (the House building); the baron rules the barony
 // Hollowmere sits in and isn't physically present yet — a reputation-only

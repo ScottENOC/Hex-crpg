@@ -590,7 +590,8 @@ function startGameCore(isLoading = false) {
       fence_v: new Image(),
       dirt: new Image(),
       hut: new Image(),
-      hut_large: new Image()
+      hut_large: new Image(),
+      journal: new Image()
   };
   visuals.playerBase.onload = () => { window.drawMap(); };
   visuals.leatherArmor.onload = () => { window.drawMap(); };
@@ -659,6 +660,7 @@ function startGameCore(isLoading = false) {
   visuals.dirt.onload = () => { window.drawMap(); };
   visuals.hut.onload = () => { window.drawMap(); };
   visuals.hut_large.onload = () => { window.drawMap(); };
+  visuals.journal.onload = () => { window.drawMap(); };
 
   visuals.playerBase.src = 'images/elf.png';
   visuals.leatherArmor.src = 'images/elfleatherarmour.png';
@@ -728,6 +730,7 @@ function startGameCore(isLoading = false) {
   visuals.dirt.src = 'images/dirt.svg';
   visuals.hut.src = 'images/hut.svg';
   visuals.hut_large.src = 'images/hut_large.svg';
+  visuals.journal.src = 'images/journal.svg';
 
   window.gameVisuals = visuals;
 
@@ -1004,6 +1007,8 @@ function renderEntities() {
               window.mapCtx.drawImage(window.gameVisuals.hut, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'hut_large' && window.gameVisuals.hut_large.complete) {
               window.mapCtx.drawImage(window.gameVisuals.hut_large, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'journal' && window.gameVisuals.journal.complete) {
+              window.mapCtx.drawImage(window.gameVisuals.journal, x - size/2, y - size/2, size, size);
           }
       }
   }
@@ -2329,6 +2334,12 @@ function handleClick(e){
     // READ SIGNPOST — same priority tier as the door toggle above
     if (doorObj && doorObj.type === 'signpost' && window.distance(player.hex, clickedHex) <= 1) {
         if (window.readSignpost) window.readSignpost();
+        return;
+    }
+
+    // READ JOURNAL — same priority tier, used by the abandoned house
+    if (doorObj && doorObj.type === 'journal' && window.distance(player.hex, clickedHex) <= 1) {
+        if (window.readAbandonedHouseJournal) window.readAbandonedHouseJournal();
         return;
     }
 

@@ -287,6 +287,18 @@ window.npcDialogueTrees = {
             { label: "Just passing through.", action: () => {} }
         ]);
     },
+    petra_hollis: (npc) => {
+        window.showDialogue(npc, "Don't get many travelers this far. Word is something's stirred up trouble on the road south of here — a house gone quiet, no one seen in or out for weeks. Nobody round here's brave enough to go look.", [
+            {
+                label: "I've been to that house.",
+                action: () => window.showDialogue(npc, "Then you know more than I care to. Keep whatever you found to yourself, if you can.", [{ label: "Noted.", action: () => {} }])
+            },
+            {
+                label: "Anything else I should know?",
+                action: () => window.showDialogue(npc, "Just that Millbrook keeps its head down and its doors locked at night, same as always.", [{ label: "Wise.", action: () => {} }])
+            }
+        ]);
+    },
     marta_wynfield: (npc) => {
         let opening;
         if (!window.hollowmereEventFired) {

@@ -82,7 +82,8 @@ document.addEventListener("DOMContentLoaded", () => {
             {key: 'fence_v', src: 'images/fence_v.svg'},
             {key: 'dirt', src: 'images/dirt.svg'},
             {key: 'hut', src: 'images/hut.svg'},
-            {key: 'hut_large', src: 'images/hut_large.svg'}
+            {key: 'hut_large', src: 'images/hut_large.svg'},
+            {key: 'journal', src: 'images/journal.svg'}
         ];
 
         window.gameVisuals = {};

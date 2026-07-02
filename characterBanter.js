@@ -64,6 +64,18 @@ window.characterBanterLines = [
         once: true,
         condition: () => partyHas('Ser Aldric Thorne') && nearHex(window.campaign2GoblinCampCenter, 15),
         lines: [{ speaker: 'Ser Aldric Thorne', mood: 'hard', text: "There. That's the camp. However you mean to handle it, I'm with you — just don't make me watch you walk away from it." }]
+    },
+    {
+        id: 'abandoned_house_first_sight',
+        once: true,
+        condition: () => nearHex(window.campaign2AbandonedHouseCenter, 10),
+        lines: [{ speaker: 'Narrator', mood: 'uneasy', text: "A house stands alone off the road, shutters closed, no smoke from the chimney. Something moves near the door — bone-white, and not alive." }]
+    },
+    {
+        id: 'millbrook_first_sight',
+        once: true,
+        condition: () => nearHex(window.campaign2MillbrookCenter, 10),
+        lines: [{ speaker: 'Narrator', mood: 'neutral', text: "Millbrook comes into view — smaller than Hollowmere, but a welcome sight after so long on the road." }]
     }
 ];
 

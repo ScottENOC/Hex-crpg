@@ -153,6 +153,59 @@ function buildGoblinCamp(roadEnd) {
     }
 }
 
+// A small house standing alone partway up the north road — the first
+// breadcrumb toward a much larger plot arc (a necromancer working toward
+// lichdom). The residents were taken, not killed here; skeletons left
+// behind to guard the place attack on sight. A journal inside gives a vague
+// account without Knowledge: Religion, and something much more specific
+// with it (see readAbandonedHouseJournal in campaign2Dialogue.js).
+function buildAbandonedHouse(waypoint) {
+    if (!waypoint) return;
+    const center = { q: waypoint.q + 6, r: waypoint.r };
+    const doorHex = { q: center.q - 3, r: center.r };
+    const houseRegion = carveBuilding(center.q, center.r, 3, 2, doorHex, 'Wood Floor');
+    window.interiorRegions.push(houseRegion);
+
+    for (let q = waypoint.q + 1; q < doorHex.q; q++) window.setTerrainAt(q, waypoint.r, 'Path');
+
+    window.tileObjects[`${center.q},${center.r}`] = { type: 'journal', lightRadius: 0 };
+    window.campaign2AbandonedHouseCenter = center;
+
+    // Placed dormant (side:'enemy' but not yet aiState:'combat') — waking
+    // them all up here at world-build time would make window.isInCombat
+    // true for the entire game from the moment Campaign 2 loads, since
+    // checkInCombat() scans every entity regardless of distance. They're
+    // woken via proximity instead (see worldTime.js's tick).
+    (window.campaign2AbandonedHouseSkeletons || []).forEach((hexOffset, i) => {
+        const skeleton = window.createMonster('skeleton', { q: center.q + hexOffset.q, r: center.r + hexOffset.r }, null, null, 'enemy');
+        window.entities.push(skeleton);
+    });
+}
+
+// Millbrook: a minimal stub village at the far end of the north road, three
+// world-map hexes from Hollowmere — a start, not fully built out. One
+// building and a single villager for now.
+function buildMillbrook(roadEnd) {
+    const center = { q: roadEnd.q, r: roadEnd.r };
+    const doorHex = { q: center.q, r: center.r + 3 };
+    const millbrookRegion = carveBuilding(center.q, center.r, 3, 3, doorHex, 'Wood Floor');
+    window.interiorRegions.push(millbrookRegion);
+
+    for (let r = roadEnd.r + 1; r < doorHex.r; r++) window.setTerrainAt(center.q, r, 'Path');
+
+    window.tileObjects[`${center.q},${center.r}`] = { type: 'fireplace', lightRadius: 6 };
+    window.campaign2MillbrookCenter = center;
+
+    if (window.campaign2MillbrookVillager) {
+        const villager = window.buildNPC({ ...window.campaign2MillbrookVillager, hex: { q: center.q + 1, r: center.r } });
+        window.entities.push(villager);
+    }
+
+    if (window.worldMapData && window.worldMapData[3] && window.worldMapData[3][6] !== undefined) {
+        window.worldMapData[3][6] = { t: 'G', f: 'V', o: 'h', p: 1, n: 'Millbrook' };
+    }
+}
+
 function setupVillageScene() {
     window.overrideTerrain = {};
     window.tileObjects = {};
@@ -350,7 +403,11 @@ function setupVillageScene() {
     // occasional one-hex lateral side-step folded into the walk itself,
     // rather than an independent offset recomputed each step. Returns the
     // final hex reached, so callers can place something at a road's end.
-    const paintRoad = (primary, length, wiggleAfter = 45, wiggleChance = 0.12) => {
+    // `onStep(i, hex)` (optional) lets a caller capture the exact hex reached
+    // at a given step count — used to place the abandoned house partway up
+    // the north road, since the wiggle means a fixed offset from CP.q
+    // wouldn't reliably land on/near the actual path at that distance.
+    const paintRoad = (primary, length, wiggleAfter = 45, wiggleChance = 0.12, onStep = null) => {
         const laterals = primary.r !== 0 ? [{ q: 1, r: 0 }, { q: -1, r: 0 }] : [{ q: 0, r: 1 }, { q: 0, r: -1 }];
         let q = CP.q, r = CP.r;
         for (let i = 1; i <= length; i++) {
@@ -361,21 +418,28 @@ function setupVillageScene() {
                 q += lat.q; r += lat.r;
                 window.setTerrainAt(q, r, 'Path');
             }
+            if (onStep) onStep(i, { q, r });
         }
         return { q, r };
     };
     // One world-map hex is WORLD_HEX_SIZE local hexes across (see
     // terrain.js's battleToWorld scale convention) — the border of "this"
-    // hex from the crossroads. The south road is extended well past it,
-    // into the next world hex, to reach Old Mac's Farmstead.
+    // hex from the crossroads. The south/west roads reach just past it; the
+    // north road runs a full three world hexes, out to Millbrook.
     const WORLD_HEX_SIZE = 130;
-    paintRoad({ q: 0, r: -1 }, WORLD_HEX_SIZE); // North: back past the village, on to Millbrook and the capital, Silverhart
+    let abandonedHouseWaypoint = null;
+    const ABANDONED_HOUSE_STEP = 200; // partway to Millbrook — "stuff in between"
+    const northRoadEnd = paintRoad({ q: 0, r: -1 }, WORLD_HEX_SIZE * 3, 45, 0.12, (i, hex) => {
+        if (i === ABANDONED_HOUSE_STEP) abandonedHouseWaypoint = hex;
+    });
     const farmRoadEnd = paintRoad({ q: 0, r: 1 }, WORLD_HEX_SIZE + 40); // South: past the hex border, to Old Mac's Farmstead
     paintRoad({ q: 1, r: 0 }, WORLD_HEX_SIZE); // East: Reddale
     const westRoadEnd = paintRoad({ q: -1, r: 0 }, WORLD_HEX_SIZE); // West: unmarked but for a skull and crossbones
 
     buildFarmstead(farmRoadEnd);
     buildGoblinCamp(westRoadEnd);
+    buildAbandonedHouse(abandonedHouseWaypoint);
+    buildMillbrook(northRoadEnd);
 
     window.hollowmereEventFired = false;
 
@@ -435,6 +499,23 @@ function readSignpost() {
     );
 }
 
+// Reads the journal at the abandoned house — the first breadcrumb toward
+// the necromancer/lichdom plot arc. Knowledge: Religion reveals specifics
+// (phylactery, a soul-binding ritual) that the vague version only hints at.
+function readAbandonedHouseJournal() {
+    const knowsReligion = window.party && window.party.some(p => window.hasKnowledgeReligion(p));
+    if (knowsReligion) {
+        window.showDialogue({ name: 'Journal' },
+            "The handwriting is frantic in places, careful in others. Early pages complain of neighbors and bad harvests. Later ones turn strange: notes on binding a soul to a vessel, on preparing \"the vessel\" before the body fails, half-finished diagrams that look uncomfortably like a phylactery. Whoever lived here wasn't just killed by the skeletons outside — they were close, terribly close, to becoming something that doesn't die at all."
+        );
+    } else {
+        window.showDialogue({ name: 'Journal' },
+            "A journal, water-stained and half-legible. Pages of ordinary complaints — bad harvests, noisy neighbors — give way to frantic, cramped handwriting you can't make sense of: something about \"the vessel,\" about being almost ready. Whatever it means, it isn't good."
+        );
+    }
+}
+
 window.setupVillageScene = setupVillageScene;
 window.toggleDoor = toggleDoor;
 window.readSignpost = readSignpost;
+window.readAbandonedHouseJournal = readAbandonedHouseJournal;

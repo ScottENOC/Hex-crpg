@@ -416,6 +416,13 @@ const skills = {
         anti_prereq: 'druid_knowledge_nature',
         apply: (player) => {}
     },
+    'knowledge_religion': {
+        name: 'Knowledge: Religion',
+        description: 'Training in scripture, ritual, and the theory behind divine and forbidden magic alike — lets you recognize what others would dismiss as mere grave-robbing or superstition.',
+        tree: 'divine',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
     'dwarf_axe_mastery': {
         name: 'Dwarven Axe Mastery',
         description: 'Grants +2 damage when using an Axe.',
@@ -1522,3 +1529,8 @@ function hasKnowledgeNature(entity) {
     return !!(entity?.skills?.druid_knowledge_nature || entity?.skills?.elf_knowledge_nature);
 }
 window.hasKnowledgeNature = hasKnowledgeNature;
+
+function hasKnowledgeReligion(entity) {
+    return !!entity?.skills?.knowledge_religion;
+}
+window.hasKnowledgeReligion = hasKnowledgeReligion;

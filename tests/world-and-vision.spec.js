@@ -26,7 +26,7 @@ test.describe('village map and vision', () => {
         expect(check.chapelInterior).toBe('Wood Floor');
         expect(check.houseInterior).toBe('Wood Floor');
         expect(check.generalStoreInterior).toBe('Wood Floor');
-        expect(check.interiorRegionCount).toBe(6); // tavern, store, chapel, house, general store, Old Mac's farmhouse
+        expect(check.interiorRegionCount).toBe(8); // tavern, store, chapel, house, general store, Old Mac's farmhouse, abandoned house, Millbrook
     });
 
     test('outdoor paths connect every building door to a ring around the tavern', async ({ page }) => {
