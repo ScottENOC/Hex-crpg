@@ -92,6 +92,10 @@ function updateTime(delta) {
         // Faction agendas advance on their own clock, independent of whether
         // the player is engaging with them (see factions.js).
         if (window.tickFactionAgendas) window.tickFactionAgendas(delta);
+
+        // Region security/prosperity decay toward their (parent-influenced)
+        // baselines on the same clock (see regions.js).
+        if (window.tickRegions) window.tickRegions(delta);
     }
     window.lightLevel = getLightLevel() * (window.indoorLightMult !== undefined ? window.indoorLightMult : 1.0);
     

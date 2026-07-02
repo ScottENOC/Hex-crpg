@@ -196,6 +196,10 @@ window.npcDialogueTrees = {
                             window.adjustReputation(npc.reputation, 15, 20);
                             window.party[0].gold = (window.party[0].gold || 0) + 25;
                             if (window.gainExp) window.gainExp(150);
+                            // A cleared local threat nudges the village's security a little,
+                            // rippling faintly up toward the barony (see regions.js) — small
+                            // and slow, not a fix, matching the "fragile peace" this system models.
+                            if (window.cascadeRegionStat) window.cascadeRegionStat('hollowmere', 'security', 6);
                             window.showMessage('Quest complete: Wolves at the Farm. (+25 gold)');
                         }
                     }
@@ -604,7 +608,11 @@ window.triggerFarmWolfEncounter = triggerFarmWolfEncounter;
 window.wildernessEncounterAccum = 0;
 function checkWildernessEncounter(playerEntity, delta) {
     if (!playerEntity || window.isInCombat) return;
-    if (window.distance(playerEntity.hex, { q: 0, r: 0 }) < 35) return; // still village/farmland, considered safe
+    // A safer Hollowmere pushes the "safe" radius outward too (patrols
+    // ranging further), not just how often encounters happen once past it.
+    const security = window.regions?.hollowmere?.security ?? 50;
+    const safeRadius = 25 + (security / 100) * 20; // 25 at 0 security, up to 45 at 100
+    if (window.distance(playerEntity.hex, { q: 0, r: 0 }) < safeRadius) return;
 
     window.wildernessEncounterAccum += delta;
     const checkInterval = 120; // seconds of in-game wilderness travel between rolls
@@ -613,7 +621,12 @@ function checkWildernessEncounter(playerEntity, delta) {
 
     const cp = window.campaign2Landmarks.crossroads;
     const headingWest = playerEntity.hex.q < cp.q - 20;
-    const chance = headingWest ? 0.35 : 0.12;
+    // Base chance responds to Hollowmere's security too: a safer village
+    // means rarer wolves nearby. West stays flavorfully more dangerous on
+    // top of that — whatever earned that skull on the signpost isn't part
+    // of this security system yet.
+    const maxChance = headingWest ? 0.5 : 0.2;
+    const chance = ((100 - security) / 100) * maxChance;
     if (Math.random() >= chance) return;
 
     const count = 1 + Math.floor(Math.random() * 2); // 1-2 wolves

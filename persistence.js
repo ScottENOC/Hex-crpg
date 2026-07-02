@@ -28,6 +28,7 @@ function saveGame(saveName = "rpg_save_game") {
         activeSpells: window.activeSpells,
         roguelikeData: window.roguelikeData,
         factions: window.factions,
+        regions: window.regions,
         interiorRegions: window.interiorRegions,
         hollowmereEventFired: window.hollowmereEventFired,
         hollowmereVictoryBonusGiven: window.hollowmereVictoryBonusGiven,
@@ -124,6 +125,7 @@ function loadGame(saveName = "rpg_save_game") {
         window.roguelikeData = gameState.roguelikeData || { fightsCompleted: 0, mercenaryGraveyard: [], bossesDefeated: [] };
         if (!window.roguelikeData.bossesDefeated) window.roguelikeData.bossesDefeated = [];
         if (gameState.factions) window.factions = gameState.factions;
+        if (gameState.regions) window.regions = gameState.regions;
         window.interiorRegions = gameState.interiorRegions || [];
         window.hollowmereEventFired = gameState.hollowmereEventFired || false;
         window.hollowmereVictoryBonusGiven = gameState.hollowmereVictoryBonusGiven || false;
