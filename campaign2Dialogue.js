@@ -152,6 +152,60 @@ window.npcDialogueTrees = {
         }
         window.showDialogue(npc, "Thank you again, for what it's worth now.", [{ label: "...", action: () => {} }]);
     },
+    old_mac: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'farm_wolves');
+
+        if (!quest) {
+            window.showDialogue(npc, "Wolves been at my pasture the past few nights. Lost two sheep already — can't fight 'em off alone anymore.", [
+                {
+                    label: "I'll deal with the wolves.",
+                    action: () => {
+                        window.questLog.push({
+                            id: 'farm_wolves',
+                            title: 'Wolves at the Farm',
+                            giver: 'Old Mac',
+                            status: 'active',
+                            description: "Clear the wolf pack menacing Old Mac's pasture."
+                        });
+                        window.showMessage('Quest added: Wolves at the Farm.');
+                    }
+                },
+                { label: "Not my problem.", action: () => {} }
+            ]);
+            return;
+        }
+
+        if (quest.status === 'active' && !quest.encounterState) {
+            window.showDialogue(npc, "They usually come round the pasture fence, after dark. Best go take a look.", [
+                { label: "I'm on it.", action: () => {} }
+            ]);
+            return;
+        }
+
+        if (quest.status === 'active' && quest.encounterState === 'engaged') {
+            const wolvesRemain = window.entities.some(e => e.farmQuestWolf && e.alive);
+            if (wolvesRemain) {
+                window.showDialogue(npc, "Still hear 'em out there. Best finish the job.", [{ label: "Back to it.", action: () => {} }]);
+            } else {
+                window.showDialogue(npc, "You got 'em! By God, every last one. That's a weight off, truly.", [
+                    {
+                        label: "Glad to help.",
+                        action: () => {
+                            quest.status = 'completed';
+                            window.adjustReputation(npc.reputation, 15, 20);
+                            window.party[0].gold = (window.party[0].gold || 0) + 25;
+                            if (window.gainExp) window.gainExp(150);
+                            window.showMessage('Quest complete: Wolves at the Farm. (+25 gold)');
+                        }
+                    }
+                ]);
+            }
+            return;
+        }
+
+        window.showDialogue(npc, "Pasture's quiet now, thanks to you.", [{ label: "Good.", action: () => {} }]);
+    },
     marta_wynfield: (npc) => {
         let opening;
         if (!window.hollowmereEventFired) {
@@ -517,6 +571,69 @@ function triggerMissingChildEncounter() {
     window.renderEntities();
 }
 window.triggerMissingChildEncounter = triggerMissingChildEncounter;
+
+// Old Mac's pasture wolves (see campaign2World.js's buildFarmstead, which
+// sets window.campaign2FarmPastureCenter). Triggered once, from proximity
+// (worldTime.js), while the quest is active. Wolves are tagged
+// farmQuestWolf so old_mac's turn-in check doesn't get confused by an
+// unrelated wilderness wolf pack wandering nearby.
+function triggerFarmWolfEncounter() {
+    if (!window.questLog || !window.campaign2FarmPastureCenter) return;
+    const quest = window.questLog.find(q => q.id === 'farm_wolves');
+    if (!quest || quest.status !== 'active' || quest.encounterState) return;
+
+    quest.encounterState = 'engaged';
+    const center = window.campaign2FarmPastureCenter;
+    [{ q: center.q - 1, r: center.r - 1 }, { q: center.q + 1, r: center.r }, { q: center.q, r: center.r + 1 }].forEach(hex => {
+        const wolf = window.createMonster('wolf', hex, null, null, 'enemy');
+        wolf.farmQuestWolf = true;
+        window.entities.push(wolf);
+        window.wakeUp(wolf);
+    });
+    window.showMessage('Snarling erupts from the pasture — the wolves are here!');
+    window.drawMap();
+    window.renderEntities();
+}
+window.triggerFarmWolfEncounter = triggerFarmWolfEncounter;
+
+// Random wilderness encounters: out past the village/farmland (35+ hexes
+// from the village center), wandering risks a wolf pack — especially
+// heading west, toward the unnamed, skull-marked road. Rolled at most once
+// per ~2 in-game minutes of wilderness travel (accumulator, not per-tick
+// probability, so it isn't tied to real framerate).
+window.wildernessEncounterAccum = 0;
+function checkWildernessEncounter(playerEntity, delta) {
+    if (!playerEntity || window.isInCombat) return;
+    if (window.distance(playerEntity.hex, { q: 0, r: 0 }) < 35) return; // still village/farmland, considered safe
+
+    window.wildernessEncounterAccum += delta;
+    const checkInterval = 120; // seconds of in-game wilderness travel between rolls
+    if (window.wildernessEncounterAccum < checkInterval) return;
+    window.wildernessEncounterAccum = 0;
+
+    const cp = window.campaign2Landmarks.crossroads;
+    const headingWest = playerEntity.hex.q < cp.q - 20;
+    const chance = headingWest ? 0.35 : 0.12;
+    if (Math.random() >= chance) return;
+
+    const count = 1 + Math.floor(Math.random() * 2); // 1-2 wolves
+    const neighbors = window.getNeighbors(playerEntity.hex.q, playerEntity.hex.r);
+    let spawned = 0;
+    for (let i = 0; i < neighbors.length && spawned < count; i++) {
+        const spot = neighbors[i];
+        if (window.getEntityAtHex(spot.q, spot.r) || window.getTerrainAt(spot.q, spot.r).name === 'Water') continue;
+        const wolf = window.createMonster('wolf', spot, null, null, 'enemy');
+        window.entities.push(wolf);
+        window.wakeUp(wolf);
+        spawned++;
+    }
+    if (spawned > 0) {
+        window.showMessage('A wolf pack emerges from the treeline!');
+        window.drawMap();
+        window.renderEntities();
+    }
+}
+window.checkWildernessEncounter = checkWildernessEncounter;
 
 window.startHollowmereShakedown = startHollowmereShakedown;
 window.resolveShakedown = resolveShakedown;

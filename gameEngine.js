@@ -585,7 +585,9 @@ function startGameCore(isLoading = false) {
       door_closed: new Image(),
       path: new Image(),
       signpost: new Image(),
-      corpse_marker: new Image()
+      corpse_marker: new Image(),
+      fence_h: new Image(),
+      fence_v: new Image()
   };
   visuals.playerBase.onload = () => { window.drawMap(); };
   visuals.leatherArmor.onload = () => { window.drawMap(); };
@@ -649,6 +651,8 @@ function startGameCore(isLoading = false) {
   visuals.path.onload = () => { window.drawMap(); };
   visuals.signpost.onload = () => { window.drawMap(); };
   visuals.corpse_marker.onload = () => { window.drawMap(); };
+  visuals.fence_h.onload = () => { window.drawMap(); };
+  visuals.fence_v.onload = () => { window.drawMap(); };
 
   visuals.playerBase.src = 'images/elf.png';
   visuals.leatherArmor.src = 'images/elfleatherarmour.png';
@@ -713,6 +717,8 @@ function startGameCore(isLoading = false) {
   visuals.path.src = 'images/path.svg';
   visuals.signpost.src = 'images/signpost.svg';
   visuals.corpse_marker.src = 'images/corpse_marker.svg';
+  visuals.fence_h.src = 'images/fence_h.svg';
+  visuals.fence_v.src = 'images/fence_v.svg';
 
   window.gameVisuals = visuals;
 
@@ -981,6 +987,10 @@ function renderEntities() {
               window.mapCtx.drawImage(window.gameVisuals.signpost, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'corpse_marker' && window.gameVisuals.corpse_marker.complete) {
               window.mapCtx.drawImage(window.gameVisuals.corpse_marker, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'fence_h' && window.gameVisuals.fence_h.complete) {
+              window.mapCtx.drawImage(window.gameVisuals.fence_h, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'fence_v' && window.gameVisuals.fence_v.complete) {
+              window.mapCtx.drawImage(window.gameVisuals.fence_v, x - size/2, y - size/2, size, size);
           }
       }
   }

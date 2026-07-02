@@ -109,6 +109,21 @@ window.campaign2BackgroundPatrons = [
 // wilderness encounter triggers (see campaign2Dialogue.js).
 window.campaign2Tam = { name: 'Tam Wells', title: 'Village Boy', race: 'human', gender: 'male', color: '#e0c080' };
 
+// Old Mac, out at the farmstead the south road leads to (past the border of
+// this world hex). Placed by buildFarmstead() in campaign2World.js.
+window.campaign2OldMac = {
+    name: 'Old Mac',
+    title: 'Farmer',
+    race: 'human', gender: 'male',
+    classLevels: ['fighter'],
+    skillPicks: ['health'],
+    equipment: ['club'],
+    side: 'neutral',
+    factionId: 'silverhart_kingdom',
+    color: '#7a8c5a',
+    dialogueId: 'old_mac'
+};
+
 // The feudal chain of authority above Hollowmere's residents. The elder is
 // placed in the village (the House building); the baron rules the barony
 // Hollowmere sits in and isn't physically present yet — a reputation-only

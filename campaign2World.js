@@ -53,6 +53,40 @@ function carveBuilding(centerQ, centerR, halfW, halfH, doorHex, floorType) {
     };
 }
 
+// Old Mac's Farmstead: a small house + fenced pasture at the end of the
+// south road, just past the border of this world-map hex. Reuses
+// carveBuilding for the house; the pasture is a plain rectangle of Grass
+// (already the default) with fence tileObjects lining its perimeter —
+// decorative only, not a collision boundary, same as table/bench.
+function buildFarmstead(roadEnd) {
+    const houseCenter = { q: roadEnd.q - 6, r: roadEnd.r };
+    const doorHex = { q: houseCenter.q + 3, r: houseCenter.r };
+    const farmHouseRegion = carveBuilding(houseCenter.q, houseCenter.r, 3, 2, doorHex, 'Wood Floor');
+    window.interiorRegions.push(farmHouseRegion);
+
+    // Short spur connecting the farmhouse door back to the south road.
+    for (let q = doorHex.q + 1; q < roadEnd.q; q++) window.setTerrainAt(q, roadEnd.r, 'Path');
+
+    // Fenced pasture west of the house.
+    const pMinQ = houseCenter.q - 9, pMaxQ = houseCenter.q - 2;
+    const pMinR = houseCenter.r - 4, pMaxR = houseCenter.r + 4;
+    for (let q = pMinQ; q <= pMaxQ; q++) {
+        window.tileObjects[`${q},${pMinR}`] = { type: 'fence_h', lightRadius: 0 };
+        window.tileObjects[`${q},${pMaxR}`] = { type: 'fence_h', lightRadius: 0 };
+    }
+    for (let r = pMinR; r <= pMaxR; r++) {
+        window.tileObjects[`${pMinQ},${r}`] = { type: 'fence_v', lightRadius: 0 };
+        window.tileObjects[`${pMaxQ},${r}`] = { type: 'fence_v', lightRadius: 0 };
+    }
+    window.campaign2FarmPastureCenter = { q: Math.floor((pMinQ + pMaxQ) / 2), r: houseCenter.r };
+
+    // Old Mac, just inside his door.
+    if (window.campaign2OldMac) {
+        const mac = window.buildNPC({ ...window.campaign2OldMac, hex: { q: houseCenter.q + 1, r: houseCenter.r } });
+        window.entities.push(mac);
+    }
+}
+
 function setupVillageScene() {
     window.overrideTerrain = {};
     window.tileObjects = {};
@@ -248,7 +282,8 @@ function setupVillageScene() {
     // uses) so the road is always contiguous — no gaps from a wiggle jumping
     // more than one hex sideways in axial coordinates. The "wiggle" is an
     // occasional one-hex lateral side-step folded into the walk itself,
-    // rather than an independent offset recomputed each step.
+    // rather than an independent offset recomputed each step. Returns the
+    // final hex reached, so callers can place something at a road's end.
     const paintRoad = (primary, length, wiggleAfter = 45, wiggleChance = 0.12) => {
         const laterals = primary.r !== 0 ? [{ q: 1, r: 0 }, { q: -1, r: 0 }] : [{ q: 0, r: 1 }, { q: 0, r: -1 }];
         let q = CP.q, r = CP.r;
@@ -261,11 +296,19 @@ function setupVillageScene() {
                 window.setTerrainAt(q, r, 'Path');
             }
         }
+        return { q, r };
     };
-    paintRoad({ q: 0, r: -1 }, 130); // North: back past the village, on to Millbrook and the capital, Silverhart
-    paintRoad({ q: 0, r: 1 }, 130);  // South: Old Mac's Farmstead
-    paintRoad({ q: 1, r: 0 }, 130);  // East: Reddale
-    paintRoad({ q: -1, r: 0 }, 130); // West: unmarked but for a skull and crossbones
+    // One world-map hex is WORLD_HEX_SIZE local hexes across (see
+    // terrain.js's battleToWorld scale convention) — the border of "this"
+    // hex from the crossroads. The south road is extended well past it,
+    // into the next world hex, to reach Old Mac's Farmstead.
+    const WORLD_HEX_SIZE = 130;
+    paintRoad({ q: 0, r: -1 }, WORLD_HEX_SIZE); // North: back past the village, on to Millbrook and the capital, Silverhart
+    const farmRoadEnd = paintRoad({ q: 0, r: 1 }, WORLD_HEX_SIZE + 40); // South: past the hex border, to Old Mac's Farmstead
+    paintRoad({ q: 1, r: 0 }, WORLD_HEX_SIZE); // East: Reddale
+    paintRoad({ q: -1, r: 0 }, WORLD_HEX_SIZE); // West: unmarked but for a skull and crossbones
+
+    buildFarmstead(farmRoadEnd);
 
     window.hollowmereEventFired = false;
 

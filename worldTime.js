@@ -74,6 +74,21 @@ function updateTime(delta) {
             }
         }
 
+        // Wolves at the Farm: wandering near Old Mac's pasture resolves the
+        // scripted encounter (see campaign2Dialogue.js).
+        if (window.campaign2FarmPastureCenter && window.triggerFarmWolfEncounter && p) {
+            const quest = (window.questLog || []).find(q => q.id === 'farm_wolves');
+            if (quest && quest.status === 'active' && !quest.encounterState &&
+                window.distance(p.hex, window.campaign2FarmPastureCenter) <= 6) {
+                window.triggerFarmWolfEncounter();
+            }
+        }
+
+        // Random wilderness encounters (wolves) out past the village/farmland.
+        if (window.checkWildernessEncounter && p) {
+            window.checkWildernessEncounter(p, delta);
+        }
+
         // Faction agendas advance on their own clock, independent of whether
         // the player is engaging with them (see factions.js).
         if (window.tickFactionAgendas) window.tickFactionAgendas(delta);
