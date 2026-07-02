@@ -28,6 +28,34 @@ function isForestClump(q, r) {
     return window.pseudoRandom(q * 1.3 + 4, r * 1.7 + 9) < 0.55;
 }
 
+// Paints a winding, variable-width stream segment starting at (startQ, startR)
+// and walking in the q direction given by dqStep (+1 east, -1 west) out to
+// endQ. Uses the same contiguity-safe trick as paintRoad's own wiggle: the
+// centerline only ever moves by a pure primary step (dqStep, 0) or an
+// *additional* pure lateral step (0, ±1) — both always valid hex-neighbor
+// directions regardless of travel direction, so consecutive water hexes are
+// never more than one hex apart (no diagonal jumps, no gaps). Width (1-3)
+// extends from the centerline in the +r direction, each hex adjacent to the
+// last, so a wide stretch is just a contiguous vertical run.
+function paintStreamSegment(startQ, endQ, dqStep, startR) {
+    let r = startR;
+    let width = 1;
+    for (let q = startQ; dqStep > 0 ? q <= endQ : q >= endQ; q += dqStep) {
+        window.setTerrainAt(q, r, 'Water');
+        let connectorPainted = 0; // the extra centerline-shift hex counts toward this column's width cap
+        if (window.pseudoRandom(q * 0.41, 5) < 0.35) {
+            r += window.pseudoRandom(q * 0.77, 13) < 0.5 ? -1 : 1;
+            window.setTerrainAt(q, r, 'Water');
+            connectorPainted = 1;
+        }
+        if (window.pseudoRandom(q * 0.53, 19) < 0.15) {
+            width = 1 + Math.floor(window.pseudoRandom(q * 0.29, 43) * 3); // 1..3
+        }
+        const extra = Math.max(0, width - 1 - connectorPainted);
+        for (let w = 1; w <= extra; w++) window.setTerrainAt(q, r + w, 'Water');
+    }
+}
+
 // Carves a simple rectangular building: walls on the border, floor inside,
 // one open door hex. Same overrideTerrain technique as the tavern — same
 // hex grid, no separate interior map. Returns the interior bounding box so
@@ -232,10 +260,15 @@ function setupVillageScene() {
     // --- A small stream just north of the village, crossed by a bridge
     // where the north road passes over it (the road is painted later in
     // this function and simply overwrites the water at the crossing hex,
-    // which is exactly what a bridge deck looks like here). ---
+    // which is exactly what a bridge deck looks like here). The stretch
+    // right by the village (this original span) stays a plain 1-wide
+    // straight line — further out, in both directions, it winds and
+    // widens (see paintStreamSegment below). ---
     for (let q = -20; q <= 28; q++) {
         window.setTerrainAt(q, -25, 'Water');
     }
+    paintStreamSegment(29, 70, 1, -25);
+    paintStreamSegment(-21, -60, -1, -25);
 
     // --- Tavern: walls q:-6..6, r:-4..4; floor carved q:-5..5, r:-3..3 ---
     for (let q = -6; q <= 6; q++) {
@@ -413,14 +446,28 @@ function setupVillageScene() {
     // at a given step count — used to place the abandoned house partway up
     // the north road, since the wiggle means a fixed offset from CP.q
     // wouldn't reliably land on/near the actual path at that distance.
-    const paintRoad = (primary, length, wiggleAfter = 45, wiggleChance = 0.12, onStep = null) => {
+    // `wiggleAfter` (hexes from the crossroads) keeps the village-approach
+    // stretch of every road dead straight — matches how a real village's
+    // immediate surroundings would be kept clear/maintained — while
+    // `wiggleChance` (checked every step past that point) is high enough to
+    // produce a real meander rather than the rare, isolated single-hex jogs
+    // a low chance produces (which just reads as "straight with an
+    // occasional zigzag," not a winding country road).
+    const paintRoad = (primary, length, wiggleAfter = 18, wiggleChance = 0.35, onStep = null) => {
         const laterals = primary.r !== 0 ? [{ q: 1, r: 0 }, { q: -1, r: 0 }] : [{ q: 0, r: 1 }, { q: 0, r: -1 }];
         let q = CP.q, r = CP.r;
+        let drift = 0; // signed lateral offset from the straight centerline
+        const maxDrift = 2; // keeps the wander gentle rather than a runaway curve
         for (let i = 1; i <= length; i++) {
             q += primary.q; r += primary.r;
             window.setTerrainAt(q, r, 'Path');
             if (i > wiggleAfter && Math.abs(Math.sin(i * 0.37)) < wiggleChance) {
-                const lat = laterals[Math.sin(i * 1.7) > 0 ? 0 : 1];
+                // Once drift has wandered as far as it's allowed to, bias the
+                // next step back toward center instead of picking randomly —
+                // this bounds the wiggle without making it a one-off bump.
+                const dir = Math.abs(drift) >= maxDrift ? -Math.sign(drift) : (Math.sin(i * 1.7) > 0 ? 1 : -1);
+                const lat = laterals[dir > 0 ? 0 : 1];
+                drift += dir;
                 q += lat.q; r += lat.r;
                 window.setTerrainAt(q, r, 'Path');
             }
@@ -435,7 +482,7 @@ function setupVillageScene() {
     const WORLD_HEX_SIZE = 130;
     let abandonedHouseWaypoint = null;
     const ABANDONED_HOUSE_STEP = 200; // partway to Millbrook — "stuff in between"
-    const northRoadEnd = paintRoad({ q: 0, r: -1 }, WORLD_HEX_SIZE * 3, 45, 0.12, (i, hex) => {
+    const northRoadEnd = paintRoad({ q: 0, r: -1 }, WORLD_HEX_SIZE * 3, 18, 0.35, (i, hex) => {
         if (i === ABANDONED_HOUSE_STEP) abandonedHouseWaypoint = hex;
     });
     const farmRoadEnd = paintRoad({ q: 0, r: 1 }, WORLD_HEX_SIZE + 40); // South: past the hex border, to Old Mac's Farmstead
@@ -446,7 +493,7 @@ function setupVillageScene() {
     // second hex further out, the same "extend the road, add a stub
     // settlement at the new end" pattern used for Millbrook up north.
     let goblinCampWaypoint = null;
-    const westRoadEnd = paintRoad({ q: -1, r: 0 }, WORLD_HEX_SIZE * 2, 45, 0.12, (i, hex) => {
+    const westRoadEnd = paintRoad({ q: -1, r: 0 }, WORLD_HEX_SIZE * 2, 18, 0.35, (i, hex) => {
         if (i === WORLD_HEX_SIZE) goblinCampWaypoint = hex;
     });
 

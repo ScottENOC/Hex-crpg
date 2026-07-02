@@ -132,6 +132,53 @@ test.describe('crossroads, signpost, and roads', () => {
         expect(result.bridgeIsPath).toBe(true);
     });
 
+    test('roads near the village stay straight, but wiggle once well clear of it', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const cp = window.campaign2Landmarks.crossroads;
+            // Within the first ~15 hexes (the village-approach stretch), the
+            // north road should sit exactly on the centerline column.
+            let straightNearVillage = true;
+            for (let i = 1; i <= 15; i++) {
+                if (window.getTerrainAt(cp.q, cp.r - i).name !== 'Path') { straightNearVillage = false; break; }
+            }
+            // Further out, the road should have drifted off that exact
+            // column at least once (a real wiggle, not just occasional bumps).
+            let everOffCenter = false;
+            for (let i = 20; i <= 100; i++) {
+                if (window.getTerrainAt(cp.q, cp.r - i).name !== 'Path') { everOffCenter = true; break; }
+            }
+            return { straightNearVillage, everOffCenter };
+        });
+        expect(result.straightNearVillage).toBe(true);
+        expect(result.everOffCenter).toBe(true);
+    });
+
+    test('the stream widens to more than 1 hex in places, further from the village, and stays gapless with no more than 3 hexes of width per column', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            let gapCount = 0;
+            let sawWidthGreaterThan1 = false;
+            let maxWidthSeen = 0;
+            let prevCenter = null;
+            let discontiguous = 0;
+            for (let q = 29; q <= 70; q++) {
+                const waterRs = [];
+                for (let r = -35; r <= -15; r++) {
+                    if (window.getTerrainAt(q, r).name === 'Water') waterRs.push(r);
+                }
+                if (waterRs.length === 0) { gapCount++; continue; }
+                if (waterRs.length > 1) sawWidthGreaterThan1 = true;
+                maxWidthSeen = Math.max(maxWidthSeen, waterRs.length);
+                if (prevCenter !== null && Math.abs(waterRs[0] - prevCenter) > 1) discontiguous++;
+                prevCenter = waterRs[0];
+            }
+            return { gapCount, sawWidthGreaterThan1, maxWidthSeen, discontiguous };
+        });
+        expect(result.gapCount).toBe(0);
+        expect(result.discontiguous).toBe(0);
+        expect(result.sawWidthGreaterThan1).toBe(true);
+        expect(result.maxWidthSeen).toBeLessThanOrEqual(3);
+    });
+
     test('regression: forest is scattered clumps, not a straight-line noise artifact', async ({ page }) => {
         // A raw sin()-plane-wave noise produces long, perfectly straight runs
         // of Forest along one diagonal. Check no single row has forest in
