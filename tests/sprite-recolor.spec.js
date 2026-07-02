@@ -120,7 +120,7 @@ test.describe('sprite recolor', () => {
         expect(result.cached).toBe(true);
     });
 
-    test('drawPlayerCharacter assigns stable, independently-salted hues per entity name', async ({ page }) => {
+    test('drawPlayerCharacter assigns stable, independently-salted hues per entity name, drawn from the natural palettes', async ({ page }) => {
         const result = await page.evaluate(() => {
             const canvas = document.createElement('canvas');
             canvas.width = 200; canvas.height = 200;
@@ -128,20 +128,42 @@ test.describe('sprite recolor', () => {
             window.hexSize = 40;
             const ent = { name: 'Testcharacter', race: 'human', gender: 'male', equipped: {} };
             window.drawPlayerCharacter(ctx, ent, 100, 100, 1, 0);
+            const expectedHairPreset = window.pickHairPreset('Testcharacter_hair');
             return {
                 shirtHue: ent.shirtHue, pantsHue: ent.pantsHue, hairHue: ent.hairHue, skinHue: ent.skinHue,
-                expectedShirt: window.hashStringToHue('Testcharacter_shirt'),
-                expectedPants: window.hashStringToHue('Testcharacter_pants'),
-                expectedHair: window.hashStringToHue('Testcharacter_hair'),
+                clothingSatMult: ent.clothingSatMult, hairLightMult: ent.hairLightMult, hairSatMult: ent.hairSatMult,
+                expectedShirt: window.pickClothingHue('Testcharacter_shirt'),
+                expectedPants: window.pickClothingHue('Testcharacter_pants'),
+                expectedHairHue: expectedHairPreset.hue,
+                expectedHairLightMult: expectedHairPreset.lightMult,
                 expectedSkin: 5 + window.hashStringToHue('Testcharacter_skin') % 40,
             };
         });
         expect(result.shirtHue).toBe(result.expectedShirt);
         expect(result.pantsHue).toBe(result.expectedPants);
-        expect(result.hairHue).toBe(result.expectedHair);
+        expect(result.hairHue).toBe(result.expectedHairHue);
+        expect(result.hairLightMult).toBe(result.expectedHairLightMult);
         expect(result.skinHue).toBe(result.expectedSkin);
+        // Defaults are muted (natural palette), unlike an explicit player choice.
+        expect(result.clothingSatMult).toBeLessThan(1);
         // Salting per band means shirt/pants/hair shouldn't all collapse to the same hue.
         expect(new Set([result.shirtHue, result.pantsHue, result.hairHue]).size).toBeGreaterThan(1);
+    });
+
+    test('pickHairPreset and pickClothingHue are deterministic and only draw from the natural palettes', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const names = ['Alice', 'Bob', 'Carol', 'Dave', 'Eve', 'Frank', 'Grace', 'Heidi'];
+            const hairHues = names.map(n => window.pickHairPreset(n + '_hair').hue);
+            const clothingHues = names.map(n => window.pickClothingHue(n + '_shirt'));
+            return {
+                hairSame: window.pickHairPreset('Alice_hair').hue === window.pickHairPreset('Alice_hair').hue,
+                hairAllValid: hairHues.every(h => [25, 45, 30, 12].includes(h)),
+                clothingAllValid: clothingHues.every(h => [25, 40, 95, 150, 210, 350, 45].includes(h)),
+            };
+        });
+        expect(result.hairSame).toBe(true);
+        expect(result.hairAllValid).toBe(true);
+        expect(result.clothingAllValid).toBe(true);
     });
 
     test('two different party members render with visibly different shirt colors', async ({ page }) => {

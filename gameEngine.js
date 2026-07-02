@@ -866,14 +866,17 @@ function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
     // spriteRecolor.js) so not every human/elf/dwarf looks identical.
     // Deterministic per entity name (salted per band so they don't all
     // collapse to the same hue), so it's stable without a stored field.
-    // Skin stays within a believable tan/brown range rather than the full
-    // hue wheel clothing gets.
+    // Defaults are drawn from CLOTHING_PALETTE/muted saturation — a raw
+    // full-hue-wheel hash looked garish on ordinary villagers — while a
+    // player's own slider choice (already set before this ever runs) is
+    // left untouched, at full saturation. Skin stays within a believable
+    // tan/brown range rather than the full hue wheel clothing gets.
     const baseImg = window.gameVisuals[cfg.baseKey];
     if (baseImg?.complete) {
-        if (e.shirtHue === undefined && window.hashStringToHue) e.shirtHue = window.hashStringToHue((e.name || 'x') + '_shirt');
-        if (e.pantsHue === undefined && window.hashStringToHue) e.pantsHue = window.hashStringToHue((e.name || 'x') + '_pants');
+        if (e.shirtHue === undefined && window.pickClothingHue) { e.shirtHue = window.pickClothingHue((e.name || 'x') + '_shirt'); e.clothingSatMult = 0.85; }
+        if (e.pantsHue === undefined && window.pickClothingHue) { e.pantsHue = window.pickClothingHue((e.name || 'x') + '_pants'); e.clothingSatMult = 0.85; }
         if (e.skinHue === undefined && window.hashStringToHue) e.skinHue = 5 + window.hashStringToHue((e.name || 'x') + '_skin') % 40;
-        const bodyImg = window.getRecoloredSprite ? window.getRecoloredSprite(baseImg, { shirtHue: e.shirtHue, pantsHue: e.pantsHue, skinHue: e.skinHue }) : baseImg;
+        const bodyImg = window.getRecoloredSprite ? window.getRecoloredSprite(baseImg, { shirtHue: e.shirtHue, pantsHue: e.pantsHue, skinHue: e.skinHue, satMult: e.clothingSatMult }) : baseImg;
         ctx.drawImage(bodyImg || baseImg, left, top, bW, bH);
     }
 
@@ -881,8 +884,11 @@ function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
     const hc = cfg.hair;
     const hairImg = window.gameVisuals[hc.key];
     if (hairImg?.complete) {
-        if (e.hairHue === undefined && window.hashStringToHue) e.hairHue = window.hashStringToHue((e.name || 'x') + '_hair');
-        const tintedHair = window.getRecoloredHairSprite ? window.getRecoloredHairSprite(hairImg, e.hairHue) : hairImg;
+        if (e.hairHue === undefined && window.pickHairPreset) {
+            const preset = window.pickHairPreset((e.name || 'x') + '_hair');
+            e.hairHue = preset.hue; e.hairLightMult = preset.lightMult; e.hairSatMult = preset.satMult;
+        }
+        const tintedHair = window.getRecoloredHairSprite ? window.getRecoloredHairSprite(hairImg, e.hairHue, e.hairLightMult, e.hairSatMult) : hairImg;
         const drawHair = tintedHair || hairImg;
         if (hc.type === 'full') {
             ctx.drawImage(drawHair, left, top + (hc.yRaw || 0) * z, bW, bH);

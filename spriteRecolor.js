@@ -67,15 +67,18 @@ const PANTS_BAND = [0.12, 0.36];
 const SKIN_BAND_MIN = 0.55;
 
 // Returns a canvas with shirt/pants/skin recolored per the given hues.
-// `hues` is `{ shirtHue, pantsHue, skinHue }` — any subset may be omitted
-// to leave that band untouched. Falls back to the original image if it
-// isn't loaded yet.
+// `hues` is `{ shirtHue, pantsHue, skinHue, satMult }` — any of the three
+// hues may be omitted to leave that band untouched. `satMult` (default 1)
+// scales shirt/pants saturation down for the muted "natural palette" NPC
+// defaults (see CLOTHING_PALETTE) without affecting a player's explicit
+// slider choice, which is passed through at full saturation. Falls back to
+// the original image if it isn't loaded yet.
 function getRecoloredSprite(img, hues) {
     if (!img || !img.complete || !img.naturalWidth) return img;
-    const { shirtHue, pantsHue, skinHue } = hues || {};
+    const { shirtHue, pantsHue, skinHue, satMult = 1 } = hues || {};
     if (shirtHue === undefined && pantsHue === undefined && skinHue === undefined) return img;
 
-    const cacheKey = `${img.src}::s${shirtHue ?? 'x'}:p${pantsHue ?? 'x'}:k${skinHue ?? 'x'}`;
+    const cacheKey = `${img.src}::s${shirtHue ?? 'x'}:p${pantsHue ?? 'x'}:k${skinHue ?? 'x'}:m${satMult}`;
     if (_recolorCache[cacheKey]) return _recolorCache[cacheKey];
 
     const canvas = document.createElement('canvas');
@@ -93,11 +96,12 @@ function getRecoloredSprite(img, hues) {
             for (let i = 0; i < data.length; i += 4) {
                 if (data[i + 3] < 50) continue; // skip transparent pixels
                 const [, s, l] = rgbToHsl(data[i], data[i + 1], data[i + 2]);
+                const s2 = Math.max(0, Math.min(1, s * satMult));
                 if (shirtHue !== undefined && l >= SHIRT_BAND[0] && l <= SHIRT_BAND[1]) {
-                    const [r2, g2, b2] = hslToRgb(shirtHue, s, l);
+                    const [r2, g2, b2] = hslToRgb(shirtHue, s2, l);
                     data[i] = r2; data[i + 1] = g2; data[i + 2] = b2;
                 } else if (pantsHue !== undefined && l >= PANTS_BAND[0] && l < PANTS_BAND[1]) {
-                    const [r2, g2, b2] = hslToRgb(pantsHue, s, l);
+                    const [r2, g2, b2] = hslToRgb(pantsHue, s2, l);
                     data[i] = r2; data[i + 1] = g2; data[i + 2] = b2;
                 }
             }
@@ -127,10 +131,14 @@ window.getRecoloredSprite = getRecoloredSprite;
 // Hair overlay sprites (e.g. images/humanmalehair.png) are almost entirely
 // transparent except the hair strands themselves, so — unlike the body —
 // every opaque pixel can be recolored without any lightness banding or
-// head-cutoff exclusion.
-function getRecoloredHairSprite(img, targetHue) {
+// head-cutoff exclusion. `lightMult`/`satMult` (default 1 — a plain hue
+// swap, used for a player's explicit slider choice) scale the source
+// pixel's own lightness/saturation, which is what actually distinguishes
+// black/blonde/brown/red from each other rather than just rotating hue
+// around the same dark-brown lightness (see HAIR_PALETTE below).
+function getRecoloredHairSprite(img, targetHue, lightMult = 1, satMult = 1) {
     if (!img || !img.complete || !img.naturalWidth || targetHue === undefined) return img;
-    const cacheKey = `${img.src}::hair:${targetHue}`;
+    const cacheKey = `${img.src}::hair:${targetHue}:${lightMult}:${satMult}`;
     if (_recolorCache[cacheKey]) return _recolorCache[cacheKey];
 
     const canvas = document.createElement('canvas');
@@ -144,7 +152,9 @@ function getRecoloredHairSprite(img, targetHue) {
     for (let i = 0; i < data.length; i += 4) {
         if (data[i + 3] < 50) continue;
         const [, s, l] = rgbToHsl(data[i], data[i + 1], data[i + 2]);
-        const [r2, g2, b2] = hslToRgb(targetHue, s, l);
+        const l2 = Math.max(0, Math.min(1, l * lightMult));
+        const s2 = Math.max(0, Math.min(1, s * satMult));
+        const [r2, g2, b2] = hslToRgb(targetHue, s2, l2);
         data[i] = r2; data[i + 1] = g2; data[i + 2] = b2;
     }
     ctx.putImageData(imageData, 0, 0);
@@ -166,3 +176,48 @@ function hashStringToHue(str) {
     return Math.abs(hash) % 360;
 }
 window.hashStringToHue = hashStringToHue;
+
+// Weighted natural palettes for a character's *default* (name-hash-derived)
+// appearance — a full random hue wheel looks wrong on ordinary medieval
+// villagers, so defaults are pulled from a small realistic set instead.
+// A player's own slider choice bypasses these entirely and calls
+// getRecoloredSprite/getRecoloredHairSprite with a raw hue.
+//
+// Hair needs a lightness/saturation change too, not just hue — the source
+// asset's hair pixels are all roughly the same dark-brown lightness, so a
+// hue-only rotation can't tell black from blonde.
+const HAIR_PALETTE = [
+    { hue: 25, weight: 35, lightMult: 0.95, satMult: 1.00 }, // brown — most common
+    { hue: 45, weight: 25, lightMult: 1.70, satMult: 0.65 }, // blonde
+    { hue: 30, weight: 22, lightMult: 0.30, satMult: 0.90 }, // black
+    { hue: 12, weight: 15, lightMult: 1.05, satMult: 1.35 }  // red — rarest
+];
+const CLOTHING_PALETTE = [
+    { hue: 25,  weight: 22 }, // brown
+    { hue: 40,  weight: 16 }, // tan
+    { hue: 95,  weight: 15 }, // moss/olive green
+    { hue: 150, weight: 10 }, // forest green
+    { hue: 210, weight: 15 }, // slate blue
+    { hue: 350, weight: 10 }, // muted rust red
+    { hue: 45,  weight: 12 }  // mustard/gold
+];
+
+// Picks a weighted entry from `palette`, deterministic per seed string
+// (reuses hashStringToHue's hash but rescrambles it so palette picks don't
+// correlate 1:1 with the raw hue hash used elsewhere).
+function pickFromPalette(seedStr, palette) {
+    const totalWeight = palette.reduce((sum, p) => sum + p.weight, 0);
+    const scrambled = (hashStringToHue(seedStr) * 977 + 53) % totalWeight;
+    let acc = 0;
+    for (const entry of palette) {
+        acc += entry.weight;
+        if (scrambled < acc) return entry;
+    }
+    return palette[palette.length - 1];
+}
+
+function pickHairPreset(seedStr) { return pickFromPalette(seedStr, HAIR_PALETTE); }
+window.pickHairPreset = pickHairPreset;
+
+function pickClothingHue(seedStr) { return pickFromPalette(seedStr, CLOTHING_PALETTE).hue; }
+window.pickClothingHue = pickClothingHue;
