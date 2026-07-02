@@ -126,6 +126,12 @@ function buildGoblinCamp(roadEnd) {
     });
     window.tileObjects[`${center.q},${center.r}`] = { type: 'fireplace', lightRadius: 6 }; // central campfire
 
+    // A note by the chief's hut, foreign-make and not goblin script — a
+    // breadcrumb that this tribe isn't operating alone (see
+    // readGoblinScoutNote in campaign2Dialogue.js). Reuses the journal
+    // sprite/click-to-read plumbing built for the abandoned house.
+    window.tileObjects[`${center.q + 1},${center.r - 2}`] = { type: 'journal', lightRadius: 0, readId: 'goblin_scout_note' };
+
     window.campaign2GoblinCampCenter = center;
 
     const chief = buildGoblinNPC({ ...window.campaign2GoblinChief, hex: { q: center.q, r: center.r - 1 } });
@@ -514,6 +520,23 @@ function readAbandonedHouseJournal() {
         );
     }
 }
+
+// A breadcrumb toward a third, larger plot arc: a foreign invasion, with the
+// Skarn-tooth goblins pushed this far south as a scouting/probing force
+// rather than acting alone. Deliberately vague — no invasion mechanics yet,
+// just enough to make a later reveal feel earned. First read cascades a
+// small security dip into Hollowmere (word of something bigger unsettles
+// the region), same mechanism as the farm quest reward.
+function readGoblinScoutNote() {
+    if (!window.goblinScoutNoteRead) {
+        window.goblinScoutNoteRead = true;
+        if (window.cascadeRegionStat) window.cascadeRegionStat('hollowmere', 'security', -3);
+    }
+    window.showDialogue({ name: 'Note' },
+        "A scrap of oilcloth, tucked inside the hut — not goblin make, and not goblin script. A crude map marks Hollowmere and the roads around it with small tally marks, dated across several months. At the bottom, in a different hand: \"Count their walls. Count their swords. Report back before the frost.\""
+    );
+}
+window.readGoblinScoutNote = readGoblinScoutNote;
 
 window.setupVillageScene = setupVillageScene;
 window.toggleDoor = toggleDoor;

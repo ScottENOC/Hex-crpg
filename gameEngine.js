@@ -2343,8 +2343,10 @@ function handleClick(e){
         return;
     }
 
-    // READ JOURNAL — same priority tier, used by the abandoned house
+    // READ JOURNAL — same priority tier, used by the abandoned house and
+    // (via readId) the goblin camp's foreign-make note
     if (doorObj && doorObj.type === 'journal' && window.distance(player.hex, clickedHex) <= 1) {
+        if (doorObj.readId === 'goblin_scout_note' && window.readGoblinScoutNote) { window.readGoblinScoutNote(); return; }
         if (window.readAbandonedHouseJournal) window.readAbandonedHouseJournal();
         return;
     }
@@ -3184,6 +3186,7 @@ function checkCombatEnd() {
             });
 
             window.triggerAmbientDialogue('hollowmere_victory');
+            if (window.offerBodyDisposalQuest) window.offerBodyDisposalQuest();
             if (window.updateActionButtons) window.updateActionButtons();
             if (window.updateTurnIndicator) window.updateTurnIndicator();
             window.drawMap();

@@ -109,6 +109,18 @@ window.campaign2BackgroundPatrons = [
 // wilderness encounter triggers (see campaign2Dialogue.js).
 window.campaign2Tam = { name: 'Tam Wells', title: 'Village Boy', race: 'human', gender: 'male', color: '#e0c080' };
 
+// Ironbond Company investigator, sent weeks after the tavern brawl to ask
+// around about the three men who never reported back. Not placed at scene
+// setup — spawned into the tavern by triggerGuildInvestigatorEncounter()
+// once enough in-game time has passed (see campaign2Dialogue.js).
+window.campaign2GuildInvestigator = {
+    name: 'Renn Ashby', title: 'Ironbond Company Investigator',
+    race: 'human', gender: 'female',
+    classLevels: ['fighter'], skillPicks: ['health'], equipment: [],
+    side: 'neutral', factionId: 'ironbond_company', color: '#7d8fa8',
+    dialogueId: 'guild_investigator'
+};
+
 // Old Mac, out at the farmstead the south road leads to (past the border of
 // this world hex). Placed by buildFarmstead() in campaign2World.js.
 window.campaign2OldMac = {

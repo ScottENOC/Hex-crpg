@@ -51,9 +51,15 @@ window.npcDialogueTrees = {
     mira_ashbrook: (npc) => {
         window.showDialogue(npc, "Quiet little village, Hollowmere. Most days, anyway.", [
             { label: "Any news from further out?", action: () => {
-                window.showDialogue(npc, "My cousin rode with the Silverhart levy up to the borderlands, fighting off orc raiders. Last letter said the raids have gotten worse — bigger warbands than the old stories tell. I try not to think on it too much.", [
-                    { label: "I hope she's alright.", action: () => {} }
-                ]);
+                if (window.goblinScoutNoteRead) {
+                    window.showDialogue(npc, "My cousin rode with the Silverhart levy up to the borderlands, fighting off orc raiders. Last letter said the raids have gotten worse — bigger warbands, moving with more purpose than raiders usually bother with. Made me think of that goblin business you had a hand in. Strange, if it's all connected.", [
+                        { label: "Strange indeed.", action: () => {} }
+                    ]);
+                } else {
+                    window.showDialogue(npc, "My cousin rode with the Silverhart levy up to the borderlands, fighting off orc raiders. Last letter said the raids have gotten worse — bigger warbands than the old stories tell. I try not to think on it too much.", [
+                        { label: "I hope she's alright.", action: () => {} }
+                    ]);
+                }
             }},
             { label: "Good to know.", action: () => {} }
         ]);
@@ -84,6 +90,23 @@ window.npcDialogueTrees = {
             }},
             { label: "Noted.", action: () => {} }
         ]);
+    },
+    guild_investigator: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'hidden_bodies');
+        if (quest && quest.hidden) {
+            window.showDialogue(npc, "Three of our men were due back from Hollowmere weeks ago. Never arrived, never sent word. You wouldn't know anything about that, would you?", [
+                { label: "No idea what you're talking about.", action: () => {
+                    window.adjustReputation(window.factions.ironbond_company, -5, 10);
+                    window.showMessage(`${npc.name} studies you a moment too long before moving on to the next table.`);
+                }},
+                { label: "Say nothing.", action: () => window.showMessage(`${npc.name} watches you a moment, then shrugs and turns away.`) }
+            ]);
+        } else {
+            window.showDialogue(npc, "Three of our men went missing near here a while back. Left enough behind that we know what happened, at least — small mercy compared to some. Keep your eyes open, will you?", [
+                { label: "I will.", action: () => {} }
+            ]);
+        }
     },
     wick_hallow: (npc) => {
         window.showDialogue(npc, "Welcome to Hallow's Goods. Soldier-grade gear, fair prices — what's left of my stock, anyway.", [
@@ -284,6 +307,11 @@ window.npcDialogueTrees = {
             return;
         }
         window.showDialogue(npc, "Something you need? Speak quick, this isn't a place for wandering humans.", [
+            { label: "Why are you really this close to the village?", action: () => {
+                window.showDialogue(npc, "You think Skarnub chose this ground? We were told to sit here, watch the roads, count what comes and goes. Somebody's paying close attention to your precious Hollowmere, and it isn't us. I've said too much — forget I spoke.", [
+                    { label: "Who told you to watch us?", action: () => window.showDialogue(npc, "Someone with a lot more banners than we've got. That's all you're getting from me.", [{ label: "...", action: () => {} }]) }
+                ]);
+            }},
             { label: "Just passing through.", action: () => {} }
         ]);
     },
@@ -533,6 +561,69 @@ function exitSoldiersPeacefully(dray, enforcers) {
     window.hollowmereSoldiersWaitingOutside = true;
     window.hollowmereQuestOfferFired = false;
 }
+
+// Only relevant after the 'fight' branch actually kills the three Ironbond
+// men (the other two branches let them leave alive — nothing to hide).
+// Called from checkCombatEnd (gameEngine.js) right after the victory
+// dialogue fires.
+function offerBodyDisposalQuest() {
+    if (!window.questLog) window.questLog = [];
+    if (window.questLog.find(q => q.id === 'hidden_bodies')) return;
+    const dray = window.entities.find(e => e.name === 'Dray Coltayne');
+    if (!dray || dray.alive) return;
+    const garrick = window.entities.find(e => e.name === 'Garrick Holt' && e.alive);
+    if (!garrick) return;
+
+    window.showDialogue(garrick, "Three Ironbond men, dead in my tavern. If word gets back to the Company before we're ready for it, they'll send twice as many next time. We should deal with this quietly.", [
+        {
+            label: "Help him hide the bodies.",
+            action: () => {
+                window.questLog.push({
+                    id: 'hidden_bodies', title: 'Loose Ends', giver: 'Garrick Holt', status: 'completed',
+                    description: "Helped Garrick dispose of the Ironbond dead before word could spread.",
+                    hidden: true, offeredAt: window.worldSeconds
+                });
+                window.showMessage("Between you, the bodies disappear into the old cellar before dawn. Whether it stays buried is another matter.");
+                if (window.updateActionButtons) window.updateActionButtons();
+            }
+        },
+        {
+            label: "Leave them for whoever finds them.",
+            action: () => {
+                window.questLog.push({
+                    id: 'hidden_bodies', title: 'Loose Ends', giver: 'Garrick Holt', status: 'completed',
+                    description: "Left the Ironbond dead where they fell, for whoever found them first.",
+                    hidden: false, offeredAt: window.worldSeconds
+                });
+                window.showMessage("You leave it be. Someone will find them soon enough.");
+                if (window.updateActionButtons) window.updateActionButtons();
+            }
+        }
+    ]);
+}
+window.offerBodyDisposalQuest = offerBodyDisposalQuest;
+
+// Weeks later, the Company notices its men never reported back and sends
+// someone to ask around. Watched from worldTime.js's tick, same time-gate
+// pattern as triggerMissingChildEncounter. Fires regardless of whether the
+// bodies were hidden or not — the dialogue just reacts differently (see
+// npcDialogueTrees.guild_investigator).
+function triggerGuildInvestigatorEncounter() {
+    if (!window.questLog) return;
+    const quest = window.questLog.find(q => q.id === 'hidden_bodies');
+    if (!quest || quest.encounterState) return;
+
+    const daysPassed = (window.worldSeconds - (quest.offeredAt || 0)) / (24 * 3600);
+    if (daysPassed < 14) return;
+    quest.encounterState = 'investigator_arrived';
+
+    const investigator = window.buildNPC({ ...window.campaign2GuildInvestigator, hex: { q: -2, r: -1 } });
+    window.entities.push(investigator);
+    window.showMessage(`${investigator.name} steps into the Hollow Tankard, eyes sweeping the room. "Ironbond Company. We're asking around about some new faces in town — mind a word?"`);
+    window.drawMap();
+    window.renderEntities();
+}
+window.triggerGuildInvestigatorEncounter = triggerGuildInvestigatorEncounter;
 
 // Watched from worldTime.js each tick: fires once, the first time the player
 // crosses back outside after the soldiers left peacefully.

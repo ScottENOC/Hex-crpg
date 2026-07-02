@@ -39,6 +39,28 @@ window.characterBanterLines = [
         ]
     },
     {
+        id: 'wren_parents_north',
+        once: true,
+        condition: () => partyHas('Wren Talbot') && window.hollowmereEventFired,
+        lines: [{ speaker: 'Wren Talbot', mood: 'distant', text: "My parents went north a couple years back — work in Millbrook, they said. Stopped writing after the first winter. I used to tell myself the roads were just bad." }]
+    },
+    {
+        id: 'wren_aldric_parents_comfort',
+        once: true,
+        condition: () => partyHas('Wren Talbot') && partyHas('Ser Aldric Thorne') && !!window.firedBanterIds['wren_parents_north'],
+        lines: [
+            { speaker: 'Ser Aldric Thorne', mood: 'gentle', text: "You mentioned your parents went north. Have you ever gone looking?" },
+            { speaker: 'Wren Talbot', mood: 'guarded', text: "Every time I think about it, I find a reason not to. Easier to imagine they're just... settled somewhere, than to go find out otherwise." },
+            { speaker: 'Ser Aldric Thorne', mood: 'solemn', text: "Then when you're ready, you won't go alone. That much I can promise." }
+        ]
+    },
+    {
+        id: 'wren_uneasy_near_house',
+        once: true,
+        condition: () => partyHas('Wren Talbot') && nearHex(window.campaign2AbandonedHouseCenter, 10) && !!window.firedBanterIds['wren_parents_north'],
+        lines: [{ speaker: 'Wren Talbot', mood: 'shaken', text: "I don't know why, but I don't like this place. Let's just... keep moving, if we can." }]
+    },
+    {
         id: 'aldric_low_attitude_warning',
         cooldownSeconds: 24 * 3600,
         condition: () => partyHas('Ser Aldric Thorne') && (window.companionAttitude?.['Ser Aldric Thorne'] ?? 100) < 30,
