@@ -30,6 +30,7 @@ function saveGame(saveName = "rpg_save_game") {
         factions: window.factions,
         regions: window.regions,
         companionAttitude: window.companionAttitude,
+        firedBanterIds: window.firedBanterIds,
         interiorRegions: window.interiorRegions,
         hollowmereEventFired: window.hollowmereEventFired,
         hollowmereVictoryBonusGiven: window.hollowmereVictoryBonusGiven,
@@ -128,6 +129,7 @@ function loadGame(saveName = "rpg_save_game") {
         if (gameState.factions) window.factions = gameState.factions;
         if (gameState.regions) window.regions = gameState.regions;
         if (gameState.companionAttitude) window.companionAttitude = gameState.companionAttitude;
+        if (gameState.firedBanterIds) window.firedBanterIds = gameState.firedBanterIds;
         window.interiorRegions = gameState.interiorRegions || [];
         window.hollowmereEventFired = gameState.hollowmereEventFired || false;
         window.hollowmereVictoryBonusGiven = gameState.hollowmereVictoryBonusGiven || false;

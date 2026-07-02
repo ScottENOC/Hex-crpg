@@ -245,6 +245,17 @@ test.describe('Ser Aldric Thorne: rescue, construction, and attitude', () => {
         expect(result).toBe(60); // unchanged — resolved, nothing left to be impatient about
     });
 
+    test('regression: attitude decay also stops once the chief is assassinated, even before the succession conversation with Nix happens', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            window.rescuePaladin();
+            window.questLog = [{ id: 'goblin_threat', status: 'active', chiefAssassinated: true }]; // no .resolution yet
+            window.companionAttitude['Ser Aldric Thorne'] = 60;
+            window.tickCompanionPatience(24 * 3600 * 1000);
+            return window.companionAttitude['Ser Aldric Thorne'];
+        });
+        expect(result).toBe(60); // the goblin problem is effectively dealt with; decay isn't a debt to pay off later
+    });
+
     test('the attitude meter is visible in the Quest Log UI', async ({ page }) => {
         const visible = await page.evaluate(() => {
             window.rescuePaladin();

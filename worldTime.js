@@ -89,6 +89,9 @@ function updateTime(delta) {
             window.checkWildernessEncounter(p, delta);
         }
 
+        // Ambient character personality lines (see characterBanter.js).
+        if (window.checkCharacterBanter) window.checkCharacterBanter(delta);
+
         // The Skarn-tooth Tribe: resolves itself once the chief dies in open
         // combat (the assassination path resolves separately, via dialogue —
         // see campaign2Dialogue.js), and Ser Aldric's patience with an

@@ -783,7 +783,12 @@ function tickCompanionPatience(deltaSeconds) {
     const name = window.campaign2Paladin?.name;
     if (!name || !window.party.some(p => p.name === name)) return;
     const quest = (window.questLog || []).find(q => q.id === 'goblin_threat');
-    if (!quest || quest.resolution) return; // resolved (any way) — no more waiting to be patient about
+    // Ceases entirely (not just slows) once the goblin problem has been
+    // dealt with — including "dealt with but the conversation to formalize
+    // it hasn't happened yet" (chiefAssassinated, pending Nix's succession
+    // dialogue). This isn't a deficit that needs to be earned back with
+    // other approval gains; it just stops.
+    if (!quest || quest.resolution || quest.chiefAssassinated) return;
     const days = deltaSeconds / (24 * 3600);
     const before = window.companionAttitude[name] ?? 50;
     window.companionAttitude[name] = Math.max(0, before - 0.15 * days); // ~1 point per ~7 in-game days
