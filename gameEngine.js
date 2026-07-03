@@ -15,6 +15,51 @@ function getEntityAtHex(q, r) {
     return window.entities.find(e => e.alive && e.getAllHexes().some(h => h.q === q && h.r === r));
 }
 
+// Alternate door actions (attack/lock) — surfaced by right-click, a
+// touch long-press, or a gamepad hold-A (see controller.js), since the
+// default tap/click/A on a door just opens/closes it.
+function openDoorContextMenu(q, r) {
+    const key = `${q},${r}`;
+    const door = window.tileObjects[key];
+    if (!door || (door.type !== 'door_open' && door.type !== 'door_closed')) return;
+    const player = window.currentTurnEntity || window.player;
+    if (!player || window.distance(player.hex, { q, r }) > 1) return;
+
+    const existing = document.getElementById('door-context-menu');
+    if (existing) existing.remove();
+
+    const { x, y } = window.hexToPixel(q, r);
+    const menu = document.createElement('div');
+    menu.id = 'door-context-menu';
+    menu.style.cssText = `position:fixed; left:${x}px; top:${y}px; transform:translate(-50%,-100%); z-index:99998;`
+        + 'background:rgba(20,20,20,0.95); border:2px solid #ffd700; border-radius:6px; padding:6px; display:flex; flex-direction:column; gap:4px;';
+
+    const attackBtn = document.createElement('button');
+    attackBtn.innerText = `Attack Door (${Math.max(0, door.hp ?? 20)}/${door.maxHp ?? 20} HP)`;
+    attackBtn.onclick = () => { window.attackDoor(q, r, player); menu.remove(); };
+    menu.appendChild(attackBtn);
+
+    if (door.type === 'door_closed' && !door.broken) {
+        const lockBtn = document.createElement('button');
+        lockBtn.innerText = door.locked ? 'Unlock Door' : 'Lock Door';
+        lockBtn.onclick = () => { window.lockDoor(q, r, player); menu.remove(); };
+        menu.appendChild(lockBtn);
+    }
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.innerText = 'Cancel';
+    cancelBtn.onclick = () => menu.remove();
+    menu.appendChild(cancelBtn);
+
+    document.body.appendChild(menu);
+    setTimeout(() => {
+        document.addEventListener('click', function closeMenu(ev) {
+            if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', closeMenu); }
+        });
+    }, 0);
+}
+window.openDoorContextMenu = openDoorContextMenu;
+
 function findNearestPassableHex(startHex) {
     // Breadth-first search for the nearest hex that is NOT water, NOT a wall, and NOT occupied
     const queue = [startHex];
@@ -92,6 +137,117 @@ function checkEquipmentAuras() {
     });
 }
 window.checkEquipmentAuras = checkEquipmentAuras;
+
+// FATIGUE & RESTING: buildings use an indoor floor terrain override (Wood
+// Floor/Cave Floor) instead of outdoor Grass/Path, which doubles as a cheap
+// "am I inside a building" check without needing separate room-bounds data.
+function isPlayerIndoors() {
+    if (!window.player) return false;
+    const t = window.getTerrainAt(window.player.hex.q, window.player.hex.r).name;
+    return t === 'Wood Floor' || t === 'Cave Floor';
+}
+window.isPlayerIndoors = isPlayerIndoors;
+
+// A building "occupied" if any non-party NPC is standing on the same indoor
+// floor nearby — approximate since buildings don't track their own bounds.
+function isBuildingOccupied() {
+    if (!window.player) return false;
+    const t = window.getTerrainAt(window.player.hex.q, window.player.hex.r).name;
+    return window.entities.some(e => e.alive && e.isNPC && e.side !== 'player'
+        && window.getTerrainAt(e.hex.q, e.hex.r).name === t
+        && window.distance(window.player.hex, e.hex) <= 10);
+}
+window.isBuildingOccupied = isBuildingOccupied;
+
+// Lower Hollowmere security -> higher chance of being caught resting rough
+// in the wilderness, same security stat checkWildernessEncounter already
+// uses (campaign2Dialogue.js).
+function getWildernessAmbushChance() {
+    const security = window.regions?.hollowmere?.security ?? 50;
+    return Math.max(0.05, Math.min(0.45, 0.45 - security / 120));
+}
+window.getWildernessAmbushChance = getWildernessAmbushChance;
+
+// Interrupts a rest with an attack: caught without armor on (see the
+// caughtOffGuard check in resolveAttack's damage-reduction calc) and having
+// to spend 5 TP just getting back on your feet before acting.
+function triggerRestAmbush(kind) {
+    window.isResting = false;
+    if (window.updateRestButton) window.updateRestButton();
+
+    const sentientAllies = window.entities.filter(e => e.alive && e.side === 'player' && !e.rider);
+    sentientAllies.forEach(e => {
+        e.caughtOffGuard = true;
+        e.timePoints = Math.max(0, (e.timePoints || 0) - 5);
+    });
+
+    const player = window.player;
+    let spawned = 0;
+    const count = 1 + Math.floor(Math.random() * 2);
+    for (let n = 0; n < count; n++) {
+        let spot = null;
+        for (let attempt = 0; attempt < 10 && !spot; attempt++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 2 + Math.floor(Math.random() * 2);
+            const candidate = window.hexRound(
+                player.hex.q + Math.round(Math.cos(angle) * dist),
+                player.hex.r + Math.round(Math.sin(angle) * dist)
+            );
+            if (window.getEntityAtHex(candidate.q, candidate.r)) continue;
+            if (window.getTerrainAt(candidate.q, candidate.r).name === 'Wall') continue;
+            if (window.getTerrainAt(candidate.q, candidate.r).name === 'Water') continue;
+            spot = candidate;
+        }
+        if (!spot) continue;
+        const monster = window.createMonster(kind === 'door' ? 'goblin' : 'wolf', spot, null, null, 'enemy');
+        window.entities.push(monster);
+        spawned++;
+    }
+
+    window.showMessage(kind === 'door'
+        ? "Someone's trying to break the door down! You scramble up, caught without your armor on."
+        : "You're jolted awake — something's found you in the wilderness, and you never got your armor back on.");
+    if (window.drawMap) window.drawMap();
+    if (window.renderEntities) window.renderEntities();
+    if (window.updateTurnIndicator) window.updateTurnIndicator();
+    return spawned;
+}
+window.triggerRestAmbush = triggerRestAmbush;
+
+window.restGuardShiftEnabled = false;
+function toggleGuardShiftRest() {
+    window.restGuardShiftEnabled = !window.restGuardShiftEnabled;
+    const partySize = window.entities.filter(e => e.alive && e.side === 'player' && !e.aiControlled && !e.rider).length;
+    if (window.restGuardShiftEnabled) {
+        if (partySize >= 4) {
+            window.showMessage("Guard shifts set: one of you stays awake and watching at all times through an 8-hour rest, rotating who.");
+        } else if (partySize === 3) {
+            window.showMessage("Guard shifts set: three-way rotation, everyone gets real sleep across a 10-hour rest.");
+        } else {
+            window.showMessage("You don't have enough people to run a real watch rotation — someone still has to sleep sometime.");
+            window.restGuardShiftEnabled = false;
+        }
+    } else {
+        window.showMessage("Guard shifts off.");
+    }
+    if (window.updateRestButton) window.updateRestButton();
+}
+window.toggleGuardShiftRest = toggleGuardShiftRest;
+
+// Innkeeper-hosted rest: always safe (no ambush roll) for a flat 1 gold.
+function restAtInn(npc) {
+    const player = window.party?.[0];
+    if (!player) return;
+    if (player.gold < 1) { window.showMessage("You don't have a single gold piece to spare."); return; }
+    const enemySeen = window.entities.some(e => e.alive && e.side === 'enemy' && window.isVisibleToPlayer(e.hex));
+    if (enemySeen) { window.showMessage("Not with enemies about!"); return; }
+    player.gold -= 1;
+    window._restSafe = true;
+    window.isResting = true;
+    window.showMessage(`${npc.name} shows you to a room. Resting safely until restored...`);
+    if (window.updateRestButton) window.updateRestButton();
+}
+window.restAtInn = restAtInn;
 
 function syncBackToPlayer(entity) {
     if (entity.side === 'player' && window.party) {
@@ -892,8 +1048,26 @@ function startGameCore(isLoading = false) {
       const target = getEntityAtHex(clickedHex.q, clickedHex.r);
       if (target && target.alive && window.isVisibleToPlayer(target.hex)) {
           window.showEntityDetails(target);
+          return;
       }
+      if (window.openDoorContextMenu) window.openDoorContextMenu(clickedHex.q, clickedHex.r);
   });
+
+  // TOUCH LONG-PRESS: same alternate-action menu as right-click, for a door
+  // under a finger held down without moving (opening/attacking is the
+  // normal tap; a hold surfaces lock/attack instead).
+  let touchHoldTimer = null, touchHoldHex = null;
+  window.mapCanvas.addEventListener("touchstart", (e) => {
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      touchHoldHex = window.screenToHex({ x: t.clientX, y: t.clientY });
+      touchHoldTimer = setTimeout(() => {
+          if (window.openDoorContextMenu && touchHoldHex) window.openDoorContextMenu(touchHoldHex.q, touchHoldHex.r);
+          touchHoldTimer = null;
+      }, 550);
+  }, { passive: true });
+  window.mapCanvas.addEventListener("touchend", () => { if (touchHoldTimer) { clearTimeout(touchHoldTimer); touchHoldTimer = null; } });
+  window.mapCanvas.addEventListener("touchmove", () => { if (touchHoldTimer) { clearTimeout(touchHoldTimer); touchHoldTimer = null; } }, { passive: true });
 
   if (!window.tickInterval) window.tickInterval = setInterval(tick, 10);
 }
@@ -914,7 +1088,7 @@ function startGameCore(isLoading = false) {
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const CHAR_CONFIG = {
     human_male:   { bodyW:1.80, bodyH:2.16, yOff:-0.18, baseKey:'humanMaleBase',  hair:{ key:'humanMaleHair',   type:'small', wFrac:0.30, hFrac:0.30, topFrac:0.19 }, armour:{ wMult:1.0, topShift:0   }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.35, y:0.64 }, offHand:{ x:0.59, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42, shieldOffset:{ x:0.15, y:0.15 }, mainHandYAdj:-0.3, offHandYAdj:-0.15 },
-    human_female: { bodyW:1.60, bodyH:1.92, yOff:-0.16, baseKey:'humanBase',       hair:{ key:'humanHair',       type:'full',  yRaw:-3                              }, armour:{ wMult:1.0, topShift:0   }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.40, y:0.66 }, offHand:{ x:0.60, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42, shieldOffset:{ x:0.15, y:0.15 } },
+    human_female: { bodyW:1.60, bodyH:1.92, yOff:-0.16, baseKey:'humanBase',       hair:{ key:'humanHair',       type:'full',  yRaw:-3                              }, armour:{ wMult:1.0, topShift:0   }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.40, y:0.66 }, offHand:{ x:0.60, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42, shieldOffset:{ x:0.30, y:0.30 }, mainHandYAdj:0.25 },
     elf_male:     { bodyW:2.00, bodyH:2.40, yOff:-0.20, baseKey:'elfMaleBase',     hair:{ key:'elfMaleHair',     type:'full'                                        }, armour:{ wMult:1.0, topShift:0.3 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.37, y:0.63 }, offHand:{ x:0.58, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
     elf_female:   { bodyW:2.00, bodyH:2.40, yOff:-0.20, baseKey:'elfFemaleBase',   hair:{ key:'elfFemaleHair',   type:'full'                                        }, armour:{ wMult:1.0, topShift:0.3 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.37, y:0.63 }, offHand:{ x:0.58, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
     dwarf_male:   { bodyW:1.60, bodyH:1.92, yOff:-0.07, baseKey:'dwarfMaleBase',   hair:{ key:'dwarfMaleHair',   type:'full'                                        }, armour:{ wMult:1.4, topShift:0.1 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.33, y:0.61 }, offHand:{ x:0.52, y:0.45 }, weaponSizeMult:1.0, shieldSizeMult:0.36 },
@@ -1361,6 +1535,12 @@ function tick() {
     lastTimestamp = now;
 
     const inCombat = checkInCombat();
+    if (inCombat && !window._wasInCombat && window.showTutorialTip) {
+        window.showTutorialTip('combat_start', "Combat is turn-based now, not real-time — very different from tabletop D&D. Each character spends Time Points (TP) on actions; once you're below 80 TP you can no longer act until it regenerates. Watch the initiative bar to see whose turn is next.");
+    } else if (!inCombat && window._wasInCombat && window.showTutorialTip) {
+        window.showTutorialTip('combat_end', "Combat's over — you're back in real-time exploration. Movement and actions now happen continuously instead of waiting for turns.");
+    }
+    window._wasInCombat = inCombat;
     window.isInCombat = inCombat; // Expose globally for UI
 
     // PERIODIC UI REFRESH (Out of combat)
@@ -2682,11 +2862,7 @@ function handleClick(e){
     // DOOR TOGGLE — takes priority over talk/attack/move when clicking an adjacent door
     const doorObj = window.tileObjects && window.tileObjects[`${clickedHex.q},${clickedHex.r}`];
     if (doorObj && (doorObj.type === 'door_open' || doorObj.type === 'door_closed') && window.distance(player.hex, clickedHex) <= 1) {
-        if (doorObj.locked) {
-            window.showMessage("The door won't budge — barred from the outside.");
-            return;
-        }
-        if (window.toggleDoor) window.toggleDoor(clickedHex.q, clickedHex.r);
+        if (window.toggleDoor) window.toggleDoor(clickedHex.q, clickedHex.r, player);
         return;
     }
 
@@ -3336,7 +3512,9 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
       }
   }
 
-  let red = (target.baseReduction || 0) +
+  // Caught off-guard mid-rest: armor was off, so equipment reduction doesn't
+  // apply until the ambush fight is over (see triggerRestAmbush).
+  let red = target.caughtOffGuard ? 0 : (target.baseReduction || 0) +
             (target.equipped?.armor && window.items[target.equipped.armor] ? window.items[target.equipped.armor].reduction : 0) +
             (target.equipped?.offhand && window.items[target.equipped.offhand] && window.items[target.equipped.offhand].type === 'shield' ? (window.items[target.equipped.offhand].reduction + (target.skills?.shield_proficiency || 0)) : 0) +
             (target.equipped?.helmet && window.items[target.equipped.helmet] ? (window.items[target.equipped.helmet].reduction || 0) : 0) +
@@ -3502,6 +3680,9 @@ function checkCombatEnd() {
     console.log(`[ARENA] checkCombatEnd â€” isInArena=${window.isInArena} aliveEnemies=${aliveEnemies.length} totalEntities=${window.entities.length}`);
     if (aliveEnemies.length > 0) console.log('[ARENA] checkCombatEnd: enemies still alive, no transition');
     if (!window.entities.some(e => e.side === 'enemy' && e.alive)) {
+        // Ambush is over — armor protection applies again.
+        window.entities.forEach(e => { if (e.caughtOffGuard) e.caughtOffGuard = false; });
+
         // Combat Ended Auto-save
         if (window.saveGame && !window.ironmanMode) {
              window.saveGame("AutoSave_CombatEnd");
@@ -3786,6 +3967,7 @@ function lootItems(entity) {
             const char = window.party.find(p => p.name === entity.name);
             if (char) char.inventory.push(itemId);
             window.showMessage(`${entity.name} looted ${window.items[itemId].name}.`);
+            if (window.showTutorialTip) window.showTutorialTip('acquired_item', "New gear sits in your Inventory until you equip it — open the Inventory screen and click Equip on it to actually use it.");
         } else {
             entity.inventory.push(itemId);
             window.showMessage(`${entity.name} looted ${window.items[itemId].name}.`);

@@ -38,12 +38,15 @@ Object.assign(window.dialogueData, {
 
 window.npcDialogueTrees = {
     garrick_holt: (npc) => {
+        const restOption = { label: "Can we get a room to rest? (1 gold)", action: () => window.restAtInn(npc) };
         if (window.hollowmereEventFired) {
             window.showDialogue(npc, "Thanks again for that, friend. The Tankard's doors are always open to you.", [
+                restOption,
                 { label: "Glad to help.", action: () => {} }
             ]);
         } else {
             window.showDialogue(npc, "Welcome to the Hollow Tankard! Sit, drink, rest a while.", [
+                restOption,
                 { label: "Thanks, we will.", action: () => {} }
             ]);
         }

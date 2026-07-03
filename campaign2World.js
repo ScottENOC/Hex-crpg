@@ -668,19 +668,71 @@ function setupVillageScene(forLoadOnly = false) {
 // Toggles a door hex between open (walkable Wood Floor) and closed (Wall,
 // blocks line-of-sight/movement via the existing wall-terrain LOS check —
 // no new LOS logic needed).
-function toggleDoor(q, r) {
+function toggleDoor(q, r, opener) {
     const key = `${q},${r}`;
+    const existing = window.tileObjects[key] || {};
     const isOpen = window.getTerrainAt(q, r).name !== 'Wall';
+    // Locked doors only yield to someone standing inside the building —
+    // approximated as standing on the same indoor floor terrain the door
+    // leads to, since buildings don't otherwise track a room boundary.
+    if (!isOpen && existing.locked && opener) {
+        const openerTerrain = window.getTerrainAt(opener.hex.q, opener.hex.r).name;
+        if (openerTerrain !== 'Wood Floor' && openerTerrain !== 'Cave Floor') {
+            window.showMessage("The door is locked.");
+            return;
+        }
+    }
+    const hp = existing.hp !== undefined ? existing.hp : 20;
+    const maxHp = existing.maxHp !== undefined ? existing.maxHp : 20;
     if (isOpen) {
         window.setTerrainAt(q, r, 'Wall');
-        window.tileObjects[key] = { type: 'door_closed', lightRadius: 0 };
+        window.tileObjects[key] = { type: 'door_closed', lightRadius: 0, locked: false, hp, maxHp };
     } else {
         window.setTerrainAt(q, r, 'Wood Floor');
-        window.tileObjects[key] = { type: 'door_open', lightRadius: 0 };
+        window.tileObjects[key] = { type: 'door_open', lightRadius: 0, locked: false, hp, maxHp };
     }
     window.drawMap();
     window.renderEntities();
 }
+
+// Doors are attackable (HP, no healing) and lockable from the inside —
+// reuses the existing Wall-terrain collision/LOS system, so a destroyed
+// door just becomes a permanently open, un-lockable doorway.
+function attackDoor(q, r, attacker) {
+    const key = `${q},${r}`;
+    const door = window.tileObjects[key];
+    if (!door || (door.type !== 'door_closed' && door.type !== 'door_open')) return;
+    if (door.hp === undefined) door.hp = 20;
+    if (door.maxHp === undefined) door.maxHp = 20;
+    const weaponId = attacker?.equipped?.weapon;
+    const dmg = (weaponId && window.items[weaponId]?.damage) ? window.items[weaponId].damage : 2;
+    door.hp -= dmg;
+    if (door.hp <= 0) {
+        window.setTerrainAt(q, r, 'Wood Floor');
+        window.tileObjects[key] = { type: 'door_open', lightRadius: 0, locked: false, broken: true, hp: 0, maxHp: door.maxHp };
+        window.showMessage("The door is smashed off its hinges!");
+    } else {
+        window.showMessage(`The door takes ${dmg} damage (${Math.max(0, door.hp)}/${door.maxHp} HP).`);
+    }
+    window.drawMap();
+    window.renderEntities();
+}
+
+function lockDoor(q, r, entity) {
+    const key = `${q},${r}`;
+    const door = window.tileObjects[key];
+    if (!door || door.type !== 'door_closed') { window.showMessage("The door needs to be closed to lock it."); return; }
+    if (door.broken) { window.showMessage("It's broken — it won't lock anymore."); return; }
+    const terrainName = window.getTerrainAt(entity.hex.q, entity.hex.r).name;
+    if (terrainName !== 'Wood Floor' && terrainName !== 'Cave Floor') {
+        window.showMessage("You can only lock a door from the inside.");
+        return;
+    }
+    door.locked = !door.locked;
+    window.showMessage(door.locked ? "You lock the door." : "You unlock the door.");
+}
+window.attackDoor = attackDoor;
+window.lockDoor = lockDoor;
 
 // Reads the crossroads signpost — pure flavor/navigation text, no state.
 function readSignpost() {

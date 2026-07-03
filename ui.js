@@ -65,6 +65,10 @@ function updatePartyTabs() {
         btn.onclick = () => window.selectCharacterByName(ent.name);
         partyDiv.appendChild(btn);
     });
+
+    if (friendlies.length > 1 && window.showTutorialTip) {
+        window.showTutorialTip('multi_character', "You've got more than one character now (party member, summon, or mount) — click their name in this bar to switch who you're controlling.");
+    }
 }
 
 function selectCharacterByName(name) {
@@ -148,8 +152,28 @@ function toggleRest() {
             showMessage("Cannot rest while enemies are nearby!");
             return;
         }
+        if (window.isPlayerIndoors && window.isPlayerIndoors() && window.isBuildingOccupied && window.isBuildingOccupied()) {
+            showMessage("You can't rest here — someone lives here.");
+            return;
+        }
+        window._restSafe = false;
         window.isResting = true;
         showMessage("Resting until restored...");
+        if (window.showTutorialTip) window.showTutorialTip('resting', "Resting fast-forwards time to recover HP/TP/mana. Out in the wilderness it isn't fully safe — you rest without armor on and there's a chance of being caught out, worse in less secure regions. Towns, inns, and empty buildings are safer.");
+
+        // One ambush roll per rest attempt — guard shifts (enough party
+        // members to keep a watch) cancel it entirely, an inn room is
+        // handled separately by restAtInn (always safe).
+        if (!window.restGuardShiftEnabled) {
+            const indoors = window.isPlayerIndoors && window.isPlayerIndoors();
+            const chance = indoors ? 0.10 : (window.getWildernessAmbushChance ? window.getWildernessAmbushChance() : 0.2);
+            if (Math.random() < chance) {
+                const delay = 800 + Math.random() * 2200;
+                setTimeout(() => {
+                    if (window.isResting && window.triggerRestAmbush) window.triggerRestAmbush(indoors ? 'door' : 'wilderness');
+                }, delay);
+            }
+        }
     } else {
         window.isResting = false;
         showMessage("Stopped resting.");
@@ -867,6 +891,7 @@ function showSpellScreen() {
         contentDiv.innerHTML = '<p>You know no base spells. Learn them from your character screen.</p>';
         return;
     }
+    if (window.showTutorialTip) window.showTutorialTip('spell_builder', "Pick a base spell, then adjust range/magnitude/targets with the sliders — mana and TP cost update live. Once it looks right, hit Save to add it to your action bar.");
     let html = `
         <div class="spell-form">
             <div class="form-group">
@@ -1211,7 +1236,10 @@ function equipItem(itemId, isOffhand = false) {
     } else if (item.type === 'armor') {
         const reqMap = { 'light_armor': 'light_armor_training', 'medium_armor': 'medium_armor_training', 'heavy_armor': 'heavy_armor_training' };
         const reqSkill = reqMap[itemId];
-        if (reqSkill && (!player.skills[reqSkill] || player.skills[reqSkill] === 0)) { showMessage(`You need ${window.skills[reqSkill].name} to equip this.`); return; }
+        if (reqSkill && (!player.skills[reqSkill] || player.skills[reqSkill] === 0)) {
+            showMessage(`You need ${window.skills[reqSkill].name} to equip this. Learn it from your character screen's skill tree, if you have a free skill point.`);
+            return;
+        }
         oldItemForLock = player.equipped.armor;
         player.equipped.armor = itemId;
     } else if (item.type === 'helmet') {
@@ -1224,6 +1252,7 @@ function equipItem(itemId, isOffhand = false) {
     showInventoryScreen();
     showCharacter();
     window.updatePlayerUI();
+    if (window.showTutorialTip) window.showTutorialTip('equip_item', "Equipping swaps this into the character's slot immediately — attack range, armor, and appearance all update right away. Some items briefly lock the slot from being swapped again.");
 }
 
 function syncPlayerEntity() {
@@ -1499,12 +1528,19 @@ function updateTurnIndicator() {
                 shieldImg.src = 'images/shield.png';
                 shieldImg.classList.add('portrait-layer');
                 if (entity.race === 'human') {
-                    const sizePct = entity.gender === 'male' ? 90 : 80;
-                    const offsetPct = (100 - sizePct) / 2;
-                    shieldImg.style.width = `${sizePct}%`; 
-                    shieldImg.style.height = `${sizePct}%`; 
-                    shieldImg.style.left = `${offsetPct}%`; 
-                    shieldImg.style.top = `${offsetPct}%`;
+                    const bodySizePct = entity.gender === 'male' ? 90 : 80;
+                    const bodyOffsetPct = (100 - bodySizePct) / 2;
+                    // The shield is a hand-held item, not another full-body
+                    // layer — sizing it like the body/armor layers made it
+                    // balloon to cover almost the whole portrait. Scale it
+                    // down the same way drawPlayerCharacter's shieldSizeMult
+                    // does relative to the body, and nudge it toward the
+                    // off-hand instead of dead-center.
+                    const shieldPct = bodySizePct * 0.42;
+                    shieldImg.style.width = `${shieldPct}%`;
+                    shieldImg.style.height = `${shieldPct}%`;
+                    shieldImg.style.left = `${bodyOffsetPct + bodySizePct * 0.08}%`;
+                    shieldImg.style.top = `${bodyOffsetPct + bodySizePct * 0.20}%`;
                 }
                 portraitDiv.appendChild(shieldImg);
             }
@@ -1826,6 +1862,7 @@ function openShop(options) {
             player.inventory.push(id);
             if (stock) stock[id]--;
             openShop(options); // Refresh
+            if (window.showTutorialTip) window.showTutorialTip('acquired_item', "New gear sits in your Inventory until you equip it — open the Inventory screen and click Equip on it to actually use it.");
         };
         div.appendChild(btn);
         buyList.appendChild(div);

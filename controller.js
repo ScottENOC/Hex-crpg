@@ -31,6 +31,7 @@ let prevButtons = [];
 let cursorX = window.innerWidth / 2;
 let cursorY = window.innerHeight / 2;
 let lastMoveStepAt = 0;
+let aButtonDownAt = 0;
 let radialEl = null;
 let radialItems = null; // currently-open radial's items, for confirm/cancel
 let targetListEl = null;
@@ -156,11 +157,36 @@ function controllerLoop() {
         updateCursor(lx, ly);
         if (justPressed(0)) clickAtCursor();
     } else {
-        if (justPressed(0)) handleContextAction();
+        if (justPressed(0)) aButtonDownAt = performance.now();
+        const justReleased0 = !buttons[0] && prevButtons[0];
+        if (justReleased0) {
+            const held = performance.now() - (aButtonDownAt || performance.now());
+            if (held > 500) {
+                handleDoorHoldAction();
+            } else {
+                handleContextAction();
+            }
+        }
         if (!anyModalOpen()) updateCharacterMove(lx, ly);
     }
 
     prevButtons = buttons;
+}
+
+// Holding A near a door (instead of a quick tap) attacks it — the same
+// alternate-action idea as right-click/long-press, just without a cursor
+// position to build a lock/attack menu from, so it goes straight to attack.
+function handleDoorHoldAction() {
+    const entity = getControlledEntity();
+    if (!entity) return;
+    const neighbors = window.getNeighbors(entity.hex.q, entity.hex.r).concat([entity.hex]);
+    for (const n of neighbors) {
+        const obj = window.tileObjects?.[`${n.q},${n.r}`];
+        if (obj && (obj.type === 'door_open' || obj.type === 'door_closed') && window.attackDoor) {
+            window.attackDoor(n.q, n.r, entity);
+            return;
+        }
+    }
 }
 
 // ---------- Cursor mode ----------
