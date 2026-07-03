@@ -62,7 +62,12 @@ function updatePartyTabs() {
             btn.style.border = "2px solid #ffeb3b";
             btn.style.backgroundColor = "#555";
         }
-        btn.onclick = () => window.selectCharacterByName(ent.name);
+        const selectAction = () => window.selectCharacterByName(ent.name);
+        btn.onclick = selectAction;
+        // onclick alone can be unreliable on touch devices for buttons that
+        // don't already have a native tap-friendly affordance — same fix
+        // already used elsewhere in this UI (e.g. the old info-mode toggle).
+        btn.ontouchstart = (e) => { e.preventDefault(); selectAction(); };
         partyDiv.appendChild(btn);
     });
 

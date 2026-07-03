@@ -96,6 +96,26 @@ function openDoorContextMenu(q, r) {
 }
 window.openDoorContextMenu = openDoorContextMenu;
 
+// Assigns each real party member/mount a destination offset from the
+// leader's clicked hex per the current formation. A follower's relative
+// offset (esp. "close" formation, which just preserves whatever gap they
+// already had) can land inside a wall/building the leader is hugging — an
+// unreachable destination used to just silently halt the follower right next
+// to it (processRealTimeStep's findPath returns null with no feedback),
+// reading as "stuck at the wall." Snap to the nearest actually-passable hex
+// instead so they path around it like the A* search already intends.
+function assignGroupMoveDestinations(leader, clickedHex) {
+    const friendlies = window.entities.filter(e => e.alive && e.side === 'player' && !e.rider && !e.aiControlled);
+    friendlies.forEach(f => {
+        const offset = f === leader ? { q: 0, r: 0 } : window.getFormationOffset(f, leader);
+        const raw = { q: clickedHex.q + offset.q, r: clickedHex.r + offset.r };
+        const terrain = window.getTerrainAt(raw.q, raw.r);
+        const blocked = terrain.name === 'Wall' || terrain.name === 'Water' || window.getEntityAtHex(raw.q, raw.r);
+        f.destination = blocked ? findNearestPassableHex(raw) : raw;
+    });
+}
+window.assignGroupMoveDestinations = assignGroupMoveDestinations;
+
 function findNearestPassableHex(startHex) {
     // Breadth-first search for the nearest hex that is NOT water, NOT a wall, and NOT occupied
     const queue = [startHex];
@@ -3364,16 +3384,7 @@ function handleClick(e){
             const fullPath = window.findPath(leader.hex, clickedHex, undefined, moveEntity, true);
             window.leaderPath = fullPath ? fullPath.map(h => `${h.q},${h.r}`) : [];
             window.groupLeader = leader;
-
-            // Real party members, pets/summons/mounts only — never temporary
-            // combat allies (aiControlled), who should never be dragged around
-            // or puppeted outside the fight they belong to.
-            const friendlies = window.entities.filter(e => e.alive && e.side === 'player' && !e.rider && !e.aiControlled);
-            friendlies.forEach(f => {
-                const offset = f === leader ? { q: 0, r: 0 } : window.getFormationOffset(f, leader);
-                f.destination = { q: clickedHex.q + offset.q, r: clickedHex.r + offset.r };
-                // tick() will pick this up via moveCooldown logic
-            });
+            assignGroupMoveDestinations(leader, clickedHex);
             window.showMessage(`Group destination set.`);
         } else {
             player.destination = clickedHex;
