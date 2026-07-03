@@ -346,6 +346,14 @@ function checkMovementReactions(movingEntity, nextHex, callback) {
                         const reactor = opt.reactor;
                         const cost = opt.tpCost;
                         reactor.sidestepsRemaining -= 1;
+                        // requestReaction's own button handler already cleared
+                        // isPausedForReaction the instant "Sidestep" was picked,
+                        // but this flow isn't actually done yet — it still needs
+                        // a destination click. Without re-pausing here, tick()
+                        // keeps running other entities' movement/reactions while
+                        // we wait, which can cascade into overlapping reaction
+                        // prompts and freeze the tab.
+                        window.isPausedForReaction = true;
                         window.showMessage(`${reactor.name} Sidesteps! Select an adjacent free hex.`);
                         // Highlight adjacent free hexes
                         window.clearHighlights();
@@ -370,6 +378,7 @@ function checkMovementReactions(movingEntity, nextHex, callback) {
                                 window.drawMap();
                                 window.renderEntities();
                                 board.removeEventListener('click', sidestepHandler);
+                                window.isPausedForReaction = false;
                                 callback(false);
                             }
                         };
@@ -1512,12 +1521,24 @@ function processRealTimeStep(entity, overage = 0) {
         entity.startR = entity.hex.r;
 
         entity.hex = nextHex;
-        if (entity.riding) entity.riding.hex = { q: nextHex.q, r: nextHex.r };
         spendTP(entity, stepCost);
 
         const duration = (stepCost / moveEntity.timePointsPerTick) * 0.4;
         entity.moveTotalTime = duration;
         entity.moveCooldown = Math.max(0, duration - overage);
+
+        // The mount is a separate entity in window.entities and updateVisualPositions
+        // interpolates each entity independently off its OWN startQ/startR/
+        // moveTotalTime/moveCooldown — without copying those over, the mount's hex
+        // snapped straight to the new tile every step (no lerp fields ever set)
+        // while the rider eased into it, reading as the horse jumping ahead.
+        if (entity.riding) {
+            entity.riding.startQ = entity.startQ;
+            entity.riding.startR = entity.startR;
+            entity.riding.hex = { q: nextHex.q, r: nextHex.r };
+            entity.riding.moveTotalTime = duration;
+            entity.riding.moveCooldown = entity.moveCooldown;
+        }
 
         // MULTIPLAYER SYNC: Broadcast each step with lerp data so remotes animate smoothly
         if (window.multiplayer && window.multiplayer.roomCode && entity.networkId === window.multiplayer.socket.id) {
