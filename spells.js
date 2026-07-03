@@ -70,6 +70,15 @@ const baseSpells = {
         type: 'dispel',
         baseRange: 8
     },
+    'dragon_breath': {
+        name: 'Dragon Breath',
+        school: 'arcane',
+        baseMana: 20,
+        baseMagnitude: 15,
+        baseRange: 4,
+        baseRadius: 1,
+        type: 'aoe_damage'
+    },
     'entangle': {
         name: 'Entangle',
         school: 'nature',

@@ -883,6 +883,7 @@ function startGameCore(isLoading = false) {
       fireplace: new Image(),
       axe: new Image(),
       troll: new Image(),
+      dragon: new Image(),
       spear: new Image(),
       club: new Image(),
       giant_club: new Image(),
@@ -965,6 +966,7 @@ function startGameCore(isLoading = false) {
   visuals.fireplace.onload = () => { window.drawMap(); };
   visuals.axe.onload = () => { window.drawMap(); };
   visuals.troll.onload = () => { window.drawMap(); };
+  visuals.dragon.onload = () => { window.drawMap(); };
   visuals.spear.onload = () => { window.drawMap(); };
   visuals.club.onload = () => { window.drawMap(); };
   visuals.giant_club.onload = () => { window.drawMap(); };
@@ -1048,6 +1050,7 @@ function startGameCore(isLoading = false) {
   visuals.fireplace.src = 'images/fireplace.svg';
   visuals.axe.src = 'images/axe.png';
   visuals.troll.src = 'images/troll.png';
+  visuals.dragon.src = 'images/dragon.svg';
   visuals.spear.src = 'images/spear.png';
   visuals.club.src = 'images/club.svg';
   visuals.giant_club.src = 'images/giant_club.png';
@@ -1515,6 +1518,11 @@ function renderEntities() {
                               size = window.hexSize * 3.5 * z; // Shrunk from 4.5
                           } else if (e.name === 'Troll') {
                               size = window.hexSize * 4.5 * z;
+                          } else if (e.dragonSizeTier) {
+                              // Bigger dragons take up more hexes and render
+                              // proportionally larger (matches extraHexes footprint).
+                              size = window.hexSize * (3.0 + e.dragonSizeTier * 1.8) * z;
+                              yOffset = e.isFlying ? -20 * z : 0;
                           } else if (e.name === 'Eagle') {
                               size = window.hexSize * 1.5 * z;
                               yOffset = e.isFlying ? -20*z : 0;
@@ -1534,6 +1542,7 @@ function renderEntities() {
                           if (e.name === 'Boar' && window.gameVisuals.boar.complete) img = window.gameVisuals.boar;
                           if (e.name === 'Tiger' && window.gameVisuals.tiger.complete) img = window.gameVisuals.tiger;
                           if (e.name === 'Troll' && window.gameVisuals.troll.complete) img = window.gameVisuals.troll;
+                          if (e.dragonSizeTier && window.gameVisuals.dragon.complete) img = window.gameVisuals.dragon;
                           if (e.name === 'Eagle') {
                               const eagleImg = e.isFlying ? window.gameVisuals.eagleflying : window.gameVisuals.eagle;
                               if (eagleImg?.complete) img = eagleImg;
@@ -1546,6 +1555,12 @@ function renderEntities() {
                           // elite_goblin art) get tinted toward their own color instead of
                           // looking like an unnamed instance of that monster.
                           if (e.spriteBase && e.color && !e.customImage && img === window.gameVisuals.monsterDefault && window.getRecoloredHairSprite && window.hexColorToHue) {
+                              const tinted = window.getRecoloredHairSprite(img, window.hexColorToHue(e.color));
+                              if (tinted) img = tinted;
+                          }
+                          // Dragons: recolor the shared base art toward this dragon's own
+                          // color, so color is a per-instance trait, not a new asset per shade.
+                          if (e.dragonSizeTier && e.color && img === window.gameVisuals.dragon && window.getRecoloredHairSprite && window.hexColorToHue) {
                               const tinted = window.getRecoloredHairSprite(img, window.hexColorToHue(e.color));
                               if (tinted) img = tinted;
                           }
@@ -2677,7 +2692,7 @@ function aiProcess(entity) {
     // SPELLCASTING AI (Grishnak / Casters)
     if (entity.createdSpells && entity.createdSpells.length > 0 && entity.timePoints >= 10) {
         // ... (existing spell logic) ...
-        const attackSpell = entity.createdSpells.find(s => s.baseId === 'firebolt');
+        const attackSpell = entity.createdSpells.find(s => s.baseId === 'firebolt' || s.baseId === 'dragon_breath');
         if (attackSpell && entity.currentMana >= attackSpell.manaCost) {
             const inRange = visibleOpponents.find(o => window.distance(entity.hex, o.hex) <= attackSpell.range);
             if (inRange) {
@@ -4848,11 +4863,11 @@ function resolveSpell(caster, spell, target, clickedHex) {
                 actionHandled = true;
             }
         }
-    } else if (spell.type === 'aoe_debuff') {
+    } else if (spell.type === 'aoe_debuff' || spell.type === 'aoe_damage') {
         const center = clickedHex;
         const radius = spell.radius || 0;
         const affected = [center];
-        
+
         if (radius > 0) {
             // Get all hexes within radius
             for (let q = -radius; q <= radius; q++) {
@@ -4863,15 +4878,32 @@ function resolveSpell(caster, spell, target, clickedHex) {
                 }
             }
         }
-        
-        const instanceId = Date.now() + Math.random();
-        window.activeSpells.push({
-            spellInstanceId: instanceId, baseId: spell.baseId, name: spell.name, casterName: caster.name,
-            coreManaCost: spell.coreManaCost || spell.manaCost, targetHexes: affected.map(h => ({q:h.q, r:h.r})), debuffType: spell.debuffType
-        });
-        affected.forEach(h => { window.setTerrainAt(h.q, h.r, 'Swamp'); });
-        window.showMessage(`${caster.name} cast ${spell.name}!`);
-        actionHandled = true;
+
+        if (spell.type === 'aoe_damage') {
+            // Instant hex-burst damage (e.g. a dragon's breath weapon) — no
+            // lingering terrain effect, just immediate damage to every
+            // opposing entity caught in the burst.
+            affected.forEach(h => {
+                const t = getEntityAtHex(h.q, h.r);
+                if (t && t.alive && t.side !== caster.side) {
+                    const red = (t.baseReduction || 0) + (t.equipped?.armor ? window.items[t.equipped.armor].reduction : 0);
+                    const dmg = Math.max(1, (spell.magnitude || 0) - red);
+                    t.hp -= dmg; syncBackToPlayer(t); wakeUp(t);
+                    if (t.hp <= 0 && t.alive) handleLethalDamage(t, caster);
+                }
+            });
+            window.showMessage(`${caster.name} unleashes ${spell.name}!`);
+            actionHandled = true;
+        } else {
+            const instanceId = Date.now() + Math.random();
+            window.activeSpells.push({
+                spellInstanceId: instanceId, baseId: spell.baseId, name: spell.name, casterName: caster.name,
+                coreManaCost: spell.coreManaCost || spell.manaCost, targetHexes: affected.map(h => ({q:h.q, r:h.r})), debuffType: spell.debuffType
+            });
+            affected.forEach(h => { window.setTerrainAt(h.q, h.r, 'Swamp'); });
+            window.showMessage(`${caster.name} cast ${spell.name}!`);
+            actionHandled = true;
+        }
     } else {
         let spellHitBonus = 0;
         if (spell.baseId === 'firebolt' && caster.skills?.firebolt_hit) spellHitBonus = caster.skills.firebolt_hit * 5;

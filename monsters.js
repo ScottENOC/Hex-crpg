@@ -101,6 +101,54 @@ const monsterTemplates = {
         },
         defaultEquipment: ['club']
     },
+    'dragon_young': {
+        name: 'Young Dragon',
+        color: '#4a8c5c',
+        hp: 70,
+        expValue: 1500,
+        riderSize: 0,
+        tags: ['dragon', 'flying'],
+        isFlying: true,
+        dragonSizeTier: 1,
+        extraHexes: [{ q: 0, r: 1 }],
+        skills: { 'health': 5, 'meleeDamage': 3, 'arcane_mana': 1, 'firebolt_hit': 1, 'firebolt_dmg': 1 },
+        createdSpells: [
+            { name: 'Dragon Breath', baseId: 'dragon_breath', school: 'arcane', type: 'aoe_damage', manaCost: 15, tpCost: 10, magnitude: 12, range: 3, radius: 1 }
+        ],
+        defaultEquipment: []
+    },
+    'dragon_adult': {
+        name: 'Adult Dragon',
+        color: '#a5401f',
+        hp: 160,
+        expValue: 4000,
+        riderSize: 0,
+        tags: ['dragon', 'flying'],
+        isFlying: true,
+        dragonSizeTier: 2,
+        extraHexes: [{ q: 0, r: 1 }, { q: 1, r: 0 }, { q: 1, r: -1 }],
+        skills: { 'health': 10, 'meleeDamage': 6, 'arcane_mana': 2, 'firebolt_hit': 2, 'firebolt_dmg': 2, 'arcane_expand': 1 },
+        createdSpells: [
+            { name: 'Dragon Breath', baseId: 'dragon_breath', school: 'arcane', type: 'aoe_damage', manaCost: 25, tpCost: 10, magnitude: 22, range: 4, radius: 2 }
+        ],
+        defaultEquipment: []
+    },
+    'dragon_ancient': {
+        name: 'Ancient Dragon',
+        color: '#1c3f6e',
+        hp: 320,
+        expValue: 9000,
+        riderSize: 0,
+        tags: ['dragon', 'flying'],
+        isFlying: true,
+        dragonSizeTier: 3,
+        extraHexes: [{ q: 0, r: 1 }, { q: 1, r: 0 }, { q: 1, r: -1 }, { q: -1, r: 1 }, { q: 0, r: -1 }],
+        skills: { 'health': 18, 'meleeDamage': 10, 'arcane_mana': 4, 'firebolt_hit': 3, 'firebolt_dmg': 3, 'arcane_expand': 2, 'arcane_targets': 2 },
+        createdSpells: [
+            { name: 'Dragon Breath', baseId: 'dragon_breath', school: 'arcane', type: 'aoe_damage', manaCost: 35, tpCost: 10, magnitude: 35, range: 5, radius: 3 }
+        ],
+        defaultEquipment: []
+    },
     'skeleton': {
         name: 'Skeleton',
         color: '#f5f5dc',
@@ -385,8 +433,11 @@ function createMonster(type, hex, customSkills = null, customEquipment = null, s
     monster.voice = template.voice || null;
     monster.visionBonus = template.visionBonus || 0;
     monster.behaviorType = template.behaviorType || 'wander';
-    
+    monster.isFlying = template.isFlying || false;
+    monster.dragonSizeTier = template.dragonSizeTier || 0;
+
     if (template.extraHexes) monster.extraHexes = template.extraHexes;
+    if (template.createdSpells) monster.createdSpells = template.createdSpells.map(s => ({ ...s }));
 
     // Special Spider Initialization
     if (type === 'spider') {
