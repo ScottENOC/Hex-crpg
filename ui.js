@@ -550,6 +550,19 @@ function updateActionButtons() {
     
     buttonsDiv.innerHTML = '';
 
+    // INFO MODE: hovering for a title= tooltip doesn't work on touch or
+    // gamepad. Toggling this makes the next action-button tap/click show
+    // its description via showMessage instead of performing the action.
+    const infoBtn = document.createElement('button');
+    infoBtn.id = 'action-info-mode-btn';
+    infoBtn.innerText = window.actionInfoMode ? 'Info: ON' : 'ⓘ Info';
+    infoBtn.style.backgroundColor = window.actionInfoMode ? '#ffd700' : '#455a64';
+    infoBtn.style.color = window.actionInfoMode ? '#000' : '#ccc';
+    const infoAction = () => { window.actionInfoMode = !window.actionInfoMode; updateActionButtons(); };
+    infoBtn.onclick = infoAction;
+    infoBtn.ontouchstart = (e) => { e.preventDefault(); infoAction(); };
+    buttonsDiv.appendChild(infoBtn);
+
     const inCombat = window.isInCombat;
     let player = inCombat ? window.currentTurnEntity : window.player;
     
@@ -811,8 +824,10 @@ function updateActionButtons() {
                         let label = skill.name;
                         if (skillKey.endsWith('_feint')) label = `${skillKey.split('_')[0].toUpperCase()} Feint`;
                         button.innerText = label;
+                        button.title = skill.description || label;
                         button.disabled = isCasting;
                         button.onclick = () => {
+                            if (window.actionInfoMode) { window.showMessage(skill.description || label); return; }
                             window.playerAction = { type: 'skill', id: skillKey };
                             window.showMessage(`Action set to: ${skill.name}. Click on a target.`);
                             updateActionButtons();
@@ -828,8 +843,11 @@ function updateActionButtons() {
                 const button = document.createElement('button');
                 button.id = `spell-btn-${index}`;
                 button.innerText = spell.name;
+                const spellInfo = `${spell.name}: ${spell.school || ''} ${spell.type || ''}, range ${spell.range}, ${spell.tpCost} TP / ${spell.manaCost} mana.`.replace(/\s+/g, ' ').trim();
+                button.title = spellInfo;
                 button.disabled = isCasting || (player.timePoints < spell.tpCost);
                 button.onclick = () => {
+                    if (window.actionInfoMode) { window.showMessage(spellInfo); return; }
                     window.playerAction = { type: 'spell', index: index, targets: [] };
                     const targetStr = (spell.extraTargets || 0) > 0 ? `Select up to ${1 + spell.extraTargets} targets.` : "Click a target.";
                     window.showMessage(`Spell ready: ${spell.name}. ${targetStr} Range (${spell.range}).`);
@@ -1235,6 +1253,12 @@ function syncPlayerEntity() {
 
 function gainExp(amt) {
     window.player.exp += amt;
+    // In the arena, window.player can be a standalone Entity clone rather
+    // than the actual window.party record (see setupArenaLobby), so the
+    // character sheet (which reads the party record) would otherwise never
+    // see this gain. Keep the two in sync regardless of which one XP landed on.
+    const partyChar = window.party.find(p => p.name === window.player.name);
+    if (partyChar && partyChar !== window.player) partyChar.exp = window.player.exp;
     window.showMessage(`Gained ${amt} experience.`);
     if (document.getElementById("character-screen-modal").style.display === "block") showCharacterScreen();
 }

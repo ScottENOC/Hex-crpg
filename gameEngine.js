@@ -60,6 +60,39 @@ function getMinDistance(entA, entB) {
     return minD;
 }
 
+// AURA ITEMS: equipment like the Orcbane Pendant (equipment.js) carries an
+// auraTag/auraRadius instead of a numeric bonus — it just warns the wearer
+// when a matching enemy is nearby (tag matched against the monster's tags[]
+// array or, for named threats like "orc"/"wolf"/"goblin" that aren't a tag
+// of their own, a case-insensitive substring match on entity.name).
+function checkEquipmentAuras() {
+    const party = window.entities?.filter(e => e.alive && e.side === 'player') || [];
+    const enemies = window.entities?.filter(e => e.alive && e.side === 'enemy') || [];
+    if (!party.length || !enemies.length) return;
+
+    party.forEach(p => {
+        const slots = [p.equipped?.weapon, p.equipped?.offhand, p.equipped?.armor, p.equipped?.helmet, p.equipped?.accessory];
+        slots.forEach(slotId => {
+            const item = slotId && window.items[slotId];
+            if (!item || !item.auraTag) return;
+            const tag = item.auraTag.toLowerCase();
+            const radius = item.auraRadius || 5;
+            const nearby = enemies.some(e => {
+                const matches = (e.tags && e.tags.includes(tag)) || (e.name && e.name.toLowerCase().includes(tag));
+                return matches && window.distance(p.hex, e.hex) <= radius;
+            });
+            if (nearby && !p._auraActive?.[slotId]) {
+                p._auraActive = p._auraActive || {};
+                p._auraActive[slotId] = true;
+                window.showMessage(`${item.name} ${item.description || 'reacts to something nearby.'}`);
+            } else if (!nearby && p._auraActive?.[slotId]) {
+                p._auraActive[slotId] = false;
+            }
+        });
+    });
+}
+window.checkEquipmentAuras = checkEquipmentAuras;
+
 function syncBackToPlayer(entity) {
     if (entity.side === 'player' && window.party) {
         const char = window.party.find(p => p.name === entity.name);
@@ -881,7 +914,7 @@ function startGameCore(isLoading = false) {
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const CHAR_CONFIG = {
     human_male:   { bodyW:1.80, bodyH:2.16, yOff:-0.18, baseKey:'humanMaleBase',  hair:{ key:'humanMaleHair',   type:'small', wFrac:0.30, hFrac:0.30, topFrac:0.19 }, armour:{ wMult:1.0, topShift:0   }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.35, y:0.64 }, offHand:{ x:0.59, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
-    human_female: { bodyW:1.60, bodyH:1.92, yOff:-0.16, baseKey:'humanBase',       hair:{ key:'humanHair',       type:'full',  yRaw:-3                              }, armour:{ wMult:1.0, topShift:0   }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.40, y:0.66 }, offHand:{ x:0.60, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
+    human_female: { bodyW:1.60, bodyH:1.92, yOff:-0.16, baseKey:'humanBase',       hair:{ key:'humanHair',       type:'full',  yRaw:-3                              }, armour:{ wMult:1.0, topShift:0   }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.40, y:0.66 }, offHand:{ x:0.60, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42, shieldOffset:{ x:0.15, y:0.15 } },
     elf_male:     { bodyW:2.00, bodyH:2.40, yOff:-0.20, baseKey:'elfMaleBase',     hair:{ key:'elfMaleHair',     type:'full'                                        }, armour:{ wMult:1.0, topShift:0.3 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.37, y:0.63 }, offHand:{ x:0.58, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
     elf_female:   { bodyW:2.00, bodyH:2.40, yOff:-0.20, baseKey:'elfFemaleBase',   hair:{ key:'elfFemaleHair',   type:'full'                                        }, armour:{ wMult:1.0, topShift:0.3 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.37, y:0.63 }, offHand:{ x:0.58, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
     dwarf_male:   { bodyW:1.60, bodyH:1.92, yOff:-0.07, baseKey:'dwarfMaleBase',   hair:{ key:'dwarfMaleHair',   type:'full'                                        }, armour:{ wMult:1.4, topShift:0.1 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.33, y:0.61 }, offHand:{ x:0.52, y:0.45 }, weaponSizeMult:1.0, shieldSizeMult:0.36 },
@@ -978,7 +1011,8 @@ function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
     // SHIELD (offhand slot)
     if (e.equipped?.offhand && window.items[e.equipped.offhand]?.type === 'shield' && window.gameVisuals.shield?.complete) {
         const sSize = bW * cfg.shieldSizeMult;
-        ctx.drawImage(window.gameVisuals.shield, x - sSize / 2, y + yOff - sSize / 2, sSize, sSize);
+        const shOff = cfg.shieldOffset || { x: 0, y: 0 };
+        ctx.drawImage(window.gameVisuals.shield, x - sSize / 2 + shOff.x * sSize, y + yOff - sSize / 2 + shOff.y * sSize, sSize, sSize);
     }
 
     // MAIN-HAND WEAPON
@@ -994,7 +1028,10 @@ function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
     if (weaponImg?.complete) {
         const wSize = hs * cfg.weaponSizeMult * weaponScale * z;
         const mhX = left + cfg.mainHand.x * bW;
-        const mhY = top  + cfg.mainHand.y * bH;
+        // The sword png's hilt anchor sits at its vertical center, but the
+        // blade reads as "held too low" unless raised by roughly half the
+        // sprite's own rendered height.
+        const mhY = top  + cfg.mainHand.y * bH - wSize / 2;
         ctx.drawImage(weaponImg, mhX - wSize / 2, mhY - wSize / 2, wSize, wSize);
     }
 
@@ -1339,6 +1376,7 @@ function tick() {
                 if (window.updateExploration) window.updateExploration();
             }
             window.updateActionButtons();
+            checkEquipmentAuras();
             tickCounter = 0;
         }
     }
