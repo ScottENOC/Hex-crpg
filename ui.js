@@ -639,7 +639,8 @@ function updateActionButtons() {
                 window.updatePlayerUI();
             } else if (window.playerAction.type === 'spell') {
                 window.clearHighlights();
-                highlightValidTargets(player, window.playerAction.spell);
+                const actionSpell = window.playerAction.spell || (charData?.createdSpells || [])[window.playerAction.index];
+                if (actionSpell) highlightValidTargets(player, actionSpell);
             }
             window.drawMap();
             window.renderEntities();

@@ -171,6 +171,17 @@ function getLightLevel() {
     return 1.0 - (t * 0.8); // Smoothly slide from 1.0 to 0.2
 }
 
+// Fractional hour-of-day (e.g. 13.5 = 1:30pm) — used by the NPC daily
+// schedule system (see updateNpcSchedules in gameEngine.js) so a schedule
+// block can be as short as a few minutes without needing minute-level
+// bookkeeping of its own.
+function getCurrentHour() {
+    const totalS = Math.floor(window.worldSeconds);
+    const secondsIntoDay = totalS % 86400;
+    return secondsIntoDay / 3600;
+}
+window.getCurrentHour = getCurrentHour;
+
 function getFormattedTime() {
     const totalS = Math.floor(window.worldSeconds);
     

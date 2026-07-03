@@ -273,6 +273,63 @@ function triggerSleepAmbush(kind) {
 }
 window.triggerSleepAmbush = triggerSleepAmbush;
 
+// DAILY NPC SCHEDULES: a few named Hollowmere NPCs walk between a home and
+// their usual daytime spot instead of standing in the tavern forever. Each
+// entry is a list of {start, end, hex} blocks in fractional hours (see
+// getCurrentHour, worldTime.js); the last matching block wins. Reuses the
+// same window.entities[i].destination the player's own real-time movement
+// already drives (processRealTimeStep) — no separate movement system needed.
+// Positions aren't saved (see persistence.js): only alive/dead + dialogue
+// state persist, and location is recomputed from the schedule + current
+// time on load, same principle as the arena lobby or indoor lighting.
+function getNpcSchedules() {
+    const farmHome = window.campaign2FarmHouseCenter;
+    return {
+        'Garrick Holt': [
+            { start: 0, end: 6, hex: { q: -4, r: 0 } },   // his own bed corner in the tavern
+            { start: 6, end: 24, hex: { q: -3, r: -2 } },  // behind the bar
+        ],
+        'Wick Hallow': [
+            { start: 0, end: 7, hex: { q: 3, r: 17 } },    // bed corner in the back of the store
+            { start: 7, end: 24, hex: { q: 0, r: 16 } },   // behind the counter
+        ],
+        'Mira Ashbrook': [
+            { start: 0, end: 9, hex: { q: 4, r: 9 } },     // home
+            { start: 9, end: 23, hex: { q: 2, r: -2 } },   // her usual tavern spot
+            { start: 23, end: 24, hex: { q: 4, r: 9 } },
+        ],
+        'Oskar Vinn': [
+            { start: 0, end: 10, hex: { q: -4, r: 9 } },   // home
+            { start: 10, end: 23, hex: { q: 3, r: -2 } },  // his usual tavern spot
+            { start: 23, end: 24, hex: { q: -4, r: 9 } },
+        ],
+        ...(farmHome ? {
+            'Old Mac': [
+                { start: 0, end: 13, hex: { q: farmHome.q + 1, r: farmHome.r } },       // home/farm all morning
+                { start: 13, end: 13.17, hex: { q: 0, r: 13 } },                          // ~10 min errand at the general store
+                { start: 13.17, end: 19, hex: { q: -3, r: -2 } },                         // evening at the tavern
+                { start: 19, end: 24, hex: { q: farmHome.q + 1, r: farmHome.r } },        // home for the night
+            ],
+        } : {}),
+    };
+}
+
+function updateNpcSchedules() {
+    if (window.currentCampaign !== '2' || window.isInCombat) return;
+    const schedules = getNpcSchedules();
+    const hour = window.getCurrentHour ? window.getCurrentHour() : 12;
+    window.entities.forEach(e => {
+        const blocks = schedules[e.name];
+        if (!e.alive || !blocks) return;
+        const block = blocks.find(b => hour >= b.start && hour < b.end);
+        if (!block) return;
+        if (e.hex.q === block.hex.q && e.hex.r === block.hex.r) { e.destination = null; return; }
+        if (e.destination && e.destination.q === block.hex.q && e.destination.r === block.hex.r) return;
+        e.destination = { q: block.hex.q, r: block.hex.r };
+    });
+}
+window.updateNpcSchedules = updateNpcSchedules;
+
 window.restGuardShiftEnabled = false;
 function toggleGuardShiftRest() {
     window.restGuardShiftEnabled = !window.restGuardShiftEnabled;
@@ -815,6 +872,7 @@ function startGameCore(isLoading = false) {
       troll: new Image(),
       spear: new Image(),
       club: new Image(),
+      giant_club: new Image(),
       spiderweb: new Image(),
       spider1: new Image(),
       spider2: new Image(),
@@ -896,6 +954,7 @@ function startGameCore(isLoading = false) {
   visuals.troll.onload = () => { window.drawMap(); };
   visuals.spear.onload = () => { window.drawMap(); };
   visuals.club.onload = () => { window.drawMap(); };
+  visuals.giant_club.onload = () => { window.drawMap(); };
   visuals.spiderweb.onload = () => { window.drawMap(); };
   visuals.spider1.onload = () => { window.drawMap(); };
   visuals.spider2.onload = () => { window.drawMap(); };
@@ -977,7 +1036,8 @@ function startGameCore(isLoading = false) {
   visuals.axe.src = 'images/axe.png';
   visuals.troll.src = 'images/troll.png';
   visuals.spear.src = 'images/spear.png';
-  visuals.club.src = 'images/club.png';
+  visuals.club.src = 'images/club.svg';
+  visuals.giant_club.src = 'images/giant_club.png';
   visuals.spiderweb.src = 'images/spiderweb.png';
   visuals.spider1.src = 'images/spider1.png';
   visuals.spider2.src = 'images/spider2.png';
@@ -1151,7 +1211,7 @@ const CHAR_CONFIG = {
     elf_male:     { bodyW:2.00, bodyH:2.40, yOff:-0.20, baseKey:'elfMaleBase',     hair:{ key:'elfMaleHair',     type:'full'                                        }, armour:{ wMult:1.0, topShift:0.3 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.37, y:0.63 }, offHand:{ x:0.58, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
     elf_female:   { bodyW:2.00, bodyH:2.40, yOff:-0.20, baseKey:'elfFemaleBase',   hair:{ key:'elfFemaleHair',   type:'full'                                        }, armour:{ wMult:1.0, topShift:0.3 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.37, y:0.63 }, offHand:{ x:0.58, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
     dwarf_male:   { bodyW:1.60, bodyH:1.92, yOff:-0.07, baseKey:'dwarfMaleBase',   hair:{ key:'dwarfMaleHair',   type:'full'                                        }, armour:{ wMult:1.4, topShift:0.1 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.33, y:0.61 }, offHand:{ x:0.52, y:0.45 }, weaponSizeMult:1.0, shieldSizeMult:0.36 },
-    dwarf_female: { bodyW:1.60, bodyH:1.92, yOff:-0.07, baseKey:'dwarfFemaleBase', hair:{ key:'dwarfFemaleHair', type:'small', wFrac:0.31, hFrac:0.31, topFrac:0.21 }, armour:{ wMult:1.4, topShift:0.1 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.33, y:0.61 }, offHand:{ x:0.52, y:0.45 }, weaponSizeMult:1.0, shieldSizeMult:0.36 },
+    dwarf_female: { bodyW:1.60, bodyH:1.92, yOff:-0.07, baseKey:'dwarfFemaleBase', hair:{ key:'dwarfFemaleHair', type:'full' }, armour:{ wMult:1.4, topShift:0.1 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.33, y:0.61 }, offHand:{ x:0.52, y:0.45 }, weaponSizeMult:1.0, shieldSizeMult:0.36 },
 
     // ENEMY HUMANOIDS — sprite keys need matching images (e.g. gameVisuals.revenantBase)
     // Use backtick debug overlay to tune anchor dots once sprites are loaded.
@@ -1464,7 +1524,15 @@ function renderEntities() {
                           if (e.name === 'Skeleton' && window.gameVisuals.skeleton.complete) img = window.gameVisuals.skeleton;
                           if (e.name === 'Zombie' && window.gameVisuals.zombie.complete) img = window.gameVisuals.zombie;
                           if (e.name === 'Imp' && window.gameVisuals.imp.complete) img = window.gameVisuals.imp;
-                          
+
+                          // Named bosses reusing a generic monster's sprite (e.g. Viper on
+                          // elite_goblin art) get tinted toward their own color instead of
+                          // looking like an unnamed instance of that monster.
+                          if (e.spriteBase && e.color && !e.customImage && img === window.gameVisuals.monsterDefault && window.getRecoloredHairSprite && window.hexColorToHue) {
+                              const tinted = window.getRecoloredHairSprite(img, window.hexColorToHue(e.color));
+                              if (tinted) img = tinted;
+                          }
+
                                   try {
                                       if (img && img.complete) {
                                           // SPECIAL: Wolf Rider Layering — wolf drawn full-size as the
@@ -1508,7 +1576,12 @@ function renderEntities() {
                           if (e.equipped?.weapon === 'sword') weaponImgEn = window.gameVisuals.swordIcon;
                           else if (e.equipped?.weapon === 'axe') weaponImgEn = window.gameVisuals.axe;
                           else if (e.equipped?.weapon === 'spear') weaponImgEn = window.gameVisuals.spear;
-                          else if (e.equipped?.weapon === 'club') weaponImgEn = window.gameVisuals.club;
+                          else if (e.equipped?.weapon === 'club') {
+                              // Large creatures swing the oversized tree-trunk
+                              // club; anything human-scale gets the small stick.
+                              const isGiantSized = e.name === 'Troll' || e.spriteBase === 'troll' || (e.tags && e.tags.includes('giant'));
+                              weaponImgEn = isGiantSized ? window.gameVisuals.giant_club : window.gameVisuals.club;
+                          }
                   
                           if (weaponImgEn && weaponImgEn.complete) {
                               const weaponSize = window.hexSize * 0.8 * z;
@@ -1585,8 +1658,28 @@ function checkInCombat() {
 let lastTimestamp = performance.now();
 let tickCounter = 0;
 
+let _pausedForReactionSince = 0;
 function tick() {
-    if (window.isPausedForReaction) return;
+    if (window.isPausedForReaction) {
+        // Safety valve: if something left isPausedForReaction stuck true
+        // without a modal actually open (a bug in some reaction sub-flow),
+        // the whole game silently stops responding forever. Auto-clear it
+        // after a long stall rather than requiring a page reload.
+        if (!_pausedForReactionSince) _pausedForReactionSince = performance.now();
+        else if (performance.now() - _pausedForReactionSince > 8000) {
+            const anyModalOpen = ['reaction-modal', 'dialogue-modal'].some(id => {
+                const el = document.getElementById(id);
+                return el && el.style.display === 'block';
+            });
+            if (!anyModalOpen) {
+                console.warn('[WATCHDOG] isPausedForReaction was stuck true with no modal open — clearing it.');
+                window.isPausedForReaction = false;
+                _pausedForReactionSince = 0;
+            }
+        }
+        return;
+    }
+    _pausedForReactionSince = 0;
     if (window.gameOver) return;
 
     const now = performance.now();
@@ -1623,6 +1716,7 @@ function tick() {
             }
             window.updateActionButtons();
             checkEquipmentAuras();
+            updateNpcSchedules();
             tickCounter = 0;
         }
     }
@@ -4472,7 +4566,9 @@ function startArenaFight() {
     } else {
         // Normal encounter
         let currentSP = 0;
-        const monsterTypes = ['goblin', 'orc', 'skeleton', 'zombie', 'imp', 'spider', 'troll'];
+        const monsterTypes = ['goblin', 'orc', 'skeleton', 'zombie', 'imp', 'spider', 'troll',
+            'wraith', 'basilisk', 'harpy', 'minotaur', 'revenant', 'wolf_rider_goblin', 'elite_goblin',
+            'wolf', 'boar', 'tiger'];
 
         while (currentSP < targetSP) {
             if (window.roguelikeData.mercenaryGraveyard.length > 0 && Math.random() < 0.2) {

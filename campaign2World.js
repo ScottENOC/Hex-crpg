@@ -73,22 +73,52 @@ function paintStreamSegment(startQ, endQ, dqStep, startR, targetR = startR, drif
 // one open door hex. Same overrideTerrain technique as the tavern — same
 // hex grid, no separate interior map. Returns the interior bounding box so
 // callers can register it for hex-local lighting.
+// A fixed r-range per q column is a parallelogram in screen space, not a
+// rectangle — axial (q,r) shears as q changes (see hexToPixel: screen y
+// depends on r + q/2). rowShift below cancels that shear so the building
+// reads as an actual rectangle, zig-zagging by half a hex per column the
+// way real hex-grid buildings do, instead of one long diagonal wall.
+function hexRowShift(dq) {
+    return Math.floor(dq / 2);
+}
+
+// A fixed 1-hex "margin column" around the floor isn't actually 1 hex of
+// wall everywhere — true hex neighbors span two rows in an adjacent column,
+// and which two rows shifts by parity (see hexRowShift). A uniform margin
+// leaves gaps exactly at the parity seams, showing floor touching outdoor
+// terrain with no wall between. Building the wall as the real hex-adjacency
+// ring around the floor (rather than an assumed row range) fixes this
+// regardless of any row-shift stagger.
+function wallRingAroundFloor(floorHexes) {
+    const floorSet = new Set(floorHexes.map(h => `${h.q},${h.r}`));
+    const wallSet = new Set();
+    floorHexes.forEach(h => {
+        window.getNeighbors(h.q, h.r).forEach(n => {
+            const key = `${n.q},${n.r}`;
+            if (!floorSet.has(key)) wallSet.add(key);
+        });
+    });
+    return [...wallSet].map(k => { const [q, r] = k.split(',').map(Number); return { q, r }; });
+}
+
 function carveBuilding(centerQ, centerR, halfW, halfH, doorHex, floorType) {
-    for (let dq = -halfW; dq <= halfW; dq++) {
-        for (let dr = -halfH; dr <= halfH; dr++) {
-            window.setTerrainAt(centerQ + dq, centerR + dr, 'Wall');
-        }
-    }
+    const floorHexes = [];
     for (let dq = -halfW + 1; dq <= halfW - 1; dq++) {
+        const shift = hexRowShift(dq);
         for (let dr = -halfH + 1; dr <= halfH - 1; dr++) {
-            window.setTerrainAt(centerQ + dq, centerR + dr, floorType);
+            floorHexes.push({ q: centerQ + dq, r: centerR + dr + shift });
         }
     }
+    wallRingAroundFloor(floorHexes).forEach(h => window.setTerrainAt(h.q, h.r, 'Wall'));
+    floorHexes.forEach(h => window.setTerrainAt(h.q, h.r, floorType));
     window.setTerrainAt(doorHex.q, doorHex.r, floorType);
     window.tileObjects[`${doorHex.q},${doorHex.r}`] = { type: 'door_open', lightRadius: 0 };
+    // Bounding box padded by the max row shift across the footprint's width,
+    // since each column's actual r-range is offset from the center now.
+    const maxShift = Math.max(Math.abs(hexRowShift(-halfW)), Math.abs(hexRowShift(halfW)));
     return {
         minQ: centerQ - halfW + 1, maxQ: centerQ + halfW - 1,
-        minR: centerR - halfH + 1, maxR: centerR + halfH - 1,
+        minR: centerR - halfH + 1 - maxShift, maxR: centerR + halfH - 1 + maxShift,
         lightMult: 0.3,
         doorHex: { q: doorHex.q, r: doorHex.r }
     };
@@ -101,6 +131,7 @@ function carveBuilding(centerQ, centerR, halfW, halfH, doorHex, floorType) {
 // decorative only, not a collision boundary, same as table/bench.
 function buildFarmstead(roadEnd) {
     const houseCenter = { q: roadEnd.q - 6, r: roadEnd.r };
+    window.campaign2FarmHouseCenter = houseCenter; // exposed for Old Mac's daily schedule
     const doorHex = { q: houseCenter.q + 3, r: houseCenter.r };
     const farmHouseRegion = carveBuilding(houseCenter.q, houseCenter.r, 3, 2, doorHex, 'Wood Floor');
     window.interiorRegions.push(farmHouseRegion);
@@ -386,16 +417,19 @@ function setupVillageScene(forLoadOnly = false) {
     }
 
     // --- Tavern: walls q:-6..6, r:-4..4; floor carved q:-5..5, r:-3..3 ---
-    for (let q = -6; q <= 6; q++) {
-        for (let r = -4; r <= 4; r++) {
-            window.setTerrainAt(q, r, 'Wall');
-        }
-    }
+    // Row-shifted per column (see hexRowShift) so this reads as an actual
+    // rectangle instead of a sheared parallelogram, with the wall built as
+    // the true hex-adjacency ring around the floor (wallRingAroundFloor) so
+    // there's no gap at the parity seams between columns.
+    const tavernFloorHexes = [];
     for (let q = -5; q <= 5; q++) {
+        const shift = hexRowShift(q);
         for (let r = -3; r <= 3; r++) {
-            window.setTerrainAt(q, r, 'Wood Floor');
+            tavernFloorHexes.push({ q, r: r + shift });
         }
     }
+    wallRingAroundFloor(tavernFloorHexes).forEach(h => window.setTerrainAt(h.q, h.r, 'Wall'));
+    tavernFloorHexes.forEach(h => window.setTerrainAt(h.q, h.r, 'Wood Floor'));
     // Door at {0,4}: starts CLOSED (Wall — blocks LOS/movement) so the
     // soldiers' entrance is a real event, not just a permanent gap.
     window.setTerrainAt(0, 4, 'Wall');
@@ -414,20 +448,37 @@ function setupVillageScene(forLoadOnly = false) {
     const generalStoreRegion = carveBuilding(0, 16, 4, 3, { q: 0, r: 13 }, 'Wood Floor');
     window.tileObjects['0,15'] = { type: 'table', lightRadius: 0 }; // counter
 
+    // Small homes for the tavern's regular patrons — Mira and Oskar go back
+    // to these at night instead of just existing at the tavern forever (see
+    // updateNpcSchedules in gameEngine.js). Tucked either side of the
+    // general-store approach path so a short spur reaches the existing
+    // north-south path column instead of needing a whole new route.
+    const miraHouseRegion = carveBuilding(4, 9, 2, 2, { q: 2, r: 9 }, 'Wood Floor');
+    const oskarHouseRegion = carveBuilding(-4, 9, 2, 2, { q: -2, r: 9 }, 'Wood Floor');
+
     // Quest item for "A Missing Locket" (Elder Marta) — tucked in the chapel.
     window.mapItems['-14,0'] = ['elder_locket'];
 
     // Register interior regions for hex-local indoor lighting (see worldTime.js).
+    // Bounds widened to cover the row-shifted floor's actual r-range across
+    // all columns (see hexRowShift) — a fixed r:[-3,3] no longer covers the
+    // corners once each column's floor is offset by its own shift.
     window.interiorRegions = [
-        { minQ: -5, maxQ: 5, minR: -3, maxR: 3, lightMult: 0.15, doorHex: { q: 0, r: 4 } },
+        { minQ: -5, maxQ: 5, minR: -3 + hexRowShift(-5), maxR: 3 + hexRowShift(5), lightMult: 0.15, doorHex: { q: 0, r: 4 } },
         storeRegion,
         chapelRegion,
         houseRegion,
-        generalStoreRegion
+        generalStoreRegion,
+        miraHouseRegion,
+        oskarHouseRegion
     ];
 
     // Fireplace for cozy interior lighting + visual marker for the door.
-    window.tileObjects['-4,0'] = { type: 'fireplace', lightRadius: 6 };
+    // Fixed-coordinate placements below carry a "+ hexRowShift(q)" correction
+    // so they land in the same spot *relative to the walls* that they did
+    // before the tavern's floor became row-shifted (see hexRowShift above) —
+    // otherwise they'd drift relative to the walls/door by a hex or two.
+    window.tileObjects[`-4,${0 + hexRowShift(-4)}`] = { type: 'fireplace', lightRadius: 6 };
     // Barred from the outside until the shakedown kicks off — stops the
     // player from just wandering out before the scripted scene plays. Once
     // the soldiers open it themselves (startHollowmereShakedown), the lock
@@ -436,15 +487,23 @@ function setupVillageScene(forLoadOnly = false) {
     window.tileObjects['0,4'] = { type: 'door_closed', lightRadius: 0, locked: true };
 
     // Furniture, placed clear of spawn hexes and the door.
-    window.tileObjects['1,1'] = { type: 'table', lightRadius: 0 };
-    window.tileObjects['1,2'] = { type: 'bench', lightRadius: 0 };
-    window.tileObjects['-2,1'] = { type: 'table', lightRadius: 0 };
-    window.tileObjects['-2,2'] = { type: 'bench', lightRadius: 0 };
+    window.tileObjects[`1,${1 + hexRowShift(1)}`] = { type: 'table', lightRadius: 0 };
+    window.tileObjects[`1,${2 + hexRowShift(1)}`] = { type: 'bench', lightRadius: 0 };
+    window.tileObjects[`-2,${1 + hexRowShift(-2)}`] = { type: 'table', lightRadius: 0 };
+    window.tileObjects[`-2,${2 + hexRowShift(-2)}`] = { type: 'bench', lightRadius: 0 };
 
     // --- Outdoor paths: a ring around the tavern (clear of every building's
     // footprint) with a short spur connecting each door to it, so the
     // village reads as one place instead of four disconnected buildings.
-    const paintPath = (hexes) => hexes.forEach(([q, r]) => window.setTerrainAt(q, r, 'Path'));
+    // Never overwrite a wall — the reshaped (row-shifted) buildings' corners
+    // can reach further than their old fixed-row footprint did, so a ring/
+    // spur path drawn without this guard could punch a hole in a building
+    // wall wherever the two happen to cross.
+    const paintPath = (hexes) => hexes.forEach(([q, r]) => {
+        const existing = window.getTerrainAt(q, r).name;
+        if (existing === 'Wall' || existing === 'Wood Floor' || existing === 'Cave Floor') return;
+        window.setTerrainAt(q, r, 'Path');
+    });
     for (let q = -8; q <= 8; q++) {
         paintPath([[q, -6], [q, 6]]); // north/south ring edges
     }
@@ -456,6 +515,8 @@ function setupVillageScene(forLoadOnly = false) {
     paintPath([[9, 0]]); // store door (10,0) -> east ring
     paintPath([[-10, 0], [-9, 0]]); // chapel door (-11,0) -> west ring
     paintPath([[0, 7], [0, 8], [0, 9], [0, 10], [0, 11], [0, 12]]); // general store door (0,13) -> south ring
+    paintPath([[1, 9]]); // Mira's house door (2,9) -> general store spur
+    paintPath([[-1, 9]]); // Oskar's house door (-2,9) -> general store spur
 
     // --- Permanent companion: a real party member (not a conditional tavern
     // ally like Garrick/Mira/Oskar) who stays regardless of what the player

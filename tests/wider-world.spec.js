@@ -95,8 +95,27 @@ test.describe('crossroads, signpost, and roads', () => {
     });
 
     test('regression: the north road does not overwrite the tavern\'s east wall', async ({ page }) => {
-        const wallIntact = await page.evaluate(() =>
-            [-4, -3, -2, -1, 0, 1, 2, 3, 4].every(r => window.getTerrainAt(6, r).name === 'Wall'));
+        // The tavern's wall ring is now built from true hex adjacency around a
+        // row-shifted floor (see hexRowShift/wallRingAroundFloor in
+        // campaign2World.js) rather than a fixed row range, so instead of
+        // asserting exact wall coordinates, check the actual invariant: no
+        // floor hex is directly adjacent to outdoor terrain (Grass/Path)
+        // without a Wall (or a door) between them.
+        const wallIntact = await page.evaluate(() => {
+            for (let q = -5; q <= 5; q++) {
+                const shift = window.hexRowShift ? window.hexRowShift(q) : 0;
+                for (let r = -3; r <= 3; r++) {
+                    const fr = r + shift;
+                    const neighbors = window.getNeighbors(q, fr);
+                    for (const n of neighbors) {
+                        const t = window.getTerrainAt(n.q, n.r).name;
+                        const isDoor = window.tileObjects[`${n.q},${n.r}`]?.type?.startsWith('door');
+                        if (t === 'Grass' || (t === 'Path' && !isDoor)) return false;
+                    }
+                }
+            }
+            return true;
+        });
         expect(wallIntact).toBe(true);
     });
 

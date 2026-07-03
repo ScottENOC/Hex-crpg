@@ -177,6 +177,20 @@ function hashStringToHue(str) {
 }
 window.hashStringToHue = hashStringToHue;
 
+// Named bosses that reuse a base monster's sprite (e.g. Viper on
+// elite_goblin's art) get tinted toward their own flavor color instead of
+// looking identical to a plain instance of that monster.
+function hexColorToHue(hex) {
+    if (!hex) return 0;
+    const m = hex.replace('#', '');
+    const r = parseInt(m.substring(0, 2), 16);
+    const g = parseInt(m.substring(2, 4), 16);
+    const b = parseInt(m.substring(4, 6), 16);
+    const [h] = rgbToHsl(r, g, b);
+    return h;
+}
+window.hexColorToHue = hexColorToHue;
+
 // Weighted natural palettes for a character's *default* (name-hash-derived)
 // appearance — a full random hue wheel looks wrong on ordinary medieval
 // villagers, so defaults are pulled from a small realistic set instead.
