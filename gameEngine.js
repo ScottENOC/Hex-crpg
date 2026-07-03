@@ -6,6 +6,19 @@ window.isPausedForReaction = false;
 // Broadcast a message to all connected clients. On non-host or single-player
 // this is identical to showMessage. On host in multiplayer the text is also
 // emitted so every instance sees the same combat/narrative log.
+// Cheap flicker for fire tiles (fireplace, held torch) — no new art needed,
+// just a per-instance jittered scale/alpha driven off a fast sine so every
+// fire flickers independently (phase offset by its own hex/entity key)
+// instead of all pulsing in lockstep.
+function fireFlicker(seedKey) {
+    let hash = 0;
+    for (let i = 0; i < seedKey.length; i++) hash = (hash * 31 + seedKey.charCodeAt(i)) | 0;
+    const phase = (hash % 1000) / 1000 * Math.PI * 2;
+    const t = performance.now() / 1000;
+    const flicker = Math.sin(t * 9 + phase) * 0.5 + Math.sin(t * 21 + phase * 2) * 0.5;
+    return { scale: 1 + flicker * 0.06, alpha: 0.88 + flicker * 0.12 };
+}
+
 function sharedMessage(text) {
     window.showMessage(text);
     if (window.broadcastGameMessage) window.broadcastGameMessage(text);
@@ -1394,7 +1407,11 @@ function renderEntities() {
           const {x, y} = window.hexToPixel(q, r);
           const size = window.hexSize * 1.5 * z;
           if (obj.type === 'fireplace' && window.gameVisuals.fireplace.complete) {
-              window.mapCtx.drawImage(window.gameVisuals.fireplace, x - size/2, y - size/2, size, size);
+              const { scale, alpha } = fireFlicker(key);
+              const fSize = size * scale;
+              window.mapCtx.globalAlpha = alpha;
+              window.mapCtx.drawImage(window.gameVisuals.fireplace, x - fSize/2, y - fSize/2, fSize, fSize);
+              window.mapCtx.globalAlpha = 1.0;
           } else if (obj.type === 'table' && window.gameVisuals.table.complete) {
               window.mapCtx.drawImage(window.gameVisuals.table, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'bench' && window.gameVisuals.bench.complete) {
@@ -1602,10 +1619,13 @@ function renderEntities() {
     if (e.equipped && window.gameVisuals.torch_lit.complete) {
         const hasTorch = (e.equipped.weapon === 'torch' || e.equipped.offhand === 'torch');
         if (hasTorch) {
-            const tSize = window.hexSize * 1.0 * z;
+            const { scale, alpha } = fireFlicker(e.name || 'torch');
+            const tSize = window.hexSize * 1.0 * z * scale;
             // Was drifting far right of the hand and sitting a bit too high;
             // pulled back left by 1.5x its own size and down by 0.4x.
+            window.mapCtx.globalAlpha = alpha;
             window.mapCtx.drawImage(window.gameVisuals.torch_lit, x + (window.hexSize/3)*z - 1.5 * tSize, y - tSize + 0.4 * tSize, tSize, tSize);
+            window.mapCtx.globalAlpha = 1.0;
         }
     }
 

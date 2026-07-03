@@ -236,6 +236,71 @@ window.npcDialogueTrees = {
 
         window.showDialogue(npc, "Pasture's quiet now, thanks to you.", [{ label: "Good.", action: () => {} }]);
     },
+    reddale_captain: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'reddale_missing_watch');
+
+        if (!quest) {
+            window.showDialogue(npc, "Two of my watchmen went out on the east road patrol three days back. Never came home. I fear the worst, but I can't spare anyone else to look.", [
+                {
+                    label: "I'll find them.",
+                    action: () => {
+                        window.questLog.push({
+                            id: 'reddale_missing_watch',
+                            title: 'The Missing Watch',
+                            giver: 'Captain Ilsa Rennick',
+                            status: 'active',
+                            description: "Find Captain Rennick's missing patrol along the road east of Reddale."
+                        });
+                        if (window.triggerReddaleMissingWatch) window.triggerReddaleMissingWatch();
+                        window.showMessage('Quest added: The Missing Watch.');
+                    }
+                },
+                { label: "Not my concern.", action: () => {} }
+            ]);
+            return;
+        }
+
+        if (quest.status === 'active') {
+            const goblinsRemain = window.entities.some(e => e.reddaleQuestGoblin && e.alive);
+            if (goblinsRemain) {
+                window.showDialogue(npc, "Head out along the east road. Whatever got them didn't leave much sign — watch yourself.", [
+                    { label: "I'll report back.", action: () => {} }
+                ]);
+            } else {
+                window.showDialogue(npc, "Goblins, this far out? That's further than they've ever ranged before — worth knowing, and worth worrying about. My thanks, truly.", [
+                    {
+                        label: "Glad to help.",
+                        action: () => {
+                            quest.status = 'completed';
+                            window.adjustReputation(npc.reputation, 15, 20);
+                            window.party[0].gold = (window.party[0].gold || 0) + 40;
+                            if (window.gainExp) window.gainExp(200);
+                            window.showMessage('Quest complete: The Missing Watch. (+40 gold)');
+                        }
+                    }
+                ]);
+            }
+            return;
+        }
+
+        window.showDialogue(npc, "Keep your nose clean in Reddale and we won't have trouble.", [{ label: "Understood.", action: () => {} }]);
+    },
+    reddale_guard: (npc) => {
+        window.showDialogue(npc, "Captain Rennick runs the watch here — if there's work needs doing, she's the one to ask. Me, I just mind the gate.", [
+            { label: "Noted.", action: () => {} }
+        ]);
+    },
+    reddale_reeve: (npc) => {
+        window.showDialogue(npc, "Reddale answers to Silverhart same as anywhere, but out here it's my word that keeps the peace. Trade's been steady — long may it stay that way.", [
+            { label: "Good to hear.", action: () => {} }
+        ]);
+    },
+    reddale_innkeeper: (npc) => {
+        window.showDialogue(npc, "Welcome to Reddale. Rooms are warm and the ale's better than the road food, I promise you that.", [
+            { label: "Good to know.", action: () => {} }
+        ]);
+    },
     farm_sheep: (npc) => {
         window.showDialogue(npc, "Baa.", [{ label: "...", action: () => {} }]);
     },
@@ -902,6 +967,24 @@ function triggerFarmWolfEncounter() {
     window.renderEntities();
 }
 window.triggerFarmWolfEncounter = triggerFarmWolfEncounter;
+
+// Reddale's "Missing Watch" quest — spawned immediately on accepting the
+// quest (unlike the proximity-triggered farm wolves, the search site is
+// already a deliberate walk from town, so there's no "wandered too close
+// without noticing" risk to guard against). Goblins tagged
+// reddaleQuestGoblin so the captain's turn-in check isn't confused by an
+// unrelated wandering goblin.
+function triggerReddaleMissingWatch() {
+    const site = window.campaign2ReddaleSearchSiteHex;
+    if (!site) return;
+    [{ q: site.q, r: site.r }, { q: site.q + 1, r: site.r - 1 }].forEach(hex => {
+        const goblin = window.createMonster('goblin', hex, null, null, 'enemy');
+        goblin.reddaleQuestGoblin = true;
+        goblin.aiState = 'idle';
+        window.entities.push(goblin);
+    });
+}
+window.triggerReddaleMissingWatch = triggerReddaleMissingWatch;
 
 // Random wilderness encounters: out past the village/farmland (35+ hexes
 // from the village center), wandering risks a wolf pack — especially

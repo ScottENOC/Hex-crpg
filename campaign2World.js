@@ -667,7 +667,7 @@ function setupVillageScene(forLoadOnly = false) {
         if (i === ABANDONED_HOUSE_STEP) abandonedHouseWaypoint = hex;
     });
     const farmRoadEnd = paintRoad({ q: 0, r: 1 }, WORLD_HEX_SIZE + 40); // South: past the hex border, to Old Mac's Farmstead
-    paintRoad({ q: 1, r: 0 }, WORLD_HEX_SIZE); // East: Reddale
+    const eastRoadEnd = paintRoad({ q: 1, r: 0 }, WORLD_HEX_SIZE); // East: Reddale
     // West: runs a full two world hexes now — the goblin camp sits at the
     // original one-hex border (captured via onStep so its position is
     // unchanged from before), and Emberlode (village + gold mine) sits a
@@ -683,6 +683,7 @@ function setupVillageScene(forLoadOnly = false) {
     buildAbandonedHouse(abandonedHouseWaypoint);
     buildMillbrook(northRoadEnd);
     buildEmberlode(westRoadEnd);
+    buildReddale(eastRoadEnd);
 
     // Campaign 2's entire world is this one deterministic layout, regenerated
     // by this function every time it runs (fresh game or the "engine not
@@ -855,6 +856,58 @@ function buildEmberlode(roadEnd) {
     // north, registers at [3][6] the same way — one row/col per world-hex).
     if (window.worldMapData && window.worldMapData[6] && window.worldMapData[6][4] !== undefined) {
         window.worldMapData[6][4] = { t: 'G', f: 'V', o: 'h', p: 1, n: 'Emberlode' };
+    }
+}
+
+// Reddale: the east road's small town — bigger than the single-building
+// village stubs (Millbrook, Emberlode). A guardhouse (Captain + a watchman),
+// a Reeve's house (the town's own on-the-map ranking authority, unlike
+// Hollowmere's off-map Baron), and an inn.
+function buildReddale(roadEnd) {
+    const guardCenter = { q: roadEnd.q - 4, r: roadEnd.r };
+    const guardDoor = { q: guardCenter.q + 3, r: guardCenter.r };
+    const guardRegion = carveBuilding(guardCenter.q, guardCenter.r, 3, 2, guardDoor, 'Wood Floor');
+    window.interiorRegions.push(guardRegion);
+    window.tileObjects[`${guardCenter.q},${guardCenter.r}`] = { type: 'fireplace', lightRadius: 6 };
+    for (let q = guardDoor.q + 1; q < roadEnd.q; q++) window.setTerrainAt(q, roadEnd.r, 'Path');
+    window.campaign2ReddaleGuardhouseCenter = guardCenter;
+
+    const reeveCenter = { q: roadEnd.q, r: roadEnd.r - 6 };
+    const reeveDoor = { q: reeveCenter.q, r: reeveCenter.r + 2 };
+    const reeveRegion = carveBuilding(reeveCenter.q, reeveCenter.r, 3, 2, reeveDoor, 'Wood Floor');
+    window.interiorRegions.push(reeveRegion);
+    for (let r = reeveDoor.r + 1; r < roadEnd.r; r++) window.setTerrainAt(roadEnd.q, r, 'Path');
+    window.campaign2ReddaleReeveHouseCenter = reeveCenter;
+
+    const innCenter = { q: roadEnd.q, r: roadEnd.r + 6 };
+    const innDoor = { q: innCenter.q, r: innCenter.r - 2 };
+    const innRegion = carveBuilding(innCenter.q, innCenter.r, 3, 2, innDoor, 'Wood Floor');
+    window.interiorRegions.push(innRegion);
+    window.tileObjects[`${innCenter.q},${innCenter.r}`] = { type: 'fireplace', lightRadius: 6 };
+    for (let r = roadEnd.r + 1; r < innDoor.r; r++) window.setTerrainAt(roadEnd.q, r, 'Path');
+    window.campaign2ReddaleInnCenter = innCenter;
+
+    // A muster point just outside the guardhouse door, roughly where a
+    // road-bound patrol would start from — used by the missing-watch quest
+    // below to place the search site a stretch further out.
+    window.campaign2ReddaleSearchSiteHex = { q: roadEnd.q + 18, r: roadEnd.r };
+
+    if (window.campaign2ReddaleCaptain) {
+        window.entities.push(window.buildNPC({ ...window.campaign2ReddaleCaptain, hex: { q: guardCenter.q - 1, r: guardCenter.r } }));
+    }
+    if (window.campaign2ReddaleGuard) {
+        window.entities.push(window.buildNPC({ ...window.campaign2ReddaleGuard, hex: { q: guardCenter.q + 1, r: guardCenter.r } }));
+    }
+    if (window.campaign2ReddaleReeve) {
+        window.entities.push(window.buildNPC({ ...window.campaign2ReddaleReeve, hex: { q: reeveCenter.q, r: reeveCenter.r } }));
+    }
+    if (window.campaign2ReddaleInnkeeper) {
+        window.entities.push(window.buildNPC({ ...window.campaign2ReddaleInnkeeper, hex: { q: innCenter.q, r: innCenter.r } }));
+    }
+
+    // One world-hex east of Hollowmere [6][6].
+    if (window.worldMapData && window.worldMapData[6] && window.worldMapData[6][7] !== undefined) {
+        window.worldMapData[6][7] = { t: 'G', f: 'T', o: 'h', p: 1, n: 'Reddale' };
     }
 }
 

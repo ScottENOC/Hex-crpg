@@ -136,6 +136,59 @@ window.campaign2OldMac = {
     dialogueId: 'old_mac'
 };
 
+// --- Reddale: the east road's small town. Bigger than Millbrook/Emberlode's
+// single-building stubs — a guardhouse, a Reeve's house (the town's ranking
+// authority, same idea as Hollowmere's off-map Baron but present in person
+// here), and an inn. See buildReddale in campaign2World.js.
+window.campaign2ReddaleCaptain = {
+    name: 'Captain Ilsa Rennick',
+    title: 'Captain of the Watch',
+    race: 'human', gender: 'female',
+    classLevels: ['fighter', 'fighter'],
+    skillPicks: ['health', 'health', 'sword_hit', 'sword_dmg', 'heavy_armor_training', 'shield_proficiency'],
+    equipment: ['sword', 'wooden_shield', 'heavy_armor'],
+    side: 'neutral',
+    factionId: 'silverhart_kingdom',
+    color: '#4a5a7a',
+    dialogueId: 'reddale_captain'
+};
+window.campaign2ReddaleGuard = {
+    name: 'Watchman Bram Oswick',
+    title: 'Town Guard',
+    race: 'human', gender: 'male',
+    classLevels: ['fighter'],
+    skillPicks: ['health', 'spear_hit', 'spear_dmg', 'light_armor_training'],
+    equipment: ['spear', 'light_armor'],
+    side: 'neutral',
+    factionId: 'silverhart_kingdom',
+    color: '#5a6a8a',
+    dialogueId: 'reddale_guard'
+};
+window.campaign2ReddaleReeve = {
+    name: 'Reeve Aldous Finch',
+    title: 'Reeve of Reddale',
+    race: 'human', gender: 'male',
+    classLevels: [],
+    skillPicks: [],
+    equipment: [],
+    side: 'neutral',
+    factionId: 'silverhart_kingdom',
+    color: '#8a7a4a',
+    dialogueId: 'reddale_reeve'
+};
+window.campaign2ReddaleInnkeeper = {
+    name: 'Nella Brook',
+    title: 'Innkeeper',
+    race: 'human', gender: 'female',
+    classLevels: [],
+    skillPicks: [],
+    equipment: [],
+    side: 'neutral',
+    factionId: 'silverhart_kingdom',
+    color: '#a0724a',
+    dialogueId: 'reddale_innkeeper'
+};
+
 // --- The Skarn-tooth goblin tribe, camped a long way west (see
 // buildGoblinCamp in campaign2World.js — placed at the very end of the west
 // road, at this world hex's border). Built from monsters.js's goblin/
