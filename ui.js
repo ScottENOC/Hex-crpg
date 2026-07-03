@@ -1746,6 +1746,14 @@ window.showDisconnectedPlayerPanel = showDisconnectedPlayerPanel;
 function requestReaction(entity, options, callback, customMsg = null) {
     // Disconnected player: auto-pass all reactions
     if (entity.disconnected) { callback(null); return; }
+    // ROOT CAUSE FIX: never open a reaction modal for someone who can't
+    // actually decide anything — already dead, or downed/unconscious. Without
+    // this, an entity that dropped to 0 HP (or was killed by something else
+    // processed earlier in the same real-time batch) earlier in the very
+    // same tick could still be offered a reaction moments later, and a dead
+    // or unconscious character was never going to click a button — that's
+    // the "stuck waiting on a corpse" failure mode, not just a timing race.
+    if (!entity.alive || entity.unconscious) { callback(null); return; }
     const isSentientAlly = entity.side === 'player' && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(entity.name);
     if (!isSentientAlly) {
         if (options.length > 0 && Math.random() < 0.7) callback(options[0].id);
@@ -1758,17 +1766,36 @@ function requestReaction(entity, options, callback, customMsg = null) {
     const optDiv = document.getElementById("reaction-options");
     desc.innerText = customMsg || "An event has occurred! Choose a reaction:";
     optDiv.innerHTML = '';
+
+    let resolved = false;
+    const resolve = (choiceId) => {
+        if (resolved) return;
+        resolved = true;
+        clearInterval(livenessWatcher);
+        modal.style.display = "none";
+        window.isPausedForReaction = false;
+        callback(choiceId);
+    };
+
+    // Belt-and-braces: if the reactor dies or goes unconscious by some other
+    // means while this modal is genuinely open (rather than merely never
+    // clicked), stop waiting on them immediately instead of leaning on the
+    // much slower generic stuck-flag watchdog in gameEngine.js's tick().
+    const livenessWatcher = setInterval(() => {
+        if (!entity.alive || entity.unconscious) resolve(null);
+    }, 300);
+
     options.forEach(opt => {
         const btn = document.createElement("button");
         btn.innerText = `${opt.name} (${opt.tpCost} TP)`;
         btn.style.marginRight = "10px";
-        btn.onclick = () => { modal.style.display = "none"; window.isPausedForReaction = false; callback(opt.id); };
+        btn.onclick = () => resolve(opt.id);
         optDiv.appendChild(btn);
     });
     const noneBtn = document.createElement("button");
     noneBtn.innerText = "None";
     noneBtn.style.backgroundColor = "#777";
-    noneBtn.onclick = () => { modal.style.display = "none"; window.isPausedForReaction = false; callback(null); };
+    noneBtn.onclick = () => resolve(null);
     optDiv.appendChild(noneBtn);
     modal.style.display = "block";
 }

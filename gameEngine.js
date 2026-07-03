@@ -373,7 +373,8 @@ function getNpcSchedules() {
         ],
         ...(farmHome ? {
             'Old Mac': [
-                { start: 0, end: 13, hex: { q: farmHome.q + 1, r: farmHome.r } },       // home/farm all morning
+                { start: 0, end: 8, hex: { q: farmHome.q + 1, r: farmHome.r } },          // home overnight
+                { start: 8, end: 13, hex: window.campaign2FarmPastureCenter || { q: farmHome.q + 1, r: farmHome.r } }, // tending the sheep
                 { start: 13, end: 13.17, hex: { q: 0, r: 15 } },                          // ~10 min errand at the general store
                 { start: 13.17, end: 19, hex: { q: -3, r: -2 } },                         // evening at the tavern
                 { start: 19, end: 24, hex: { q: farmHome.q + 1, r: farmHome.r } },        // home for the night
@@ -1783,7 +1784,7 @@ function tick() {
         // the whole game silently stops responding forever. Auto-clear it
         // after a long stall rather than requiring a page reload.
         if (!_pausedForReactionSince) _pausedForReactionSince = performance.now();
-        else if (performance.now() - _pausedForReactionSince > 8000) {
+        else if (performance.now() - _pausedForReactionSince > 4000) {
             const anyModalOpen = ['reaction-modal', 'dialogue-modal'].some(id => {
                 const el = document.getElementById(id);
                 return el && el.style.display === 'block';

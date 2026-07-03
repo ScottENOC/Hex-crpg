@@ -98,6 +98,49 @@ window.characterBanterLines = [
         once: true,
         condition: () => nearHex(window.campaign2MillbrookCenter, 10),
         lines: [{ speaker: 'Narrator', mood: 'neutral', text: "Millbrook comes into view — smaller than Hollowmere, but a welcome sight after so long on the road." }]
+    },
+    {
+        id: 'reddale_first_sight',
+        once: true,
+        condition: () => nearHex({ q: 133, r: 24 }, 15),
+        lines: [{ speaker: 'Narrator', mood: 'neutral', text: "Reddale rises ahead — bigger than Hollowmere, with an honest-to-goodness guardhouse watching the road." }]
+    },
+    // Recurring, plot-agnostic travel chatter — just personality, meant to
+    // fill quiet stretches of road rather than mark a location or beat.
+    {
+        id: 'wren_aldric_idle_travel_1',
+        cooldownSeconds: 3 * 3600,
+        condition: () => partyHas('Wren Talbot') && partyHas('Ser Aldric Thorne'),
+        lines: [
+            { speaker: 'Wren Talbot', mood: 'idle', text: "Tell me honestly — does the armor ever stop being heavy, or do you just stop noticing?" },
+            { speaker: 'Ser Aldric Thorne', mood: 'dry', text: "You stop noticing. Right up until you take it off, and then your own shirt feels like a burden." }
+        ]
+    },
+    {
+        id: 'wren_idle_travel_2',
+        cooldownSeconds: 3 * 3600,
+        condition: () => partyHas('Wren Talbot'),
+        lines: [{ speaker: 'Wren Talbot', mood: 'idle', text: "Remind me — when this is all over, I'm owed a very long sit by a very warm fire." }]
+    },
+    {
+        id: 'aldric_idle_travel',
+        cooldownSeconds: 4 * 3600,
+        condition: () => partyHas('Ser Aldric Thorne'),
+        lines: [{ speaker: 'Ser Aldric Thorne', mood: 'thoughtful', text: "Quiet roads make me nervous. Give me an honest fight over a suspicious silence any day." }]
+    },
+    // Reacts to the necromancer arc's phylactery-shard item (see resources.js) —
+    // party unease scales with how long you've been carrying it.
+    {
+        id: 'wren_uneasy_about_shard',
+        cooldownSeconds: 2 * 3600,
+        condition: () => partyHas('Wren Talbot') && !!(window.player && window.player.inventory && window.player.inventory.includes('phylactery_shard')),
+        lines: [{ speaker: 'Wren Talbot', mood: 'uneasy', text: "That thing you're carrying — I don't like how cold it feels standing near you. What is it, really?" }]
+    },
+    {
+        id: 'aldric_lich_rank_warning',
+        cooldownSeconds: 6 * 3600,
+        condition: () => partyHas('Ser Aldric Thorne') && !!(window.player && window.player.skills && Object.keys(window.player.skills).some(k => k.startsWith('lich_'))),
+        lines: [{ speaker: 'Ser Aldric Thorne', mood: 'grave', text: "Something's changed in you. I won't pretend I understand it, but I'll be watching — for your sake as much as anyone's." }]
     }
 ];
 

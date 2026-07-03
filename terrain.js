@@ -81,11 +81,34 @@ function getTerrainAt(q, r) {
     // ensureWildernessResourceNode in resources.js).
     if (window.currentCampaign === '2') {
         if (Math.abs(q) <= 32 && Math.abs(r) <= 32) return terrainTypes['grass'];
+
+        // A coarser "region" layer (much bigger cells than the clump layer
+        // below) picks a broad zone — mostly temperate, with occasional
+        // swampy or sandy stretches — so terrain reads as actual regions of
+        // the map rather than a fine-grained checkerboard of every type
+        // scattered evenly everywhere.
+        const regionSize = 25;
+        const regionQ = Math.floor(q / regionSize);
+        const regionR = Math.floor(r / regionSize);
+        const regionNoise = pseudoRandom(regionQ * 9.1 + 41, regionR * 6.7 + 23);
+        const isSwampRegion = regionNoise > 0.85;
+        const isSandRegion = regionNoise < 0.12;
+
         const cellSize = 5;
         const cellQ = Math.floor(q / cellSize);
         const cellR = Math.floor(r / cellSize);
         const cellNoise = pseudoRandom(cellQ * 3.1 + 7, cellR * 4.3 + 13);
         const hexNoise = pseudoRandom(q * 1.3 + 4, r * 1.7 + 9);
+
+        if (isSwampRegion) {
+            if (cellNoise > 0.75) return terrainTypes['swamp'];
+            if (cellNoise > 0.55 && hexNoise < 0.5) return terrainTypes['forest'];
+            return terrainTypes['grass'];
+        }
+        if (isSandRegion) {
+            if (cellNoise > 0.7) return terrainTypes['sand'];
+            return terrainTypes['grass'];
+        }
         if (cellNoise > 0.88) return terrainTypes['rocky_outcrop'];
         if (cellNoise > 0.55 && hexNoise < 0.5) return terrainTypes['forest'];
         return terrainTypes['grass'];
