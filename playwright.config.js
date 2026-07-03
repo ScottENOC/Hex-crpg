@@ -14,6 +14,13 @@ module.exports = defineConfig({
     testDir: './tests',
     timeout: 30000,
     fullyParallel: true,
+    // Every test pays a near-identical ~5-7s "boot the whole game" cost via
+    // createCharacter() regardless of what it actually checks, so wall-clock
+    // time scales almost linearly with test count / worker count. Playwright's
+    // default worker count under-uses this machine's 4 cores; pin it explicitly
+    // (leaving 1 core free for the dev server + OS) instead of leaving it to
+    // whatever heuristic picked 2.
+    workers: process.env.CI ? undefined : 3,
     retries: process.env.CI ? 1 : 0,
     reporter: process.env.CI ? 'github' : 'list',
     use: {

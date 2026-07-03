@@ -10,6 +10,29 @@ window.isPausedForReaction = false;
 // just a per-instance jittered scale/alpha driven off a fast sine so every
 // fire flickers independently (phase offset by its own hex/entity key)
 // instead of all pulsing in lockstep.
+// Grants a skill rank directly, bypassing the normal attribute-pool spend.
+// This is the only way lich-tree ranks are ever obtained (quest rewards call
+// this, never learnSkill) — it's also what makes the tree visible at all,
+// since ui.js's skill screen only lists a tree once the player already holds
+// a rank in one of its skills or unspent points in it (lich never gets
+// either through the normal level-up/wildcard flow).
+function grantSkillRank(player, skillKey) {
+    const skill = window.skills[skillKey];
+    if (!skill) return;
+    const current = player.skills[skillKey] || 0;
+    if (skill.maxRanks > 0 && current >= skill.maxRanks) return;
+    player.skills[skillKey] = current + 1;
+    if (skill.apply) skill.apply(player);
+    const playerEntity = window.entities.find(e => e.name === player.name);
+    if (playerEntity) Object.assign(playerEntity, {
+        baseReduction: player.baseReduction, lifeDrainOnMeleeHit: player.lifeDrainOnMeleeHit,
+        witheringTouchStacks: player.witheringTouchStacks, commandsUndead: player.commandsUndead,
+        hasSoulAnchor: player.hasSoulAnchor
+    });
+    if (window.showCharacter) window.showCharacter();
+}
+window.grantSkillRank = grantSkillRank;
+
 function fireFlicker(seedKey) {
     let hash = 0;
     for (let i = 0; i < seedKey.length; i++) hash = (hash * 31 + seedKey.charCodeAt(i)) | 0;
@@ -1777,6 +1800,7 @@ function tick() {
                 const allRestored = sentientAllies.every(e => e.hp >= e.maxHp && (e.maxMana === 0 || e.currentMana >= e.maxMana));
                 if (allRestored) {
                     window.isResting = false;
+                    sentientAllies.forEach(ent => { ent.soulAnchorUsed = false; });
                     window.showMessage("Rest complete. Everyone is restored.");
                     window.updateRestButton();
                     window.showCharacter();
@@ -1788,7 +1812,7 @@ function tick() {
                 const mc = window.entities.find(e => e.name === window.party[0].name);
                 if (!mc || (mc.sleepRemainingSeconds <= 0)) {
                     window.isSleeping = false;
-                    sentientAllies.forEach(ent => ent.awakeSeconds = 0);
+                    sentientAllies.forEach(ent => { ent.awakeSeconds = 0; ent.soulAnchorUsed = false; });
                     window.showMessage("Sleep complete.");
                     window.updateSleepButton();
                     window.showCharacter();
@@ -2032,6 +2056,18 @@ function runTickInternal(isSleepCycle = false, skipUI = false, tickMultiplier = 
                             e.alive = false;
                             sharedMessage(`${e.name} died from poison!`);
                             checkCombatEnd();
+                        }
+                    }
+
+                    // LICH: Withering Touch tick (same shape as poison)
+                    if (e.witherTicks > 0) {
+                        const witherAmount = (e.witherDamage || 1) * tickMultiplier;
+                        e.hp -= witherAmount;
+                        e.witherTicks -= tickMultiplier;
+                        syncBackToPlayer(e);
+                        if (e.hp <= 0 && e.alive) {
+                            const witherer = window.entities.find(en => en.witheringTouchStacks && en.side !== e.side) || e;
+                            handleLethalDamage(e, witherer);
                         }
                     }
 
@@ -2636,7 +2672,10 @@ function aiProcess(entity) {
 
     // Combat Logic
     const opponentSide = entity.side === 'player' ? 'enemy' : 'player';
-    const opponents = window.entities.filter(e => e.alive && e.side === opponentSide);
+    // LICH: Command the Dead - undead never treat a commandsUndead player-side
+    // entity as an opponent (recognizes a kindred will instead of fighting it).
+    const opponents = window.entities.filter(e => e.alive && e.side === opponentSide &&
+        !(entity.tags?.includes('undead') && e.commandsUndead));
     const visibleOpponents = opponents.filter(t => canSee(entity, t));
 
     // Filter attackable targets based on flying
@@ -3065,6 +3104,7 @@ function handleClick(e){
     if (doorObj && doorObj.type === 'journal' && window.distance(player.hex, clickedHex) <= 1) {
         if (doorObj.readId === 'goblin_scout_note' && window.readGoblinScoutNote) { window.readGoblinScoutNote(); return; }
         if (doorObj.readId === 'emberlode_ledger' && window.readEmberlodeLedger) { window.readEmberlodeLedger(); return; }
+        if (doorObj.readId === 'phylactery_altar' && window.interactPhylacteryAltar) { window.interactPhylacteryAltar(); return; }
         if (window.readAbandonedHouseJournal) window.readAbandonedHouseJournal();
         return;
     }
@@ -3735,6 +3775,19 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
       sharedMessage(`${attacker.name} drains ${drained} HP from ${target.name}!`);
   }
 
+  // LICH: Grave Chill - melee attacks heal the attacker a flat amount per rank
+  if (attacker.lifeDrainOnMeleeHit && !isRanged) {
+      attacker.hp = Math.min(attacker.maxHp, attacker.hp + attacker.lifeDrainOnMeleeHit);
+      syncBackToPlayer(attacker);
+      sharedMessage(`${attacker.name}'s Grave Chill drains ${attacker.lifeDrainOnMeleeHit} HP from ${target.name}!`);
+  }
+
+  // LICH: Withering Touch - stacking damage-over-time on hit
+  if (attacker.witheringTouchStacks) {
+      target.witherTicks = (target.witherTicks || 0) + 5;
+      target.witherDamage = attacker.witheringTouchStacks;
+  }
+
   // Set last seen hex so they can search if stealthed
   target.lastSeenTargetHex = { q: attacker.hex.q, r: attacker.hex.r };
   
@@ -3790,6 +3843,17 @@ function handleLethalDamage(target, attacker) {
         return; // abort normal death processing this time
     }
 
+    // LICH: Soul Anchor - once per rest, a would-be lethal hit leaves you at
+    // 1 HP instead. Consumed on use; restored the same way TP/rest recovery
+    // already works (see the rest/sleep completion code that clears it).
+    if (target.side === 'player' && target.hasSoulAnchor && !target.soulAnchorUsed) {
+        target.soulAnchorUsed = true;
+        target.hp = 1;
+        syncBackToPlayer(target);
+        window.showMessage(`${target.name}'s soul refuses to leave — Soul Anchor holds them at 1 HP!`);
+        return;
+    }
+
     if (target.side === 'player') {
         const trueDeathThreshold = -(target.maxHp * 0.5);
         if (target.hp <= trueDeathThreshold) {
@@ -3827,6 +3891,11 @@ function handleLethalDamage(target, attacker) {
         if (target.expValue) window.gainExp(target.expValue);
         if (target.gold) window.player.gold += target.gold;
         target.inventory.forEach(i => window.player.inventory.push(i));
+        // Killing the necromancer's undead minions is plain reputation, same
+        // as fighting any other faction's forces — no bespoke flag needed.
+        if (target.necromancerMinion && window.factions?.necromancer_cult) {
+            window.adjustReputation(window.factions.necromancer_cult, -5, 5);
+        }
     }
     if (side === 'enemy') checkCombatEnd();
 }

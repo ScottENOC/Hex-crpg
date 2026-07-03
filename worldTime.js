@@ -89,6 +89,11 @@ function updateTime(delta) {
             window.checkWildernessEncounter(p, delta);
         }
 
+        // Small orc raiding/scouting bands, weighted toward the east road.
+        if (window.checkOrcRaiderEncounter && p) {
+            window.checkOrcRaiderEncounter(p, delta);
+        }
+
         // The abandoned house's skeletons are placed dormant at world-build
         // time (waking them all up immediately would make window.isInCombat
         // true for the whole game) and only aggro once the player actually

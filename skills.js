@@ -1520,6 +1520,60 @@ function generateMagicSkills(school, spellName, spellId) {
     return s;
 }
 
+// The lich tree: never funded by the normal attribute pool or wildcard
+// points (deliberately absent from ui.js's standardTrees list) and never
+// granted through level-up. The only way to gain a rank is window.grantSkillRank
+// being called directly by a necromancer-arc quest reward — which is also
+// what makes the tree visible at all, since ui.js only lists a tree once the
+// player already holds unspent points in it or a rank in one of its skills.
+Object.assign(skills, {
+    'lich_deathless_flesh': {
+        name: 'Deathless Flesh',
+        description: 'Your flesh forgets how to die properly. Reduces all incoming damage by 1 per rank.',
+        tree: 'lich',
+        maxRanks: 3,
+        apply: (player) => {
+            player.baseReduction = (player.baseReduction || 0) + 1;
+        }
+    },
+    'lich_grave_chill': {
+        name: 'Grave Chill',
+        description: 'Melee attacks drain a sliver of the target\'s life into your own. Heals 2 HP per rank on a successful melee hit.',
+        tree: 'lich',
+        maxRanks: 2,
+        apply: (player) => {
+            player.lifeDrainOnMeleeHit = (player.lifeDrainOnMeleeHit || 0) + 2;
+        }
+    },
+    'lich_withering_touch': {
+        name: 'Withering Touch',
+        description: 'Your touch withers what it strikes. Attacks apply a stacking damage-over-time.',
+        tree: 'lich',
+        maxRanks: 3,
+        apply: (player) => {
+            player.witheringTouchStacks = (player.witheringTouchStacks || 0) + 1;
+        }
+    },
+    'lich_command_the_dead': {
+        name: 'Command the Dead',
+        description: 'Nearby undead recognize a kindred will and fight for you instead of against you.',
+        tree: 'lich',
+        maxRanks: 1,
+        apply: (player) => {
+            player.commandsUndead = true;
+        }
+    },
+    'lich_soul_anchor': {
+        name: 'Soul Anchor',
+        description: "A fragment of you refuses to leave. Once per rest, damage that would kill you instead leaves you at 1 HP.",
+        tree: 'lich',
+        maxRanks: 1,
+        apply: (player) => {
+            player.hasSoulAnchor = true;
+        }
+    }
+});
+
 Object.assign(skills, {
     'persuasion': {
         name: 'Persuasion',

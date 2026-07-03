@@ -16,7 +16,17 @@ window.factions = {
     // to the Silverhart Kingdom's on purpose in most quest resolutions —
     // strengthening/earning favor with the goblins tends to come at the
     // human kingdom's expense (see campaign2Dialogue.js's goblin questline).
-    goblin_tribe:       { id: 'goblin_tribe',       name: 'The Skarn-tooth Tribe',  race: 'goblin', knowledge: 0, standing: 0 }
+    goblin_tribe:       { id: 'goblin_tribe',       name: 'The Skarn-tooth Tribe',  race: 'goblin', knowledge: 0, standing: 0 },
+    // The necromancer haunting the abandoned house north of Millbrook.
+    // Standing here is deliberately just reputation like any other faction
+    // (return the phylactery-shard, defend townsfolk from their undead
+    // minions, etc.) — no bespoke flags. Crossing standing thresholds is
+    // what unlocks deeper quests, same as goblin_tribe's diplomacy path.
+    necromancer_cult:   { id: 'necromancer_cult',   name: 'The Vessel-Seeker',      race: 'undead', knowledge: 0, standing: 0 },
+    // Small orc raiding/scouting bands pressing in from the borderlands.
+    // Currently pure wilderness-encounter flavor + reputation target for
+    // "Eyes on the Border" — no camp/settlement of their own yet.
+    orc_raiders:        { id: 'orc_raiders',        name: 'The Borderland Raiders', race: 'orc', knowledge: 0, standing: 0 }
 };
 
 function seedStanding(race, playerRace) {

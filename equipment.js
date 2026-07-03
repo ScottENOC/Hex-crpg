@@ -39,7 +39,8 @@ const items = {
     'huntsman_helm': { id: 'huntsman_helm', name: "Huntsman's Helm", type: 'helmet', reduction: 1, buyPrice: 140, auraTag: 'wolf', auraRadius: 5, description: "A wolf-tooth is set in the brow; it aches faintly when the pack is near." },
 
     // Quest items — no buyPrice, so they never show up in the shop.
-    'elder_locket': { id: 'elder_locket', name: 'Tarnished Locket', type: 'quest_item' }
+    'elder_locket': { id: 'elder_locket', name: 'Tarnished Locket', type: 'quest_item' },
+    'phylactery_shard': { id: 'phylactery_shard', name: 'Phylactery Shard', type: 'quest_item', description: 'A cold, faintly warm shard of blackened bone and glass. It wants to be whole again.' }
 };
 
 window.items = items;

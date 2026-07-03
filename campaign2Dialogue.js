@@ -284,6 +284,53 @@ window.npcDialogueTrees = {
             return;
         }
 
+        // "Eyes on the Border" - offered once the Missing Watch is behind
+        // her, and only once there's real cause to worry (either the goblin
+        // scout note or an aggressive resolution to the goblin_threat quest).
+        const goblinQuest = window.questLog.find(q => q.id === 'goblin_threat');
+        const causeForConcern = window.goblinScoutNoteRead || ['assault', 'betrayal'].includes(goblinQuest?.resolution);
+        const bordersQuest = window.questLog.find(q => q.id === 'eyes_on_border');
+
+        if (causeForConcern && !bordersQuest) {
+            window.showDialogue(npc, "One more thing, while you're here. Traders coming up the east road talk of tracks that aren't goblin-make — heavier, further apart. If something's scouting us from further out, I want to know who.", [
+                {
+                    label: "I'll find out.",
+                    action: () => {
+                        window.questLog.push({
+                            id: 'eyes_on_border', title: 'Eyes on the Border', giver: 'Captain Ilsa Rennick',
+                            status: 'active', description: "Investigate the orc scouts spotted east of Reddale."
+                        });
+                        if (window.triggerEyesOnBorder) window.triggerEyesOnBorder();
+                        window.showMessage('Quest added: Eyes on the Border.');
+                    }
+                },
+                { label: "Not my problem.", action: () => {} }
+            ]);
+            return;
+        }
+
+        if (bordersQuest && bordersQuest.status === 'active') {
+            const scoutAlive = window.entities.some(e => e.eyesOnBorderTarget && e.alive);
+            if (scoutAlive) {
+                window.showDialogue(npc, "Still out there, last I heard. Watch the road east.", [{ label: "On it.", action: () => {} }]);
+            } else {
+                window.showDialogue(npc, "One scout down, and you got a good look at their gear — that's Silverhart border-levy make, not tribal. Someone's testing how far they can push before we notice. My thanks — this matters more than you know.", [
+                    {
+                        label: "Glad to help.",
+                        action: () => {
+                            bordersQuest.status = 'completed';
+                            window.adjustReputation(npc.reputation, 15, 15);
+                            if (window.factions?.orc_raiders) window.adjustReputation(window.factions.orc_raiders, -15, 15);
+                            window.party[0].gold = (window.party[0].gold || 0) + 30;
+                            if (window.gainExp) window.gainExp(150);
+                            window.showMessage('Quest complete: Eyes on the Border. (+30 gold)');
+                        }
+                    }
+                ]);
+            }
+            return;
+        }
+
         window.showDialogue(npc, "Keep your nose clean in Reddale and we won't have trouble.", [
             {
                 label: "Try to read her.",
@@ -307,17 +354,94 @@ window.npcDialogueTrees = {
             },
             { label: "Noted.", action: () => {} }
         ];
+
+        // Con path for "Eyes on the Border": Bram (already establish as
+        // bribable) can be paid to bury the border sighting instead of it
+        // ever reaching the Captain — quietly resolves the quest but lets
+        // the threat go unreported.
+        const bordersQuest = (window.questLog || []).find(q => q.id === 'eyes_on_border');
+        if (bordersQuest && bordersQuest.status === 'active') {
+            baseOptions.unshift({
+                label: "Ask him to bury the border sighting. (25 gold)",
+                action: () => {
+                    if ((window.party[0].gold || 0) < 25) { window.showMessage("You don't have enough gold."); return; }
+                    window.party[0].gold -= 25;
+                    bordersQuest.status = 'buried';
+                    if (window.factions?.silverhart_kingdom) window.adjustReputation(window.factions.silverhart_kingdom, -10, 10);
+                    if (window.factions?.orc_raiders) window.adjustReputation(window.factions.orc_raiders, 10, 10);
+                    window.showMessage("Bram pockets the coin. \"Never saw a thing,\" he says.");
+                }
+            });
+        }
         window.showDialogue(npc, "Captain Rennick runs the watch here — if there's work needs doing, she's the one to ask. Me, I just mind the gate.", baseOptions);
     },
     reddale_reeve: (npc) => {
-        window.showDialogue(npc, "Reddale answers to Silverhart same as anywhere, but out here it's my word that keeps the peace. Trade's been steady — long may it stay that way.", [
+        const influence = window.factions?.ironbond_company?.merchantInfluence?.silverhart_kingdom ?? 30;
+        const cutQuest = (window.questLog || []).find(q => q.id === 'reddale_cut');
+
+        if (cutQuest && cutQuest.status === 'active') {
+            window.showDialogue(npc, "Have you decided which way this goes? Ironbond's man is still waiting on an answer.", [
+                {
+                    label: "Help you push back against Ironbond.",
+                    action: () => {
+                        cutQuest.status = 'completed';
+                        if (window.factions?.ironbond_company) {
+                            window.adjustReputation(window.factions.ironbond_company, -15, 15);
+                            window.adjustMerchantInfluence(window.factions.ironbond_company, 'silverhart_kingdom', -15);
+                        }
+                        window.adjustReputation(npc.reputation, 20, 20);
+                        window.showMessage("Reddale holds its ground against Ironbond. (Ironbond's grip on the kingdom weakens.)");
+                    }
+                },
+                {
+                    label: "Broker the deal in Ironbond's favor. (+50 gold)",
+                    action: () => {
+                        cutQuest.status = 'completed';
+                        window.party[0].gold = (window.party[0].gold || 0) + 50;
+                        if (window.factions?.ironbond_company) {
+                            window.adjustReputation(window.factions.ironbond_company, 20, 15);
+                            window.adjustMerchantInfluence(window.factions.ironbond_company, 'silverhart_kingdom', 15);
+                        }
+                        window.adjustReputation(npc.reputation, -10, 15);
+                        window.showMessage("The deal is struck. Ironbond's grip on the kingdom tightens. (+50 gold)");
+                    }
+                }
+            ]);
+            return;
+        }
+
+        if (influence >= 40 && !cutQuest) {
+            window.showDialogue(npc, "The Ironbond Company sent a man 'round last week — talking protection fees, same as they did in Hollowmere by all accounts. I won't roll over for it, but I won't pretend saying no is free either. What would you do in my place?", [
+                {
+                    label: "Take it seriously.",
+                    action: () => {
+                        window.questLog = window.questLog || [];
+                        window.questLog.push({ id: 'reddale_cut', title: "Reddale's Cut", giver: 'Reeve Aldous Finch', status: 'active', description: 'Decide how Reddale answers the Ironbond Company.' });
+                        window.showMessage("Quest added: Reddale's Cut.");
+                    }
+                },
+                { label: "Not my business.", action: () => {} }
+            ]);
+            return;
+        }
+
+        const tone = influence >= 40
+            ? "Reddale answers to Silverhart same as anywhere, but I'll admit the Company's shadow reaches further east than it used to."
+            : "Reddale answers to Silverhart same as anywhere, but out here it's my word that keeps the peace. Trade's been steady — long may it stay that way.";
+        window.showDialogue(npc, tone, [
             { label: "Good to hear.", action: () => {} }
         ]);
     },
     reddale_innkeeper: (npc) => {
-        window.showDialogue(npc, "Welcome to Reddale. Rooms are warm and the ale's better than the road food, I promise you that.", [
-            { label: "Good to know.", action: () => {} }
-        ]);
+        if (window.abandonedHouseJournalRead) {
+            window.showDialogue(npc, "Welcome to Reddale. Rooms are warm and the ale's better than the road food, I promise you that.\n\nSince you're asking after strange things — a family out past Millbrook way went quiet a season back, and a grave near here was found disturbed not long after. Everyone says animals. I'm not so sure they're the same kind of quiet.", [
+                { label: "Worth looking into.", action: () => {} }
+            ]);
+        } else {
+            window.showDialogue(npc, "Welcome to Reddale. Rooms are warm and the ale's better than the road food, I promise you that.", [
+                { label: "Good to know.", action: () => {} }
+            ]);
+        }
     },
     farm_sheep: (npc) => {
         window.showDialogue(npc, "Baa.", [{ label: "...", action: () => {} }]);
@@ -1004,6 +1128,16 @@ function triggerReddaleMissingWatch() {
 }
 window.triggerReddaleMissingWatch = triggerReddaleMissingWatch;
 
+function triggerEyesOnBorder() {
+    const site = window.campaign2ReddaleSearchSiteHex;
+    if (!site) return;
+    const scout = window.createMonster('orc', { q: site.q + 6, r: site.r + 2 }, null, null, 'enemy');
+    scout.eyesOnBorderTarget = true;
+    scout.aiState = 'idle';
+    window.entities.push(scout);
+}
+window.triggerEyesOnBorder = triggerEyesOnBorder;
+
 // Random wilderness encounters: out past the village/farmland (35+ hexes
 // from the village center), wandering risks a wolf pack — especially
 // heading west, toward the unnamed, skull-marked road. Rolled at most once
@@ -1067,6 +1201,61 @@ function checkWildernessEncounter(playerEntity, delta) {
     }
 }
 window.checkWildernessEncounter = checkWildernessEncounter;
+
+// Small orc raiding/scouting bands pressing in from the borderlands east of
+// Reddale — ambient pressure independent of "Eyes on the Border," reusing
+// the same accumulator/placement approach as the wolf encounters above
+// (never inside the player's visual range, rolled on a travel-time timer
+// rather than per-tick). Weighted east instead of west.
+window.orcRaiderEncounterAccum = 0;
+function checkOrcRaiderEncounter(playerEntity, delta) {
+    if (!playerEntity || window.isInCombat) return;
+    const security = window.regions?.hollowmere?.security ?? 50;
+    const safeRadius = 25 + (security / 100) * 20;
+    if (window.distance(playerEntity.hex, { q: 0, r: 0 }) < safeRadius) return;
+
+    window.orcRaiderEncounterAccum += delta;
+    const checkInterval = 180; // rarer than wolves - this should read as ambient pressure, not a gauntlet
+    if (window.orcRaiderEncounterAccum < checkInterval) return;
+    window.orcRaiderEncounterAccum = 0;
+
+    const cp = window.campaign2Landmarks.crossroads;
+    const headingEast = playerEntity.hex.q > cp.q + 20;
+    const maxChance = headingEast ? 0.25 : 0.05;
+    const chance = ((100 - security) / 100) * maxChance;
+    if (Math.random() >= chance) return;
+
+    const count = 2 + Math.floor(Math.random() * 2); // 2-3 orcs, a small raiding band
+    let spawned = 0;
+    for (let n = 0; n < count; n++) {
+        let spot = null;
+        for (let attempt = 0; attempt < 12 && !spot; attempt++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 10 + Math.floor(Math.random() * 6);
+            const candidate = window.hexRound(
+                playerEntity.hex.q + Math.round(Math.cos(angle) * dist),
+                playerEntity.hex.r + Math.round(Math.sin(angle) * dist)
+            );
+            if (window.getEntityAtHex(candidate.q, candidate.r)) continue;
+            if (window.getTerrainAt(candidate.q, candidate.r).name === 'Water') continue;
+            if (window.isVisibleToPlayer(candidate)) continue;
+            spot = candidate;
+        }
+        if (!spot) continue;
+        const orc = window.createMonster('orc', spot, null, null, 'enemy');
+        orc.aiState = 'idle';
+        orc.behaviorType = 'patrol';
+        orc.orcRaiderBand = true;
+        window.entities.push(orc);
+        spawned++;
+    }
+    if (spawned > 0) {
+        window.showMessage('An orc raiding party is nearby...');
+        window.drawMap();
+        window.renderEntities();
+    }
+}
+window.checkOrcRaiderEncounter = checkOrcRaiderEncounter;
 
 // --- Companion attitude (BG3-style approval): a 0-100 meter per companion
 // name, moved by tagged actions and shown to the player as a toast message

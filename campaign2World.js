@@ -325,8 +325,14 @@ function buildAbandonedHouse(waypoint) {
     // woken via proximity instead (see worldTime.js's tick).
     (window.campaign2AbandonedHouseSkeletons || []).forEach((hexOffset, i) => {
         const skeleton = window.createMonster('skeleton', { q: center.q + hexOffset.q, r: center.r + hexOffset.r }, null, null, 'enemy');
+        skeleton.necromancerMinion = true; // defeating them costs necromancer_cult standing (see handleLethalDamage)
         window.entities.push(skeleton);
     });
+
+    // A cold ritual altar in the house's back room, holding a shard of the
+    // necromancer's phylactery. Interacting picks it up (once); interacting
+    // again while holding it offers to return it — see interactPhylacteryAltar.
+    window.tileObjects[`${center.q + 1},${center.r}`] = { type: 'journal', readId: 'phylactery_altar', lightRadius: 0 };
 }
 
 // Millbrook: a minimal stub village at the far end of the north road, three
@@ -928,6 +934,7 @@ function buildReddale(roadEnd) {
 // the necromancer/lichdom plot arc. Knowledge: Religion reveals specifics
 // (phylactery, a soul-binding ritual) that the vague version only hints at.
 function readAbandonedHouseJournal() {
+    window.abandonedHouseJournalRead = true;
     const knowsReligion = window.party && window.party.some(p => window.hasKnowledgeReligion(p));
     if (knowsReligion) {
         window.showDialogue({ name: 'Journal', customImage: 'journal' },
@@ -939,6 +946,61 @@ function readAbandonedHouseJournal() {
         );
     }
 }
+
+// The altar's phylactery-shard: a real inventory item, not a flag. Holding it
+// is what unlocks pursuing lichdom yourself; how the necromancer_cult faction
+// feels about you is tracked as plain reputation (see interactPhylacteryAltar's
+// two branches below and the necromancerMinion reputation hit in
+// handleLethalDamage), never a bespoke one-off flag.
+function interactPhylacteryAltar() {
+    const npc = { name: 'Ritual Altar', customImage: 'journal' };
+    const hasShard = window.player.inventory.includes('phylactery_shard');
+
+    if (window.phylacteryReturned) {
+        window.showDialogue(npc, "The altar is cold and empty now — whatever answered here once, it doesn't any longer.");
+        return;
+    }
+
+    if (!hasShard && !window.phylacteryShardTaken) {
+        window.phylacteryShardTaken = true;
+        window.player.inventory.push('phylactery_shard');
+        window.showDialogue(npc,
+            "A shard of blackened bone-and-glass sits at the altar's center, faintly warm despite the cold room. It comes away in your hand more easily than it should. Whatever it's a piece of, it wants to be whole again.",
+            [{ label: "Take it.", action: () => {} }]
+        );
+        return;
+    }
+
+    if (hasShard) {
+        window.showDialogue(npc, "The altar hums faintly — it knows what you're carrying.", [
+            {
+                label: "Return the shard to the altar.",
+                action: () => {
+                    window.player.inventory = window.player.inventory.filter(i => i !== 'phylactery_shard');
+                    window.phylacteryReturned = true;
+                    if (window.factions?.necromancer_cult) window.adjustReputation(window.factions.necromancer_cult, 40, 30);
+                    window.showDialogue({ name: 'A Cold Voice', customImage: 'journal' },
+                        "...You didn't have to. Few wouldn't have kept it. I won't forget this.");
+                }
+            },
+            {
+                label: "Keep it, and try to use it yourself.",
+                action: () => {
+                    if (window.grantSkillRank) window.grantSkillRank(window.player, 'lich_deathless_flesh');
+                    ['silverhart_kingdom', 'ironbond_company', 'goblin_tribe', 'orc_raiders'].forEach(id => {
+                        if (window.factions[id]) window.adjustReputation(window.factions[id], -25, 10);
+                    });
+                    window.showMessage("Something in you changes. Word of it will travel, and it will not be kind.");
+                }
+            },
+            { label: "Not now.", action: () => {} }
+        ]);
+        return;
+    }
+
+    window.showDialogue(npc, "A cold ritual altar, long disturbed. There's nothing left to take.");
+}
+window.interactPhylacteryAltar = interactPhylacteryAltar;
 
 // A breadcrumb toward a third, larger plot arc: a foreign invasion, with the
 // Skarn-tooth goblins pushed this far south as a scouting/probing force
