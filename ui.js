@@ -2070,6 +2070,53 @@ window.updateAudioSetting = function(type, value) {
     }
 };
 
+// ALLEGIANCE OUTLINE MODE: 'combat' (default) | 'always' | 'never'.
+// A player-level preference (not game-save state), so it lives in
+// localStorage and survives across save files the same way audio would
+// if that were persisted.
+window.allegianceOutlineMode = localStorage.getItem('rpg_allegiance_outline_mode') || 'combat';
+window.setAllegianceOutlineMode = function(mode) {
+    window.allegianceOutlineMode = mode;
+    localStorage.setItem('rpg_allegiance_outline_mode', mode);
+};
+
+// TUTORIAL MODE: explains a mechanic the first time it happens, then
+// remembers it via a set of seen-ids in localStorage so it never repeats.
+// window.showTutorialTip(id, text) is the hook other systems call.
+window.tutorialModeEnabled = localStorage.getItem('rpg_tutorial_enabled') !== 'false';
+try {
+    window.tutorialSeen = JSON.parse(localStorage.getItem('rpg_tutorial_seen') || '{}');
+} catch (e) {
+    window.tutorialSeen = {};
+}
+window.setTutorialModeEnabled = function(enabled) {
+    window.tutorialModeEnabled = enabled;
+    localStorage.setItem('rpg_tutorial_enabled', enabled ? 'true' : 'false');
+};
+window.disableTutorialMode = function() {
+    window.setTutorialModeEnabled(false);
+    const cb = document.getElementById('tutorial-mode-toggle');
+    if (cb) cb.checked = false;
+    window.showMessage('Tutorial tips turned off.');
+};
+window.resetTutorialMemory = function() {
+    window.tutorialSeen = {};
+    localStorage.removeItem('rpg_tutorial_seen');
+    window.showMessage('Tutorial memory reset — tips will explain things again.');
+};
+window.showTutorialTip = function(id, text) {
+    if (!window.tutorialModeEnabled || window.tutorialSeen[id]) return;
+    window.tutorialSeen[id] = true;
+    localStorage.setItem('rpg_tutorial_seen', JSON.stringify(window.tutorialSeen));
+    window.showMessage(`Tip: ${text}`);
+};
+window.initSettingsUI = function() {
+    const modeSelect = document.getElementById('allegiance-outline-mode');
+    if (modeSelect) modeSelect.value = window.allegianceOutlineMode;
+    const tutCheck = document.getElementById('tutorial-mode-toggle');
+    if (tutCheck) tutCheck.checked = window.tutorialModeEnabled;
+};
+
 function updateMusicState() {
     if (!window.audioEnabled) return;
 

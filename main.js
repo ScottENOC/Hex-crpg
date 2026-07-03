@@ -220,6 +220,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (modal) {
                 modal.style.display = "block";
                 if (window.updateMusicState) window.updateMusicState();
+                if (window.initSettingsUI) window.initSettingsUI();
             }
         } else if (btnId === "host-game-btn") {
             if (window.createRoom) window.createRoom();
@@ -525,7 +526,21 @@ window.updateRoguelikePreview = function() {
             const hairImg = loadAppearancePreviewImage(hairSrc);
             if (hairImg.complete && hairImg.naturalWidth) {
                 const tintedHair = window.getRecoloredHairSprite(hairImg, parseInt(hairSlider.value, 10));
-                ctx.drawImage(tintedHair, drawX, drawY, w, h);
+                // Some hairstyles (e.g. human_male, dwarf_female) are a small
+                // "cap" meant to be drawn at a fraction of body size near the
+                // top of the head, not stretched over the whole body — same
+                // convention as drawPlayerCharacter's hair.type === 'small'.
+                // Skipping this made the preview render those as a full-body
+                // hair overlay, comically oversized.
+                const hairCfg = window.CHAR_CONFIG?.[key]?.hair;
+                if (hairCfg && hairCfg.type === 'small') {
+                    const hW = w * hairCfg.wFrac;
+                    const hH = h * hairCfg.hFrac;
+                    const topFrac = hairCfg.topFrac !== undefined ? hairCfg.topFrac : 0.2;
+                    ctx.drawImage(tintedHair, drawX + w / 2 - hW / 2, drawY + topFrac * h - hH / 2, hW, hH);
+                } else {
+                    ctx.drawImage(tintedHair, drawX, drawY + (hairCfg?.yRaw || 0), w, h);
+                }
             }
         }
     };

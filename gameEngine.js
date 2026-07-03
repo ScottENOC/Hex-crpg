@@ -913,7 +913,7 @@ function startGameCore(isLoading = false) {
 // mainHand/offHand: normalised (0â€“1) position within body rect for weapon hilt
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const CHAR_CONFIG = {
-    human_male:   { bodyW:1.80, bodyH:2.16, yOff:-0.18, baseKey:'humanMaleBase',  hair:{ key:'humanMaleHair',   type:'small', wFrac:0.30, hFrac:0.30, topFrac:0.19 }, armour:{ wMult:1.0, topShift:0   }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.35, y:0.64 }, offHand:{ x:0.59, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
+    human_male:   { bodyW:1.80, bodyH:2.16, yOff:-0.18, baseKey:'humanMaleBase',  hair:{ key:'humanMaleHair',   type:'small', wFrac:0.30, hFrac:0.30, topFrac:0.19 }, armour:{ wMult:1.0, topShift:0   }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.35, y:0.64 }, offHand:{ x:0.59, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42, shieldOffset:{ x:0.15, y:0.15 }, mainHandYAdj:-0.3, offHandYAdj:-0.15 },
     human_female: { bodyW:1.60, bodyH:1.92, yOff:-0.16, baseKey:'humanBase',       hair:{ key:'humanHair',       type:'full',  yRaw:-3                              }, armour:{ wMult:1.0, topShift:0   }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.40, y:0.66 }, offHand:{ x:0.60, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42, shieldOffset:{ x:0.15, y:0.15 } },
     elf_male:     { bodyW:2.00, bodyH:2.40, yOff:-0.20, baseKey:'elfMaleBase',     hair:{ key:'elfMaleHair',     type:'full'                                        }, armour:{ wMult:1.0, topShift:0.3 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.37, y:0.63 }, offHand:{ x:0.58, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
     elf_female:   { bodyW:2.00, bodyH:2.40, yOff:-0.20, baseKey:'elfFemaleBase',   hair:{ key:'elfFemaleHair',   type:'full'                                        }, armour:{ wMult:1.0, topShift:0.3 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.37, y:0.63 }, offHand:{ x:0.58, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
@@ -1018,37 +1018,40 @@ function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
     // MAIN-HAND WEAPON
     let weaponImg = null;
     let weaponScale = 1.0;
+    let mainYAdj = cfg.mainHandYAdj !== undefined ? cfg.mainHandYAdj : 0.5;
     const mainW = e.equipped?.weapon;
     if (mainW === 'sword' || mainW === 'sword_arrow_deflection') weaponImg = window.gameVisuals.swordIcon;
     else if (mainW === 'axe')    weaponImg = window.gameVisuals.axe;
     else if (mainW === 'spear')  weaponImg = window.gameVisuals.spear;
     else if (mainW === 'club')   weaponImg = window.gameVisuals.club;
-    else if (mainW === 'dagger') { weaponImg = window.gameVisuals.swordIcon; weaponScale = 0.5; }
+    else if (mainW === 'dagger') { weaponImg = window.gameVisuals.swordIcon; weaponScale = 0.75; mainYAdj = 0.1; }
 
     if (weaponImg?.complete) {
         const wSize = hs * cfg.weaponSizeMult * weaponScale * z;
         const mhX = left + cfg.mainHand.x * bW;
         // The sword png's hilt anchor sits at its vertical center, but the
-        // blade reads as "held too low" unless raised by roughly half the
-        // sprite's own rendered height.
-        const mhY = top  + cfg.mainHand.y * bH - wSize / 2;
+        // blade reads as "held too low" unless raised — mainHandYAdj (in
+        // wSize units) tunes this per race/weapon; daggers need much less
+        // of a raise than a full sword.
+        const mhY = top  + cfg.mainHand.y * bH - mainYAdj * wSize;
         ctx.drawImage(weaponImg, mhX - wSize / 2, mhY - wSize / 2, wSize, wSize);
     }
 
     // OFF-HAND WEAPON (mirrored)
     let offhandImg = null;
     let offhandScale = 1.0;
+    let offYAdj = cfg.offHandYAdj !== undefined ? cfg.offHandYAdj : 0;
     const offW = e.equipped?.offhand;
     if (offW === 'sword' || offW === 'sword_arrow_deflection') offhandImg = window.gameVisuals.swordIcon;
     else if (offW === 'axe')    offhandImg = window.gameVisuals.axe;
     else if (offW === 'spear')  offhandImg = window.gameVisuals.spear;
     else if (offW === 'club')   offhandImg = window.gameVisuals.club;
-    else if (offW === 'dagger') { offhandImg = window.gameVisuals.swordIcon; offhandScale = 0.5; }
+    else if (offW === 'dagger') { offhandImg = window.gameVisuals.swordIcon; offhandScale = 0.75; offYAdj -= 0.4; }
 
     if (offhandImg?.complete && window.items[offW]?.type === 'weapon') {
         const wSize = hs * cfg.weaponSizeMult * offhandScale * z;
         const ohX = left + cfg.offHand.x * bW;
-        const ohY = top  + cfg.offHand.y * bH;
+        const ohY = top  + cfg.offHand.y * bH - offYAdj * wSize;
         ctx.save();
         ctx.translate(ohX, ohY);
         ctx.scale(-1, 1);
@@ -1171,7 +1174,9 @@ function renderEntities() {
       // (the tavern brawl, an arena boss + guards, a goblin camp) is hard to
       // read from sprite color alone — party/temporary-ally/bystander/enemy
       // each get their own hex outline color, drawn under the sprite.
-      if (e.alive && !e.rider) {
+      const outlineMode = window.allegianceOutlineMode || 'combat';
+      const showOutline = outlineMode === 'always' || (outlineMode === 'combat' && window.isInCombat);
+      if (showOutline && e.alive && !e.rider) {
           let allegianceColor = null;
           if (e.side === 'enemy') allegianceColor = '#ff3b3b';
           else if (e.side === 'player' && e.aiControlled) allegianceColor = '#00e5ff';
@@ -1292,7 +1297,9 @@ function renderEntities() {
         const hasTorch = (e.equipped.weapon === 'torch' || e.equipped.offhand === 'torch');
         if (hasTorch) {
             const tSize = window.hexSize * 1.0 * z;
-            window.mapCtx.drawImage(window.gameVisuals.torch_lit, x + (window.hexSize/3)*z, y - tSize, tSize, tSize);
+            // Was drifting far right of the hand and sitting a bit too high;
+            // pulled back left by 1.5x its own size and down by 0.4x.
+            window.mapCtx.drawImage(window.gameVisuals.torch_lit, x + (window.hexSize/3)*z - 1.5 * tSize, y - tSize + 0.4 * tSize, tSize, tSize);
         }
     }
 

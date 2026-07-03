@@ -373,7 +373,10 @@ function drawMap() {
       if (hex.type === 'move') {
           drawHex(x,y, hexSize, { stroke: '#00f', lineWidth: 2 * window.cameraZoom, fill: 'rgba(0,0,255,0.1)'});
       } else if (hex.type === 'attack') {
-          drawHex(x,y, hexSize, { stroke: '#f00', lineWidth: 2 * window.cameraZoom, fill: 'rgba(255,0,0,0.1)'});
+          // Distinct from the enemy allegiance outline (also red) so
+          // "reachable with my current weapon" doesn't visually collide
+          // with "this is an enemy".
+          drawHex(x,y, hexSize, { stroke: '#ff9800', lineWidth: 2 * window.cameraZoom, fill: 'rgba(255,152,0,0.12)'});
       } else if (hex.type === 'turn') {
           drawHex(x,y, hexSize, { stroke: '#ff0', lineWidth: 4 * window.cameraZoom });
       }
