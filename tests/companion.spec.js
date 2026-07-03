@@ -28,7 +28,7 @@ test.describe('Wren Talbot (permanent companion)', () => {
         expect(result.cls).toBe('fighter');
         expect(result.skills).toMatchObject({ health: 1, sword_hit: 1, sword_dmg: 1 });
         expect(result.equipped.weapon).toBe('sword');
-        expect(result.equipped.armor).toBe('light_armor');
+        expect(result.equipped.armor).toBe(null); // no free starting armor — requires light_armor_training first
         expect(result.distanceFromPlayer).toBeLessThanOrEqual(1); // seated right next to the player
     });
 

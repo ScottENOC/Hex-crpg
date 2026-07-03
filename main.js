@@ -306,6 +306,8 @@ document.addEventListener("DOMContentLoaded", () => {
             window.toggleRest();
         } else if (btnId === "sleep-btn") {
             window.toggleSleep();
+        } else if (btnId === "time-speed-btn") {
+            window.toggleTimeSpeed();
         }
     });
 

@@ -501,7 +501,7 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
                 if (isKnownWall) continue;
             }
 
-            const nextCost = cost + (baseCost * terrain.moveCostMult);
+            const nextCost = cost + (baseCost * (window.getMoveCostMult ? window.getMoveCostMult(next.q, next.r) : terrain.moveCostMult));
 
             // Allow one last step that crosses the availableTP threshold
             if (!ignoreTP && availableTP !== undefined && nextCost > availableTP && cost >= availableTP) continue;

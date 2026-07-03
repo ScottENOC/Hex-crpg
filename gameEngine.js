@@ -163,7 +163,7 @@ function playerMoveProcess(player, path) {
         const previousTerrain = window.getTerrainAt(previousHex.q, previousHex.r);
         const terrain = window.getTerrainAt(player.hex.q, player.hex.r);
         
-        let terrainMult = terrain.moveCostMult;
+        let terrainMult = window.getMoveCostMult(player.hex.q, player.hex.r);
         if (terrain.name === 'Foliage' && (moveEntity.skills?.elf_foliage_expertise || moveEntity.skills?.druid_foliage_expertise)) {
             terrainMult = 1.0; 
         }
@@ -456,7 +456,7 @@ function updatePlayerUI() {
             const terrain = window.getTerrainAt(n.q, n.r);
             if (terrain.name === 'Wall') continue;
 
-            const stepCost = baseMoveCost * (player.isFlying ? 1 : terrain.moveCostMult);
+            const stepCost = baseMoveCost * (player.isFlying ? 1 : window.getMoveCostMult(n.q, n.r));
             const totalCost = cost + stepCost;
 
             if (totalCost <= availableTP) {
@@ -588,6 +588,10 @@ function startGameCore(isLoading = false) {
       corpse_marker: new Image(),
       fence_h: new Image(),
       fence_v: new Image(),
+      fence_broken: new Image(),
+      blood_spatter: new Image(),
+      blood_spatter_faint: new Image(),
+      sheep: new Image(),
       dirt: new Image(),
       hut: new Image(),
       hut_large: new Image(),
@@ -665,6 +669,10 @@ function startGameCore(isLoading = false) {
   visuals.corpse_marker.onload = () => { window.drawMap(); };
   visuals.fence_h.onload = () => { window.drawMap(); };
   visuals.fence_v.onload = () => { window.drawMap(); };
+  visuals.fence_broken.onload = () => { window.drawMap(); };
+  visuals.blood_spatter.onload = () => { window.drawMap(); };
+  visuals.blood_spatter_faint.onload = () => { window.drawMap(); };
+  visuals.sheep.onload = () => { window.drawMap(); };
   visuals.dirt.onload = () => { window.drawMap(); };
   visuals.bush_small.onload = () => { window.drawMap(); };
   visuals.bush_large.onload = () => { window.drawMap(); };
@@ -743,6 +751,10 @@ function startGameCore(isLoading = false) {
   visuals.corpse_marker.src = 'images/corpse_marker.svg';
   visuals.fence_h.src = 'images/fence_h.svg';
   visuals.fence_v.src = 'images/fence_v.svg';
+  visuals.fence_broken.src = 'images/fence_broken.svg';
+  visuals.blood_spatter.src = 'images/overlay blood.png';
+  visuals.blood_spatter_faint.src = 'images/overlay blood.png';
+  visuals.sheep.src = 'images/sheep.svg';
   visuals.dirt.src = 'images/dirt.svg';
   visuals.hut.src = 'images/hut.svg';
   visuals.hut_large.src = 'images/hut_large.svg';
@@ -859,17 +871,17 @@ function startGameCore(isLoading = false) {
 // mainHand/offHand: normalised (0â€“1) position within body rect for weapon hilt
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const CHAR_CONFIG = {
-    human_male:   { bodyW:1.80, bodyH:2.16, yOff:-0.18, baseKey:'humanMaleBase',  hair:{ key:'humanMaleHair',   type:'small', wFrac:0.30, hFrac:0.30, topFrac:0.19 }, armour:{ wMult:1.0, topShift:0   }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.35, y:0.64 }, offHand:{ x:0.59, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:2.25 },
-    human_female: { bodyW:1.60, bodyH:1.92, yOff:-0.16, baseKey:'humanBase',       hair:{ key:'humanHair',       type:'full',  yRaw:-3                              }, armour:{ wMult:1.0, topShift:0   }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.40, y:0.66 }, offHand:{ x:0.60, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:2.25 },
-    elf_male:     { bodyW:2.00, bodyH:2.40, yOff:-0.20, baseKey:'elfMaleBase',     hair:{ key:'elfMaleHair',     type:'full'                                        }, armour:{ wMult:1.0, topShift:0.3 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.37, y:0.63 }, offHand:{ x:0.58, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:2.25 },
-    elf_female:   { bodyW:2.00, bodyH:2.40, yOff:-0.20, baseKey:'elfFemaleBase',   hair:{ key:'elfFemaleHair',   type:'full'                                        }, armour:{ wMult:1.0, topShift:0.3 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.37, y:0.63 }, offHand:{ x:0.58, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:2.25 },
-    dwarf_male:   { bodyW:1.60, bodyH:1.92, yOff:-0.07, baseKey:'dwarfMaleBase',   hair:{ key:'dwarfMaleHair',   type:'full'                                        }, armour:{ wMult:1.4, topShift:0.1 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.33, y:0.61 }, offHand:{ x:0.52, y:0.45 }, weaponSizeMult:1.0, shieldSizeMult:2.00 },
-    dwarf_female: { bodyW:1.60, bodyH:1.92, yOff:-0.07, baseKey:'dwarfFemaleBase', hair:{ key:'dwarfFemaleHair', type:'small', wFrac:0.31, hFrac:0.31, topFrac:0.21 }, armour:{ wMult:1.4, topShift:0.1 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.33, y:0.61 }, offHand:{ x:0.52, y:0.45 }, weaponSizeMult:1.0, shieldSizeMult:2.00 },
+    human_male:   { bodyW:1.80, bodyH:2.16, yOff:-0.18, baseKey:'humanMaleBase',  hair:{ key:'humanMaleHair',   type:'small', wFrac:0.30, hFrac:0.30, topFrac:0.19 }, armour:{ wMult:1.0, topShift:0   }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.35, y:0.64 }, offHand:{ x:0.59, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
+    human_female: { bodyW:1.60, bodyH:1.92, yOff:-0.16, baseKey:'humanBase',       hair:{ key:'humanHair',       type:'full',  yRaw:-3                              }, armour:{ wMult:1.0, topShift:0   }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.40, y:0.66 }, offHand:{ x:0.60, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
+    elf_male:     { bodyW:2.00, bodyH:2.40, yOff:-0.20, baseKey:'elfMaleBase',     hair:{ key:'elfMaleHair',     type:'full'                                        }, armour:{ wMult:1.0, topShift:0.3 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.37, y:0.63 }, offHand:{ x:0.58, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
+    elf_female:   { bodyW:2.00, bodyH:2.40, yOff:-0.20, baseKey:'elfFemaleBase',   hair:{ key:'elfFemaleHair',   type:'full'                                        }, armour:{ wMult:1.0, topShift:0.3 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.37, y:0.63 }, offHand:{ x:0.58, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
+    dwarf_male:   { bodyW:1.60, bodyH:1.92, yOff:-0.07, baseKey:'dwarfMaleBase',   hair:{ key:'dwarfMaleHair',   type:'full'                                        }, armour:{ wMult:1.4, topShift:0.1 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.33, y:0.61 }, offHand:{ x:0.52, y:0.45 }, weaponSizeMult:1.0, shieldSizeMult:0.36 },
+    dwarf_female: { bodyW:1.60, bodyH:1.92, yOff:-0.07, baseKey:'dwarfFemaleBase', hair:{ key:'dwarfFemaleHair', type:'small', wFrac:0.31, hFrac:0.31, topFrac:0.21 }, armour:{ wMult:1.4, topShift:0.1 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.33, y:0.61 }, offHand:{ x:0.52, y:0.45 }, weaponSizeMult:1.0, shieldSizeMult:0.36 },
 
     // ENEMY HUMANOIDS — sprite keys need matching images (e.g. gameVisuals.revenantBase)
     // Use backtick debug overlay to tune anchor dots once sprites are loaded.
-    revenant_male:   { bodyW:1.85, bodyH:2.20, yOff:-0.18, baseKey:'revenantBase', hair:{ key:null }, armour:{ wMult:1.05, topShift:0 }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.35, y:0.64 }, offHand:{ x:0.59, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:2.25 },
-    revenant_female: { bodyW:1.65, bodyH:1.96, yOff:-0.16, baseKey:'revenantBase', hair:{ key:null }, armour:{ wMult:1.05, topShift:0 }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.40, y:0.66 }, offHand:{ x:0.60, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:2.25 },
+    revenant_male:   { bodyW:1.85, bodyH:2.20, yOff:-0.18, baseKey:'revenantBase', hair:{ key:null }, armour:{ wMult:1.05, topShift:0 }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.35, y:0.64 }, offHand:{ x:0.59, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
+    revenant_female: { bodyW:1.65, bodyH:1.96, yOff:-0.16, baseKey:'revenantBase', hair:{ key:null }, armour:{ wMult:1.05, topShift:0 }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.40, y:0.66 }, offHand:{ x:0.60, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
 };
 
 function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
@@ -1057,6 +1069,21 @@ function renderEntities() {
               window.mapCtx.drawImage(window.gameVisuals.fence_h, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'fence_v' && window.gameVisuals.fence_v.complete) {
               window.mapCtx.drawImage(window.gameVisuals.fence_v, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'fence_broken' && window.gameVisuals.fence_broken.complete) {
+              window.mapCtx.drawImage(window.gameVisuals.fence_broken, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'blood_spatter' && window.gameVisuals.blood_spatter.complete) {
+              const bSize = size * 0.4;
+              window.mapCtx.drawImage(window.gameVisuals.blood_spatter, x - bSize/2, y - bSize/2, bSize, bSize);
+          } else if (obj.type === 'blood_spatter_faint' && window.gameVisuals.blood_spatter_faint.complete) {
+              // Only visible at all with Knowledge: Nature — the trail should
+              // read as "fading out to nothing" without it, not just fainter.
+              const knowsNature = window.party && window.party.some(p => window.hasKnowledgeNature && window.hasKnowledgeNature(p));
+              if (knowsNature) {
+                  const bSize = size * 0.3;
+                  window.mapCtx.globalAlpha = 0.55;
+                  window.mapCtx.drawImage(window.gameVisuals.blood_spatter_faint, x - bSize/2, y - bSize/2, bSize, bSize);
+                  window.mapCtx.globalAlpha = 1.0;
+              }
           } else if (obj.type === 'hut' && window.gameVisuals.hut.complete) {
               window.mapCtx.drawImage(window.gameVisuals.hut, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'hut_large' && window.gameVisuals.hut_large.complete) {
@@ -1075,6 +1102,12 @@ function renderEntities() {
   });
 
   sorted.forEach(e => {
+      // Wolf Rider Goblin draws its own mount inline (see the "SPECIAL: Wolf
+      // Rider Layering" block below) so the small goblin rider stays visible
+      // instead of being hidden under the mount's own independent (and much
+      // bigger) sprite. Skip that separate mount draw entirely here.
+      if (e.rider && e.rider.name === 'Wolf Rider Goblin') return;
+
       const vQ = e.visualQ !== undefined ? e.visualQ : e.hex.q;
       const vR = e.visualR !== undefined ? e.visualR : e.hex.r;
       let {x, y} = window.hexToPixel(vQ, vR);
@@ -1135,16 +1168,16 @@ function renderEntities() {
                           
                                   try {
                                       if (img && img.complete) {
-                                          // SPECIAL: Wolf Rider Layering
+                                          // SPECIAL: Wolf Rider Layering — wolf drawn full-size as the
+                                          // mount, goblin drawn smaller and shifted up so it actually
+                                          // reads as a rider instead of being fully hidden behind the
+                                          // wolf (both used to draw at identical size/position, so the
+                                          // goblin never showed at all).
                                           if (e.name === 'Wolf Rider Goblin') {
-                                              // Goblin Base
-                                              window.mapCtx.drawImage(window.gameVisuals.monsterDefault, x - size/2, y - size/2 + yOffset, size, size);
-                                              // Equipment
-                                              if (e.equipped?.armor) {
-                                                  // ... draw armor
-                                              }
-                                              // Wolf on TOP
-                                              window.mapCtx.drawImage(window.gameVisuals.wolf, x - size/2, y - size/2 + yOffset, size, size);
+                                              const wolfSize = size * 1.8;
+                                              window.mapCtx.drawImage(window.gameVisuals.wolf, x - wolfSize/2, y - wolfSize/2 + yOffset, wolfSize, wolfSize);
+                                              const riderSize = size * 0.75;
+                                              window.mapCtx.drawImage(window.gameVisuals.monsterDefault, x - riderSize/2, y - wolfSize*0.42 + yOffset, riderSize, riderSize);
                                           } else {
                                               const finalWidth = size * widthMult;
                                               window.mapCtx.drawImage(img, x - finalWidth/2, y - size/2 + yOffset, finalWidth, size);
@@ -1340,7 +1373,7 @@ function tick() {
     }
 
     if (!inCombat) {
-        const timeScale = 5.0;
+        const timeScale = 5.0 * (window.timeSpeedMultiplier || 1);
         const scaledDt = dt * timeScale;
 
         if (window.updateTime) window.updateTime(scaledDt);
@@ -1471,7 +1504,7 @@ function processRealTimeStep(entity, overage = 0) {
 
         const terrain = window.getTerrainAt(nextHex.q, nextHex.r);
 
-        let stepCost = 5 * (terrain.moveCostMult || 1);
+        let stepCost = 5 * window.getMoveCostMult(nextHex.q, nextHex.r);
         if (moveEntity.skills?.fastMovement) stepCost -= moveEntity.skills.fastMovement;
 
         // Set start point to current hex center for lerp
@@ -1698,6 +1731,13 @@ function autoMoveProcess(entity) {
         setTimeout(() => autoMoveProcess(entity), 20);
         return;
     }
+    // Briefly freezes movement after a real-time equipment change (see
+    // ui.js's applyEquipLock) — swapping armor mid-stride should cost you
+    // some time, not be instantaneous.
+    if (entity.actionLockedUntil && performance.now() < entity.actionLockedUntil) {
+        setTimeout(() => autoMoveProcess(entity), 50);
+        return;
+    }
 
     let threshold = 80;
     if (entity.skills && entity.skills['quickRecovery']) threshold -= entity.skills['quickRecovery'];
@@ -1751,7 +1791,7 @@ function autoMoveProcess(entity) {
         }
 
         const terrain = window.getTerrainAt(nextHex.q, nextHex.r);
-        let stepCost = 5 * (terrain.moveCostMult || 1);
+        let stepCost = 5 * window.getMoveCostMult(nextHex.q, nextHex.r);
         if (moveEntity.skills['fastMovement']) stepCost -= 1;
 
         entity.startQ = entity.hex.q;
@@ -1793,6 +1833,20 @@ function autoMoveProcess(entity) {
 // Picks the neighbor of `fromHex` that's closest to `toHex` — one step along
 // a straight line, reused by stalking predators and patrol/camp routines so
 // they walk toward a point instead of only ever random-wandering.
+// A fence is a tileObject decoration (fence_h/fence_v), not its own terrain
+// type, so plain terrain.moveCostMult lookups never noticed it — climbing
+// over one should cost extra regardless of the ground terrain underneath.
+function getMoveCostMult(q, r) {
+    const terrain = window.getTerrainAt(q, r);
+    let mult = terrain.moveCostMult || 1;
+    const obj = window.tileObjects && window.tileObjects[`${q},${r}`];
+    if (obj && (obj.type === 'fence_h' || obj.type === 'fence_v')) {
+        mult *= 1.6;
+    }
+    return mult;
+}
+window.getMoveCostMult = getMoveCostMult;
+
 // Shared "can an idle-AI entity step here" check — unoccupied and not
 // Water/Wall. Used by wander/patrol/campRoutine/stalking movement so none of
 // them walk through walls now that the arena generates real ones.
@@ -2106,7 +2160,7 @@ function aiProcess(entity) {
             const terrain = window.getTerrainAt(bestHex.q, bestHex.r);
             if (!getEntityAtHex(bestHex.q, bestHex.r)) {
                 entity.hex = bestHex;
-                spendTP(entity, 5 * (terrain.moveCostMult || 1));
+                spendTP(entity, 5 * window.getMoveCostMult(bestHex.q, bestHex.r));
             } else {
                 spendTP(entity, 5);
             }
@@ -2320,13 +2374,13 @@ function aiProcess(entity) {
 
                 if (entity.riding) {
                     if (entity.riding.timePoints > 80) {
-                        spendTP(entity.riding, cost * terrain.moveCostMult);
+                        spendTP(entity.riding, cost * window.getMoveCostMult(entity.hex.q, entity.hex.r));
                     } else {
                         setTimeout(() => aiProcess(entity), 20);
                         return;
                     }
                 } else {
-                    spendTP(entity, cost * terrain.moveCostMult);
+                    spendTP(entity, cost * window.getMoveCostMult(entity.hex.q, entity.hex.r));
                 }
 
                 if (forceEnd) entity.timePoints = threshold;
@@ -2365,6 +2419,35 @@ function wakeUp(entity) {
                 e.moveCooldown = 0;
             }
         });
+
+        // Real-time "close" formation movement can leave trailing party
+        // members detouring onto the same hex as whoever's ahead of them
+        // (never actually two-on-one-hex, but visually crowded together);
+        // if combat catches them mid-move like that, spread any duplicates
+        // out to a free neighboring hex right away instead of leaving them
+        // stacked for the whole fight.
+        const partyEntities = window.entities.filter(e => e.alive && e.side === 'player' && !e.rider);
+        const seenHexes = new Set();
+        partyEntities.forEach(e => {
+            const key = `${e.hex.q},${e.hex.r}`;
+            if (!seenHexes.has(key)) { seenHexes.add(key); return; }
+            const openNeighbor = window.getNeighbors(e.hex.q, e.hex.r).find(h => window.isOpenHex(h));
+            if (openNeighbor) {
+                e.hex = openNeighbor;
+                e.visualQ = openNeighbor.q;
+                e.visualR = openNeighbor.r;
+                e.startQ = openNeighbor.q;
+                e.startR = openNeighbor.r;
+                seenHexes.add(`${openNeighbor.q},${openNeighbor.r}`);
+            }
+        });
+
+        // Fights shouldn't play out at 3x just because the player left
+        // fast-forward on during the walk over.
+        if (window.timeSpeedMultiplier && window.timeSpeedMultiplier !== 1) {
+            window.timeSpeedMultiplier = 1;
+            if (window.updateTimeSpeedButton) window.updateTimeSpeedButton();
+        }
         if (window.updateActionButtons) window.updateActionButtons();
     }
 

@@ -108,18 +108,75 @@ function buildFarmstead(roadEnd) {
     // Short spur connecting the farmhouse door back to the south road.
     for (let q = doorHex.q + 1; q < roadEnd.q; q++) window.setTerrainAt(q, roadEnd.r, 'Path');
 
-    // Fenced pasture west of the house.
-    const pMinQ = houseCenter.q - 9, pMaxQ = houseCenter.q - 2;
+    // Fenced pasture west of the house. Its east edge sits flush with the
+    // house's own west wall (houseCenter.q - 3, matching carveBuilding's
+    // halfW=3 above) rather than cutting inside the building — the two
+    // areas share that wall (already stone-colored Wall terrain) instead of
+    // a wooden fence running across/through the house. The wooden fence
+    // only continues along that same q line above and below the house's
+    // actual r-span (houseCenter.r-2..+2), where there's no wall to share.
+    const pMinQ = houseCenter.q - 9, pMaxQ = houseCenter.q - 3;
     const pMinR = houseCenter.r - 4, pMaxR = houseCenter.r + 4;
+    const houseMinR = houseCenter.r - 2, houseMaxR = houseCenter.r + 2;
     for (let q = pMinQ; q <= pMaxQ; q++) {
         window.tileObjects[`${q},${pMinR}`] = { type: 'fence_h', lightRadius: 0 };
         window.tileObjects[`${q},${pMaxR}`] = { type: 'fence_h', lightRadius: 0 };
     }
     for (let r = pMinR; r <= pMaxR; r++) {
         window.tileObjects[`${pMinQ},${r}`] = { type: 'fence_v', lightRadius: 0 };
-        window.tileObjects[`${pMaxQ},${r}`] = { type: 'fence_v', lightRadius: 0 };
+        if (r < houseMinR || r > houseMaxR) {
+            window.tileObjects[`${pMaxQ},${r}`] = { type: 'fence_v', lightRadius: 0 };
+        }
     }
     window.campaign2FarmPastureCenter = { q: Math.floor((pMinQ + pMaxQ) / 2), r: houseCenter.r };
+
+    // A broken section of the outer fence plus a blood trail fading away
+    // toward the treeline — evidence of how the wolves actually got at the
+    // sheep, and a breadcrumb pointing toward their den, which sits well
+    // outside the pasture (a "bit of a walk," not visible from the farm) —
+    // see triggerFarmWolfEncounter in campaign2Dialogue.js for where the
+    // wolves themselves get spawned. The gap doesn't slow movement like an
+    // intact fence does (getMoveCostMult only special-cases fence_h/fence_v).
+    const brokenFenceHex = { q: pMinQ, r: houseCenter.r };
+    window.tileObjects[`${brokenFenceHex.q},${brokenFenceHex.r}`] = { type: 'fence_broken', lightRadius: 0 };
+    window.campaign2BrokenFenceHex = brokenFenceHex;
+    // Well past the ~30-hex daylight vision cap (see isVisibleToPlayer in
+    // hexMap.js) so the den is a genuine "go explore in that direction"
+    // discovery, not something visible the moment the fence breaks.
+    window.campaign2WolfDenCenter = { q: pMinQ - 34, r: houseCenter.r + 10 };
+
+    // Spatters get sparser and, past the first handful, only visible with
+    // Knowledge: Nature (see the tileObjects render loop in gameEngine.js) —
+    // a plain trail across grass in a game with limited "make it obvious" UI
+    // wouldn't stay wrong. Deliberately stops short of the den itself so the
+    // wolves stay a genuine "not visible" discovery, not a marker-guided walk.
+    let trailHex = { ...brokenFenceHex };
+    for (let i = 1; i <= 10; i++) {
+        trailHex = (window.stepToward && window.stepToward(trailHex, window.campaign2WolfDenCenter)) || trailHex;
+        const key = `${trailHex.q},${trailHex.r}`;
+        if (window.tileObjects[key]) continue;
+        if (i <= 4) {
+            window.tileObjects[key] = { type: 'blood_spatter', lightRadius: 0 };
+        } else if (i % 2 === 0) {
+            window.tileObjects[key] = { type: 'blood_spatter_faint', lightRadius: 0 };
+        }
+    }
+
+    // A sheep or two left in the (mostly) intact part of the pasture — the
+    // farm reads a little more alive, and gives the player something to
+    // click/talk to that isn't Old Mac. Passive, low HP, says only "Baa."
+    // (see talkToNPC's dialogue dispatch in campaign2Dialogue.js).
+    [{ q: houseCenter.q - 4, r: houseCenter.r - 1 }, { q: houseCenter.q - 5, r: houseCenter.r + 1 }].forEach((hex, i) => {
+        const sheep = new window.Entity(`Sheep${i > 0 ? ' ' + (i + 1) : ''}`, '#f5f5f0', hex, 10);
+        sheep.hp = 3;
+        sheep.maxHp = 3;
+        sheep.side = 'neutral';
+        sheep.isNPC = true;
+        sheep.customImage = 'sheep';
+        sheep.tags = ['animal'];
+        sheep.dialogueId = 'farm_sheep';
+        window.entities.push(sheep);
+    });
 
     // Old Mac, just inside his door.
     if (window.campaign2OldMac) {

@@ -5,8 +5,10 @@ function initializePlayer(race, cls, gender, campaign = "3", voice = "pc_1") {
   window.currentCampaign = campaign;
   
   const mainChar = createCharacterData(race, cls, "Player (Main)", gender, voice);
-  if (campaign === "1") mainChar.gold = 100;
-  if (campaign === "2") mainChar.gold = 40; // enough for a basic weapon/armor piece at Hollowmere's general store, not a full loadout
+  // Bumped from 100/40 now that armor no longer comes free — enough left
+  // over after buying a starting armor piece and its training skill.
+  if (campaign === "1") mainChar.gold = 150;
+  if (campaign === "2") mainChar.gold = 65;
   
   window.party.push(mainChar);
   window.player = mainChar; // Keep window.player as a reference to the selected one for compatibility
@@ -79,12 +81,15 @@ function createCharacterData(race, cls, name, gender = "female", voice = "pc_1")
   const cb = window.classData[cls].bonus;
   for (let key in cb) char.attributes[key] += cb[key];
 
-  // Starting equipment
+  // Starting equipment — no armor by default: equipping any armor tier
+  // requires its matching *_armor_training skill (enforced in ui.js's
+  // equipItem), and a fresh level-1 character hasn't bought any skills yet.
+  // Weapons/shields aren't skill-gated, so those still start equipped;
+  // starting gold is bumped a bit (see initializePlayer) so a player who
+  // wants armor right away can buy both the piece and the training skill.
   if (cls === 'fighter') {
     char.inventory.push('sword');
     char.equipped.weapon = 'sword';
-    char.inventory.push('light_armor');
-    char.equipped.armor = 'light_armor';
   } else if (cls === 'rogue') {
     char.inventory.push('dagger');
     char.equipped.weapon = 'dagger';
@@ -93,15 +98,11 @@ function createCharacterData(race, cls, name, gender = "female", voice = "pc_1")
   } else if (cls === 'cleric') {
     char.inventory.push('club');
     char.equipped.weapon = 'club';
-    char.inventory.push('light_armor');
-    char.equipped.armor = 'light_armor';
     char.inventory.push('wooden_shield');
     char.equipped.offhand = 'wooden_shield';
   } else if (cls === 'druid') {
     char.inventory.push('club');
     char.equipped.weapon = 'club';
-    char.inventory.push('light_armor');
-    char.equipped.armor = 'light_armor';
   } else {
     // Default / Wizard / Monk etc.
     char.inventory.push('dagger');

@@ -173,6 +173,26 @@ function updateRestButton() {
     }
 }
 
+// Real-time-only "fast forward" — triples both the world clock and
+// real-time movement speed together (tick()'s !inCombat branch already
+// drives both off the same scaledDt, so one multiplier covers both). Has no
+// effect in combat (that branch runs at a fixed 1x regardless), and turns
+// itself back off the moment combat starts so the player doesn't get
+// surprised by a fight playing out at 3x.
+function toggleTimeSpeed() {
+    window.timeSpeedMultiplier = (window.timeSpeedMultiplier === 3) ? 1 : 3;
+    updateTimeSpeedButton();
+}
+function updateTimeSpeedButton() {
+    const btn = document.getElementById("time-speed-btn");
+    if (!btn) return;
+    const active = window.timeSpeedMultiplier === 3;
+    btn.innerText = active ? "Speed: 3x" : "Speed: 1x";
+    btn.style.backgroundColor = active ? "#00acc1" : "#00838f";
+}
+window.toggleTimeSpeed = toggleTimeSpeed;
+window.updateTimeSpeedButton = updateTimeSpeedButton;
+
 function toggleSleep() {
     if (!window.isSleeping) {
         const enemySeen = window.entities.some(e => e.alive && e.side === 'enemy' && window.isVisibleToPlayer(e.hex));
@@ -1080,14 +1100,37 @@ function showInventoryScreen() {
     contentDiv.innerHTML = html;
 }
 
+// Held items (weapons/shields/accessories/helmets) cost a flat second to
+// swap; armor takes longer the heavier it is, and swapping between two
+// armor tiers takes as long as the slower of the two changes (you're both
+// taking the old piece off and getting the new one on).
+const ARMOR_SWAP_SECONDS = { light_armor: 2, medium_armor: 4, heavy_armor: 6 };
+function getEquipLockSeconds(oldItemId, newItemId) {
+    const oldSec = oldItemId && ARMOR_SWAP_SECONDS[oldItemId] || (oldItemId ? 1 : 0);
+    const newSec = newItemId && ARMOR_SWAP_SECONDS[newItemId] || (newItemId ? 1 : 0);
+    return Math.max(oldSec, newSec);
+}
+// Applies the lock: outside combat this briefly stops the character's
+// real-time movement (checked in autoMoveProcess); in combat, equipping is
+// still gated to that character's own turn, so there's nothing to "pause".
+function applyEquipLock(playerEntity, seconds) {
+    if (!window.isInCombat && seconds > 0) {
+        playerEntity.actionLockedUntil = performance.now() + seconds * 1000;
+    }
+}
+
 function unequipItem(slot) {
     const player = window.player;
     const playerEntity = window.entities.find(e => e.name === player.name);
     if (!playerEntity) return;
-    if (window.gamePhase !== 'PLAYER_TURN' || window.currentTurnEntity !== playerEntity) { showMessage("It must be this character's turn to change equipment."); return; }
-    if (playerEntity.timePoints < 1) { showMessage("Not enough Time Points to change equipment."); return; }
+    if (window.isInCombat) {
+        if (window.gamePhase !== 'PLAYER_TURN' || window.currentTurnEntity !== playerEntity) { showMessage("It must be this character's turn to change equipment."); return; }
+        if (playerEntity.timePoints < 1) { showMessage("Not enough Time Points to change equipment."); return; }
+    }
+    const removedItem = player.equipped[slot];
     player.equipped[slot] = null;
-    playerEntity.timePoints -= 1;
+    if (window.isInCombat) playerEntity.timePoints -= 1;
+    else applyEquipLock(playerEntity, getEquipLockSeconds(removedItem, null));
     syncPlayerEntity();
     showInventoryScreen();
     showCharacter();
@@ -1128,15 +1171,21 @@ function equipItem(itemId, isOffhand = false) {
     const item = window.items[itemId];
     const playerEntity = window.entities.find(e => e.name === player.name);
     if (!playerEntity) return;
-    if (window.gamePhase !== 'PLAYER_TURN' || window.currentTurnEntity !== playerEntity) { showMessage("It must be this character's turn to change equipment."); return; }
-    if (playerEntity.timePoints < 1) { showMessage("Not enough Time Points to change equipment."); return; }
-    
+    if (window.isInCombat) {
+        if (window.gamePhase !== 'PLAYER_TURN' || window.currentTurnEntity !== playerEntity) { showMessage("It must be this character's turn to change equipment."); return; }
+        if (playerEntity.timePoints < 1) { showMessage("Not enough Time Points to change equipment."); return; }
+    }
+
+    let oldItemForLock = null;
     if (item.type === 'accessory') {
+        oldItemForLock = player.equipped.accessory;
         player.equipped.accessory = itemId;
     } else if (item.type === 'weapon') {
+        oldItemForLock = isOffhand ? player.equipped.offhand : player.equipped.weapon;
         if (isOffhand) player.equipped.offhand = itemId;
         else { player.equipped.weapon = itemId; if (item.hands === 2) player.equipped.offhand = null; }
     } else if (item.type === 'shield') {
+        oldItemForLock = player.equipped.offhand;
         const weaponId = player.equipped.weapon;
         const weapon = weaponId ? window.items[weaponId] : null;
         if (weapon && weapon.hands === 2) player.equipped.weapon = null;
@@ -1145,9 +1194,14 @@ function equipItem(itemId, isOffhand = false) {
         const reqMap = { 'light_armor': 'light_armor_training', 'medium_armor': 'medium_armor_training', 'heavy_armor': 'heavy_armor_training' };
         const reqSkill = reqMap[itemId];
         if (reqSkill && (!player.skills[reqSkill] || player.skills[reqSkill] === 0)) { showMessage(`You need ${window.skills[reqSkill].name} to equip this.`); return; }
+        oldItemForLock = player.equipped.armor;
         player.equipped.armor = itemId;
-    } else if (item.type === 'helmet') player.equipped.helmet = itemId;
-    playerEntity.timePoints -= 1;
+    } else if (item.type === 'helmet') {
+        oldItemForLock = player.equipped.helmet;
+        player.equipped.helmet = itemId;
+    }
+    if (window.isInCombat) playerEntity.timePoints -= 1;
+    else applyEquipLock(playerEntity, getEquipLockSeconds(oldItemForLock, itemId));
     syncPlayerEntity();
     showInventoryScreen();
     showCharacter();
@@ -1262,9 +1316,17 @@ function updateTurnIndicator() {
     const indicatorBar = document.getElementById('turn-indicator-bar');
     if (!indicatorBar) return;
     indicatorBar.innerHTML = '';
+    // Outside combat, timePoints drift continuously per-entity (they double as
+    // a pacing multiplier for regen/poison/etc, not just initiative), so
+    // sorting by it here made the bar visually reshuffle every refresh with
+    // no real turn order to justify it. Only sort by initiative once there's
+    // an actual turn order to show; otherwise keep filter-preserved (stable)
+    // order.
     const sortedEntities = [...window.entities]
-        .filter(e => e.alive && (e.side === 'player' || e.hasBeenSeenByPlayer) && !e.rider && !e.isNPC)
-        .sort((a, b) => b.timePoints - a.timePoints);
+        .filter(e => e.alive && (e.side === 'player' || e.hasBeenSeenByPlayer) && !e.rider && !e.isNPC);
+    if (window.isInCombat) {
+        sortedEntities.sort((a, b) => b.timePoints - a.timePoints);
+    }
 
     sortedEntities.forEach(entity => {
         const itemDiv = document.createElement('div');

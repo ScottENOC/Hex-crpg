@@ -233,6 +233,9 @@ window.npcDialogueTrees = {
 
         window.showDialogue(npc, "Pasture's quiet now, thanks to you.", [{ label: "Good.", action: () => {} }]);
     },
+    farm_sheep: (npc) => {
+        window.showDialogue(npc, "Baa.", [{ label: "...", action: () => {} }]);
+    },
     ser_aldric_captive: (npc) => {
         if (window.party.some(p => p.name === window.campaign2Paladin.name)) return; // already rescued
         window.showDialogue(npc, "Please... cut me loose. I came out here to deal with this goblin problem myself, and, well — here we are. Whatever you decide to do about them, I intend to see them gone from this land. I'll owe you a debt either way.", [
@@ -880,14 +883,18 @@ function triggerFarmWolfEncounter() {
     if (!quest || quest.status !== 'active' || quest.encounterState) return;
 
     quest.encounterState = 'engaged';
-    const center = window.campaign2FarmPastureCenter;
-    [{ q: center.q - 1, r: center.r - 1 }, { q: center.q + 1, r: center.r }, { q: center.q, r: center.r + 1 }].forEach(hex => {
+    // Wolves live at their den well outside the pasture now (see
+    // buildFarmstead's broken-fence/blood-trail breadcrumb), not waiting
+    // inside the fence — they spawn idle/wandering, same as any other
+    // wilderness pack, rather than instantly aggroing on the player.
+    const den = window.campaign2WolfDenCenter || window.campaign2FarmPastureCenter;
+    [{ q: den.q - 1, r: den.r - 1 }, { q: den.q + 1, r: den.r }, { q: den.q, r: den.r + 1 }].forEach(hex => {
         const wolf = window.createMonster('wolf', hex, null, null, 'enemy');
         wolf.farmQuestWolf = true;
+        wolf.aiState = 'idle';
         window.entities.push(wolf);
-        window.wakeUp(wolf);
     });
-    window.showMessage('Snarling erupts from the pasture — the wolves are here!');
+    window.showMessage("A broken fence rail, and blood spatters leading off toward the treeline...");
     window.drawMap();
     window.renderEntities();
 }

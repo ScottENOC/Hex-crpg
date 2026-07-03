@@ -10,7 +10,7 @@ const terrainTypes = {
     'wall': { name: 'Wall', color: '#696969', moveCostMult: 2, hitBonus: 5, dodgeBonus: 5, stealthBonus: 0 },
     'cave_floor': { name: 'Cave Floor', color: '#3e3e3e', moveCostMult: 1, hitBonus: 0, dodgeBonus: 0, stealthBonus: 0 },
     'wood_floor': { name: 'Wood Floor', color: '#8d5a2b', moveCostMult: 1, hitBonus: 0, dodgeBonus: 0, stealthBonus: 0 },
-    'path': { name: 'Path', color: '#c2a878', moveCostMult: 1, hitBonus: 0, dodgeBonus: 0, stealthBonus: -10 },
+    'path': { name: 'Path', color: '#c2a878', moveCostMult: 0.9, hitBonus: 0, dodgeBonus: 0, stealthBonus: -10 },
     'dirt': { name: 'Dirt', color: '#8a6d4a', moveCostMult: 1, hitBonus: 0, dodgeBonus: 0, stealthBonus: -15 },
     'pedestal': { name: 'Pedestal', color: '#888', moveCostMult: 2, hitBonus: 10, dodgeBonus: -5, stealthBonus: 0, blocksLOS: true },
     'foliage': { name: 'Foliage', color: '#2e7d32', moveCostMult: 1.5, hitBonus: -10, dodgeBonus: 15, stealthBonus: 40 }
