@@ -56,12 +56,15 @@ const monsterTemplates = {
         canLoot: false,
         mountSize: 2,
         tags: ['animal'],
+        visionBonus: 10,
+        behaviorType: 'wander',
         skills: {
             'health': 1,
             'unarmed_hit': 1,
             'unarmed_dmg': 1,
             'fastMovement': 1,
             'timePointRate': 6,
+            'keen_scent': 1,
             'quarterstaff_trip': 1 
         },
         defaultEquipment: []
@@ -361,6 +364,8 @@ function createMonster(type, hex, customSkills = null, customEquipment = null, s
     monster.mountSize = template.mountSize || 0;
     monster.tags = template.tags ? [...template.tags] : [];
     monster.voice = template.voice || null;
+    monster.visionBonus = template.visionBonus || 0;
+    monster.behaviorType = template.behaviorType || 'wander';
     
     if (template.extraHexes) monster.extraHexes = template.extraHexes;
 

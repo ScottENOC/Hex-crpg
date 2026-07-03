@@ -591,7 +591,16 @@ function startGameCore(isLoading = false) {
       dirt: new Image(),
       hut: new Image(),
       hut_large: new Image(),
-      journal: new Image()
+      journal: new Image(),
+      foliage_bush: new Image(),
+      foliage_pine: new Image(),
+      foliage_shrub: new Image(),
+      foliage_thicket: new Image(),
+      grass_1: new Image(),
+      grass_2: new Image(),
+      grass_3: new Image(),
+      water_1: new Image(),
+      water_2: new Image()
   };
   visuals.playerBase.onload = () => { window.drawMap(); };
   visuals.leatherArmor.onload = () => { window.drawMap(); };
@@ -658,6 +667,15 @@ function startGameCore(isLoading = false) {
   visuals.fence_h.onload = () => { window.drawMap(); };
   visuals.fence_v.onload = () => { window.drawMap(); };
   visuals.dirt.onload = () => { window.drawMap(); };
+  visuals.foliage_bush.onload = () => { window.drawMap(); };
+  visuals.foliage_pine.onload = () => { window.drawMap(); };
+  visuals.foliage_shrub.onload = () => { window.drawMap(); };
+  visuals.foliage_thicket.onload = () => { window.drawMap(); };
+  visuals.grass_1.onload = () => { window.drawMap(); };
+  visuals.grass_2.onload = () => { window.drawMap(); };
+  visuals.grass_3.onload = () => { window.drawMap(); };
+  visuals.water_1.onload = () => { window.drawMap(); };
+  visuals.water_2.onload = () => { window.drawMap(); };
   visuals.hut.onload = () => { window.drawMap(); };
   visuals.hut_large.onload = () => { window.drawMap(); };
   visuals.journal.onload = () => { window.drawMap(); };
@@ -731,6 +749,15 @@ function startGameCore(isLoading = false) {
   visuals.hut.src = 'images/hut.svg';
   visuals.hut_large.src = 'images/hut_large.svg';
   visuals.journal.src = 'images/journal.svg';
+  visuals.foliage_bush.src = 'images/foliage_bush.svg';
+  visuals.foliage_pine.src = 'images/foliage_pine.svg';
+  visuals.foliage_shrub.src = 'images/foliage_shrub.svg';
+  visuals.foliage_thicket.src = 'images/foliage_thicket.svg';
+  visuals.grass_1.src = 'images/grass_1.svg';
+  visuals.grass_2.src = 'images/grass_2.svg';
+  visuals.grass_3.src = 'images/grass_3.svg';
+  visuals.water_1.src = 'images/water_1.svg';
+  visuals.water_2.src = 'images/water_2.svg';
 
   window.gameVisuals = visuals;
 
@@ -1766,6 +1793,100 @@ function autoMoveProcess(entity) {
     }
 }
 
+// Picks the neighbor of `fromHex` that's closest to `toHex` — one step along
+// a straight line, reused by stalking predators and patrol/camp routines so
+// they walk toward a point instead of only ever random-wandering.
+function stepToward(fromHex, toHex) {
+    const d = window.distance(fromHex, toHex);
+    if (d === 0) return null;
+    const lerped = window.hexLerp(fromHex, toHex, 1 / d);
+    return window.hexRound(lerped.q, lerped.r);
+}
+window.stepToward = stepToward;
+
+// Dispatches non-combat, no-visible-target idle movement by behaviorType.
+// Anything without a recognized behaviorType (or explicitly 'wander') keeps
+// the original pure-random wander. 'stationary' never moves on its own.
+// 'patrol' walks a fixed loop of hexes. 'campRoutine' mostly stays near its
+// spawn point but occasionally wanders off to a designated spot (fire, food,
+// bedroll) and lingers there a while before returning to duty.
+function behaviorTick(entity) {
+    if (!entity.homeHex) entity.homeHex = { ...entity.hex };
+
+    if (entity.behaviorType === 'stationary') {
+        spendTP(entity, 10);
+        return;
+    }
+
+    if (entity.behaviorType === 'patrol' && entity.patrolPath && entity.patrolPath.length > 0) {
+        if (entity.patrolIndex === undefined) entity.patrolIndex = 0;
+        const target = entity.patrolPath[entity.patrolIndex];
+        if (entity.hex.q === target.q && entity.hex.r === target.r) {
+            entity.patrolIndex = (entity.patrolIndex + 1) % entity.patrolPath.length;
+        } else {
+            const next = stepToward(entity.hex, target);
+            if (next && !getEntityAtHex(next.q, next.r) && window.getTerrainAt(next.q, next.r).name !== 'Water') {
+                entity.hex = next;
+            }
+        }
+        spendTP(entity, 10);
+        return;
+    }
+
+    if (entity.behaviorType === 'campRoutine') {
+        if (entity.campBusyTicks > 0) {
+            entity.campBusyTicks--;
+            spendTP(entity, 10);
+            return;
+        }
+        if (entity.campDestination) {
+            if (entity.hex.q === entity.campDestination.q && entity.hex.r === entity.campDestination.r) {
+                entity.campBusyTicks = 3 + Math.floor(Math.random() * 5); // linger at the fire/food/bedroll
+                entity.campDestination = null;
+            } else {
+                const next = stepToward(entity.hex, entity.campDestination);
+                if (next && !getEntityAtHex(next.q, next.r) && window.getTerrainAt(next.q, next.r).name !== 'Water') {
+                    entity.hex = next;
+                }
+            }
+            spendTP(entity, 10);
+            return;
+        }
+        // Mostly on duty near homeHex; occasionally wander off to a camp spot.
+        if (entity.campSpots && entity.campSpots.length > 0 && Math.random() < 0.15) {
+            entity.campDestination = entity.campSpots[Math.floor(Math.random() * entity.campSpots.length)];
+            spendTP(entity, 10);
+            return;
+        }
+        if (window.distance(entity.hex, entity.homeHex) > 2) {
+            const next = stepToward(entity.hex, entity.homeHex);
+            if (next && !getEntityAtHex(next.q, next.r) && window.getTerrainAt(next.q, next.r).name !== 'Water') {
+                entity.hex = next;
+            }
+            spendTP(entity, 10);
+            return;
+        }
+        if (Math.random() < 0.3) {
+            const neighbors = window.getNeighbors(entity.hex.q, entity.hex.r);
+            const valid = neighbors.filter(h => !getEntityAtHex(h.q, h.r) && window.getTerrainAt(h.q, h.r).name !== 'Water');
+            if (valid.length > 0) entity.hex = valid[Math.floor(Math.random() * valid.length)];
+        }
+        spendTP(entity, 10);
+        return;
+    }
+
+    // Default: pure random wander (original behavior).
+    if (Math.random() < 0.3) {
+        const neighbors = window.getNeighbors(entity.hex.q, entity.hex.r);
+        const valid = neighbors.filter(h => !getEntityAtHex(h.q, h.r) && window.getTerrainAt(h.q, h.r).name !== 'Water');
+        if (valid.length > 0) {
+            entity.hex = valid[Math.floor(Math.random() * valid.length)];
+        }
+    }
+    spendTP(entity, 10);
+}
+window.behaviorTick = behaviorTick;
+
 function aiProcess(entity) {
     // If another entity's turn started while this AI was mid-chain (stale timeout), abort.
     if (window.currentTurnEntity && window.currentTurnEntity !== entity) return;
@@ -1775,7 +1896,14 @@ function aiProcess(entity) {
         return;
     }
     if (entity.side === 'neutral') {
-        entity.timePoints = 0;
+        // Neutral NPCs with a behaviorType (e.g. camp guards) still putter
+        // around their post even though they're not a combat threat; plain
+        // neutrals (shopkeepers, quest-givers) keep the old no-op turn.
+        if (entity.behaviorType && entity.behaviorType !== 'wander' && entity.timePoints >= 10) {
+            window.behaviorTick(entity);
+        } else {
+            entity.timePoints = 0;
+        }
         window.currentTurnEntity = null;
         window.gamePhase = 'WAITING';
         return;
@@ -1877,14 +2005,33 @@ function aiProcess(entity) {
     if (entity.side === 'enemy' && entity.aiState !== 'combat') {
         // Idle behavior: Check for enemies
         const targets = window.entities.filter(e => e.alive && e.side === 'player');
-        
+
         // Non-aggro on Eagle
         const visibleTarget = targets.find(t => canSee(entity, t) && t.name !== 'Eagle');
 
+        // Stalking: a keen-scent hunter (e.g. a wolf) that spots the player from
+        // beyond melee range creeps closer over several turns instead of
+        // aggroing instantly. Anything without keen_scent skips straight to
+        // the old instant-engage behavior.
+        if (visibleTarget && entity.skills?.keen_scent && window.distance(entity.hex, visibleTarget.hex) > 3) {
+            if (entity.aiState !== 'stalking') {
+                entity.aiState = 'stalking';
+                sharedMessage(`${entity.name} catches your scent and creeps closer...`);
+            }
+            const next = window.stepToward(entity.hex, visibleTarget.hex);
+            if (next && !getEntityAtHex(next.q, next.r) && window.getTerrainAt(next.q, next.r).name !== 'Water') {
+                entity.hex = next;
+            }
+            spendTP(entity, 10);
+            setTimeout(() => aiProcess(entity), 20);
+            return;
+        }
+
         if (visibleTarget) {
+            entity.aiState = 'idle';
             wakeUp(entity);
             sharedMessage(`${entity.name} spotted a target and engages!`);
-            
+
             // DIALOGUE: Enemy sees player
             if (entity.voice) {
                 const now = Date.now();
@@ -1896,20 +2043,8 @@ function aiProcess(entity) {
                 }
             }
         } else {
-            // ... search or wander ...
-            if (Math.random() < 0.3) {
-                const neighbors = window.getNeighbors(entity.hex.q, entity.hex.r);
-                const valid = neighbors.filter(h => !getEntityAtHex(h.q, h.r) && window.getTerrainAt(h.q, h.r).name !== 'Water');
-                if (valid.length > 0) {
-                    const next = valid[Math.floor(Math.random() * valid.length)];
-                    entity.hex = next; 
-                    spendTP(entity, 10);
-                } else {
-                    spendTP(entity, 10);
-                }
-            } else {
-                spendTP(entity, 10);
-            }
+            entity.aiState = 'idle';
+            window.behaviorTick(entity);
             setTimeout(() => aiProcess(entity), 20);
             return;
         }

@@ -37,14 +37,26 @@ function isForestClump(q, r) {
 // never more than one hex apart (no diagonal jumps, no gaps). Width (1-3)
 // extends from the centerline in the +r direction, each hex adjacent to the
 // last, so a wide stretch is just a contiguous vertical run.
-function paintStreamSegment(startQ, endQ, dqStep, startR) {
+// `targetR`/`driftBias` support deliberate long bends, chained across
+// multiple calls: pass the previous call's returned `{q, r}` in as the next
+// call's `startR` so the river continues from exactly where it left off,
+// and give that next leg its own `targetR` (with `driftBias` > 0) to bend it
+// toward a new heading over the length of that leg. Omitting them (as the
+// original two calls do) keeps the old plain, undirected 50/50 wiggle.
+function paintStreamSegment(startQ, endQ, dqStep, startR, targetR = startR, driftBias = 0) {
     let r = startR;
     let width = 1;
     for (let q = startQ; dqStep > 0 ? q <= endQ : q >= endQ; q += dqStep) {
         window.setTerrainAt(q, r, 'Water');
         let connectorPainted = 0; // the extra centerline-shift hex counts toward this column's width cap
         if (window.pseudoRandom(q * 0.41, 5) < 0.35) {
-            r += window.pseudoRandom(q * 0.77, 13) < 0.5 ? -1 : 1;
+            const roll = window.pseudoRandom(q * 0.77, 13);
+            if (driftBias > 0 && targetR !== r) {
+                const towardSign = targetR > r ? 1 : -1;
+                r += roll < (0.5 + driftBias / 2) ? towardSign : -towardSign;
+            } else {
+                r += roll < 0.5 ? -1 : 1;
+            }
             window.setTerrainAt(q, r, 'Water');
             connectorPainted = 1;
         }
@@ -54,6 +66,7 @@ function paintStreamSegment(startQ, endQ, dqStep, startR) {
         const extra = Math.max(0, width - 1 - connectorPainted);
         for (let w = 1; w <= extra; w++) window.setTerrainAt(q, r + w, 'Water');
     }
+    return { q: endQ, r };
 }
 
 // Carves a simple rectangular building: walls on the border, floor inside,
@@ -168,8 +181,20 @@ function buildGoblinCamp(roadEnd) {
     window.entities.push(chief, lieutenant, shaman);
 
     const guardHexes = [{ q: center.q - 3, r: center.r + 1 }, { q: center.q + 3, r: center.r + 1 }, { q: center.q, r: center.r + 2 }];
+    // Guards mostly hold their post, but drift off to the fire, a hut (food/
+    // sleep), or a neighbor's hut (to pilfer from a "friend") rather than
+    // standing like statues — see behaviorTick's campRoutine case.
+    const campSpots = [
+        { q: center.q, r: center.r },           // the campfire
+        { q: center.q - 3, r: center.r - 1 },   // a hut
+        { q: center.q + 3, r: center.r - 1 },   // another hut
+    ];
     (window.campaign2GoblinGuards || []).forEach((spec, i) => {
-        window.entities.push(buildGoblinNPC({ ...spec, hex: guardHexes[i] || { q: center.q, r: center.r + 2 } }));
+        const guard = buildGoblinNPC({ ...spec, hex: guardHexes[i] || { q: center.q, r: center.r + 2 } });
+        guard.behaviorType = 'campRoutine';
+        guard.homeHex = { ...guard.hex };
+        guard.campSpots = campSpots;
+        window.entities.push(guard);
     });
 
     // Ser Aldric, tied up, one hex from the campfire — a real rescue target,
@@ -274,8 +299,34 @@ function setupVillageScene(forLoadOnly = false) {
     for (let q = -20; q <= 28; q++) {
         window.setTerrainAt(q, -25, 'Water');
     }
-    paintStreamSegment(29, 70, 1, -25);
-    paintStreamSegment(-21, -60, -1, -25);
+    // East: a much longer run than before, in three legs so it reads as a
+    // real river bending across the landscape rather than a straight line
+    // with a wiggle. Leg 1 (unchanged) drifts naturally. Leg 2 lets that
+    // drift continue a while longer, unforced, so by the time it's run its
+    // course the river has wandered noticeably southeast. Leg 3 then bends
+    // it back with a real directional pull (driftBias) until it's heading
+    // roughly east/level again, instead of continuing to wander south.
+    let eastEnd = paintStreamSegment(29, 70, 1, -25);
+    eastEnd = paintStreamSegment(70, 130, 1, eastEnd.r);
+    paintStreamSegment(130, 220, 1, eastEnd.r, -25, 0.6);
+
+    paintStreamSegment(-21, -90, -1, -25);
+
+    // Precompute which grass hexes sit next to water, once, instead of every
+    // grass hex checking its own 6 neighbors every render frame — grass is
+    // the overwhelming majority of on-screen hexes (tens of thousands once
+    // zoomed out), so a per-frame per-hex neighbor scan there is real cost;
+    // scanning the comparatively tiny set of water hexes once at world-gen
+    // time and building a lookup Set is orders of magnitude cheaper overall.
+    // See hexMap.js's isGrassNearWater.
+    window._grassNearWaterSet = new Set();
+    for (const key in window.overrideTerrain) {
+        if (window.overrideTerrain[key].name !== 'Water') continue;
+        const [wq, wr] = key.split(',').map(Number);
+        for (const [dq, dr] of [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]]) {
+            window._grassNearWaterSet.add(`${wq + dq},${wr + dr}`);
+        }
+    }
 
     // --- Tavern: walls q:-6..6, r:-4..4; floor carved q:-5..5, r:-3..3 ---
     for (let q = -6; q <= 6; q++) {

@@ -923,18 +923,34 @@ function checkWildernessEncounter(playerEntity, delta) {
     if (Math.random() >= chance) return;
 
     const count = 1 + Math.floor(Math.random() * 2); // 1-2 wolves
-    const neighbors = window.getNeighbors(playerEntity.hex.q, playerEntity.hex.r);
+    // Never spawn inside the player's visual range — encounters should be
+    // discovered by walking toward them (or by a wolf stalking in), not by
+    // popping into existence on top of the party. Try a handful of random
+    // directions/distances just outside vision and settle for the first
+    // clear, unseen hex each wolf finds.
     let spawned = 0;
-    for (let i = 0; i < neighbors.length && spawned < count; i++) {
-        const spot = neighbors[i];
-        if (window.getEntityAtHex(spot.q, spot.r) || window.getTerrainAt(spot.q, spot.r).name === 'Water') continue;
+    for (let n = 0; n < count; n++) {
+        let spot = null;
+        for (let attempt = 0; attempt < 12 && !spot; attempt++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 10 + Math.floor(Math.random() * 6); // just past the ~30-hex daylight vision cap's edge cases and any nearer dark-vision viewers
+            const candidate = window.hexRound(
+                playerEntity.hex.q + Math.round(Math.cos(angle) * dist),
+                playerEntity.hex.r + Math.round(Math.sin(angle) * dist)
+            );
+            if (window.getEntityAtHex(candidate.q, candidate.r)) continue;
+            if (window.getTerrainAt(candidate.q, candidate.r).name === 'Water') continue;
+            if (window.isVisibleToPlayer(candidate)) continue;
+            spot = candidate;
+        }
+        if (!spot) continue;
         const wolf = window.createMonster('wolf', spot, null, null, 'enemy');
+        wolf.aiState = 'idle';
         window.entities.push(wolf);
-        window.wakeUp(wolf);
         spawned++;
     }
     if (spawned > 0) {
-        window.showMessage('A wolf pack emerges from the treeline!');
+        window.showMessage('You sense something is out there...');
         window.drawMap();
         window.renderEntities();
     }

@@ -193,6 +193,32 @@ function drawHexImage(img, x, y, zoomedSize, cacheKey) {
     mapCtx.restore();
 }
 
+// Visual variety for the three terrain types that dominate the map (grass,
+// foliage, water) — purely cosmetic, same gameplay stats regardless of
+// which variant renders. Each hex's variant is a deterministic function of
+// its own (q, r) via pseudoRandom (terrain.js), salted differently per
+// terrain type so grass/foliage/water don't all pick "the same" index for a
+// given hex — not randomized per frame, so it's stable across redraws
+// without needing to store anything per hex.
+const FOLIAGE_VARIANTS = ['foliage', 'foliage_bush', 'foliage_pine', 'foliage_shrub', 'foliage_thicket'];
+const GRASS_VARIANTS_DEFAULT = ['grass_1', 'grass_1', 'grass_2', 'grass_3'];
+const GRASS_VARIANTS_LUSH = ['grass_3', 'grass_3', 'grass_1', 'grass_2'];
+const WATER_VARIANTS = ['water', 'water', 'water_1', 'water_2'];
+
+function pickVariantKey(q, r, salt, keys) {
+    const roll = window.pseudoRandom(q * 7.13 + salt, r * 5.71 + salt * 1.7);
+    return keys[Math.min(keys.length - 1, Math.floor(roll * keys.length))];
+}
+
+// Precomputed once, at world-gen time (campaign2World.js's setupVillageScene,
+// right after all water is painted) — a Set of every hex adjacent to water,
+// so this is a single Set.has() per grass hex per frame instead of scanning
+// 6 neighbors, which matters a lot given grass is the overwhelming majority
+// of on-screen hexes once zoomed out.
+function isGrassNearWater(q, r) {
+    return !!(window._grassNearWaterSet && window._grassNearWaterSet.has(`${q},${r}`));
+}
+
 function getVisibleHexes() {
     const rect = mapCanvas.getBoundingClientRect();
     const margin = 2 * hexSize * window.cameraZoom;
@@ -265,14 +291,32 @@ function drawMap() {
           if (needsTransparency) mapCtx.globalAlpha = 0.5;
           drawHexImage(window.gameVisuals.pedestal, x, y, zoomedSize, 'pedestal');
           if (needsTransparency) mapCtx.globalAlpha = 1.0;
-      } else if (terrain.name === 'Foliage' && imgOk(window.gameVisuals.foliage)) {
-          drawHexImage(window.gameVisuals.foliage, x, y, zoomedSize, 'foliage');
+      } else if (terrain.name === 'Foliage') {
+          const key = pickVariantKey(q, r, 101, FOLIAGE_VARIANTS);
+          if (imgOk(window.gameVisuals[key])) {
+              drawHexImage(window.gameVisuals[key], x, y, zoomedSize, key);
+          } else {
+              drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
+          }
       } else if (terrain.name === 'Wood Floor' && imgOk(window.gameVisuals.wood_floor)) {
           drawHexImage(window.gameVisuals.wood_floor, x, y, zoomedSize, 'wood_floor');
       } else if (terrain.name === 'Path' && imgOk(window.gameVisuals.path)) {
           drawHexImage(window.gameVisuals.path, x, y, zoomedSize, 'path');
       } else if (terrain.name === 'Dirt' && imgOk(window.gameVisuals.dirt)) {
           drawHexImage(window.gameVisuals.dirt, x, y, zoomedSize, 'dirt');
+      } else if (terrain.name === 'Grass') {
+          // "Lusher"/darker variants weighted higher right next to water — a
+          // cheap direct lookup against the sparse overrideTerrain dict
+          // (water is always explicitly painted, never a fallback default),
+          // not a full getNeighbors()/getTerrainAt() call, since this runs
+          // for every grass hex on screen every frame.
+          const keys = isGrassNearWater(q, r) ? GRASS_VARIANTS_LUSH : GRASS_VARIANTS_DEFAULT;
+          const key = pickVariantKey(q, r, 211, keys);
+          if (imgOk(window.gameVisuals[key])) {
+              drawHexImage(window.gameVisuals[key], x, y, zoomedSize, key);
+          } else {
+              drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
+          }
       } else if (terrain.name !== 'Water') {
           drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
       } else {
@@ -288,12 +332,16 @@ function drawMap() {
   // 4. PASS 3: Water Overlay (50% Transparency) - DRAWN ON TOP OF CHARACTERS
   visibleAndExplored.forEach(({q, r}) => {
       const terrain = window.getTerrainAt(q, r);
-      if (terrain.name === 'Water' && imgOk(window.gameVisuals.water)) {
-          const {x, y} = hexToPixel(q, r);
-          const zoomedSize = hexSize * window.cameraZoom;
-          mapCtx.globalAlpha = 0.5;
-          drawHexImage(window.gameVisuals.water, x, y, zoomedSize, 'water');
-          mapCtx.globalAlpha = 1.0;
+      if (terrain.name === 'Water') {
+          const key = pickVariantKey(q, r, 311, WATER_VARIANTS);
+          const img = window.gameVisuals[key];
+          if (imgOk(img)) {
+              const {x, y} = hexToPixel(q, r);
+              const zoomedSize = hexSize * window.cameraZoom;
+              mapCtx.globalAlpha = 0.5;
+              drawHexImage(img, x, y, zoomedSize, key);
+              mapCtx.globalAlpha = 1.0;
+          }
       }
   });
 
