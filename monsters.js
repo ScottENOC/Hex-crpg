@@ -412,6 +412,30 @@ function createMonster(type, hex, customSkills = null, customEquipment = null, s
     return monster;
 }
 
+// Grants a generic humanoid enemy extra "class levels" worth of stats/skills
+// as the party grows stronger — same idea as a PC's level-up, just applied
+// in bulk by callers (arena spawning) rather than through the real
+// level-up UI. Deliberately calls skill.apply() once per *new* rank rather
+// than monster.applySkills() (which re-applies every existing rank too,
+// which would double-count the template's starting skills).
+function applyClassLevelScaling(monster, bonusLevels) {
+    if (!bonusLevels || bonusLevels <= 0) return;
+    monster.classLevelsGranted = bonusLevels;
+    for (let i = 0; i < bonusLevels; i++) {
+        const weaponSkills = monster.equipped?.weapon
+            ? [`${monster.equipped.weapon}_hit`, `${monster.equipped.weapon}_dmg`]
+            : ['unarmed_hit', 'unarmed_dmg'];
+        const pool = ['meleeDamage', 'health', ...weaponSkills];
+        const pick = pool[Math.floor(Math.random() * pool.length)];
+        monster.skills[pick] = (monster.skills[pick] || 0) + 1;
+        const skill = window.skills[pick];
+        if (skill && skill.apply) skill.apply(monster);
+    }
+    monster.hp = monster.maxHp; // top off after any maxHp-raising skill (e.g. 'health')
+    monster.expValue = Math.round(monster.expValue * (1 + bonusLevels * 0.25));
+}
+window.applyClassLevelScaling = applyClassLevelScaling;
+
 function equipToMonster(monster, itemId) {
     const item = window.items[itemId];
     if (!item) return;

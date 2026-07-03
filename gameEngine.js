@@ -1793,6 +1793,16 @@ function autoMoveProcess(entity) {
 // Picks the neighbor of `fromHex` that's closest to `toHex` — one step along
 // a straight line, reused by stalking predators and patrol/camp routines so
 // they walk toward a point instead of only ever random-wandering.
+// Shared "can an idle-AI entity step here" check — unoccupied and not
+// Water/Wall. Used by wander/patrol/campRoutine/stalking movement so none of
+// them walk through walls now that the arena generates real ones.
+function isOpenHex(h) {
+    if (getEntityAtHex(h.q, h.r)) return false;
+    const name = window.getTerrainAt(h.q, h.r).name;
+    return name !== 'Water' && name !== 'Wall';
+}
+window.isOpenHex = isOpenHex;
+
 function stepToward(fromHex, toHex) {
     const d = window.distance(fromHex, toHex);
     if (d === 0) return null;
@@ -1822,7 +1832,7 @@ function behaviorTick(entity) {
             entity.patrolIndex = (entity.patrolIndex + 1) % entity.patrolPath.length;
         } else {
             const next = stepToward(entity.hex, target);
-            if (next && !getEntityAtHex(next.q, next.r) && window.getTerrainAt(next.q, next.r).name !== 'Water') {
+            if (next && isOpenHex(next)) {
                 entity.hex = next;
             }
         }
@@ -1842,7 +1852,7 @@ function behaviorTick(entity) {
                 entity.campDestination = null;
             } else {
                 const next = stepToward(entity.hex, entity.campDestination);
-                if (next && !getEntityAtHex(next.q, next.r) && window.getTerrainAt(next.q, next.r).name !== 'Water') {
+                if (next && isOpenHex(next)) {
                     entity.hex = next;
                 }
             }
@@ -1857,7 +1867,7 @@ function behaviorTick(entity) {
         }
         if (window.distance(entity.hex, entity.homeHex) > 2) {
             const next = stepToward(entity.hex, entity.homeHex);
-            if (next && !getEntityAtHex(next.q, next.r) && window.getTerrainAt(next.q, next.r).name !== 'Water') {
+            if (next && isOpenHex(next)) {
                 entity.hex = next;
             }
             spendTP(entity, 10);
@@ -1865,7 +1875,7 @@ function behaviorTick(entity) {
         }
         if (Math.random() < 0.3) {
             const neighbors = window.getNeighbors(entity.hex.q, entity.hex.r);
-            const valid = neighbors.filter(h => !getEntityAtHex(h.q, h.r) && window.getTerrainAt(h.q, h.r).name !== 'Water');
+            const valid = neighbors.filter(isOpenHex);
             if (valid.length > 0) entity.hex = valid[Math.floor(Math.random() * valid.length)];
         }
         spendTP(entity, 10);
@@ -1875,7 +1885,7 @@ function behaviorTick(entity) {
     // Default: pure random wander (original behavior).
     if (Math.random() < 0.3) {
         const neighbors = window.getNeighbors(entity.hex.q, entity.hex.r);
-        const valid = neighbors.filter(h => !getEntityAtHex(h.q, h.r) && window.getTerrainAt(h.q, h.r).name !== 'Water');
+        const valid = neighbors.filter(isOpenHex);
         if (valid.length > 0) {
             entity.hex = valid[Math.floor(Math.random() * valid.length)];
         }
@@ -2016,7 +2026,7 @@ function aiProcess(entity) {
                 sharedMessage(`${entity.name} catches your scent and creeps closer...`);
             }
             const next = window.stepToward(entity.hex, visibleTarget.hex);
-            if (next && !getEntityAtHex(next.q, next.r) && window.getTerrainAt(next.q, next.r).name !== 'Water') {
+            if (next && isOpenHex(next)) {
                 entity.hex = next;
             }
             spendTP(entity, 10);
@@ -3812,12 +3822,53 @@ function startArenaFight() {
                  }
 
                  window.setTerrainAt(q, r, tType);
-                 
+
                  if (isIndoor && Math.random() < 0.02 && tType === 'Cave Floor') {
                      window.tileObjects[`${q},${r}`] = { type: 'fireplace', lightRadius: 10 };
                  }
             }
         }
+    }
+
+    // Carve a handful of ring-shaped ruin structures — wall rings with 2-3
+    // gaps left as doorways — so the arena has actual chokepoints and cover
+    // to fight around instead of being one flat open field. Left as plain
+    // hex rings (not full rectangles) since that's cheap to compute on a hex
+    // grid and still reads as "a ruined room" once walls block LOS/movement.
+    const numStructures = 3 + Math.floor(Math.random() * 3); // 3-5
+    for (let s = 0; s < numStructures; s++) {
+        let center = null;
+        for (let attempt = 0; attempt < 20; attempt++) {
+            const cq = Math.round((Math.random() * 2 - 1) * (arenaSize - 6));
+            const cr = Math.round((Math.random() * 2 - 1) * (arenaSize - 6));
+            if (Math.abs(cq) + Math.abs(cr) + Math.abs(cq + cr) <= (arenaSize - 6) * 2) {
+                center = { q: cq, r: cr };
+                break;
+            }
+        }
+        if (!center) continue;
+
+        const ringRadius = 2 + Math.floor(Math.random() * 3); // 2-4
+        const ringHexes = [];
+        for (let dq = -ringRadius; dq <= ringRadius; dq++) {
+            for (let dr = -ringRadius; dr <= ringRadius; dr++) {
+                const h = { q: center.q + dq, r: center.r + dr };
+                if (window.distance(center, h) === ringRadius) ringHexes.push(h);
+            }
+        }
+        if (ringHexes.length === 0) continue;
+
+        const gapCount = 2 + Math.floor(Math.random() * 2); // 2-3 doorways
+        const gapIndices = new Set();
+        while (gapIndices.size < Math.min(gapCount, ringHexes.length)) {
+            gapIndices.add(Math.floor(Math.random() * ringHexes.length));
+        }
+        ringHexes.forEach((h, i) => {
+            if (gapIndices.has(i)) return;
+            if (Math.abs(h.q) <= arenaSize && Math.abs(h.r) <= arenaSize && Math.abs(h.q + h.r) <= arenaSize) {
+                window.setTerrainAt(h.q, h.r, 'Wall');
+            }
+        });
     }
 
     // 3. Spawn variety
@@ -3992,6 +4043,30 @@ function startArenaFight() {
                 const extraHP = Math.floor(diff * 5);
                 m.maxHp += extraHP;
                 m.hp += extraHP;
+            }
+
+            // As the party outlevels the base roster, generic humanoids
+            // (goblins/orcs, not undead/animals/giants) start picking up
+            // real class levels — extra HP and combat skill ranks — so late
+            // arena runs don't stay trivial forever.
+            if (m.tags?.includes('humanoid') && window.party?.length) {
+                const avgPartyLevel = window.party.reduce((sum, c) => sum + c.level, 0) / window.party.length;
+                const bonusLevels = Math.floor(avgPartyLevel / 3);
+                if (window.applyClassLevelScaling) window.applyClassLevelScaling(m, bonusLevels);
+            }
+
+            // Half the time, patrol a short loop near the spawn point instead
+            // of pure random wander, so groups read as actually guarding a
+            // spot rather than idling in place.
+            if (Math.random() < 0.5) {
+                const patrolNeighbors = window.getNeighbors(spawnHex.q, spawnHex.r)
+                    .filter(h => window.getTerrainAt(h.q, h.r).name !== 'Wall' && window.getTerrainAt(h.q, h.r).name !== 'Water');
+                if (patrolNeighbors.length > 0) {
+                    const far = patrolNeighbors[Math.floor(Math.random() * patrolNeighbors.length)];
+                    m.behaviorType = 'patrol';
+                    m.patrolPath = [spawnHex, far];
+                    m.homeHex = { ...spawnHex };
+                }
             }
 
             window.entities.push(m);
