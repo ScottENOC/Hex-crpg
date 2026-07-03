@@ -311,7 +311,16 @@ const arenaBosses = {
         equipment: ['light_armor']
     },
     'Sir Alistair': {
-        base: 'orc', 
+        base: 'orc',
+        // Stat template only — "base: 'orc'" just borrows the orc's tankier
+        // baseline stats, but he's written and voiced as a human paladin
+        // knight (title, heal spell, heavy armor + shield), so he renders
+        // through the same layered human/elf/dwarf sprite system real party
+        // members use (see the boss-spawn code in gameEngine.js) instead of
+        // a flat monster image — that's also what was making him render as
+        // a plain goblin (the generic monster sprite path's image lookup is
+        // keyed by e.name, and "Sir Alistair" never matched "Orc").
+        race: 'human',
         color: '#ffd700',
         gender: 'male',
         hp: 50,

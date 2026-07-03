@@ -4061,6 +4061,7 @@ function startArenaFight() {
         if (config.hp) { boss.hp = config.hp; boss.maxHp = config.hp; }
         if (config.mana) { boss.currentMana = config.mana; boss.maxMana = config.mana; }
         if (config.gender) boss.gender = config.gender;
+        if (config.race) boss.race = config.race;
         if (config.color) boss.color = config.color;
         
         if (config.spells) {
