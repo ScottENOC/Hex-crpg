@@ -164,7 +164,8 @@ function toggleRest() {
         // One ambush roll per rest attempt — guard shifts (enough party
         // members to keep a watch) cancel it entirely, an inn room is
         // handled separately by restAtInn (always safe).
-        if (!window.restGuardShiftEnabled) {
+        const inArenaLobby = window.currentCampaign === "1";
+        if (!window.restGuardShiftEnabled && !window.isInArena && !inArenaLobby) {
             const indoors = window.isPlayerIndoors && window.isPlayerIndoors();
             const chance = indoors ? 0.10 : (window.getWildernessAmbushChance ? window.getWildernessAmbushChance() : 0.2);
             if (Math.random() < chance) {
@@ -224,17 +225,45 @@ function toggleSleep() {
             showMessage("Cannot sleep while enemies are nearby!");
             return;
         }
+        if (window.isPlayerIndoors && window.isPlayerIndoors() && window.isBuildingOccupied && window.isBuildingOccupied()) {
+            showMessage("You can't sleep here — someone lives here.");
+            return;
+        }
         window.isSleeping = true;
-        
+
         // Initialize sleep timer for all player entities if needed (only if they don't have time left)
-        window.entities.forEach(e => {
-            if (e.side === 'player' && e.name !== 'Wolf' && e.name !== 'Horse') {
-                if (!e.sleepRemainingSeconds || e.sleepRemainingSeconds <= 0) {
-                    e.sleepRemainingSeconds = 8 * 3600; // 8 hours
-                }
+        const sentientAllies = window.entities.filter(e => e.side === 'player' && e.alive && !e.rider && e.name !== 'Wolf' && e.name !== 'Horse');
+        sentientAllies.forEach(e => {
+            if (!e.sleepRemainingSeconds || e.sleepRemainingSeconds <= 0) {
+                e.sleepRemainingSeconds = 10 * 3600; // 10 hours
             }
+            e.onGuard = false;
         });
-        showMessage("Going to sleep...");
+
+        // 3+ people can rotate a watch — one keeps armor on and stays alert
+        // all night, so an ambush only catches the others off-guard. Below
+        // that, everyone actually sleeps and everyone's vulnerable.
+        if (sentientAllies.length >= 3) {
+            const guard = sentientAllies[Math.floor(Math.random() * sentientAllies.length)];
+            guard.onGuard = true;
+            showMessage(`You make camp for the night. ${guard.name} takes first watch while the others sleep.`);
+        } else {
+            showMessage("You make camp for the night and settle in to sleep.");
+        }
+
+        // One ambush roll for the night, same idea as resting — skipped
+        // entirely in the arena (no wandering encounters there).
+        const inArenaLobby = window.currentCampaign === "1";
+        if (!window.isInArena && !inArenaLobby) {
+            const indoors = window.isPlayerIndoors && window.isPlayerIndoors();
+            const chance = indoors ? 0.10 : (window.getWildernessAmbushChance ? window.getWildernessAmbushChance() : 0.2);
+            if (Math.random() < chance) {
+                const delay = 1500 + Math.random() * 3000;
+                setTimeout(() => {
+                    if (window.isSleeping && window.triggerSleepAmbush) window.triggerSleepAmbush(indoors ? 'door' : 'wilderness');
+                }, delay);
+            }
+        }
     } else {
         window.isSleeping = false;
         showMessage("Woke up.");

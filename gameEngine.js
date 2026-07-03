@@ -152,6 +152,10 @@ window.isPlayerIndoors = isPlayerIndoors;
 // floor nearby — approximate since buildings don't track their own bounds.
 function isBuildingOccupied() {
     if (!window.player) return false;
+    // The roguelike arena lobby is Cave Floor dotted with the shopkeeper/
+    // announcer NPCs — it's meant to be a safe hub, not a house someone
+    // lives in, so it never counts as occupied.
+    if (window.currentCampaign === "1" && !window.isInArena) return false;
     const t = window.getTerrainAt(window.player.hex.q, window.player.hex.r).name;
     return window.entities.some(e => e.alive && e.isNPC && e.side !== 'player'
         && window.getTerrainAt(e.hex.q, e.hex.r).name === t
@@ -200,6 +204,7 @@ function triggerRestAmbush(kind) {
         }
         if (!spot) continue;
         const monster = window.createMonster(kind === 'door' ? 'goblin' : 'wolf', spot, null, null, 'enemy');
+        monster.aiState = 'combat'; // ambush — attacks immediately, not a wandering idle encounter
         window.entities.push(monster);
         spawned++;
     }
@@ -213,6 +218,60 @@ function triggerRestAmbush(kind) {
     return spawned;
 }
 window.triggerRestAmbush = triggerRestAmbush;
+
+// Same idea as triggerRestAmbush, but for sleep: whoever's on watch
+// (see toggleSleep's guard pick for 3+ party members) keeps their armor
+// and doesn't need to spend TP standing up, since they were never asleep.
+// Sleep itself doesn't cancel — combat plays out, then _resumeSleepAfterCombat
+// (checked in checkCombatEnd) puts everyone back to sleep afterward.
+function triggerSleepAmbush(kind) {
+    window.isSleeping = false;
+    window._resumeSleepAfterCombat = true;
+    if (window.updateSleepButton) window.updateSleepButton();
+
+    const sentientAllies = window.entities.filter(e => e.alive && e.side === 'player' && !e.rider);
+    sentientAllies.forEach(e => {
+        if (e.onGuard) return;
+        e.caughtOffGuard = true;
+        e.timePoints = Math.max(0, (e.timePoints || 0) - 5);
+    });
+
+    const player = window.player;
+    let spawned = 0;
+    const count = 1 + Math.floor(Math.random() * 2);
+    for (let n = 0; n < count; n++) {
+        let spot = null;
+        for (let attempt = 0; attempt < 10 && !spot; attempt++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 2 + Math.floor(Math.random() * 2);
+            const candidate = window.hexRound(
+                player.hex.q + Math.round(Math.cos(angle) * dist),
+                player.hex.r + Math.round(Math.sin(angle) * dist)
+            );
+            if (window.getEntityAtHex(candidate.q, candidate.r)) continue;
+            if (window.getTerrainAt(candidate.q, candidate.r).name === 'Wall') continue;
+            if (window.getTerrainAt(candidate.q, candidate.r).name === 'Water') continue;
+            spot = candidate;
+        }
+        if (!spot) continue;
+        const monster = window.createMonster(kind === 'door' ? 'goblin' : 'wolf', spot, null, null, 'enemy');
+        monster.aiState = 'combat'; // ambush — attacks immediately, not a wandering idle encounter
+        window.entities.push(monster);
+        spawned++;
+    }
+
+    const guard = sentientAllies.find(e => e.onGuard);
+    window.showMessage(guard
+        ? `${guard.name} spots movement and shouts a warning — the others scramble up without their armor on!`
+        : (kind === 'door'
+            ? "Someone's trying to break the door down! You scramble up, caught without your armor on."
+            : "You're jolted awake — something's found your camp, and no one had armor on."));
+    if (window.drawMap) window.drawMap();
+    if (window.renderEntities) window.renderEntities();
+    if (window.updateTurnIndicator) window.updateTurnIndicator();
+    return spawned;
+}
+window.triggerSleepAmbush = triggerSleepAmbush;
 
 window.restGuardShiftEnabled = false;
 function toggleGuardShiftRest() {
@@ -3682,6 +3741,14 @@ function checkCombatEnd() {
     if (!window.entities.some(e => e.side === 'enemy' && e.alive)) {
         // Ambush is over — armor protection applies again.
         window.entities.forEach(e => { if (e.caughtOffGuard) e.caughtOffGuard = false; });
+
+        // A sleep-ambush fight doesn't end the night's rest — go back to sleep.
+        if (window._resumeSleepAfterCombat) {
+            window._resumeSleepAfterCombat = false;
+            window.isSleeping = true;
+            window.showMessage("With the danger past, you settle back down to sleep.");
+            if (window.updateSleepButton) window.updateSleepButton();
+        }
 
         // Combat Ended Auto-save
         if (window.saveGame && !window.ironmanMode) {
