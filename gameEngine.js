@@ -592,10 +592,9 @@ function startGameCore(isLoading = false) {
       hut: new Image(),
       hut_large: new Image(),
       journal: new Image(),
-      foliage_bush: new Image(),
-      foliage_pine: new Image(),
-      foliage_shrub: new Image(),
-      foliage_thicket: new Image(),
+      bush_small: new Image(),
+      bush_large: new Image(),
+      tree_small: new Image(),
       grass_1: new Image(),
       grass_2: new Image(),
       grass_3: new Image(),
@@ -667,10 +666,9 @@ function startGameCore(isLoading = false) {
   visuals.fence_h.onload = () => { window.drawMap(); };
   visuals.fence_v.onload = () => { window.drawMap(); };
   visuals.dirt.onload = () => { window.drawMap(); };
-  visuals.foliage_bush.onload = () => { window.drawMap(); };
-  visuals.foliage_pine.onload = () => { window.drawMap(); };
-  visuals.foliage_shrub.onload = () => { window.drawMap(); };
-  visuals.foliage_thicket.onload = () => { window.drawMap(); };
+  visuals.bush_small.onload = () => { window.drawMap(); };
+  visuals.bush_large.onload = () => { window.drawMap(); };
+  visuals.tree_small.onload = () => { window.drawMap(); };
   visuals.grass_1.onload = () => { window.drawMap(); };
   visuals.grass_2.onload = () => { window.drawMap(); };
   visuals.grass_3.onload = () => { window.drawMap(); };
@@ -749,10 +747,9 @@ function startGameCore(isLoading = false) {
   visuals.hut.src = 'images/hut.svg';
   visuals.hut_large.src = 'images/hut_large.svg';
   visuals.journal.src = 'images/journal.svg';
-  visuals.foliage_bush.src = 'images/foliage_bush.svg';
-  visuals.foliage_pine.src = 'images/foliage_pine.svg';
-  visuals.foliage_shrub.src = 'images/foliage_shrub.svg';
-  visuals.foliage_thicket.src = 'images/foliage_thicket.svg';
+  visuals.bush_small.src = 'images/bush_small.svg';
+  visuals.bush_large.src = 'images/bush_large.svg';
+  visuals.tree_small.src = 'images/tree_small.svg';
   visuals.grass_1.src = 'images/grass_1.svg';
   visuals.grass_2.src = 'images/grass_2.svg';
   visuals.grass_3.src = 'images/grass_3.svg';
@@ -1098,7 +1095,7 @@ function renderEntities() {
   
       // Enemy humanoids with sprite config are drawn the same way as player characters
       const hasEnemySpriteCfg = !isSentientAlly && e.race && e.gender && CHAR_CONFIG[`${e.race}_${e.gender}`];
-      if ((isSentientAlly || hasEnemySpriteCfg) && window.gameVisuals) {
+      if ((isSentientAlly || hasEnemySpriteCfg) && !e.customImage && window.gameVisuals) {
           drawPlayerCharacter(window.mapCtx, e, x, y, z, flyOff);
       } else if ((e instanceof window.Enemy || e.customImage) && window.gameVisuals) {
                           let size = window.hexSize * 1.5 * z;
@@ -2492,6 +2489,10 @@ function handleClick(e){
     // DOOR TOGGLE — takes priority over talk/attack/move when clicking an adjacent door
     const doorObj = window.tileObjects && window.tileObjects[`${clickedHex.q},${clickedHex.r}`];
     if (doorObj && (doorObj.type === 'door_open' || doorObj.type === 'door_closed') && window.distance(player.hex, clickedHex) <= 1) {
+        if (doorObj.locked) {
+            window.showMessage("The door won't budge — barred from the outside.");
+            return;
+        }
         if (window.toggleDoor) window.toggleDoor(clickedHex.q, clickedHex.r);
         return;
     }

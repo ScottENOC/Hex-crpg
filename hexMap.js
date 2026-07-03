@@ -200,7 +200,12 @@ function drawHexImage(img, x, y, zoomedSize, cacheKey) {
 // terrain type so grass/foliage/water don't all pick "the same" index for a
 // given hex — not randomized per frame, so it's stable across redraws
 // without needing to store anything per hex.
-const FOLIAGE_VARIANTS = ['foliage', 'foliage_bush', 'foliage_pine', 'foliage_shrub', 'foliage_thicket'];
+// Overlay sprites drawn on top of the plain dark-green foliage hex — the
+// variety comes from what's growing there, not a different-colored hex.
+// tree_small's canvas is taller than one hex on purpose (a real tree reads
+// taller than the ground it's rooted in) and visually spills into the hex
+// north of it, so anyone standing in either hex needs to see through it.
+const FOLIAGE_OVERLAYS = ['bush_small', 'bush_large', 'tree_small'];
 const GRASS_VARIANTS_DEFAULT = ['grass_1', 'grass_1', 'grass_2', 'grass_3'];
 const GRASS_VARIANTS_LUSH = ['grass_3', 'grass_3', 'grass_1', 'grass_2'];
 const WATER_VARIANTS = ['water', 'water', 'water_1', 'water_2'];
@@ -291,12 +296,29 @@ function drawMap() {
           if (needsTransparency) mapCtx.globalAlpha = 0.5;
           drawHexImage(window.gameVisuals.pedestal, x, y, zoomedSize, 'pedestal');
           if (needsTransparency) mapCtx.globalAlpha = 1.0;
-      } else if (terrain.name === 'Foliage') {
-          const key = pickVariantKey(q, r, 101, FOLIAGE_VARIANTS);
-          if (imgOk(window.gameVisuals[key])) {
-              drawHexImage(window.gameVisuals[key], x, y, zoomedSize, key);
+      } else if (terrain.name === 'Forest' || terrain.name === 'Foliage') {
+          // Both terrain types render the same way: the plain dark-green hex
+          // (terrain.js's 'foliage' image happens to be the same forest
+          // green) plus a randomly-picked bush/tree overlay for variety.
+          // 'Forest' is what campaign 2's wilderness actually paints;
+          // 'Foliage' exists as a distinct gameplay terrain (see the
+          // elf/druid foliage-expertise skills) but nothing paints it yet.
+          if (imgOk(window.gameVisuals.foliage)) {
+              drawHexImage(window.gameVisuals.foliage, x, y, zoomedSize, 'foliage');
           } else {
               drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
+          }
+          const overlayKey = pickVariantKey(q, r, 401, FOLIAGE_OVERLAYS);
+          const overlayImg = window.gameVisuals[overlayKey];
+          if (imgOk(overlayImg)) {
+              const isTall = overlayKey === 'tree_small';
+              const footprint = isTall ? [{ q, r }, { q, r: r - 1 }] : [{ q, r }];
+              const occupied = footprint.some(fh => window.entities.some(e => e.alive && e.getAllHexes && e.getAllHexes().some(h => h.q === fh.q && h.r === fh.r)));
+              const w = zoomedSize * 1.7;
+              const h = w * (overlayImg.naturalHeight / overlayImg.naturalWidth);
+              if (occupied) mapCtx.globalAlpha = 0.4;
+              mapCtx.drawImage(overlayImg, x - w / 2, y + zoomedSize * 0.6 - h, w, h);
+              if (occupied) mapCtx.globalAlpha = 1.0;
           }
       } else if (terrain.name === 'Wood Floor' && imgOk(window.gameVisuals.wood_floor)) {
           drawHexImage(window.gameVisuals.wood_floor, x, y, zoomedSize, 'wood_floor');

@@ -371,7 +371,12 @@ function setupVillageScene(forLoadOnly = false) {
 
     // Fireplace for cozy interior lighting + visual marker for the door.
     window.tileObjects['-4,0'] = { type: 'fireplace', lightRadius: 6 };
-    window.tileObjects['0,4'] = { type: 'door_closed', lightRadius: 0 };
+    // Barred from the outside until the shakedown kicks off — stops the
+    // player from just wandering out before the scripted scene plays. Once
+    // the soldiers open it themselves (startHollowmereShakedown), the lock
+    // is lifted for good, so the player can flee mid-scene or leave normally
+    // afterward.
+    window.tileObjects['0,4'] = { type: 'door_closed', lightRadius: 0, locked: true };
 
     // Furniture, placed clear of spawn hexes and the door.
     window.tileObjects['1,1'] = { type: 'table', lightRadius: 0 };
