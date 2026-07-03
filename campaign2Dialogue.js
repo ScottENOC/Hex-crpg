@@ -284,12 +284,30 @@ window.npcDialogueTrees = {
             return;
         }
 
-        window.showDialogue(npc, "Keep your nose clean in Reddale and we won't have trouble.", [{ label: "Understood.", action: () => {} }]);
+        window.showDialogue(npc, "Keep your nose clean in Reddale and we won't have trouble.", [
+            {
+                label: "Try to read her.",
+                action: () => {
+                    const { text } = window.readTheRoom(npc, window.party[0]);
+                    window.showDialogue(npc, text, [{ label: "Understood.", action: () => {} }]);
+                }
+            },
+            { label: "Understood.", action: () => {} }
+        ]);
     },
     reddale_guard: (npc) => {
-        window.showDialogue(npc, "Captain Rennick runs the watch here — if there's work needs doing, she's the one to ask. Me, I just mind the gate.", [
+        const baseOptions = [
+            {
+                label: "Try to read him.",
+                action: () => {
+                    const { text } = window.readTheRoom(npc, window.party[0]);
+                    const followUps = window.getLeverageOptions(npc, window.party[0]);
+                    window.showDialogue(npc, text, [...followUps, { label: "Noted.", action: () => {} }]);
+                }
+            },
             { label: "Noted.", action: () => {} }
-        ]);
+        ];
+        window.showDialogue(npc, "Captain Rennick runs the watch here — if there's work needs doing, she's the one to ask. Me, I just mind the gate.", baseOptions);
     },
     reddale_reeve: (npc) => {
         window.showDialogue(npc, "Reddale answers to Silverhart same as anywhere, but out here it's my word that keeps the peace. Trade's been steady — long may it stay that way.", [

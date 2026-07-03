@@ -893,10 +893,23 @@ function buildReddale(roadEnd) {
     window.campaign2ReddaleSearchSiteHex = { q: roadEnd.q + 18, r: roadEnd.r };
 
     if (window.campaign2ReddaleCaptain) {
-        window.entities.push(window.buildNPC({ ...window.campaign2ReddaleCaptain, hex: { q: guardCenter.q - 1, r: guardCenter.r } }));
+        const captainEntity = window.buildNPC({ ...window.campaign2ReddaleCaptain, hex: { q: guardCenter.q - 1, r: guardCenter.r } });
+        captainEntity.wants = null; // incorruptible - no leverage option will ever be offered
+        captainEntity.incorruptibleFlavor = "She runs a tight watch. Best not even think about a bribe.";
+        window.entities.push(captainEntity);
     }
     if (window.campaign2ReddaleGuard) {
-        window.entities.push(window.buildNPC({ ...window.campaign2ReddaleGuard, hex: { q: guardCenter.q + 1, r: guardCenter.r } }));
+        const guardEntity = window.buildNPC({ ...window.campaign2ReddaleGuard, hex: { q: guardCenter.q + 1, r: guardCenter.r } });
+        guardEntity.wants = {
+            type: 'gold', amount: 15, offerLabel: 'bribe', description: 'a little coin for looking the other way',
+            fullHint: "Bram grumbles about the Company's pay more than most — a bit of coin would go a long way with him.",
+            partialHint: "He seems unenthusiastic about the job. Might be persuadable, if you had something to offer."
+        };
+        guardEntity.vagueFlavor = "Hard to get a read on him.";
+        guardEntity.onBribeSuccess = () => {
+            window.showDialogue(guardEntity, "Much obliged. Won't remember seeing you.", [{ label: "Good.", action: () => {} }]);
+        };
+        window.entities.push(guardEntity);
     }
     if (window.campaign2ReddaleReeve) {
         window.entities.push(window.buildNPC({ ...window.campaign2ReddaleReeve, hex: { q: reeveCenter.q, r: reeveCenter.r } }));

@@ -379,7 +379,7 @@ function showCharacterScreen() {
 
     const treesToShow = new Set();
     const hasWildcard = availablePoints.wildcard > 0;
-    const standardTrees = ['arcane', 'divine', 'nature', 'strength', 'endurance', 'agility', 'weapons'];
+    const standardTrees = ['arcane', 'divine', 'nature', 'strength', 'endurance', 'agility', 'weapons', 'social', 'practical'];
 
     if (window.showAllSkillsMode) {
         Object.keys(skillTrees).forEach(t => {
@@ -477,7 +477,7 @@ function learnSkill(skillKey) {
         return;
     }
 
-    const standardTrees = ['arcane', 'divine', 'nature', 'strength', 'endurance', 'agility', 'weapons'];
+    const standardTrees = ['arcane', 'divine', 'nature', 'strength', 'endurance', 'agility', 'weapons', 'social', 'practical'];
     const isStandard = standardTrees.includes(skill.tree);
 
     const currentRanks = player.skills[skillKey] || 0;
@@ -493,12 +493,13 @@ function learnSkill(skillKey) {
         }
     }
 
-    if (player.attributes[skill.tree] > 0) {
-        player.attributes[skill.tree]--;
-    } else if (player.attributes.wildcard > 0 && isStandard) {
-        player.attributes.wildcard--;
+    const rankCost = currentRanks + 1; // rank 1 costs 1, rank 2 costs 2, rank 3 costs 3...
+    if ((player.attributes[skill.tree] || 0) >= rankCost) {
+        player.attributes[skill.tree] -= rankCost;
+    } else if (player.attributes.wildcard >= rankCost && isStandard) {
+        player.attributes.wildcard -= rankCost;
     } else {
-        showMessage("You don't have points to learn this skill.");
+        showMessage(`You don't have enough points to learn this skill (needs ${rankCost}).`);
         return;
     }
 

@@ -1520,6 +1520,51 @@ function generateMagicSkills(school, spellName, spellId) {
     return s;
 }
 
+Object.assign(skills, {
+    'persuasion': {
+        name: 'Persuasion',
+        description: 'A modest, bounded discount (5%/rank, capped 15%) on the cost of anything you offer someone to win their cooperation. Never unlocks an outcome by itself — you still need something they actually want.',
+        tree: 'social',
+        maxRanks: 3,
+        apply: (player) => {}
+    },
+    'insight': {
+        name: 'Insight',
+        description: "Reads people accurately — reveals what an NPC actually wants (and flags when they're bluffing) without having to guess and risk the consequences.",
+        tree: 'social',
+        maxRanks: 3,
+        apply: (player) => {}
+    },
+    'intimidation': {
+        name: 'Intimidation',
+        description: 'An alternative to paying someone off: lean on them instead. Trades your reputation for not having to give anything up.',
+        tree: 'social',
+        maxRanks: 2,
+        apply: (player) => {}
+    },
+    'lockpicking': {
+        name: 'Lockpicking',
+        description: 'Skill at opening locks without the key.',
+        tree: 'practical',
+        maxRanks: 3,
+        apply: (player) => {}
+    },
+    'survival': {
+        name: 'Survival',
+        description: 'Reduces the chance of being ambushed while resting in the wilderness.',
+        tree: 'practical',
+        maxRanks: 2,
+        apply: (player) => {}
+    },
+    'appraisal': {
+        name: 'Appraisal',
+        description: 'A bounded improvement to shop prices, and reveals a bit more about an item than the eye alone would tell you.',
+        tree: 'practical',
+        maxRanks: 2,
+        apply: (player) => {}
+    }
+});
+
 window.skills = skills;
 
 // Either the druid or elf pickup of Knowledge: Nature (mutually exclusive
