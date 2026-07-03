@@ -1345,7 +1345,10 @@ function updateTurnIndicator() {
             img.style.left = "-100%"; img.style.top = "-50%";
             img.style.zIndex = "5";
         };
-        if (entity.side === 'player' && entity.name !== 'Wolf' && entity.name !== 'Horse') {
+        // Named bosses built on race:'human'/'elf'/'dwarf' (see the boss-spawn
+        // code in gameEngine.js) go through the same layered portrait as
+        // real party members, not just side:'player' entities.
+        if ((entity.side === 'player' || entity.race) && entity.name !== 'Wolf' && entity.name !== 'Horse') {
                             if (entity.race === 'human') {
                                 const sizePct = entity.gender === 'male' ? 90 : 80;
                                 const offsetPct = (100 - sizePct) / 2;
@@ -1483,15 +1486,24 @@ function updateTurnIndicator() {
             }
         } else {
             const img = document.createElement('img');
-            if (entity.name === 'Orc') img.src = 'images/orc.png';
-            else if (entity.name === 'Wolf') img.src = 'images/wolf.png';
-            else if (entity.name === 'Horse') { img.src = 'images/horse.png'; applyHorseScaling(img); }
-            else if (entity.name === 'Skeleton') img.src = 'images/skeleton.svg';
-            else if (entity.name === 'Zombie') img.src = 'images/zombie.svg';
-            else if (entity.name === 'Imp') img.src = 'images/imp.svg';
-            else if (entity.name === 'Boar') img.src = 'images/boar.png';
-            else if (entity.name === 'Tiger') img.src = 'images/tiger.png';
-            else if (entity.name === 'Eagle') {
+            // Renamed bosses (Grishnak, Krog, etc.) carry spriteBase (their
+            // underlying monster type) since e.name no longer matches a
+            // generic monster name once the boss-spawn code renames them.
+            const key = entity.name === 'Orc' || entity.name === 'Wolf' || entity.name === 'Horse' ||
+                entity.name === 'Skeleton' || entity.name === 'Zombie' || entity.name === 'Imp' ||
+                entity.name === 'Boar' || entity.name === 'Tiger' || entity.name === 'Eagle' || entity.name === 'Troll'
+                ? entity.name
+                : ({ orc: 'Orc', wolf: 'Wolf', troll: 'Troll', skeleton: 'Skeleton', zombie: 'Zombie', imp: 'Imp', boar: 'Boar', tiger: 'Tiger' }[entity.spriteBase] || entity.name);
+            if (key === 'Orc') img.src = 'images/orc.png';
+            else if (key === 'Wolf') img.src = 'images/wolf.png';
+            else if (key === 'Horse') { img.src = 'images/horse.png'; applyHorseScaling(img); }
+            else if (key === 'Skeleton') img.src = 'images/skeleton.svg';
+            else if (key === 'Zombie') img.src = 'images/zombie.svg';
+            else if (key === 'Imp') img.src = 'images/imp.svg';
+            else if (key === 'Boar') img.src = 'images/boar.png';
+            else if (key === 'Tiger') img.src = 'images/tiger.png';
+            else if (key === 'Troll') img.src = 'images/troll.png';
+            else if (key === 'Eagle') {
                 img.src = entity.isFlying ? 'images/eagleflying.png' : 'images/eagle.png';
             }
             else img.src = 'images/goblin.png';

@@ -4056,14 +4056,34 @@ function startArenaFight() {
         const config = arenaBosses[bossName];
         
         window.triggerAmbientDialogue(config.dialogue);
-        const boss = window.createMonster(config.base, lastSpawnHex, config.skills, config.equipment, 'enemy');
-        boss.name = bossName;
+        // Bosses with real class levels (currently just Sir Alistair) are
+        // built the same way hand-authored NPCs are (see buildNPC in
+        // npcBuilder.js) instead of createMonster's flat monster template —
+        // he's a genuine human fighter/cleric, not a reskinned orc.
+        let boss;
+        if (config.classLevels) {
+            boss = window.buildNPC({
+                name: bossName, race: config.race, gender: config.gender,
+                hex: lastSpawnHex, classLevels: config.classLevels,
+                skillPicks: config.skillPicks, equipment: config.equipment,
+                side: 'enemy', color: config.color, expValue: config.expValue
+            });
+            boss.isNPC = false; // a real combatant, not a talk-to NPC
+        } else {
+            boss = window.createMonster(config.base, lastSpawnHex, config.skills, config.equipment, 'enemy');
+            boss.name = bossName;
+        }
         if (config.hp) { boss.hp = config.hp; boss.maxHp = config.hp; }
         if (config.mana) { boss.currentMana = config.mana; boss.maxMana = config.mana; }
         if (config.gender) boss.gender = config.gender;
         if (config.race) boss.race = config.race;
         if (config.color) boss.color = config.color;
-        
+        // Lets the turn-indicator portrait (ui.js) pick the right fallback
+        // image for renamed bosses without a race (e.g. Grishnak -> orc.png)
+        // instead of always defaulting to goblin.png once e.name no longer
+        // matches a generic monster name.
+        boss.spriteBase = config.base;
+
         if (config.spells) {
             boss.createdSpells = boss.createdSpells || [];
             config.spells.forEach(s => boss.createdSpells.push({...s}));
@@ -4079,13 +4099,26 @@ function startArenaFight() {
         window.entities.push(boss);
         console.log(`Spawned BOSS ${bossName} at {q: ${lastSpawnHex.q}, r: ${lastSpawnHex.r}}`);
 
-        // Spawn some guards
+        // Spawn some guards — a human squire for bosses that define one
+        // (guardRace), otherwise the boss's own monster-type muscle.
         for (let i = 0; i < 2; i++) {
             const neighbors = window.getNeighbors(lastSpawnHex.q, lastSpawnHex.r);
             const valid = neighbors.filter(h => validHexes.some(vh => vh.q === h.q && vh.r === h.r));
             const spawnHex = valid.length > 0 ? valid[Math.floor(Math.random() * valid.length)] : lastSpawnHex;
-            const m = window.createMonster(config.base, spawnHex, null, null, 'enemy');
-            window.entities.push(m);
+            if (config.guardRace) {
+                const guard = window.buildNPC({
+                    name: i === 0 ? config.guardName : `${config.guardName} II`,
+                    title: config.guardTitle, race: config.guardRace, gender: config.guardGender,
+                    hex: spawnHex, classLevels: config.guardClassLevels,
+                    skillPicks: config.guardSkillPicks, equipment: config.guardEquipment,
+                    side: 'enemy', expValue: config.guardExpValue
+                });
+                guard.isNPC = false;
+                window.entities.push(guard);
+            } else {
+                const m = window.createMonster(config.base, spawnHex, null, null, 'enemy');
+                window.entities.push(m);
+            }
         }
     } else {
         // Normal encounter

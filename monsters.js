@@ -311,26 +311,36 @@ const arenaBosses = {
         equipment: ['light_armor']
     },
     'Sir Alistair': {
-        base: 'orc',
-        // Stat template only — "base: 'orc'" just borrows the orc's tankier
-        // baseline stats, but he's written and voiced as a human paladin
-        // knight (title, heal spell, heavy armor + shield), so he renders
-        // through the same layered human/elf/dwarf sprite system real party
-        // members use (see the boss-spawn code in gameEngine.js) instead of
-        // a flat monster image — that's also what was making him render as
-        // a plain goblin (the generic monster sprite path's image lookup is
-        // keyed by e.name, and "Sir Alistair" never matched "Orc").
+        // Built like a real hand-authored NPC (see window.buildNPC in
+        // npcBuilder.js) — race + class levels -> attribute pool -> skills
+        // purchased from it — rather than a flat ad hoc skills dict, since
+        // he's a genuine human fighter/cleric paladin, not a reskinned orc.
+        // See the boss-spawn code in gameEngine.js for where classLevels
+        // triggers the buildNPC path instead of createMonster.
         race: 'human',
         color: '#ffd700',
         gender: 'male',
         hp: 50,
         mana: 30,
+        expValue: 400,
         dialogue: 'alistair_entry',
-        skills: { 'learn_heal': 1, 'divine_mana': 2, 'heavy_armor_training': 1, 'shield_proficiency': 1, 'sword_hit': 1, 'sword_dmg': 1, 'shield_bash': 1 },
+        classLevels: ['fighter', 'fighter', 'cleric'],
+        skillPicks: ['health', 'health', 'sword_hit', 'sword_dmg', 'heavy_armor_training', 'shield_proficiency', 'shield_bash', 'learn_heal', 'divine_mana', 'divine_mana'],
         spells: [
             { name: "Heal", baseId: 'heal', type: 'heal', school: 'divine', manaCost: 10, tpCost: 10, range: 5, magnitude: 15 }
         ],
-        equipment: ['heavy_armor', 'sword', 'wooden_shield']
+        equipment: ['heavy_armor', 'sword', 'wooden_shield'],
+        // A squire backing him up instead of the orc/goblin muscle every
+        // other boss gets — another human, built the same way, just at a
+        // lower class level.
+        guardName: 'Squire Bram',
+        guardTitle: 'Squire',
+        guardRace: 'human',
+        guardGender: 'male',
+        guardClassLevels: ['fighter'],
+        guardSkillPicks: ['health', 'sword_hit', 'sword_dmg', 'light_armor_training'],
+        guardEquipment: ['sword', 'light_armor'],
+        guardExpValue: 120
     },
     'Viper': {
         base: 'elite_goblin',
