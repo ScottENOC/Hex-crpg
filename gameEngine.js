@@ -326,23 +326,23 @@ function getNpcSchedules() {
             { start: 6, end: 24, hex: { q: -3, r: -2 } },  // behind the bar
         ],
         'Wick Hallow': [
-            { start: 0, end: 7, hex: { q: 3, r: 17 } },    // bed corner in the back of the store
-            { start: 7, end: 24, hex: { q: 0, r: 16 } },   // behind the counter
+            { start: 0, end: 7, hex: { q: 3, r: 19 } },    // bed corner in the back of the store
+            { start: 7, end: 24, hex: { q: 0, r: 18 } },   // behind the counter
         ],
         'Mira Ashbrook': [
-            { start: 0, end: 9, hex: { q: 4, r: 9 } },     // home
+            { start: 0, end: 9, hex: { q: 6, r: 9 } },     // home
             { start: 9, end: 23, hex: { q: 2, r: -2 } },   // her usual tavern spot
-            { start: 23, end: 24, hex: { q: 4, r: 9 } },
+            { start: 23, end: 24, hex: { q: 6, r: 9 } },
         ],
         'Oskar Vinn': [
-            { start: 0, end: 10, hex: { q: -4, r: 9 } },   // home
+            { start: 0, end: 10, hex: { q: -6, r: 9 } },   // home
             { start: 10, end: 23, hex: { q: 3, r: -2 } },  // his usual tavern spot
-            { start: 23, end: 24, hex: { q: -4, r: 9 } },
+            { start: 23, end: 24, hex: { q: -6, r: 9 } },
         ],
         ...(farmHome ? {
             'Old Mac': [
                 { start: 0, end: 13, hex: { q: farmHome.q + 1, r: farmHome.r } },       // home/farm all morning
-                { start: 13, end: 13.17, hex: { q: 0, r: 13 } },                          // ~10 min errand at the general store
+                { start: 13, end: 13.17, hex: { q: 0, r: 15 } },                          // ~10 min errand at the general store
                 { start: 13.17, end: 19, hex: { q: -3, r: -2 } },                         // evening at the tavern
                 { start: 19, end: 24, hex: { q: farmHome.q + 1, r: farmHome.r } },        // home for the night
             ],
@@ -366,25 +366,6 @@ function updateNpcSchedules() {
 }
 window.updateNpcSchedules = updateNpcSchedules;
 
-window.restGuardShiftEnabled = false;
-function toggleGuardShiftRest() {
-    window.restGuardShiftEnabled = !window.restGuardShiftEnabled;
-    const partySize = window.entities.filter(e => e.alive && e.side === 'player' && !e.aiControlled && !e.rider).length;
-    if (window.restGuardShiftEnabled) {
-        if (partySize >= 4) {
-            window.showMessage("Guard shifts set: one of you stays awake and watching at all times through an 8-hour rest, rotating who.");
-        } else if (partySize === 3) {
-            window.showMessage("Guard shifts set: three-way rotation, everyone gets real sleep across a 10-hour rest.");
-        } else {
-            window.showMessage("You don't have enough people to run a real watch rotation — someone still has to sleep sometime.");
-            window.restGuardShiftEnabled = false;
-        }
-    } else {
-        window.showMessage("Guard shifts off.");
-    }
-    if (window.updateRestButton) window.updateRestButton();
-}
-window.toggleGuardShiftRest = toggleGuardShiftRest;
 
 // Innkeeper-hosted rest: always safe (no ambush roll) for a flat 1 gold.
 function restAtInn(npc) {

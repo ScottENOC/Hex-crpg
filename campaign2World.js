@@ -451,16 +451,21 @@ function setupVillageScene(forLoadOnly = false) {
     // facing the tavern's door across a short stretch of path, so the two
     // busiest buildings read as facing each other rather than the tavern's
     // only entrance opening onto nothing.
-    const generalStoreRegion = carveBuilding(0, 16, 4, 3, { q: 0, r: 13 }, 'Wood Floor');
-    window.tileObjects['0,15'] = { type: 'table', lightRadius: 0 }; // counter
+    // Pushed 2 hexes further south than the original placement, and Mira's/
+    // Oskar's houses pushed 2 hexes further out (see below) — the original
+    // cluster left the general store's approach corridor too tight against
+    // both houses, with the east house's floor reaching into where the path
+    // was meant to run.
+    const generalStoreRegion = carveBuilding(0, 18, 4, 3, { q: 0, r: 15 }, 'Wood Floor');
+    window.tileObjects['0,17'] = { type: 'table', lightRadius: 0 }; // counter
 
     // Small homes for the tavern's regular patrons — Mira and Oskar go back
     // to these at night instead of just existing at the tavern forever (see
     // updateNpcSchedules in gameEngine.js). Tucked either side of the
     // general-store approach path so a short spur reaches the existing
     // north-south path column instead of needing a whole new route.
-    const miraHouseRegion = carveBuilding(4, 9, 2, 2, { q: 2, r: 9 }, 'Wood Floor');
-    const oskarHouseRegion = carveBuilding(-4, 9, 2, 2, { q: -2, r: 9 }, 'Wood Floor');
+    const miraHouseRegion = carveBuilding(6, 9, 2, 2, { q: 4, r: 9 }, 'Wood Floor');
+    const oskarHouseRegion = carveBuilding(-6, 9, 2, 2, { q: -4, r: 9 }, 'Wood Floor');
 
     // Quest item for "A Missing Locket" (Elder Marta) — tucked in the chapel.
     window.mapItems['-14,0'] = ['elder_locket'];
@@ -520,9 +525,14 @@ function setupVillageScene(forLoadOnly = false) {
     paintPath([[0, -9], [0, -8], [0, -7]]); // house door (0,-10) -> north ring
     paintPath([[9, 0]]); // store door (10,0) -> east ring
     paintPath([[-10, 0], [-9, 0]]); // chapel door (-11,0) -> west ring
-    paintPath([[0, 7], [0, 8], [0, 9], [0, 10], [0, 11], [0, 12]]); // general store door (0,13) -> south ring
-    paintPath([[1, 9]]); // Mira's house door (2,9) -> general store spur
-    paintPath([[-1, 9]]); // Oskar's house door (-2,9) -> general store spur
+    paintPath([[0, 7], [0, 8], [0, 9], [0, 10], [0, 11], [0, 12], [0, 13]]);
+    // (0,14) is a real wall tile — a row-shift-seam artifact of the store's
+    // own wall ring reaching one hex further out than its flat footprint
+    // would suggest (see wallRingAroundFloor) — so the last step to the door
+    // steps diagonally around it instead of straight through it.
+    paintPath([[1, 14]]); // general store door (0,15) -> south ring, around the seam wall at (0,14)
+    paintPath([[1, 9], [2, 9], [3, 9]]); // Mira's house door (4,9) -> general store spur
+    paintPath([[-1, 9], [-2, 9], [-3, 9]]); // Oskar's house door (-4,9) -> general store spur
 
     // --- Permanent companion: a real party member (not a conditional tavern
     // ally like Garrick/Mira/Oskar) who stays regardless of what the player
@@ -569,7 +579,7 @@ function setupVillageScene(forLoadOnly = false) {
         'Garrick Holt': { q: -3, r: -2 },
         'Mira Ashbrook': { q: 2, r: -2 },
         'Oskar Vinn': { q: 3, r: -2 },
-        'Wick Hallow': { q: 0, r: 16 }
+        'Wick Hallow': { q: 0, r: 18 }
     };
     (window.campaign2Npcs || []).forEach(spec => {
         const hex = npcHexes[spec.name] || { q: 0, r: -2 };

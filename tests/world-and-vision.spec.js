@@ -18,7 +18,7 @@ test.describe('village map and vision', () => {
             storeInterior: window.getTerrainAt(14, 0).name,
             chapelInterior: window.getTerrainAt(-14, 0).name,
             houseInterior: window.getTerrainAt(0, -12).name,
-            generalStoreInterior: window.getTerrainAt(0, 16).name,
+            generalStoreInterior: window.getTerrainAt(0, 18).name,
             interiorRegionCount: window.interiorRegions.length,
         }));
         expect(check.tavernFloor).toBe('Wood Floor');

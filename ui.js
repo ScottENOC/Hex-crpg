@@ -161,11 +161,13 @@ function toggleRest() {
         showMessage("Resting until restored...");
         if (window.showTutorialTip) window.showTutorialTip('resting', "Resting fast-forwards time to recover HP/TP/mana. Out in the wilderness it isn't fully safe — you rest without armor on and there's a chance of being caught out, worse in less secure regions. Towns, inns, and empty buildings are safer.");
 
-        // One ambush roll per rest attempt — guard shifts (enough party
-        // members to keep a watch) cancel it entirely, an inn room is
-        // handled separately by restAtInn (always safe).
+        // One ambush roll per rest attempt — a big enough party (3+) always
+        // keeps a watch rotation going and cancels it entirely, no toggle
+        // needed. An inn room is handled separately by restAtInn (always safe).
         const inArenaLobby = window.currentCampaign === "1";
-        if (!window.restGuardShiftEnabled && !window.isInArena && !inArenaLobby) {
+        const partySize = window.entities.filter(e => e.alive && e.side === 'player' && !e.aiControlled && !e.rider).length;
+        const hasGuardShift = partySize >= 3;
+        if (!hasGuardShift && !window.isInArena && !inArenaLobby) {
             const indoors = window.isPlayerIndoors && window.isPlayerIndoors();
             const chance = indoors ? 0.10 : (window.getWildernessAmbushChance ? window.getWildernessAmbushChance() : 0.2);
             if (Math.random() < chance) {
@@ -604,19 +606,6 @@ function updateActionButtons() {
     
     buttonsDiv.innerHTML = '';
 
-    // INFO MODE: hovering for a title= tooltip doesn't work on touch or
-    // gamepad. Toggling this makes the next action-button tap/click show
-    // its description via showMessage instead of performing the action.
-    const infoBtn = document.createElement('button');
-    infoBtn.id = 'action-info-mode-btn';
-    infoBtn.innerText = window.actionInfoMode ? 'Info: ON' : 'ⓘ Info';
-    infoBtn.style.backgroundColor = window.actionInfoMode ? '#ffd700' : '#455a64';
-    infoBtn.style.color = window.actionInfoMode ? '#000' : '#ccc';
-    const infoAction = () => { window.actionInfoMode = !window.actionInfoMode; updateActionButtons(); };
-    infoBtn.onclick = infoAction;
-    infoBtn.ontouchstart = (e) => { e.preventDefault(); infoAction(); };
-    buttonsDiv.appendChild(infoBtn);
-
     const inCombat = window.isInCombat;
     let player = inCombat ? window.currentTurnEntity : window.player;
     
@@ -882,7 +871,6 @@ function updateActionButtons() {
                         button.title = skill.description || label;
                         button.disabled = isCasting;
                         button.onclick = () => {
-                            if (window.actionInfoMode) { window.showMessage(skill.description || label); return; }
                             window.playerAction = { type: 'skill', id: skillKey };
                             window.showMessage(`Action set to: ${skill.name}. Click on a target.`);
                             updateActionButtons();
@@ -902,7 +890,6 @@ function updateActionButtons() {
                 button.title = spellInfo;
                 button.disabled = isCasting || (player.timePoints < spell.tpCost);
                 button.onclick = () => {
-                    if (window.actionInfoMode) { window.showMessage(spellInfo); return; }
                     window.playerAction = { type: 'spell', index: index, targets: [] };
                     const targetStr = (spell.extraTargets || 0) > 0 ? `Select up to ${1 + spell.extraTargets} targets.` : "Click a target.";
                     window.showMessage(`Spell ready: ${spell.name}. ${targetStr} Range (${spell.range}).`);

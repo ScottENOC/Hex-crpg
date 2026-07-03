@@ -305,13 +305,6 @@ document.addEventListener("DOMContentLoaded", () => {
             window.cancelAllMoveOrders();
         } else if (btnId === "rest-btn") {
             window.toggleRest();
-        } else if (btnId === "guard-shift-btn") {
-            window.toggleGuardShiftRest();
-            const gsBtn = document.getElementById("guard-shift-btn");
-            if (gsBtn) {
-                gsBtn.innerText = `Guard Shifts: ${window.restGuardShiftEnabled ? 'ON' : 'OFF'}`;
-                gsBtn.style.backgroundColor = window.restGuardShiftEnabled ? '#2e7d32' : '#455a64';
-            }
         } else if (btnId === "sleep-btn") {
             window.toggleSleep();
         } else if (btnId === "time-speed-btn") {
