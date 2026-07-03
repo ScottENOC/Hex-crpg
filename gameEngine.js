@@ -494,7 +494,7 @@ function updatePlayerUI() {
         if (target && target.side === 'enemy') {
             const bothFlying = player.isFlying && target.isFlying;
             const eitherFlying = player.isFlying || target.isFlying;
-            if (isRanged || !eitherFlying || bothFlying) {
+            if ((isRanged || !eitherFlying || bothFlying) && window.hasLineOfSight(player.hex, h)) {
                 window.highlightedHexes.push({ ...h, type: 'attack' });
             }
         }
@@ -1129,7 +1129,22 @@ function renderEntities() {
       if (t.name === 'Pedestal') {
           y -= (window.hexSize * 0.6) * z; // 30% of hex height (2*size is full height)
       }
-      
+
+      // ALLEGIANCE OUTLINE: a fight with several factions in the same room
+      // (the tavern brawl, an arena boss + guards, a goblin camp) is hard to
+      // read from sprite color alone — party/temporary-ally/bystander/enemy
+      // each get their own hex outline color, drawn under the sprite.
+      if (e.alive && !e.rider) {
+          let allegianceColor = null;
+          if (e.side === 'enemy') allegianceColor = '#ff3b3b';
+          else if (e.side === 'player' && e.aiControlled) allegianceColor = '#00e5ff';
+          else if (e.side === 'player') allegianceColor = '#4da6ff';
+          else if (e.side === 'neutral') allegianceColor = '#ffd700';
+          if (allegianceColor) {
+              window.drawHex(x, y, window.hexSize, { stroke: allegianceColor, lineWidth: 2.5 * z });
+          }
+      }
+
           if (e.isStealthed) window.mapCtx.globalAlpha = 0.5;
           if (e.unconscious) window.mapCtx.globalAlpha = 0.4;
           const isSentientAlly = e.side === 'player' && !e.aiControlled && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(e.name);
@@ -1409,6 +1424,7 @@ function tick() {
                 if (ent.moveCooldown === undefined) ent.moveCooldown = 0;
 
                 ent.moveCooldown -= scaledDt;
+                let steppedThisTick = false;
                 // Loop to handle overage that might cover multiple hexes
                 while (ent.moveCooldown <= 0 && ent.destination) {
                     const overage = Math.abs(ent.moveCooldown);
@@ -1417,6 +1433,14 @@ function tick() {
                         ent.moveCooldown = 0;
                         break;
                     }
+                    steppedThisTick = true;
+                }
+                // Attack range/highlighting is otherwise only refreshed on a
+                // throttled ~1s timer out of combat, so closing the last hex
+                // of distance to an enemy could leave the action bar showing
+                // stale "too far to attack" info until the next click.
+                if (steppedThisTick && ent.side === 'player' && window.updateActionButtons) {
+                    window.updateActionButtons();
                 }
             } else {
                 ent.moveCooldown = 0;
@@ -1841,6 +1865,11 @@ function autoMoveProcess(entity) {
         if (entity.hex.q === entity.destination.q && entity.hex.r === entity.destination.r) {
             entity.destination = null;
         }
+
+        // Same reasoning as the out-of-combat real-time step above — without
+        // this, closing distance on a target mid-turn could leave attack
+        // range/highlighting stale until the next click.
+        if (entity.side === 'player' && window.updateActionButtons) window.updateActionButtons();
 
         setTimeout(() => autoMoveProcess(entity), waitTime);
         } else {        if (window.distance(entity.hex, entity.destination) > 0) {
@@ -2360,9 +2389,14 @@ function aiProcess(entity) {
         const bestHex = neighbors.map(h => {
             let s = -window.distance(h, huntTargetHex);
             const t = window.getTerrainAt(h.q, h.r);
-            if (t.name === 'Wall') s += 5;
+            // Was "+= 5" — a sign flip that made a Wall hex score BETTER than
+            // an open one at the same distance, so chasing enemies picked
+            // walls as their preferred step and then failed to path onto
+            // them (findPath rightly refuses), leaving them stuck bumping
+            // into the wall instead of routing around it.
+            if (t.name === 'Wall') s -= 20;
             if (t.name === 'Water') s -= 10;
-            if (getEntityAtHex(h.q, h.r)) s -= 5; 
+            if (getEntityAtHex(h.q, h.r)) s -= 5;
             return {h, s};
         }).sort((a,b) => b.s - a.s)[0].h;
 

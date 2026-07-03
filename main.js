@@ -308,6 +308,8 @@ document.addEventListener("DOMContentLoaded", () => {
             window.toggleSleep();
         } else if (btnId === "time-speed-btn") {
             window.toggleTimeSpeed();
+        } else if (btnId === "controller-mode-btn") {
+            if (window.toggleControllerMode) window.toggleControllerMode();
         }
     });
 
