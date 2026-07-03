@@ -16,6 +16,26 @@ const items = {
     
     'wooden_shield': { id: 'wooden_shield', name: 'Wooden Shield', type: 'shield', reduction: 1, hands: 1, buyPrice: 20 },
 
+    // Mining tool — a weak weapon in a pinch, but its real job is unlocking
+    // ore-node harvesting for the whole party just by being carried (see
+    // harvestOreNode in resources.js).
+    'pickaxe': { id: 'pickaxe', name: 'Pickaxe', type: 'weapon', subType: 'melee', damage: 1, range: 0, hands: 1, buyPrice: 15, description: 'Better for breaking rock than fighting. Carrying one unlocks mining.' },
+
+    // Gathered wilderness resources — mundane goods, not magic items. Sold
+    // for modest gold, donated to raise a region's prosperity, or (food only)
+    // eaten for the non-healing "Well Fed" buff. See resources.js.
+    'fruit': { id: 'fruit', name: 'Wild Fruit', type: 'food', sellPrice: 1, description: 'Foraged from a fruiting tree.' },
+    'fish': { id: 'fish', name: 'Fresh Fish', type: 'food', sellPrice: 2, description: 'Caught from a quiet stretch of water.' },
+    'herbs': { id: 'herbs', name: 'Wild Herbs', type: 'resource', sellPrice: 2, description: 'Common medicinal and cooking herbs.' },
+    'game_meat': { id: 'game_meat', name: 'Game Meat', type: 'food', sellPrice: 3, description: "Harvested from an animal's corpse." },
+    'hide': { id: 'hide', name: 'Hide', type: 'resource', sellPrice: 4, description: "A tanned-worthy hide, harvested from an animal's corpse." },
+    'ore_iron': { id: 'ore_iron', name: 'Iron Ore', type: 'resource', sellPrice: 5, description: 'Common ore, the backbone of most tools and arms.' },
+    'ore_silver': { id: 'ore_silver', name: 'Silver Ore', type: 'resource', sellPrice: 12, description: 'Uncommon ore, prized for fine jewelry and coin.' },
+    'ore_gold': { id: 'ore_gold', name: 'Gold Ore', type: 'resource', sellPrice: 20, description: 'Rare ore, valuable and soft.' },
+    'gem_red': { id: 'gem_red', name: 'Red Gem', type: 'resource', sellPrice: 30, description: 'A rare, uncut gemstone — flavor and favor, nothing more.' },
+    'gem_blue': { id: 'gem_blue', name: 'Blue Gem', type: 'resource', sellPrice: 30, description: 'A rare, uncut gemstone — flavor and favor, nothing more.' },
+    'gem_green': { id: 'gem_green', name: 'Green Gem', type: 'resource', sellPrice: 30, description: 'A rare, uncut gemstone — flavor and favor, nothing more.' },
+
     // Magic Items
     // Deliberately avoid flat +hit/+damage stacking (bounded accuracy) —
     // these lean on situational effects, skill grants already consumed

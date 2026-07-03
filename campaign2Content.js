@@ -269,11 +269,11 @@ window.campaign2Elder = {
 // roguelike (equipment.js's buyPrice is shared, not duplicated here), but
 // with limited stock — a village store, not an unlimited armory. Heavier
 // pieces (medium armor, the helm) are scarcer than basic weapons.
-window.hollowmereStoreItems = ['club', 'sword', 'axe', 'spear', 'dagger', 'light_armor', 'medium_armor', 'wooden_shield', 'nasal_helm', 'torch', 'potion_health'];
+window.hollowmereStoreItems = ['club', 'sword', 'axe', 'spear', 'dagger', 'light_armor', 'medium_armor', 'wooden_shield', 'nasal_helm', 'torch', 'potion_health', 'pickaxe'];
 window.hollowmereStoreStock = {
     club: 3, sword: 2, axe: 2, spear: 2, dagger: 3,
     light_armor: 2, medium_armor: 1, wooden_shield: 2, nasal_helm: 1,
-    torch: 5, potion_health: 4
+    torch: 5, potion_health: 4, pickaxe: 2
 };
 
 // Emberlode: a mining settlement two world-hexes west of Hollowmere, past

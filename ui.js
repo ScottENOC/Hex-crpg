@@ -1160,6 +1160,7 @@ function showInventoryScreen() {
                 ${available > 0 && (item.type !== 'consumable' && item.type !== 'shield') ? `<button onclick="window.equipItem('${itemId}')">Equip</button>` : ''}
                 ${showOffhandBtn ? `<button onclick="window.equipItem('${itemId}', true)" style="margin-left:5px;">Equip Off-hand</button>` : ''}
                 ${item.type === 'consumable' && available > 0 ? `<button onclick="window.drinkPotion('${itemId}')">Drink</button>` : ''}
+                ${item.type === 'food' && available > 0 ? `<button onclick="window.eatFood('${itemId}')">Eat</button>` : ''}
             </div>`;
         });
     }
@@ -1960,7 +1961,9 @@ function openShop(options) {
     for (const id in counts) {
         const item = window.items[id];
         if (!item) continue;
-        const sellPrice = Math.floor((item.buyPrice || 0) * 0.5);
+        // Gathered raw materials (food/resource items) aren't buyable, so they
+        // carry an explicit sellPrice instead of half a buyPrice.
+        const sellPrice = item.sellPrice || Math.floor((item.buyPrice || 0) * 0.5);
         if (sellPrice <= 0) continue;
 
         const div = document.createElement("div");

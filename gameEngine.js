@@ -3,6 +3,12 @@
 window.gamePhase = 'WAITING'; // WAITING, PLAYER_TURN, AI_TURN
 window.isPausedForReaction = false;
 
+// Ore-vein tint per resource type — flavor only (see the design notes in
+// resources.js), reusing the same hue-tint system as recolored monster
+// sprites. Iron is left untinted (the vein art's own neutral tan/brown
+// already reads as "common ore").
+const ORE_HUES = { ore_silver: 220, ore_gold: 48, gem_red: 0, gem_blue: 210, gem_green: 130 };
+
 // Broadcast a message to all connected clients. On non-host or single-player
 // this is identical to showMessage. On host in multiplayer the text is also
 // emitted so every instance sees the same combat/narrative log.
@@ -224,7 +230,13 @@ window.isBuildingOccupied = isBuildingOccupied;
 // uses (campaign2Dialogue.js).
 function getWildernessAmbushChance() {
     const security = window.regions?.hollowmere?.security ?? 50;
-    return Math.max(0.05, Math.min(0.45, 0.45 - security / 120));
+    let chance = Math.max(0.05, Math.min(0.45, 0.45 - security / 120));
+    // Well Fed (see resources.js's eatFood): a mundane, non-healing benefit
+    // from gathered food, same idea as the Survival skill's own reduction.
+    if (window.isWellFed && window.isWellFed(window.player)) chance *= 0.7;
+    const survivalRank = window.player?.skills?.survival || 0;
+    if (survivalRank > 0) chance *= Math.max(0.4, 1 - survivalRank * 0.2);
+    return chance;
 }
 window.getWildernessAmbushChance = getWildernessAmbushChance;
 
@@ -908,6 +920,8 @@ function startGameCore(isLoading = false) {
       axe: new Image(),
       troll: new Image(),
       dragon: new Image(),
+      ore_vein: new Image(),
+      tree_large: new Image(),
       spear: new Image(),
       club: new Image(),
       giant_club: new Image(),
@@ -991,6 +1005,8 @@ function startGameCore(isLoading = false) {
   visuals.axe.onload = () => { window.drawMap(); };
   visuals.troll.onload = () => { window.drawMap(); };
   visuals.dragon.onload = () => { window.drawMap(); };
+  visuals.ore_vein.onload = () => { window.drawMap(); };
+  visuals.tree_large.onload = () => { window.drawMap(); };
   visuals.spear.onload = () => { window.drawMap(); };
   visuals.club.onload = () => { window.drawMap(); };
   visuals.giant_club.onload = () => { window.drawMap(); };
@@ -1075,6 +1091,8 @@ function startGameCore(isLoading = false) {
   visuals.axe.src = 'images/axe.png';
   visuals.troll.src = 'images/troll.png';
   visuals.dragon.src = 'images/dragon.svg';
+  visuals.ore_vein.src = 'images/ore_vein.svg';
+  visuals.tree_large.src = 'images/tree_large.svg';
   visuals.spear.src = 'images/spear.png';
   visuals.club.src = 'images/club.svg';
   visuals.giant_club.src = 'images/giant_club.png';
@@ -1476,6 +1494,46 @@ function renderEntities() {
               window.mapCtx.drawImage(window.gameVisuals.hut_large, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'journal' && window.gameVisuals.journal.complete) {
               window.mapCtx.drawImage(window.gameVisuals.journal, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'ore_node' && window.gameVisuals.ore_vein.complete) {
+              // Depleted veins fade out until they regrow (see harvestOreNode).
+              let img = window.gameVisuals.ore_vein;
+              const hue = ORE_HUES[obj.oreType];
+              if (hue !== undefined && window.getRecoloredHairSprite) {
+                  const tinted = window.getRecoloredHairSprite(img, hue);
+                  if (tinted) img = tinted;
+              }
+              if (obj.depleted) window.mapCtx.globalAlpha = 0.3;
+              window.mapCtx.drawImage(img, x - size/2, y - size/2, size, size);
+              if (obj.depleted) window.mapCtx.globalAlpha = 1.0;
+          } else if (obj.type === 'fruit_tree' && window.gameVisuals.tree_large.complete) {
+              // Larger than the decorative small trees, and tinted warm/ripe
+              // when it actually has fruit to harvest, its natural green otherwise.
+              let img = window.gameVisuals.tree_large;
+              if (obj.hasFruit && window.getRecoloredHairSprite) {
+                  const tinted = window.getRecoloredHairSprite(img, 25, 1, 1.3); // warm orange-red, fruit-laden
+                  if (tinted) img = tinted;
+              }
+              const tSize = size * 2.2;
+              const th = tSize * (window.gameVisuals.tree_large.naturalHeight / window.gameVisuals.tree_large.naturalWidth);
+              window.mapCtx.drawImage(img, x - tSize / 2, y + size * 0.5 - th, tSize, th);
+          } else if (obj.type === 'herb_patch' && window.gameVisuals.foliage.complete) {
+              const hSize = size * 0.6;
+              window.mapCtx.globalAlpha = obj.hasHerbs ? 1.0 : 0.35;
+              window.mapCtx.drawImage(window.gameVisuals.foliage, x - hSize/2, y - hSize/2, hSize, hSize);
+              window.mapCtx.globalAlpha = 1.0;
+          } else if (obj.type === 'corpse' && !obj.harvested) {
+              window.mapCtx.globalAlpha = 0.7;
+              window.mapCtx.fillStyle = '#5a3d2b';
+              window.mapCtx.beginPath();
+              window.mapCtx.ellipse(x, y, size * 0.35, size * 0.2, 0, 0, Math.PI * 2);
+              window.mapCtx.fill();
+              window.mapCtx.globalAlpha = 1.0;
+          } else if (obj.type === 'fishing_spot') {
+              const ready = (window.worldSeconds - (obj.lastFishedAt || 0)) >= 4 * 3600;
+              window.mapCtx.fillStyle = ready ? '#dff' : '#89a';
+              window.mapCtx.beginPath();
+              window.mapCtx.ellipse(x, y, size * 0.15, size * 0.08, 0, 0, Math.PI * 2);
+              window.mapCtx.fill();
           }
       }
   }
@@ -3110,6 +3168,16 @@ function handleClick(e){
         return;
     }
 
+    // HARVEST RESOURCE NODES / CORPSES — same priority tier as the journal
+    // click above. See resources.js for the actual harvest logic.
+    if (doorObj && window.distance(player.hex, clickedHex) <= 1) {
+        if (doorObj.type === 'ore_node' && window.harvestOreNode) { window.harvestOreNode(clickedHex.q, clickedHex.r); return; }
+        if (doorObj.type === 'fruit_tree' && window.harvestFruitTree) { window.harvestFruitTree(clickedHex.q, clickedHex.r); return; }
+        if (doorObj.type === 'herb_patch' && window.harvestHerbPatch) { window.harvestHerbPatch(clickedHex.q, clickedHex.r); return; }
+        if (doorObj.type === 'fishing_spot' && window.harvestFishingSpot) { window.harvestFishingSpot(clickedHex.q, clickedHex.r); return; }
+        if (doorObj.type === 'corpse' && window.harvestCorpse) { window.harvestCorpse(clickedHex.q, clickedHex.r); return; }
+    }
+
     // ASSASSINATE THE GOBLIN CHIEF — a stealthed player adjacent to the
     // still-unaware chief can end the whole camp's leadership in one
     // stroke, ahead of the normal talk/attack handling below.
@@ -3651,6 +3719,7 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   const attackerTerrain = window.getTerrainAt(attacker.hex.q, attacker.hex.r);
   const targetTerrain = window.getTerrainAt(target.hex.q, target.hex.r);
   let hitChance = 50 + baseHit + attackerTerrain.hitBonus - (target.passiveDodge + targetTerrain.dodgeBonus);
+  if (attacker.toHitVsAnimal && target.tags?.includes('animal')) hitChance += attacker.toHitVsAnimal;
   
   // FOLIAGE DEFENSE
   if (targetTerrain.name === 'Foliage') {
@@ -3863,6 +3932,11 @@ function handleLethalDamage(target, attacker) {
 
     target.alive = false; window.showMessage(`${target.name} defeated!`);
     const side = target.side;
+
+    // Leave a harvestable corpse behind for animal-tagged kills (see
+    // leaveCorpse/harvestCorpse in resources.js) — gated on Knowledge:
+    // Nature's nature_butchery sub-skill, not the base skill itself.
+    if (target.tags?.includes('animal') && window.leaveCorpse) window.leaveCorpse(target);
 
     // ROGUELIKE: Remove from graveyard if a graveyard merc dies
     if (target.isGraveyardMerc) {

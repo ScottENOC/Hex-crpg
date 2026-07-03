@@ -13,7 +13,8 @@ const terrainTypes = {
     'path': { name: 'Path', color: '#c2a878', moveCostMult: 0.9, hitBonus: 0, dodgeBonus: 0, stealthBonus: -10 },
     'dirt': { name: 'Dirt', color: '#8a6d4a', moveCostMult: 1, hitBonus: 0, dodgeBonus: 0, stealthBonus: -15 },
     'pedestal': { name: 'Pedestal', color: '#888', moveCostMult: 2, hitBonus: 10, dodgeBonus: -5, stealthBonus: 0, blocksLOS: true },
-    'foliage': { name: 'Foliage', color: '#2e7d32', moveCostMult: 1.5, hitBonus: -10, dodgeBonus: 15, stealthBonus: 40 }
+    'foliage': { name: 'Foliage', color: '#2e7d32', moveCostMult: 1.5, hitBonus: -10, dodgeBonus: 15, stealthBonus: 40 },
+    'rocky_outcrop': { name: 'Rocky Outcrop', color: '#8a7f6b', moveCostMult: 1.5, hitBonus: 5, dodgeBonus: 0, stealthBonus: 0 }
 };
 
 window.mapItems = {}; // Key format: "q,r", Value: array of item IDs
@@ -69,10 +70,26 @@ function getTerrainAt(q, r) {
     // ROGUELIKE: If in arena and no override, it's effectively "void" (Wall)
     if (window.isInArena) return terrainTypes['wall'];
 
-    // CAMPAIGN 2: hand-crafted small world, no procedural biome map exists.
-    // Unpainted hexes default to grass instead of falling through to the
-    // out-of-bounds water fallback below.
-    if (window.currentCampaign === '2') return terrainTypes['grass'];
+    // CAMPAIGN 2: hand-crafted village/roads/river (all setTerrainAt overrides,
+    // checked above) sit inside a wider hand-crafted "safe" radius that's
+    // flat grass on purpose. Past that, unpainted hexes get sparse procedural
+    // forest/rocky-outcrop clumps instead of flat grass forever in every
+    // direction — the same coarse-cell-noise clump trick as the village's own
+    // isForestClump, just generalized so cross-country wilderness isn't
+    // completely barren. Resource nodes (ore/fruit/herbs) are layered onto
+    // qualifying terrain separately, lazily, as hexes are explored (see
+    // ensureWildernessResourceNode in resources.js).
+    if (window.currentCampaign === '2') {
+        if (Math.abs(q) <= 32 && Math.abs(r) <= 32) return terrainTypes['grass'];
+        const cellSize = 5;
+        const cellQ = Math.floor(q / cellSize);
+        const cellR = Math.floor(r / cellSize);
+        const cellNoise = pseudoRandom(cellQ * 3.1 + 7, cellR * 4.3 + 13);
+        const hexNoise = pseudoRandom(q * 1.3 + 4, r * 1.7 + 9);
+        if (cellNoise > 0.88) return terrainTypes['rocky_outcrop'];
+        if (cellNoise > 0.55 && hexNoise < 0.5) return terrainTypes['forest'];
+        return terrainTypes['grass'];
+    }
 
     // 1. Determine World Biome
     const worldPos = battleToWorld(q, r);

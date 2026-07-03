@@ -114,6 +114,21 @@ window.npcDialogueTrees = {
     wick_hallow: (npc) => {
         window.showDialogue(npc, "Welcome to Hallow's Goods. Soldier-grade gear, fair prices — what's left of my stock, anyway.", [
             { label: "Let me see your wares.", action: () => window.openShop({ itemIds: window.hollowmereStoreItems, stock: window.hollowmereStoreStock, mounts: false }) },
+            {
+                label: "Donate 5 fish/fruit/herbs to the village stores.",
+                action: () => {
+                    const foodLike = ['fish', 'fruit', 'herbs'];
+                    const have = window.player.inventory.filter(i => foodLike.includes(i)).length;
+                    if (have < 5) { window.showMessage("You need 5 fish/fruit/herbs (any mix) to donate."); return; }
+                    let removed = 0;
+                    window.player.inventory = window.player.inventory.filter(i => {
+                        if (foodLike.includes(i) && removed < 5) { removed++; return false; }
+                        return true;
+                    });
+                    if (window.adjustRegionStat) window.adjustRegionStat('hollowmere', 'prosperity', 3);
+                    window.showMessage("Hollowmere's stores are a little fuller. (Prosperity rises.)");
+                }
+            },
             { label: "Just looking.", action: () => {} }
         ]);
     },
@@ -433,12 +448,51 @@ window.npcDialogueTrees = {
         ]);
     },
     reddale_innkeeper: (npc) => {
+        // A trade-good want that becomes a real quest (with a quest-log
+        // entry and turn-in tracking) instead of an instant leverage
+        // transaction — see leverage.js's design notes: leverage is for
+        // spur-of-the-moment persuasion, this is for something an NPC will
+        // actually wait on and remember.
+        const gemQuest = (window.questLog || []).find(q => q.id === 'a_stone_for_nella');
+        if (gemQuest && gemQuest.status === 'active') {
+            const has = window.player.inventory.includes('gem_blue');
+            if (has) {
+                window.showDialogue(npc, "Is that... you found one? A blue stone, just like I asked.", [
+                    {
+                        label: "Here you go.",
+                        action: () => {
+                            window.player.inventory.splice(window.player.inventory.indexOf('gem_blue'), 1);
+                            gemQuest.status = 'completed';
+                            window.adjustReputation(npc.reputation, 20, 20);
+                            window.party[0].gold = (window.party[0].gold || 0) + 20;
+                            window.showMessage("Quest complete: A Stone for Nella. (+20 gold)");
+                        }
+                    },
+                    { label: "Not yet.", action: () => {} }
+                ]);
+            } else {
+                window.showDialogue(npc, "Still keeping an eye out for that blue stone? No rush.", [{ label: "I'll find one.", action: () => {} }]);
+            }
+            return;
+        }
+
         if (window.abandonedHouseJournalRead) {
             window.showDialogue(npc, "Welcome to Reddale. Rooms are warm and the ale's better than the road food, I promise you that.\n\nSince you're asking after strange things — a family out past Millbrook way went quiet a season back, and a grave near here was found disturbed not long after. Everyone says animals. I'm not so sure they're the same kind of quiet.", [
                 { label: "Worth looking into.", action: () => {} }
             ]);
         } else {
             window.showDialogue(npc, "Welcome to Reddale. Rooms are warm and the ale's better than the road food, I promise you that.", [
+                {
+                    label: "Anything you need?",
+                    action: () => {
+                        window.questLog = window.questLog || [];
+                        window.questLog.push({
+                            id: 'a_stone_for_nella', title: 'A Stone for Nella', giver: 'Nella Brook', status: 'active',
+                            description: 'Bring Nella Brook a blue gem.'
+                        });
+                        window.showDialogue(npc, "Funny you ask — my mother always wore a blue stone, before we lost everything on the road here. If you ever find one out there, I'd pay well for it. Sentimental, I know.", [{ label: "I'll keep an eye out.", action: () => {} }]);
+                    }
+                },
                 { label: "Good to know.", action: () => {} }
             ]);
         }
@@ -564,6 +618,21 @@ window.npcDialogueTrees = {
 
         if (oreRoad && oreRoad.status === 'completed') {
             window.showDialogue(npc, "First wagon home safe, thanks to you. We'll remember that, out here.", [
+                {
+                    label: "Donate 3 ore to Emberlode's stores.",
+                    action: () => {
+                        const oreTypes = ['ore_iron', 'ore_silver', 'ore_gold'];
+                        const have = window.player.inventory.filter(i => oreTypes.includes(i)).length;
+                        if (have < 3) { window.showMessage("You need 3 ore (any type) to donate."); return; }
+                        let removed = 0;
+                        window.player.inventory = window.player.inventory.filter(i => {
+                            if (oreTypes.includes(i) && removed < 3) { removed++; return false; }
+                            return true;
+                        });
+                        if (window.adjustRegionStat) window.adjustRegionStat('emberlode', 'prosperity', 4);
+                        window.showMessage("Emberlode's stockpiles grow. (Prosperity rises.)");
+                    }
+                },
                 { label: "Glad to help.", action: () => {} }
             ]);
             return;

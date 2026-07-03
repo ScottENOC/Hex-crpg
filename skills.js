@@ -416,6 +416,38 @@ const skills = {
         anti_prereq: 'druid_knowledge_nature',
         apply: (player) => {}
     },
+    // Knowledge: Nature used to single-handedly unlock reading tracks/kills
+    // AND (as of the resource-gathering system) harvesting/quality bonuses —
+    // one point doing too much. It now stays a pure "read details others
+    // would miss" flavor unlock; the actual mechanical hooks live in these
+    // three sub-skills, each requiring it as a prereq (either the druid or
+    // elf pickup — functionally identical, see hasKnowledgeNature).
+    'nature_butchery': {
+        name: 'Butchery',
+        description: 'Cleanly harvest meat and hides from animal corpses. (Requires Knowledge: Nature)',
+        tree: 'nature',
+        maxRanks: 1,
+        prereq_eval: (player) => window.hasKnowledgeNature(player),
+        apply: (player) => {}
+    },
+    'nature_bounty': {
+        name: "Forager's Bounty",
+        description: 'Extra yield when foraging fruit/herbs/fish. (Requires Knowledge: Nature)',
+        tree: 'nature',
+        maxRanks: 1,
+        prereq_eval: (player) => window.hasKnowledgeNature(player),
+        apply: (player) => {}
+    },
+    'nature_ranger': {
+        name: "Ranger's Instinct",
+        description: 'Grants +5 to-hit against animal-tagged enemies. (Requires Knowledge: Nature)',
+        tree: 'nature',
+        maxRanks: 1,
+        prereq_eval: (player) => window.hasKnowledgeNature(player),
+        apply: (player) => {
+            player.toHitVsAnimal = (player.toHitVsAnimal || 0) + 5;
+        }
+    },
     'knowledge_religion': {
         name: 'Knowledge: Religion',
         description: 'Training in scripture, ritual, and the theory behind divine and forbidden magic alike — lets you recognize what others would dismiss as mere grave-robbing or superstition.',
