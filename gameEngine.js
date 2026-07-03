@@ -4604,8 +4604,32 @@ function startArenaFight() {
         const monsterTypes = ['goblin', 'orc', 'skeleton', 'zombie', 'imp', 'spider', 'troll',
             'wraith', 'basilisk', 'harpy', 'minotaur', 'revenant', 'wolf_rider_goblin', 'elite_goblin',
             'wolf', 'boar', 'tiger'];
+        // Dragons are far stronger (and take up far more space) than anything
+        // else in the pool. The SP-budget check below still lets an
+        // over-budget monster through as a lone first spawn, which would let
+        // a level-1 party occasionally roll a solo Ancient Dragon — so gate
+        // dragons behind fightsCompleted directly, on top of the SP budget,
+        // rather than relying on SP scaling alone.
+        const fightsCompleted = window.roguelikeData.fightsCompleted || 0;
+        if (fightsCompleted >= 6) monsterTypes.push('dragon_young');
+        if (fightsCompleted >= 12) monsterTypes.push('dragon_adult');
+        if (fightsCompleted >= 20) monsterTypes.push('dragon_ancient');
 
-        while (currentSP < targetSP) {
+        // Multi-hex monsters (dragons, trolls) need every hex of their
+        // footprint clear of walls/water/other entities, not just their
+        // center hex.
+        const isFootprintClear = (centerHex, tmpl) => {
+            const hexes = [centerHex, ...(tmpl.extraHexes || []).map(o => ({ q: centerHex.q + o.q, r: centerHex.r + o.r }))];
+            return hexes.every(h => {
+                if (Math.abs(h.q) + Math.abs(h.r) + Math.abs(h.q + h.r) > arenaSize * 2) return false;
+                const t = window.getTerrainAt(h.q, h.r);
+                return t.name !== 'Wall' && t.name !== 'Water' && t.name !== 'Pedestal' && !getEntityAtHex(h.q, h.r);
+            });
+        };
+
+        let safetyIterations = 0;
+        while (currentSP < targetSP && safetyIterations < 200) {
+            safetyIterations++;
             if (window.roguelikeData.mercenaryGraveyard.length > 0 && Math.random() < 0.2) {
                 const snapshot = window.roguelikeData.mercenaryGraveyard.splice(Math.floor(Math.random() * window.roguelikeData.mercenaryGraveyard.length), 1)[0];
                 const neighbors = window.getNeighbors(lastSpawnHex.q, lastSpawnHex.r);
@@ -4629,8 +4653,17 @@ function startArenaFight() {
             if (currentSP + baseSP > targetSP + 10 && currentSP > 0) break;
 
             const neighbors = window.getNeighbors(lastSpawnHex.q, lastSpawnHex.r);
-            const valid = neighbors.filter(h => validHexes.some(vh => vh.q === h.q && vh.r === h.r));
-            const spawnHex = valid.length > 0 ? valid[Math.floor(Math.random() * valid.length)] : lastSpawnHex;
+            let candidates = neighbors.filter(h => validHexes.some(vh => vh.q === h.q && vh.r === h.r));
+            if (template.extraHexes && template.extraHexes.length > 0) {
+                candidates = candidates.filter(h => isFootprintClear(h, template));
+                if (candidates.length === 0) {
+                    // No room near the last spawn point — search the whole
+                    // arena for anywhere this monster's full footprint fits.
+                    candidates = validHexes.filter(h => isFootprintClear(h, template));
+                }
+                if (candidates.length === 0) continue; // nowhere big enough right now - try a different monster next pass
+            }
+            const spawnHex = candidates.length > 0 ? candidates[Math.floor(Math.random() * candidates.length)] : lastSpawnHex;
             const terrain = window.getTerrainAt(spawnHex.q, spawnHex.r);
             console.log(`Spawned ${type} at {q: ${spawnHex.q}, r: ${spawnHex.r}} (${terrain.name})`);
             const m = window.createMonster(type, spawnHex, null, null, 'enemy');
