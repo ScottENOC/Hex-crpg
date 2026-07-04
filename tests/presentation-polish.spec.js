@@ -24,9 +24,12 @@ test.describe('first-five-minutes presentation polish', () => {
             return document.getElementById('world-map-legend').innerHTML;
         });
         expect(legendHtml).toContain('Human Lands');
+        // Orc-held territory is now actually painted on the map (east of the
+        // border forts), so it's correct for it to appear here — dwarves and
+        // elves still aren't represented anywhere in this part of the world.
+        expect(legendHtml).toContain('Orc Tribes');
         expect(legendHtml).not.toContain('Dwarven Kingdom');
         expect(legendHtml).not.toContain('Elven Realm');
-        expect(legendHtml).not.toContain('Orc Tribes');
         expect(legendHtml).not.toContain('Goblin Hordes');
     });
 });

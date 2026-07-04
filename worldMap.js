@@ -45,19 +45,51 @@ function loadWorldMap() {
         }
 
         if (window.currentCampaign === "2") {
-            window.worldMapWidth = 12;
-            window.worldMapHeight = 12;
+            // 16x16 rather than the original 12x12 so there's room for the
+            // capital north of Millbrook, the orc-held east, and border forts
+            // between them — without moving Hollowmere/Millbrook/Emberlode/
+            // Reddale off the exact [row][col] indices campaign2World.js
+            // already hardcodes when it paints them in later (row3/col6,
+            // row6/col4, row6/col7).
+            window.worldMapWidth = 16;
+            window.worldMapHeight = 16;
             window.worldMapData = [];
-            for (let y = 0; y < 12; y++) {
+            for (let y = 0; y < 16; y++) {
                 const row = [];
-                for (let x = 0; x < 12; x++) {
-                    row.push({ t: 'G', f: 'n', o: '', p: 0, n: '' });
+                for (let x = 0; x < 16; x++) {
+                    // Human Silverhart territory west of the border (col < 10),
+                    // orc-held territory east of it (col >= 10). Sparse
+                    // hills/mountains for flavor, using the same pseudoRandom
+                    // hash the local terrain generators already use.
+                    const isOrcLands = x >= 10;
+                    let t = 'G';
+                    const rough = window.pseudoRandom(x * 2.3 + 5, y * 1.7 + 3);
+                    if (isOrcLands && rough > 0.8) t = 'M';
+                    else if (isOrcLands && rough > 0.6) t = 'H';
+                    else if (!isOrcLands && y <= 1) t = 'M'; // northern range behind the capital
+                    row.push({ t, f: '', o: isOrcLands ? 'o' : 'h', p: 0, n: '' });
                 }
                 window.worldMapData.push(row);
             }
-            // Add Hollowmere in the middle. Note: cell.f is the marker SHAPE ('C'/'T'/'V'),
-            // cell.o is the faction-color code — see drawWorldHex, which reads them this way.
-            window.worldMapData[6][6] = { t: 'G', f: 'C', o: 'h', p: 1, n: 'Hollowmere' };
+            // Note: cell.f is the marker SHAPE ('K' capital/'C' city/'T' town/
+            // 'V' village/'F' fort), cell.o is the faction-color code — see
+            // drawWorldHex, which reads them this way.
+            window.worldMapData[6][6] = { t: 'G', f: 'V', o: 'h', p: 1, n: 'Hollowmere' };
+            window.worldMapData[0][6] = { t: 'G', f: 'K', o: 'h', p: 3, n: 'Silverhart' };
+            window.worldMapData[9][6] = { t: 'G', f: 'V', o: 'h', p: 1, n: "Old Mac's Farmstead" };
+            window.worldMapData[4][9] = { t: 'H', f: 'F', o: 'h', p: 1, n: 'Northwatch Fort' };
+            window.worldMapData[9][9] = { t: 'H', f: 'F', o: 'h', p: 1, n: 'Ridgehold Fort' };
+
+            // A river running the length of the visible continent — starts
+            // behind the capital, passes just west of Millbrook, Hollowmere,
+            // and the farmstead (never on top of a settlement's own hex), and
+            // keeps going off the south edge of the map.
+            window.worldRiverPath = [
+                { x: 7, y: 0 }, { x: 6, y: 1 }, { x: 5, y: 2 }, { x: 5, y: 3 }, { x: 5, y: 4 },
+                { x: 5, y: 5 }, { x: 5, y: 6 }, { x: 5, y: 7 }, { x: 5, y: 8 }, { x: 5, y: 9 },
+                { x: 6, y: 10 }, { x: 6, y: 11 }, { x: 6, y: 12 }, { x: 6, y: 13 }, { x: 6, y: 14 }, { x: 6, y: 15 }
+            ];
+
             window.playerWorldPos = { x: 6, y: 6 };
             return;
         }
@@ -115,6 +147,20 @@ function updateWorldMapLegend() {
 }
 window.updateWorldMapLegend = updateWorldMapLegend;
 
+// Odd-q offset hex neighbors, matching worldHexToPixel's layout (odd columns
+// pushed down by half a hex height). Used only for the border-hex stroke
+// below — approximate is fine for a stylized overview map, but this is the
+// real adjacency table (redblobgames' odd-q offset directions), not a
+// guess, so borders land on the correct edge of the correct hex.
+const ODDQ_DIRECTIONS = [
+    [[+1, 0], [+1, -1], [0, -1], [-1, -1], [-1, 0], [0, +1]], // even column
+    [[+1, +1], [+1, 0], [0, -1], [-1, 0], [-1, +1], [0, +1]], // odd column
+];
+function getWorldNeighbors(x, y) {
+    const dirs = ODDQ_DIRECTIONS[x % 2 === 0 ? 0 : 1];
+    return dirs.map(([dx, dy]) => ({ x: x + dx, y: y + dy }));
+}
+
 function renderWorldMap() {
     const canvas = document.getElementById("worldMapCanvas");
     const container = document.getElementById("world-map-container");
@@ -122,10 +168,19 @@ function renderWorldMap() {
     const ctx = canvas.getContext("2d");
     updateWorldMapLegend();
 
-    if (canvas.width !== container.clientWidth || canvas.height !== container.clientHeight) {
-        canvas.width = container.clientWidth;
-        canvas.height = container.clientHeight;
+    // Render at native device pixel density so hex edges and text stay crisp
+    // on high-DPI/Retina screens (iOS in particular) instead of the canvas's
+    // low-res backing store getting upscaled by the browser. All drawing
+    // below stays in CSS-pixel coordinates via the ctx.setTransform.
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = container.clientWidth, cssH = container.clientHeight;
+    if (canvas.width !== Math.round(cssW * dpr) || canvas.height !== Math.round(cssH * dpr)) {
+        canvas.width = Math.round(cssW * dpr);
+        canvas.height = Math.round(cssH * dpr);
+        canvas.style.width = cssW + 'px';
+        canvas.style.height = cssH + 'px';
     }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     if (!window.worldMapInitialized && window.playerWorldPos) {
         centerOnPlayer();
@@ -133,7 +188,7 @@ function renderWorldMap() {
     }
 
     ctx.fillStyle = "#0a0a0a";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, cssW, cssH);
 
     const baseSize = 15;
     const zoomedSize = baseSize * window.worldCameraZoom;
@@ -146,11 +201,27 @@ function renderWorldMap() {
 
                 const {x: px, y: py} = worldHexToPixel(x, y);
 
-                if (px < -zoomedSize || px > canvas.width + zoomedSize || py < -zoomedSize || py > canvas.height + zoomedSize) continue;
+                if (px < -zoomedSize || px > cssW + zoomedSize || py < -zoomedSize || py > cssH + zoomedSize) continue;
 
                 drawWorldHex(ctx, px, py, zoomedSize, cell, x, y);
             }
         }
+    }
+
+    // The river: a continuous thin blue line through the actual river cells,
+    // drawn over the terrain fill so it reads clearly at any zoom level
+    // instead of relying on single 'R' terrain hexes to carry the visual.
+    if (window.worldRiverPath && window.worldRiverPath.length > 1) {
+        ctx.beginPath();
+        window.worldRiverPath.forEach((pt, i) => {
+            const { x: px, y: py } = worldHexToPixel(pt.x, pt.y);
+            if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        });
+        ctx.strokeStyle = '#4fc3f7';
+        ctx.lineWidth = Math.max(1.5, 3 * window.worldCameraZoom);
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.stroke();
     }
 
     if (window.playerWorldPos) {
@@ -162,11 +233,19 @@ function renderWorldMap() {
         ctx.arc(px, py, 6 * window.worldCameraZoom, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
-        
+
+        // Fixed CSS-pixel font size (not scaled by zoom) so it stays crisp
+        // and legible instead of shrinking into an unreadable, pixelated
+        // smear at low zoom. Drawn BELOW the marker — the settlement name
+        // (drawWorldHex) is drawn above its marker, so the two never overlap
+        // even when the player is standing on a named hex.
         ctx.fillStyle = "white";
-        ctx.font = `bold ${12 * window.worldCameraZoom}px Arial`;
+        ctx.font = `bold 11px Arial`;
         ctx.textAlign = "center";
-        ctx.fillText("YOU", px, py - (10 * window.worldCameraZoom));
+        ctx.shadowColor = "black";
+        ctx.shadowBlur = 3;
+        ctx.fillText("YOU", px, py + zoomedSize + 12);
+        ctx.shadowBlur = 0;
     }
 }
 
@@ -180,65 +259,89 @@ function drawWorldHex(ctx, x, y, size, cell, q, r) {
         else ctx.lineTo(px, py);
     }
     ctx.closePath();
-    
+
     ctx.fillStyle = worldTerrainColors[cell.t] || '#000';
     ctx.fill();
     ctx.strokeStyle = "rgba(0,0,0,0.1)";
     ctx.stroke();
 
-    if (cell.f) {
-        let markerSize = size * 0.4;
-        let markerColor = factionColors[cell.o] || 'white';
-        
-        if (cell.f === 'C') { 
-            markerSize = size * 0.6;
-            ctx.fillStyle = markerColor;
-            ctx.beginPath();
-            ctx.moveTo(x, y - markerSize);
-            ctx.lineTo(x + markerSize, y);
-            ctx.lineTo(x, y + markerSize);
-            ctx.lineTo(x - markerSize, y);
-            ctx.closePath();
-            ctx.fill();
-            ctx.strokeStyle = "black";
+    // Country border: re-stroke this hex's outline in its own faction's
+    // color whenever at least one real neighbor belongs to a different,
+    // non-empty faction — reads as a colored line along the border between
+    // territories (each side draws its own edge in its own color).
+    if (cell.o) {
+        const isBorder = getWorldNeighbors(q, r).some(n => {
+            const row = window.worldMapData[n.y];
+            const neighborCell = row && row[n.x];
+            return neighborCell && neighborCell.o && neighborCell.o !== cell.o;
+        });
+        if (isBorder) {
+            ctx.lineWidth = Math.max(1, 2.5 * window.worldCameraZoom);
+            ctx.strokeStyle = factionColors[cell.o] || 'white';
             ctx.stroke();
-        } else if (cell.f === 'T') { 
+        }
+    }
+
+    if (cell.f) {
+        const markerColor = cell.f === 'F' ? '#8d6e63' : (factionColors[cell.o] || 'white');
+        let markerRadius;
+        switch (cell.f) {
+            case 'K': markerRadius = size * 0.45; break; // capital
+            case 'C': markerRadius = size * 0.38; break; // city
+            case 'T': markerRadius = size * 0.28; break; // town
+            case 'F': markerRadius = size * 0.22; break; // fort
+            default:  markerRadius = size * 0.18; break; // village
+        }
+
+        if (cell.f === 'F') {
+            // Fort: a small square, not a settlement dot, so it reads as a
+            // military waypoint rather than a place people actually live.
             ctx.fillStyle = markerColor;
-            ctx.fillRect(x - markerSize/2, y - markerSize/2, markerSize, markerSize);
-            ctx.strokeStyle = "black";
-            ctx.strokeRect(x - markerSize/2, y - markerSize/2, markerSize, markerSize);
-        } else if (cell.f === 'V') { 
+            ctx.fillRect(x - markerRadius, y - markerRadius, markerRadius * 2, markerRadius * 2);
+            ctx.strokeStyle = factionColors[cell.o] || 'black';
+            ctx.lineWidth = Math.max(1, 1.5 * window.worldCameraZoom);
+            ctx.strokeRect(x - markerRadius, y - markerRadius, markerRadius * 2, markerRadius * 2);
+        } else {
+            // Village/Town/City/Capital are all graduated dot sizes (see
+            // markerRadius above) so scale alone communicates settlement
+            // tier at a glance. The capital additionally gets a gold ring so
+            // it's unmistakable even at a glance across a busy map.
             ctx.fillStyle = markerColor;
             ctx.beginPath();
-            ctx.arc(x, y, markerSize/2, 0, Math.PI * 2);
+            ctx.arc(x, y, markerRadius, 0, Math.PI * 2);
             ctx.fill();
-            ctx.strokeStyle = "black";
+            ctx.strokeStyle = cell.f === 'K' ? '#ffd700' : 'black';
+            ctx.lineWidth = cell.f === 'K' ? Math.max(1.5, 2.5 * window.worldCameraZoom) : 1;
             ctx.stroke();
         }
 
-        if (cell.f === 'C' || (window.worldCameraZoom > 1.2 && cell.f)) {
+        // Fixed CSS-pixel font size (not multiplied by zoom) for crisp,
+        // legible labels at any zoom. Capitals/cities always show their
+        // name; smaller settlements only once zoomed in enough to have room.
+        const alwaysLabeled = cell.f === 'K' || cell.f === 'C';
+        if (alwaysLabeled || window.worldCameraZoom > 1.2) {
             ctx.fillStyle = "white";
-            const fontSize = cell.f === 'C' ? 10 : 8;
-            ctx.font = `bold ${fontSize * window.worldCameraZoom}px Arial`;
+            const fontSize = cell.f === 'K' ? 13 : (cell.f === 'C' ? 11 : 9.5);
+            ctx.font = `bold ${fontSize}px Arial`;
             ctx.textAlign = "center";
             ctx.shadowColor = "black";
-            ctx.shadowBlur = 4;
-            ctx.fillText(cell.n, x, y - size);
+            ctx.shadowBlur = 3;
+            ctx.fillText(cell.n, x, y - size - 4);
             ctx.shadowBlur = 0;
         }
     }
 }
 
 function centerOnPlayer() {
-    const canvas = document.getElementById("worldMapCanvas");
-    if (!canvas || !window.playerWorldPos) return;
-    
+    const container = document.getElementById("world-map-container");
+    if (!container || !window.playerWorldPos) return;
+
     const size = 15;
     const targetX = (size * (3/2 * window.playerWorldPos.x)) * window.worldCameraZoom;
     const targetY = (size * (Math.sqrt(3) * window.playerWorldPos.y + (window.playerWorldPos.x % 2 === 0 ? 0 : Math.sqrt(3)/2))) * window.worldCameraZoom;
-    
-    window.worldCameraX = (canvas.width / 2) - targetX;
-    window.worldCameraY = (canvas.height / 2) - targetY;
+
+    window.worldCameraX = (container.clientWidth / 2) - targetX;
+    window.worldCameraY = (container.clientHeight / 2) - targetY;
 }
 
 // Nearest-cell lookup — the layout (worldHexToPixel) uses an odd-q offset
@@ -274,7 +377,7 @@ function selectWorldMapCell(x, y) {
     if (!panel) return;
 
     const factionNames = { h: 'Human', e: 'Elven', d: 'Dwarven', o: 'Orc', g: 'Goblin', n: 'Neutral' };
-    const settlementNames = { C: 'City', T: 'Town', V: 'Village' };
+    const settlementNames = { K: 'Capital', C: 'City', T: 'Town', V: 'Village', F: 'Fort' };
 
     nameEl.innerText = cell.n || `Unnamed hex (${x}, ${y})`;
     const parts = [];
