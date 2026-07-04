@@ -77,17 +77,24 @@ function loadWorldMap() {
             window.worldMapData[6][6] = { t: 'G', f: 'V', o: 'h', p: 1, n: 'Hollowmere' };
             window.worldMapData[0][6] = { t: 'G', f: 'K', o: 'h', p: 3, n: 'Silverhart' };
             window.worldMapData[9][6] = { t: 'G', f: 'V', o: 'h', p: 1, n: "Old Mac's Farmstead" };
-            window.worldMapData[4][9] = { t: 'H', f: 'F', o: 'h', p: 1, n: 'Northwatch Fort' };
+            window.worldMapData[5][9] = { t: 'H', f: 'F', o: 'h', p: 1, n: 'Northwatch Fort' };
             window.worldMapData[9][9] = { t: 'H', f: 'F', o: 'h', p: 1, n: 'Ridgehold Fort' };
 
-            // A river running the length of the visible continent — starts
-            // behind the capital, passes just west of Millbrook, Hollowmere,
-            // and the farmstead (never on top of a settlement's own hex), and
-            // keeps going off the south edge of the map.
+            // Matches the actual local stream (campaign2World.js's
+            // buildReddale/buildVillage terrain painting: a strictly
+            // east-west line at r=-25, crossed by the north road's bridge)
+            // — running west-to-east between the capital (row0) and
+            // Hollowmere/Millbrook (rows 3 and 6), not north-to-south. It
+            // crosses the human/orc border right where Northwatch Fort (row5,
+            // col9) stands watch over the bank, same "bridge guarded by a
+            // fort" read as the local river/road crossing, with a gentle
+            // bend further east
+            // (mirroring the local river's own big bend before it levels
+            // back out — see paintStreamSegment's leg 3).
             window.worldRiverPath = [
-                { x: 7, y: 0 }, { x: 6, y: 1 }, { x: 5, y: 2 }, { x: 5, y: 3 }, { x: 5, y: 4 },
-                { x: 5, y: 5 }, { x: 5, y: 6 }, { x: 5, y: 7 }, { x: 5, y: 8 }, { x: 5, y: 9 },
-                { x: 6, y: 10 }, { x: 6, y: 11 }, { x: 6, y: 12 }, { x: 6, y: 13 }, { x: 6, y: 14 }, { x: 6, y: 15 }
+                { x: 0, y: 4 }, { x: 1, y: 4 }, { x: 2, y: 4 }, { x: 3, y: 4 }, { x: 4, y: 4 },
+                { x: 5, y: 4 }, { x: 6, y: 4 }, { x: 7, y: 4 }, { x: 8, y: 4 }, { x: 9, y: 4 },
+                { x: 10, y: 4 }, { x: 11, y: 5 }, { x: 12, y: 5 }, { x: 13, y: 4 }, { x: 14, y: 4 }, { x: 15, y: 4 }
             ];
 
             window.playerWorldPos = { x: 6, y: 6 };

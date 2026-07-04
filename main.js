@@ -81,6 +81,7 @@ document.addEventListener("DOMContentLoaded", () => {
             {key: 'wood_floor', src: 'images/wood_floor.svg'},
             {key: 'table', src: 'images/table.svg'},
             {key: 'bench', src: 'images/bench.svg'},
+            {key: 'throne', src: 'images/throne.svg'},
             {key: 'door_open', src: 'images/door_open.svg'},
             {key: 'door_closed', src: 'images/door_closed.svg'},
             {key: 'path', src: 'images/path.svg'},
@@ -310,6 +311,9 @@ document.addEventListener("DOMContentLoaded", () => {
             window.toggleFlyCheat();
         } else if (btnId === "cheat-max-skills-btn") {
             window.cheatMaxSkills();
+        } else if (btnId === "cheat-teleport-btn") {
+            const sel = document.getElementById("cheat-teleport-select");
+            if (sel && window.teleportPartyToLocation) window.teleportPartyToLocation(sel.value);
         } else if (btnId === "cancel-moves-btn") {
             window.cancelAllMoveOrders();
         } else if (btnId === "rest-btn") {
@@ -368,7 +372,7 @@ document.addEventListener("DOMContentLoaded", () => {
         'load-btn-initial', 'save-menu-btn', 'load-menu-btn', 'game-over-load-btn', 'game-over-menu-btn',
         'confirm-save-btn', 'quick-save-btn', 'quick-load-btn', 'settings-menu-btn', 'host-game-btn',
         'confirm-hire-btn', 'cancel-hire-btn', 'close-shop-modal', 'cheat-jerry-btn', 'cheat-horse-btn',
-        'cheat-all-equip-btn', 'cheat-fly-btn', 'cheat-max-skills-btn', 'cancel-moves-btn', 'rest-btn',
+        'cheat-all-equip-btn', 'cheat-fly-btn', 'cheat-max-skills-btn', 'cheat-teleport-btn', 'cancel-moves-btn', 'rest-btn',
         'sleep-btn', 'time-speed-btn', 'controller-mode-btn'
     ]);
     window.addEventListener('touchend', (e) => {
@@ -635,6 +639,44 @@ window.toggleFlyCheat = function() {
     window.renderEntities();
     window.updateTurnIndicator();
     if (window.updateActionButtons) window.updateActionButtons();
+};
+
+// Cheat: teleport the whole (non-combat-ally) party to any named location
+// this campaign has actually built. Each entry is a getter, not a static
+// hex, since these building centers (campaign2MillbrookCenter etc.) aren't
+// assigned until setupVillageScene finishes running at game start.
+window.campaign2TeleportLocations = {
+    'Hollowmere (Village)': () => window.campaign2Landmarks?.crossroads,
+    'Millbrook (Village)': () => window.campaign2MillbrookCenter,
+    'Silverhart (Capital)': () => window.campaign2PalaceThroneCenter,
+    'Reddale (Town)': () => window.campaign2ReddaleGuardhouseCenter,
+    'Emberlode (Mining Village)': () => window.campaign2EmberlodeCenter,
+    "Old Mac's Farmstead": () => window.campaign2FarmHouseCenter,
+    'Goblin Stronghold': () => window.campaign2GoblinCampCenter,
+    'Abandoned House': () => window.campaign2AbandonedHouseCenter,
+};
+
+window.teleportPartyToLocation = function(locationName) {
+    const getHex = window.campaign2TeleportLocations[locationName];
+    const hex = getHex && getHex();
+    if (!hex || hex.q === undefined) {
+        window.showMessage(`Cheat: "${locationName}" isn't built yet.`);
+        return;
+    }
+    // Real party members/mounts only — never temporary combat allies, who
+    // should stay wherever the fight they belong to left them.
+    const friendlies = window.entities.filter(e => e.alive && e.side === 'player' && !e.aiControlled);
+    const spread = window.getNeighbors ? window.getNeighbors(hex.q, hex.r) : [];
+    friendlies.forEach((f, i) => {
+        const dest = i === 0 ? hex : (spread[i - 1] || hex);
+        f.hex = { q: dest.q, r: dest.r };
+        f.destination = null;
+    });
+    window.cameraFollowEnabled = true;
+    if (window.centerCameraOn) window.centerCameraOn(hex);
+    if (window.drawMap) window.drawMap();
+    if (window.renderEntities) window.renderEntities();
+    window.showMessage(`Cheat: teleported to ${locationName}.`);
 };
 
 window.testVoice = function(voiceId) {

@@ -26,7 +26,7 @@ test.describe('village map and vision', () => {
         expect(check.chapelInterior).toBe('Wood Floor');
         expect(check.houseInterior).toBe('Wood Floor');
         expect(check.generalStoreInterior).toBe('Wood Floor');
-        expect(check.interiorRegionCount).toBe(18); // tavern, store, chapel, house, general store, Mira's house, Oskar's house, Old Mac's farmhouse, abandoned house, Millbrook, Emberlode hall/bunkhouse/mine, Reddale guardhouse/Reeve's house/inn/guildhouse/manor
+        expect(check.interiorRegionCount).toBe(21); // tavern, store, chapel, house, general store, Mira's house, Oskar's house, Old Mac's farmhouse, abandoned house, Millbrook, Emberlode hall/bunkhouse/mine, Reddale guardhouse/Reeve's house/inn/guildhouse/manor, Silverhart throne room/barracks/council chamber
     });
 
     test('outdoor paths connect every building door to a ring around the tavern', async ({ page }) => {

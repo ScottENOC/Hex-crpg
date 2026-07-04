@@ -1277,6 +1277,39 @@ window.npcDialogueTrees = {
             },
             { label: "I'm sorry to hear that.", action: () => {} }
         ]);
+    },
+    // Silverhart Palace's throne room — an audience with the King himself.
+    // Flavor-only for now (no quest here yet): tone just reflects the
+    // kingdom's actual standing toward the player, the same reputation
+    // value every other Silverhart-aligned NPC already reads.
+    silverhart_king: (npc) => {
+        const standing = window.factions?.silverhart_kingdom?.standing ?? 0;
+        let line;
+        if (standing >= 40) {
+            line = "So — you're the one Reddale and Hollowmere keep writing to me about. Good work, whatever you've been doing out there. The crown remembers people who make its work easier.";
+        } else if (standing >= 10) {
+            line = "You've kept my barony's business in decent order, from what reaches my desk. Keep it that way.";
+        } else if (standing <= -20) {
+            line = "I know your name, and not from anything I'd call flattering. Mind yourself in my hall.";
+        } else {
+            line = "Another face passing through court. Say your piece, if you have one.";
+        }
+        window.showDialogue(npc, line, [
+            { label: "Just paying my respects, Your Majesty.", action: () => {} }
+        ]);
+    },
+    palace_chancellor: (npc) => {
+        window.showDialogue(npc, "The King's ledgers, the King's letters, the King's patience with petitioners — all mine to mind, in that order. If you've business with the crown, best it's brief.", [
+            {
+                label: "What's the news from the borderlands?",
+                action: () => {
+                    window.showDialogue(npc, "Nothing His Majesty says in open court, if that's what you're asking. Orc raids past Aldervale, worse than the old stories — that much everyone already knows. What worries me is how organized they've gotten. Raiders don't usually keep to a plan.", [
+                        { label: "Noted.", action: () => {} }
+                    ]);
+                }
+            },
+            { label: "No business today.", action: () => {} }
+        ]);
     }
 };
 

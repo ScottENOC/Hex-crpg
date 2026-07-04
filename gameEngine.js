@@ -986,6 +986,7 @@ function startGameCore(isLoading = false) {
       wood_floor: new Image(),
       table: new Image(),
       bench: new Image(),
+      throne: new Image(),
       door_open: new Image(),
       door_closed: new Image(),
       path: new Image(),
@@ -1071,6 +1072,7 @@ function startGameCore(isLoading = false) {
   visuals.wood_floor.onload = () => { window.drawMap(); };
   visuals.table.onload = () => { window.drawMap(); };
   visuals.bench.onload = () => { window.drawMap(); };
+  visuals.throne.onload = () => { window.drawMap(); };
   visuals.door_open.onload = () => { window.drawMap(); };
   visuals.door_closed.onload = () => { window.drawMap(); };
   visuals.path.onload = () => { window.drawMap(); };
@@ -1157,6 +1159,7 @@ function startGameCore(isLoading = false) {
   visuals.wood_floor.src = 'images/wood_floor.svg';
   visuals.table.src = 'images/table.svg';
   visuals.bench.src = 'images/bench.svg';
+  visuals.throne.src = 'images/throne.svg';
   visuals.door_open.src = 'images/door_open.svg';
   visuals.door_closed.src = 'images/door_closed.svg';
   visuals.path.src = 'images/path.svg';
@@ -1499,6 +1502,8 @@ function renderEntities() {
               window.mapCtx.drawImage(window.gameVisuals.table, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'bench' && window.gameVisuals.bench.complete) {
               window.mapCtx.drawImage(window.gameVisuals.bench, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'throne' && window.gameVisuals.throne.complete) {
+              window.mapCtx.drawImage(window.gameVisuals.throne, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'door_open' && window.gameVisuals.door_open.complete) {
               window.mapCtx.drawImage(window.gameVisuals.door_open, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'door_closed' && window.gameVisuals.door_closed.complete) {

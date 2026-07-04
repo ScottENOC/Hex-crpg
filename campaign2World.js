@@ -374,6 +374,89 @@ function buildMillbrook(roadEnd) {
     }
 }
 
+// Silverhart Palace: the kingdom's capital, one more world-hex north of
+// Millbrook on the same road (see setupVillageScene's northRoadEnd). Three
+// separate carveBuilding wings clustered around a short courtyard, the same
+// "one room per carveBuilding call" convention every other multi-building
+// site here uses (see buildReddale) — a throne room (the biggest, holding
+// the throne + King + his flanking guards), a barracks (most of the "lots
+// of guards" ask), and a small council chamber for the Chancellor.
+function buildSilverhartPalace(roadEnd) {
+    const throneCenter = { q: roadEnd.q, r: roadEnd.r };
+    const throneDoor = { q: throneCenter.q, r: throneCenter.r + 4 };
+    const throneRegion = carveBuilding(throneCenter.q, throneCenter.r, 5, 4, throneDoor, 'Wood Floor');
+    window.interiorRegions.push(throneRegion);
+    window.campaign2PalaceThroneCenter = throneCenter;
+
+    for (let r = roadEnd.r + 1; r < throneDoor.r; r++) window.setTerrainAt(roadEnd.q, r, 'Path');
+
+    // The throne itself sits at the far (north) end of the hall, opposite
+    // the door, flanked by a fireplace on each side for warmth/light.
+    const throneSeat = { q: throneCenter.q, r: throneCenter.r - 3 };
+    window.tileObjects[`${throneSeat.q},${throneSeat.r}`] = { type: 'throne' };
+    window.tileObjects[`${throneSeat.q - 2},${throneSeat.r}`] = { type: 'fireplace', lightRadius: 6 };
+    window.tileObjects[`${throneSeat.q + 2},${throneSeat.r}`] = { type: 'fireplace', lightRadius: 6 };
+    window.tileObjects[`${throneCenter.q - 1},${throneCenter.r}`] = { type: 'table' };
+    window.tileObjects[`${throneCenter.q + 1},${throneCenter.r}`] = { type: 'table' };
+
+    if (window.campaign2SilverhartKing) {
+        window.entities.push(window.buildNPC({ ...window.campaign2SilverhartKing, hex: { q: throneSeat.q, r: throneSeat.r + 1 } }));
+    }
+
+    // Barracks: east wing, off its own short spur from the courtyard —
+    // where most of the "lots of guards" actually live, benched and armed.
+    const barracksCenter = { q: throneCenter.q + 10, r: throneCenter.r + 2 };
+    const barracksDoor = { q: barracksCenter.q - 3, r: barracksCenter.r };
+    const barracksRegion = carveBuilding(barracksCenter.q, barracksCenter.r, 3, 3, barracksDoor, 'Wood Floor');
+    window.interiorRegions.push(barracksRegion);
+    window.tileObjects[`${barracksCenter.q},${barracksCenter.r}`] = { type: 'fireplace', lightRadius: 6 };
+    window.tileObjects[`${barracksCenter.q},${barracksCenter.r - 1}`] = { type: 'bench' };
+    window.tileObjects[`${barracksCenter.q},${barracksCenter.r + 1}`] = { type: 'bench' };
+    window.campaign2PalaceBarracksCenter = barracksCenter;
+    for (let q = throneDoor.q + 1; q <= barracksDoor.q - 1; q++) window.setTerrainAt(q, throneDoor.r, 'Path');
+    for (let q = barracksDoor.q + 1; q < barracksCenter.q; q++) window.setTerrainAt(q, barracksCenter.r, 'Path');
+
+    // Council chamber: west wing, mirrored, for the Chancellor.
+    const councilCenter = { q: throneCenter.q - 10, r: throneCenter.r + 2 };
+    const councilDoor = { q: councilCenter.q + 3, r: councilCenter.r };
+    const councilRegion = carveBuilding(councilCenter.q, councilCenter.r, 3, 2, councilDoor, 'Wood Floor');
+    window.interiorRegions.push(councilRegion);
+    window.tileObjects[`${councilCenter.q},${councilCenter.r}`] = { type: 'table' };
+    window.campaign2PalaceCouncilCenter = councilCenter;
+    for (let q = councilDoor.q + 1; q <= throneDoor.q - 1; q++) window.setTerrainAt(q, throneDoor.r, 'Path');
+    for (let q = councilCenter.q + 1; q < councilDoor.q; q++) window.setTerrainAt(q, councilCenter.r, 'Path');
+
+    if (window.campaign2PalaceChancellor) {
+        window.entities.push(window.buildNPC({ ...window.campaign2PalaceChancellor, hex: { q: councilCenter.q, r: councilCenter.r - 1 } }));
+    }
+
+    // Royal guards: two flanking the throne itself, one at the throne
+    // room's own door, and the rest posted in the barracks — "lots of
+    // guards" spread across the whole palace, not just clustered in one spot.
+    const guards = window.campaign2RoyalGuards || [];
+    const posts = [
+        { q: throneSeat.q - 1, r: throneSeat.r + 1 }, // flanking the throne
+        { q: throneSeat.q + 1, r: throneSeat.r + 1 },
+        { q: throneDoor.q, r: throneDoor.r - 1 },     // throne room entrance
+        { q: barracksCenter.q - 1, r: barracksCenter.r },
+        { q: barracksCenter.q + 1, r: barracksCenter.r },
+        { q: barracksCenter.q, r: barracksCenter.r - 2 },
+    ];
+    guards.forEach((g, i) => {
+        if (!posts[i]) return;
+        const guard = window.buildNPC({ ...g, hex: posts[i] });
+        guard.homeHex = { ...posts[i] };
+        window.entities.push(guard);
+    });
+
+    // One world-hex north of Millbrook [3][6], which is itself 3 north of
+    // Hollowmere [6][6] — see the world map's [0][6] Silverhart placement in
+    // worldMap.js's loadWorldMap.
+    if (window.worldMapData && window.worldMapData[0] && window.worldMapData[0][6] !== undefined) {
+        window.worldMapData[0][6] = { t: 'G', f: 'K', o: 'h', p: 3, n: 'Silverhart' };
+    }
+}
+
 // `forLoadOnly` (see gameEngine.js's startGameCore) means this call exists
 // purely to regenerate the deterministic terrain/tileObjects/NPC baseline
 // for a save being loaded — the NPCs/party seating it creates get thrown
@@ -694,8 +777,15 @@ function setupVillageScene(forLoadOnly = false) {
     const WORLD_HEX_SIZE = 130;
     let abandonedHouseWaypoint = null;
     const ABANDONED_HOUSE_STEP = 200; // partway to Millbrook — "stuff in between"
-    const northRoadEnd = paintRoad({ q: 0, r: -1 }, WORLD_HEX_SIZE * 3, 18, 0.35, (i, hex) => {
+    // Runs a full four world hexes now — Millbrook still sits at the same
+    // step (captured via onStep, so its exact position is unchanged), and
+    // Silverhart (the capital) sits a further hex north at the new end,
+    // same "extend the road, add a stub settlement at the new end" pattern
+    // used for Emberlode out west.
+    let millbrookWaypoint = null;
+    const northRoadEnd = paintRoad({ q: 0, r: -1 }, WORLD_HEX_SIZE * 4, 18, 0.35, (i, hex) => {
         if (i === ABANDONED_HOUSE_STEP) abandonedHouseWaypoint = hex;
+        if (i === WORLD_HEX_SIZE * 3) millbrookWaypoint = hex;
     });
     const farmRoadEnd = paintRoad({ q: 0, r: 1 }, WORLD_HEX_SIZE + 40); // South: past the hex border, to Old Mac's Farmstead
     const eastRoadEnd = paintRoad({ q: 1, r: 0 }, WORLD_HEX_SIZE); // East: Reddale
@@ -712,7 +802,8 @@ function setupVillageScene(forLoadOnly = false) {
     buildFarmstead(farmRoadEnd);
     buildGoblinCamp(goblinCampWaypoint);
     buildAbandonedHouse(abandonedHouseWaypoint);
-    buildMillbrook(northRoadEnd);
+    buildMillbrook(millbrookWaypoint);
+    buildSilverhartPalace(northRoadEnd);
     buildEmberlode(westRoadEnd);
     buildReddale(eastRoadEnd);
 

@@ -17,7 +17,7 @@ test.describe('world map overhaul: river, capital, forts, orc lands, borders', (
     test('border forts sit between the human west and orc-held east', async ({ page }) => {
         await createCharacter(page, { campaign: '2' });
         const result = await page.evaluate(() => {
-            const forts = [window.worldMapData[4][9], window.worldMapData[9][9]];
+            const forts = [window.worldMapData[5][9], window.worldMapData[9][9]];
             return forts.map(f => ({ marker: f.f, faction: f.o, name: f.n }));
         });
         result.forEach(f => {
@@ -38,7 +38,7 @@ test.describe('world map overhaul: river, capital, forts, orc lands, borders', (
         expect(result.east).toBe('o');
     });
 
-    test('a river path exists, running north-to-south and never sitting directly on a named settlement hex', async ({ page }) => {
+    test('a river path exists, running west-to-east (matching the local stream\'s actual east-west orientation) and never sitting directly on a named settlement hex', async ({ page }) => {
         await createCharacter(page, { campaign: '2' });
         const result = await page.evaluate(() => {
             const path = window.worldRiverPath || [];
@@ -48,13 +48,13 @@ test.describe('world map overhaul: river, capital, forts, orc lands, borders', (
             });
             return {
                 length: path.length,
-                firstY: path[0]?.y,
-                lastY: path[path.length - 1]?.y,
+                firstX: path[0]?.x,
+                lastX: path[path.length - 1]?.x,
                 overlapsSettlement,
             };
         });
         expect(result.length).toBeGreaterThan(5);
-        expect(result.lastY).toBeGreaterThan(result.firstY);
+        expect(result.lastX).toBeGreaterThan(result.firstX);
         expect(result.overlapsSettlement).toBe(false);
     });
 

@@ -390,3 +390,45 @@ window.campaign2ReddaleBaronSteward = {
     color: '#333366',
     dialogueId: 'reddale_steward'
 };
+
+// --- Silverhart Palace: the kingdom's capital, a full world-hex further
+// north up the same road past Millbrook (see buildSilverhartPalace in
+// campaign2World.js). King Alaric Corrin — a different line from Baron
+// Corwin Aldervale, who answers to him — holds court in the throne room,
+// flanked by royal guards; more guards stand watch in the entry hall and
+// barracks wing. All neutral, like every other authority-figure NPC so far.
+window.campaign2SilverhartKing = {
+    name: 'King Alaric Corrin',
+    title: 'King of the Silverhart Kingdom',
+    race: 'human', gender: 'male',
+    classLevels: [],
+    skillPicks: [],
+    equipment: [],
+    side: 'neutral',
+    factionId: 'silverhart_kingdom',
+    color: '#5a2a8a',
+    dialogueId: 'silverhart_king'
+};
+// One template, several named instances (same pattern as
+// campaign2GoblinGuards) — a uniform royal guard, tougher than an ordinary
+// town watchman since these stand in the king's own palace.
+window.campaign2RoyalGuards = [
+    { name: 'Royal Guard Denna', title: 'Royal Guard', race: 'human', gender: 'female', classLevels: ['fighter', 'fighter'], skillPicks: ['health', 'health', 'sword_hit', 'sword_dmg', 'heavy_armor_training', 'shield_proficiency'], equipment: ['sword', 'wooden_shield', 'heavy_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#3a3a6a' },
+    { name: 'Royal Guard Corwin', title: 'Royal Guard', race: 'human', gender: 'male', classLevels: ['fighter', 'fighter'], skillPicks: ['health', 'health', 'spear_hit', 'spear_dmg', 'heavy_armor_training', 'shield_proficiency'], equipment: ['spear', 'wooden_shield', 'heavy_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#3a3a6a' },
+    { name: 'Royal Guard Ashe', title: 'Royal Guard', race: 'human', gender: 'male', classLevels: ['fighter', 'fighter'], skillPicks: ['health', 'health', 'sword_hit', 'sword_dmg', 'heavy_armor_training'], equipment: ['sword', 'heavy_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#3a3a6a' },
+    { name: 'Royal Guard Petra', title: 'Royal Guard', race: 'human', gender: 'female', classLevels: ['fighter', 'fighter'], skillPicks: ['health', 'health', 'spear_hit', 'spear_dmg', 'heavy_armor_training'], equipment: ['spear', 'heavy_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#3a3a6a' },
+    { name: 'Royal Guard Osric', title: 'Royal Guard', race: 'human', gender: 'male', classLevels: ['fighter'], skillPicks: ['health', 'sword_hit', 'light_armor_training'], equipment: ['sword', 'light_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#3a3a6a' },
+    { name: 'Royal Guard Isolde', title: 'Royal Guard', race: 'human', gender: 'female', classLevels: ['fighter'], skillPicks: ['health', 'spear_hit', 'light_armor_training'], equipment: ['spear', 'light_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#3a3a6a' }
+];
+window.campaign2PalaceChancellor = {
+    name: 'Chancellor Merric Vane',
+    title: "The King's Chancellor",
+    race: 'human', gender: 'male',
+    classLevels: [],
+    skillPicks: [],
+    equipment: [],
+    side: 'neutral',
+    factionId: 'silverhart_kingdom',
+    color: '#4a4a2a',
+    dialogueId: 'palace_chancellor'
+};
