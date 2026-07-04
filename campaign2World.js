@@ -559,10 +559,19 @@ function setupVillageScene(forLoadOnly = false) {
 
     // Small homes for the tavern's regular patrons — Mira and Oskar go back
     // to these at night instead of just existing at the tavern forever (see
-    // updateNpcSchedules in gameEngine.js). Tucked either side of the
-    // general-store approach path so a short spur reaches the existing
-    // north-south path column instead of needing a whole new route.
-    const miraHouseRegion = carveBuilding(6, 9, 2, 2, { q: 4, r: 9 }, 'Wood Floor');
+    // updateNpcSchedules in gameEngine.js). Oskar's stays tucked west of the
+    // general-store approach path with a short spur to it.
+    //
+    // Mira's used to sit at the same distance east (center q=6), but at
+    // halfW=2 its wall ring reaches q=8 — exactly the column the north road
+    // (see setupVillageScene's paintRoad below) runs down. paintRoad has no
+    // "don't overwrite Wall" guard (unlike this function's own paintPath),
+    // so it punched straight through Mira's east wall, and left no gap
+    // between her west wall and the tavern's own (center q=6 floor starting
+    // at q=5, flush against the tavern floor's own maxQ=5). Moved well
+    // clear of the road instead of just nudging it, per direct feedback —
+    // now sits on the far (east) side of the road, with room to spare.
+    const miraHouseRegion = carveBuilding(12, 9, 2, 2, { q: 10, r: 9 }, 'Wood Floor');
     const oskarHouseRegion = carveBuilding(-6, 9, 2, 2, { q: -4, r: 9 }, 'Wood Floor');
 
     // Quest item for "A Missing Locket" (Elder Marta) — tucked in the chapel.
@@ -629,7 +638,7 @@ function setupVillageScene(forLoadOnly = false) {
     // would suggest (see wallRingAroundFloor) — so the last step to the door
     // steps diagonally around it instead of straight through it.
     paintPath([[1, 14]]); // general store door (0,15) -> south ring, around the seam wall at (0,14)
-    paintPath([[1, 9], [2, 9], [3, 9]]); // Mira's house door (4,9) -> general store spur
+    paintPath([[9, 9]]); // Mira's house door (10,9) -> the north road column (q=8), painted below
     paintPath([[-1, 9], [-2, 9], [-3, 9]]); // Oskar's house door (-4,9) -> general store spur
 
     // --- Permanent companion: a real party member (not a conditional tavern

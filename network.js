@@ -4,7 +4,26 @@ const backendUrl = window.location.hostname === 'scottenoc.github.io'
     ? 'https://your-rpg-backend.onrender.com' // Replace with your actual hosted backend URL
     : window.location.origin;
 
-const socket = io(backendUrl);
+// socket.io's client lib loads from a CDN <script> tag (index.html) before
+// this file runs. If that CDN request is slow, blocked, or fails outright
+// (seen on at least one hosting environment, plus any sandboxed/offline
+// network), `io` is never defined — and since this used to be a bare
+// `io(backendUrl)` call with no guard, that ReferenceError aborted the
+// entire rest of this script, so window.multiplayer never got assigned at
+// all. Anything downstream that reads window.multiplayer.* unguarded then
+// throws too, breaking solo play in ways that have nothing to do with
+// multiplayer — a stub socket (real API shape, every method a no-op) keeps
+// window.multiplayer always defined and solo play fully working even with
+// no multiplayer backend reachable at all.
+let socket;
+try {
+    if (typeof io !== 'function') throw new Error('socket.io client did not load (io is undefined)');
+    socket = io(backendUrl);
+} catch (e) {
+    console.warn('Multiplayer unavailable, continuing in solo mode:', e.message);
+    const noop = () => {};
+    socket = { on: noop, off: noop, once: noop, emit: noop, connect: noop, disconnect: noop, connected: false, id: null };
+}
 
 window.multiplayer = {
     roomCode: null,

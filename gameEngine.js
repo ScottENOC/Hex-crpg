@@ -399,9 +399,9 @@ function getNpcSchedules() {
             { start: 7, end: 24, hex: { q: 0, r: 18 } },   // behind the counter
         ],
         'Mira Ashbrook': [
-            { start: 0, end: 9, hex: { q: 6, r: 9 } },     // home
+            { start: 0, end: 9, hex: { q: 12, r: 9 } },     // home
             { start: 9, end: 23, hex: { q: 2, r: -2 } },   // her usual tavern spot
-            { start: 23, end: 24, hex: { q: 6, r: 9 } },
+            { start: 23, end: 24, hex: { q: 12, r: 9 } },
         ],
         'Oskar Vinn': [
             { start: 0, end: 10, hex: { q: -6, r: 9 } },   // home

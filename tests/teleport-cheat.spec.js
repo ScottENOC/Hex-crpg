@@ -2,6 +2,16 @@ const { test, expect } = require('@playwright/test');
 const { createCharacter } = require('./helpers.js');
 
 test.describe('Cheat: teleport to location', () => {
+    test('clicking the location <select> does not close the Cheat dropdown mid-interaction', async ({ page }) => {
+        await createCharacter(page);
+        await page.click('#top-menu .dropdown:has(#cheat-teleport-select) .dropbtn');
+        const openBefore = await page.evaluate(() => document.getElementById('cheat-teleport-select').closest('.dropdown-content').classList.contains('show'));
+        expect(openBefore).toBe(true);
+        await page.click('#cheat-teleport-select');
+        const openAfter = await page.evaluate(() => document.getElementById('cheat-teleport-select').closest('.dropdown-content').classList.contains('show'));
+        expect(openAfter).toBe(true);
+    });
+
     test('teleports the player entity to Silverhart (Capital)', async ({ page }) => {
         await createCharacter(page);
         const result = await page.evaluate(() => {

@@ -125,6 +125,13 @@ document.addEventListener("DOMContentLoaded", () => {
     // trackpads/touch — also toggle them on click, closing any other open
     // dropdown and closing when the click lands outside of one entirely.
     function handleMenuDropdownToggle(e) {
+        // A <select> (or its <option>s) inside a dropdown-content needs the
+        // dropdown to stay open while its own native picker is up — closing
+        // the container mid-tap (especially on mobile, where the picker is
+        // tied to the select's live DOM/visibility state) can abort the
+        // picker before it ever opens. Interacting with the teleport-cheat
+        // location select is exactly this case.
+        if (e.target.tagName === 'SELECT' || e.target.tagName === 'OPTION') return;
         const clickedDropbtn = e.target.classList && e.target.classList.contains('dropbtn');
         document.querySelectorAll('.dropdown-content.show').forEach(dc => {
             if (!clickedDropbtn || dc !== e.target.nextElementSibling) dc.classList.remove('show');
