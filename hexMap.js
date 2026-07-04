@@ -392,9 +392,10 @@ function drawMap() {
   // 7. PASS 6: Floating combat text (damage/heal/miss) - always on top
   if (window.renderFloatingTexts) window.renderFloatingTexts(mapCtx, hexToPixel, window.cameraZoom);
 
-  // 8. PASS 7: Party banter speech bubbles - above floating text so a bubble
-  // and a damage number over the same hex don't fight for attention
-  if (window.renderSpeechBubbles) window.renderSpeechBubbles(mapCtx, hexToPixel, window.cameraZoom);
+  // Speech bubbles render after renderEntities (gameEngine.js), not here —
+  // drawMap() always runs before renderEntities() in every call site, so
+  // drawing bubbles in this pass put them underneath whichever character
+  // sprite got rendered on top of them next.
 }
 
 function clearHighlights() {

@@ -1784,6 +1784,10 @@ function renderEntities() {
 
     window.mapCtx.globalAlpha = 1.0;
   });
+
+  // Speech bubbles render after entities (not in drawMap's pass order) so a
+  // bubble never gets drawn over by whichever character stands behind it.
+  if (window.renderSpeechBubbles) window.renderSpeechBubbles(window.mapCtx, window.hexToPixel, window.cameraZoom);
 }
 
 function triggerPenalty(casterName, victim, spell) {

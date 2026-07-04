@@ -115,7 +115,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Menu/Cheat dropdowns rely on CSS :hover, which is unreliable on
     // trackpads/touch — also toggle them on click, closing any other open
     // dropdown and closing when the click lands outside of one entirely.
-    window.addEventListener('click', (e) => {
+    function handleMenuDropdownToggle(e) {
         const clickedDropbtn = e.target.classList && e.target.classList.contains('dropbtn');
         document.querySelectorAll('.dropdown-content.show').forEach(dc => {
             if (!clickedDropbtn || dc !== e.target.nextElementSibling) dc.classList.remove('show');
@@ -124,10 +124,11 @@ document.addEventListener("DOMContentLoaded", () => {
             const content = e.target.nextElementSibling;
             if (content) content.classList.toggle('show');
         }
-    });
+    }
+    window.addEventListener('click', handleMenuDropdownToggle);
 
     // Global click listener for ANY button click in the window
-    window.addEventListener('click', (e) => {
+    function handleGlobalButtonAction(e) {
         const btnId = e.target.id;
         if (btnId) console.log("Window clicked element ID:", btnId);
 
@@ -312,24 +313,25 @@ document.addEventListener("DOMContentLoaded", () => {
         } else if (btnId === "controller-mode-btn") {
             if (window.toggleControllerMode) window.toggleControllerMode();
         }
-    });
+    }
+    window.addEventListener('click', handleGlobalButtonAction);
 
     // Modal Close Logic
-    window.addEventListener('click', (e) => {
+    function handleModalCloseClick(e) {
         const isCloseBtn = e.target.classList.contains('close-btn');
         const isModalOverlay = e.target.classList.contains('modal');
-        
+
         if (isCloseBtn || isModalOverlay) {
             const modal = isCloseBtn ? e.target.closest(".modal") : e.target;
             if (modal) {
                 if (modal.id === "end-run-modal" && isModalOverlay) return;
-                
+
                 modal.style.display = "none";
                 window.isPausedForReaction = false;
                 window.lastModalClosedTime = Date.now(); // Track for ghost click prevention
-                
+
                 if (window.updateMusicState) window.updateMusicState();
-                
+
                 if (modal.id === "character-screen-modal" && window.isInitialCharacterScreen) {
                     window.isInitialCharacterScreen = false;
                     console.log("Initial character screen closed - Starting Core");
@@ -337,7 +339,26 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             }
         }
-    });
+    }
+    window.addEventListener('click', handleModalCloseClick);
+
+    // iOS Safari: a synthetic 'click' delegated all the way up to window can
+    // be unreliable, especially for buttons that only became visible a
+    // moment earlier via a class toggle (the dropdown menu) — same
+    // touch-hardening already applied to the party tabs elsewhere in this
+    // UI. Fire the same three handlers directly off touchend for anything
+    // these actually act on (id'd buttons, dropdown buttons, modal
+    // close/overlay), and suppress the resulting synthetic click so the
+    // action doesn't run twice.
+    window.addEventListener('touchend', (e) => {
+        const t = e.target;
+        const actionable = t.id || (t.classList && (t.classList.contains('dropbtn') || t.classList.contains('close-btn') || t.classList.contains('modal')));
+        if (!actionable) return;
+        e.preventDefault();
+        handleMenuDropdownToggle(e);
+        handleGlobalButtonAction(e);
+        handleModalCloseClick(e);
+    }, { passive: false });
 
     window.initHexMap();
     if (window.initWorldMapEvents) window.initWorldMapEvents();
