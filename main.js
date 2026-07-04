@@ -349,10 +349,24 @@ document.addEventListener("DOMContentLoaded", () => {
     // UI. Fire the same three handlers directly off touchend for anything
     // these actually act on (id'd buttons, dropdown buttons, modal
     // close/overlay), and suppress the resulting synthetic click so the
-    // action doesn't run twice.
+    // action doesn't run twice. Scoped to exactly the ids/classes these
+    // three handlers switch on — NOT "any element with an id" (that
+    // swallowed the touch on other id'd controls with their own separate
+    // click listeners, e.g. createCharacterButton and campaign-select,
+    // breaking character creation on touch devices entirely).
+    const GLOBAL_BUTTON_ACTION_IDS = new Set([
+        'create-room-btn', 'join-room-btn', 'leave-room-btn', 'character-screen-btn', 'spell-menu-btn',
+        'inventory-btn', 'world-map-btn', 'quest-log-btn', 'move-group-btn', 'party-formation-btn',
+        'load-btn-initial', 'save-menu-btn', 'load-menu-btn', 'game-over-load-btn', 'game-over-menu-btn',
+        'confirm-save-btn', 'quick-save-btn', 'quick-load-btn', 'settings-menu-btn', 'host-game-btn',
+        'confirm-hire-btn', 'cancel-hire-btn', 'close-shop-modal', 'cheat-jerry-btn', 'cheat-horse-btn',
+        'cheat-all-equip-btn', 'cheat-fly-btn', 'cheat-max-skills-btn', 'cancel-moves-btn', 'rest-btn',
+        'sleep-btn', 'time-speed-btn', 'controller-mode-btn'
+    ]);
     window.addEventListener('touchend', (e) => {
         const t = e.target;
-        const actionable = t.id || (t.classList && (t.classList.contains('dropbtn') || t.classList.contains('close-btn') || t.classList.contains('modal')));
+        const actionable = GLOBAL_BUTTON_ACTION_IDS.has(t.id) ||
+            (t.classList && (t.classList.contains('dropbtn') || t.classList.contains('close-btn') || t.classList.contains('modal')));
         if (!actionable) return;
         e.preventDefault();
         handleMenuDropdownToggle(e);
