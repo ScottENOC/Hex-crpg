@@ -502,7 +502,42 @@ window.npcDialogueTrees = {
     // >= 20) — see espionageQuests.js for the actual stealth-mission
     // tracker (activeStealthMission / checkStealthMissionStatus /
     // searchEvidence) that enforces "stay stealthed or the mission fails."
+    reddale_steward: (npc) => {
+        window.showDialogue(npc, "The Baron is occupied. State your business, or don't waste my time.", [
+            {
+                label: "Try to read him.",
+                action: () => {
+                    const { text } = window.readTheRoom(npc, window.party[0]);
+                    const followUps = window.getLeverageOptions(npc, window.party[0]);
+                    window.showDialogue(npc, text, [...followUps, { label: "Noted.", action: () => {} }]);
+                }
+            },
+            { label: "Never mind.", action: () => {} }
+        ]);
+    },
     reddale_baron: (npc) => {
+        const gemQuest = (window.questLog || []).find(q => q.id === 'baron_tribute');
+        if (gemQuest && gemQuest.status === 'active') {
+            if (window.player.inventory.includes('gem_red')) {
+                window.showDialogue(npc, "A tribute, is it? Let's see it, then.", [
+                    {
+                        label: "Present the gem.",
+                        action: () => {
+                            window.player.inventory.splice(window.player.inventory.indexOf('gem_red'), 1);
+                            gemQuest.status = 'completed';
+                            window.adjustReputation(window.factions.silverhart_kingdom, 10, 15);
+                            window.adjustReputation(npc.reputation, 20, 20);
+                            window.party[0].gold = (window.party[0].gold || 0) + 20;
+                            window.showMessage("Quest complete: The Baron's Tribute. (+20 gold)");
+                        }
+                    },
+                    { label: "Not yet.", action: () => {} }
+                ]);
+                return;
+            }
+            window.showDialogue(npc, "Still no tribute? A red stone isn't so hard to find, surely.", [{ label: "Still looking.", action: () => {} }]);
+            return;
+        }
         const trust = window.factions?.silverhart_kingdom?.standing ?? 0;
         const quest = (window.questLog || []).find(q => q.id === 'spy_on_guild');
 
@@ -560,6 +595,24 @@ window.npcDialogueTrees = {
                     }
                 },
                 { label: "Not my business.", action: () => {} }
+            ]);
+            return;
+        }
+
+        if (!gemQuest) {
+            window.showDialogue(npc, "Reddale answers to me, same as the rest of the barony. Mind your business here and we'll get along fine. Bring a gift worth the visit and I'll remember it kindly — a fine red gem would do nicely.", [
+                {
+                    label: "I'll bring you a tribute.",
+                    action: () => {
+                        window.questLog = window.questLog || [];
+                        window.questLog.push({
+                            id: 'baron_tribute', title: "The Baron's Tribute", giver: 'Baron Corwin Aldervale', status: 'active',
+                            description: 'Bring Baron Corwin Aldervale a red gem as tribute.'
+                        });
+                        window.showMessage("Quest added: The Baron's Tribute.");
+                    }
+                },
+                { label: "Understood.", action: () => {} }
             ]);
             return;
         }

@@ -54,6 +54,11 @@ function checkStealthMissionStatus() {
         window.entities.find(e => e.side === 'player' && !e.rider);
     if (!guard || !player) return;
 
+    // A bribed guard (see the steward's `wants`/onBribeSuccess in
+    // buildReddale, campaign2World.js) has already agreed to look the other
+    // way — no detection check at all for this specific mission.
+    if (guard.bribed) return;
+
     if (window.canSee(guard, player)) {
         failStealthMission(`${guard.name} spotted you.`);
     }

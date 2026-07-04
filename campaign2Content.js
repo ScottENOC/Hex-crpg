@@ -365,5 +365,6 @@ window.campaign2ReddaleBaronSteward = {
     equipment: ['sword', 'light_armor'],
     side: 'neutral',
     factionId: 'silverhart_kingdom',
-    color: '#333366'
+    color: '#333366',
+    dialogueId: 'reddale_steward'
 };

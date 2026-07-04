@@ -986,6 +986,20 @@ function buildReddale(roadEnd) {
         steward.behaviorType = 'patrol';
         steward.patrolPath = [{ q: manorCenter.q - 1, r: manorCenter.r }, { q: manorCenter.q + 1, r: manorCenter.r + 1 }];
         steward.homeHex = { q: manorCenter.q - 1, r: manorCenter.r };
+        // Bribable, same pattern as Bram at the Reddale guardhouse — pays off
+        // directly against the "A Look at the Ledgers" stealth mission (see
+        // espionageQuests.js's checkStealthMissionStatus), which skips its
+        // detection check entirely once this guard is bribed.
+        steward.wants = {
+            type: 'gold', amount: 40, offerLabel: 'bribe', description: 'coin to look the other way in the back halls',
+            fullHint: "Greer's salary hasn't kept pace with the Baron's tastes. He'd notice a heavy purse.",
+            partialHint: "He carries himself like a man underpaid for what he puts up with."
+        };
+        steward.vagueFlavor = "Stiff, formal, gives nothing away.";
+        steward.onBribeSuccess = () => {
+            steward.bribed = true;
+            window.showDialogue(steward, "The manor's a big place. A man can't watch every hallway at once.", [{ label: "Good.", action: () => {} }]);
+        };
         window.entities.push(steward);
     }
 
