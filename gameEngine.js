@@ -1727,6 +1727,18 @@ function renderEntities() {
         }
     }
 
+    // Brief colored overlay on hit/heal (see combatFX.js's flashEntity) —
+    // cheap "got hit" feedback without a dedicated hit-animation frame.
+    if (e._fxFlashUntil && performance.now() < e._fxFlashUntil) {
+        window.mapCtx.globalAlpha = 0.45;
+        window.mapCtx.fillStyle = e._fxFlashColor || '#f00';
+        const fSize = window.hexSize * 1.3 * z;
+        window.mapCtx.beginPath();
+        window.mapCtx.arc(x, y, fSize / 2, 0, Math.PI * 2);
+        window.mapCtx.fill();
+        window.mapCtx.globalAlpha = 1.0;
+    }
+
     window.mapCtx.globalAlpha = 1.0;
   });
 }
@@ -3781,6 +3793,7 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
 
       if (roll >= hitChance) {
           sharedMessage(`${attacker.name} misses ${target.name}! (Roll: ${roll} vs Need: <${hitChance})`);
+          if (window.spawnFloatingText) window.spawnFloatingText(target.hex, 'Miss', '#ccc');
           if (!isOffhand) attacker.offhandAttackAvailable = (attacker.equipped?.offhand && window.items[attacker.equipped.offhand].type === 'weapon');
           missCallbackFinal();
           return;
@@ -3815,8 +3828,10 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   // HEALING REDUCTION / PENALTIES (Not applicable to damage directly but noted)
 
   sharedMessage(`${attacker.name} hits ${target.name} for ${fd} damage! (${dmg} base - ${red} reduction)`);
+  if (window.spawnFloatingText) window.spawnFloatingText(target.hex, `-${fd}`, '#ff4d4d');
+  if (window.flashEntity) window.flashEntity(target, '#f00');
   target.hp -= fd; syncBackToPlayer(target);
-  
+
   // UNARMED REACTION BLOCK
   if (!weapon && attacker.skills?.unarmed_reaction_block) {
       target.reactionBlocked = true;
@@ -3932,6 +3947,7 @@ function handleLethalDamage(target, attacker) {
     }
 
     target.alive = false; window.showMessage(`${target.name} defeated!`);
+    if (window.triggerScreenShake) window.triggerScreenShake();
     const side = target.side;
 
     // Leave a harvestable corpse behind for animal-tagged kills (see
@@ -5105,6 +5121,8 @@ function resolveSpell(caster, spell, target, clickedHex) {
             if (hit) {
                 let red = (target.baseReduction || 0) + (target.equipped?.armor ? window.items[target.equipped.armor].reduction : 0) + (window.items[target.equipped?.offhand]?.type === 'shield' ? window.items[target.equipped.offhand].reduction : 0);
                 let fd = Math.max(1, (spell.magnitude || 0) - red);
+                if (window.spawnFloatingText) window.spawnFloatingText(target.hex, `-${fd}`, '#ff4d4d');
+                if (window.flashEntity) window.flashEntity(target, '#f00');
                 target.hp -= fd; syncBackToPlayer(target);
                 wakeUp(target);
                 if (target.hp <= 0 && target.alive) {
@@ -5114,6 +5132,7 @@ function resolveSpell(caster, spell, target, clickedHex) {
             actionHandled = true;
         } else if (spell.type === 'heal' && target) {
             target.hp = Math.min(target.maxHp, target.hp + spell.magnitude);
+            if (window.spawnFloatingText) window.spawnFloatingText(target.hex, `+${spell.magnitude}`, '#5cff5c');
             if (target.unconscious && target.hp > 0) {
                 target.unconscious = false;
                 window.showMessage(`${target.name} regains consciousness!`);

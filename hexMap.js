@@ -62,8 +62,8 @@ let longPressTimer = null;
 
 // Flat-top hexToPixel formula - UPDATED for camera
 function hexToPixel(q, r) {
-  const x = (hexSize * (3/2 * q) + mapOffsetX) * window.cameraZoom + window.cameraX;
-  const y = (hexSize * (Math.sqrt(3) * r + Math.sqrt(3)/2 * q) + mapOffsetY) * window.cameraZoom + window.cameraY;
+  const x = (hexSize * (3/2 * q) + mapOffsetX) * window.cameraZoom + window.cameraX + (window.shakeOffsetX || 0);
+  const y = (hexSize * (Math.sqrt(3) * r + Math.sqrt(3)/2 * q) + mapOffsetY) * window.cameraZoom + window.cameraY + (window.shakeOffsetY || 0);
   return { x, y };
 }
 
@@ -245,8 +245,9 @@ function getVisibleHexes() {
 
 function drawMap() {
   if (!mapCtx) return;
+  if (window.applyScreenShake) window.applyScreenShake();
   mapCtx.clearRect(0,0,mapCanvas.width,mapCanvas.height);
-  
+
   const bounds = getVisibleHexes();
   const visibleAndExplored = [];
 
@@ -384,9 +385,12 @@ function drawMap() {
 
   // 6. PASS 5: Night Filter
   if (window.lightLevel < 1.0) {
-      mapCtx.fillStyle = `rgba(0,0,0,${(1.0 - window.lightLevel) * 0.7})`; 
+      mapCtx.fillStyle = `rgba(0,0,0,${(1.0 - window.lightLevel) * 0.7})`;
       mapCtx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
   }
+
+  // 7. PASS 6: Floating combat text (damage/heal/miss) - always on top
+  if (window.renderFloatingTexts) window.renderFloatingTexts(mapCtx, hexToPixel, window.cameraZoom);
 }
 
 function clearHighlights() {
