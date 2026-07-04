@@ -1532,6 +1532,12 @@ function renderEntities() {
               window.mapCtx.drawImage(window.gameVisuals.hut_large, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'journal' && window.gameVisuals.journal.complete) {
               window.mapCtx.drawImage(window.gameVisuals.journal, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'evidence' && window.gameVisuals.journal.complete) {
+              // Espionage-quest incriminating documents (see espionageQuests.js)
+              // — reuses the journal sprite, faded out once already searched.
+              if (obj.taken) window.mapCtx.globalAlpha = 0.3;
+              window.mapCtx.drawImage(window.gameVisuals.journal, x - size/2, y - size/2, size, size);
+              window.mapCtx.globalAlpha = 1.0;
           } else if (obj.type === 'ore_node' && window.gameVisuals.ore_vein.complete) {
               // Depleted veins fade out until they regrow (see harvestOreNode).
               let img = window.gameVisuals.ore_vein;
@@ -3226,6 +3232,7 @@ function handleClick(e){
         if (doorObj.type === 'herb_patch' && window.harvestHerbPatch) { window.harvestHerbPatch(clickedHex.q, clickedHex.r); return; }
         if (doorObj.type === 'fishing_spot' && window.harvestFishingSpot) { window.harvestFishingSpot(clickedHex.q, clickedHex.r); return; }
         if (doorObj.type === 'corpse' && window.harvestCorpse) { window.harvestCorpse(clickedHex.q, clickedHex.r); return; }
+        if (doorObj.type === 'evidence' && window.searchEvidence) { window.searchEvidence(clickedHex.q, clickedHex.r); return; }
     }
 
     // ASSASSINATE THE GOBLIN CHIEF — a stealthed player adjacent to the

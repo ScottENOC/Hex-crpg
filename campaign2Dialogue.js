@@ -497,6 +497,143 @@ window.npcDialogueTrees = {
             ]);
         }
     },
+    // --- Merchants Guild vs the Baron: mirrored espionage side-quests. Each
+    // only opens up once the *offering* faction trusts the player (standing
+    // >= 20) — see espionageQuests.js for the actual stealth-mission
+    // tracker (activeStealthMission / checkStealthMissionStatus /
+    // searchEvidence) that enforces "stay stealthed or the mission fails."
+    reddale_baron: (npc) => {
+        const trust = window.factions?.silverhart_kingdom?.standing ?? 0;
+        const quest = (window.questLog || []).find(q => q.id === 'spy_on_guild');
+
+        if (quest && quest.status === 'active') {
+            if (window.player.inventory.includes('guild_ledger_evidence')) {
+                window.showDialogue(npc, "You look like someone who's been somewhere they shouldn't. Tell me you found something.", [
+                    {
+                        label: "Here — their ledgers. (Give evidence)",
+                        action: () => {
+                            window.player.inventory.splice(window.player.inventory.indexOf('guild_ledger_evidence'), 1);
+                            quest.status = 'completed';
+                            window.adjustReputation(window.factions.silverhart_kingdom, 15, 15);
+                            window.adjustReputation(npc.reputation, 20, 20);
+                            if (window.factions.merchants_guild) window.adjustReputation(window.factions.merchants_guild, -20, 20);
+                            window.party[0].gold = (window.party[0].gold || 0) + 40;
+                            if (window.gainExp) window.gainExp(150);
+                            window.showMessage("Quest complete: Eyes on the Guildhouse. (+40 gold)");
+                        }
+                    },
+                    { label: "Not yet.", action: () => {} }
+                ]);
+            } else {
+                window.showDialogue(npc, "Still nothing from the guildhouse? Take your time — but not too much of it.", [{ label: "Working on it.", action: () => {} }]);
+            }
+            return;
+        }
+        if (quest && quest.status === 'failed') {
+            window.showDialogue(npc, "Word reached me you were caught snooping around the guildhouse. That's put us both in a poor position. I won't ask that of you again.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+
+        if (trust >= 20 && !quest) {
+            window.showDialogue(npc, "The Guild's books don't add up, and Voss won't open them for any tax man I send. I need someone who isn't a tax man. Get into their guildhouse, find their real ledgers, and bring them to me — quietly. If you're seen, this goes badly for both of us.", [
+                {
+                    label: "I'll do it.",
+                    action: () => {
+                        window.questLog = window.questLog || [];
+                        window.questLog.push({
+                            id: 'spy_on_guild', title: 'Eyes on the Guildhouse', giver: 'Baron Corwin Aldervale', status: 'active',
+                            description: "Sneak into the Reddale guildhouse and find the merchants guild's real ledgers, without being seen."
+                        });
+                        if (window.startStealthMission) {
+                            window.startStealthMission({
+                                questId: 'spy_on_guild',
+                                guardName: 'Guild Watchman Corley',
+                                evidenceKey: 'guild_ledgers',
+                                itemId: 'guild_ledger_evidence',
+                                evidenceFlavor: 'the guild\'s private ledgers',
+                                factionSpiedOn: 'merchants_guild',
+                                failStandingHit: -20,
+                                objectiveText: 'Search the guildhouse ledgers without being seen by the guild watchman.'
+                            });
+                        }
+                        window.showMessage("Quest added: Eyes on the Guildhouse.");
+                    }
+                },
+                { label: "Not my business.", action: () => {} }
+            ]);
+            return;
+        }
+
+        window.showDialogue(npc, "Reddale answers to me, same as the rest of the barony. Mind your business here and we'll get along fine.", [
+            { label: "Understood.", action: () => {} }
+        ]);
+    },
+    reddale_guildmaster: (npc) => {
+        const trust = window.factions?.merchants_guild?.standing ?? 0;
+        const quest = (window.questLog || []).find(q => q.id === 'spy_on_baron');
+
+        if (quest && quest.status === 'active') {
+            if (window.player.inventory.includes('baron_tariff_evidence')) {
+                window.showDialogue(npc, "You've the look of someone who's been in the manor and not through the front door. Well?", [
+                    {
+                        label: "Here — his steward's own tally. (Give evidence)",
+                        action: () => {
+                            window.player.inventory.splice(window.player.inventory.indexOf('baron_tariff_evidence'), 1);
+                            quest.status = 'completed';
+                            window.adjustReputation(window.factions.merchants_guild, 15, 15);
+                            window.adjustReputation(npc.reputation, 20, 20);
+                            if (window.factions.silverhart_kingdom) window.adjustReputation(window.factions.silverhart_kingdom, -20, 20);
+                            window.party[0].gold = (window.party[0].gold || 0) + 40;
+                            if (window.gainExp) window.gainExp(150);
+                            window.showMessage("Quest complete: A Look at the Ledgers. (+40 gold)");
+                        }
+                    },
+                    { label: "Not yet.", action: () => {} }
+                ]);
+            } else {
+                window.showDialogue(npc, "Still no word from the manor? No rush — but the Baron isn't getting any less greedy while we wait.", [{ label: "Working on it.", action: () => {} }]);
+            }
+            return;
+        }
+        if (quest && quest.status === 'failed') {
+            window.showDialogue(npc, "I heard his steward caught someone poking around the manor. That was meant to stay quiet. I won't send you back in.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+
+        if (trust >= 20 && !quest) {
+            window.showDialogue(npc, "The Baron's tariffs have crept up twice this year and his own books somehow never show it. I need proof, not rumors. Get into the manor, find his steward's real tally, and get out without being seen. If his man catches you, I can't protect you.", [
+                {
+                    label: "I'll do it.",
+                    action: () => {
+                        window.questLog = window.questLog || [];
+                        window.questLog.push({
+                            id: 'spy_on_baron', title: 'A Look at the Ledgers', giver: 'Guildmaster Petra Voss', status: 'active',
+                            description: "Sneak into the Baron's manor and find the steward's real tariff records, without being seen."
+                        });
+                        if (window.startStealthMission) {
+                            window.startStealthMission({
+                                questId: 'spy_on_baron',
+                                guardName: 'Steward Halvard Greer',
+                                evidenceKey: 'baron_tariffs',
+                                itemId: 'baron_tariff_evidence',
+                                evidenceFlavor: "the steward's tariff tally",
+                                factionSpiedOn: 'silverhart_kingdom',
+                                failStandingHit: -20,
+                                objectiveText: "Search the manor's tariff records without being seen by the Baron's steward."
+                            });
+                        }
+                        window.showMessage("Quest added: A Look at the Ledgers.");
+                    }
+                },
+                { label: "Not my business.", action: () => {} }
+            ]);
+            return;
+        }
+
+        window.showDialogue(npc, "The Guild looks after its own here in Reddale. Trade fair with us and we'll do the same for you.", [
+            { label: "Good to know.", action: () => {} }
+        ]);
+    },
     farm_sheep: (npc) => {
         window.showDialogue(npc, "Baa.", [{ label: "...", action: () => {} }]);
     },

@@ -26,7 +26,14 @@ window.factions = {
     // Small orc raiding/scouting bands pressing in from the borderlands.
     // Currently pure wilderness-encounter flavor + reputation target for
     // "Eyes on the Border" — no camp/settlement of their own yet.
-    orc_raiders:        { id: 'orc_raiders',        name: 'The Borderland Raiders', race: 'orc', knowledge: 0, standing: 0 }
+    orc_raiders:        { id: 'orc_raiders',        name: 'The Borderland Raiders', race: 'orc', knowledge: 0, standing: 0 },
+    // Reddale's merchants guild, in a quiet standoff with the Baron over
+    // tariffs and trade rights — see the espionage side-quests in
+    // espionageQuests.js/campaign2Dialogue.js. Standing here and the
+    // Baron's standing with silverhart_kingdom move in opposite directions
+    // as the player picks a side, same convention as goblin_tribe vs the
+    // kingdom.
+    merchants_guild:    { id: 'merchants_guild',    name: 'The Reddale Merchants Guild', race: 'human', knowledge: 0, standing: 0 }
 };
 
 function seedStanding(race, playerRace) {

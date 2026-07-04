@@ -304,5 +304,50 @@ window.campaign2Baron = {
     equipment: ['sword', 'medium_armor'],
     side: 'neutral',
     factionId: 'silverhart_kingdom',
-    color: '#4444aa'
+    color: '#4444aa',
+    dialogueId: 'reddale_baron'
+};
+
+// --- Reddale's merchants guild vs the Baron: a quiet standoff over tariffs
+// and trade rights, resolved through espionage side-quests once one side
+// trusts the player enough to ask them to spy on the other (see
+// espionageQuests.js and campaign2Dialogue.js's reddale_baron/
+// reddale_guildmaster trees). The Baron himself is physically placed here
+// in Reddale (his barony's real seat of power), not in Hollowmere — see
+// buildReddale in campaign2World.js, which pushes the existing
+// window.regionalNPCs.baron entity into the world instead of building a
+// second, duplicate Baron.
+window.campaign2ReddaleGuildmaster = {
+    name: 'Guildmaster Petra Voss',
+    title: 'Guildmaster',
+    race: 'human', gender: 'female',
+    classLevels: ['fighter'],
+    skillPicks: ['health'],
+    equipment: ['club'],
+    side: 'neutral',
+    factionId: 'merchants_guild',
+    color: '#4a7a5a',
+    dialogueId: 'reddale_guildmaster'
+};
+window.campaign2ReddaleGuildGuard = {
+    name: 'Guild Watchman Corley',
+    title: 'Guild Watchman',
+    race: 'human', gender: 'male',
+    classLevels: ['fighter'],
+    skillPicks: ['health'],
+    equipment: ['club', 'light_armor'],
+    side: 'neutral',
+    factionId: 'merchants_guild',
+    color: '#3a5a4a'
+};
+window.campaign2ReddaleBaronSteward = {
+    name: 'Steward Halvard Greer',
+    title: "Baron's Steward",
+    race: 'human', gender: 'male',
+    classLevels: ['fighter'],
+    skillPicks: ['health'],
+    equipment: ['sword', 'light_armor'],
+    side: 'neutral',
+    factionId: 'silverhart_kingdom',
+    color: '#333366'
 };

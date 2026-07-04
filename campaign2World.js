@@ -934,6 +934,61 @@ function buildReddale(roadEnd) {
         window.entities.push(window.buildNPC({ ...window.campaign2ReddaleInnkeeper, hex: { q: innCenter.q, r: innCenter.r } }));
     }
 
+    // Merchants Guild guildhouse and the Baron's manor — the two ends of the
+    // Reddale espionage side-quests (see espionageQuests.js and
+    // campaign2Dialogue.js's reddale_baron/reddale_guildmaster trees). Kept
+    // well clear of the other buildings/road, on their own short spurs.
+    const guildCenter = { q: roadEnd.q + 8, r: roadEnd.r + 10 };
+    const guildDoor = { q: guildCenter.q - 3, r: guildCenter.r };
+    const guildRegion = carveBuilding(guildCenter.q, guildCenter.r, 3, 2, guildDoor, 'Wood Floor');
+    window.interiorRegions.push(guildRegion);
+    window.tileObjects[`${guildCenter.q},${guildCenter.r}`] = { type: 'fireplace', lightRadius: 6 };
+    window.tileObjects[`${guildCenter.q},${guildCenter.r - 1}`] = { type: 'table' };
+    window.campaign2ReddaleGuildhouseCenter = guildCenter;
+    // The ledgers the Baron wants his spy to find.
+    const guildEvidenceHex = { q: guildCenter.q + 1, r: guildCenter.r - 1 };
+    window.tileObjects[`${guildEvidenceHex.q},${guildEvidenceHex.r}`] = { type: 'evidence', evidenceKey: 'guild_ledgers' };
+    window.campaign2GuildEvidenceHex = guildEvidenceHex;
+
+    const manorCenter = { q: roadEnd.q + 8, r: roadEnd.r - 10 };
+    const manorDoor = { q: manorCenter.q - 3, r: manorCenter.r };
+    const manorRegion = carveBuilding(manorCenter.q, manorCenter.r, 3, 2, manorDoor, 'Wood Floor');
+    window.interiorRegions.push(manorRegion);
+    window.tileObjects[`${manorCenter.q},${manorCenter.r}`] = { type: 'fireplace', lightRadius: 6 };
+    window.tileObjects[`${manorCenter.q},${manorCenter.r - 1}`] = { type: 'table' };
+    window.campaign2ReddaleManorCenter = manorCenter;
+    // The tariff records the Guildmaster wants her spy to find.
+    const manorEvidenceHex = { q: manorCenter.q + 1, r: manorCenter.r - 1 };
+    window.tileObjects[`${manorEvidenceHex.q},${manorEvidenceHex.r}`] = { type: 'evidence', evidenceKey: 'baron_tariffs' };
+    window.campaign2ManorEvidenceHex = manorEvidenceHex;
+
+    if (window.campaign2ReddaleGuildmaster) {
+        window.entities.push(window.buildNPC({ ...window.campaign2ReddaleGuildmaster, hex: { q: guildCenter.q, r: guildCenter.r + 1 } }));
+    }
+    if (window.campaign2ReddaleGuildGuard) {
+        const guildGuard = window.buildNPC({ ...window.campaign2ReddaleGuildGuard, hex: { q: guildCenter.q - 1, r: guildCenter.r } });
+        guildGuard.behaviorType = 'patrol';
+        guildGuard.patrolPath = [{ q: guildCenter.q - 1, r: guildCenter.r }, { q: guildCenter.q + 1, r: guildCenter.r + 1 }];
+        guildGuard.homeHex = { q: guildCenter.q - 1, r: guildCenter.r };
+        window.entities.push(guildGuard);
+    }
+
+    // The Baron is the existing off-map-until-now regionalNPCs.baron entity
+    // (see setupVillageScene above) — placed here in the flesh rather than
+    // duplicating a second Baron object, so his reputation stays one single
+    // source of truth wherever he's referenced.
+    if (window.regionalNPCs?.baron) {
+        window.regionalNPCs.baron.hex = { q: manorCenter.q, r: manorCenter.r + 1 };
+        window.entities.push(window.regionalNPCs.baron);
+    }
+    if (window.campaign2ReddaleBaronSteward) {
+        const steward = window.buildNPC({ ...window.campaign2ReddaleBaronSteward, hex: { q: manorCenter.q - 1, r: manorCenter.r } });
+        steward.behaviorType = 'patrol';
+        steward.patrolPath = [{ q: manorCenter.q - 1, r: manorCenter.r }, { q: manorCenter.q + 1, r: manorCenter.r + 1 }];
+        steward.homeHex = { q: manorCenter.q - 1, r: manorCenter.r };
+        window.entities.push(steward);
+    }
+
     // One world-hex east of Hollowmere [6][6].
     if (window.worldMapData && window.worldMapData[6] && window.worldMapData[6][7] !== undefined) {
         window.worldMapData[6][7] = { t: 'G', f: 'T', o: 'h', p: 1, n: 'Reddale' };

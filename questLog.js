@@ -48,12 +48,13 @@ function renderQuestLog() {
         div.style.marginBottom = '8px';
         div.style.borderRadius = '6px';
         div.style.background = 'rgba(255,255,255,0.05)';
-        div.style.borderLeft = `4px solid ${q.status === 'completed' ? '#4caf50' : '#ffb300'}`;
+        const statusColor = q.status === 'completed' ? '#4caf50' : q.status === 'failed' ? '#e57373' : '#ffb300';
+        div.style.borderLeft = `4px solid ${statusColor}`;
 
-        const statusLabel = q.status === 'completed' ? 'Completed' : 'Active';
+        const statusLabel = q.status === 'completed' ? 'Completed' : q.status === 'failed' ? 'Failed' : 'Active';
         div.innerHTML = `
             <strong style="color:#fff;">${q.title}</strong>
-            <span style="float:right; color:${q.status === 'completed' ? '#4caf50' : '#ffb300'}; font-size:0.85em;">${statusLabel}</span>
+            <span style="float:right; color:${statusColor}; font-size:0.85em;">${statusLabel}</span>
             <br><small style="color:#aaa;">From: ${q.giver}</small>
             <p style="margin: 6px 0 0 0; color:#ccc; font-size:0.9em;">${q.description}</p>
         `;

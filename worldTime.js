@@ -107,6 +107,11 @@ function updateTime(delta) {
         // Ambient character personality lines (see characterBanter.js).
         if (window.checkCharacterBanter) window.checkCharacterBanter(delta);
 
+        // Reddale espionage side-quests: fails the active stealth mission
+        // (if any) the moment its guard actually sees the player — see
+        // espionageQuests.js.
+        if (window.checkStealthMissionStatus) window.checkStealthMissionStatus(delta);
+
         // Loose Ends: weeks after the tavern brawl, the Ironbond Company
         // sends someone to ask around (see campaign2Dialogue.js).
         if (window.triggerGuildInvestigatorEncounter) window.triggerGuildInvestigatorEncounter();

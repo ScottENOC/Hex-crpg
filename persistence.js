@@ -68,6 +68,7 @@ function saveGame(saveName = "rpg_save_game") {
         emberlodeRaided: window.emberlodeRaided,
         questLog: window.questLog,
         worldMapNotes: window.worldMapNotes,
+        activeStealthMission: window.activeStealthMission || null,
         // The baron is a reputation-only NPC not placed in window.entities
         // (never rendered/AI-processed), so he needs his own save/load slot.
         regionalNPCBaron: window.regionalNPCs?.baron || null,
@@ -187,6 +188,7 @@ function loadGame(saveName = "rpg_save_game") {
         window.emberlodeRaided = gameState.emberlodeRaided || false;
         window.questLog = gameState.questLog || [];
         window.worldMapNotes = gameState.worldMapNotes || {};
+        window.activeStealthMission = gameState.activeStealthMission || null;
         // Always false on load, regardless of what was saved — loading a
         // save is exactly how the player is meant to recover from Game Over.
         window.gameOver = false;
@@ -194,6 +196,19 @@ function loadGame(saveName = "rpg_save_game") {
         if (gameOverModal) gameOverModal.style.display = 'none';
         if (gameState.regionalNPCBaron) {
             window.regionalNPCs = window.regionalNPCs || {};
+            // The Baron is now also physically placed in Reddale (see
+            // buildReddale in campaign2World.js), so startGameCore's fresh
+            // world-build above already pushed a brand-new baron entity into
+            // window.entities before this save data gets applied. Swap that
+            // stand-in out for the restored object (keeping its rebuilt
+            // hex/position) so window.entities and window.regionalNPCs.baron
+            // stay the exact same object, not two diverging copies.
+            const freshBaron = window.entities.find(e => e === window.regionalNPCs.baron || e.name === gameState.regionalNPCBaron.name);
+            if (freshBaron) {
+                gameState.regionalNPCBaron.hex = freshBaron.hex;
+                const idx = window.entities.indexOf(freshBaron);
+                window.entities[idx] = gameState.regionalNPCBaron;
+            }
             window.regionalNPCs.baron = gameState.regionalNPCBaron;
         }
 
