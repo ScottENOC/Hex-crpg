@@ -391,6 +391,10 @@ function drawMap() {
 
   // 7. PASS 6: Floating combat text (damage/heal/miss) - always on top
   if (window.renderFloatingTexts) window.renderFloatingTexts(mapCtx, hexToPixel, window.cameraZoom);
+
+  // 8. PASS 7: Party banter speech bubbles - above floating text so a bubble
+  // and a damage number over the same hex don't fight for attention
+  if (window.renderSpeechBubbles) window.renderSpeechBubbles(mapCtx, hexToPixel, window.cameraZoom);
 }
 
 function clearHighlights() {

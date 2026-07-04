@@ -174,7 +174,77 @@ function playBanterLines(lines) {
             const text = `${line.speaker} (${line.mood}): "${line.text}"`;
             window.showMessage(text);
             if (window.broadcastGameMessage) window.broadcastGameMessage(text);
+            if (window.spawnSpeechBubble) window.spawnSpeechBubble(line.speaker, line.text);
         }, i * 2500);
     });
 }
 window.playBanterLines = playBanterLines;
+
+// Speech bubbles: banter previously only showed up in the scrolling text log,
+// which made a party of characters walking around in real time feel mute.
+// Cheap canvas overlay above the speaking entity's own hex — no new art,
+// same "transient VFX, nothing persisted" spirit as combatFX.js.
+window.speechBubbles = [];
+function spawnSpeechBubble(speakerName, text, durationMs = 3200) {
+    window.speechBubbles.push({ speakerName, text, start: performance.now(), duration: durationMs });
+}
+window.spawnSpeechBubble = spawnSpeechBubble;
+
+function renderSpeechBubbles(ctx, hexToPixel, zoom) {
+    const now = performance.now();
+    window.speechBubbles = window.speechBubbles.filter(b => now - b.start < b.duration);
+    window.speechBubbles.forEach(b => {
+        const ent = window.entities && window.entities.find(e => e.name === b.speakerName && e.alive);
+        if (!ent || !ent.hex) return;
+
+        const { x, y } = hexToPixel(ent.hex.q, ent.hex.r);
+        const maxTextWidth = 160 * zoom;
+        const padding = 8 * zoom;
+        const lineHeight = 14 * zoom;
+
+        ctx.save();
+        ctx.font = `${Math.round(12 * zoom)}px sans-serif`;
+        ctx.textAlign = 'center';
+
+        const words = b.text.split(' ');
+        const lines = [];
+        let current = '';
+        words.forEach(word => {
+            const candidate = current ? `${current} ${word}` : word;
+            if (current && ctx.measureText(candidate).width > maxTextWidth) {
+                lines.push(current);
+                current = word;
+            } else {
+                current = candidate;
+            }
+        });
+        if (current) lines.push(current);
+
+        const boxWidth = Math.min(maxTextWidth, Math.max(...lines.map(l => ctx.measureText(l).width))) + padding * 2;
+        const boxHeight = lines.length * lineHeight + padding * 2;
+        const boxX = x - boxWidth / 2;
+        const boxY = y - 45 * zoom - boxHeight;
+
+        ctx.fillStyle = 'rgba(20,20,20,0.85)';
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 6 * zoom);
+        else ctx.rect(boxX, boxY, boxWidth, boxHeight);
+        ctx.fill();
+        ctx.stroke();
+
+        // Speech-bubble tail pointing down at the speaker.
+        ctx.beginPath();
+        ctx.moveTo(x - 6 * zoom, boxY + boxHeight);
+        ctx.lineTo(x + 6 * zoom, boxY + boxHeight);
+        ctx.lineTo(x, boxY + boxHeight + 8 * zoom);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = '#fff';
+        lines.forEach((line, i) => ctx.fillText(line, x, boxY + padding + (i + 1) * lineHeight - 4 * zoom));
+        ctx.restore();
+    });
+}
+window.renderSpeechBubbles = renderSpeechBubbles;
