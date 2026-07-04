@@ -9,6 +9,43 @@ window.isPausedForReaction = false;
 // already reads as "common ore").
 const ORE_HUES = { ore_silver: 220, ore_gold: 48, gem_red: 0, gem_blue: 210, gem_green: 130 };
 
+// Shared base monster pool for both the arena's actual encounter roll
+// (startArenaFight) and the lobby's "waiting combatants" preview
+// (setupArenaLobby) — kept as one array so the lobby can genuinely draw
+// from the same pool the next fight will, rather than a separate
+// hand-picked flavor list that could never match.
+const ARENA_MONSTER_POOL = ['goblin', 'orc', 'skeleton', 'zombie', 'imp', 'spider', 'troll',
+    'wraith', 'basilisk', 'harpy', 'minotaur', 'revenant', 'wolf_rider_goblin', 'elite_goblin',
+    'wolf', 'boar', 'tiger'];
+const ARENA_BEAST_TYPES = ['wolf', 'boar', 'tiger', 'dragon_young', 'dragon_adult', 'dragon_ancient'];
+
+// One-line flavor for the lobby's dialogue-only "waiting combatant" and
+// caged-beast NPCs — talkToNPC falls back to these when the entity has no
+// dialogueId of its own (see the arenaFlavorLine field set in
+// setupArenaLobby).
+const ARENA_FLAVOR_LINES = {
+    goblin: "The goblin eyes your gear, chained wrists rattling. \"Next match... maybe you. Maybe not.\"",
+    orc: "The orc says nothing, just cracks its knuckles and watches the door to the pit.",
+    skeleton: "The skeleton's jaw clatters — whether that's a threat or a greeting, hard to say.",
+    zombie: "It groans low and doesn't seem to notice you're there at all.",
+    imp: "The imp cackles. \"Ooh, fresh meat! Well — fresh-ish. Good luck out there!\"",
+    spider: "Too many eyes track your every step. It doesn't move otherwise.",
+    troll: "The troll is asleep, or pretending to be. Either way, best not to find out.",
+    wraith: "Cold radiates off it even from here. It doesn't seem to breathe.",
+    basilisk: "It's hooded, thankfully. You are not eager to see what's underneath.",
+    harpy: "It preens, entirely uninterested in you until the horn sounds.",
+    minotaur: "The minotaur snorts and paces its chain's short radius, again and again.",
+    revenant: "\"Already died once,\" it rasps. \"Doesn't sting the same the second time.\"",
+    wolf_rider_goblin: "The goblin checks its wolf's tack for the third time this hour.",
+    elite_goblin: "This one's armor is a cut above the others'. It knows it, too.",
+    wolf: "The wolf paces the fence line, watching you the whole way across.",
+    boar: "It grunts and paws at the dirt but the fence holds.",
+    tiger: "Its tail flicks. It has clearly done this before.",
+    dragon_young: "Even young, it fills the pen. Best not get close to the bars.",
+    dragon_adult: "The whole enclosure smells of ash. You give it a wide berth.",
+    dragon_ancient: "It barely fits. It barely seems to care that you're here at all."
+};
+
 // Broadcast a message to all connected clients. On non-host or single-player
 // this is identical to showMessage. On host in multiplayer the text is also
 // emitted so every instance sees the same combat/narrative log.
@@ -3492,6 +3529,12 @@ function handleClick(e){
 window.snapVisuals = snapVisuals;
 
 function tryAttack(attacker, target, isFeint = false, isOffhand = false, bonusDamage = 0, ignoreNeutralCheck = false) {
+    // Dialogue-only lobby/pen NPCs (see setupArenaLobby) — never a valid
+    // target, not even via Force-Attack's ignoreNeutralCheck override.
+    if (target.noAttack) {
+        if (attacker.side === 'player') window.showMessage(`${target.name} isn't part of any fight — leave them be.`);
+        return;
+    }
     if (target.side === 'neutral' && !ignoreNeutralCheck) {
         if (attacker.side === 'player') window.showMessage("You cannot attack a neutral character!");
         return;
@@ -4263,6 +4306,10 @@ function tryStealth(entity) {
 }
 
 function tryShove(shover, target) {
+    if (target.noAttack) {
+        if (shover.side === 'player') window.showMessage(`${target.name} isn't part of any fight — leave them be.`);
+        return false;
+    }
     if (!window.areAdjacent(shover.hex, target.hex)) {
         window.showMessage("Target is not adjacent for shove.");
         return false;
@@ -4381,27 +4428,55 @@ function setupArenaLobby() {
     window.hasTriggeredImpatience = false;
     window.startSleepTime = 0; 
 
-    // Create two rooms: Spawn Room and NPC Room
-    // Room 1 (Spawn): -10 to -2
-    // Room 2 (NPCs): 2 to 10
+    // Two rooms built as true hex-distance circles (not q/r bounding
+    // rectangles) — a rectangular q/r range reads as a slanted rhombus once
+    // drawn through the axial hex projection, while a hex-distance circle
+    // reads as a proper rounded room. Joined by a short corridor.
+    const SPAWN_ROOM_CENTER = { q: -7, r: 0 };
+    const NPC_ROOM_CENTER = { q: 7, r: 0 };
+    const ROOM_RADIUS = 5;
+    window.arenaSpawnRoomCenter = SPAWN_ROOM_CENTER;
+    window.arenaNpcRoomCenter = NPC_ROOM_CENTER;
+
     for (let q = -12; q <= 12; q++) {
         for (let r = -8; r <= 8; r++) {
             window.setTerrainAt(q, r, 'Wall');
-            
-            // Spawn Room
-            if (q >= -10 && q <= -2 && r >= -6 && r <= 6) {
+
+            if (window.distance({ q, r }, SPAWN_ROOM_CENTER) <= ROOM_RADIUS) {
                 window.setTerrainAt(q, r, 'Cave Floor');
             }
-            // NPC Room
-            if (q >= 2 && q <= 10 && r >= -6 && r <= 6) {
+            if (window.distance({ q, r }, NPC_ROOM_CENTER) <= ROOM_RADIUS) {
                 window.setTerrainAt(q, r, 'Cave Floor');
             }
             // Connecting passage
-            if (q > -2 && q < 2 && r >= -1 && r <= 1) {
+            if (q > -3 && q < 3 && r >= -1 && r <= 1) {
                 window.setTerrainAt(q, r, 'Cave Floor');
             }
         }
     }
+
+    // Carve the gated beast pen out of a corner of the NPC room before it
+    // fills with humanoid NPCs below — a small fenced enclosure (reusing the
+    // farm's fence_h/fence_v tileObjects, which slow movement but don't
+    // block LOS, so the player can see the beast without being able to
+    // casually walk up on it) housing whichever beast-type "waiting
+    // combatant" got rolled.
+    const PEN_MIN_Q = 9, PEN_MAX_Q = 13, PEN_MIN_R = -4, PEN_MAX_R = -2;
+    for (let q = PEN_MIN_Q; q <= PEN_MAX_Q; q++) {
+        for (let r = PEN_MIN_R; r <= PEN_MAX_R; r++) {
+            window.setTerrainAt(q, r, 'Cave Floor');
+        }
+    }
+    for (let q = PEN_MIN_Q; q <= PEN_MAX_Q; q++) {
+        window.tileObjects[`${q},${PEN_MIN_R}`] = { type: 'fence_h', lightRadius: 0 };
+        window.tileObjects[`${q},${PEN_MAX_R}`] = { type: 'fence_h', lightRadius: 0 };
+    }
+    for (let r = PEN_MIN_R; r <= PEN_MAX_R; r++) {
+        window.tileObjects[`${PEN_MIN_Q},${r}`] = { type: 'fence_v', lightRadius: 0 };
+        window.tileObjects[`${PEN_MAX_Q},${r}`] = { type: 'fence_v', lightRadius: 0 };
+    }
+    // Interior hexes (not on the fence line itself) where a beast can stand.
+    const PEN_INTERIOR_HEXES = [{ q: 10, r: -3 }, { q: 11, r: -3 }, { q: 12, r: -3 }];
 
     // 1. Initialize from party data first to ensure main characters exist
     window.party.forEach((p, i) => {
@@ -4455,19 +4530,54 @@ function setupArenaLobby() {
     recruiter.customImage = 'arenamercenary';
     window.entities.push(recruiter);
 
+    // "Waiting combatants" — drawn from the exact same pool the next fight
+    // rolls its opponents from (see ARENA_MONSTER_POOL/startArenaFight), so
+    // these aren't just flavor: about half the time, one of them really is
+    // who you end up facing. Beast-type rolls go in the gated pen;
+    // humanoids mill around loose. All of them are isNPC + noAttack —
+    // dialogue only, never a valid combat target, even via Force-Attack.
+    const fightsCompleted = window.roguelikeData.fightsCompleted || 0;
+    const previewPool = [...ARENA_MONSTER_POOL];
+    if (fightsCompleted >= 6) previewPool.push('dragon_young');
+    if (fightsCompleted >= 12) previewPool.push('dragon_adult');
+    if (fightsCompleted >= 20) previewPool.push('dragon_ancient');
+
+    window.arenaLobbyPreviewTypes = [];
+    while (window.arenaLobbyPreviewTypes.length < Math.min(2, previewPool.length)) {
+        const t = previewPool[Math.floor(Math.random() * previewPool.length)];
+        if (!window.arenaLobbyPreviewTypes.includes(t)) window.arenaLobbyPreviewTypes.push(t);
+    }
+
+    const humanoidHexes = [{ q: 3, r: -1 }, { q: 10, r: 1 }];
+    const beastHexes = [...PEN_INTERIOR_HEXES];
+    let humanoidSlot = 0, beastSlot = 0;
+    window.arenaLobbyPreviewTypes.forEach(type => {
+        const isBeast = ARENA_BEAST_TYPES.includes(type);
+        const hex = isBeast ? beastHexes[beastSlot++] : humanoidHexes[humanoidSlot++];
+        if (!hex || !window.createMonster) return;
+        const combatant = window.createMonster(type, hex, null, null, 'neutral');
+        combatant.isNPC = true;
+        combatant.noAttack = true;
+        combatant.behaviorType = 'idle';
+        combatant.arenaFlavorLine = ARENA_FLAVOR_LINES[type] || `${combatant.name} waits quietly, watching the pit.`;
+        window.entities.push(combatant);
+    });
+
     // Fireplace in the center of NPC room
     window.tileObjects["6,0"] = { type: 'fireplace', lightRadius: 12 };
     // Fireplace in spawn room
     window.tileObjects["-6,0"] = { type: 'fireplace', lightRadius: 8 };
 
     // Dress the bare cave floor with the same table/bench furniture used in
-    // the tavern — cheap, reuses existing art, keeps clear of NPC/spawn hexes.
-    window.tileObjects["4,-4"] = { type: 'table' };
-    window.tileObjects["4,-3"] = { type: 'bench' };
-    window.tileObjects["9,-4"] = { type: 'table' };
-    window.tileObjects["9,4"] = { type: 'bench' };
-    window.tileObjects["-9,-4"] = { type: 'table' };
-    window.tileObjects["-9,4"] = { type: 'bench' };
+    // the tavern — cheap, reuses existing art, keeps clear of NPC/spawn/pen hexes.
+    window.tileObjects["4,-2"] = { type: 'table' };
+    window.tileObjects["5,-1"] = { type: 'bench' };
+    window.tileObjects["9,3"] = { type: 'table' };
+    window.tileObjects["10,4"] = { type: 'bench' };
+    window.tileObjects["-9,-1"] = { type: 'table' };
+    window.tileObjects["-9,1"] = { type: 'bench' };
+    // A grim touch of "used arena" flavor near the pen rather than flat cave floor everywhere.
+    window.tileObjects["12,-1"] = { type: 'blood_spatter_faint' };
 
     window.drawMap();
     window.renderEntities();
@@ -4773,9 +4883,7 @@ function startArenaFight() {
     } else {
         // Normal encounter
         let currentSP = 0;
-        const monsterTypes = ['goblin', 'orc', 'skeleton', 'zombie', 'imp', 'spider', 'troll',
-            'wraith', 'basilisk', 'harpy', 'minotaur', 'revenant', 'wolf_rider_goblin', 'elite_goblin',
-            'wolf', 'boar', 'tiger'];
+        const monsterTypes = [...ARENA_MONSTER_POOL];
         // Dragons are far stronger (and take up far more space) than anything
         // else in the pool. The SP-budget check below still lets an
         // over-budget monster through as a lone first spawn, which would let
@@ -4786,6 +4894,17 @@ function startArenaFight() {
         if (fightsCompleted >= 6) monsterTypes.push('dragon_young');
         if (fightsCompleted >= 12) monsterTypes.push('dragon_adult');
         if (fightsCompleted >= 20) monsterTypes.push('dragon_ancient');
+
+        // The lobby shows a couple of "waiting combatants" drawn from this
+        // same pool (see setupArenaLobby). About half the time, weight this
+        // fight's roll toward actually including one of them — not a
+        // guarantee, just a real chance the fighters you saw waiting turn
+        // out to be who you face.
+        if (window.arenaLobbyPreviewTypes && Math.random() < 0.5) {
+            window.arenaLobbyPreviewTypes.forEach(t => {
+                if (monsterTypes.includes(t)) monsterTypes.push(t, t, t);
+            });
+        }
 
         // Multi-hex monsters (dragons, trolls) need every hex of their
         // footprint clear of walls/water/other entities, not just their
@@ -4939,6 +5058,8 @@ function talkToNPC(npc) {
             { label: "I'd like to hire someone (100g).", action: () => window.startMercenaryHire() },
             { label: "Not right now.", action: () => {} }
         ]);
+    } else if (npc.arenaFlavorLine) {
+        window.showDialogue(npc, npc.arenaFlavorLine);
     } else {
         window.showDialogue(npc, `You talk to ${npc.name}, but they have nothing to say.`);
     }
@@ -5132,7 +5253,7 @@ function resolveSpell(caster, spell, target, clickedHex) {
             window.showMessage(`${caster.name} casts ${spell.name} at ${target.name}: ${hit ? 'HIT' : 'MISS'} (Roll: ${roll} vs Need: <${hitChance})`);
         }
 
-        if (spell.type === 'damage' && target && target.side !== caster.side) {
+        if (spell.type === 'damage' && target && target.side !== caster.side && !target.noAttack) {
             const baseSpell = window.baseSpells[spell.baseId];
             if (baseSpell && baseSpell.validTags) {
                 const hasValidTag = baseSpell.validTags.some(tag => target.tags && target.tags.includes(tag));
