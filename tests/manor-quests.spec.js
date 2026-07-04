@@ -24,7 +24,7 @@ test.describe('Baron manor content: steward bribery and the tribute quest', () =
     test('a bribed guard never fails the stealth mission, even if seen', async ({ page }) => {
         await createCharacter(page);
         const result = await page.evaluate(() => {
-            window.factions.merchants_guild.standing = 10;
+            window.factions.ironbond_company.standing = 10;
             const steward = window.entities.find(e => e.name === 'Steward Halvard Greer');
             steward.bribed = true;
 

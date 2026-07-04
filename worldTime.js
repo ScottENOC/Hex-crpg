@@ -112,8 +112,8 @@ function updateTime(delta) {
         // espionageQuests.js.
         if (window.checkStealthMissionStatus) window.checkStealthMissionStatus(delta);
 
-        // The Merchants Guild's retaliation, once you've burned them badly
-        // enough spying for the Baron — see espionageQuests.js.
+        // Ironbond's retaliation, once you've burned them badly enough
+        // spying for the Baron — see espionageQuests.js.
         if (window.checkGuildAssassinTrigger) window.checkGuildAssassinTrigger();
         if (window.checkGuildAssassinTail) window.checkGuildAssassinTail(delta);
 

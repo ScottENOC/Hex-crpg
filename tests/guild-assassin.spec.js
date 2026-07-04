@@ -6,14 +6,14 @@ test.describe('Merchants Guild retaliation: the hired assassin', () => {
         await createCharacter(page);
         const result = await page.evaluate(() => {
             // Quest not completed yet, standing already low — should not trigger.
-            window.factions.merchants_guild.standing = -20;
+            window.factions.ironbond_company.standing = -20;
             (window.questLog = window.questLog || []).push({ id: 'spy_on_guild', title: 'x', giver: 'y', status: 'active', description: 'z' });
             window.checkGuildAssassinTrigger();
             const triggeredWhileActive = window.guildAssassinTriggered;
 
             // Quest completed but standing not low enough — still should not trigger.
             window.questLog.find(q => q.id === 'spy_on_guild').status = 'completed';
-            window.factions.merchants_guild.standing = 5;
+            window.factions.ironbond_company.standing = 5;
             window.checkGuildAssassinTrigger();
             const triggeredWithGoodStanding = window.guildAssassinTriggered;
 
@@ -27,7 +27,7 @@ test.describe('Merchants Guild retaliation: the hired assassin', () => {
         await createCharacter(page);
         const result = await page.evaluate(() => {
             (window.questLog = window.questLog || []).push({ id: 'spy_on_guild', title: 'x', giver: 'y', status: 'completed', description: 'z' });
-            window.factions.merchants_guild.standing = -20;
+            window.factions.ironbond_company.standing = -20;
             window.checkGuildAssassinTrigger();
             const assassin = window.entities.find(e => e.name === 'Guild Assassin');
             return {
@@ -51,7 +51,7 @@ test.describe('Merchants Guild retaliation: the hired assassin', () => {
         await createCharacter(page);
         const result = await page.evaluate(() => {
             (window.questLog = window.questLog || []).push({ id: 'spy_on_guild', title: 'x', giver: 'y', status: 'completed', description: 'z' });
-            window.factions.merchants_guild.standing = -20;
+            window.factions.ironbond_company.standing = -20;
             window.checkGuildAssassinTrigger();
             const assassin = window.entities.find(e => e.name === 'Guild Assassin');
             const player = window.entities.find(e => e.side === 'player' && !e.rider);
@@ -77,7 +77,7 @@ test.describe('Merchants Guild retaliation: the hired assassin', () => {
         await createCharacter(page);
         const result = await page.evaluate(() => {
             (window.questLog = window.questLog || []).push({ id: 'spy_on_guild', title: 'x', giver: 'y', status: 'completed', description: 'z' });
-            window.factions.merchants_guild.standing = -20;
+            window.factions.ironbond_company.standing = -20;
             window.checkGuildAssassinTrigger();
             const assassin = window.entities.find(e => e.name === 'Guild Assassin');
             const player = window.entities.find(e => e.side === 'player' && !e.rider);
@@ -102,7 +102,7 @@ test.describe('Merchants Guild retaliation: the hired assassin', () => {
         await createCharacter(page);
         const result = await page.evaluate(() => {
             (window.questLog = window.questLog || []).push({ id: 'spy_on_guild', title: 'x', giver: 'y', status: 'completed', description: 'z' });
-            window.factions.merchants_guild.standing = -20;
+            window.factions.ironbond_company.standing = -20;
             window.checkGuildAssassinTrigger();
             const assassin = window.entities.find(e => e.name === 'Guild Assassin');
             const player = window.entities.find(e => e.side === 'player' && !e.rider);

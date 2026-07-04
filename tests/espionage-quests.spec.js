@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { createCharacter, readDialogue, clickDialogueOption } = require('./helpers.js');
 
 test.describe('Reddale espionage: Merchants Guild vs the Baron', () => {
-    test('the Baron is physically placed in Reddale and the Merchants Guild faction/NPCs exist', async ({ page }) => {
+    test('the Baron is physically placed in Reddale and the Reddale guildhouse NPCs are Ironbond\'s people, not a separate faction', async ({ page }) => {
         await createCharacter(page);
         const result = await page.evaluate(() => {
             const baron = window.entities.find(e => e.name === 'Baron Corwin Aldervale');
@@ -13,8 +13,9 @@ test.describe('Reddale espionage: Merchants Guild vs the Baron', () => {
                 baronPlaced: !!baron,
                 baronDialogueId: baron?.dialogueId,
                 baronSide: baron?.side,
-                guildFactionExists: !!window.factions.merchants_guild,
+                noSeparateGuildFaction: !window.factions.merchants_guild,
                 guildmasterFaction: guildmaster?.factionId,
+                guildGuardFaction: guildGuard?.factionId,
                 guildGuardPatrols: guildGuard?.behaviorType === 'patrol',
                 stewardPatrols: steward?.behaviorType === 'patrol',
             };
@@ -22,8 +23,9 @@ test.describe('Reddale espionage: Merchants Guild vs the Baron', () => {
         expect(result.baronPlaced).toBe(true);
         expect(result.baronDialogueId).toBe('reddale_baron');
         expect(result.baronSide).toBe('neutral');
-        expect(result.guildFactionExists).toBe(true);
-        expect(result.guildmasterFaction).toBe('merchants_guild');
+        expect(result.noSeparateGuildFaction).toBe(true);
+        expect(result.guildmasterFaction).toBe('ironbond_company');
+        expect(result.guildGuardFaction).toBe('ironbond_company');
         expect(result.guildGuardPatrols).toBe(true);
         expect(result.stewardPatrols).toBe(true);
     });
@@ -56,18 +58,18 @@ test.describe('Reddale espionage: Merchants Guild vs the Baron', () => {
         expect(result.quest.status).toBe('active');
         expect(result.mission.guardName).toBe('Guild Watchman Corley');
         expect(result.mission.evidenceKey).toBe('guild_ledgers');
-        expect(result.mission.factionSpiedOn).toBe('merchants_guild');
+        expect(result.mission.factionSpiedOn).toBe('ironbond_company');
     });
 
     test('the mission fails and the spied-on faction standing drops if the guard sees the player', async ({ page }) => {
         await createCharacter(page);
         const result = await page.evaluate(() => {
             window.factions.silverhart_kingdom.standing = 25;
-            window.factions.merchants_guild.standing = 10;
+            window.factions.ironbond_company.standing = 10;
             const baron = window.entities.find(e => e.name === 'Baron Corwin Aldervale');
             window.startStealthMission({
                 questId: 'spy_on_guild', guardName: 'Guild Watchman Corley', evidenceKey: 'guild_ledgers',
-                itemId: 'guild_ledger_evidence', evidenceFlavor: 'the ledgers', factionSpiedOn: 'merchants_guild',
+                itemId: 'guild_ledger_evidence', evidenceFlavor: 'the ledgers', factionSpiedOn: 'ironbond_company',
                 failStandingHit: -20, objectiveText: 'test'
             });
             (window.questLog = window.questLog || []).push({ id: 'spy_on_guild', title: 'Eyes on the Guildhouse', giver: baron.name, status: 'active', description: 'test' });
@@ -81,7 +83,7 @@ test.describe('Reddale espionage: Merchants Guild vs the Baron', () => {
             return {
                 mission: window.activeStealthMission,
                 questStatus: (window.questLog || []).find(q => q.id === 'spy_on_guild')?.status,
-                guildStanding: window.factions.merchants_guild.standing,
+                guildStanding: window.factions.ironbond_company.standing,
             };
         });
         expect(result.mission).toBe(null);
@@ -95,7 +97,7 @@ test.describe('Reddale espionage: Merchants Guild vs the Baron', () => {
             window.tileObjects['500,500'] = { type: 'evidence', evidenceKey: 'guild_ledgers' };
             window.startStealthMission({
                 questId: 'spy_on_guild', guardName: 'Guild Watchman Corley', evidenceKey: 'guild_ledgers',
-                itemId: 'guild_ledger_evidence', evidenceFlavor: 'the ledgers', factionSpiedOn: 'merchants_guild',
+                itemId: 'guild_ledger_evidence', evidenceFlavor: 'the ledgers', factionSpiedOn: 'ironbond_company',
                 failStandingHit: -20, objectiveText: 'test'
             });
             window.searchEvidence(500, 500);
@@ -126,19 +128,19 @@ test.describe('Reddale espionage: Merchants Guild vs the Baron', () => {
         await createCharacter(page);
         await page.evaluate(() => {
             window.factions.silverhart_kingdom.standing = 25;
-            window.factions.merchants_guild.standing = 10;
+            window.factions.ironbond_company.standing = 10;
             (window.questLog = window.questLog || []).push({ id: 'spy_on_guild', title: 'Eyes on the Guildhouse', giver: 'Baron Corwin Aldervale', status: 'active', description: 'test' });
             window.player.inventory.push('guild_ledger_evidence');
             const baron = window.entities.find(e => e.name === 'Baron Corwin Aldervale');
             window.npcDialogueTrees.reddale_baron(baron);
         });
-        const before = await page.evaluate(() => ({ kingdom: window.factions.silverhart_kingdom.standing, guild: window.factions.merchants_guild.standing, gold: window.party[0].gold || 0 }));
+        const before = await page.evaluate(() => ({ kingdom: window.factions.silverhart_kingdom.standing, guild: window.factions.ironbond_company.standing, gold: window.party[0].gold || 0 }));
         await clickDialogueOption(page, "Here");
         const after = await page.evaluate(() => ({
             questStatus: (window.questLog || []).find(q => q.id === 'spy_on_guild')?.status,
             hasItem: window.player.inventory.includes('guild_ledger_evidence'),
             kingdom: window.factions.silverhart_kingdom.standing,
-            guild: window.factions.merchants_guild.standing,
+            guild: window.factions.ironbond_company.standing,
             gold: window.party[0].gold || 0,
         }));
         expect(after.questStatus).toBe('completed');
@@ -148,10 +150,10 @@ test.describe('Reddale espionage: Merchants Guild vs the Baron', () => {
         expect(after.gold).toBeGreaterThan(before.gold);
     });
 
-    test('the mirrored Guildmaster quest exists and is gated on merchants_guild trust', async ({ page }) => {
+    test('the mirrored Guildmaster quest exists and is gated on Ironbond\'s merchantInfluence', async ({ page }) => {
         await createCharacter(page);
         await page.evaluate(() => {
-            window.factions.merchants_guild.standing = 25;
+            window.factions.ironbond_company.merchantInfluence.silverhart_kingdom = 45;
             const guildmaster = window.entities.find(e => e.name === 'Guildmaster Petra Voss');
             window.npcDialogueTrees.reddale_guildmaster(guildmaster);
         });

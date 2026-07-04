@@ -497,11 +497,16 @@ window.npcDialogueTrees = {
             ]);
         }
     },
-    // --- Merchants Guild vs the Baron: mirrored espionage side-quests. Each
-    // only opens up once the *offering* faction trusts the player (standing
-    // >= 20) — see espionageQuests.js for the actual stealth-mission
-    // tracker (activeStealthMission / checkStealthMissionStatus /
-    // searchEvidence) that enforces "stay stealthed or the mission fails."
+    // --- Ironbond Company vs the Baron: mirrored espionage side-quests (the
+    // same Ironbond from the Hollowmere tavern shakedown, straining for
+    // influence against the Baron/kingdom here too — not a separate guild).
+    // spy_on_guild opens once the Baron trusts the player (kingdom standing
+    // >= 20); spy_on_baron opens once Ironbond's merchantInfluence over the
+    // kingdom is high enough (>= 40, same threshold reddale_cut uses) that
+    // it's ready to move against him directly. See espionageQuests.js for
+    // the actual stealth-mission tracker (activeStealthMission /
+    // checkStealthMissionStatus / searchEvidence) that enforces "stay
+    // stealthed or the mission fails."
     reddale_steward: (npc) => {
         window.showDialogue(npc, "The Baron is occupied. State your business, or don't waste my time.", [
             {
@@ -551,7 +556,10 @@ window.npcDialogueTrees = {
                             quest.status = 'completed';
                             window.adjustReputation(window.factions.silverhart_kingdom, 15, 15);
                             window.adjustReputation(npc.reputation, 20, 20);
-                            if (window.factions.merchants_guild) window.adjustReputation(window.factions.merchants_guild, -20, 20);
+                            if (window.factions.ironbond_company) {
+                                window.adjustReputation(window.factions.ironbond_company, -20, 20);
+                                if (window.adjustMerchantInfluence) window.adjustMerchantInfluence(window.factions.ironbond_company, 'silverhart_kingdom', -10);
+                            }
                             window.party[0].gold = (window.party[0].gold || 0) + 40;
                             if (window.gainExp) window.gainExp(150);
                             window.showMessage("Quest complete: Eyes on the Guildhouse. (+40 gold)");
@@ -570,14 +578,14 @@ window.npcDialogueTrees = {
         }
 
         if (trust >= 20 && !quest) {
-            window.showDialogue(npc, "The Guild's books don't add up, and Voss won't open them for any tax man I send. I need someone who isn't a tax man. Get into their guildhouse, find their real ledgers, and bring them to me — quietly. If you're seen, this goes badly for both of us.", [
+            window.showDialogue(npc, "Ironbond's books don't add up, and Voss won't open them for any tax man I send. I need someone who isn't a tax man. Get into their guildhouse, find their real ledgers, and bring them to me — quietly. If you're seen, this goes badly for both of us.", [
                 {
                     label: "I'll do it.",
                     action: () => {
                         window.questLog = window.questLog || [];
                         window.questLog.push({
                             id: 'spy_on_guild', title: 'Eyes on the Guildhouse', giver: 'Baron Corwin Aldervale', status: 'active',
-                            description: "Sneak into the Reddale guildhouse and find the merchants guild's real ledgers, without being seen."
+                            description: "Sneak into the Reddale guildhouse and find Ironbond's real ledgers, without being seen."
                         });
                         if (window.startStealthMission) {
                             window.startStealthMission({
@@ -585,8 +593,8 @@ window.npcDialogueTrees = {
                                 guardName: 'Guild Watchman Corley',
                                 evidenceKey: 'guild_ledgers',
                                 itemId: 'guild_ledger_evidence',
-                                evidenceFlavor: 'the guild\'s private ledgers',
-                                factionSpiedOn: 'merchants_guild',
+                                evidenceFlavor: "Ironbond's private ledgers",
+                                factionSpiedOn: 'ironbond_company',
                                 failStandingHit: -20,
                                 objectiveText: 'Search the guildhouse ledgers without being seen by the guild watchman.'
                             });
@@ -622,7 +630,11 @@ window.npcDialogueTrees = {
         ]);
     },
     reddale_guildmaster: (npc) => {
-        const trust = window.factions?.merchants_guild?.standing ?? 0;
+        // Ironbond's own merchantInfluence over the kingdom (the same stat
+        // reddale_cut reads) rather than a separate faction's standing — the
+        // Company only turns on the Baron once its grip here is strong
+        // enough to risk it.
+        const trust = window.factions?.ironbond_company?.merchantInfluence?.silverhart_kingdom ?? 0;
         const quest = (window.questLog || []).find(q => q.id === 'spy_on_baron');
 
         if (quest && quest.status === 'active') {
@@ -633,8 +645,9 @@ window.npcDialogueTrees = {
                         action: () => {
                             window.player.inventory.splice(window.player.inventory.indexOf('baron_tariff_evidence'), 1);
                             quest.status = 'completed';
-                            window.adjustReputation(window.factions.merchants_guild, 15, 15);
+                            window.adjustReputation(window.factions.ironbond_company, 15, 15);
                             window.adjustReputation(npc.reputation, 20, 20);
+                            if (window.adjustMerchantInfluence) window.adjustMerchantInfluence(window.factions.ironbond_company, 'silverhart_kingdom', 10);
                             if (window.factions.silverhart_kingdom) window.adjustReputation(window.factions.silverhart_kingdom, -20, 20);
                             window.party[0].gold = (window.party[0].gold || 0) + 40;
                             if (window.gainExp) window.gainExp(150);
@@ -653,7 +666,7 @@ window.npcDialogueTrees = {
             return;
         }
 
-        if (trust >= 20 && !quest) {
+        if (trust >= 40 && !quest) {
             window.showDialogue(npc, "The Baron's tariffs have crept up twice this year and his own books somehow never show it. I need proof, not rumors. Get into the manor, find his steward's real tally, and get out without being seen. If his man catches you, I can't protect you.", [
                 {
                     label: "I'll do it.",

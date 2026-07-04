@@ -308,41 +308,43 @@ window.campaign2Baron = {
     dialogueId: 'reddale_baron'
 };
 
-// --- Reddale's merchants guild vs the Baron: a quiet standoff over tariffs
-// and trade rights, resolved through espionage side-quests once one side
-// trusts the player enough to ask them to spy on the other (see
-// espionageQuests.js and campaign2Dialogue.js's reddale_baron/
-// reddale_guildmaster trees). The Baron himself is physically placed here
-// in Reddale (his barony's real seat of power), not in Hollowmere — see
-// buildReddale in campaign2World.js, which pushes the existing
-// window.regionalNPCs.baron entity into the world instead of building a
-// second, duplicate Baron.
+// --- Ironbond Company vs the Baron in Reddale: the same Company from the
+// Hollowmere tavern shakedown, straining for influence against the
+// nobility/kingdom/soldiers here too — not a separate guild. Its Reddale
+// "guildhouse" is Ironbond's local seat of power, resolved through
+// espionage side-quests once one side trusts the player enough to ask
+// them to spy on the other (see espionageQuests.js and
+// campaign2Dialogue.js's reddale_baron/reddale_guildmaster trees). The
+// Baron himself is physically placed here in Reddale (his barony's real
+// seat of power), not in Hollowmere — see buildReddale in
+// campaign2World.js, which pushes the existing window.regionalNPCs.baron
+// entity into the world instead of building a second, duplicate Baron.
 window.campaign2ReddaleGuildmaster = {
     name: 'Guildmaster Petra Voss',
-    title: 'Guildmaster',
+    title: 'Ironbond Factor',
     race: 'human', gender: 'female',
     classLevels: ['fighter'],
     skillPicks: ['health'],
     equipment: ['club'],
     side: 'neutral',
-    factionId: 'merchants_guild',
+    factionId: 'ironbond_company',
     color: '#4a7a5a',
     dialogueId: 'reddale_guildmaster'
 };
 window.campaign2ReddaleGuildGuard = {
     name: 'Guild Watchman Corley',
-    title: 'Guild Watchman',
+    title: 'Ironbond Watchman',
     race: 'human', gender: 'male',
     classLevels: ['fighter'],
     skillPicks: ['health'],
     equipment: ['club', 'light_armor'],
     side: 'neutral',
-    factionId: 'merchants_guild',
+    factionId: 'ironbond_company',
     color: '#3a5a4a'
 };
-// A consequence of successfully spying on the guild for the Baron (see
+// A consequence of successfully spying on Ironbond for the Baron (see
 // espionageQuests.js's checkGuildAssassinTrigger/checkGuildAssassinTail):
-// once merchants_guild's standing craters, they send someone after the
+// once ironbond_company's standing craters, they send someone after the
 // player directly. Bow-armed on purpose — long range, so the ambush isn't
 // just another melee mob once it reveals itself.
 window.campaign2GuildAssassin = {
@@ -353,7 +355,7 @@ window.campaign2GuildAssassin = {
     skillPicks: ['health', 'health'],
     equipment: ['bow', 'light_armor'],
     side: 'neutral',
-    factionId: 'merchants_guild',
+    factionId: 'ironbond_company',
     color: '#222222'
 };
 window.campaign2ReddaleBaronSteward = {

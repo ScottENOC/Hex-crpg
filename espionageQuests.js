@@ -1,5 +1,5 @@
 // espionageQuests.js
-// Generic "stealth infiltration" tracker used by Reddale's Merchants Guild
+// Generic "stealth infiltration" tracker used by Reddale's Ironbond Company
 // vs Baron side-quests (see campaign2Dialogue.js's reddale_baron /
 // reddale_guildmaster trees, and buildReddale in campaign2World.js for the
 // guildhouse/manor + guard placement). Deliberately built as ONE reusable
@@ -92,9 +92,9 @@ function searchEvidence(q, r) {
 }
 window.searchEvidence = searchEvidence;
 
-// --- The Merchants Guild's retaliation: once the player has actually
-// burned the Guild badly enough (completed spy_on_guild AND its standing
-// has cratered), the Guild hires someone to deal with the problem directly.
+// --- Ironbond's retaliation: once the player has actually burned the
+// Company badly enough (completed spy_on_guild AND its standing has
+// cratered), it hires someone to deal with the problem directly.
 // Deliberately a real-time tail, not an instant ambush: the assassin
 // approaches stealthed and follows a lagged copy of the player's own
 // breadcrumb trail (entity.stalkTargetHex, moved each turn by the
@@ -108,7 +108,7 @@ window._trailAccumSeconds = 0;
 function checkGuildAssassinTrigger() {
     if (window.guildAssassinTriggered) return;
     const quest = (window.questLog || []).find(q => q.id === 'spy_on_guild');
-    const guildStanding = window.factions?.merchants_guild?.standing ?? 0;
+    const guildStanding = window.factions?.ironbond_company?.standing ?? 0;
     if (!quest || quest.status !== 'completed' || guildStanding > -10) return;
     if (!window.campaign2GuildAssassin || !window.buildNPC) return;
 
@@ -125,7 +125,7 @@ function checkGuildAssassinTrigger() {
     assassin.homeHex = { ...spawnHex };
     window.entities.push(assassin);
 
-    window.showMessage("Somewhere behind you, the Guild has decided you're a problem worth solving permanently.");
+    window.showMessage("Somewhere behind you, Ironbond has decided you're a problem worth solving permanently.");
 }
 window.checkGuildAssassinTrigger = checkGuildAssassinTrigger;
 
@@ -176,7 +176,7 @@ function checkGuildAssassinTail(delta) {
         assassin.isStealthed = false;
         assassin.behaviorType = 'wander';
         if (window.wakeUp) window.wakeUp(assassin);
-        const text = "A figure steps from the shadows, bow already drawn — the Guild sent someone after all!";
+        const text = "A figure steps from the shadows, bow already drawn — Ironbond sent someone after all!";
         window.showMessage(text);
         if (window.broadcastGameMessage) window.broadcastGameMessage(text);
     }

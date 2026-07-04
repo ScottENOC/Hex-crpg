@@ -949,8 +949,8 @@ function buildReddale(roadEnd) {
         window.entities.push(window.buildNPC({ ...window.campaign2ReddaleInnkeeper, hex: { q: innCenter.q, r: innCenter.r } }));
     }
 
-    // Merchants Guild guildhouse and the Baron's manor — the two ends of the
-    // Reddale espionage side-quests (see espionageQuests.js and
+    // Ironbond's Reddale guildhouse and the Baron's manor — the two ends of
+    // the Reddale espionage side-quests (see espionageQuests.js and
     // campaign2Dialogue.js's reddale_baron/reddale_guildmaster trees). Kept
     // well clear of the other buildings/road, on their own short spurs.
     const guildCenter = { q: roadEnd.q + 8, r: roadEnd.r + 10 };
