@@ -617,6 +617,34 @@ window.npcDialogueTrees = {
         ]);
     },
     reddale_baron: (npc) => {
+        // Double cross: while the player is nominally Ironbond's spy against
+        // the Baron (spy_on_baron), the Baron confronts them with exactly
+        // that accusation and offers to flip them into his own inside man —
+        // same reward-or-threat shape mirrored below in reddale_guildmaster
+        // for the opposite quest.
+        const spyOnBaronQuest = (window.questLog || []).find(q => q.id === 'spy_on_baron');
+        if (spyOnBaronQuest && spyOnBaronQuest.status === 'active' && !spyOnBaronQuest.doubleCrossOffered) {
+            spyOnBaronQuest.doubleCrossOffered = true;
+            window.showDialogue(npc, "I know Ironbond's coin when I smell it on someone. You've been pretending to court their favor so you could slip into my manor unnoticed — clever. Keep playing their spy, but bring what you learn to me first, and I'll see you rewarded properly. Cross me instead, and you'll find Reddale a very hard place to work in.", [
+                {
+                    label: "I'm your man on the inside now.",
+                    action: () => {
+                        spyOnBaronQuest.doubleAgentFor = 'silverhart_kingdom';
+                        window.adjustReputation(window.factions.silverhart_kingdom, 10, 15);
+                        window.showMessage("Baron Corwin Aldervale: \"Good. See that you remember it.\"");
+                    }
+                },
+                {
+                    label: "You're wrong about me.",
+                    action: () => {
+                        spyOnBaronQuest.doubleCrossDeclined = true;
+                        window.adjustReputation(window.factions.silverhart_kingdom, -10, 15);
+                        window.showMessage("Baron Corwin Aldervale: \"We'll see.\"");
+                    }
+                }
+            ]);
+            return;
+        }
         const gemQuest = (window.questLog || []).find(q => q.id === 'baron_tribute');
         if (gemQuest && gemQuest.status === 'active') {
             if (window.player.inventory.includes('gem_red')) {
@@ -650,13 +678,26 @@ window.npcDialogueTrees = {
                         action: () => {
                             window.player.inventory.splice(window.player.inventory.indexOf('guild_ledger_evidence'), 1);
                             quest.status = 'completed';
-                            window.adjustReputation(window.factions.silverhart_kingdom, 15, 15);
                             window.adjustReputation(npc.reputation, 20, 20);
-                            if (window.factions.ironbond_company) {
-                                window.adjustReputation(window.factions.ironbond_company, -20, 20);
-                                if (window.adjustMerchantInfluence) window.adjustMerchantInfluence(window.factions.ironbond_company, 'silverhart_kingdom', -10);
+                            const doubleAgent = quest.doubleAgentFor === 'ironbond_company';
+                            let bonusGold = 40;
+                            if (doubleAgent) {
+                                // Petra believes the whole spying job was theater to win her
+                                // trust — it doesn't just soften the damage, it undoes it. The
+                                // kingdom, once it's plain whose side you're really playing,
+                                // gets no such mercy.
+                                if (window.factions.ironbond_company.standing < 0) window.factions.ironbond_company.standing = 0;
+                                window.factions.silverhart_kingdom.standing = window.FACTION_DOUBLE_CROSS_STANDING;
+                                bonusGold += 20;
+                                window.showMessage("Word quietly reaches you later: Ironbond isn't half as furious as they should be. (+20 secret gold from Petra Voss)");
+                            } else {
+                                window.adjustReputation(window.factions.silverhart_kingdom, 15, 15);
+                                if (window.factions.ironbond_company) {
+                                    window.adjustReputation(window.factions.ironbond_company, -20, 20);
+                                    if (window.adjustMerchantInfluence) window.adjustMerchantInfluence(window.factions.ironbond_company, 'silverhart_kingdom', -10);
+                                }
                             }
-                            window.party[0].gold = (window.party[0].gold || 0) + 40;
+                            window.party[0].gold = (window.party[0].gold || 0) + bonusGold;
                             if (window.gainExp) window.gainExp(150);
                             window.showMessage("Quest complete: Eyes on the Guildhouse. (+40 gold)");
                         }
@@ -733,6 +774,33 @@ window.npcDialogueTrees = {
         const trust = window.factions?.ironbond_company?.merchantInfluence?.silverhart_kingdom ?? 0;
         const quest = (window.questLog || []).find(q => q.id === 'spy_on_baron');
 
+        // Double cross, mirrored: while the player is nominally the Baron's
+        // spy against Ironbond (spy_on_guild), Petra confronts them with it
+        // and offers the same reward-or-threat flip.
+        const bogusQuest = (window.questLog || []).find(q => q.id === 'spy_on_guild');
+        if (bogusQuest && bogusQuest.status === 'active' && !bogusQuest.doubleCrossOffered) {
+            bogusQuest.doubleCrossOffered = true;
+            window.showDialogue(npc, "I know why you're really here. The Baron's got you creeping through my guildhouse, doesn't he? Don't bother lying — I've seen that look before. Good work getting this close. Now here's what happens next: you keep pretending to work for him, and you bring what you find to me first. I'll make it worth your while. Unless, of course, I'm wrong, and you're actually loyal to him — in which case, I've got ways of making Reddale very uncomfortable for you.", [
+                {
+                    label: "I'm your man on the inside now.",
+                    action: () => {
+                        bogusQuest.doubleAgentFor = 'ironbond_company';
+                        window.adjustReputation(window.factions.ironbond_company, 10, 15);
+                        window.showMessage("Guildmaster Petra Voss: \"Good. Don't make me regret this.\"");
+                    }
+                },
+                {
+                    label: "You're wrong about me.",
+                    action: () => {
+                        bogusQuest.doubleCrossDeclined = true;
+                        window.adjustReputation(window.factions.ironbond_company, -10, 15);
+                        window.showMessage("Guildmaster Petra Voss: \"We'll see.\"");
+                    }
+                }
+            ]);
+            return;
+        }
+
         if (quest && quest.status === 'active') {
             if (window.player.inventory.includes('baron_tariff_evidence')) {
                 window.showDialogue(npc, "You've the look of someone who's been in the manor and not through the front door. Well?", [
@@ -741,11 +809,24 @@ window.npcDialogueTrees = {
                         action: () => {
                             window.player.inventory.splice(window.player.inventory.indexOf('baron_tariff_evidence'), 1);
                             quest.status = 'completed';
-                            window.adjustReputation(window.factions.ironbond_company, 15, 15);
                             window.adjustReputation(npc.reputation, 20, 20);
-                            if (window.adjustMerchantInfluence) window.adjustMerchantInfluence(window.factions.ironbond_company, 'silverhart_kingdom', 10);
-                            if (window.factions.silverhart_kingdom) window.adjustReputation(window.factions.silverhart_kingdom, -20, 20);
-                            window.party[0].gold = (window.party[0].gold || 0) + 40;
+                            const doubleAgent = quest.doubleAgentFor === 'silverhart_kingdom';
+                            let bonusGold = 40;
+                            if (doubleAgent) {
+                                // The Baron believes the espionage was cover for winning his
+                                // trust — it undoes the damage rather than just softening it.
+                                // Ironbond, once it's obvious whose side you're really on,
+                                // gets no such mercy.
+                                if (window.factions.silverhart_kingdom.standing < 0) window.factions.silverhart_kingdom.standing = 0;
+                                window.factions.ironbond_company.standing = window.FACTION_DOUBLE_CROSS_STANDING;
+                                bonusGold += 20;
+                                window.showMessage("Word quietly reaches you later: the Baron isn't half as furious as he should be. (+20 secret gold from Corwin Aldervale)");
+                            } else {
+                                window.adjustReputation(window.factions.ironbond_company, 15, 15);
+                                if (window.adjustMerchantInfluence) window.adjustMerchantInfluence(window.factions.ironbond_company, 'silverhart_kingdom', 10);
+                                if (window.factions.silverhart_kingdom) window.adjustReputation(window.factions.silverhart_kingdom, -20, 20);
+                            }
+                            window.party[0].gold = (window.party[0].gold || 0) + bonusGold;
                             if (window.gainExp) window.gainExp(150);
                             window.showMessage("Quest complete: A Look at the Ledgers. (+40 gold)");
                         }

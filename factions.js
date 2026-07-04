@@ -5,6 +5,11 @@
 // Standing seeds at +5 for same-race NPCs/factions, 0 otherwise. As knowledge
 // grows, standing swings are dampened (harder to move, never frozen).
 
+// Fixed floor a faction's standing gets trashed to once a double-cross quest
+// (see campaign2Dialogue.js's reddale_baron/reddale_guildmaster) reveals the
+// player was secretly working for their rival all along.
+window.FACTION_DOUBLE_CROSS_STANDING = -40;
+
 window.factions = {
     silverhart_kingdom: { id: 'silverhart_kingdom', name: 'The Silverhart Kingdom', race: 'human', knowledge: 0, standing: 0 },
     // merchantInfluence: the Company's grip on each kingdom it operates in
