@@ -112,6 +112,11 @@ function updateTime(delta) {
         // espionageQuests.js.
         if (window.checkStealthMissionStatus) window.checkStealthMissionStatus(delta);
 
+        // The Merchants Guild's retaliation, once you've burned them badly
+        // enough spying for the Baron — see espionageQuests.js.
+        if (window.checkGuildAssassinTrigger) window.checkGuildAssassinTrigger();
+        if (window.checkGuildAssassinTail) window.checkGuildAssassinTail(delta);
+
         // Loose Ends: weeks after the tavern brawl, the Ironbond Company
         // sends someone to ask around (see campaign2Dialogue.js).
         if (window.triggerGuildInvestigatorEncounter) window.triggerGuildInvestigatorEncounter();

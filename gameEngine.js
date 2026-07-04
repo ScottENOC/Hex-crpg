@@ -2550,6 +2550,21 @@ function behaviorTick(entity) {
         return;
     }
 
+    // 'stalk': follows a lagged breadcrumb of the player's own past positions
+    // (entity.stalkTargetHex, kept updated from outside — see
+    // espionageQuests.js's checkGuildAssassinTail) rather than beelining at
+    // their current hex, so a tailing NPC reads as "walking your own recent
+    // route a little behind you" instead of a straight-line chase.
+    if (entity.behaviorType === 'stalk') {
+        const target = entity.stalkTargetHex;
+        if (target && (entity.hex.q !== target.q || entity.hex.r !== target.r)) {
+            const next = stepToward(entity.hex, target);
+            if (next && isOpenHex(next)) entity.hex = next;
+        }
+        spendTP(entity, 10);
+        return;
+    }
+
     // Default: pure random wander (original behavior).
     if (Math.random() < 0.3) {
         const neighbors = window.getNeighbors(entity.hex.q, entity.hex.r);

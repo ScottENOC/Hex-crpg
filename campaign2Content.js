@@ -340,6 +340,22 @@ window.campaign2ReddaleGuildGuard = {
     factionId: 'merchants_guild',
     color: '#3a5a4a'
 };
+// A consequence of successfully spying on the guild for the Baron (see
+// espionageQuests.js's checkGuildAssassinTrigger/checkGuildAssassinTail):
+// once merchants_guild's standing craters, they send someone after the
+// player directly. Bow-armed on purpose — long range, so the ambush isn't
+// just another melee mob once it reveals itself.
+window.campaign2GuildAssassin = {
+    name: 'Guild Assassin',
+    title: 'Hired Blade',
+    race: 'human', gender: 'female',
+    classLevels: ['fighter', 'fighter'],
+    skillPicks: ['health', 'health'],
+    equipment: ['bow', 'light_armor'],
+    side: 'neutral',
+    factionId: 'merchants_guild',
+    color: '#222222'
+};
 window.campaign2ReddaleBaronSteward = {
     name: 'Steward Halvard Greer',
     title: "Baron's Steward",

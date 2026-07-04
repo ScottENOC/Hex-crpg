@@ -69,6 +69,7 @@ function saveGame(saveName = "rpg_save_game") {
         questLog: window.questLog,
         worldMapNotes: window.worldMapNotes,
         activeStealthMission: window.activeStealthMission || null,
+        guildAssassinTriggered: window.guildAssassinTriggered || false,
         // The baron is a reputation-only NPC not placed in window.entities
         // (never rendered/AI-processed), so he needs his own save/load slot.
         regionalNPCBaron: window.regionalNPCs?.baron || null,
@@ -189,6 +190,7 @@ function loadGame(saveName = "rpg_save_game") {
         window.questLog = gameState.questLog || [];
         window.worldMapNotes = gameState.worldMapNotes || {};
         window.activeStealthMission = gameState.activeStealthMission || null;
+        window.guildAssassinTriggered = gameState.guildAssassinTriggered || false;
         // Always false on load, regardless of what was saved — loading a
         // save is exactly how the player is meant to recover from Game Over.
         window.gameOver = false;
