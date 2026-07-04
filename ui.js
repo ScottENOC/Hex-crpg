@@ -500,7 +500,7 @@ function learnSkill(skillKey) {
         }
     }
 
-    const rankCost = currentRanks + 1; // rank 1 costs 1, rank 2 costs 2, rank 3 costs 3...
+    const rankCost = 1; // every rank costs a flat 1 point, regardless of how many ranks you already have
     if ((player.attributes[skill.tree] || 0) >= rankCost) {
         player.attributes[skill.tree] -= rankCost;
     } else if (player.attributes.wildcard >= rankCost && isStandard) {
