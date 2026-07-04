@@ -537,8 +537,14 @@ window.npcDialogueTrees = {
     // another background townsperson, same convention as the abandoned
     // house journal's vague/detailed split.
     reddale_disciple: (npc) => {
+        // Two independent ways to notice something's wrong with her: reading
+        // the literal symbols (Knowledge: Religion), or a Smite Evil caster's
+        // trained sense for the unnatural — a concrete case of a spell
+        // gating a dialogue option the same way a knowledge skill does (see
+        // hasSpellUnlocked in skills.js).
         const knowsReligion = window.party && window.party.some(p => window.hasKnowledgeReligion(p));
-        if (!knowsReligion) {
+        const sensesEvil = window.party && window.party.some(p => window.hasSpellUnlocked(p, 'smite_evil'));
+        if (!knowsReligion && !sensesEvil) {
             window.showDialogue(npc, "Herbs for a cough, a bad hip, a bad night's sleep — that's all I sell. Anything else?", [
                 { label: "Nothing, thanks.", action: () => {} }
             ]);
@@ -546,12 +552,16 @@ window.npcDialogueTrees = {
         }
 
         if (!window.discipleSuspected) {
+            const lookCloserLabel = knowsReligion ? "Look closer at her wares." : "Something about her unsettles you.";
+            const revealText = knowsReligion
+                ? "Among the drying herbs, a sigil is scratched faintly into the shelf's underside — the same mark from the phylactery altar north of Millbrook. She notices you noticing, and her smile doesn't move."
+                : "The same cold prickle you feel from the walking dead crawls up your arms the moment she takes your hand to sell you herbs. Whatever she is, some part of you that answers to Smite Evil doesn't believe \"herbalist\" for a second.";
             window.showDialogue(npc, "Herbs for a cough, a bad hip, a bad night's sleep — that's all I sell. Anything else?", [
                 {
-                    label: "Look closer at her wares.",
+                    label: lookCloserLabel,
                     action: () => {
                         window.discipleSuspected = true;
-                        window.showDialogue(npc, "Among the drying herbs, a sigil is scratched faintly into the shelf's underside — the same mark from the phylactery altar north of Millbrook. She notices you noticing, and her smile doesn't move.", [
+                        window.showDialogue(npc, revealText, [
                             { label: "...", action: () => {} }
                         ]);
                     }

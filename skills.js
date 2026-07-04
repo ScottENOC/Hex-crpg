@@ -1665,3 +1665,19 @@ function hasKnowledgeReligion(entity) {
     return !!entity?.skills?.knowledge_religion;
 }
 window.hasKnowledgeReligion = hasKnowledgeReligion;
+
+// Generic "does this character actually know spell X" check — same idea as
+// hasKnowledgeNature/hasKnowledgeReligion above, but for spells rather than
+// knowledge skills. Lets dialogue treat a learned spell as a real source of
+// in-world insight (e.g. Smite Evil training making a disciple of the dead
+// feel wrong to be near, the same way Knowledge: Religion lets you read the
+// literal symbols) rather than spells being purely a combat button.
+// Checks unlockedBaseSpells (set the moment the underlying skill is learned,
+// see e.g. learn_smite_evil's apply()) rather than createdSpells, since the
+// player may not have gotten around to customizing every spell they've
+// unlocked — knowing OF a spell is what should gate a dialogue option, not
+// whether they bothered building a casting configuration for it yet.
+function hasSpellUnlocked(entity, baseSpellId) {
+    return !!(entity?.unlockedBaseSpells || []).includes(baseSpellId);
+}
+window.hasSpellUnlocked = hasSpellUnlocked;
