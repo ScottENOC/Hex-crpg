@@ -8,6 +8,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const createCharacterButton = document.getElementById("createCharacterButton");
     if (createCharacterButton) {
         createCharacterButton.addEventListener("click", window.startGame);
+        // onclick/click alone has been unreliable on iOS Safari for this
+        // exact button — same touch-hardening already applied to the party
+        // tabs elsewhere in this UI. preventDefault stops the click that
+        // would otherwise follow touchend from firing startGame twice.
+        createCharacterButton.addEventListener("touchend", (e) => {
+            e.preventDefault();
+            window.startGame();
+        }, { passive: false });
     }
 
     // Asset Preloading Logic

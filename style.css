@@ -26,6 +26,7 @@ body {
     background-color: #222;
     z-index: 200;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch; /* smooth momentum scroll on iOS so nothing lower on the form is stuck out of reach */
 }
 
 #gameContainer {
