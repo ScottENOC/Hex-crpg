@@ -3897,6 +3897,17 @@ function opponentsHaveHealerCapability(opponents) {
 function targetPriorityCompare(entity, a, b, opponentsHaveHealer) {
     const aDown = !!a.unconscious, bDown = !!b.unconscious;
     if (aDown !== bDown) {
+        // Difficulty guard for the Hollowmere shakedown tutorial fight: a
+        // fresh level-1 protagonist shouldn't be able to get permanently
+        // finished off by "smart" AI in the very first scripted encounter,
+        // so entities flagged tutorialFightGuard never apply the
+        // finish-the-downed-target-before-the-healer-saves-them logic to
+        // window.party[0] specifically (still applies normally to allies).
+        if (entity.tutorialFightGuard) {
+            const mainName = window.party?.[0]?.name;
+            if (aDown && a.name === mainName) return 1;
+            if (bDown && b.name === mainName) return -1;
+        }
         if (opponentsHaveHealer) return aDown ? -1 : 1; // finish them off before the healer saves them
         return aDown ? 1 : -1; // otherwise leave downed targets alone
     }

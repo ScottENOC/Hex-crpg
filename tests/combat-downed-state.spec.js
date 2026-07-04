@@ -139,4 +139,29 @@ test.describe('downed state and death threshold', () => {
         });
         expect(result).toBe('Wren Talbot');
     });
+
+    test('tutorialFightGuard stops the AI from finishing off a downed main character even with a healer present', async ({ page }) => {
+        // Regression for the Hollowmere shakedown difficulty guard: a fresh
+        // level-1 protagonist's very first scripted fight shouldn't let the
+        // "finish them before the healer saves them" logic apply to them
+        // specifically, even though it's the intended smart play in general.
+        const result = await page.evaluate(() => {
+            const mainName = window.party[0].name;
+            const main = window.entities.find(e => e.name === mainName);
+            const oskar = window.entities.find(e => e.name === 'Oskar Vinn');
+            const attacker = window.entities.find(e => e.name === 'Dray Coltayne') || window.entities.find(e => e.side === 'enemy') || { name: 'Dray Coltayne', tutorialFightGuard: true };
+            attacker.tutorialFightGuard = true;
+
+            main.alive = true; main.unconscious = true; main.hp = 5;
+            oskar.side = 'player'; oskar.alive = true; oskar.unconscious = false; oskar.hp = 10;
+            oskar.hex = { q: main.hex.q, r: main.hex.r };
+            oskar.skills = { ...(oskar.skills || {}), learn_heal: 1 }; // a healer is present
+
+            const opponents = [main, oskar];
+            const hasHealer = window.opponentsHaveHealerCapability(opponents);
+            const sorted = [...opponents].sort((a, b) => window.targetPriorityCompare(attacker, a, b, hasHealer));
+            return sorted[0].name;
+        });
+        expect(result).toBe('Oskar Vinn');
+    });
 });

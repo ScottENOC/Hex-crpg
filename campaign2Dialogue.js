@@ -899,6 +899,11 @@ function resolveShakedown(branch) {
             if (!e) return;
             e.isNPC = false;
             e.hasBeenSeenByPlayer = true;
+            // Tutorial difficulty guard (see targetPriorityCompare) — this is
+            // a level-1 protagonist's very first scripted fight, so these
+            // three never opportunistically finish off a downed main
+            // character just because an ally healer is nearby.
+            e.tutorialFightGuard = true;
         });
         if (dray) {
             dray.side = 'enemy';
