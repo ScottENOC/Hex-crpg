@@ -264,6 +264,21 @@ function buildGoblinCamp(roadEnd) {
     window.campaign2GoblinCampCenter = center;
 
     const chief = buildGoblinNPC({ ...window.campaign2GoblinChief, hex: { q: center.q, r: center.r - 1 } });
+    // A gift-based way into the chief's trust, same leverage/`wants` pattern
+    // as Bram at the Reddale guardhouse — separate from (and much faster
+    // than) grinding standing up via offerGoblinFavor. Paying it unlocks the
+    // "let them stay" alliance branch in chief_skarnub's dialogue tree (see
+    // campaign2Dialogue.js).
+    chief.wants = {
+        type: 'gold', amount: 60, offerLabel: 'gift', description: "a show of good faith, so his tribe isn't run off",
+        fullHint: "Skarnub sizes up strangers by what they're willing to give up front, not just what they say.",
+        partialHint: "He watches your hands more than your face — weighing whether you came empty-handed."
+    };
+    chief.vagueFlavor = "Hard to read. Could go either way.";
+    chief.onBribeSuccess = () => {
+        chief.giftedIn = true;
+        window.showDialogue(chief, "Huh. Didn't expect that. Maybe you're not just another human come to run us off.", [{ label: "...", action: () => {} }]);
+    };
     const lieutenant = buildGoblinNPC({ ...window.campaign2GoblinLieutenant, hex: { q: center.q - 2, r: center.r } });
     const shaman = buildGoblinNPC({ ...window.campaign2GoblinShaman, hex: { q: center.q + 2, r: center.r } });
     window.entities.push(chief, lieutenant, shaman);

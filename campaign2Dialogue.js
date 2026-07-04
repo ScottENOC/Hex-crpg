@@ -702,8 +702,47 @@ window.npcDialogueTrees = {
         const quest = window.questLog.find(q => q.id === 'goblin_threat');
         const goblinRep = window.factions.goblin_tribe.standing;
 
-        if (quest && quest.resolution) {
+        // The alliance resolution keeps a door open (the mine-raid favor)
+        // that no other resolution does, so it's excluded from the generic
+        // "nothing left to discuss" shutdown below.
+        if (quest && quest.resolution && quest.resolution !== 'goblin_alliance') {
             window.showDialogue(npc, "We have nothing left to discuss.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+
+        if (quest && quest.resolution === 'goblin_alliance') {
+            const mineQuest = window.questLog.find(q => q.id === 'goblin_mine_raid');
+            if (mineQuest && mineQuest.status === 'completed') {
+                window.showDialogue(npc, "We're settled here, thanks to you. That mine haul didn't hurt either.", [{ label: "Good.", action: () => {} }]);
+                return;
+            }
+            if (!mineQuest) {
+                window.showDialogue(npc, "Since you've let us stay... there's a mining camp down the west road. Rich pickings, if you're willing to lead us there.", [
+                    {
+                        label: "I'll help you raid it.",
+                        action: () => {
+                            window.questLog.push({
+                                id: 'goblin_mine_raid', title: 'A Favor for the Tribe', giver: 'Chief Skarnub', status: 'active',
+                                description: "Help the Skarn-tooth tribe raid Emberlode's gold mine."
+                            });
+                            window.showMessage("Quest added: A Favor for the Tribe.");
+                        }
+                    },
+                    { label: "Not yet.", action: () => {} }
+                ]);
+                return;
+            }
+            window.showDialogue(npc, "Well? Are we raiding that mine or not?", [
+                {
+                    label: "Lead the raid now.",
+                    action: () => {
+                        window.resolveGoblinFavor('raid_mine');
+                        mineQuest.status = 'completed';
+                        window.showMessage("Quest complete: A Favor for the Tribe.");
+                    }
+                },
+                { label: "Not yet.", action: () => {} }
+            ]);
             return;
         }
 
@@ -730,7 +769,7 @@ window.npcDialogueTrees = {
             return;
         }
 
-        window.showDialogue(npc, "Another human, come to gawk or to fight? Speak quick.", [
+        const baseOptions = [
             {
                 label: "I could help you, for the right price.",
                 action: () => {
@@ -743,11 +782,48 @@ window.npcDialogueTrees = {
                 }
             },
             {
+                label: "Try to read him.",
+                action: () => {
+                    const { text } = window.readTheRoom(npc, window.party[0]);
+                    const followUps = window.getLeverageOptions(npc, window.party[0]);
+                    window.showDialogue(npc, text, [...followUps, { label: "Noted.", action: () => {} }]);
+                }
+            },
+            {
                 label: "Leave this land, or face us.",
                 action: () => window.showMessage('Chief Skarnub bares his teeth. "Face us, then — see how far that gets you."')
             },
             { label: "Just looking.", action: () => {} }
-        ]);
+        ];
+
+        // Unlocked once the chief's been gifted (see the leverage `wants`
+        // set on him in buildGoblinCamp) — an entirely different resolution
+        // from every other path: the tribe stays, permanently, as allies
+        // rather than being driven off or leaving on their own.
+        if (npc.giftedIn && !quest?.resolution) {
+            baseOptions.unshift({
+                label: "You don't have to leave. Stay.",
+                action: () => {
+                    if (!quest) window.questLog.push({ id: 'goblin_threat', title: 'The Skarn-tooth Tribe', giver: 'Elder Marta Wynfield', status: 'active', description: '' });
+                    const q = window.questLog.find(q2 => q2.id === 'goblin_threat');
+                    q.status = 'completed';
+                    q.resolution = 'goblin_alliance';
+                    // Worse for the kingdom/Hollowmere's long-term safety than
+                    // even watching them leave (goblin_diplomacy) — this is a
+                    // hostile tribe permanently camped on the doorstep, not a
+                    // problem that goes away.
+                    window.adjustReputation(window.factions.silverhart_kingdom, -20, 15);
+                    window.adjustReputation(window.factions.goblin_tribe, 25, 20);
+                    if (window.adjustRegionStat) window.adjustRegionStat('hollowmere', 'security', -10);
+                    if (window.gainExp) window.gainExp(100);
+                    window.rescuePaladin();
+                    if (window.adjustCompanionAttitude) window.adjustCompanionAttitude(window.campaign2Paladin.name, -20, "let a raiding tribe settle permanently on Hollowmere's doorstep");
+                    window.showMessage('The Skarn-tooth tribe stays, with your blessing. Quest complete: The Skarn-tooth Tribe.');
+                }
+            });
+        }
+
+        window.showDialogue(npc, "Another human, come to gawk or to fight? Speak quick.", baseOptions);
     },
     nix_sharpear: (npc) => {
         if (!window.questLog) window.questLog = [];
@@ -757,6 +833,10 @@ window.npcDialogueTrees = {
                 { label: "Take your people and go.", action: () => window.resolveGoblinSuccession() },
                 { label: "...", action: () => {} }
             ]);
+            return;
+        }
+        if (quest && quest.resolution === 'goblin_alliance') {
+            window.showDialogue(npc, "We're not going anywhere now — you saw to that. Skarnub speaks for us; take it up with him.", [{ label: "Understood.", action: () => {} }]);
             return;
         }
         if (quest && quest.resolution) {
@@ -787,14 +867,25 @@ window.npcDialogueTrees = {
     corran_vale: (npc) => {
         if (!window.questLog) window.questLog = [];
         const goblinQuest = window.questLog.find(q => q.id === 'goblin_threat');
-        const resolvedSafe = !!(goblinQuest && goblinQuest.resolution && goblinQuest.resolution !== 'betrayal');
+        // Alliance excluded from "safe" — the tribe hasn't left, it's just
+        // settled in permanently, and (per goblin_mine_raid) may still come
+        // for Emberlode specifically even though Hollowmere itself is fine.
+        const resolvedSafe = !!(goblinQuest && goblinQuest.resolution && goblinQuest.resolution !== 'betrayal' && goblinQuest.resolution !== 'goblin_alliance');
         const betrayed = !!(goblinQuest && goblinQuest.resolution === 'betrayal');
+        const alliedNotYetRaided = !!(goblinQuest && goblinQuest.resolution === 'goblin_alliance' && !window.emberlodeRaided);
         let buriedRoad = window.questLog.find(q => q.id === 'buried_road');
         let oreRoad = window.questLog.find(q => q.id === 'ore_road_reopened');
 
         if (window.emberlodeRaided) {
             window.showDialogue(npc, "Goblins came down out of nowhere and cleaned us out — strongbox, ore stores, the lot. Nobody killed, small mercy, but we've nothing left to run carts with even if the road were safe.", [
                 { label: "That's rough.", action: () => {} }
+            ]);
+            return;
+        }
+
+        if (alliedNotYetRaided) {
+            window.showDialogue(npc, "Word reached us you've made peace with the Skarn-tooth tribe. Peace for Hollowmere, maybe — but they're still sitting right on our road, and I don't much trust it holding.", [
+                { label: "I'll keep an eye on things.", action: () => {} }
             ]);
             return;
         }
@@ -875,8 +966,16 @@ window.npcDialogueTrees = {
     },
     emberlode_miner: (npc) => {
         const goblinQuest = window.questLog && window.questLog.find(q => q.id === 'goblin_threat');
-        const resolvedSafe = !!(goblinQuest && goblinQuest.resolution && goblinQuest.resolution !== 'betrayal');
-        if (resolvedSafe) {
+        const resolvedSafe = !!(goblinQuest && goblinQuest.resolution && goblinQuest.resolution !== 'betrayal' && goblinQuest.resolution !== 'goblin_alliance');
+        if (window.emberlodeRaided) {
+            window.showDialogue(npc, "We're still picking up the pieces from that raid. Didn't see it coming, not after word came the goblins had settled down.", [
+                { label: "I'm sorry.", action: () => {} }
+            ]);
+        } else if (goblinQuest && goblinQuest.resolution === 'goblin_alliance') {
+            window.showDialogue(npc, "Settled with Hollowmere or not, that camp's still sitting right on our road. Doesn't fill me with confidence.", [
+                { label: "Stay careful.", action: () => {} }
+            ]);
+        } else if (resolvedSafe) {
             window.showDialogue(npc, "First good night's sleep I've had in a season, knowing the road's clear. Corran says we might even be back to full crews by next month.", [
                 { label: "Good to hear.", action: () => {} }
             ]);
