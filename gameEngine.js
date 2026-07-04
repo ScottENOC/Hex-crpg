@@ -4449,6 +4449,15 @@ function setupArenaLobby() {
     // Fireplace in spawn room
     window.tileObjects["-6,0"] = { type: 'fireplace', lightRadius: 8 };
 
+    // Dress the bare cave floor with the same table/bench furniture used in
+    // the tavern — cheap, reuses existing art, keeps clear of NPC/spawn hexes.
+    window.tileObjects["4,-4"] = { type: 'table' };
+    window.tileObjects["4,-3"] = { type: 'bench' };
+    window.tileObjects["9,-4"] = { type: 'table' };
+    window.tileObjects["9,4"] = { type: 'bench' };
+    window.tileObjects["-9,-4"] = { type: 'table' };
+    window.tileObjects["-9,4"] = { type: 'bench' };
+
     window.drawMap();
     window.renderEntities();
     window.showCharacter();

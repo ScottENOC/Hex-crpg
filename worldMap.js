@@ -92,12 +92,36 @@ function worldHexToPixel(q, r) {
   return { x, y };
 }
 
+// Builds the legend from whichever faction codes actually appear on the
+// currently-loaded map, instead of a static list of every faction the game
+// will eventually have — this campaign's explored region is still just
+// Hollowmere and unclaimed territory, so a full 6-faction legend read as a
+// broken/unfinished map rather than "more content coming".
+const factionLegendNames = { h: 'Human Lands', e: 'Elven Realm', d: 'Dwarven Kingdom', o: 'Orc Tribes', g: 'Goblin Hordes', n: 'Unclaimed Territory' };
+function updateWorldMapLegend() {
+    const legendEl = document.getElementById('world-map-legend');
+    if (!legendEl || !window.worldMapData.length) return;
+    const seen = new Set();
+    for (const row of window.worldMapData) {
+        for (const cell of row) {
+            if (cell && cell.o) seen.add(cell.o);
+        }
+    }
+    legendEl.innerHTML = Array.from(seen).map(code => {
+        const color = factionColors[code] || 'white';
+        const name = factionLegendNames[code] || code;
+        return `<div><span style="display:inline-block; width:12px; height:12px; background:${color}; border-radius:50%; margin-right:5px;"></span>${name}</div>`;
+    }).join('');
+}
+window.updateWorldMapLegend = updateWorldMapLegend;
+
 function renderWorldMap() {
     const canvas = document.getElementById("worldMapCanvas");
     const container = document.getElementById("world-map-container");
     if (!canvas || !container) return;
     const ctx = canvas.getContext("2d");
-    
+    updateWorldMapLegend();
+
     if (canvas.width !== container.clientWidth || canvas.height !== container.clientHeight) {
         canvas.width = container.clientWidth;
         canvas.height = container.clientHeight;
