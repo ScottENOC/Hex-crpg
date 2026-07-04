@@ -20,7 +20,13 @@ function ensureWildernessResourceNode(q, r) {
     const terrain = window.getTerrainAt(q, r);
     const roll = window.pseudoRandom(q * 2.13 + 31, r * 3.17 + 53);
 
-    if (terrain.name === 'Rocky Outcrop' && roll < 0.5) {
+    // Ore/fruit/fish thresholds cut to ~10% of their original width — at
+    // the old rates they were common enough that a wandering player either
+    // felt obligated to stop and harvest constantly, or (once they realized
+    // there'd always be another node right around the corner) ignored them
+    // entirely. Herb patches are left as-is; only these three were reported
+    // too common.
+    if (terrain.name === 'Rocky Outcrop' && roll < 0.05) {
         const oreRoll = window.pseudoRandom(q * 5.1 + 7, r * 7.3 + 11);
         let oreType = 'ore_iron';
         if (oreRoll > 0.97) oreType = 'gem_blue';
@@ -29,11 +35,11 @@ function ensureWildernessResourceNode(q, r) {
         else if (oreRoll > 0.80) oreType = 'ore_gold';
         else if (oreRoll > 0.65) oreType = 'ore_silver';
         window.tileObjects[key] = { type: 'ore_node', oreType, depleted: false };
-    } else if (terrain.name === 'Forest' && roll >= 0.5 && roll < 0.56) {
+    } else if (terrain.name === 'Forest' && roll >= 0.5 && roll < 0.506) {
         window.tileObjects[key] = { type: 'fruit_tree', hasFruit: true, regrowAt: 0 };
     } else if (terrain.name === 'Grass' && roll >= 0.96) {
         window.tileObjects[key] = { type: 'herb_patch', hasHerbs: true, regrowAt: 0 };
-    } else if (terrain.name === 'Water' && roll < 0.08) {
+    } else if (terrain.name === 'Water' && roll < 0.008) {
         window.tileObjects[key] = { type: 'fishing_spot', lastFishedAt: 0 };
     }
 }

@@ -987,6 +987,7 @@ function startGameCore(isLoading = false) {
       table: new Image(),
       bench: new Image(),
       throne: new Image(),
+      apple: new Image(),
       door_open: new Image(),
       door_closed: new Image(),
       path: new Image(),
@@ -1073,6 +1074,7 @@ function startGameCore(isLoading = false) {
   visuals.table.onload = () => { window.drawMap(); };
   visuals.bench.onload = () => { window.drawMap(); };
   visuals.throne.onload = () => { window.drawMap(); };
+  visuals.apple.onload = () => { window.drawMap(); };
   visuals.door_open.onload = () => { window.drawMap(); };
   visuals.door_closed.onload = () => { window.drawMap(); };
   visuals.path.onload = () => { window.drawMap(); };
@@ -1160,6 +1162,7 @@ function startGameCore(isLoading = false) {
   visuals.table.src = 'images/table.svg';
   visuals.bench.src = 'images/bench.svg';
   visuals.throne.src = 'images/throne.svg';
+  visuals.apple.src = 'images/apple.svg';
   visuals.door_open.src = 'images/door_open.svg';
   visuals.door_closed.src = 'images/door_closed.svg';
   visuals.path.src = 'images/path.svg';
@@ -1555,16 +1558,40 @@ function renderEntities() {
               window.mapCtx.drawImage(img, x - size/2, y - size/2, size, size);
               if (obj.depleted) window.mapCtx.globalAlpha = 1.0;
           } else if (obj.type === 'fruit_tree' && window.gameVisuals.tree_large.complete) {
-              // Larger than the decorative small trees, and tinted warm/ripe
-              // when it actually has fruit to harvest, its natural green otherwise.
+              // Larger than the decorative small trees. Ripe fruit used to be
+              // shown by tinting the *whole tree* warm orange-red, which read
+              // as "this tree is a weird color" more than "this tree has
+              // fruit" — small apple sprites overlaid on the canopy are far
+              // more legible. The canopy itself just gets the same seasonal
+              // tint every other tree gets (see getSeasonalLeafTint).
               let img = window.gameVisuals.tree_large;
-              if (obj.hasFruit && window.getRecoloredHairSprite) {
-                  const tinted = window.getRecoloredHairSprite(img, 25, 1, 1.3); // warm orange-red, fruit-laden
+              if (window.getSeasonalLeafTint && window.getRecoloredHairSprite) {
+                  const tint = window.getSeasonalLeafTint();
+                  const tinted = window.getRecoloredHairSprite(img, tint.hue, tint.light, tint.sat);
                   if (tinted) img = tinted;
               }
               const tSize = size * 2.2;
               const th = tSize * (window.gameVisuals.tree_large.naturalHeight / window.gameVisuals.tree_large.naturalWidth);
-              window.mapCtx.drawImage(img, x - tSize / 2, y + size * 0.5 - th, tSize, th);
+              const treeX = x - tSize / 2, treeY = y + size * 0.5 - th;
+              window.mapCtx.drawImage(img, treeX, treeY, tSize, th);
+
+              if (obj.hasFruit && window.gameVisuals.apple.complete) {
+                  const appleSize = tSize * 0.22;
+                  // Offsets (fraction of canopy width/height) landing inside
+                  // the upper canopy area, not the trunk.
+                  const applePositions = [
+                      { dx: -0.26, dy: 0.30 }, { dx: 0.20, dy: 0.24 },
+                      { dx: -0.04, dy: 0.42 }, { dx: 0.30, dy: 0.44 }
+                  ];
+                  applePositions.forEach(p => {
+                      window.mapCtx.drawImage(
+                          window.gameVisuals.apple,
+                          treeX + tSize * (0.5 + p.dx) - appleSize / 2,
+                          treeY + th * p.dy - appleSize / 2,
+                          appleSize, appleSize
+                      );
+                  });
+              }
           } else if (obj.type === 'herb_patch' && window.gameVisuals.foliage.complete) {
               const hSize = size * 0.6;
               window.mapCtx.globalAlpha = obj.hasHerbs ? 1.0 : 0.35;

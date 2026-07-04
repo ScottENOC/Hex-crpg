@@ -197,6 +197,48 @@ function getCurrentHour() {
 }
 window.getCurrentHour = getCurrentHour;
 
+// Season, for foliage color — derived from the *same* solstice positions
+// getLightLevel's day-length formula already uses (mo=5 is the longest-day
+// summer peak, mo=11 is the shortest-day winter trough), not from the month
+// names themselves. A couple of names read a little backwards against that
+// (Redleaf(5) is functionally high summer; Greenbud(11) is functionally
+// deep winter) — a pre-existing quirk of the calendar's naming, not
+// something this feeds off; the actual daylight-length math is the source
+// of truth so the seasonal palette never contradicts how long the days are.
+// Quantized to the whole month (not day-of-month) so getRecoloredHairSprite's
+// cache only ever needs to hold 12 variants per source sprite.
+const LEAF_SEASON_KEYFRAMES = [
+    { t: 0,    hue: 100, sat: 1.0,  light: 1.0  }, // mo5 - full summer green
+    { t: 2,    hue: 95,  sat: 0.9,  light: 1.0  }, // mo7 - still green
+    { t: 3.5,  hue: 40,  sat: 1.1,  light: 1.05 }, // mo8.5 - turning orange
+    { t: 5,    hue: 15,  sat: 1.1,  light: 0.9  }, // mo10 - red/rust peak
+    { t: 6,    hue: 30,  sat: 0.4,  light: 0.6  }, // mo11 - winter trough, bare/brown
+    { t: 8,    hue: 30,  sat: 0.4,  light: 0.6  }, // mo1 - still winter-bare
+    { t: 9.5,  hue: 90,  sat: 0.6,  light: 0.75 }, // mo2.5 - budding green returns
+    { t: 11,   hue: 100, sat: 0.95, light: 0.98 }, // mo4 - nearly full green
+    { t: 12,   hue: 100, sat: 1.0,  light: 1.0  }, // wraps back to mo5
+];
+function getSeasonalLeafTint() {
+    const totalD = Math.floor(window.worldSeconds / 86400);
+    const mo = Math.floor(totalD / 30) % 12;
+    const t = (mo - 5 + 12) % 12; // 0 at mo5 (summer peak), 6 at mo11 (winter trough)
+    let a = LEAF_SEASON_KEYFRAMES[0], b = LEAF_SEASON_KEYFRAMES[LEAF_SEASON_KEYFRAMES.length - 1];
+    for (let i = 0; i < LEAF_SEASON_KEYFRAMES.length - 1; i++) {
+        if (t >= LEAF_SEASON_KEYFRAMES[i].t && t <= LEAF_SEASON_KEYFRAMES[i + 1].t) {
+            a = LEAF_SEASON_KEYFRAMES[i]; b = LEAF_SEASON_KEYFRAMES[i + 1];
+            break;
+        }
+    }
+    const span = b.t - a.t || 1;
+    const f = (t - a.t) / span;
+    return {
+        hue: a.hue + (b.hue - a.hue) * f,
+        sat: a.sat + (b.sat - a.sat) * f,
+        light: a.light + (b.light - a.light) * f,
+    };
+}
+window.getSeasonalLeafTint = getSeasonalLeafTint;
+
 function getFormattedTime() {
     const totalS = Math.floor(window.worldSeconds);
     

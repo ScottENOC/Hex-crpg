@@ -312,13 +312,23 @@ function drawMap() {
           const overlayKey = pickVariantKey(q, r, 401, FOLIAGE_OVERLAYS);
           const overlayImg = window.gameVisuals[overlayKey];
           if (imgOk(overlayImg)) {
+              // Seasonal leaf color — see getSeasonalLeafTint (worldTime.js).
+              // Aspect ratio is read from the original <img> (naturalWidth/
+              // Height) before any tinting, since getRecoloredHairSprite
+              // returns a <canvas> (width/height only, no naturalWidth).
+              let drawImg = overlayImg;
+              if (window.getSeasonalLeafTint && window.getRecoloredHairSprite) {
+                  const tint = window.getSeasonalLeafTint();
+                  const tinted = window.getRecoloredHairSprite(overlayImg, tint.hue, tint.light, tint.sat);
+                  if (tinted) drawImg = tinted;
+              }
               const isTall = overlayKey === 'tree_small';
               const footprint = isTall ? [{ q, r }, { q, r: r - 1 }] : [{ q, r }];
               const occupied = footprint.some(fh => window.entities.some(e => e.alive && e.getAllHexes && e.getAllHexes().some(h => h.q === fh.q && h.r === fh.r)));
               const w = zoomedSize * 1.7;
               const h = w * (overlayImg.naturalHeight / overlayImg.naturalWidth);
               if (occupied) mapCtx.globalAlpha = 0.4;
-              mapCtx.drawImage(overlayImg, x - w / 2, y + zoomedSize * 0.6 - h, w, h);
+              mapCtx.drawImage(drawImg, x - w / 2, y + zoomedSize * 0.6 - h, w, h);
               if (occupied) mapCtx.globalAlpha = 1.0;
           }
       } else if (terrain.name === 'Wood Floor' && imgOk(window.gameVisuals.wood_floor)) {
