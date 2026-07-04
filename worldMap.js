@@ -256,6 +256,26 @@ function renderWorldMap() {
     }
 }
 
+// Maps a named world-map cell to the real local hex it corresponds to, so
+// "have I actually been there" can reuse the game's existing fog-of-war
+// tracking (window.exploredHexes/isHexExplored) instead of inventing a
+// second, parallel "visited" tracker. Forts have no built local counterpart
+// (world-map abstractions only), so they're simply not in this table —
+// isWorldCellVisited safely returns false for them, no indicator drawn.
+const worldCellLocalHexLookup = {
+    'Hollowmere': () => ({ q: 0, r: 0 }), // the tavern — always explored at game start
+    'Millbrook': () => window.campaign2MillbrookCenter,
+    'Silverhart': () => window.campaign2PalaceThroneCenter,
+    'Reddale': () => window.campaign2ReddaleGuardhouseCenter,
+    'Emberlode': () => window.campaign2EmberlodeCenter,
+    "Old Mac's Farmstead": () => window.campaign2FarmHouseCenter,
+};
+function isWorldCellVisited(cell) {
+    const getHex = cell.n && worldCellLocalHexLookup[cell.n];
+    const hex = getHex && getHex();
+    return !!(hex && window.isHexExplored && window.isHexExplored(hex.q, hex.r));
+}
+
 function drawWorldHex(ctx, x, y, size, cell, q, r) {
     ctx.beginPath();
     for (let i = 0; i < 6; i++) {
@@ -335,6 +355,18 @@ function drawWorldHex(ctx, x, y, size, cell, q, r) {
             ctx.shadowBlur = 3;
             ctx.fillText(cell.n, x, y - size - 4);
             ctx.shadowBlur = 0;
+        }
+
+        // A subtle ring around the marker for any named location the player
+        // has actually set foot in (reuses the existing fog-of-war explored
+        // set — not a new "visited" tracker) — deliberately quiet (thin,
+        // translucent) so it reads as a light touch, not a bold badge.
+        if (isWorldCellVisited(cell)) {
+            ctx.beginPath();
+            ctx.arc(x, y, markerRadius + 3, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(129, 199, 132, 0.75)';
+            ctx.lineWidth = Math.max(1, 1.3 * window.worldCameraZoom);
+            ctx.stroke();
         }
     }
 }
@@ -462,6 +494,75 @@ function initWorldMapEvents() {
         window.worldCameraY = mouseY - worldY * window.worldCameraZoom;
 
         renderWorldMap();
+    }, { passive: false });
+
+    // Touch support — this canvas previously had none at all, so tapping a
+    // hex for details, panning, and pinch-zoom simply did nothing on
+    // touch/iOS. Mirrors the same drag-vs-tap distinction and pinch-zoom
+    // math already proven on the main map canvas (hexMap.js).
+    let touchStartX = 0, touchStartY = 0, lastPinchDist = 0;
+    canvas.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 1) {
+            worldIsDragging = true;
+            worldLastMouseX = e.touches[0].clientX;
+            worldLastMouseY = e.touches[0].clientY;
+            touchStartX = worldLastMouseX;
+            touchStartY = worldLastMouseY;
+        } else if (e.touches.length === 2) {
+            worldIsDragging = false;
+            lastPinchDist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+        }
+    }, { passive: false });
+
+    canvas.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        if (e.touches.length === 1 && worldIsDragging) {
+            const dx = e.touches[0].clientX - worldLastMouseX;
+            const dy = e.touches[0].clientY - worldLastMouseY;
+            window.worldCameraX += dx;
+            window.worldCameraY += dy;
+            worldLastMouseX = e.touches[0].clientX;
+            worldLastMouseY = e.touches[0].clientY;
+            renderWorldMap();
+        } else if (e.touches.length === 2) {
+            const dist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+            const delta = dist / lastPinchDist;
+            lastPinchDist = dist;
+
+            const rect = canvas.getBoundingClientRect();
+            const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+            const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+
+            const worldX = (centerX - window.worldCameraX) / window.worldCameraZoom;
+            const worldY = (centerY - window.worldCameraY) / window.worldCameraZoom;
+
+            window.worldCameraZoom = Math.min(Math.max(0.01, window.worldCameraZoom * delta), 10.0);
+            window.worldCameraX = centerX - worldX * window.worldCameraZoom;
+            window.worldCameraY = centerY - worldY * window.worldCameraZoom;
+
+            renderWorldMap();
+        }
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', (e) => {
+        worldIsDragging = false;
+        if (e.touches.length < 2) lastPinchDist = 0;
+        if (e.changedTouches.length === 1) {
+            const moved = Math.abs(e.changedTouches[0].clientX - touchStartX) + Math.abs(e.changedTouches[0].clientY - touchStartY);
+            if (moved < 10) {
+                const rect = canvas.getBoundingClientRect();
+                const touchX = e.changedTouches[0].clientX - rect.left;
+                const touchY = e.changedTouches[0].clientY - rect.top;
+                const cell = getWorldCellAtScreenPos(touchX, touchY);
+                if (cell) selectWorldMapCell(cell.x, cell.y);
+            }
+        }
     }, { passive: false });
 }
 

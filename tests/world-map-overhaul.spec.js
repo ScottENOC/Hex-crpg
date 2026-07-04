@@ -95,4 +95,29 @@ test.describe('world map overhaul: river, capital, forts, orc lands, borders', (
         expect(cell.n).toBe('Hollowmere');
         expect(cell.f).toBe('V');
     });
+
+    test('Hollowmere (the starting tavern hex) counts as explored, the signal the visited-indicator reads', async ({ page }) => {
+        await createCharacter(page, { campaign: '2' });
+        // updateExploration normally runs during real ticks/movement; force
+        // one pass here rather than waiting on the real-time loop.
+        const explored = await page.evaluate(() => {
+            window.updateExploration();
+            return window.isHexExplored(0, 0);
+        });
+        expect(explored).toBe(true);
+    });
+
+    test('a tap on the player\'s hex resolves to a real cell and opens the details panel (the exact lookup the new touchend handler calls)', async ({ page }) => {
+        await createCharacter(page, { campaign: '2' });
+        const result = await page.evaluate(() => {
+            document.getElementById('world-map-modal').style.display = 'block';
+            window.renderWorldMap();
+            const { x, y } = window.worldHexToPixel ? window.worldHexToPixel(window.playerWorldPos.x, window.playerWorldPos.y) : { x: 0, y: 0 };
+            const cell = window.getWorldCellAtScreenPos(x, y);
+            if (cell) window.selectWorldMapCell(cell.x, cell.y);
+            return { foundCell: !!cell, panelVisible: document.getElementById('world-map-details').style.display === 'block' };
+        });
+        expect(result.foundCell).toBe(true);
+        expect(result.panelVisible).toBe(true);
+    });
 });

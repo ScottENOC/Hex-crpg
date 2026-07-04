@@ -55,6 +55,23 @@
         .dropbtn:hover {
             background-color: #3f51b5;
         }
+
+        /* iOS Safari can otherwise render a <select> with near-invisible
+           contrast (or a near-zero effective tap target inside a flex row)
+           unless every rendering-relevant property is set explicitly rather
+           than relying on inheritance/native chrome defaults. */
+        .cheat-teleport-select {
+            -webkit-appearance: none;
+            appearance: none;
+            background-color: #333;
+            color: #fff;
+            border: 1px solid #777;
+            border-radius: 4px;
+            padding: 6px 8px;
+            min-width: 150px;
+            min-height: 30px;
+            font-size: 0.8em;
+        }
     </style>
 </head>
 <body>
@@ -103,7 +120,7 @@
         <button id="cheat-fly-btn" style="background-color: #03a9f4; font-size: 0.7em; color: white;">Cheat: Fly All</button>
         <button id="cheat-max-skills-btn" style="background-color: #e91e63; font-size: 0.7em; color: white;">Cheat: Max Skills</button>
         <div style="padding: 4px; display: flex; gap: 4px; align-items: center;">
-            <select id="cheat-teleport-select" style="font-size: 0.7em; flex: 1;">
+            <select id="cheat-teleport-select" class="cheat-teleport-select" style="flex: 1;">
                 <option value="Hollowmere (Village)">Hollowmere (Village)</option>
                 <option value="Millbrook (Village)">Millbrook (Village)</option>
                 <option value="Silverhart (Capital)">Silverhart (Capital)</option>
