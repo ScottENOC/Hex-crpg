@@ -948,6 +948,15 @@ function buildReddale(roadEnd) {
     if (window.campaign2ReddaleInnkeeper) {
         window.entities.push(window.buildNPC({ ...window.campaign2ReddaleInnkeeper, hex: { q: innCenter.q, r: innCenter.r } }));
     }
+    if (window.campaign2ReddaleDisciple) {
+        window.entities.push(window.buildNPC({ ...window.campaign2ReddaleDisciple, hex: { q: innCenter.q + 1, r: innCenter.r } }));
+        // Her cult correspondence, tucked just outside the inn — the
+        // evidence needed to actually report her (see readDiscipleNote and
+        // reddale_captain's report option in campaign2Dialogue.js). Reuses
+        // the existing journal/readId click-to-read plumbing rather than a
+        // new tileObject type.
+        window.tileObjects[`${innCenter.q + 2},${innCenter.r}`] = { type: 'journal', lightRadius: 0, readId: 'disciple_note' };
+    }
 
     // Ironbond's Reddale guildhouse and the Baron's manor — the two ends of
     // the Reddale espionage side-quests (see espionageQuests.js and
@@ -1040,6 +1049,23 @@ function readAbandonedHouseJournal() {
         );
     }
 }
+
+// Mirella Thorn's cult correspondence — the actual evidence needed to report
+// her (see reddale_captain's report option in campaign2Dialogue.js). A real
+// one-shot inventory item, same convention as the phylactery shard below,
+// not a bare flag.
+function readDiscipleNote() {
+    if (window.player.inventory.includes('disciple_evidence') || window.discipleNoteTaken) {
+        window.showDialogue({ name: 'Note', customImage: 'journal' }, "Nothing left here worth reading again.");
+        return;
+    }
+    window.discipleNoteTaken = true;
+    window.player.inventory.push('disciple_evidence');
+    window.showDialogue({ name: 'Note', customImage: 'journal' },
+        "A folded letter, tucked behind a shelf of drying herbs. The hand is cramped and careful, signed with a sigil you recognize — the same one scratched into the phylactery altar north of Millbrook. Whoever Mirella really is, an herbalist isn't all of it."
+    );
+}
+window.readDiscipleNote = readDiscipleNote;
 
 // The altar's phylactery-shard: a real inventory item, not a flag. Holding it
 // is what unlocks pursuing lichdom yourself; how the necromancer_cult faction

@@ -62,7 +62,8 @@ const items = {
     'elder_locket': { id: 'elder_locket', name: 'Tarnished Locket', type: 'quest_item' },
     'phylactery_shard': { id: 'phylactery_shard', name: 'Phylactery Shard', type: 'quest_item', description: 'A cold, faintly warm shard of blackened bone and glass. It wants to be whole again.' },
     'guild_ledger_evidence': { id: 'guild_ledger_evidence', name: 'Guild Ledger Pages', type: 'quest_item', description: 'Torn pages from the merchants guild\'s private ledgers — untaxed shipments, dates, and names.' },
-    'baron_tariff_evidence': { id: 'baron_tariff_evidence', name: 'Tariff Skimming Records', type: 'quest_item', description: "A steward's private tally of tariffs collected that never reached the crown's coffers." }
+    'baron_tariff_evidence': { id: 'baron_tariff_evidence', name: 'Tariff Skimming Records', type: 'quest_item', description: "A steward's private tally of tariffs collected that never reached the crown's coffers." },
+    'disciple_evidence': { id: 'disciple_evidence', name: "Mirella's Cult Letters", type: 'quest_item', description: "Correspondence in a cramped hand, signed with a sigil that matches the phylactery altar's markings." }
 };
 
 window.items = items;

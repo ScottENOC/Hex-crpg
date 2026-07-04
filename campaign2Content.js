@@ -189,6 +189,26 @@ window.campaign2ReddaleInnkeeper = {
     dialogueId: 'reddale_innkeeper'
 };
 
+// A disciple of the necromancer (see the abandoned house/phylactery arc in
+// campaign2World.js), hiding in plain sight in Reddale as an ordinary
+// herbalist. Deliberately just another background NPC — no new building,
+// see buildReddale — investigated via Knowledge: Religion, and only
+// reportable to the Watch if the player actually has evidence (see
+// readDiscipleNote/campaign2Dialogue.js's reddale_disciple/reddale_captain
+// trees).
+window.campaign2ReddaleDisciple = {
+    name: 'Mirella Thorn',
+    title: 'Herbalist',
+    race: 'human', gender: 'female',
+    classLevels: [],
+    skillPicks: [],
+    equipment: [],
+    side: 'neutral',
+    factionId: 'necromancer_cult',
+    color: '#4a3a5a',
+    dialogueId: 'reddale_disciple'
+};
+
 // --- The Skarn-tooth goblin tribe, camped a long way west (see
 // buildGoblinCamp in campaign2World.js — placed at the very end of the west
 // road, at this world hex's border). Built from monsters.js's goblin/

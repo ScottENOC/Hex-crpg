@@ -3235,6 +3235,7 @@ function handleClick(e){
         if (doorObj.readId === 'goblin_scout_note' && window.readGoblinScoutNote) { window.readGoblinScoutNote(); return; }
         if (doorObj.readId === 'emberlode_ledger' && window.readEmberlodeLedger) { window.readEmberlodeLedger(); return; }
         if (doorObj.readId === 'phylactery_altar' && window.interactPhylacteryAltar) { window.interactPhylacteryAltar(); return; }
+        if (doorObj.readId === 'disciple_note' && window.readDiscipleNote) { window.readDiscipleNote(); return; }
         if (window.readAbandonedHouseJournal) window.readAbandonedHouseJournal();
         return;
     }

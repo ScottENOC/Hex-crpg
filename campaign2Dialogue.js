@@ -253,6 +253,39 @@ window.npcDialogueTrees = {
     },
     reddale_captain: (npc) => {
         if (!window.questLog) window.questLog = [];
+
+        // Reporting the disciple takes priority over anything else she has
+        // going on — an accusation with real evidence behind it isn't the
+        // kind of thing that waits its turn. Only offered once the player
+        // actually holds the evidence (see readDiscipleNote), same "no free
+        // option without real signal" principle leverage.js uses for
+        // bribes/threats.
+        const discipleQuest = window.questLog.find(q => q.id === 'disciple_exposed');
+        if (!discipleQuest && window.player.inventory.includes('disciple_evidence')) {
+            window.showDialogue(npc, "Something on your mind?", [
+                {
+                    label: "Report a cult disciple hiding in town.",
+                    action: () => {
+                        window.player.inventory.splice(window.player.inventory.indexOf('disciple_evidence'), 1);
+                        window.questLog.push({
+                            id: 'disciple_exposed', title: "The Herbalist's Secret", giver: 'Captain Ilsa Rennick', status: 'completed',
+                            description: 'Reported Mirella Thorn, a disciple of the necromancer hiding in Reddale, to the Watch.'
+                        });
+                        const disciple = window.entities.find(e => e.name === 'Mirella Thorn');
+                        if (disciple) disciple.alive = false;
+                        window.adjustReputation(window.factions.necromancer_cult, -25, 20);
+                        window.adjustReputation(npc.reputation, 15, 15);
+                        if (window.adjustRegionStat) window.adjustRegionStat('hollowmere', 'security', 5);
+                        window.party[0].gold = (window.party[0].gold || 0) + 30;
+                        if (window.gainExp) window.gainExp(150);
+                        window.showMessage("The Watch moves on Mirella's shop before dawn. Whatever she really was, Reddale won't have to find out the hard way. (+30 gold)");
+                    }
+                },
+                { label: "Never mind.", action: () => {} }
+            ]);
+            return;
+        }
+
         const quest = window.questLog.find(q => q.id === 'reddale_missing_watch');
 
         if (!quest) {
@@ -496,6 +529,59 @@ window.npcDialogueTrees = {
                 { label: "Good to know.", action: () => {} }
             ]);
         }
+    },
+    // --- The necromancer's disciple, hiding as an ordinary herbalist in
+    // Reddale (see the abandoned house/phylactery-shard arc in
+    // campaign2World.js). Knowledge: Religion is what actually lets the
+    // player notice anything is wrong with her — without it she's just
+    // another background townsperson, same convention as the abandoned
+    // house journal's vague/detailed split.
+    reddale_disciple: (npc) => {
+        const knowsReligion = window.party && window.party.some(p => window.hasKnowledgeReligion(p));
+        if (!knowsReligion) {
+            window.showDialogue(npc, "Herbs for a cough, a bad hip, a bad night's sleep — that's all I sell. Anything else?", [
+                { label: "Nothing, thanks.", action: () => {} }
+            ]);
+            return;
+        }
+
+        if (!window.discipleSuspected) {
+            window.showDialogue(npc, "Herbs for a cough, a bad hip, a bad night's sleep — that's all I sell. Anything else?", [
+                {
+                    label: "Look closer at her wares.",
+                    action: () => {
+                        window.discipleSuspected = true;
+                        window.showDialogue(npc, "Among the drying herbs, a sigil is scratched faintly into the shelf's underside — the same mark from the phylactery altar north of Millbrook. She notices you noticing, and her smile doesn't move.", [
+                            { label: "...", action: () => {} }
+                        ]);
+                    }
+                },
+                { label: "Nothing, thanks.", action: () => {} }
+            ]);
+            return;
+        }
+
+        const options = [
+            {
+                label: "You serve the Vessel-Seeker.",
+                action: () => window.showDialogue(npc, "\"The Vessel-Seeker\"? I sell herbs. Whatever you think you saw, keep it to yourself — for your own sake, if not mine.", [{ label: "...", action: () => {} }])
+            },
+            { label: "Nothing, thanks.", action: () => {} }
+        ];
+
+        const conspireStanding = window.factions?.necromancer_cult?.standing ?? 0;
+        if (conspireStanding > -20 && !window.discipleConspired) {
+            options.unshift({
+                label: "Your secret's safe with me — for now.",
+                action: () => {
+                    window.discipleConspired = true;
+                    window.adjustReputation(window.factions.necromancer_cult, 15, 15);
+                    if (window.factions?.silverhart_kingdom) window.adjustReputation(window.factions.silverhart_kingdom, -10, 10);
+                    window.showMessage("Mirella's shoulders ease, just slightly. \"Smart. We'll remember it.\"");
+                }
+            });
+        }
+        window.showDialogue(npc, "You've a sharp eye. Sharper than most who come through here.", options);
     },
     // --- Ironbond Company vs the Baron: mirrored espionage side-quests (the
     // same Ironbond from the Hollowmere tavern shakedown, straining for
