@@ -428,6 +428,17 @@ window.campaign2RoyalGuards = [
     { name: 'Royal Guard Osric', title: 'Royal Guard', race: 'human', gender: 'male', classLevels: ['fighter'], skillPicks: ['health', 'sword_hit', 'light_armor_training'], equipment: ['sword', 'light_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#3a3a6a' },
     { name: 'Royal Guard Isolde', title: 'Royal Guard', race: 'human', gender: 'female', classLevels: ['fighter'], skillPicks: ['health', 'spear_hit', 'light_armor_training'], equipment: ['spear', 'light_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#3a3a6a' }
 ];
+// Same template shape as campaign2RoyalGuards, posted along the new curtain
+// wall (gatehouse + watchtowers) instead of inside the buildings — a
+// walled royal seat needs visible wall guards, not just interior ones.
+window.campaign2WallGuards = [
+    { name: 'Wall Guard Brennan', title: 'Royal Guard', race: 'human', gender: 'male', classLevels: ['fighter', 'fighter'], skillPicks: ['health', 'health', 'spear_hit', 'spear_dmg', 'heavy_armor_training', 'shield_proficiency'], equipment: ['spear', 'wooden_shield', 'heavy_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#3a3a6a' },
+    { name: 'Wall Guard Yara', title: 'Royal Guard', race: 'human', gender: 'female', classLevels: ['fighter', 'fighter'], skillPicks: ['health', 'health', 'sword_hit', 'sword_dmg', 'heavy_armor_training', 'shield_proficiency'], equipment: ['sword', 'wooden_shield', 'heavy_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#3a3a6a' },
+    { name: 'Wall Guard Tomas', title: 'Royal Guard', race: 'human', gender: 'male', classLevels: ['fighter'], skillPicks: ['health', 'spear_hit', 'light_armor_training'], equipment: ['spear', 'light_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#3a3a6a' },
+    { name: 'Wall Guard Sela', title: 'Royal Guard', race: 'human', gender: 'female', classLevels: ['fighter'], skillPicks: ['health', 'sword_hit', 'light_armor_training'], equipment: ['sword', 'light_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#3a3a6a' },
+    { name: 'Wall Guard Draven', title: 'Royal Guard', race: 'human', gender: 'male', classLevels: ['fighter', 'fighter'], skillPicks: ['health', 'health', 'sword_hit', 'sword_dmg', 'heavy_armor_training'], equipment: ['sword', 'heavy_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#3a3a6a' },
+    { name: 'Wall Guard Ottilie', title: 'Royal Guard', race: 'human', gender: 'female', classLevels: ['fighter', 'fighter'], skillPicks: ['health', 'health', 'spear_hit', 'spear_dmg', 'heavy_armor_training'], equipment: ['spear', 'heavy_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#3a3a6a' }
+];
 window.campaign2PalaceChancellor = {
     name: 'Chancellor Merric Vane',
     title: "The Queen's Chancellor",

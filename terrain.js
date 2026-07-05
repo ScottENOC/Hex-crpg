@@ -14,7 +14,15 @@ const terrainTypes = {
     'dirt': { name: 'Dirt', color: '#8a6d4a', moveCostMult: 1, hitBonus: 0, dodgeBonus: 0, stealthBonus: -15 },
     'pedestal': { name: 'Pedestal', color: '#888', moveCostMult: 2, hitBonus: 10, dodgeBonus: -5, stealthBonus: 0, blocksLOS: true },
     'foliage': { name: 'Foliage', color: '#2e7d32', moveCostMult: 1.5, hitBonus: -10, dodgeBonus: 15, stealthBonus: 40 },
-    'rocky_outcrop': { name: 'Rocky Outcrop', color: '#8a7f6b', moveCostMult: 1.5, hitBonus: 5, dodgeBonus: 0, stealthBonus: 0 }
+    'rocky_outcrop': { name: 'Rocky Outcrop', color: '#8a7f6b', moveCostMult: 1.5, hitBonus: 5, dodgeBonus: 0, stealthBonus: 0 },
+    // A third wall tier, between plain 'Wall' (fully impassable — used for
+    // the palace's actual room walls) and a fence tileObject (barely an
+    // inconvenience) — a real curtain wall you CAN scale, but only with a
+    // ladder or real climbing skill (see getMoveCostMult in gameEngine.js
+    // for the agile_climber/ladder-tileObject discount). Not literally
+    // 'Wall' so it doesn't hit any of the hardcoded impassable-terrain
+    // checks scattered through pathfinding/targeting.
+    'palisade_wall': { name: 'Palisade Wall', color: '#5a4632', moveCostMult: 15, hitBonus: 10, dodgeBonus: -10, stealthBonus: -30, blocksLOS: true }
 };
 
 window.mapItems = {}; // Key format: "q,r", Value: array of item IDs

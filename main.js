@@ -94,6 +94,8 @@ document.addEventListener("DOMContentLoaded", () => {
             {key: 'door_closed', src: 'images/door_closed.svg'},
             {key: 'path', src: 'images/path.svg'},
             {key: 'signpost', src: 'images/signpost.svg'},
+            {key: 'ladder', src: 'images/ladder.svg'},
+            {key: 'watchtower', src: 'images/watchtower.svg'},
             {key: 'corpse_marker', src: 'images/corpse_marker.svg'},
             {key: 'fence_h', src: 'images/fence_h.svg'},
             {key: 'fence_v', src: 'images/fence_v.svg'},

@@ -515,6 +515,97 @@ function buildSilverhartPalace(roadEnd) {
     window.tileObjects[`${bedroomCenter.q},${bedroomCenter.r - 1}`] = { type: 'fireplace', lightRadius: 5 };
     window.campaign2PalaceBedroomCenter = bedroomCenter;
 
+    // A real curtain wall around the whole complex — hex-distance ring
+    // (same "circle" technique the arena lobby's rooms already use), so it
+    // reads as a proper hexagon. Radius 23 clears every wing built above
+    // (barracks' outer edge is the furthest point, at distance 20) with a
+    // few hexes of courtyard to spare. Uses the new 'Palisade Wall' terrain
+    // (see terrain.js) — a real barrier, not decorative, but one that CAN
+    // be scaled with a ladder or real climbing skill (getMoveCostMult in
+    // gameEngine.js), unlike the palace's own room walls (plain 'Wall',
+    // fully impassable) or a simple fence (barely an inconvenience).
+    const WALL_RADIUS = 23;
+    const ringHexes = [];
+    for (let q = -WALL_RADIUS; q <= WALL_RADIUS; q++) {
+        for (let r = -WALL_RADIUS; r <= WALL_RADIUS; r++) {
+            if (window.distance({ q: 0, r: 0 }, { q, r }) === WALL_RADIUS) {
+                ringHexes.push({ q: throneCenter.q + q, r: throneCenter.r + r });
+            }
+        }
+    }
+    // The southern edge (r = throneCenter.r + WALL_RADIUS, q from
+    // throneCenter.q - WALL_RADIUS to throneCenter.q) is a straight run of
+    // ring hexes lining up with the existing entrance road (which runs
+    // along q = throneCenter.q) — a 3-hex gate carved right where the road
+    // meets the wall, flanked by two watchtowers.
+    const gateHexes = [
+        { q: throneCenter.q, r: throneCenter.r + WALL_RADIUS },
+        { q: throneCenter.q - 1, r: throneCenter.r + WALL_RADIUS },
+        { q: throneCenter.q - 2, r: throneCenter.r + WALL_RADIUS },
+    ];
+    const gateKeys = new Set(gateHexes.map(h => `${h.q},${h.r}`));
+    ringHexes.forEach(h => {
+        const key = `${h.q},${h.r}`;
+        if (gateKeys.has(key)) {
+            window.setTerrainAt(h.q, h.r, 'Path');
+        } else {
+            window.setTerrainAt(h.q, h.r, 'Palisade Wall');
+        }
+    });
+    // Connect the gate to the existing entrance road running north from
+    // roadEnd to throneDoor.
+    for (let r = throneDoor.r + 1; r < throneCenter.r + WALL_RADIUS; r++) window.setTerrainAt(throneCenter.q, r, 'Path');
+
+    // Watchtowers flanking the gate, plus one at each of the hexagon's
+    // other five true corners. A hex ring's 6 corners are the well-known
+    // (R,0), (R,-R), (0,-R), (-R,0), (-R,R), (0,R) axial offsets — the last
+    // of those (0,R) is the gate's own south corner, so it's skipped here
+    // in favor of two towers flanking the gate itself instead.
+    const towerSpots = [
+        { q: throneCenter.q + 2, r: throneCenter.r + 21 },                 // flanking the gate (east)
+        { q: throneCenter.q - 4, r: throneCenter.r + WALL_RADIUS },        // flanking the gate (west)
+        { q: throneCenter.q + WALL_RADIUS, r: throneCenter.r },            // east corner
+        { q: throneCenter.q - WALL_RADIUS, r: throneCenter.r },            // west corner
+        { q: throneCenter.q, r: throneCenter.r - WALL_RADIUS },            // north corner
+        { q: throneCenter.q + WALL_RADIUS, r: throneCenter.r - WALL_RADIUS }, // northeast corner
+        { q: throneCenter.q - WALL_RADIUS, r: throneCenter.r + WALL_RADIUS }, // southwest corner
+    ];
+    towerSpots.forEach(h => {
+        window.setTerrainAt(h.q, h.r, 'Palisade Wall');
+        window.tileObjects[`${h.q},${h.r}`] = { type: 'watchtower', lightRadius: 4 };
+    });
+    // A couple of ladders on far, unwatched stretches of wall — a
+    // determined (or well-skilled) intruder's real way over, away from the
+    // gate and its guards.
+    const ladderSpots = [
+        { q: throneCenter.q + 12, r: throneCenter.r - WALL_RADIUS },  // NE edge
+        { q: throneCenter.q - 12, r: throneCenter.r - 11 },           // NW edge
+    ];
+    ladderSpots.forEach(h => {
+        window.tileObjects[`${h.q},${h.r}`] = { type: 'ladder' };
+    });
+
+    // Wall guards: at the gate and atop most of the corner watchtowers —
+    // "lots of royal guard on the walls" alongside the existing interior
+    // posts. Each is one hex inward (toward the courtyard) from its tower/
+    // gate hex, verified against the same distance formula so they land
+    // just inside the wall ring rather than embedded in it.
+    const wallGuards = window.campaign2WallGuards || [];
+    const wallPosts = [
+        { q: throneCenter.q + 2, r: throneCenter.r + 20 },              // behind the east gate tower
+        { q: throneCenter.q - 4, r: throneCenter.r + WALL_RADIUS - 1 }, // behind the west gate tower
+        { q: throneCenter.q + WALL_RADIUS - 1, r: throneCenter.r },     // behind the east corner tower
+        { q: throneCenter.q - WALL_RADIUS + 1, r: throneCenter.r },     // behind the west corner tower
+        { q: throneCenter.q, r: throneCenter.r - WALL_RADIUS + 1 },     // behind the north corner tower
+        { q: throneCenter.q + WALL_RADIUS - 1, r: throneCenter.r - WALL_RADIUS + 1 }, // behind the NE corner tower
+    ];
+    wallGuards.forEach((g, i) => {
+        if (!wallPosts[i]) return;
+        const guard = window.buildNPC({ ...g, hex: wallPosts[i] });
+        guard.homeHex = { ...wallPosts[i] };
+        window.entities.push(guard);
+    });
+
     // Royal guards: flanking the throne, at the great hall's own door, and
     // spread through the barracks — "lots of guards" across the whole
     // palace, not clustered in one spot.

@@ -555,7 +555,7 @@ function playerMoveProcess(player, path) {
         const previousTerrain = window.getTerrainAt(previousHex.q, previousHex.r);
         const terrain = window.getTerrainAt(player.hex.q, player.hex.r);
         
-        let terrainMult = window.getMoveCostMult(player.hex.q, player.hex.r);
+        let terrainMult = window.getMoveCostMult(player.hex.q, player.hex.r, moveEntity);
         if (terrain.name === 'Foliage' && (moveEntity.skills?.elf_foliage_expertise || moveEntity.skills?.druid_foliage_expertise)) {
             terrainMult = 1.0; 
         }
@@ -857,7 +857,7 @@ function updatePlayerUI() {
             const terrain = window.getTerrainAt(n.q, n.r);
             if (terrain.name === 'Wall') continue;
 
-            const stepCost = baseMoveCost * (player.isFlying ? 1 : window.getMoveCostMult(n.q, n.r));
+            const stepCost = baseMoveCost * (player.isFlying ? 1 : window.getMoveCostMult(n.q, n.r, player));
             const totalCost = cost + stepCost;
 
             if (totalCost <= availableTP) {
@@ -999,6 +999,8 @@ function startGameCore(isLoading = false) {
       door_closed: new Image(),
       path: new Image(),
       signpost: new Image(),
+      ladder: new Image(),
+      watchtower: new Image(),
       corpse_marker: new Image(),
       fence_h: new Image(),
       fence_v: new Image(),
@@ -1093,6 +1095,8 @@ function startGameCore(isLoading = false) {
   visuals.door_closed.onload = () => { window.drawMap(); };
   visuals.path.onload = () => { window.drawMap(); };
   visuals.signpost.onload = () => { window.drawMap(); };
+  visuals.ladder.onload = () => { window.drawMap(); };
+  visuals.watchtower.onload = () => { window.drawMap(); };
   visuals.corpse_marker.onload = () => { window.drawMap(); };
   visuals.fence_h.onload = () => { window.drawMap(); };
   visuals.fence_v.onload = () => { window.drawMap(); };
@@ -1188,6 +1192,8 @@ function startGameCore(isLoading = false) {
   visuals.door_closed.src = 'images/door_closed.svg';
   visuals.path.src = 'images/path.svg';
   visuals.signpost.src = 'images/signpost.svg';
+  visuals.ladder.src = 'images/ladder.svg';
+  visuals.watchtower.src = 'images/watchtower.svg';
   visuals.corpse_marker.src = 'images/corpse_marker.svg';
   visuals.fence_h.src = 'images/fence_h.svg';
   visuals.fence_v.src = 'images/fence_v.svg';
@@ -1539,6 +1545,11 @@ function renderEntities() {
               window.mapCtx.drawImage(window.gameVisuals.door_closed, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'signpost' && window.gameVisuals.signpost.complete) {
               window.mapCtx.drawImage(window.gameVisuals.signpost, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'ladder' && window.gameVisuals.ladder.complete) {
+              window.mapCtx.drawImage(window.gameVisuals.ladder, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'watchtower' && window.gameVisuals.watchtower.complete) {
+              const tSize = size * 1.4;
+              window.mapCtx.drawImage(window.gameVisuals.watchtower, x - tSize/2, y - tSize/2, tSize, tSize);
           } else if (obj.type === 'corpse_marker' && window.gameVisuals.corpse_marker.complete) {
               window.mapCtx.drawImage(window.gameVisuals.corpse_marker, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'fence_h' && window.gameVisuals.fence_h.complete) {
@@ -2151,7 +2162,7 @@ function processRealTimeStep(entity, overage = 0) {
 
         const terrain = window.getTerrainAt(nextHex.q, nextHex.r);
 
-        let stepCost = 5 * window.getMoveCostMult(nextHex.q, nextHex.r);
+        let stepCost = 5 * window.getMoveCostMult(nextHex.q, nextHex.r, moveEntity);
         if (moveEntity.skills?.fastMovement) stepCost -= moveEntity.skills.fastMovement;
 
         // Set start point to current hex center for lerp
@@ -2462,7 +2473,7 @@ function autoMoveProcess(entity) {
         }
 
         const terrain = window.getTerrainAt(nextHex.q, nextHex.r);
-        let stepCost = 5 * window.getMoveCostMult(nextHex.q, nextHex.r);
+        let stepCost = 5 * window.getMoveCostMult(nextHex.q, nextHex.r, moveEntity);
         if (moveEntity.skills['fastMovement']) stepCost -= 1;
 
         entity.startQ = entity.hex.q;
@@ -2512,12 +2523,21 @@ function autoMoveProcess(entity) {
 // A fence is a tileObject decoration (fence_h/fence_v), not its own terrain
 // type, so plain terrain.moveCostMult lookups never noticed it — climbing
 // over one should cost extra regardless of the ground terrain underneath.
-function getMoveCostMult(q, r) {
+function getMoveCostMult(q, r, entity) {
     const terrain = window.getTerrainAt(q, r);
     let mult = terrain.moveCostMult || 1;
     const obj = window.tileObjects && window.tileObjects[`${q},${r}`];
     if (obj && (obj.type === 'fence_h' || obj.type === 'fence_v')) {
         mult *= 1.6;
+    }
+    // A palisade wall is meant to actually stop most people — but a ladder
+    // propped against it, or real climbing skill, makes it a real (if
+    // still slow) way over instead of requiring the fully-impassable 'Wall'
+    // terrain the palace's actual room walls use.
+    if (terrain.name === 'Palisade Wall') {
+        const hasLadder = obj && obj.type === 'ladder';
+        const canClimb = entity?.skills?.agile_climber;
+        mult = (hasLadder || canClimb) ? 2 : terrain.moveCostMult;
     }
     return mult;
 }
@@ -2851,7 +2871,7 @@ function aiProcess(entity) {
             const terrain = window.getTerrainAt(bestHex.q, bestHex.r);
             if (!getEntityAtHex(bestHex.q, bestHex.r)) {
                 entity.hex = bestHex;
-                spendTP(entity, 5 * window.getMoveCostMult(bestHex.q, bestHex.r));
+                spendTP(entity, 5 * window.getMoveCostMult(bestHex.q, bestHex.r, entity));
             } else {
                 spendTP(entity, 5);
             }
@@ -3073,13 +3093,13 @@ function aiProcess(entity) {
 
                 if (entity.riding) {
                     if (entity.riding.timePoints > 80) {
-                        spendTP(entity.riding, cost * window.getMoveCostMult(entity.hex.q, entity.hex.r));
+                        spendTP(entity.riding, cost * window.getMoveCostMult(entity.hex.q, entity.hex.r, entity.riding));
                     } else {
                         setTimeout(() => aiProcess(entity), 20);
                         return;
                     }
                 } else {
-                    spendTP(entity, cost * window.getMoveCostMult(entity.hex.q, entity.hex.r));
+                    spendTP(entity, cost * window.getMoveCostMult(entity.hex.q, entity.hex.r, entity));
                 }
 
                 if (forceEnd) entity.timePoints = threshold;
