@@ -112,6 +112,11 @@ window.npcDialogueTrees = {
         }
     },
     wick_hallow: (npc) => {
+        const ironbondQuest = window.questLog && window.questLog.find(q => q.id === 'ironbond_pitch');
+        if (ironbondQuest && ironbondQuest.status === 'active' && !ironbondQuest.pitched) {
+            ironbondQuest.pitched = true;
+            window.showMessage("You put in a word for the Ironbond Company with Wick Hallow.");
+        }
         window.showDialogue(npc, "Welcome to Hallow's Goods. Soldier-grade gear, fair prices — what's left of my stock, anyway.", [
             { label: "Let me see your wares.", action: () => window.openShop({ itemIds: window.hollowmereStoreItems, stock: window.hollowmereStoreStock, mounts: false }) },
             {
@@ -1176,6 +1181,11 @@ window.npcDialogueTrees = {
         }
     },
     marta_wynfield: (npc) => {
+        const aldenreachQuest = window.questLog && window.questLog.find(q => q.id === 'aldenreach_message');
+        if (aldenreachQuest && aldenreachQuest.status === 'active' && !aldenreachQuest.delivered) {
+            aldenreachQuest.delivered = true;
+            window.showMessage("You pass along Ambassador Wren's quiet word of goodwill to Elder Marta.");
+        }
         let opening;
         if (!window.hollowmereEventFired) {
             opening = "Welcome, traveler. Hollowmere's a small place, but an honest one.";
@@ -1377,25 +1387,159 @@ window.npcDialogueTrees = {
             { label: "Another time.", action: () => {} }
         ]);
     },
-    // Diplomatic Quarter — flavor-only ambassadors, see campaign2Content.js.
+    // Diplomatic Quarter — each ambassador/envoy/cleric is a real (if modest)
+    // quest giver. The four foreign embassies deliberately don't trust the
+    // player with anything weighty yet — these are entry-point errands meant
+    // to open the door to bigger foreign-nation content later, not the
+    // content itself.
     elven_ambassador: (npc) => {
-        window.showDialogue(npc, "The Sylvan Court sends its regards to the Queen, and its patience with her borders' woodcutters. Both are finite, in their way.", [
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'elven_gift');
+        const player = window.party[0];
+        const have = () => (player.inventory || []).filter(i => i === 'herbs').length;
+
+        if (quest && quest.status === 'active') {
+            if (have() >= 3) {
+                window.showDialogue(npc, "You've brought herbs? The Court will be glad of it — small gestures matter more than gold, out here.", [
+                    { label: "Here you go.", action: () => {
+                        let removed = 0;
+                        player.inventory = player.inventory.filter(i => { if (i === 'herbs' && removed < 3) { removed++; return false; } return true; });
+                        quest.status = 'completed';
+                        window.adjustReputation(npc.reputation, 10, 15);
+                        player.gold = (player.gold || 0) + 15;
+                        if (window.gainExp) window.gainExp(60);
+                        window.showMessage('Quest complete: A Gift of Green. (+15 gold)');
+                    }}
+                ]);
+                return;
+            }
+            window.showDialogue(npc, "Herbs, if you can find them — three should do. The Sylvan Court sends its regards to the Queen, and its patience with her borders' woodcutters. Both are finite, in their way.", [
+                { label: "Still looking.", action: () => {} }
+            ]);
+            return;
+        }
+        if (quest && quest.status === 'completed') {
+            window.showDialogue(npc, "The Sylvan Court remembers a kindness. Small as it was.", [{ label: "Glad to help.", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "The Sylvan Court sends its regards to the Queen, and its patience with her borders' woodcutters. Both are finite, in their way. A gift of good herbs would go some way toward the latter — three, if you can spare them.", [
+            {
+                label: "I'll bring you some herbs.",
+                action: () => {
+                    window.questLog.push({ id: 'elven_gift', title: 'A Gift of Green', giver: 'Ambassador Elarion', status: 'active', description: 'Bring 3 herbs to Ambassador Elarion as a gesture of goodwill to the Sylvan Court.' });
+                    window.showMessage('Quest added: A Gift of Green.');
+                }
+            },
             { label: "I'll keep that in mind.", action: () => {} }
         ]);
     },
     dwarven_ambassador: (npc) => {
-        window.showDialogue(npc, "The Deepholds trade in iron and good sense, in roughly that order. Silverhart's been fair with us. Long may that last.", [
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'dwarven_toll');
+        const player = window.party[0];
+
+        if (quest && quest.status === 'active') {
+            if ((player.gold || 0) >= 15) {
+                window.showDialogue(npc, "Fifteen gold, as agreed. Not charity — a toll, same as any trade road. The Deepholds don't forget who pays their way.", [
+                    { label: "Here.", action: () => {
+                        player.gold -= 15;
+                        quest.status = 'completed';
+                        window.adjustReputation(npc.reputation, 10, 15);
+                        if (window.gainExp) window.gainExp(60);
+                        window.showMessage('Quest complete: Coin for the Deepholds.');
+                    }},
+                    { label: "Not yet.", action: () => {} }
+                ]);
+                return;
+            }
+            window.showDialogue(npc, "Fifteen gold, when you have it. The Deepholds trade in iron and good sense, in roughly that order.", [{ label: "Soon.", action: () => {} }]);
+            return;
+        }
+        if (quest && quest.status === 'completed') {
+            window.showDialogue(npc, "Silverhart's been fair with us. Long may that last — and you've done your part toward it.", [{ label: "Long may it last.", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "The Deepholds trade in iron and good sense, in roughly that order. A trade toll of fifteen gold would smooth the road between us — nothing more than that, for now.", [
+            {
+                label: "I'll pay the toll.",
+                action: () => {
+                    window.questLog.push({ id: 'dwarven_toll', title: 'Coin for the Deepholds', giver: 'Ambassador Brokk Stonehammer', status: 'active', description: 'Pay a 15 gold trade toll to Ambassador Brokk Stonehammer.' });
+                    window.showMessage('Quest added: Coin for the Deepholds.');
+                }
+            },
             { label: "Long may it last.", action: () => {} }
         ]);
     },
     aldenreach_ambassador: (npc) => {
-        window.showDialogue(npc, "Aldenreach and Silverhart haven't gone to war in three generations. My whole posting here is to keep it that way, one dull treaty dinner at a time.", [
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'aldenreach_message');
+
+        if (quest && quest.status === 'active') {
+            if (quest.delivered) {
+                window.showDialogue(npc, "Elder Marta had your word for it, then? Good. Aldenreach likes to know its friendlier gestures actually land somewhere.", [
+                    { label: "They landed.", action: () => {
+                        quest.status = 'completed';
+                        window.adjustReputation(npc.reputation, 10, 15);
+                        window.party[0].gold = (window.party[0].gold || 0) + 15;
+                        if (window.gainExp) window.gainExp(60);
+                        window.showMessage('Quest complete: A Quiet Word. (+15 gold)');
+                    }}
+                ]);
+                return;
+            }
+            window.showDialogue(npc, "Still waiting to hear whether Hollowmere's elder got my word. No rush — just don't forget.", [{ label: "I haven't.", action: () => {} }]);
+            return;
+        }
+        if (quest && quest.status === 'completed') {
+            window.showDialogue(npc, "Aldenreach and Silverhart haven't gone to war in three generations. Small favors like yours are most of why.", [{ label: "Glad to help.", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "Aldenreach and Silverhart haven't gone to war in three generations. My whole posting here is to keep it that way, one dull treaty dinner at a time. Would you carry a quiet word of goodwill to Hollowmere's elder for me? Nothing Silverhart needs to know about.", [
+            {
+                label: "I'll carry your word.",
+                action: () => {
+                    window.questLog.push({ id: 'aldenreach_message', title: 'A Quiet Word', giver: 'Ambassador Cassia Wren', status: 'active', description: "Deliver Ambassador Cassia Wren's message of goodwill to Elder Marta Wynfield in Hollowmere." });
+                    window.showMessage('Quest added: A Quiet Word.');
+                }
+            },
             { label: "Sounds like important work.", action: () => {} }
         ]);
     },
     corvane_ambassador: (npc) => {
-        window.showDialogue(npc, "Corvane sent me to watch the greenskin trouble on Silverhart's border and report back. So far: it's trouble, and it's on the border. Riveting dispatches, I know.", [
-            { label: "Keep watching.", action: () => {} }
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'corvane_watch');
+        const goblinQuest = window.questLog.find(q => q.id === 'goblin_threat');
+        const goblinResolved = goblinQuest && goblinQuest.status !== 'active';
+
+        if (quest && quest.status === 'active') {
+            if (goblinResolved) {
+                window.showDialogue(npc, "The greenskin camp west of Hollowmere — word is it's settled, one way or another. That's the first good dispatch I've had cause to send home in months.", [
+                    { label: "It's settled.", action: () => {
+                        quest.status = 'completed';
+                        window.adjustReputation(npc.reputation, 10, 15);
+                        window.party[0].gold = (window.party[0].gold || 0) + 15;
+                        if (window.gainExp) window.gainExp(60);
+                        window.showMessage('Quest complete: Eyes on the Border. (+15 gold)');
+                    }}
+                ]);
+                return;
+            }
+            window.showDialogue(npc, "Corvane sent me to watch the greenskin trouble on Silverhart's border and report back. So far: it's trouble, and it's on the border. Riveting dispatches, I know.", [{ label: "Keep watching.", action: () => {} }]);
+            return;
+        }
+        if (quest && quest.status === 'completed') {
+            window.showDialogue(npc, "The border's quieter these days. Corvane appreciates knowing why.", [{ label: "Good to hear.", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "Corvane sent me to watch the greenskin trouble on Silverhart's border and report back. So far: it's trouble, and it's on the border. If you hear anything real out that way — anything I could actually put in a dispatch — I'd owe you.", [
+            {
+                label: "I'll let you know what I find.",
+                action: () => {
+                    window.questLog.push({ id: 'corvane_watch', title: 'Eyes on the Border', giver: 'Ambassador Toren Aldwyn', status: 'active', description: "Bring Ambassador Toren Aldwyn real word of how the greenskin trouble west of Hollowmere is resolved." });
+                    window.showMessage('Quest added: Eyes on the Border.');
+                }
+            },
+            { label: "Riveting.", action: () => {} }
         ]);
     },
     ironbond_envoy: (npc) => {
@@ -1408,10 +1552,77 @@ window.npcDialogueTrees = {
         } else {
             line = "Business as usual — a little coin here, a little influence there. Nothing you'd need to worry about.";
         }
-        window.showDialogue(npc, line, [{ label: "Noted.", action: () => {} }]);
+
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'ironbond_pitch');
+        if (quest && quest.status === 'active') {
+            if (quest.pitched) {
+                window.showDialogue(npc, "Wick Hallow, was it? He came around. That's Hollowmere's general store carrying Ironbond stock, from this week on. Good work.", [
+                    { label: "Glad it worked.", action: () => {
+                        quest.status = 'completed';
+                        if (window.factions?.ironbond_company?.merchantInfluence) window.factions.ironbond_company.merchantInfluence.silverhart_kingdom = (window.factions.ironbond_company.merchantInfluence.silverhart_kingdom ?? 30) + 10;
+                        window.adjustReputation(npc.reputation, 10, 15);
+                        window.party[0].gold = (window.party[0].gold || 0) + 20;
+                        if (window.gainExp) window.gainExp(60);
+                        window.showMessage('Quest complete: Good for Business. (+20 gold)');
+                    }}
+                ]);
+                return;
+            }
+            window.showDialogue(npc, line + " Still waiting on that storekeeper in Hollowmere, if you get the chance.", [{ label: "Working on it.", action: () => {} }]);
+            return;
+        }
+        if (quest && quest.status === 'completed') {
+            window.showDialogue(npc, line, [{ label: "Noted.", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, line + " There's a general store out in Hollowmere — Wick Hallow's place. Convince him to carry Ironbond stock and there's coin in it for you.", [
+            {
+                label: "I'll talk to him.",
+                action: () => {
+                    window.questLog.push({ id: 'ironbond_pitch', title: 'Good for Business', giver: 'Factor Willem Drass', status: 'active', description: "Convince Wick Hallow, Hollowmere's storekeeper, to carry Ironbond Company stock." });
+                    window.showMessage('Quest added: Good for Business.');
+                }
+            },
+            { label: "Noted.", action: () => {} }
+        ]);
     },
     high_cleric: (npc) => {
-        window.showDialogue(npc, "The Grand Cathedral keeps the gods' peace over the whole kingdom — a bigger flock than Hollowmere's little chapel, but the same gods listening.", [
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'crimson_court');
+        const player = window.party[0];
+        const hasAsh = player?.inventory?.includes('ashen_fang');
+
+        if (quest && quest.status === 'active') {
+            if (hasAsh) {
+                window.showDialogue(npc, "A fang, drained of its own blood rather than another's — just as the old texts describe. So it's true, then. Something in the west isn't merely dying of hunger. Thank you for this. The Cathedral will want to know a great deal more, before long.", [
+                    { label: "Hand it over.", action: () => {
+                        player.inventory = player.inventory.filter(i => i !== 'ashen_fang');
+                        quest.status = 'completed';
+                        window.vampireLeadConfirmed = true;
+                        window.adjustReputation(npc.reputation, 15, 20);
+                        player.gold = (player.gold || 0) + 30;
+                        if (window.gainExp) window.gainExp(150);
+                        window.showMessage('Quest complete: Whispers of the Crimson Court. (+30 gold)');
+                    }}
+                ]);
+                return;
+            }
+            window.showDialogue(npc, "Still nothing from the west? Livestock drained, not torn — that's not wolves, whatever the farmers want to believe. Keep looking.", [{ label: "I'm still looking.", action: () => {} }]);
+            return;
+        }
+        if (quest && quest.status === 'completed') {
+            window.showDialogue(npc, "The Grand Cathedral keeps the gods' peace over the whole kingdom — and thanks to you, we now know a little more of what we're keeping the peace against.", [{ label: "Good to know.", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "The Grand Cathedral keeps the gods' peace over the whole kingdom — a bigger flock than Hollowmere's little chapel, but the same gods listening. Lately, though, something troubles me: reports from west of here, livestock found drained of blood rather than torn apart. Wolves don't drink, traveler. I fear something older is stirring.", [
+            {
+                label: "I'll look into it.",
+                action: () => {
+                    window.questLog.push({ id: 'crimson_court', title: 'Whispers of the Crimson Court', giver: 'High Cleric Adelram', status: 'active', description: "Investigate reports of exsanguinated livestock in the western wilds and bring any evidence to High Cleric Adelram." });
+                    window.showMessage('Quest added: Whispers of the Crimson Court.');
+                }
+            },
             { label: "Good to know.", action: () => {} }
         ]);
     }

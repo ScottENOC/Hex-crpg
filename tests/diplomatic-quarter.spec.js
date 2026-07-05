@@ -75,4 +75,104 @@ test.describe('Silverhart: rock/forest clearing and the Diplomatic Quarter', () 
         });
         result.forEach(name => expect(name).toBe('Path'));
     });
+
+    test('a gate arch marks the Diplomatic Quarter entrance and a fountain anchors the central plaza', async ({ page }) => {
+        await createCharacter(page);
+        const result = await page.evaluate(() => {
+            const gate = window.campaign2DiplomaticGateCenter;
+            const plaza = window.campaign2DiplomaticPlazaCenter;
+            return {
+                gateType: window.tileObjects[`${gate.q},${gate.r}`]?.type,
+                plazaTerrain: window.getTerrainAt(plaza.q, plaza.r).name,
+                fountainType: window.tileObjects[`${plaza.q},${plaza.r}`]?.type,
+            };
+        });
+        expect(result.gateType).toBe('gate_arch');
+        expect(result.plazaTerrain).toBe('Path');
+        expect(result.fountainType).toBe('fountain');
+    });
+
+    test('the elven embassy quest: A Gift of Green is offered, tracked, and completed on turning in 3 herbs', async ({ page }) => {
+        await createCharacter(page);
+        const before = await page.evaluate(() => {
+            const npc = window.entities.find(e => e.name === 'Ambassador Elarion');
+            window.npcDialogueTrees.elven_ambassador(npc);
+            return document.getElementById('dialogue-options').children.length;
+        });
+        expect(before).toBeGreaterThan(0);
+        await clickDialogueOption(page, "I'll bring you some herbs");
+        const offered = await page.evaluate(() => window.questLog.find(q => q.id === 'elven_gift')?.status);
+        expect(offered).toBe('active');
+
+        const result = await page.evaluate(() => {
+            window.party[0].inventory.push('herbs', 'herbs', 'herbs');
+            const npc = window.entities.find(e => e.name === 'Ambassador Elarion');
+            window.npcDialogueTrees.elven_ambassador(npc);
+            return document.getElementById('dialogue-options').children.length;
+        });
+        expect(result).toBeGreaterThan(0);
+        await clickDialogueOption(page, "Here you go");
+        const after = await page.evaluate(() => ({
+            status: window.questLog.find(q => q.id === 'elven_gift')?.status,
+            herbsLeft: window.party[0].inventory.filter(i => i === 'herbs').length,
+        }));
+        expect(after.status).toBe('completed');
+        expect(after.herbsLeft).toBe(0);
+    });
+
+    test('the cathedral quest: Whispers of the Crimson Court — reading the hidden grave grants the fang, turning it in completes the quest', async ({ page }) => {
+        await createCharacter(page);
+        await page.evaluate(() => {
+            const npc = window.entities.find(e => e.name === 'High Cleric Adelram');
+            window.npcDialogueTrees.high_cleric(npc);
+        });
+        await clickDialogueOption(page, "I'll look into it");
+        const offered = await page.evaluate(() => window.questLog.find(q => q.id === 'crimson_court')?.status);
+        expect(offered).toBe('active');
+
+        await page.evaluate(() => window.readVampireGrave());
+        await clickDialogueOption(page, 'Take the fang');
+        const hasFang = await page.evaluate(() => window.party[0].inventory.includes('ashen_fang'));
+        expect(hasFang).toBe(true);
+
+        await page.evaluate(() => {
+            const npc = window.entities.find(e => e.name === 'High Cleric Adelram');
+            window.npcDialogueTrees.high_cleric(npc);
+        });
+        await clickDialogueOption(page, 'Hand it over');
+        const final = await page.evaluate(() => ({
+            status: window.questLog.find(q => q.id === 'crimson_court')?.status,
+            hasFang: window.party[0].inventory.includes('ashen_fang'),
+            confirmed: window.vampireLeadConfirmed,
+        }));
+        expect(final.status).toBe('completed');
+        expect(final.hasFang).toBe(false);
+        expect(final.confirmed).toBe(true);
+    });
+
+    test('the Aldenreach embassy quest completes only after the message is actually delivered to Elder Marta', async ({ page }) => {
+        await createCharacter(page);
+        await page.evaluate(() => {
+            const npc = window.entities.find(e => e.name === 'Ambassador Cassia Wren');
+            window.npcDialogueTrees.aldenreach_ambassador(npc);
+        });
+        await clickDialogueOption(page, "I'll carry your word");
+        const notDelivered = await page.evaluate(() => window.questLog.find(q => q.id === 'aldenreach_message')?.delivered);
+        expect(notDelivered).toBeFalsy();
+
+        await page.evaluate(() => {
+            const marta = window.entities.find(e => e.name === 'Elder Marta Wynfield');
+            window.npcDialogueTrees.marta_wynfield(marta);
+        });
+        const delivered = await page.evaluate(() => window.questLog.find(q => q.id === 'aldenreach_message')?.delivered);
+        expect(delivered).toBe(true);
+
+        await page.evaluate(() => {
+            const npc = window.entities.find(e => e.name === 'Ambassador Cassia Wren');
+            window.npcDialogueTrees.aldenreach_ambassador(npc);
+        });
+        await clickDialogueOption(page, 'They landed');
+        const status = await page.evaluate(() => window.questLog.find(q => q.id === 'aldenreach_message')?.status);
+        expect(status).toBe('completed');
+    });
 });

@@ -661,6 +661,11 @@ function buildSilverhartPalace(roadEnd) {
     const dqCenter = throneCenter.q;
     for (let r = throneCenter.r + 24; r <= throneCenter.r + 36; r++) window.setTerrainAt(dqCenter, r, 'Path');
 
+    // Gate entry: a formal arch marking where the road out of the palace
+    // gate becomes the Diplomatic Quarter proper.
+    window.tileObjects[`${dqCenter},${throneCenter.r + 24}`] = { type: 'gate_arch' };
+    window.campaign2DiplomaticGateCenter = { q: dqCenter, r: throneCenter.r + 24 };
+
     const embassyRow1 = throneCenter.r + 26;
     const embassyRow2 = throneCenter.r + 32;
     const officeRow = throneCenter.r + 38;
@@ -692,6 +697,20 @@ function buildSilverhartPalace(roadEnd) {
     for (let q = dqCenter + 1; q < corvaneDoor.q; q++) window.setTerrainAt(q, embassyRow2, 'Path');
     window.tileObjects[`${corvaneCenter.q},${corvaneCenter.r}`] = { type: 'table' };
     window.campaign2CorvaneEmbassyCenter = corvaneCenter;
+
+    // Central plaza and fountain: a small open square between the two rows
+    // of embassies, on the way to the Ironbond office and cathedral.
+    const plazaCenter = { q: dqCenter, r: throneCenter.r + 35 };
+    for (let dq = -2; dq <= 2; dq++) {
+        for (let dr = -2; dr <= 2; dr++) {
+            if (window.distance({ q: 0, r: 0 }, { q: dq, r: dr }) > 2) continue;
+            window.setTerrainAt(plazaCenter.q + dq, plazaCenter.r + dr, 'Path');
+        }
+    }
+    window.tileObjects[`${plazaCenter.q},${plazaCenter.r}`] = { type: 'fountain' };
+    window.tileObjects[`${plazaCenter.q - 2},${plazaCenter.r}`] = { type: 'bench' };
+    window.tileObjects[`${plazaCenter.q + 2},${plazaCenter.r}`] = { type: 'bench' };
+    window.campaign2DiplomaticPlazaCenter = plazaCenter;
 
     const ironbondOfficeCenter = { q: dqCenter - 8, r: officeRow };
     const ironbondOfficeDoor = { q: ironbondOfficeCenter.q + 4, r: ironbondOfficeCenter.r };
@@ -731,6 +750,36 @@ window.readWizardTowerTome = function() {
     window.showDialogue({ name: "Thessaly's Tome", customImage: 'journal' },
         "A page near the back, in a hand shakier than the rest: \"Old magic doesn't die, it just stops answering court summons. There is a grove west of the mountains where the druids still keep faith with something older than any crown — and where, if the stories hold, something far rarer than a spell still runs wild. Not for a court wizard to go chasing. Perhaps for someone less tied to a throne.\"",
         [{ label: "Interesting.", action: () => {} }]
+    );
+};
+
+// A hidden grave off the western road — the "livestock drained of blood, not
+// torn" lead High Cleric Adelram sends the player chasing (see the
+// crimson_court quest in campaign2Dialogue.js's high_cleric handler). Placed
+// a little off the beaten path, same "journal/readId" click-to-read plumbing
+// as every other note in this world.
+function buildVampireGrave(westRoadEnd) {
+    const q = westRoadEnd.q - 4, r = westRoadEnd.r + 6;
+    window.tileObjects[`${q},${r}`] = { type: 'journal', readId: 'vampire_grave', lightRadius: 0 };
+    window.campaign2VampireGraveCenter = { q, r };
+}
+
+window.readVampireGrave = function() {
+    const player = window.party[0];
+    if (player.inventory && player.inventory.includes('ashen_fang')) {
+        window.showDialogue({ name: "A Shallow Grave", customImage: 'journal' },
+            "You've already taken what this grave had to give.",
+            [{ label: "...", action: () => {} }]
+        );
+        return;
+    }
+    window.showDialogue({ name: "A Shallow Grave", customImage: 'journal' },
+        "A sheep's carcass, half-buried and long picked over by crows — but the wounds are wrong. No claw marks, no torn flesh, just two clean punctures at the throat, drained dry. Wedged nearby, half-shattered: a single, unnaturally long fang, still faintly warm to the touch.",
+        [{ label: "Take the fang.", action: () => {
+            if (!player.inventory) player.inventory = [];
+            player.inventory.push('ashen_fang');
+            window.showMessage("You take the fang. This feels like something the Cathedral should see.");
+        }}]
     );
 };
 
@@ -1092,6 +1141,7 @@ function setupVillageScene(forLoadOnly = false) {
     buildSilverhartPalace(northRoadEnd);
     buildEmberlode(westRoadEnd);
     buildReddale(eastRoadEnd);
+    buildVampireGrave(westRoadEnd);
 
     // Campaign 2's entire world is this one deterministic layout, regenerated
     // by this function every time it runs (fresh game or the "engine not

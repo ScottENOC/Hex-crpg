@@ -1545,6 +1545,11 @@ function renderEntities() {
               window.mapCtx.drawImage(window.gameVisuals.door_closed, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'signpost' && window.gameVisuals.signpost.complete) {
               window.mapCtx.drawImage(window.gameVisuals.signpost, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'fountain' && window.gameVisuals.fountain.complete) {
+              window.mapCtx.drawImage(window.gameVisuals.fountain, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'gate_arch' && window.gameVisuals.gate_arch.complete) {
+              const gSize = size * 1.4;
+              window.mapCtx.drawImage(window.gameVisuals.gate_arch, x - gSize/2, y - gSize/2, gSize, gSize);
           } else if (obj.type === 'ladder' && window.gameVisuals.ladder.complete) {
               window.mapCtx.drawImage(window.gameVisuals.ladder, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'watchtower' && window.gameVisuals.watchtower.complete) {
@@ -3319,6 +3324,7 @@ function handleClick(e){
         if (doorObj.readId === 'phylactery_altar' && window.interactPhylacteryAltar) { window.interactPhylacteryAltar(); return; }
         if (doorObj.readId === 'disciple_note' && window.readDiscipleNote) { window.readDiscipleNote(); return; }
         if (doorObj.readId === 'wizard_tower_tome' && window.readWizardTowerTome) { window.readWizardTowerTome(); return; }
+        if (doorObj.readId === 'vampire_grave' && window.readVampireGrave) { window.readVampireGrave(); return; }
         if (window.readAbandonedHouseJournal) window.readAbandonedHouseJournal();
         return;
     }
