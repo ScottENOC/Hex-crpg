@@ -13,30 +13,32 @@ test.describe('Cheat: teleport to location', () => {
         expect(rect.right).toBeLessThanOrEqual(375);
     });
 
-    test('selecting the longest option (Emberlode) does not widen the select past its container or break the value', async ({ page }) => {
+    test('the longest destination button (Emberlode) never widens the dropdown past its container', async ({ page }) => {
         await page.setViewportSize({ width: 375, height: 667 });
         await createCharacter(page);
         const dropbtns = await page.locator('#top-menu .dropbtn').all();
         for (const btn of dropbtns) {
             if ((await btn.innerText()).includes('Cheat')) { await btn.click(); break; }
         }
-        await page.selectOption('#cheat-teleport-select', 'Emberlode (Mining Village)');
-        const result = await page.evaluate(() => {
-            const select = document.getElementById('cheat-teleport-select');
-            return { value: select.value, right: select.getBoundingClientRect().right };
+        const rect = await page.evaluate(() => {
+            const btn = [...document.querySelectorAll('.cheat-teleport-dest-btn')].find(b => b.dataset.teleportDest === 'Emberlode (Mining Village)');
+            return btn.getBoundingClientRect();
         });
-        expect(result.value).toBe('Emberlode (Mining Village)');
-        expect(result.right).toBeLessThanOrEqual(375);
+        expect(rect.right).toBeLessThanOrEqual(375);
     });
 
-    test('clicking the location <select> does not close the Cheat dropdown mid-interaction', async ({ page }) => {
+    test('clicking a teleport destination button in the Cheat menu actually teleports the party (real click, not a direct function call)', async ({ page }) => {
         await createCharacter(page);
-        await page.click('#top-menu .dropdown:has(#cheat-teleport-select) .dropbtn');
-        const openBefore = await page.evaluate(() => document.getElementById('cheat-teleport-select').closest('.dropdown-content').classList.contains('show'));
+        await page.click('#top-menu .dropdown:has(#cheat-teleport-list) .dropbtn');
+        const openBefore = await page.evaluate(() => document.getElementById('cheat-teleport-list').closest('.dropdown-content').classList.contains('show'));
         expect(openBefore).toBe(true);
-        await page.click('#cheat-teleport-select');
-        const openAfter = await page.evaluate(() => document.getElementById('cheat-teleport-select').closest('.dropdown-content').classList.contains('show'));
-        expect(openAfter).toBe(true);
+        await page.click('.cheat-teleport-dest-btn[data-teleport-dest="Reddale (Town)"]');
+        const result = await page.evaluate(() => {
+            const player = window.entities.find(e => e.side === 'player' && !e.rider && !e.aiControlled);
+            const target = window.campaign2ReddaleGuardhouseCenter;
+            return Math.abs(player.hex.q - target.q) + Math.abs(player.hex.r - target.r);
+        });
+        expect(result).toBeLessThanOrEqual(2);
     });
 
     test('teleports the player entity to Silverhart (Capital)', async ({ page }) => {

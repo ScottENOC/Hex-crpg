@@ -63,34 +63,6 @@
             background-color: #3f51b5;
         }
 
-        /* iOS Safari can otherwise render a <select> with near-invisible
-           contrast (or a near-zero effective tap target inside a flex row)
-           unless every rendering-relevant property is set explicitly rather
-           than relying on inheritance/native chrome defaults. NOTE:
-           deliberately NOT setting -webkit-appearance/appearance: none here —
-           on iOS Safari that can suppress the native picker wheel from
-           opening on tap at all, which is worse than the contrast issue it
-           was meant to fix. Keep native appearance; fix contrast via
-           explicit colors only. */
-        .cheat-teleport-select {
-            background-color: #333;
-            color: #fff;
-            border: 1px solid #777;
-            border-radius: 4px;
-            padding: 6px 8px;
-            min-width: 0; /* flex: 1 1 100% already gives it the full dropdown width */
-            max-width: 100%;
-            min-height: 30px;
-            font-size: 0.8em;
-            /* The longest option ("Emberlode (Mining Village)") doesn't
-               functionally break anything even when it doesn't fit — the
-               native picker always shows full option text regardless — but
-               without this the closed-state box can clip it jaggedly
-               mid-character instead of a clean ellipsis. */
-            text-overflow: ellipsis;
-            overflow: hidden;
-            white-space: nowrap;
-        }
     </style>
 </head>
 <body>
@@ -138,18 +110,21 @@
         <button id="cheat-all-equip-btn" style="background-color: #607d8b; font-size: 0.7em; color: white;">Cheat: Add All Equipment</button>
         <button id="cheat-fly-btn" style="background-color: #03a9f4; font-size: 0.7em; color: white;">Cheat: Fly All</button>
         <button id="cheat-max-skills-btn" style="background-color: #e91e63; font-size: 0.7em; color: white;">Cheat: Max Skills</button>
-        <div style="padding: 4px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center;">
-            <select id="cheat-teleport-select" class="cheat-teleport-select" style="flex: 1 1 100%;">
-                <option value="Hollowmere (Village)">Hollowmere (Village)</option>
-                <option value="Millbrook (Village)">Millbrook (Village)</option>
-                <option value="Silverhart (Capital)">Silverhart (Capital)</option>
-                <option value="Reddale (Town)">Reddale (Town)</option>
-                <option value="Emberlode (Mining Village)">Emberlode (Mining Village)</option>
-                <option value="Old Mac's Farmstead">Old Mac's Farmstead</option>
-                <option value="Goblin Stronghold">Goblin Stronghold</option>
-                <option value="Abandoned House">Abandoned House</option>
-            </select>
-            <button id="cheat-teleport-btn" style="background-color: #009688; font-size: 0.7em; color: white;">Cheat: Teleport To</button>
+        <div id="cheat-teleport-list" style="padding: 4px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center;">
+            <!-- A native <select> is deliberately NOT used here — on iOS
+                 Safari the native picker could be made to render correctly
+                 but never reliably opened on tap in this dropdown, unlike
+                 every other button in this menu. Plain buttons (one per
+                 destination) reuse the exact same click/touch handling that
+                 already works for every other Cheat button. -->
+            <button class="cheat-teleport-dest-btn" data-teleport-dest="Hollowmere (Village)" style="background-color: #009688; font-size: 0.7em; color: white;">Hollowmere (Village)</button>
+            <button class="cheat-teleport-dest-btn" data-teleport-dest="Millbrook (Village)" style="background-color: #009688; font-size: 0.7em; color: white;">Millbrook (Village)</button>
+            <button class="cheat-teleport-dest-btn" data-teleport-dest="Silverhart (Capital)" style="background-color: #009688; font-size: 0.7em; color: white;">Silverhart (Capital)</button>
+            <button class="cheat-teleport-dest-btn" data-teleport-dest="Reddale (Town)" style="background-color: #009688; font-size: 0.7em; color: white;">Reddale (Town)</button>
+            <button class="cheat-teleport-dest-btn" data-teleport-dest="Emberlode (Mining Village)" style="background-color: #009688; font-size: 0.7em; color: white;">Emberlode (Mining Village)</button>
+            <button class="cheat-teleport-dest-btn" data-teleport-dest="Old Mac's Farmstead" style="background-color: #009688; font-size: 0.7em; color: white;">Old Mac's Farmstead</button>
+            <button class="cheat-teleport-dest-btn" data-teleport-dest="Goblin Stronghold" style="background-color: #009688; font-size: 0.7em; color: white;">Goblin Stronghold</button>
+            <button class="cheat-teleport-dest-btn" data-teleport-dest="Abandoned House" style="background-color: #009688; font-size: 0.7em; color: white;">Abandoned House</button>
         </div>
     </div>
     </div>
@@ -555,8 +530,7 @@
                     <label><input type="checkbox" id="tutorial-mode-toggle" onchange="window.setTutorialModeEnabled(this.checked)"> Explain new things the first time they happen</label>
                 </div>
                 <div class="form-group" style="display:flex; gap:8px;">
-                    <button onclick="window.disableTutorialMode()" style="flex:1;">Turn Off Tutorials</button>
-                    <button onclick="window.resetTutorialMemory()" style="flex:1;">Reset ("Never Heard Anything")</button>
+                    <button onclick="window.resetTutorialMemory()" style="flex:1;">Reset Tutorial Tips</button>
                 </div>
             </div>
         </div>

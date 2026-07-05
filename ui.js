@@ -2183,12 +2183,6 @@ window.setTutorialModeEnabled = function(enabled) {
     window.tutorialModeEnabled = enabled;
     localStorage.setItem('rpg_tutorial_enabled', enabled ? 'true' : 'false');
 };
-window.disableTutorialMode = function() {
-    window.setTutorialModeEnabled(false);
-    const cb = document.getElementById('tutorial-mode-toggle');
-    if (cb) cb.checked = false;
-    window.showMessage('Tutorial tips turned off.');
-};
 window.resetTutorialMemory = function() {
     window.tutorialSeen = {};
     localStorage.removeItem('rpg_tutorial_seen');

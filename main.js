@@ -338,9 +338,9 @@ document.addEventListener("DOMContentLoaded", () => {
             window.toggleFlyCheat();
         } else if (btnId === "cheat-max-skills-btn") {
             window.cheatMaxSkills();
-        } else if (btnId === "cheat-teleport-btn") {
-            const sel = document.getElementById("cheat-teleport-select");
-            if (sel && window.teleportPartyToLocation) window.teleportPartyToLocation(sel.value);
+        } else if (e.target.classList && e.target.classList.contains('cheat-teleport-dest-btn')) {
+            const dest = e.target.dataset.teleportDest;
+            if (dest && window.teleportPartyToLocation) window.teleportPartyToLocation(dest);
         } else if (btnId === "cancel-moves-btn") {
             window.cancelAllMoveOrders();
         } else if (btnId === "rest-btn") {
@@ -399,13 +399,13 @@ document.addEventListener("DOMContentLoaded", () => {
         'load-btn-initial', 'save-menu-btn', 'load-menu-btn', 'game-over-load-btn', 'game-over-menu-btn',
         'confirm-save-btn', 'quick-save-btn', 'quick-load-btn', 'settings-menu-btn', 'host-game-btn',
         'confirm-hire-btn', 'cancel-hire-btn', 'close-shop-modal', 'cheat-jerry-btn', 'cheat-horse-btn',
-        'cheat-all-equip-btn', 'cheat-fly-btn', 'cheat-max-skills-btn', 'cheat-teleport-btn', 'cancel-moves-btn', 'rest-btn',
+        'cheat-all-equip-btn', 'cheat-fly-btn', 'cheat-max-skills-btn', 'cancel-moves-btn', 'rest-btn',
         'sleep-btn', 'time-speed-btn', 'controller-mode-btn'
     ]);
     window.addEventListener('touchend', (e) => {
         const t = e.target;
         const actionable = GLOBAL_BUTTON_ACTION_IDS.has(t.id) ||
-            (t.classList && (t.classList.contains('dropbtn') || t.classList.contains('close-btn') || t.classList.contains('modal')));
+            (t.classList && (t.classList.contains('dropbtn') || t.classList.contains('close-btn') || t.classList.contains('modal') || t.classList.contains('cheat-teleport-dest-btn')));
         if (!actionable) return;
         e.preventDefault();
         handleMenuDropdownToggle(e);
