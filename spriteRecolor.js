@@ -164,6 +164,41 @@ function getRecoloredHairSprite(img, targetHue, lightMult = 1, satMult = 1) {
 }
 window.getRecoloredHairSprite = getRecoloredHairSprite;
 
+// A dedicated gold-metal tint for equipment (armor/helm) art. The source
+// armor/helm images are near-grayscale steel, so getRecoloredHairSprite's
+// hue-swap (which multiplies the EXISTING saturation) leaves them looking
+// unchanged — 0 saturation times any multiplier is still 0. This instead
+// pushes every opaque pixel to a fixed strong-gold saturation while keeping
+// its original lightness, so shading/highlights on the metal still read.
+const GOLD_HUE = 45;
+const GOLD_SATURATION = 0.65;
+function getGoldTintedSprite(img) {
+    if (!img || !img.complete || !img.naturalWidth) return img;
+    const cacheKey = `${img.src}::gold`;
+    if (_recolorCache[cacheKey]) return _recolorCache[cacheKey];
+
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] < 50) continue;
+        const [, , l] = rgbToHsl(data[i], data[i + 1], data[i + 2]);
+        const l2 = Math.max(0.15, Math.min(0.85, l));
+        const [r2, g2, b2] = hslToRgb(GOLD_HUE, GOLD_SATURATION, l2);
+        data[i] = r2; data[i + 1] = g2; data[i + 2] = b2;
+    }
+    ctx.putImageData(imageData, 0, 0);
+
+    _recolorCache[cacheKey] = canvas;
+    return canvas;
+}
+window.getGoldTintedSprite = getGoldTintedSprite;
+
 // Deterministic hue per string, so a given character always looks the same
 // (across renders and save/load) without needing an explicit stored field.
 // Callers salt the string per band (e.g. name+'_shirt' vs name+'_pants') so

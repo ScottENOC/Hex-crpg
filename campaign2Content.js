@@ -403,7 +403,10 @@ window.campaign2SilverhartKing = {
     race: 'human', gender: 'male',
     classLevels: [],
     skillPicks: [],
-    equipment: [],
+    // Heavy armor + a helm so he actually reads as a king, not a bare
+    // tunic — goldGear (applied after buildNPC, see campaign2World.js)
+    // recolors this same armor/helm art gold rather than needing new assets.
+    equipment: ['heavy_armor', 'nasal_helm'],
     side: 'neutral',
     factionId: 'silverhart_kingdom',
     color: '#5a2a8a',

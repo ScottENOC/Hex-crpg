@@ -529,6 +529,8 @@ function equipToMonster(monster, itemId) {
         monster.equipped.offhand = itemId;
     } else if (item.type === 'armor') {
         monster.equipped.armor = itemId;
+    } else if (item.type === 'helmet') {
+        monster.equipped.helmet = itemId;
     }
 }
 

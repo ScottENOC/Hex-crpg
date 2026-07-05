@@ -1404,7 +1404,9 @@ function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
     // HELMET
     if (e.equipped?.helmet === 'nasal_helm' && window.gameVisuals.nasal_helm?.complete) {
         const hW = bW * cfg.helm.sizeMult;
-        ctx.drawImage(window.gameVisuals.nasal_helm, x - hW / 2 + cfg.helm.xOff * hs * z, top + cfg.helm.yOff * hs * z, hW, bH);
+        let helmImg = window.gameVisuals.nasal_helm;
+        if (e.goldGear && window.getGoldTintedSprite) helmImg = window.getGoldTintedSprite(helmImg);
+        ctx.drawImage(helmImg, x - hW / 2 + cfg.helm.xOff * hs * z, top + cfg.helm.yOff * hs * z, hW, bH);
     }
 
     // ARMOUR (humanoid armour images scale to fit each race)
@@ -1415,6 +1417,7 @@ function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
         if (aid === 'medium_armor') armorImg = window.gameVisuals.humanMedium;
         if (aid === 'heavy_armor')  armorImg = window.gameVisuals.humanHeavy;
         if (armorImg?.complete) {
+            if (e.goldGear && window.getGoldTintedSprite) armorImg = window.getGoldTintedSprite(armorImg);
             const aW = bW * cfg.armour.wMult;
             const aTopShift = cfg.armour.topShift * hs * z;
             ctx.drawImage(armorImg, x - aW / 2, top + aTopShift, aW, bH - aTopShift);

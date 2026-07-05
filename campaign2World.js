@@ -400,7 +400,9 @@ function buildSilverhartPalace(roadEnd) {
     window.tileObjects[`${throneCenter.q + 1},${throneCenter.r}`] = { type: 'table' };
 
     if (window.campaign2SilverhartKing) {
-        window.entities.push(window.buildNPC({ ...window.campaign2SilverhartKing, hex: { q: throneSeat.q, r: throneSeat.r + 1 } }));
+        const king = window.buildNPC({ ...window.campaign2SilverhartKing, hex: { q: throneSeat.q, r: throneSeat.r + 1 } });
+        king.goldGear = true; // recolors his armor/helm gold at render time
+        window.entities.push(king);
     }
 
     // Barracks: east wing, off its own short spur from the courtyard —
