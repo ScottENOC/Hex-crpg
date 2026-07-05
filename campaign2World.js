@@ -625,6 +625,98 @@ function buildSilverhartPalace(roadEnd) {
         window.entities.push(guard);
     });
 
+    // Silverhart sits far outside Campaign 2's hand-painted "safe radius"
+    // (terrain.js only forces flat grass within |q|,|r| <= 32 of LOCAL
+    // origin — everywhere else, including all the way out here, falls
+    // through to the same procedural forest/rocky-outcrop/swamp/sand noise
+    // the wilderness uses), so without an explicit override the capital
+    // reads as a walled palace dropped in the middle of scattered
+    // rock/forest clumps. Force flat Grass over a real clearing around the
+    // whole complex — big enough to cover the curtain wall plus the
+    // diplomatic quarter built below, with room to spare for whatever else
+    // gets added to the city later. Only touches wilderness-noise terrain
+    // (never Wall/Palisade Wall/Wood Floor/Path), so it can't clobber
+    // anything already carved above.
+    const CLEAR_RADIUS = 60;
+    for (let dq = -CLEAR_RADIUS; dq <= CLEAR_RADIUS; dq++) {
+        for (let dr = -CLEAR_RADIUS; dr <= CLEAR_RADIUS; dr++) {
+            if (window.distance({ q: 0, r: 0 }, { q: dq, r: dr }) > CLEAR_RADIUS) continue;
+            const q = throneCenter.q + dq, r = throneCenter.r + dr;
+            const name = window.getTerrainAt(q, r).name;
+            if (name === 'Forest' || name === 'Rocky Outcrop' || name === 'Swamp' || name === 'Sand') {
+                window.setTerrainAt(q, r, 'Grass');
+            }
+        }
+    }
+
+    // Diplomatic Quarter: south of the gate, along the road's continued
+    // extension — an elven embassy, a dwarven embassy, embassies for two
+    // other human kingdoms (Aldenreach and Corvane), the Ironbond Company's
+    // Silverhart office, and the kingdom's Grand Cathedral. All flavor-only
+    // for now (no reputation/faction wiring for the four embassies — that
+    // would be a real new system of its own, out of scope here); Ironbond's
+    // office ties into the existing ironbond_company faction just by being
+    // there, and the Cathedral gives Knowledge: Religion content a real
+    // building to live in instead of only Hollowmere's small chapel.
+    const dqCenter = throneCenter.q;
+    for (let r = throneCenter.r + 24; r <= throneCenter.r + 36; r++) window.setTerrainAt(dqCenter, r, 'Path');
+
+    const embassyRow1 = throneCenter.r + 26;
+    const embassyRow2 = throneCenter.r + 32;
+    const officeRow = throneCenter.r + 38;
+
+    const elvenCenter = { q: dqCenter - 8, r: embassyRow1 };
+    const elvenDoor = { q: elvenCenter.q + 3, r: elvenCenter.r };
+    window.interiorRegions.push(carveFlatRoom(elvenCenter.q, elvenCenter.r, 3, 2, elvenDoor, 'Wood Floor'));
+    for (let q = elvenDoor.q + 1; q < dqCenter; q++) window.setTerrainAt(q, embassyRow1, 'Path');
+    window.tileObjects[`${elvenCenter.q},${elvenCenter.r}`] = { type: 'table' };
+    window.campaign2ElvenEmbassyCenter = elvenCenter;
+
+    const dwarvenCenter = { q: dqCenter + 8, r: embassyRow1 };
+    const dwarvenDoor = { q: dwarvenCenter.q - 3, r: dwarvenCenter.r };
+    window.interiorRegions.push(carveFlatRoom(dwarvenCenter.q, dwarvenCenter.r, 3, 2, dwarvenDoor, 'Wood Floor'));
+    for (let q = dqCenter + 1; q < dwarvenDoor.q; q++) window.setTerrainAt(q, embassyRow1, 'Path');
+    window.tileObjects[`${dwarvenCenter.q},${dwarvenCenter.r}`] = { type: 'table' };
+    window.campaign2DwarvenEmbassyCenter = dwarvenCenter;
+
+    const aldenreachCenter = { q: dqCenter - 8, r: embassyRow2 };
+    const aldenreachDoor = { q: aldenreachCenter.q + 3, r: aldenreachCenter.r };
+    window.interiorRegions.push(carveFlatRoom(aldenreachCenter.q, aldenreachCenter.r, 3, 2, aldenreachDoor, 'Wood Floor'));
+    for (let q = aldenreachDoor.q + 1; q < dqCenter; q++) window.setTerrainAt(q, embassyRow2, 'Path');
+    window.tileObjects[`${aldenreachCenter.q},${aldenreachCenter.r}`] = { type: 'table' };
+    window.campaign2AldenreachEmbassyCenter = aldenreachCenter;
+
+    const corvaneCenter = { q: dqCenter + 8, r: embassyRow2 };
+    const corvaneDoor = { q: corvaneCenter.q - 3, r: corvaneCenter.r };
+    window.interiorRegions.push(carveFlatRoom(corvaneCenter.q, corvaneCenter.r, 3, 2, corvaneDoor, 'Wood Floor'));
+    for (let q = dqCenter + 1; q < corvaneDoor.q; q++) window.setTerrainAt(q, embassyRow2, 'Path');
+    window.tileObjects[`${corvaneCenter.q},${corvaneCenter.r}`] = { type: 'table' };
+    window.campaign2CorvaneEmbassyCenter = corvaneCenter;
+
+    const ironbondOfficeCenter = { q: dqCenter - 8, r: officeRow };
+    const ironbondOfficeDoor = { q: ironbondOfficeCenter.q + 4, r: ironbondOfficeCenter.r };
+    window.interiorRegions.push(carveFlatRoom(ironbondOfficeCenter.q, ironbondOfficeCenter.r, 4, 3, ironbondOfficeDoor, 'Wood Floor'));
+    for (let q = ironbondOfficeDoor.q + 1; q < dqCenter; q++) window.setTerrainAt(q, officeRow, 'Path');
+    window.tileObjects[`${ironbondOfficeCenter.q},${ironbondOfficeCenter.r}`] = { type: 'table' };
+    window.tileObjects[`${ironbondOfficeCenter.q + 1},${ironbondOfficeCenter.r}`] = { type: 'bench' };
+    window.campaign2IronbondOfficeCenter = ironbondOfficeCenter;
+
+    const cathedralCenter = { q: dqCenter + 8, r: officeRow };
+    const cathedralDoor = { q: cathedralCenter.q - 4, r: cathedralCenter.r };
+    window.interiorRegions.push(carveFlatRoom(cathedralCenter.q, cathedralCenter.r, 4, 4, cathedralDoor, 'Wood Floor'));
+    for (let q = dqCenter + 1; q < cathedralDoor.q; q++) window.setTerrainAt(q, officeRow, 'Path');
+    window.tileObjects[`${cathedralCenter.q},${cathedralCenter.r - 2}`] = { type: 'throne' }; // stands in for an altar — same "focal furniture at the head of the room" reuse as the throne room
+    window.tileObjects[`${cathedralCenter.q - 2},${cathedralCenter.r}`] = { type: 'bench' };
+    window.tileObjects[`${cathedralCenter.q + 2},${cathedralCenter.r}`] = { type: 'bench' };
+    window.campaign2CathedralCenter = cathedralCenter;
+
+    if (window.campaign2ElvenAmbassador) window.entities.push(window.buildNPC({ ...window.campaign2ElvenAmbassador, hex: { q: elvenCenter.q, r: elvenCenter.r + 1 } }));
+    if (window.campaign2DwarvenAmbassador) window.entities.push(window.buildNPC({ ...window.campaign2DwarvenAmbassador, hex: { q: dwarvenCenter.q, r: dwarvenCenter.r + 1 } }));
+    if (window.campaign2AldenreachAmbassador) window.entities.push(window.buildNPC({ ...window.campaign2AldenreachAmbassador, hex: { q: aldenreachCenter.q, r: aldenreachCenter.r + 1 } }));
+    if (window.campaign2CorvaneAmbassador) window.entities.push(window.buildNPC({ ...window.campaign2CorvaneAmbassador, hex: { q: corvaneCenter.q, r: corvaneCenter.r + 1 } }));
+    if (window.campaign2IronbondEnvoy) window.entities.push(window.buildNPC({ ...window.campaign2IronbondEnvoy, hex: { q: ironbondOfficeCenter.q, r: ironbondOfficeCenter.r + 1 } }));
+    if (window.campaign2HighCleric) window.entities.push(window.buildNPC({ ...window.campaign2HighCleric, hex: { q: cathedralCenter.q, r: cathedralCenter.r + 1 } }));
+
     // One world-hex north of Millbrook [3][6], which is itself 3 north of
     // Hollowmere [6][6] — see the world map's [0][6] Silverhart placement in
     // worldMap.js's loadWorldMap.

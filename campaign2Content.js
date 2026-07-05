@@ -463,3 +463,39 @@ window.campaign2RoyalWizard = {
     color: '#2a4a7a',
     dialogueId: 'royal_wizard'
 };
+
+// --- Diplomatic Quarter (south of the palace gate, see buildSilverhartPalace).
+// Flavor-only ambassadors for now — no dedicated reputation/faction system
+// for the four foreign nations (that would be a real system of its own);
+// Ironbond's envoy and the Cathedral's cleric tie into factions that
+// already exist (ironbond_company, and Knowledge: Religion content).
+window.campaign2ElvenAmbassador = {
+    name: 'Ambassador Elarion', title: 'Envoy of the Sylvan Court',
+    race: 'elf', gender: 'male', classLevels: [], skillPicks: [], equipment: [],
+    side: 'neutral', factionId: null, color: '#3a7a4a', dialogueId: 'elven_ambassador'
+};
+window.campaign2DwarvenAmbassador = {
+    name: 'Ambassador Brokk Stonehammer', title: 'Envoy of the Deepholds',
+    race: 'dwarf', gender: 'male', classLevels: [], skillPicks: [], equipment: [],
+    side: 'neutral', factionId: null, color: '#7a5a2a', dialogueId: 'dwarven_ambassador'
+};
+window.campaign2AldenreachAmbassador = {
+    name: 'Ambassador Cassia Wren', title: 'Envoy of Aldenreach',
+    race: 'human', gender: 'female', classLevels: [], skillPicks: [], equipment: [],
+    side: 'neutral', factionId: null, color: '#7a2a4a', dialogueId: 'aldenreach_ambassador'
+};
+window.campaign2CorvaneAmbassador = {
+    name: 'Ambassador Toren Aldwyn', title: 'Envoy of Corvane',
+    race: 'human', gender: 'male', classLevels: [], skillPicks: [], equipment: [],
+    side: 'neutral', factionId: null, color: '#2a3a7a', dialogueId: 'corvane_ambassador'
+};
+window.campaign2IronbondEnvoy = {
+    name: 'Factor Willem Drass', title: "The Ironbond Company's Silverhart Envoy",
+    race: 'human', gender: 'male', classLevels: [], skillPicks: [], equipment: [],
+    side: 'neutral', factionId: 'ironbond_company', color: '#5a5a5a', dialogueId: 'ironbond_envoy'
+};
+window.campaign2HighCleric = {
+    name: 'High Cleric Adelram', title: 'High Cleric of the Grand Cathedral',
+    race: 'human', gender: 'male', classLevels: ['cleric'], skillPicks: [], equipment: [],
+    side: 'neutral', factionId: 'silverhart_kingdom', color: '#c9a24f', dialogueId: 'high_cleric'
+};

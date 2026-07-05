@@ -1376,6 +1376,44 @@ window.npcDialogueTrees = {
             }},
             { label: "Another time.", action: () => {} }
         ]);
+    },
+    // Diplomatic Quarter — flavor-only ambassadors, see campaign2Content.js.
+    elven_ambassador: (npc) => {
+        window.showDialogue(npc, "The Sylvan Court sends its regards to the Queen, and its patience with her borders' woodcutters. Both are finite, in their way.", [
+            { label: "I'll keep that in mind.", action: () => {} }
+        ]);
+    },
+    dwarven_ambassador: (npc) => {
+        window.showDialogue(npc, "The Deepholds trade in iron and good sense, in roughly that order. Silverhart's been fair with us. Long may that last.", [
+            { label: "Long may it last.", action: () => {} }
+        ]);
+    },
+    aldenreach_ambassador: (npc) => {
+        window.showDialogue(npc, "Aldenreach and Silverhart haven't gone to war in three generations. My whole posting here is to keep it that way, one dull treaty dinner at a time.", [
+            { label: "Sounds like important work.", action: () => {} }
+        ]);
+    },
+    corvane_ambassador: (npc) => {
+        window.showDialogue(npc, "Corvane sent me to watch the greenskin trouble on Silverhart's border and report back. So far: it's trouble, and it's on the border. Riveting dispatches, I know.", [
+            { label: "Keep watching.", action: () => {} }
+        ]);
+    },
+    ironbond_envoy: (npc) => {
+        const influence = window.factions?.ironbond_company?.merchantInfluence?.silverhart_kingdom ?? 30;
+        let line;
+        if (influence >= 60) {
+            line = "The Company's word carries real weight in this court these days. We like it that way.";
+        } else if (influence <= 10) {
+            line = "Harder going for us at court lately, if I'm honest. Someone's been undoing our work.";
+        } else {
+            line = "Business as usual — a little coin here, a little influence there. Nothing you'd need to worry about.";
+        }
+        window.showDialogue(npc, line, [{ label: "Noted.", action: () => {} }]);
+    },
+    high_cleric: (npc) => {
+        window.showDialogue(npc, "The Grand Cathedral keeps the gods' peace over the whole kingdom — a bigger flock than Hollowmere's little chapel, but the same gods listening.", [
+            { label: "Good to know.", action: () => {} }
+        ]);
     }
 };
 
