@@ -17,6 +17,13 @@
             position: absolute;
             background-color: #333;
             min-width: 160px;
+            /* Safety net alongside main.js's clampDropdownToViewport (which
+               repositions it after opening, based on where the trigger
+               button actually landed) — this caps its own width so it can
+               never force horizontal overflow on a narrow phone screen even
+               before that JS-driven clamp runs. */
+            max-width: min(280px, 94vw);
+            box-sizing: border-box;
             box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
             z-index: 105;
             border: 1px solid #555;
@@ -68,9 +75,18 @@
             border: 1px solid #777;
             border-radius: 4px;
             padding: 6px 8px;
-            min-width: 150px;
+            min-width: 0; /* flex: 1 1 100% already gives it the full dropdown width */
+            max-width: 100%;
             min-height: 30px;
             font-size: 0.8em;
+            /* The longest option ("Emberlode (Mining Village)") doesn't
+               functionally break anything even when it doesn't fit — the
+               native picker always shows full option text regardless — but
+               without this the closed-state box can clip it jaggedly
+               mid-character instead of a clean ellipsis. */
+            text-overflow: ellipsis;
+            overflow: hidden;
+            white-space: nowrap;
         }
     </style>
 </head>
@@ -119,8 +135,8 @@
         <button id="cheat-all-equip-btn" style="background-color: #607d8b; font-size: 0.7em; color: white;">Cheat: Add All Equipment</button>
         <button id="cheat-fly-btn" style="background-color: #03a9f4; font-size: 0.7em; color: white;">Cheat: Fly All</button>
         <button id="cheat-max-skills-btn" style="background-color: #e91e63; font-size: 0.7em; color: white;">Cheat: Max Skills</button>
-        <div style="padding: 4px; display: flex; gap: 4px; align-items: center;">
-            <select id="cheat-teleport-select" class="cheat-teleport-select" style="flex: 1;">
+        <div style="padding: 4px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center;">
+            <select id="cheat-teleport-select" class="cheat-teleport-select" style="flex: 1 1 100%;">
                 <option value="Hollowmere (Village)">Hollowmere (Village)</option>
                 <option value="Millbrook (Village)">Millbrook (Village)</option>
                 <option value="Silverhart (Capital)">Silverhart (Capital)</option>

@@ -139,7 +139,26 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         if (clickedDropbtn) {
             const content = e.target.nextElementSibling;
-            if (content) content.classList.toggle('show');
+            if (content) {
+                content.classList.toggle('show');
+                if (content.classList.contains('show')) clampDropdownToViewport(content);
+            }
+        }
+    }
+
+    // .dropdown-content has no explicit left/right, so it inherits whatever
+    // static position its trigger button ends up at in the wrapped #top-menu
+    // button row — on a narrow phone screen the Cheat button can land near
+    // the right edge, and the dropdown (widened further by the teleport
+    // select+button) then spills straight off-screen. Clamp it back on
+    // screen after it opens, rather than trying to predict button position
+    // in CSS (which has no reliable "distance from viewport edge" query).
+    function clampDropdownToViewport(content) {
+        content.style.left = '';
+        const rect = content.getBoundingClientRect();
+        const overflowRight = rect.right - window.innerWidth;
+        if (overflowRight > 0) {
+            content.style.left = `-${Math.ceil(overflowRight) + 8}px`;
         }
     }
     window.addEventListener('click', handleMenuDropdownToggle);

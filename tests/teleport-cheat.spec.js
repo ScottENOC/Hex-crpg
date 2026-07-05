@@ -2,6 +2,33 @@ const { test, expect } = require('@playwright/test');
 const { createCharacter } = require('./helpers.js');
 
 test.describe('Cheat: teleport to location', () => {
+    test('the Cheat dropdown never spills off the right edge of a narrow phone screen', async ({ page }) => {
+        await page.setViewportSize({ width: 375, height: 667 });
+        await createCharacter(page);
+        const dropbtns = await page.locator('#top-menu .dropbtn').all();
+        for (const btn of dropbtns) {
+            if ((await btn.innerText()).includes('Cheat')) { await btn.click(); break; }
+        }
+        const rect = await page.evaluate(() => document.querySelector('#top-menu .dropdown-content.show').getBoundingClientRect());
+        expect(rect.right).toBeLessThanOrEqual(375);
+    });
+
+    test('selecting the longest option (Emberlode) does not widen the select past its container or break the value', async ({ page }) => {
+        await page.setViewportSize({ width: 375, height: 667 });
+        await createCharacter(page);
+        const dropbtns = await page.locator('#top-menu .dropbtn').all();
+        for (const btn of dropbtns) {
+            if ((await btn.innerText()).includes('Cheat')) { await btn.click(); break; }
+        }
+        await page.selectOption('#cheat-teleport-select', 'Emberlode (Mining Village)');
+        const result = await page.evaluate(() => {
+            const select = document.getElementById('cheat-teleport-select');
+            return { value: select.value, right: select.getBoundingClientRect().right };
+        });
+        expect(result.value).toBe('Emberlode (Mining Village)');
+        expect(result.right).toBeLessThanOrEqual(375);
+    });
+
     test('clicking the location <select> does not close the Cheat dropdown mid-interaction', async ({ page }) => {
         await createCharacter(page);
         await page.click('#top-menu .dropdown:has(#cheat-teleport-select) .dropbtn');
