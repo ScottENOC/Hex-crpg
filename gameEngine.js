@@ -4523,6 +4523,14 @@ function setupArenaLobby() {
     // rolled. Outer footprint is 9x7 (including the fence ring) so the
     // walkable interior is a full 7x5 — big enough for large beasts like
     // dragons, unlike the old 5x3-outer/3x1-interior pen.
+    //
+    // Only the side facing the room (PEN_MAX_Q, where the player actually
+    // approaches from) is a real passable-but-slow fence. The other three
+    // sides get real Wall terrain underneath the fence dressing — fences
+    // slow movement but never blocked it, so a player could wander through
+    // the far side and off the edge of the explicitly-painted lobby map
+    // into raw, unset procedural terrain (which can resolve to Water).
+    // Solid walls there close that leak regardless of pen position.
     const PEN_MIN_Q = -17, PEN_MAX_Q = -9, PEN_MIN_R = 2, PEN_MAX_R = 8;
     for (let q = PEN_MIN_Q; q <= PEN_MAX_Q; q++) {
         for (let r = PEN_MIN_R; r <= PEN_MAX_R; r++) {
@@ -4530,10 +4538,13 @@ function setupArenaLobby() {
         }
     }
     for (let q = PEN_MIN_Q; q <= PEN_MAX_Q; q++) {
+        window.setTerrainAt(q, PEN_MIN_R, 'Wall');
+        window.setTerrainAt(q, PEN_MAX_R, 'Wall');
         window.tileObjects[`${q},${PEN_MIN_R}`] = { type: 'fence_h', lightRadius: 0 };
         window.tileObjects[`${q},${PEN_MAX_R}`] = { type: 'fence_h', lightRadius: 0 };
     }
     for (let r = PEN_MIN_R; r <= PEN_MAX_R; r++) {
+        window.setTerrainAt(PEN_MIN_Q, r, 'Wall');
         window.tileObjects[`${PEN_MIN_Q},${r}`] = { type: 'fence_v', lightRadius: 0 };
         window.tileObjects[`${PEN_MAX_Q},${r}`] = { type: 'fence_v', lightRadius: 0 };
     }

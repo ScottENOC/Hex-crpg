@@ -100,4 +100,29 @@ test.describe('arena lobby: redesigned layout, waiting combatants, gated beast p
         expect(result.interiorCount).toBeGreaterThanOrEqual(15);
         expect(result.distToSpawn).toBeLessThan(result.distToNpcRoom);
     });
+
+    test('the pen cannot be walked through into unset terrain beyond the lobby (three sides are real Wall, not just fence)', async ({ page }) => {
+        await createCharacter(page, { campaign: '1' });
+        const result = await page.evaluate(() => {
+            const fenceKeys = Object.keys(window.tileObjects).filter(k => {
+                const t = window.tileObjects[k].type;
+                return t === 'fence_h' || t === 'fence_v';
+            });
+            // Every fence-dressed hex must actually be Wall terrain UNLESS it's
+            // on the single room-facing gate column (the side with the max Q,
+            // since the pen sits to the room's left/outer side) — that side is
+            // the intentional passable-but-slow approach.
+            const qs = fenceKeys.map(k => parseInt(k.split(',')[0], 10));
+            const maxQ = Math.max(...qs);
+            let leaks = 0;
+            fenceKeys.forEach(k => {
+                const [q, r] = k.split(',').map(Number);
+                if (q === maxQ) return; // the gate side, intentionally passable
+                if (window.getTerrainAt(q, r).name !== 'Wall') leaks++;
+            });
+            return { leaks, fenceCount: fenceKeys.length };
+        });
+        expect(result.fenceCount).toBeGreaterThan(0);
+        expect(result.leaks).toBe(0);
+    });
 });
