@@ -1,0 +1,27 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Ears -->
+  <path d="M17 22C9 18 7 9 11 7C15 5 21 14 23 22Z" fill="#4a7a30" stroke="#22350f" stroke-width="2"/>
+  <path d="M47 22C55 18 57 9 53 7C49 5 43 14 41 22Z" fill="#4a7a30" stroke="#22350f" stroke-width="2"/>
+  <!-- Head -->
+  <path d="M19 24C19 13 26 7 32 7C38 7 45 13 45 24C45 32 38 36 32 36C26 36 19 32 19 24Z" fill="#5c9a3d" stroke="#22350f" stroke-width="2"/>
+  <!-- Battle scar -->
+  <path d="M24 15L30 25" stroke="#2a3a1a" stroke-width="1.5"/>
+  <!-- Eyes (angrier) -->
+  <path d="M24 21L30 23" stroke="#22350f" stroke-width="1.5"/>
+  <path d="M40 21L34 23" stroke="#22350f" stroke-width="1.5"/>
+  <circle cx="27" cy="23" r="2.5" fill="#ff5a3f"/>
+  <circle cx="37" cy="23" r="2.5" fill="#ff5a3f"/>
+  <circle cx="27" cy="23" r="1" fill="#000"/>
+  <circle cx="37" cy="23" r="1" fill="#000"/>
+  <!-- Mouth/tusks -->
+  <path d="M25 32C29 36 35 36 39 32" fill="none" stroke="#22350f" stroke-width="1.5"/>
+  <path d="M27 32L26 37" stroke="#f0f0e0" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M37 32L38 37" stroke="#f0f0e0" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Armored body -->
+  <path d="M22 36C20 44 20 52 22 57H42C44 52 44 44 42 36Z" fill="#5a5f66" stroke="#25282c" stroke-width="2"/>
+  <path d="M25 40H39" stroke="#8a8f96" stroke-width="2"/>
+  <path d="M25 46H39" stroke="#8a8f96" stroke-width="2"/>
+  <!-- Spiked shoulder -->
+  <path d="M20 38L16 34L20 34Z" fill="#8a8f96" stroke="#25282c" stroke-width="1"/>
+  <path d="M44 38L48 34L44 34Z" fill="#8a8f96" stroke="#25282c" stroke-width="1"/>
+</svg>

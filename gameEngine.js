@@ -952,6 +952,12 @@ function startGameCore(isLoading = false) {
       skeleton: new Image(),
       zombie: new Image(),
       imp: new Image(),
+      elite_goblin: new Image(),
+      harpy: new Image(),
+      wraith: new Image(),
+      basilisk: new Image(),
+      minotaur: new Image(),
+      revenantBase: new Image(),
       wolf: new Image(),
       torch_lit: new Image(),
       fireplace: new Image(),
@@ -1039,6 +1045,12 @@ function startGameCore(isLoading = false) {
   visuals.skeleton.onload = () => { window.drawMap(); };
   visuals.zombie.onload = () => { window.drawMap(); };
   visuals.imp.onload = () => { window.drawMap(); };
+  visuals.elite_goblin.onload = () => { window.drawMap(); };
+  visuals.harpy.onload = () => { window.drawMap(); };
+  visuals.wraith.onload = () => { window.drawMap(); };
+  visuals.basilisk.onload = () => { window.drawMap(); };
+  visuals.minotaur.onload = () => { window.drawMap(); };
+  visuals.revenantBase.onload = () => { window.drawMap(); };
   visuals.wolf.onload = () => { window.drawMap(); };
   visuals.torch_lit.onload = () => { window.drawMap(); };
   visuals.fireplace.onload = () => { window.drawMap(); };
@@ -1127,6 +1139,12 @@ function startGameCore(isLoading = false) {
   visuals.skeleton.src = 'images/skeleton.svg';
   visuals.zombie.src = 'images/zombie.svg';
   visuals.imp.src = 'images/imp.svg';
+  visuals.elite_goblin.src = 'images/elite_goblin.svg';
+  visuals.harpy.src = 'images/harpy.svg';
+  visuals.wraith.src = 'images/wraith.svg';
+  visuals.basilisk.src = 'images/basilisk.svg';
+  visuals.minotaur.src = 'images/minotaur.svg';
+  visuals.revenantBase.src = 'images/revenant.svg';
   visuals.wolf.src = 'images/wolf.png';
   visuals.torch_lit.src = 'images/torch_lit.svg';
   visuals.fireplace.src = 'images/fireplace.svg';
@@ -4933,6 +4951,11 @@ function startArenaFight() {
         // instead of always defaulting to goblin.png once e.name no longer
         // matches a generic monster name.
         boss.spriteBase = config.base;
+        // createMonster may have set customImage for types with their own
+        // distinct art (harpy, elite_goblin, etc.) — a renamed unique boss
+        // should get the existing spriteBase color-tint treatment instead of
+        // showing the flat, untinted base-monster art.
+        delete boss.customImage;
 
         if (config.spells) {
             boss.createdSpells = boss.createdSpells || [];

@@ -1,0 +1,17 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Horns -->
+  <path d="M20 16C14 10 12 4 16 2C20 4 22 12 24 18Z" fill="#e8dcc4" stroke="#5c4530" stroke-width="2"/>
+  <path d="M44 16C50 10 52 4 48 2C44 4 42 12 40 18Z" fill="#e8dcc4" stroke="#5c4530" stroke-width="2"/>
+  <!-- Head -->
+  <path d="M18 22C18 12 24 8 32 8C40 8 46 12 46 22C46 30 40 34 32 34C24 34 18 30 18 22Z" fill="#6b4a30" stroke="#3a2818" stroke-width="2"/>
+  <!-- Snout -->
+  <path d="M24 28C24 32 27 35 32 35C37 35 40 32 40 28C40 30 37 32 32 32C27 32 24 30 24 28Z" fill="#8a6a48" stroke="#3a2818" stroke-width="1.5"/>
+  <!-- Nose ring -->
+  <circle cx="32" cy="34" r="2.5" fill="none" stroke="#c9a24f" stroke-width="1.5"/>
+  <!-- Eyes -->
+  <circle cx="26" cy="20" r="2" fill="#ff5a3f"/>
+  <circle cx="38" cy="20" r="2" fill="#ff5a3f"/>
+  <!-- Body -->
+  <path d="M20 34C16 42 16 52 20 58H44C48 52 48 42 44 34Z" fill="#7a5638" stroke="#3a2818" stroke-width="2"/>
+  <path d="M24 42C28 44 36 44 40 42" stroke="#5c4530" stroke-width="1.5" fill="none"/>
+</svg>

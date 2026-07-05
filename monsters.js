@@ -422,6 +422,8 @@ const arenaBosses = {
     }
 };
 
+const MONSTER_CUSTOM_IMAGE_TYPES = ['elite_goblin', 'harpy', 'wraith', 'basilisk', 'minotaur'];
+
 function createMonster(type, hex, customSkills = null, customEquipment = null, side = 'enemy') {
     const template = monsterTemplates[type] || monsterTemplates['goblin'];
     const monster = new window.Enemy(template.name, template.color, hex, 3, template.hp, template.expValue);
@@ -479,6 +481,16 @@ function createMonster(type, hex, customSkills = null, customEquipment = null, s
     }
 
     monster.gold = Math.floor(Math.random() * 5) + 5;
+
+    // Types with their own distinct art (not just the shared monsterDefault
+    // fallback) get customImage set here — this is the ONE place both the
+    // map sprite render and the dialogue-portrait render already check, so
+    // it fixes both at once instead of needing a separate name-based branch
+    // per call site. Bosses that reuse this art (createMonster(config.base,
+    // ...) then renamed) explicitly delete this in the arena boss-spawn code
+    // so their existing spriteBase color-tint still applies.
+    if (MONSTER_CUSTOM_IMAGE_TYPES.includes(type)) monster.customImage = type;
+
     return monster;
 }
 
