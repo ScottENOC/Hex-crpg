@@ -67,8 +67,15 @@ function getTerrainAt(q, r) {
     const key = `${q},${r}`;
     if (window.overrideTerrain[key]) return window.overrideTerrain[key];
 
-    // ROGUELIKE: If in arena and no override, it's effectively "void" (Wall)
-    if (window.isInArena) return terrainTypes['wall'];
+    // ROGUELIKE: Campaign 1 has no open world at all — every hex the player
+    // can ever see is either the arena lobby or a real fight map, and both
+    // explicitly paint every tile they intend to be walkable via
+    // setTerrainAt (checked above). Any hex reaching this point is one
+    // neither of those explicitly carved — i.e. it's "void" outside the
+    // intended play area — so the safe default is a solid Wall, not letting
+    // it fall through to the overworld biome-noise generator below (which
+    // can and did produce reachable Water at lobby/arena edges).
+    if (window.currentCampaign === "1" || window.isInArena) return terrainTypes['wall'];
 
     // CAMPAIGN 2: hand-crafted village/roads/river (all setTerrainAt overrides,
     // checked above) sit inside a wider hand-crafted "safe" radius that's
