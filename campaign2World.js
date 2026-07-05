@@ -124,6 +124,44 @@ function carveBuilding(centerQ, centerR, halfW, halfH, doorHex, floorType) {
     };
 }
 
+// hexRowShift's sign doesn't actually cancel hexToPixel's shear (screen
+// y ~ r + q/2; canceling that as q varies needs shift(dq) ~ -dq/2, but
+// hexRowShift returns +floor(dq/2) — so every carveBuilding room actually
+// reads as a diamond/rhombus on screen, not a rectangle, confirmed visually
+// on the palace). Fixing hexRowShift itself would reshape every building in
+// the game (tavern, houses, Ironvein, the farm...), all of which have
+// interior decorations placed at hardcoded offsets tuned against the
+// current (wrong) shape — far too large a blast radius to safely re-verify
+// here. carveFlatRoom is the corrected version, used only for new palace
+// construction so its rooms actually read as level-topped rectangles
+// ("/\/\/\/\" zig-zag reading as a flat line, not a slanted diamond edge).
+function hexRowShiftFlat(dq) {
+    return -Math.floor(dq / 2);
+}
+
+function carveFlatRoom(centerQ, centerR, halfW, halfH, doorHex, floorType) {
+    const floorHexes = [];
+    for (let dq = -halfW + 1; dq <= halfW - 1; dq++) {
+        const shift = hexRowShiftFlat(dq);
+        for (let dr = -halfH + 1; dr <= halfH - 1; dr++) {
+            floorHexes.push({ q: centerQ + dq, r: centerR + dr + shift });
+        }
+    }
+    wallRingAroundFloor(floorHexes).forEach(h => window.setTerrainAt(h.q, h.r, 'Wall'));
+    floorHexes.forEach(h => window.setTerrainAt(h.q, h.r, floorType));
+    if (doorHex) {
+        window.setTerrainAt(doorHex.q, doorHex.r, floorType);
+        window.tileObjects[`${doorHex.q},${doorHex.r}`] = { type: 'door_open', lightRadius: 0 };
+    }
+    const maxShift = Math.max(Math.abs(hexRowShiftFlat(-halfW)), Math.abs(hexRowShiftFlat(halfW)));
+    return {
+        minQ: centerQ - halfW + 1, maxQ: centerQ + halfW - 1,
+        minR: centerR - halfH + 1 - maxShift, maxR: centerR + halfH - 1 + maxShift,
+        lightMult: 0.3,
+        doorHex: doorHex ? { q: doorHex.q, r: doorHex.r } : null
+    };
+}
+
 // Old Mac's Farmstead: a small house + fenced pasture at the end of the
 // south road, just past the border of this world-map hex. Reuses
 // carveBuilding for the house; the pasture is a plain rectangle of Grass
@@ -382,48 +420,60 @@ function buildMillbrook(roadEnd) {
 // the throne + King + his flanking guards), a barracks (most of the "lots
 // of guards" ask), and a small council chamber for the Chancellor.
 function buildSilverhartPalace(roadEnd) {
+    // Grand Hall — the palace's real centerpiece, roughly 50% bigger in
+    // each direction than the old throne room, and carved with
+    // carveFlatRoom (not carveBuilding) so its outer wall actually reads as
+    // a level-topped rectangle on screen instead of a slanted diamond.
     const throneCenter = { q: roadEnd.q, r: roadEnd.r };
     const throneDoor = { q: throneCenter.q, r: throneCenter.r + 4 };
-    const throneRegion = carveBuilding(throneCenter.q, throneCenter.r, 5, 4, throneDoor, 'Wood Floor');
+    const throneRegion = carveFlatRoom(throneCenter.q, throneCenter.r, 7, 5, throneDoor, 'Wood Floor');
     window.interiorRegions.push(throneRegion);
     window.campaign2PalaceThroneCenter = throneCenter;
 
     for (let r = roadEnd.r + 1; r < throneDoor.r; r++) window.setTerrainAt(roadEnd.q, r, 'Path');
 
     // The throne itself sits at the far (north) end of the hall, opposite
-    // the door, flanked by a fireplace on each side for warmth/light.
+    // the door, flanked by fireplaces and long tables down the hall for a
+    // real "great hall" feel rather than one bare room.
     const throneSeat = { q: throneCenter.q, r: throneCenter.r - 3 };
     window.tileObjects[`${throneSeat.q},${throneSeat.r}`] = { type: 'throne' };
     window.tileObjects[`${throneSeat.q - 2},${throneSeat.r}`] = { type: 'fireplace', lightRadius: 6 };
     window.tileObjects[`${throneSeat.q + 2},${throneSeat.r}`] = { type: 'fireplace', lightRadius: 6 };
-    window.tileObjects[`${throneCenter.q - 1},${throneCenter.r}`] = { type: 'table' };
-    window.tileObjects[`${throneCenter.q + 1},${throneCenter.r}`] = { type: 'table' };
+    window.tileObjects[`${throneCenter.q - 1},${throneCenter.r - 1}`] = { type: 'table' };
+    window.tileObjects[`${throneCenter.q + 1},${throneCenter.r - 1}`] = { type: 'table' };
+    window.tileObjects[`${throneCenter.q - 1},${throneCenter.r + 1}`] = { type: 'table' };
+    window.tileObjects[`${throneCenter.q + 1},${throneCenter.r + 1}`] = { type: 'table' };
+    window.tileObjects[`${throneCenter.q - 3},${throneCenter.r}`] = { type: 'bench' };
+    window.tileObjects[`${throneCenter.q + 3},${throneCenter.r}`] = { type: 'bench' };
 
-    if (window.campaign2SilverhartKing) {
-        const king = window.buildNPC({ ...window.campaign2SilverhartKing, hex: { q: throneSeat.q, r: throneSeat.r + 1 } });
-        king.goldGear = true; // recolors his armor/helm gold at render time
-        window.entities.push(king);
+    if (window.campaign2SilverhartQueen) {
+        const queen = window.buildNPC({ ...window.campaign2SilverhartQueen, hex: { q: throneSeat.q, r: throneSeat.r + 1 } });
+        queen.goldGear = true; // recolors her armor/helm gold at render time
+        window.entities.push(queen);
+        window.campaign2QueenEntityName = queen.name;
     }
 
-    // Barracks: east wing, off its own short spur from the courtyard —
-    // where most of the "lots of guards" actually live, benched and armed.
-    const barracksCenter = { q: throneCenter.q + 10, r: throneCenter.r + 2 };
-    const barracksDoor = { q: barracksCenter.q - 3, r: barracksCenter.r };
-    const barracksRegion = carveBuilding(barracksCenter.q, barracksCenter.r, 3, 3, barracksDoor, 'Wood Floor');
+    // Barracks: east wing, bigger than before — off its own short spur from
+    // the courtyard, where most of the "lots of guards" actually live.
+    const barracksCenter = { q: throneCenter.q + 14, r: throneCenter.r + 2 };
+    const barracksDoor = { q: barracksCenter.q - 4, r: barracksCenter.r };
+    const barracksRegion = carveFlatRoom(barracksCenter.q, barracksCenter.r, 4, 4, barracksDoor, 'Wood Floor');
     window.interiorRegions.push(barracksRegion);
     window.tileObjects[`${barracksCenter.q},${barracksCenter.r}`] = { type: 'fireplace', lightRadius: 6 };
     window.tileObjects[`${barracksCenter.q},${barracksCenter.r - 1}`] = { type: 'bench' };
     window.tileObjects[`${barracksCenter.q},${barracksCenter.r + 1}`] = { type: 'bench' };
+    window.tileObjects[`${barracksCenter.q - 1},${barracksCenter.r}`] = { type: 'table' };
     window.campaign2PalaceBarracksCenter = barracksCenter;
     for (let q = throneDoor.q + 1; q <= barracksDoor.q - 1; q++) window.setTerrainAt(q, throneDoor.r, 'Path');
     for (let q = barracksDoor.q + 1; q < barracksCenter.q; q++) window.setTerrainAt(q, barracksCenter.r, 'Path');
 
     // Council chamber: west wing, mirrored, for the Chancellor.
-    const councilCenter = { q: throneCenter.q - 10, r: throneCenter.r + 2 };
-    const councilDoor = { q: councilCenter.q + 3, r: councilCenter.r };
-    const councilRegion = carveBuilding(councilCenter.q, councilCenter.r, 3, 2, councilDoor, 'Wood Floor');
+    const councilCenter = { q: throneCenter.q - 14, r: throneCenter.r + 2 };
+    const councilDoor = { q: councilCenter.q + 4, r: councilCenter.r };
+    const councilRegion = carveFlatRoom(councilCenter.q, councilCenter.r, 4, 3, councilDoor, 'Wood Floor');
     window.interiorRegions.push(councilRegion);
     window.tileObjects[`${councilCenter.q},${councilCenter.r}`] = { type: 'table' };
+    window.tileObjects[`${councilCenter.q},${councilCenter.r - 1}`] = { type: 'bench' };
     window.campaign2PalaceCouncilCenter = councilCenter;
     for (let q = councilDoor.q + 1; q <= throneDoor.q - 1; q++) window.setTerrainAt(q, throneDoor.r, 'Path');
     for (let q = councilCenter.q + 1; q < councilDoor.q; q++) window.setTerrainAt(q, councilCenter.r, 'Path');
@@ -432,14 +482,47 @@ function buildSilverhartPalace(roadEnd) {
         window.entities.push(window.buildNPC({ ...window.campaign2PalaceChancellor, hex: { q: councilCenter.q, r: councilCenter.r - 1 } }));
     }
 
-    // Royal guards: two flanking the throne itself, one at the throne
-    // room's own door, and the rest posted in the barracks — "lots of
-    // guards" spread across the whole palace, not just clustered in one spot.
+    // Royal Wizard's Tower: a small standalone chamber south-west of the
+    // courtyard, off its own spur — scale befitting a real royal seat, not
+    // just a throne room with two side rooms.
+    const towerCenter = { q: throneCenter.q - 7, r: throneCenter.r + 8 };
+    const towerDoor = { q: towerCenter.q, r: towerCenter.r - 2 };
+    const towerRegion = carveFlatRoom(towerCenter.q, towerCenter.r, 3, 3, towerDoor, 'Wood Floor');
+    window.interiorRegions.push(towerRegion);
+    window.tileObjects[`${towerCenter.q},${towerCenter.r}`] = { type: 'table' };
+    window.tileObjects[`${towerCenter.q + 1},${towerCenter.r}`] = { type: 'journal', readId: 'wizard_tower_tome', lightRadius: 0 };
+    window.tileObjects[`${towerCenter.q - 1},${towerCenter.r}`] = { type: 'fireplace', lightRadius: 5 };
+    window.campaign2PalaceTowerCenter = towerCenter;
+    for (let r = throneCenter.r + 5; r < towerDoor.r; r++) window.setTerrainAt(throneCenter.q - 7, r, 'Path');
+    for (let q = throneCenter.q - 7; q < throneDoor.q; q++) window.setTerrainAt(q, throneCenter.r + 5, 'Path');
+
+    if (window.campaign2RoyalWizard) {
+        window.entities.push(window.buildNPC({ ...window.campaign2RoyalWizard, hex: { q: towerCenter.q, r: towerCenter.r + 1 } }));
+    }
+
+    // Queen's private chambers: through a rear door behind the throne
+    // itself, a small bedroom wing — the "multiple rooms, not just a throne
+    // room" scale the great hall alone doesn't give.
+    const rearDoor = { q: throneCenter.q, r: throneCenter.r - 4 };
+    const bedroomCenter = { q: throneCenter.q, r: throneCenter.r - 9 };
+    const bedroomDoor = { q: bedroomCenter.q, r: bedroomCenter.r + 2 };
+    const bedroomRegion = carveFlatRoom(bedroomCenter.q, bedroomCenter.r, 3, 3, bedroomDoor, 'Wood Floor');
+    window.interiorRegions.push(bedroomRegion);
+    window.tileObjects[`${rearDoor.q},${rearDoor.r}`] = { type: 'door_open', lightRadius: 0 };
+    for (let r = throneCenter.r - 5; r > bedroomDoor.r; r--) window.setTerrainAt(throneCenter.q, r, 'Path');
+    window.tileObjects[`${bedroomCenter.q},${bedroomCenter.r}`] = { type: 'bed' };
+    window.tileObjects[`${bedroomCenter.q + 1},${bedroomCenter.r}`] = { type: 'table' };
+    window.tileObjects[`${bedroomCenter.q},${bedroomCenter.r - 1}`] = { type: 'fireplace', lightRadius: 5 };
+    window.campaign2PalaceBedroomCenter = bedroomCenter;
+
+    // Royal guards: flanking the throne, at the great hall's own door, and
+    // spread through the barracks — "lots of guards" across the whole
+    // palace, not clustered in one spot.
     const guards = window.campaign2RoyalGuards || [];
     const posts = [
         { q: throneSeat.q - 1, r: throneSeat.r + 1 }, // flanking the throne
         { q: throneSeat.q + 1, r: throneSeat.r + 1 },
-        { q: throneDoor.q, r: throneDoor.r - 1 },     // throne room entrance
+        { q: throneDoor.q, r: throneDoor.r - 1 },     // great hall entrance
         { q: barracksCenter.q - 1, r: barracksCenter.r },
         { q: barracksCenter.q + 1, r: barracksCenter.r },
         { q: barracksCenter.q, r: barracksCenter.r - 2 },
@@ -458,6 +541,15 @@ function buildSilverhartPalace(roadEnd) {
         window.worldMapData[0][6] = { t: 'G', f: 'K', o: 'h', p: 3, n: 'Silverhart' };
     }
 }
+
+// A first breadcrumb toward the Druid/unicorn quest chain — read once, same
+// convention as every other journal (see readAbandonedHouseJournal etc).
+window.readWizardTowerTome = function() {
+    window.showDialogue({ name: "Thessaly's Tome", customImage: 'journal' },
+        "A page near the back, in a hand shakier than the rest: \"Old magic doesn't die, it just stops answering court summons. There is a grove west of the mountains where the druids still keep faith with something older than any crown — and where, if the stories hold, something far rarer than a spell still runs wild. Not for a court wizard to go chasing. Perhaps for someone less tied to a throne.\"",
+        [{ label: "Interesting.", action: () => {} }]
+    );
+};
 
 // `forLoadOnly` (see gameEngine.js's startGameCore) means this call exists
 // purely to regenerate the deterministic terrain/tileObjects/NPC baseline

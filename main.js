@@ -87,6 +87,7 @@ document.addEventListener("DOMContentLoaded", () => {
             {key: 'wood_floor', src: 'images/wood_floor.svg'},
             {key: 'table', src: 'images/table.svg'},
             {key: 'bench', src: 'images/bench.svg'},
+            {key: 'bed', src: 'images/bed.svg'},
             {key: 'throne', src: 'images/throne.svg'},
             {key: 'apple', src: 'images/apple.svg'},
             {key: 'door_open', src: 'images/door_open.svg'},

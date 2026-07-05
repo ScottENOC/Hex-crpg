@@ -393,24 +393,29 @@ window.campaign2ReddaleBaronSteward = {
 
 // --- Silverhart Palace: the kingdom's capital, a full world-hex further
 // north up the same road past Millbrook (see buildSilverhartPalace in
-// campaign2World.js). King Alaric Corrin — a different line from Baron
-// Corwin Aldervale, who answers to him — holds court in the throne room,
+// campaign2World.js). Queen Seraphine Corrin — a different line from Baron
+// Corwin Aldervale, who answers to her — holds court in the great hall,
 // flanked by royal guards; more guards stand watch in the entry hall and
 // barracks wing. All neutral, like every other authority-figure NPC so far.
-window.campaign2SilverhartKing = {
-    name: 'King Alaric Corrin',
-    title: 'King of the Silverhart Kingdom',
-    race: 'human', gender: 'male',
-    classLevels: [],
-    skillPicks: [],
-    // Heavy armor + a helm so he actually reads as a king, not a bare
-    // tunic — goldGear (applied after buildNPC, see campaign2World.js)
+// A real fighter, not a decorative throne-sitter — she's meant to be a
+// significant, recurring character, not a flavor NPC: her dialogue reacts to
+// all three of the kingdom's major threats (greenskin incursions, the
+// Ironbond Company's growing influence, and the necromancer/lichdom plot),
+// not just the player's raw reputation total.
+window.campaign2SilverhartQueen = {
+    name: 'Queen Seraphine Corrin',
+    title: 'Queen of the Silverhart Kingdom',
+    race: 'human', gender: 'female',
+    classLevels: ['fighter', 'fighter'],
+    skillPicks: ['health', 'health', 'sword_hit', 'sword_dmg', 'heavy_armor_training'],
+    // Sword + heavy armor + a helm so she reads as a warrior-queen, not a
+    // bare tunic — goldGear (applied after buildNPC, see campaign2World.js)
     // recolors this same armor/helm art gold rather than needing new assets.
-    equipment: ['heavy_armor', 'nasal_helm'],
+    equipment: ['sword', 'heavy_armor', 'nasal_helm'],
     side: 'neutral',
     factionId: 'silverhart_kingdom',
     color: '#5a2a8a',
-    dialogueId: 'silverhart_king'
+    dialogueId: 'silverhart_queen'
 };
 // One template, several named instances (same pattern as
 // campaign2GoblinGuards) — a uniform royal guard, tougher than an ordinary
@@ -425,7 +430,7 @@ window.campaign2RoyalGuards = [
 ];
 window.campaign2PalaceChancellor = {
     name: 'Chancellor Merric Vane',
-    title: "The King's Chancellor",
+    title: "The Queen's Chancellor",
     race: 'human', gender: 'male',
     classLevels: [],
     skillPicks: [],
@@ -434,4 +439,16 @@ window.campaign2PalaceChancellor = {
     factionId: 'silverhart_kingdom',
     color: '#4a4a2a',
     dialogueId: 'palace_chancellor'
+};
+window.campaign2RoyalWizard = {
+    name: 'Court Wizard Thessaly',
+    title: "The Queen's Court Wizard",
+    race: 'elf', gender: 'female',
+    classLevels: ['wizard'],
+    skillPicks: [],
+    equipment: [],
+    side: 'neutral',
+    factionId: 'silverhart_kingdom',
+    color: '#2a4a7a',
+    dialogueId: 'royal_wizard'
 };

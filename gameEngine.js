@@ -992,6 +992,7 @@ function startGameCore(isLoading = false) {
       wood_floor: new Image(),
       table: new Image(),
       bench: new Image(),
+      bed: new Image(),
       throne: new Image(),
       apple: new Image(),
       door_open: new Image(),
@@ -1085,6 +1086,7 @@ function startGameCore(isLoading = false) {
   visuals.wood_floor.onload = () => { window.drawMap(); };
   visuals.table.onload = () => { window.drawMap(); };
   visuals.bench.onload = () => { window.drawMap(); };
+  visuals.bed.onload = () => { window.drawMap(); };
   visuals.throne.onload = () => { window.drawMap(); };
   visuals.apple.onload = () => { window.drawMap(); };
   visuals.door_open.onload = () => { window.drawMap(); };
@@ -1179,6 +1181,7 @@ function startGameCore(isLoading = false) {
   visuals.wood_floor.src = 'images/wood_floor.svg';
   visuals.table.src = 'images/table.svg';
   visuals.bench.src = 'images/bench.svg';
+  visuals.bed.src = 'images/bed.svg';
   visuals.throne.src = 'images/throne.svg';
   visuals.apple.src = 'images/apple.svg';
   visuals.door_open.src = 'images/door_open.svg';
@@ -1526,6 +1529,8 @@ function renderEntities() {
               window.mapCtx.drawImage(window.gameVisuals.table, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'bench' && window.gameVisuals.bench.complete) {
               window.mapCtx.drawImage(window.gameVisuals.bench, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'bed' && window.gameVisuals.bed.complete) {
+              window.mapCtx.drawImage(window.gameVisuals.bed, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'throne' && window.gameVisuals.throne.complete) {
               window.mapCtx.drawImage(window.gameVisuals.throne, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'door_open' && window.gameVisuals.door_open.complete) {
@@ -3293,6 +3298,7 @@ function handleClick(e){
         if (doorObj.readId === 'emberlode_ledger' && window.readEmberlodeLedger) { window.readEmberlodeLedger(); return; }
         if (doorObj.readId === 'phylactery_altar' && window.interactPhylacteryAltar) { window.interactPhylacteryAltar(); return; }
         if (doorObj.readId === 'disciple_note' && window.readDiscipleNote) { window.readDiscipleNote(); return; }
+        if (doorObj.readId === 'wizard_tower_tome' && window.readWizardTowerTome) { window.readWizardTowerTome(); return; }
         if (window.readAbandonedHouseJournal) window.readAbandonedHouseJournal();
         return;
     }

@@ -1278,15 +1278,19 @@ window.npcDialogueTrees = {
             { label: "I'm sorry to hear that.", action: () => {} }
         ]);
     },
-    // Silverhart Palace's throne room — an audience with the King himself.
-    // Flavor-only for now (no quest here yet): tone just reflects the
-    // kingdom's actual standing toward the player, the same reputation
-    // value every other Silverhart-aligned NPC already reads.
-    silverhart_king: (npc) => {
+    // Silverhart Palace's great hall — an audience with the Queen herself.
+    // Her opening line still reflects raw kingdom standing (same value
+    // every other Silverhart-aligned NPC reads), but she's meant to be a
+    // genuinely significant, recurring character — the extra options below
+    // let her react to all three of the campaign's major arcs (greenskins,
+    // the Ironbond Company, and the necromancer/lichdom plot) using the
+    // exact same state every other NPC in those arcs already reads/writes,
+    // rather than a separate parallel tracker just for her.
+    silverhart_queen: (npc) => {
         const standing = window.factions?.silverhart_kingdom?.standing ?? 0;
         let line;
         if (standing >= 40) {
-            line = "So — you're the one Reddale and Hollowmere keep writing to me about. Good work, whatever you've been doing out there. The crown remembers people who make its work easier.";
+            line = "So — you're the one Reddale and Hollowmere keep writing to me about. Good work, whatever you've been doing out there. The crown remembers those who make its work easier.";
         } else if (standing >= 10) {
             line = "You've kept my barony's business in decent order, from what reaches my desk. Keep it that way.";
         } else if (standing <= -20) {
@@ -1294,21 +1298,83 @@ window.npcDialogueTrees = {
         } else {
             line = "Another face passing through court. Say your piece, if you have one.";
         }
-        window.showDialogue(npc, line, [
-            { label: "Just paying my respects, Your Majesty.", action: () => {} }
-        ]);
+        const options = [];
+
+        const goblinRep = window.factions?.goblin_tribe?.standing;
+        if (goblinRep !== undefined) {
+            options.push({
+                label: "What of the greenskins?",
+                action: () => {
+                    let greenskinLine;
+                    if (goblinRep >= 30) {
+                        greenskinLine = "Peace with the goblin tribe, brokered by your hand — I still find it strange to say aloud. Strange, and better than another decade of border war. Don't think it makes you popular with everyone at this court, though.";
+                    } else if (goblinRep <= -30) {
+                        greenskinLine = "Whatever's left of that tribe won't trouble the border again, thanks to you. My generals sleep easier. I'm less sure I do — that kind of ending always seems to breed another one somewhere else.";
+                    } else {
+                        greenskinLine = "Orc raiders past Aldervale, bigger warbands than the old stories tell. If you've dealt with any of it personally, the crown hasn't heard the particulars yet. I'd like to.";
+                    }
+                    window.showDialogue(npc, greenskinLine, [{ label: "I'll keep you informed.", action: () => {} }]);
+                }
+            });
+        }
+
+        const ironbondInfluence = window.factions?.ironbond_company?.merchantInfluence?.silverhart_kingdom;
+        if (ironbondInfluence !== undefined) {
+            options.push({
+                label: "What of the Ironbond Company?",
+                action: () => {
+                    let ironbondLine;
+                    if (ironbondInfluence >= 60) {
+                        ironbondLine = "The Company's coin runs through half my treasury's ledgers these days. Convenient, until the day it isn't. I'd sleep better if the crown owed them less.";
+                    } else if (ironbondInfluence <= 10) {
+                        ironbondLine = "Ironbond's grip on this kingdom has loosened lately — your doing, more than once, if the reports are honest. Good. A crown that answers to merchants isn't much of a crown.";
+                    } else {
+                        ironbondLine = "The Ironbond Company minds its manners at court and does as it pleases everywhere else. A tolerable arrangement, for now.";
+                    }
+                    window.showDialogue(npc, ironbondLine, [{ label: "Understood.", action: () => {} }]);
+                }
+            });
+        }
+
+        options.push({
+            label: "Rumors of necromancy in Reddale?",
+            action: () => {
+                let necroLine;
+                if (window.phylacteryReturned) {
+                    necroLine = "You brought that horror to my Chancellor's desk yourself, and I've had priests sworn to secrecy about it ever since. Whatever that thing was building toward, you closed the door on it. I don't forget that kind of favor.";
+                } else if (window.player?.inventory?.includes('phylactery_shard')) {
+                    necroLine = "You carry something you shouldn't, if half of what my Chancellor whispers to me is true. I won't ask what you mean to do with it — but know that I'll hear of it, whatever it is.";
+                } else if (window.factions?.necromancer_cult?.standing > 0) {
+                    necroLine = "There's talk of a cult working old, ugly magic somewhere near Reddale. Talk only, so far — but talk that keeps reaching my court from too many separate mouths to be nothing.";
+                } else {
+                    necroLine = "Nothing on my desk about necromancers, thank the gods. Should that change, I trust you'll be one of the first to hear of it — and one of the first I'd ask to do something about it.";
+                }
+                window.showDialogue(npc, necroLine, [{ label: "I'll watch for it.", action: () => {} }]);
+            }
+        });
+
+        options.push({ label: "Just paying my respects, Your Majesty.", action: () => {} });
+        window.showDialogue(npc, line, options);
     },
     palace_chancellor: (npc) => {
-        window.showDialogue(npc, "The King's ledgers, the King's letters, the King's patience with petitioners — all mine to mind, in that order. If you've business with the crown, best it's brief.", [
+        window.showDialogue(npc, "Her Majesty's ledgers, her letters, her patience with petitioners — all mine to mind, in that order. If you've business with the crown, best it's brief.", [
             {
                 label: "What's the news from the borderlands?",
                 action: () => {
-                    window.showDialogue(npc, "Nothing His Majesty says in open court, if that's what you're asking. Orc raids past Aldervale, worse than the old stories — that much everyone already knows. What worries me is how organized they've gotten. Raiders don't usually keep to a plan.", [
+                    window.showDialogue(npc, "Nothing Her Majesty says in open court, if that's what you're asking. Orc raids past Aldervale, worse than the old stories — that much everyone already knows. What worries me is how organized they've gotten. Raiders don't usually keep to a plan.", [
                         { label: "Noted.", action: () => {} }
                     ]);
                 }
             },
             { label: "No business today.", action: () => {} }
+        ]);
+    },
+    royal_wizard: (npc) => {
+        window.showDialogue(npc, "The Queen keeps me for omens and old books, mostly — court wizardry is duller than the stories make it sound. Still, I read a great deal I probably shouldn't.", [
+            { label: "Anything worth sharing?", action: () => {
+                if (window.readWizardTowerTome) window.readWizardTowerTome();
+            }},
+            { label: "Another time.", action: () => {} }
         ]);
     }
 };

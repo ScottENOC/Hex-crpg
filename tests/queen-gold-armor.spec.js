@@ -1,15 +1,16 @@
 const { test, expect } = require('@playwright/test');
 const { createCharacter } = require('./helpers.js');
 
-test.describe('King Alaric Corrin: gold-tinted heavy armor and helm', () => {
-    test('the king spawns wearing heavy armor and a nasal helm, flagged for gold tinting', async ({ page }) => {
+test.describe('Queen Seraphine Corrin: gold-tinted heavy armor and helm', () => {
+    test('the queen spawns wearing a sword, heavy armor, and a nasal helm, flagged for gold tinting', async ({ page }) => {
         await createCharacter(page, { campaign: '2' });
         const result = await page.evaluate(() => {
             window.teleportPartyToLocation('Silverhart (Capital)');
-            const king = window.entities.find(e => e.name === 'King Alaric Corrin');
-            return { found: !!king, equipped: king?.equipped, goldGear: king?.goldGear };
+            const queen = window.entities.find(e => e.name === 'Queen Seraphine Corrin');
+            return { found: !!queen, equipped: queen?.equipped, goldGear: queen?.goldGear };
         });
         expect(result.found).toBe(true);
+        expect(result.equipped.weapon).toBe('sword');
         expect(result.equipped.armor).toBe('heavy_armor');
         expect(result.equipped.helmet).toBe('nasal_helm');
         expect(result.goldGear).toBe(true);
