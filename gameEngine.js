@@ -4514,13 +4514,16 @@ function setupArenaLobby() {
         }
     }
 
-    // Carve the gated beast pen out of a corner of the NPC room before it
-    // fills with humanoid NPCs below — a small fenced enclosure (reusing the
-    // farm's fence_h/fence_v tileObjects, which slow movement but don't
-    // block LOS, so the player can see the beast without being able to
-    // casually walk up on it) housing whichever beast-type "waiting
-    // combatant" got rolled.
-    const PEN_MIN_Q = 9, PEN_MAX_Q = 13, PEN_MIN_R = -4, PEN_MAX_R = -2;
+    // Carve the gated beast pen out of a corner of the SPAWN room (the
+    // player's first room) before it fills with the humanoid preview
+    // fighters below — a fenced enclosure (reusing the farm's
+    // fence_h/fence_v tileObjects, which slow movement but don't block LOS,
+    // so the player can see the beast without being able to casually walk
+    // up on it) housing whichever beast-type "waiting combatant" got
+    // rolled. Outer footprint is 9x7 (including the fence ring) so the
+    // walkable interior is a full 7x5 — big enough for large beasts like
+    // dragons, unlike the old 5x3-outer/3x1-interior pen.
+    const PEN_MIN_Q = -17, PEN_MAX_Q = -9, PEN_MIN_R = 2, PEN_MAX_R = 8;
     for (let q = PEN_MIN_Q; q <= PEN_MAX_Q; q++) {
         for (let r = PEN_MIN_R; r <= PEN_MAX_R; r++) {
             window.setTerrainAt(q, r, 'Cave Floor');
@@ -4534,8 +4537,13 @@ function setupArenaLobby() {
         window.tileObjects[`${PEN_MIN_Q},${r}`] = { type: 'fence_v', lightRadius: 0 };
         window.tileObjects[`${PEN_MAX_Q},${r}`] = { type: 'fence_v', lightRadius: 0 };
     }
-    // Interior hexes (not on the fence line itself) where a beast can stand.
-    const PEN_INTERIOR_HEXES = [{ q: 10, r: -3 }, { q: 11, r: -3 }, { q: 12, r: -3 }];
+    // Interior hexes (not on the fence line itself) where a beast can stand — 5x3.
+    const PEN_INTERIOR_HEXES = [];
+    for (let q = PEN_MIN_Q + 1; q <= PEN_MAX_Q - 1; q++) {
+        for (let r = PEN_MIN_R + 1; r <= PEN_MAX_R - 1; r++) {
+            PEN_INTERIOR_HEXES.push({ q, r });
+        }
+    }
 
     // 1. Initialize from party data first to ensure main characters exist
     window.party.forEach((p, i) => {
@@ -4607,7 +4615,9 @@ function setupArenaLobby() {
         if (!window.arenaLobbyPreviewTypes.includes(t)) window.arenaLobbyPreviewTypes.push(t);
     }
 
-    const humanoidHexes = [{ q: 3, r: -1 }, { q: 10, r: 1 }];
+    // Humanoid preview fighters also live in the spawn room now, clear of
+    // both the party's own spawn hexes and the beast pen.
+    const humanoidHexes = [{ q: -9, r: -3 }, { q: -4, r: 1 }];
     const beastHexes = [...PEN_INTERIOR_HEXES];
     let humanoidSlot = 0, beastSlot = 0;
     window.arenaLobbyPreviewTypes.forEach(type => {
@@ -4707,8 +4717,16 @@ function startArenaFight() {
             // Hexagonal constraint: max(abs(q), abs(r), abs(q+r)) <= arenaSize
             if (Math.abs(q) <= arenaSize && Math.abs(r) <= arenaSize && Math.abs(q+r) <= arenaSize) {
                  let tType = 'Cave Floor';
-                 
-                 if (isWaterArena) {
+                 const distFromCenter = Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r));
+                 // Boundary ring: always solid Wall, regardless of any other
+                 // terrain roll. Without this, the water-noise roll below can
+                 // (and did) land Water right at the play area's true edge,
+                 // so the player could walk/wade off the intentionally
+                 // painted hexagon into unbounded/undefined terrain instead
+                 // of hitting a hard, visible wall.
+                 const isBoundaryRing = distFromCenter >= arenaSize - 1;
+
+                 if (isWaterArena && !isBoundaryRing) {
                      const waterNoise = Math.abs(Math.sin(q * 0.2 + r * 0.15));
                      if (waterNoise > 0.8) tType = 'Water';
                  }
@@ -4722,6 +4740,8 @@ function startArenaFight() {
                      const fNoise = Math.abs(Math.sin(q * 0.3 + r * 0.3 + 5));
                      if (fNoise > 0.85) tType = 'foliage';
                  }
+
+                 if (isBoundaryRing) tType = 'Wall';
 
                  window.setTerrainAt(q, r, tType);
 

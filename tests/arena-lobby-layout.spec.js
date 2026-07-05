@@ -67,4 +67,37 @@ test.describe('arena lobby: redesigned layout, waiting combatants, gated beast p
             expect(result.nearFence).toBe(true);
         }
     });
+
+    test('the beast pen has a real, roomy walkable interior (not the old 3x1) and sits near the spawn room', async ({ page }) => {
+        await createCharacter(page, { campaign: '1' });
+        const result = await page.evaluate(() => {
+            const spawnCenter = window.arenaSpawnRoomCenter;
+            const npcCenter = window.arenaNpcRoomCenter;
+            // Interior hexes are exactly the ones surrounded by the pen's fence tileObjects.
+            const fenceKeys = Object.keys(window.tileObjects).filter(k => {
+                const t = window.tileObjects[k].type;
+                return t === 'fence_h' || t === 'fence_v';
+            });
+            const qs = fenceKeys.map(k => parseInt(k.split(',')[0], 10));
+            const rs = fenceKeys.map(k => parseInt(k.split(',')[1], 10));
+            const minQ = Math.min(...qs), maxQ = Math.max(...qs);
+            const minR = Math.min(...rs), maxR = Math.max(...rs);
+            let interiorCount = 0;
+            for (let q = minQ + 1; q < maxQ; q++) {
+                for (let r = minR + 1; r < maxR; r++) {
+                    if (window.getTerrainAt(q, r).name === 'Cave Floor' && !window.tileObjects[`${q},${r}`]) {
+                        interiorCount++;
+                    }
+                }
+            }
+            const penCenter = { q: (minQ + maxQ) / 2, r: (minR + maxR) / 2 };
+            return {
+                interiorCount,
+                distToSpawn: window.distance(penCenter, spawnCenter),
+                distToNpcRoom: window.distance(penCenter, npcCenter),
+            };
+        });
+        expect(result.interiorCount).toBeGreaterThanOrEqual(15);
+        expect(result.distToSpawn).toBeLessThan(result.distToNpcRoom);
+    });
 });

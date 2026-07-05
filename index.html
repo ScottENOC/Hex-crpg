@@ -66,10 +66,13 @@
         /* iOS Safari can otherwise render a <select> with near-invisible
            contrast (or a near-zero effective tap target inside a flex row)
            unless every rendering-relevant property is set explicitly rather
-           than relying on inheritance/native chrome defaults. */
+           than relying on inheritance/native chrome defaults. NOTE:
+           deliberately NOT setting -webkit-appearance/appearance: none here —
+           on iOS Safari that can suppress the native picker wheel from
+           opening on tap at all, which is worse than the contrast issue it
+           was meant to fix. Keep native appearance; fix contrast via
+           explicit colors only. */
         .cheat-teleport-select {
-            -webkit-appearance: none;
-            appearance: none;
             background-color: #333;
             color: #fff;
             border: 1px solid #777;
