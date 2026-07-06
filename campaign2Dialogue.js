@@ -2424,6 +2424,7 @@ function checkWildernessEncounter(playerEntity, delta) {
         if (!spot) continue;
         const wolf = window.createMonster('wolf', spot, null, null, 'enemy');
         wolf.aiState = 'idle';
+        wolf.isRandomEncounter = true; // eligible for corpse pruning once dead and far away — see pruneDistantEncounterCorpses
         window.entities.push(wolf);
         spawned++;
     }
@@ -2434,6 +2435,75 @@ function checkWildernessEncounter(playerEntity, delta) {
     }
 }
 window.checkWildernessEncounter = checkWildernessEncounter;
+
+// Corpse pruning: window.entities only ever grows (dead entities stay in the
+// array so their loot/body remains inspectable and turn-order/rendering code
+// doesn't need special-casing). Left unchecked over an hours-long session
+// this is exactly what makes pathfinding/AI scans slower the longer you
+// play. Named/pre-generated NPCs and monsters are finite in number and can
+// carry quest-relevant loot or story weight (a body as future evidence), so
+// they're never pruned. Random-encounter wildlife (wolves spawned by
+// checkWildernessEncounter/triggerRestAmbush/triggerSleepAmbush, tagged
+// isRandomEncounter) has neither concern and can regenerate indefinitely, so
+// once one is dead AND far enough behind the player that it can't be seen or
+// walked back to on a whim, it's spliced out for good. 2.2x the base vision
+// range (30 hexes) mirrors the load/unload hysteresis gap you'd want in a
+// chunk-streaming world (see the campaign2World.js comment on explored-hex
+// memory) — far enough that it won't get evicted right after the fight
+// ends, or re-spawn a duplicate if the player doubles back a short way.
+window.corpsePruneAccum = 0;
+function pruneDistantEncounterCorpses(playerEntity, delta) {
+    if (!playerEntity) return;
+    window.corpsePruneAccum += delta;
+    const checkInterval = 60; // in-game seconds between sweeps — this is a single O(entities) filter, far cheaper than a pathfind, but no need to run it every tick
+    if (window.corpsePruneAccum < checkInterval) return;
+    window.corpsePruneAccum = 0;
+
+    const pruneRadius = 66; // 2.2x base vision range (30)
+    window.entities = window.entities.filter(e => {
+        if (e.alive || !e.isRandomEncounter) return true;
+        return window.distance(playerEntity.hex, e.hex) <= pruneRadius;
+    });
+}
+window.pruneDistantEncounterCorpses = pruneDistantEncounterCorpses;
+
+// Explored-hex memory: window.exploredHexes (updateExploration, hexMap.js)
+// and window.lastSeenTimeMap add one entry per hex the player has ever laid
+// eyes on and never remove one — both grow forever and both get written out
+// in full on every save (persistence.js). The actual persistent world state
+// lives in window.overrideTerrain/tileObjects, which are already sparse diffs
+// against deterministic world-gen (only real changes — a carved building, a
+// painted road, an opened door, a depleted resource node — get an entry), so
+// that tier scales with "how much has actually changed," not "how far the
+// player has walked." A house upgrade or two is a handful of diff entries
+// regardless of map size; explored-hex memory is the one part of the
+// architecture that scales with distance traveled instead.
+//
+// Fix: local fog-of-war only matters for hexes on-screen (or about to be),
+// so forgetting a hex's "explored" flag once the player is far away has no
+// gameplay effect — updateExploration re-adds it the moment the player is
+// close enough to see it again, rebuilt from the same deterministic
+// generation code plus whatever diff already exists for that hex. The coarse
+// per-world-hex "have I been to this village" flag used by the world map is
+// a separate, tiny, bounded structure and is untouched.
+window.explorationPruneAccum = 0;
+function pruneDistantExploredHexes(playerEntity, delta) {
+    if (!playerEntity || !window.exploredHexes) return;
+    window.explorationPruneAccum += delta;
+    const checkInterval = 60;
+    if (window.explorationPruneAccum < checkInterval) return;
+    window.explorationPruneAccum = 0;
+
+    const pruneRadius = 66; // 2.2x base vision range (30), same hysteresis gap as pruneDistantEncounterCorpses
+    for (const key of window.exploredHexes) {
+        const [q, r] = key.split(',').map(Number);
+        if (window.distance(playerEntity.hex, { q, r }) > pruneRadius) {
+            window.exploredHexes.delete(key);
+            if (window.lastSeenTimeMap) delete window.lastSeenTimeMap[key];
+        }
+    }
+}
+window.pruneDistantExploredHexes = pruneDistantExploredHexes;
 
 // Small orc raiding/scouting bands pressing in from the borderlands east of
 // Reddale — ambient pressure independent of "Eyes on the Border," reusing
@@ -2479,6 +2549,7 @@ function checkOrcRaiderEncounter(playerEntity, delta) {
         orc.aiState = 'idle';
         orc.behaviorType = 'patrol';
         orc.orcRaiderBand = true;
+        orc.isRandomEncounter = true; // eligible for corpse pruning once dead and far away — see pruneDistantEncounterCorpses
         window.entities.push(orc);
         spawned++;
     }

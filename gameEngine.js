@@ -343,6 +343,7 @@ function triggerRestAmbush(kind) {
         if (!spot) continue;
         const monster = window.createMonster(kind === 'door' ? 'goblin' : 'wolf', spot, null, null, 'enemy');
         monster.aiState = 'combat'; // ambush — attacks immediately, not a wandering idle encounter
+        monster.isRandomEncounter = true; // eligible for corpse pruning once dead and far away — see pruneDistantEncounterCorpses
         window.entities.push(monster);
         spawned++;
     }
@@ -394,6 +395,7 @@ function triggerSleepAmbush(kind) {
         if (!spot) continue;
         const monster = window.createMonster(kind === 'door' ? 'goblin' : 'wolf', spot, null, null, 'enemy');
         monster.aiState = 'combat'; // ambush — attacks immediately, not a wandering idle encounter
+        monster.isRandomEncounter = true; // eligible for corpse pruning once dead and far away — see pruneDistantEncounterCorpses
         window.entities.push(monster);
         spawned++;
     }

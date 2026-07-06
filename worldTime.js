@@ -89,6 +89,21 @@ function updateTime(delta) {
             window.checkWildernessEncounter(p, delta);
         }
 
+        // Sweep dead random-encounter wildlife the player has left far behind
+        // (see pruneDistantEncounterCorpses, campaign2Dialogue.js) — keeps
+        // window.entities from growing unbounded over a long session.
+        if (window.pruneDistantEncounterCorpses && p) {
+            window.pruneDistantEncounterCorpses(p, delta);
+        }
+
+        // Forget local fog-of-war memory for hexes far behind the player —
+        // keeps exploredHexes/lastSeenTimeMap (and the save file) from
+        // growing with total distance traveled instead of total world state
+        // actually changed (see pruneDistantExploredHexes, campaign2Dialogue.js).
+        if (window.pruneDistantExploredHexes && p) {
+            window.pruneDistantExploredHexes(p, delta);
+        }
+
         // Small orc raiding/scouting bands, weighted toward the east road.
         if (window.checkOrcRaiderEncounter && p) {
             window.checkOrcRaiderEncounter(p, delta);
