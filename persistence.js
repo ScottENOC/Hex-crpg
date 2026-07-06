@@ -69,6 +69,7 @@ function saveGame(saveName = "rpg_save_game") {
         campaign2AbandonedHouseRenovated: window.campaign2AbandonedHouseRenovated,
         campaign2SilverhartManorGranted: window.campaign2SilverhartManorGranted,
         campaign2SilverhartManorFortified: window.campaign2SilverhartManorFortified,
+        clothingDisplayMode: window.clothingDisplayMode,
         goblinScoutNoteRead: window.goblinScoutNoteRead,
         emberlodeRaided: window.emberlodeRaided,
         questLog: window.questLog,
@@ -196,6 +197,7 @@ function loadGame(saveName = "rpg_save_game") {
         window.campaign2AbandonedHouseRenovated = gameState.campaign2AbandonedHouseRenovated || false;
         window.campaign2SilverhartManorGranted = gameState.campaign2SilverhartManorGranted || false;
         window.campaign2SilverhartManorFortified = gameState.campaign2SilverhartManorFortified || false;
+        window.clothingDisplayMode = gameState.clothingDisplayMode || 'armor';
         window.goblinScoutNoteRead = gameState.goblinScoutNoteRead || false;
         window.emberlodeRaided = gameState.emberlodeRaided || false;
         window.questLog = gameState.questLog || [];

@@ -1019,6 +1019,31 @@ function buildSilverhartPalace(roadEnd) {
         window.entities.push(window.buildNPC({ ...window.campaign2Stablehand, hex: { q: stableCenter.q, r: stableCenter.r - 1 } }));
     }
 
+    // Two more merchant-district shops, further out along the same safe
+    // column — a clothier (the new cosmetic 'clothes' slot's actual point
+    // of sale) and a magic-item dealer (reusing the existing named magic
+    // items from equipment.js; rare and priced accordingly already).
+    const shopRow = stableRow + 8;
+    for (let r = stableRow; r <= shopRow; r++) window.setTerrainAt(dqCenter, r, 'Path');
+
+    const clothierCenter = { q: dqCenter - 8, r: shopRow };
+    const clothierDoor = { q: clothierCenter.q + 3, r: clothierCenter.r };
+    const clothierRegion = carveBuilding(clothierCenter.q, clothierCenter.r, 3, 2, clothierDoor, 'Wood Floor');
+    window.interiorRegions.push(clothierRegion);
+    for (let q = clothierDoor.q + 1; q < dqCenter; q++) window.setTerrainAt(q, shopRow, 'Path');
+    if (window.campaign2Clothier) {
+        window.entities.push(window.buildNPC({ ...window.campaign2Clothier, hex: { q: clothierCenter.q, r: clothierCenter.r + 1 } }));
+    }
+
+    const magicShopCenter = { q: dqCenter + 8, r: shopRow };
+    const magicShopDoor = { q: magicShopCenter.q - 3, r: magicShopCenter.r };
+    const magicShopRegion = carveBuilding(magicShopCenter.q, magicShopCenter.r, 3, 2, magicShopDoor, 'Wood Floor');
+    window.interiorRegions.push(magicShopRegion);
+    for (let q = dqCenter + 1; q < magicShopDoor.q; q++) window.setTerrainAt(q, shopRow, 'Path');
+    if (window.campaign2MagicDealer) {
+        window.entities.push(window.buildNPC({ ...window.campaign2MagicDealer, hex: { q: magicShopCenter.q, r: magicShopCenter.r + 1 } }));
+    }
+
     // One world-hex north of Millbrook [3][6], which is itself 3 north of
     // Hollowmere [6][6] — see the world map's [0][6] Silverhart placement in
     // worldMap.js's loadWorldMap.

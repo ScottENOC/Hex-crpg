@@ -1405,6 +1405,18 @@ const CHAR_CONFIG = {
     revenant_female: { bodyW:1.65, bodyH:1.96, yOff:-0.16, baseKey:'revenantBase', hair:{ key:null }, armour:{ wMult:1.05, topShift:0 }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.40, y:0.66 }, offHand:{ x:0.60, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
 };
 
+// Cosmetic outfits for the 'clothes' equip slot (equipment.js) — fixed
+// shirt/pants hues per item, distinct from a player's own slider-chosen
+// everyday colors. Shown per window.clothingDisplayMode (see the inventory
+// screen's toggle, ui.js) — 'clothes' always shows them; the default
+// 'armor' mode only shows them when no armor is equipped to compete with.
+window.CLOTHING_PRESETS = {
+    traveler_garb:  { shirtHue: 30,  pantsHue: 25,  satMult: 0.7 },
+    fine_tunic:     { shirtHue: 220, pantsHue: 0,   satMult: 0.9 },
+    noble_doublet:  { shirtHue: 280, pantsHue: 0,   satMult: 1.1 },
+    scholars_robe:  { shirtHue: 0,   pantsHue: 0,   satMult: 0.15 },
+};
+
 function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
     const cfg = CHAR_CONFIG[`${e.race}_${e.gender}`];
     if (!cfg || !window.gameVisuals) {
@@ -1439,11 +1451,22 @@ function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
     // left untouched, at full saturation. Skin stays within a believable
     // tan/brown range rather than the full hue wheel clothing gets.
     const baseImg = window.gameVisuals[cfg.baseKey];
+    // Equipped clothes (equipment.js's 'clothes' type) override the default
+    // shirt/pants hues for this render only — e.shirtHue/pantsHue themselves
+    // are left untouched so unequipping reverts to the original look
+    // instantly. Shown whenever there's no armor equipped to compete with,
+    // or the "always show clothes" inventory toggle is on.
+    const clothesId = e.equipped?.clothes;
+    const clothesPreset = clothesId && window.CLOTHING_PRESETS?.[clothesId];
+    const showClothes = !!clothesPreset && (window.clothingDisplayMode === 'clothes' || !e.equipped?.armor);
     if (baseImg?.complete) {
         if (e.shirtHue === undefined && window.pickClothingHue) { e.shirtHue = window.pickClothingHue((e.name || 'x') + '_shirt'); e.clothingSatMult = 0.85; }
         if (e.pantsHue === undefined && window.pickClothingHue) { e.pantsHue = window.pickClothingHue((e.name || 'x') + '_pants'); e.clothingSatMult = 0.85; }
         if (e.skinHue === undefined && window.hashStringToHue) e.skinHue = 5 + window.hashStringToHue((e.name || 'x') + '_skin') % 40;
-        const bodyImg = window.getRecoloredSprite ? window.getRecoloredSprite(baseImg, { shirtHue: e.shirtHue, pantsHue: e.pantsHue, skinHue: e.skinHue, satMult: e.clothingSatMult }) : baseImg;
+        const shirtHue = showClothes ? clothesPreset.shirtHue : e.shirtHue;
+        const pantsHue = showClothes ? clothesPreset.pantsHue : e.pantsHue;
+        const satMult = showClothes ? (clothesPreset.satMult !== undefined ? clothesPreset.satMult : 1) : e.clothingSatMult;
+        const bodyImg = window.getRecoloredSprite ? window.getRecoloredSprite(baseImg, { shirtHue, pantsHue, skinHue: e.skinHue, satMult }) : baseImg;
         ctx.drawImage(bodyImg || baseImg, left, top, bW, bH);
     }
 
@@ -1480,8 +1503,12 @@ function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
         ctx.drawImage(helmImg, x - hW / 2 + cfg.helm.xOff * hs * z, top + cfg.helm.yOff * hs * z, hW, bH);
     }
 
-    // ARMOUR (humanoid armour images scale to fit each race)
-    if (e.equipped?.armor) {
+    // ARMOUR (humanoid armour images scale to fit each race) — skipped when
+    // clothes are the thing actually being shown this render (see
+    // showClothes above), so the "always show clothes" toggle actually
+    // hides the armor overlay instead of just drawing both on top of
+    // each other.
+    if (e.equipped?.armor && !showClothes) {
         let armorImg = null;
         const aid = e.equipped.armor;
         if (aid === 'light_armor')  armorImg = window.gameVisuals.humanLight;

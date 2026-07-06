@@ -177,6 +177,18 @@ window.npcDialogueTrees = {
         colorOptions.push({ label: "Just looking.", action: () => {} });
         window.showDialogue(npc, `${window.HORSE_PRICE} gold buys you a horse — pick your color.`, colorOptions);
     },
+    silverhart_clothier: (npc) => {
+        window.showDialogue(npc, "Something for court, or something plainer for the road? Either way, it's all just for show — doesn't stop a blade any better than what you're already wearing.", [
+            { label: "Let me see what you have.", action: () => window.openShop({ itemIds: window.campaign2ClothierItems, mounts: false }) },
+            { label: "Not today.", action: () => {} }
+        ]);
+    },
+    silverhart_magic_dealer: (npc) => {
+        window.showDialogue(npc, "Every piece here is genuine, and priced like it. Careful browsing — some of these will empty a purse fast.", [
+            { label: "Show me your wares.", action: () => window.openShop({ itemIds: window.campaign2MagicShopItems, mounts: false }) },
+            { label: "Just looking.", action: () => {} }
+        ]);
+    },
     wick_hallow: (npc) => {
         const ironbondQuest = window.questLog && window.questLog.find(q => q.id === 'ironbond_pitch');
         if (ironbondQuest && ironbondQuest.status === 'active' && !ironbondQuest.pitched) {

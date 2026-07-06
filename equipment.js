@@ -32,6 +32,16 @@ const items = {
     'ore_iron': { id: 'ore_iron', name: 'Iron Ore', type: 'resource', sellPrice: 5, description: 'Common ore, the backbone of most tools and arms.' },
     'wood': { id: 'wood', name: 'Timber', type: 'resource', sellPrice: 2, description: 'Rough-cut logs, chopped from a tree. Building material.' },
     'stone': { id: 'stone', name: 'Quarried Stone', type: 'resource', sellPrice: 3, description: 'Broken from a rocky outcrop. Building material.' },
+
+    // Cosmetic clothes — a separate equip slot from armor (see 'clothes' in
+    // equipItem/unequipItem, ui.js), purely a look: no reduction, no combat
+    // stats. See CLOTHING_PRESETS (gameEngine.js) for the shirt/pants hues
+    // each one actually renders as, and window.clothingDisplayMode for the
+    // "always show armor / always show clothes" inventory toggle.
+    'traveler_garb':  { id: 'traveler_garb',  name: "Traveler's Garb",  type: 'clothes', buyPrice: 15, description: 'Plain, practical, well-worn.' },
+    'fine_tunic':     { id: 'fine_tunic',     name: 'Fine Tunic',       type: 'clothes', buyPrice: 40, description: 'Well-tailored city wear, a cut above common clothes.' },
+    'noble_doublet':  { id: 'noble_doublet',  name: 'Noble Doublet',    type: 'clothes', buyPrice: 90, description: "Court fashion — you'll turn heads among nobility." },
+    'scholars_robe':  { id: 'scholars_robe',  name: "Scholar's Robe",   type: 'clothes', buyPrice: 55, description: 'Simple, dignified, faintly ink-stained.' },
     'ore_silver': { id: 'ore_silver', name: 'Silver Ore', type: 'resource', sellPrice: 12, description: 'Uncommon ore, prized for fine jewelry and coin.' },
     'ore_gold': { id: 'ore_gold', name: 'Gold Ore', type: 'resource', sellPrice: 20, description: 'Rare ore, valuable and soft.' },
     'gem_red': { id: 'gem_red', name: 'Red Gem', type: 'resource', sellPrice: 30, description: 'A rare, uncut gemstone — flavor and favor, nothing more.' },

@@ -1121,13 +1121,21 @@ function showInventoryScreen() {
     contentDiv.innerHTML = '';
     if (!player) { contentDiv.innerHTML = '<p>Character not initialized.</p>'; return; }
     let html = `<h3>Gold: ${player.gold || 0}</h3><h3>Equipped</h3>`;
-    const slots = [{ label: 'Weapon', key: 'weapon' }, { label: 'Off-hand', key: 'offhand' }, { label: 'Armor/Barding', key: 'armor' }, { label: 'Helmet', key: 'helmet' }, { label: 'Accessory', key: 'accessory' }];
+    const slots = [{ label: 'Weapon', key: 'weapon' }, { label: 'Off-hand', key: 'offhand' }, { label: 'Armor/Barding', key: 'armor' }, { label: 'Helmet', key: 'helmet' }, { label: 'Accessory', key: 'accessory' }, { label: 'Clothes', key: 'clothes' }];
     slots.forEach(slot => {
         const itemId = player.equipped[slot.key];
         const item = itemId ? window.items[itemId] : null;
         const itemName = item ? item.name : 'None';
         html += `<div style="margin-bottom: 5px;"><strong>${slot.label}:</strong> ${itemName} ${itemId ? `<button onclick="window.unequipItem('${slot.key}')" style="font-size: 0.8em; margin-left: 10px;">Unequip</button>` : ''}</div>`;
     });
+    // Only matters when both an armor and a clothes item are equipped at
+    // once — otherwise whichever's actually equipped just shows (see
+    // showClothes in drawPlayerCharacter, gameEngine.js).
+    const mode = window.clothingDisplayMode === 'clothes' ? 'clothes' : 'armor';
+    html += `<div style="margin-bottom: 10px;"><strong>Always show:</strong>
+        <button onclick="window.setClothingDisplayMode('armor')" style="${mode === 'armor' ? 'font-weight:bold;text-decoration:underline;' : ''}">Armor</button>
+        <button onclick="window.setClothingDisplayMode('clothes')" style="margin-left:5px;${mode === 'clothes' ? 'font-weight:bold;text-decoration:underline;' : ''}">Clothes</button>
+    </div>`;
     html += '<h3>Backpack</h3>';
     if (player.inventory.length === 0) html += '<p>Empty</p>';
     else {
@@ -1147,6 +1155,7 @@ function showInventoryScreen() {
             if (player.equipped.armor === itemId) equipCount++;
             if (player.equipped.helmet === itemId) equipCount++;
             if (player.equipped.accessory === itemId) equipCount++;
+            if (player.equipped.clothes === itemId) equipCount++;
 
             const available = count - equipCount;
             const canBeOffhand = item.canOffhand || item.type === 'shield';
@@ -1187,10 +1196,28 @@ function applyEquipLock(playerEntity, seconds) {
     }
 }
 
+// "Always show: Armor / Clothes" toggle — only matters when both an armor
+// and a clothes item are equipped at once (see showClothes in
+// drawPlayerCharacter, gameEngine.js).
+function setClothingDisplayMode(mode) {
+    window.clothingDisplayMode = mode === 'clothes' ? 'clothes' : 'armor';
+    showInventoryScreen();
+    window.renderEntities();
+}
+window.setClothingDisplayMode = setClothingDisplayMode;
+
 function unequipItem(slot) {
     const player = window.player;
     const playerEntity = window.entities.find(e => e.name === player.name);
     if (!playerEntity) return;
+    if (slot === 'clothes') {
+        player.equipped.clothes = null;
+        syncPlayerEntity();
+        showInventoryScreen();
+        showCharacter();
+        window.renderEntities();
+        return;
+    }
     if (window.isInCombat) {
         if (window.gamePhase !== 'PLAYER_TURN' || window.currentTurnEntity !== playerEntity) { showMessage("It must be this character's turn to change equipment."); return; }
         if (playerEntity.timePoints < 1) { showMessage("Not enough Time Points to change equipment."); return; }
@@ -1239,6 +1266,18 @@ function equipItem(itemId, isOffhand = false) {
     const item = window.items[itemId];
     const playerEntity = window.entities.find(e => e.name === player.name);
     if (!playerEntity) return;
+
+    // Cosmetic only — no combat-turn gate, no TP cost, no equip lock,
+    // unlike every other slot below.
+    if (item.type === 'clothes') {
+        player.equipped.clothes = itemId;
+        syncPlayerEntity();
+        showInventoryScreen();
+        showCharacter();
+        window.renderEntities();
+        return;
+    }
+
     if (window.isInCombat) {
         if (window.gamePhase !== 'PLAYER_TURN' || window.currentTurnEntity !== playerEntity) { showMessage("It must be this character's turn to change equipment."); return; }
         if (playerEntity.timePoints < 1) { showMessage("Not enough Time Points to change equipment."); return; }

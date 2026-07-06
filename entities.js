@@ -84,7 +84,7 @@ class Enemy extends Entity {
         this.gold = 0;
         this.inventory = [];
         this.createdSpells = [];
-        this.equipped = { weapon: null, offhand: null, armor: null, helmet: null };
+        this.equipped = { weapon: null, offhand: null, armor: null, helmet: null, clothes: null };
         this.lastSeenTargetHex = null;
     }
 

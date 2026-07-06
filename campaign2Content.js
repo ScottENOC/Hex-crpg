@@ -482,6 +482,33 @@ window.campaign2Stablehand = {
     dialogueId: 'silverhart_stablehand'
 };
 
+// Merchant district: the clothier (sells the new cosmetic 'clothes' slot
+// items, equipment.js) and a rare-goods magic dealer (sells the existing
+// named magic items — already priced well above ordinary gear, unchanged
+// here, just given a real storefront).
+window.campaign2Clothier = {
+    name: 'Mirelle Sondhe', title: 'Clothier',
+    race: 'human', gender: 'female',
+    classLevels: [], skillPicks: [], equipment: [],
+    side: 'neutral', factionId: null, color: '#7a3a5a',
+    dialogueId: 'silverhart_clothier'
+};
+window.campaign2ClothierItems = ['traveler_garb', 'fine_tunic', 'noble_doublet', 'scholars_robe'];
+
+window.campaign2MagicDealer = {
+    name: 'Corvin Ashe', title: 'Rare Goods Dealer',
+    race: 'elf', gender: 'male',
+    classLevels: [], skillPicks: [], equipment: [],
+    side: 'neutral', factionId: null, color: '#3a5a7a',
+    dialogueId: 'silverhart_magic_dealer'
+};
+window.campaign2MagicShopItems = [
+    'sword_arrow_deflection', 'glowing_ring', 'orcbane_pendant', 'wolfward_charm',
+    'undying_locket', 'silvertongue_ring', 'stormcaller_spear', 'nightowl_bow',
+    'featherweight_dagger', 'bulwark_shield', 'ashenwood_club', 'travelers_cloakpin',
+    'moonlit_armor', 'huntsman_helm',
+];
+
 window.campaign2PalaceChancellor = {
     name: 'Chancellor Merric Vane',
     title: "The Queen's Chancellor",
