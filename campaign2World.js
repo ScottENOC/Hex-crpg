@@ -399,6 +399,38 @@ function buildGoblinCamp(roadEnd) {
     }
 }
 
+// Player housing (MVP): a surveyed plot near the crossroads the player can
+// build on for free, no resource cost yet — that's a later system. Building
+// swaps the plot marker for a real one-room cottage with a bed that gives a
+// free version of restAtInn's safe rest (see restAtHome in gameEngine.js).
+function buildPlayerCottagePlot(crossroads) {
+    if (!crossroads) return;
+    const plot = { q: crossroads.q + 5, r: crossroads.r + 3 };
+    for (let q = crossroads.q + 1; q <= plot.q; q++) window.setTerrainAt(q, crossroads.r, 'Path');
+    for (let r = crossroads.r + 1; r <= plot.r; r++) window.setTerrainAt(plot.q, r, 'Path');
+    window.tileObjects[`${plot.q},${plot.r}`] = { type: 'building_plot' };
+    window.campaign2PlayerCottagePlot = plot;
+}
+
+// Called when the player interacts with the building_plot marker (see
+// interactWithTileObject in gameEngine.js). Carves a small one-room cottage
+// in place, right on the plot hex, and replaces the marker with a bed.
+function buildPlayerCottage(q, r) {
+    if (window.campaign2PlayerCottageBuilt) return;
+    const plot = window.campaign2PlayerCottagePlot;
+    if (!plot || q !== plot.q || r !== plot.r) return;
+    const doorHex = { q: plot.q, r: plot.r + 2 };
+    const region = carveBuilding(plot.q, plot.r, 2, 2, doorHex, 'Wood Floor');
+    window.interiorRegions.push(region);
+    window.tileObjects[`${plot.q},${plot.r}`] = { type: 'player_bed', lightRadius: 0 };
+    window.tileObjects[`${plot.q - 1},${plot.r}`] = { type: 'fireplace', lightRadius: 5 };
+    window.campaign2PlayerCottageBuilt = true;
+    window.showMessage("You build a small cottage here. It's yours now — free to rest whenever you need.");
+    if (window.drawMap) window.drawMap();
+    if (window.renderEntities) window.renderEntities();
+}
+window.buildPlayerCottage = buildPlayerCottage;
+
 // A small house standing alone partway up the north road — the first
 // breadcrumb toward a much larger plot arc (a necromancer working toward
 // lichdom). The residents were taken, not killed here; skeletons left
@@ -1283,6 +1315,7 @@ function setupVillageScene(forLoadOnly = false) {
 
     buildFarmstead(farmRoadEnd);
     buildGoblinCamp(goblinCampWaypoint);
+    buildPlayerCottagePlot(CP);
     buildAbandonedHouse(abandonedHouseWaypoint);
     buildMillbrook(millbrookWaypoint);
     buildSilverhartPalace(northRoadEnd);

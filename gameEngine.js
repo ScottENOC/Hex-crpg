@@ -485,6 +485,21 @@ function restAtInn(npc) {
 }
 window.restAtInn = restAtInn;
 
+// Free rest at the player's own built cottage (see buildPlayerCottage in
+// campaign2World.js) — same safe/no-ambush mechanics as restAtInn, minus
+// the gold cost, since it's the player's own home.
+function restAtHome() {
+    const player = window.party?.[0];
+    if (!player) return;
+    const enemySeen = window.entities.some(e => e.alive && e.side === 'enemy' && window.isVisibleToPlayer(e.hex));
+    if (enemySeen) { window.showMessage("Not with enemies about!"); return; }
+    window._restSafe = true;
+    window.isResting = true;
+    window.showMessage("You settle in and rest safely until restored...");
+    if (window.updateRestButton) window.updateRestButton();
+}
+window.restAtHome = restAtHome;
+
 function syncBackToPlayer(entity) {
     if (entity.side === 'player' && window.party) {
         const char = window.party.find(p => p.name === entity.name);
@@ -1587,6 +1602,12 @@ function renderEntities() {
               window.mapCtx.drawImage(window.gameVisuals.bench, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'bed' && window.gameVisuals.bed?.complete) {
               window.mapCtx.drawImage(window.gameVisuals.bed, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'player_bed' && window.gameVisuals.bed?.complete) {
+              window.mapCtx.drawImage(window.gameVisuals.bed, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'building_plot' && window.gameVisuals.signpost?.complete) {
+              // Reuses the signpost art as a "surveyed lot, build here" marker
+              // — a dedicated foundation/stake sprite can replace this later.
+              window.mapCtx.drawImage(window.gameVisuals.signpost, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'throne' && window.gameVisuals.throne?.complete) {
               window.mapCtx.drawImage(window.gameVisuals.throne, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'door_open' && window.gameVisuals.door_open?.complete) {
@@ -2517,6 +2538,8 @@ function interactWithTileObject(q, r, player) {
         if (window.readAbandonedHouseJournal) window.readAbandonedHouseJournal();
         return;
     }
+    if (doorObj.type === 'building_plot' && window.buildPlayerCottage) { window.buildPlayerCottage(q, r); return; }
+    if (doorObj.type === 'player_bed' && window.restAtHome) { window.restAtHome(); return; }
     if (doorObj.type === 'ore_node' && window.harvestOreNode) { window.harvestOreNode(q, r); return; }
     if (doorObj.type === 'fruit_tree' && window.harvestFruitTree) { window.harvestFruitTree(q, r); return; }
     if (doorObj.type === 'herb_patch' && window.harvestHerbPatch) { window.harvestHerbPatch(q, r); return; }
@@ -3445,7 +3468,7 @@ function handleClick(e){
     // and the pendingInteractHex arrival hook in autoMoveProcess) rather than
     // silently just moving onto it without ever interacting.
     const doorObj = window.tileObjects && window.tileObjects[`${clickedHex.q},${clickedHex.r}`];
-    const interactableTypes = ['door_open', 'door_closed', 'signpost', 'journal', 'ore_node', 'fruit_tree', 'herb_patch', 'fishing_spot', 'corpse', 'evidence'];
+    const interactableTypes = ['door_open', 'door_closed', 'signpost', 'journal', 'ore_node', 'fruit_tree', 'herb_patch', 'fishing_spot', 'corpse', 'evidence', 'building_plot', 'player_bed'];
     if (doorObj && interactableTypes.includes(doorObj.type)) {
         if (window.distance(player.hex, clickedHex) <= 1) {
             interactWithTileObject(clickedHex.q, clickedHex.r, player);
