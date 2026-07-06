@@ -1878,6 +1878,17 @@ function renderEntities() {
                               const tinted = window.getRecoloredHairSprite(img, window.hexColorToHue(e.color));
                               if (tinted) img = tinted;
                           }
+                          // Horses bought from a stable carry a fixed coat preset (see
+                          // HORSE_COAT_PRESETS) rather than an arbitrary hue — deliberately
+                          // a short vetted list (brown/black/white/chestnut/gray), not a
+                          // free-form color picker, so there's no way to end up with a
+                          // green horse. Wild/skill-granted horses are left their default
+                          // sprite color (no coatPreset set).
+                          if (e.name === 'Horse' && e.coatPreset && window.HORSE_COAT_PRESETS?.[e.coatPreset] && window.getRecoloredHairSprite) {
+                              const preset = window.HORSE_COAT_PRESETS[e.coatPreset];
+                              const tinted = window.getRecoloredHairSprite(img, preset.hue, preset.light, preset.sat);
+                              if (tinted) img = tinted;
+                          }
 
                                   try {
                                       if (img && img.complete) {

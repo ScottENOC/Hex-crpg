@@ -1001,6 +1001,24 @@ function buildSilverhartPalace(roadEnd) {
         window.entities.push(window.buildNPC({ ...window.campaign2SilverhartBuilder, hex: { q: manorCenter.q + 5, r: manorCenter.r } }));
     }
 
+    // Merchant district (MVP): a horse stable, further out still past the
+    // manor — same "far enough out to skip re-verifying hex-shear
+    // collisions" reasoning used for the manor above. A real merchant
+    // district (shops, a proper street grid) is a bigger follow-up; this is
+    // just the stable itself, reachable and functional.
+    const stableRow = manorRow + 10;
+    for (let r = manorRow; r <= stableRow; r++) window.setTerrainAt(dqCenter, r, 'Path');
+    const stableCenter = { q: dqCenter + 10, r: stableRow };
+    const stableDoor = { q: stableCenter.q - 4, r: stableCenter.r };
+    const stableRegion = carveBuilding(stableCenter.q, stableCenter.r, 4, 3, stableDoor, 'Wood Floor');
+    window.interiorRegions.push(stableRegion);
+    for (let q = dqCenter + 1; q < stableDoor.q; q++) window.setTerrainAt(q, stableRow, 'Path');
+    window.campaign2SilverhartStableCenter = stableCenter;
+    window.tileObjects[`${stableCenter.q},${stableCenter.r}`] = { type: 'fence_h' }; // stalls/pen flavor
+    if (window.campaign2Stablehand) {
+        window.entities.push(window.buildNPC({ ...window.campaign2Stablehand, hex: { q: stableCenter.q, r: stableCenter.r - 1 } }));
+    }
+
     // One world-hex north of Millbrook [3][6], which is itself 3 north of
     // Hollowmere [6][6] — see the world map's [0][6] Silverhart placement in
     // worldMap.js's loadWorldMap.

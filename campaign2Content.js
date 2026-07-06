@@ -472,6 +472,16 @@ window.campaign2ManorNeighbor = {
     dialogueId: 'manor_neighbor'
 };
 
+// Silverhart's stable — sells horses in a short, vetted range of coat
+// colors (see HORSE_COAT_PRESETS in stable.js) to anyone with Riding.
+window.campaign2Stablehand = {
+    name: 'Ossian Fell', title: 'Stablehand',
+    race: 'human', gender: 'male',
+    classLevels: [], skillPicks: [], equipment: [],
+    side: 'neutral', factionId: null, color: '#4a3a2a',
+    dialogueId: 'silverhart_stablehand'
+};
+
 window.campaign2PalaceChancellor = {
     name: 'Chancellor Merric Vane',
     title: "The Queen's Chancellor",

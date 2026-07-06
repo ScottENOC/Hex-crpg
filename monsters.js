@@ -441,6 +441,15 @@ function createMonster(type, hex, customSkills = null, customEquipment = null, s
     if (template.extraHexes) monster.extraHexes = template.extraHexes;
     if (template.createdSpells) monster.createdSpells = template.createdSpells.map(s => ({ ...s }));
 
+    // Every horse gets a random coat from the same vetted preset list a
+    // stable purchase lets the player pick from (see stable.js) — random,
+    // but never an arbitrary/green color, matching "random for the arena,
+    // but not colour-shift to any arbitrary rgb."
+    if (type === 'horse' && window.HORSE_COAT_PRESETS) {
+        const keys = Object.keys(window.HORSE_COAT_PRESETS);
+        monster.coatPreset = keys[Math.floor(Math.random() * keys.length)];
+    }
+
     // Special Spider Initialization
     if (type === 'spider') {
         monster.spiderImage = Math.random() < 0.5 ? 'spider1' : 'spider2';

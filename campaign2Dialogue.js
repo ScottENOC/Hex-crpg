@@ -161,6 +161,22 @@ window.npcDialogueTrees = {
             { label: "Someone should ask the Queen about it.", action: () => {} }
         ]);
     },
+    silverhart_stablehand: (npc) => {
+        if (!window.partyHasRiding()) {
+            window.showDialogue(npc, "Fine animals, every one — but they're wasted on someone who's never learned to sit a saddle. Come back once you've picked up Riding.", [
+                { label: "I'll be back.", action: () => {} }
+            ]);
+            return;
+        }
+        const colorOptions = Object.entries(window.HORSE_COAT_PRESETS).map(([key, preset]) => ({
+            label: `${preset.name} (${window.HORSE_PRICE} gold)`,
+            action: () => {
+                if (window.buyHorse(key)) window.showMessage("Enjoy the ride.");
+            }
+        }));
+        colorOptions.push({ label: "Just looking.", action: () => {} });
+        window.showDialogue(npc, `${window.HORSE_PRICE} gold buys you a horse — pick your color.`, colorOptions);
+    },
     wick_hallow: (npc) => {
         const ironbondQuest = window.questLog && window.questLog.find(q => q.id === 'ironbond_pitch');
         if (ironbondQuest && ironbondQuest.status === 'active' && !ironbondQuest.pitched) {
