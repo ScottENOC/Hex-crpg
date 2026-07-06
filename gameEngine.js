@@ -709,7 +709,8 @@ function checkMovementReactions(movingEntity, nextHex, callback) {
                 allOptions.push({ id: `halt_${r.name}`, name: `${r.name}: Halt`, tpCost: 1, reactor: r });
             }
         }
-        if (r.skills['sidestep'] && r.sidestepsRemaining > 0) {
+        const rIsLightOrNoArmor = !r.equipped || !r.equipped.armor || window.items[r.equipped.armor]?.id === 'light_armor';
+        if (r.skills['sidestep'] && r.sidestepsRemaining > 0 && rIsLightOrNoArmor) {
             let tpCost = 6;
             if (r.skills['sidestep_mastery']) tpCost -= 1;
             if (r.timePoints >= tpCost) {
@@ -1512,8 +1513,10 @@ function renderEntities() {
           const [q, r] = coord.split(',').map(Number);
           const {x, y} = window.hexToPixel(q, r);
           const size = window.hexSize * 0.8 * z;
-          if (window.gameVisuals.swordIcon.complete) {
-              window.mapCtx.drawImage(window.gameVisuals.swordIcon, x - size/2, y - size/2, size, size);
+          let icon = window.gameVisuals.swordIcon;
+          if (items.includes('elder_locket') && window.gameVisuals.locket?.complete) icon = window.gameVisuals.locket;
+          if (icon.complete) {
+              window.mapCtx.drawImage(icon, x - size/2, y - size/2, size, size);
           }
       }
   }
@@ -1545,9 +1548,9 @@ function renderEntities() {
               window.mapCtx.drawImage(window.gameVisuals.door_closed, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'signpost' && window.gameVisuals.signpost.complete) {
               window.mapCtx.drawImage(window.gameVisuals.signpost, x - size/2, y - size/2, size, size);
-          } else if (obj.type === 'fountain' && window.gameVisuals.fountain.complete) {
+          } else if (obj.type === 'fountain' && window.gameVisuals.fountain?.complete) {
               window.mapCtx.drawImage(window.gameVisuals.fountain, x - size/2, y - size/2, size, size);
-          } else if (obj.type === 'gate_arch' && window.gameVisuals.gate_arch.complete) {
+          } else if (obj.type === 'gate_arch' && window.gameVisuals.gate_arch?.complete) {
               const gSize = size * 1.4;
               window.mapCtx.drawImage(window.gameVisuals.gate_arch, x - gSize/2, y - gSize/2, gSize, gSize);
           } else if (obj.type === 'ladder' && window.gameVisuals.ladder.complete) {
@@ -1580,6 +1583,10 @@ function renderEntities() {
               window.mapCtx.drawImage(window.gameVisuals.hut, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'hut_large' && window.gameVisuals.hut_large.complete) {
               window.mapCtx.drawImage(window.gameVisuals.hut_large, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'journal' && obj.readId === 'phylactery_altar' && window.gameVisuals.altar_unholy?.complete) {
+              // The necromancer's ritual altar reuses the journal
+              // click-to-read plumbing, but shouldn't look like a letter.
+              window.mapCtx.drawImage(window.gameVisuals.altar_unholy, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'journal' && window.gameVisuals.journal.complete) {
               window.mapCtx.drawImage(window.gameVisuals.journal, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'evidence' && window.gameVisuals.journal.complete) {
@@ -1734,6 +1741,7 @@ function renderEntities() {
                   
                           let img = window.gameVisuals.monsterDefault;
                           if (e.name === 'Orc' && window.gameVisuals.orcBase.complete) img = window.gameVisuals.orcBase;
+                          if (e.forceOrcSprite && window.gameVisuals.orcBase.complete) img = window.gameVisuals.orcBase;
                           if (e.name === 'Grishnak' && window.gameVisuals.grishnak.complete) img = window.gameVisuals.grishnak;
                           if (e.name === 'Spider' && e.spiderImage && window.gameVisuals[e.spiderImage]?.complete) img = window.gameVisuals[e.spiderImage];
                           if (e.customImage && window.gameVisuals[e.customImage]?.complete) img = window.gameVisuals[e.customImage];
@@ -1939,7 +1947,7 @@ function tick() {
 
     const inCombat = checkInCombat();
     if (inCombat && !window._wasInCombat && window.showTutorialTip) {
-        window.showTutorialTip('combat_start', "Combat is turn-based now, not real-time — very different from tabletop D&D. Each character spends Time Points (TP) on actions; once you're below 80 TP you can no longer act until it regenerates. Watch the initiative bar to see whose turn is next.");
+        window.showTutorialTip('combat_start', "Combat is turn based now, not real time. Each character spends Time Points (TP) on actions; once you're below 80 TP you can no longer act until it regenerates. Watch the initiative bar to track who has the most time points (TP).");
     } else if (!inCombat && window._wasInCombat && window.showTutorialTip) {
         window.showTutorialTip('combat_end', "Combat's over — you're back in real-time exploration. Movement and actions now happen continuously instead of waiting for turns.");
     }
@@ -2413,6 +2421,51 @@ function takeTurn(entity) {
     if (window.broadcastFullState) window.broadcastFullState();
 }
 
+// Shared door/signpost/journal/harvest dispatch — called both for an
+// immediate adjacent click (handleClick) and once the player arrives at a
+// tile object they clicked on from farther away (see pendingInteractHex).
+function interactWithTileObject(q, r, player) {
+    const doorObj = window.tileObjects && window.tileObjects[`${q},${r}`];
+    if (!doorObj) return;
+    if (doorObj.type === 'door_open' || doorObj.type === 'door_closed') {
+        if (window.toggleDoor) window.toggleDoor(q, r, player);
+        return;
+    }
+    if (doorObj.type === 'signpost') {
+        if (window.readSignpost) window.readSignpost();
+        return;
+    }
+    if (doorObj.type === 'journal') {
+        if (doorObj.readId === 'goblin_scout_note' && window.readGoblinScoutNote) { window.readGoblinScoutNote(); return; }
+        if (doorObj.readId === 'emberlode_ledger' && window.readEmberlodeLedger) { window.readEmberlodeLedger(); return; }
+        if (doorObj.readId === 'phylactery_altar' && window.interactPhylacteryAltar) { window.interactPhylacteryAltar(); return; }
+        if (doorObj.readId === 'disciple_note' && window.readDiscipleNote) { window.readDiscipleNote(); return; }
+        if (doorObj.readId === 'wizard_tower_tome' && window.readWizardTowerTome) { window.readWizardTowerTome(); return; }
+        if (doorObj.readId === 'vampire_grave' && window.readVampireGrave) { window.readVampireGrave(); return; }
+        if (window.readAbandonedHouseJournal) window.readAbandonedHouseJournal();
+        return;
+    }
+    if (doorObj.type === 'ore_node' && window.harvestOreNode) { window.harvestOreNode(q, r); return; }
+    if (doorObj.type === 'fruit_tree' && window.harvestFruitTree) { window.harvestFruitTree(q, r); return; }
+    if (doorObj.type === 'herb_patch' && window.harvestHerbPatch) { window.harvestHerbPatch(q, r); return; }
+    if (doorObj.type === 'fishing_spot' && window.harvestFishingSpot) { window.harvestFishingSpot(q, r); return; }
+    if (doorObj.type === 'corpse' && window.harvestCorpse) { window.harvestCorpse(q, r); return; }
+    if (doorObj.type === 'evidence' && window.searchEvidence) { window.searchEvidence(q, r); return; }
+}
+window.interactWithTileObject = interactWithTileObject;
+
+// Fires once autoMoveProcess clears a player's destination — if they were
+// walking toward a tile object clicked from out of interact range, interact
+// with it now that they've arrived instead of leaving them standing on it.
+function checkPendingInteractArrival(entity) {
+    if (!window.pendingInteractHex || entity.side !== 'player') return;
+    const target = window.pendingInteractHex;
+    if (window.distance(entity.hex, target) <= 1) {
+        window.pendingInteractHex = null;
+        interactWithTileObject(target.q, target.r, entity);
+    }
+}
+
 function autoMoveProcess(entity) {
     if (window.isPausedForReaction) {
         setTimeout(() => autoMoveProcess(entity), 20);
@@ -2458,6 +2511,7 @@ function autoMoveProcess(entity) {
 
     if (entity.hex.q === entity.destination.q && entity.hex.r === entity.destination.r) {
         entity.destination = null;
+        checkPendingInteractArrival(entity);
         finalizePlayerAction(entity, true);
         return;
     }
@@ -2506,6 +2560,7 @@ function autoMoveProcess(entity) {
 
         if (entity.hex.q === entity.destination.q && entity.hex.r === entity.destination.r) {
             entity.destination = null;
+            checkPendingInteractArrival(entity);
         }
 
         // Same reasoning as the out-of-combat real-time step above — without
@@ -3117,6 +3172,30 @@ function aiProcess(entity) {
     }
 }
 
+// Real-time "close" formation movement can leave trailing party members
+// detouring onto the same hex as whoever's ahead of them (never actually
+// two-on-one-hex, but visually crowded together) — e.g. when the leader
+// stops abruptly to loot and followers converge, or combat catches them
+// mid-move. Spread any duplicates out to a free neighboring hex.
+function deconflictPartyStacking() {
+    const partyEntities = window.entities.filter(e => e.alive && e.side === 'player' && !e.rider);
+    const seenHexes = new Set();
+    partyEntities.forEach(e => {
+        const key = `${e.hex.q},${e.hex.r}`;
+        if (!seenHexes.has(key)) { seenHexes.add(key); return; }
+        const openNeighbor = window.getNeighbors(e.hex.q, e.hex.r).find(h => window.isOpenHex(h));
+        if (openNeighbor) {
+            e.hex = openNeighbor;
+            e.visualQ = openNeighbor.q;
+            e.visualR = openNeighbor.r;
+            e.startQ = openNeighbor.q;
+            e.startR = openNeighbor.r;
+            seenHexes.add(`${openNeighbor.q},${openNeighbor.r}`);
+        }
+    });
+}
+window.deconflictPartyStacking = deconflictPartyStacking;
+
 function wakeUp(entity) {
     if (entity.aiState === 'combat') return;
     
@@ -3144,27 +3223,7 @@ function wakeUp(entity) {
             }
         });
 
-        // Real-time "close" formation movement can leave trailing party
-        // members detouring onto the same hex as whoever's ahead of them
-        // (never actually two-on-one-hex, but visually crowded together);
-        // if combat catches them mid-move like that, spread any duplicates
-        // out to a free neighboring hex right away instead of leaving them
-        // stacked for the whole fight.
-        const partyEntities = window.entities.filter(e => e.alive && e.side === 'player' && !e.rider);
-        const seenHexes = new Set();
-        partyEntities.forEach(e => {
-            const key = `${e.hex.q},${e.hex.r}`;
-            if (!seenHexes.has(key)) { seenHexes.add(key); return; }
-            const openNeighbor = window.getNeighbors(e.hex.q, e.hex.r).find(h => window.isOpenHex(h));
-            if (openNeighbor) {
-                e.hex = openNeighbor;
-                e.visualQ = openNeighbor.q;
-                e.visualR = openNeighbor.r;
-                e.startQ = openNeighbor.q;
-                e.startR = openNeighbor.r;
-                seenHexes.add(`${openNeighbor.q},${openNeighbor.r}`);
-            }
-        });
+        deconflictPartyStacking();
 
         // Fights shouldn't play out at 3x just because the player left
         // fast-forward on during the walk over.
@@ -3303,41 +3362,25 @@ function handleClick(e){
     const target = getEntityAtHex(clickedHex.q, clickedHex.r);
     let actionHandled = false;
 
-    // DOOR TOGGLE — takes priority over talk/attack/move when clicking an adjacent door
+    // DOOR/SIGNPOST/JOURNAL/HARVEST — takes priority over talk/attack/move
+    // when clicking an adjacent interactable tile object. Clicking one from
+    // farther away walks the player there instead (see interactWithTileObject
+    // and the pendingInteractHex arrival hook in autoMoveProcess) rather than
+    // silently just moving onto it without ever interacting.
     const doorObj = window.tileObjects && window.tileObjects[`${clickedHex.q},${clickedHex.r}`];
-    if (doorObj && (doorObj.type === 'door_open' || doorObj.type === 'door_closed') && window.distance(player.hex, clickedHex) <= 1) {
-        if (window.toggleDoor) window.toggleDoor(clickedHex.q, clickedHex.r, player);
-        return;
-    }
-
-    // READ SIGNPOST — same priority tier as the door toggle above
-    if (doorObj && doorObj.type === 'signpost' && window.distance(player.hex, clickedHex) <= 1) {
-        if (window.readSignpost) window.readSignpost();
-        return;
-    }
-
-    // READ JOURNAL — same priority tier, used by the abandoned house and
-    // (via readId) the goblin camp's foreign-make note and Emberlode's ledger
-    if (doorObj && doorObj.type === 'journal' && window.distance(player.hex, clickedHex) <= 1) {
-        if (doorObj.readId === 'goblin_scout_note' && window.readGoblinScoutNote) { window.readGoblinScoutNote(); return; }
-        if (doorObj.readId === 'emberlode_ledger' && window.readEmberlodeLedger) { window.readEmberlodeLedger(); return; }
-        if (doorObj.readId === 'phylactery_altar' && window.interactPhylacteryAltar) { window.interactPhylacteryAltar(); return; }
-        if (doorObj.readId === 'disciple_note' && window.readDiscipleNote) { window.readDiscipleNote(); return; }
-        if (doorObj.readId === 'wizard_tower_tome' && window.readWizardTowerTome) { window.readWizardTowerTome(); return; }
-        if (doorObj.readId === 'vampire_grave' && window.readVampireGrave) { window.readVampireGrave(); return; }
-        if (window.readAbandonedHouseJournal) window.readAbandonedHouseJournal();
-        return;
-    }
-
-    // HARVEST RESOURCE NODES / CORPSES — same priority tier as the journal
-    // click above. See resources.js for the actual harvest logic.
-    if (doorObj && window.distance(player.hex, clickedHex) <= 1) {
-        if (doorObj.type === 'ore_node' && window.harvestOreNode) { window.harvestOreNode(clickedHex.q, clickedHex.r); return; }
-        if (doorObj.type === 'fruit_tree' && window.harvestFruitTree) { window.harvestFruitTree(clickedHex.q, clickedHex.r); return; }
-        if (doorObj.type === 'herb_patch' && window.harvestHerbPatch) { window.harvestHerbPatch(clickedHex.q, clickedHex.r); return; }
-        if (doorObj.type === 'fishing_spot' && window.harvestFishingSpot) { window.harvestFishingSpot(clickedHex.q, clickedHex.r); return; }
-        if (doorObj.type === 'corpse' && window.harvestCorpse) { window.harvestCorpse(clickedHex.q, clickedHex.r); return; }
-        if (doorObj.type === 'evidence' && window.searchEvidence) { window.searchEvidence(clickedHex.q, clickedHex.r); return; }
+    const interactableTypes = ['door_open', 'door_closed', 'signpost', 'journal', 'ore_node', 'fruit_tree', 'herb_patch', 'fishing_spot', 'corpse', 'evidence'];
+    if (doorObj && interactableTypes.includes(doorObj.type)) {
+        if (window.distance(player.hex, clickedHex) <= 1) {
+            interactWithTileObject(clickedHex.q, clickedHex.r, player);
+            return;
+        }
+        if (!window.isInCombat) {
+            window.pendingInteractHex = { q: clickedHex.q, r: clickedHex.r };
+            player.destination = clickedHex;
+            window.showMessage(`${player.name} walks over to take a closer look.`);
+            finalizePlayerAction(player, actionHandled);
+            return;
+        }
     }
 
     // ASSASSINATE THE GOBLIN CHIEF — a stealthed player adjacent to the
@@ -3541,7 +3584,7 @@ function handleClick(e){
         } else if (act.type === 'spell') {
             const spell = window.player.createdSpells[act.index];
             const dist = target ? getMinDistance(player, target) : window.distance(player.hex, clickedHex);
-            if (dist <= spell.range && player.currentMana >= spell.manaCost && player.timePoints >= spell.tpCost) {
+            if (dist <= spell.range && player.currentMana >= spell.manaCost + getArmorSpellPenalty(player, spell) && player.timePoints >= spell.tpCost) {
                 const maxTargets = 1 + (spell.extraTargets || 0);
                 
                 // Add target if not already added
@@ -3606,6 +3649,11 @@ function handleClick(e){
             playerMoveProcess(player, path); 
             return; 
         }
+    } else if (window.isInCombat) {
+        // In combat, a click that doesn't land on a highlighted move/attack
+        // hex isn't a valid action — real-time free-move destinations (below)
+        // would let a click bypass turn-based movement entirely.
+        window.showMessage("That's out of range this turn.");
     } else {
         // NO ACTION/MOVE ACTIVE: Set Destination for Auto-Move
         if (window.groupMoveMode) {
@@ -3619,20 +3667,15 @@ function handleClick(e){
         } else {
             player.destination = clickedHex;
             window.showMessage(`${player.name} destination set to ${clickedHex.q},${clickedHex.r}`);
-            
+
             // MULTIPLAYER SYNC: Send destination to server
             if (window.multiplayer && window.multiplayer.roomCode) {
-                window.multiplayer.socket.emit('move', { 
-                    roomCode: window.multiplayer.roomCode, 
+                window.multiplayer.socket.emit('move', {
+                    roomCode: window.multiplayer.roomCode,
                     hex: player.hex,
-                    destination: clickedHex 
+                    destination: clickedHex
                 });
             }
-        }
-        
-        // Combat turn evaluation
-        if (window.isInCombat && window.gamePhase === 'PLAYER_TURN' && window.currentTurnEntity === player) {
-            setTimeout(() => window.autoMoveProcess(player), 20);
         }
     }
     finalizePlayerAction(player, actionHandled);
@@ -3752,11 +3795,24 @@ function tryAttack(attacker, target, isFeint = false, isOffhand = false, bonusDa
                 let parryBonus = (target.skills[`${r.skillBase}_parry_chance`] || 0) * 5;
                 let hit = Math.random() * 100 < (50 + target.toHitMelee + parryBonus - attacker.passiveDodge);
                 
-                if (hit) { 
+                if (hit) {
                     window.showMessage(`${target.name} successfully parried ${attacker.name}!`);
                     if (window.playParrySound) window.playParrySound();
                     if (isFeint) window.showMessage(`[FEINT SUCCESS] ${attacker.name} tricked ${target.name} into wasting a Parry!`);
-                    return; 
+                    if (target.skills[`${r.skillBase}_riposte`] && target.timePoints >= 5) {
+                        spendTP(target, 5);
+                        sharedMessage(`${target.name} ripostes!`);
+                        const hitChance = 50 + target.toHitMelee - attacker.passiveDodge;
+                        if (Math.random() * 100 < hitChance) {
+                            const dmg = target.baseDamage || 1;
+                            attacker.hp -= dmg;
+                            sharedMessage(`Riposte hits for ${dmg} damage!`);
+                            if (attacker.hp <= 0) handleLethalDamage(attacker, target);
+                        } else {
+                            sharedMessage("Riposte misses!");
+                        }
+                    }
+                    return;
                 } else {
                     window.showMessage(`${target.name} tried to parry but FAILED!`);
                     if (isFeint) window.showMessage(`[FEINT FAILED] ${target.name} didn't fall for the feint.`);
@@ -4032,6 +4088,28 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   attacker.offhandAttackAvailable = !isOffhand && (attacker.equipped?.offhand && window.items[attacker.equipped.offhand].type === 'weapon');
   if (target.hp <= 0 && target.alive) {
       handleLethalDamage(target, attacker);
+  }
+
+  // SLIP AWAY: after being successfully hit, immediately relocate to an
+  // adjacent unoccupied hex — too heavy in medium/heavy armor to pull off.
+  if (target.alive && !target.unconscious && !target.reactionBlocked && target.skills?.slip_away && target.timePoints >= 5) {
+      const isLightOrNoArmorTarget = !target.equipped || !target.equipped.armor || window.items[target.equipped.armor]?.id === 'light_armor';
+      if (isLightOrNoArmorTarget) {
+          window.requestReaction(target, [{ id: 'slip_away', name: 'Slip Away', tpCost: 5 }], (choice) => {
+              if (choice === 'slip_away') {
+                  const openHex = window.getNeighbors(target.hex.q, target.hex.r).find(h =>
+                      !getEntityAtHex(h.q, h.r) && window.getTerrainAt(h.q, h.r).name !== 'Wall' && window.getTerrainAt(h.q, h.r).name !== 'Water');
+                  if (openHex) {
+                      spendTP(target, 5);
+                      target.hex = openHex;
+                      if (target.riding) target.riding.hex = { q: openHex.q, r: openHex.r };
+                      sharedMessage(`${target.name} slips away!`);
+                      window.drawMap();
+                      window.renderEntities();
+                  }
+              }
+          }, `${target.name} was hit! Slip Away?`);
+      }
   }
 }
 
@@ -4498,6 +4576,7 @@ function lootItems(entity) {
     if (entity.side === 'player') {
         window.updateActionButtons();
         window.showInventoryScreen();
+        if (!window.isInCombat) deconflictPartyStacking();
     }
     window.drawMap();
     window.renderEntities();
@@ -5427,6 +5506,15 @@ function resolveSpell(caster, spell, target, clickedHex) {
                 window.showMessage(`${target.name} regains consciousness!`);
             }
             syncBackToPlayer(target); actionHandled = true;
+        } else if (spell.type === 'timeskip' && target) {
+            // Drains the target's Time Points to 0 — since a turn only ever
+            // comes around once an entity reaches 100 TP (see readyEntities
+            // in runTickInternal), this just pushes their next turn back by
+            // however long a full regen from 0 takes, rather than skipping a
+            // fixed number of turns or granting them a bonus turn later.
+            target.timePoints = 0;
+            window.showMessage(`${caster.name}'s ${spell.name} drains ${target.name}'s Time Points to 0 — their next turn is pushed well back.`);
+            actionHandled = true;
         } else if ((spell.type === 'buff' || spell.type === 'debuff') && target) {
             const instanceId = Date.now() + Math.random();
             window.activeSpells.push({
@@ -5440,6 +5528,20 @@ function resolveSpell(caster, spell, target, clickedHex) {
     }
     return actionHandled;
 }
+
+// Heavier armor makes spellcasting clumsier: +1/+2/+3 mana per cast in
+// light/medium/heavy armor (no armor, no penalty). Cleric's Vestment Ease
+// and Druid's Wild Ease shave this off per-school, since those two schools
+// have their own reasons to still wear armor into a fight.
+function getArmorSpellPenalty(caster, spell) {
+    const armorId = caster.equipped?.armor;
+    let penalty = armorId === 'heavy_armor' ? 3 : armorId === 'medium_armor' ? 2 : armorId === 'light_armor' ? 1 : 0;
+    if (penalty === 0) return 0;
+    if (spell.school === 'divine') penalty -= (caster.skills?.divine_armor_ease || 0);
+    if (spell.school === 'nature') penalty -= (caster.skills?.nature_armor_ease || 0);
+    return Math.max(0, penalty);
+}
+window.getArmorSpellPenalty = getArmorSpellPenalty;
 
 function tryCastSpell(caster, spell, target, clickedHex, bypassCooldown = false) {
     // REAL-TIME CASTING DELAY
@@ -5533,16 +5635,16 @@ function tryCastSpell(caster, spell, target, clickedHex, bypassCooldown = false)
             const aiCounter = counterOptions.find(opt => opt.reactor.side !== 'player');
             if (aiCounter && Math.random() < 0.5) {
                 spendTP(aiCounter.reactor, 5);
-                aiCounter.reactor.currentMana -= aiCounter.spell.manaCost;
+                aiCounter.reactor.currentMana -= aiCounter.spell.manaCost + getArmorSpellPenalty(aiCounter.reactor, aiCounter.spell);
                 window.showMessage(`${aiCounter.reactor.name} counters ${caster.name}'s ${spell.name}!`);
-                caster.currentMana -= spell.manaCost; 
-                return true; 
+                caster.currentMana -= spell.manaCost + getArmorSpellPenalty(caster, spell);
+                return true;
             }
         }
     }
 
     // 2. Resolve Spell (Normal path if no reaction or AI missed)
-    caster.currentMana -= spell.manaCost;
+    caster.currentMana -= spell.manaCost + getArmorSpellPenalty(caster, spell);
     if (caster.isStealthed) breakStealth(caster);
     return resolveSpell(caster, spell, target, clickedHex);
 }

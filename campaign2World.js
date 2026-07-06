@@ -211,8 +211,11 @@ function buildFarmstead(roadEnd) {
     window.campaign2BrokenFenceHex = brokenFenceHex;
     // Well past the ~30-hex daylight vision cap (see isVisibleToPlayer in
     // hexMap.js) so the den is a genuine "go explore in that direction"
-    // discovery, not something visible the moment the fence breaks.
-    window.campaign2WolfDenCenter = { q: pMinQ - 34, r: houseCenter.r + 10 };
+    // discovery, not something visible — or immediately engageable — from
+    // the pasture itself. 34 hexes wasn't quite enough margin (visionBonus
+    // and hex-distance rounding could still let the pen see/reach them), so
+    // this pushes well clear of any realistic vision/reach bonus.
+    window.campaign2WolfDenCenter = { q: pMinQ - 50, r: houseCenter.r + 10 };
 
     // Spatters get sparser and, past the first handful, only visible with
     // Knowledge: Nature (see the tileObjects render loop in gameEngine.js) —
@@ -259,13 +262,21 @@ function buildFarmstead(roadEnd) {
 // playable race with a raceData attribute pool, so they're built as
 // monsters (which already support custom skills/equipment) rather than
 // through buildNPC's class/race attribute-purchase system.
-function buildGoblinNPC({ name, title, monsterType, hex, customSkills, customEquipment, side, dialogueId }) {
+function buildGoblinNPC({ name, title, monsterType, hex, customSkills, customEquipment, side, dialogueId, color }) {
     const ent = window.createMonster(monsterType, hex, customSkills || null, customEquipment || null, side || 'neutral');
     ent.name = name;
     ent.title = title || null;
     ent.isNPC = true;
     ent.dialogueId = dialogueId || null;
     ent.factionId = 'goblin_tribe';
+    // Renaming to a specific NPC name (e.g. "Goblin Skulker") breaks the
+    // renderer's name-based sprite lookup, which would otherwise fall back to
+    // the flat, untinted default goblin art (same issue the arena's named
+    // bosses solve with spriteBase — see gameEngine.js's boss spawn code).
+    if (color) {
+        ent.color = color;
+        ent.spriteBase = monsterType;
+    }
     const playerRace = window.party && window.party[0] ? window.party[0].race : 'human';
     ent.reputation = { knowledge: 0, standing: window.seedStanding ? window.seedStanding('goblin', playerRace) : 0 };
     return ent;
@@ -321,7 +332,7 @@ function buildGoblinCamp(roadEnd) {
     const shaman = buildGoblinNPC({ ...window.campaign2GoblinShaman, hex: { q: center.q + 2, r: center.r } });
     window.entities.push(chief, lieutenant, shaman);
 
-    const guardHexes = [{ q: center.q - 3, r: center.r + 1 }, { q: center.q + 3, r: center.r + 1 }, { q: center.q, r: center.r + 2 }];
+    const guardHexes = [{ q: center.q - 3, r: center.r + 1 }, { q: center.q + 3, r: center.r + 1 }, { q: center.q, r: center.r + 1 }];
     // Guards mostly hold their post, but drift off to the fire, a hut (food/
     // sleep), or a neighbor's hut (to pilfer from a "friend") rather than
     // standing like statues — see behaviorTick's campRoutine case.
@@ -335,6 +346,11 @@ function buildGoblinCamp(roadEnd) {
         guard.behaviorType = 'campRoutine';
         guard.homeHex = { ...guard.hex };
         guard.campSpots = campSpots;
+        // Visual preference: these three render with the orc base art
+        // (weapons/armor still layer on top normally) rather than the
+        // flat default goblin sprite, even though they're still goblins
+        // narratively (Skarn-tooth tribe, goblin_tribe faction, etc).
+        guard.forceOrcSprite = true;
         window.entities.push(guard);
     });
 

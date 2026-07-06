@@ -487,29 +487,37 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
                 e.getAllHexes().some(h => h.q === next.q && h.r === next.r)
             );
 
+            const isLightOrNoArmorEntity = !entity.equipped || !entity.equipped.armor || window.items[entity.equipped.armor]?.id === 'light_armor';
+            let acrobaticsCost = 0;
             if (occupant) {
                 const isKnownObstacle = !isPlayer || isVisible;
                 if (isKnownObstacle) {
-                    // It's a known obstacle. 
-                    // Task 1: If it's the target hex, it's blocked. 
-                    // (Old logic allowed pathing TO occupied hexes, we now block it if known).
-                    continue; 
+                    // Acrobatics lets a lightly-armored (or unarmored) entity
+                    // cross an occupied hex instead of being blocked by it,
+                    // at a TP surcharge — plate-wearers stay blocked outright.
+                    if (entity.skills?.acrobatics && isLightOrNoArmorEntity) {
+                        acrobaticsCost = 3;
+                    } else {
+                        // It's a known obstacle.
+                        // Task 1: If it's the target hex, it's blocked.
+                        // (Old logic allowed pathing TO occupied hexes, we now block it if known).
+                        continue;
+                    }
                 }
             }
-            
+
             // Calculate cost
             let baseCost = 5;
             if (entity.skills) {
-                if (entity.skills['fastMovement']) {
-                    const isLightOrNoArmor = !entity.equipped || !entity.equipped.armor || window.items[entity.equipped.armor]?.id === 'light_armor';
-                    if (isLightOrNoArmor) baseCost -= entity.skills['fastMovement'];
+                if (entity.skills['fastMovement'] && isLightOrNoArmorEntity) {
+                    baseCost -= entity.skills['fastMovement'];
                 }
                 if (entity.skills['swift_step']) {
                     const isUnarmored = (!entity.equipped || !entity.equipped.armor) && (!entity.equipped || !entity.equipped.offhand || window.items[entity.equipped.offhand].type !== 'shield');
                     if (isUnarmored) baseCost -= 1;
                 }
             }
-            baseCost = Math.max(1, baseCost); 
+            baseCost = Math.max(1, baseCost) + acrobaticsCost;
 
             // PREFERRED PATH DISCOUNT (Stay Together)
             if (preferredPath && preferredPath.includes(key)) {

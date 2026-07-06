@@ -116,7 +116,7 @@ const skills = {
     },
     'sidestep': {
         name: 'Sidestep',
-        description: 'Spend 6 TP to move to an adjacent hex when an opponent moves next to you.',
+        description: 'Spend 6 TP to move to an adjacent hex when an opponent moves next to you. Requires light armor or no armor.',
         tree: 'agility',
         maxRanks: 1,
         reaction: true,
@@ -455,6 +455,20 @@ const skills = {
         maxRanks: 1,
         apply: (player) => {}
     },
+    'divine_armor_ease': {
+        name: 'Vestment Ease',
+        description: "Reduces the mana-cost penalty for casting divine spells in armor by 1 per rank (can't reduce it below 0).",
+        tree: 'divine',
+        maxRanks: 2,
+        apply: (player) => {}
+    },
+    'nature_armor_ease': {
+        name: 'Wild Ease',
+        description: "Reduces the mana-cost penalty for casting nature spells in armor by 1 (can't reduce it below 0).",
+        tree: 'nature',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
     'dwarf_axe_mastery': {
         name: 'Dwarven Axe Mastery',
         description: 'Grants +2 damage when using an Axe.',
@@ -656,7 +670,7 @@ const skills = {
     // AGILITY ADDITIONS
     'slip_away': {
         name: 'Slip Away',
-        description: 'Reaction (5 TP): When you are successfully hit, immediately move to any adjacent unoccupied hex.',
+        description: 'Reaction (5 TP): When you are successfully hit, immediately move to any adjacent unoccupied hex. Requires light armor or no armor.',
         tree: 'agility',
         maxRanks: 1,
         prereq: 'sidestep',
@@ -665,7 +679,7 @@ const skills = {
     },
     'acrobatics': {
         name: 'Acrobatics',
-        description: 'Passive: You can move through hexes occupied by enemies at +3 TP per such hex crossed.',
+        description: 'Passive: You can move through hexes occupied by enemies at +3 TP per such hex crossed. Requires light armor or no armor.',
         tree: 'agility',
         maxRanks: 1,
         apply: (player) => {}
@@ -706,15 +720,6 @@ const skills = {
     },
 
     // FIGHTER ADDITIONS
-    'counter_attack': {
-        name: 'Counter-Attack',
-        description: 'Reaction (3 TP): After a successful parry or Shield Bash, immediately make a basic attack against the attacker.',
-        tree: 'fighter',
-        maxRanks: 1,
-        prereq_eval: (p) => !!(p.skills['sword_parry'] || p.skills['dagger_parry'] || p.skills['shield_bash']),
-        reaction: true,
-        apply: (player) => {}
-    },
     'brace': {
         name: 'Brace',
         description: 'Active (3 TP): Enter a readied stance. Your next reaction this turn costs 1 fewer TP.',
@@ -1036,7 +1041,7 @@ const skills = {
     },
     'learn_temporal_rift': {
         name: 'Learn Temporal Rift',
-        description: 'Unlocks Temporal Rift: Target entity skips their next turn, briefly displaced in time (20 mana, 15 TP).',
+        description: 'Unlocks Temporal Rift: Drains the target\'s Time Points to 0, briefly displacing them in time — since a turn only comes around at 100 TP, this pushes their next turn back by a full regen from zero (20 mana, 15 TP).',
         tree: 'arcane',
         maxRanks: 1,
         apply: (player) => {

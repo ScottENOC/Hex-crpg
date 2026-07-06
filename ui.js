@@ -695,6 +695,7 @@ function updateActionButtons() {
                 lootBtn.onclick = () => { window.lootItems(player); };
                 lootBtn.ontouchstart = (e) => { e.preventDefault(); window.lootItems(player); };
                 buttonsDiv.appendChild(lootBtn);
+                if (window.showTutorialTip) window.showTutorialTip('loot_button', "Standing over something lootable — a Loot Hex button has appeared below. Click it to pick everything up.");
             }
         }
 

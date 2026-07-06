@@ -981,7 +981,11 @@ window.npcDialogueTrees = {
                 action: () => {
                     const { text } = window.readTheRoom(npc, window.party[0]);
                     const followUps = window.getLeverageOptions(npc, window.party[0]);
-                    window.showDialogue(npc, text, [...followUps, { label: "Noted.", action: () => {} }]);
+                    window.showDialogue(npc, text, [
+                        ...followUps,
+                        { label: "Keep talking.", action: () => window.npcDialogueTrees.chief_skarnub(npc) },
+                        { label: "Walk away.", action: () => {} }
+                    ]);
                 }
             },
             {

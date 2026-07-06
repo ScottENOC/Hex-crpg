@@ -70,6 +70,24 @@ function setTerrainAt(q, r, typeName) {
     }
 }
 
+// Snaps (q,r) to the nearest point on a hex lattice spaced `cellSize` apart
+// (standard cube-coordinate rounding). Used below instead of independently
+// flooring q and r into a grid — flooring axial coordinates carves rhomboid
+// parallelogram cells (since axial space is sheared relative to the screen,
+// same shear carveFlatRoom corrects for when building rooms), which is why
+// the old rocky-outcrop/swamp regions read as awkward rhombi. Snapping to
+// the nearest hex-lattice cell instead makes the noise-driven region/clump
+// boundaries follow true hex adjacency, so patches read as natural blobs.
+// Still fully deterministic — no Math.random(), no per-session seed.
+function nearestHexCell(q, r, cellSize) {
+    const fx = q / cellSize, fz = r / cellSize, fy = -fx - fz;
+    let rx = Math.round(fx), ry = Math.round(fy), rz = Math.round(fz);
+    const xDiff = Math.abs(rx - fx), yDiff = Math.abs(ry - fy), zDiff = Math.abs(rz - fz);
+    if (xDiff > yDiff && xDiff > zDiff) rx = -ry - rz;
+    else if (yDiff > zDiff) ry = -rx - rz;
+    return { q: rx * cellSize, r: rz * cellSize };
+}
+
 function getTerrainAt(q, r) {
     // 0. Check overrides
     const key = `${q},${r}`;
@@ -103,16 +121,14 @@ function getTerrainAt(q, r) {
         // the map rather than a fine-grained checkerboard of every type
         // scattered evenly everywhere.
         const regionSize = 25;
-        const regionQ = Math.floor(q / regionSize);
-        const regionR = Math.floor(r / regionSize);
-        const regionNoise = pseudoRandom(regionQ * 9.1 + 41, regionR * 6.7 + 23);
+        const regionCell = nearestHexCell(q, r, regionSize);
+        const regionNoise = pseudoRandom(regionCell.q * 9.1 + 41, regionCell.r * 6.7 + 23);
         const isSwampRegion = regionNoise > 0.85;
         const isSandRegion = regionNoise < 0.12;
 
         const cellSize = 5;
-        const cellQ = Math.floor(q / cellSize);
-        const cellR = Math.floor(r / cellSize);
-        const cellNoise = pseudoRandom(cellQ * 3.1 + 7, cellR * 4.3 + 13);
+        const cell = nearestHexCell(q, r, cellSize);
+        const cellNoise = pseudoRandom(cell.q * 3.1 + 7, cell.r * 4.3 + 13);
         const hexNoise = pseudoRandom(q * 1.3 + 4, r * 1.7 + 9);
 
         if (isSwampRegion) {

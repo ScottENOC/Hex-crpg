@@ -87,6 +87,13 @@ const baseSpells = {
         baseRange: 8,
         baseRadius: 1,
         debuffType: 'entangled'
+    },
+    'temporal_rift': {
+        name: 'Temporal Rift',
+        school: 'arcane',
+        baseMana: 20,
+        baseRange: 8,
+        type: 'timeskip'
     }
 };
 

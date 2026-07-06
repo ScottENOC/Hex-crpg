@@ -220,8 +220,8 @@ window.campaign2ReddaleDisciple = {
 // makes it so.
 window.campaign2GoblinChief = {
     name: 'Chief Skarnub', title: 'Goblin Chief', monsterType: 'elite_goblin',
-    customSkills: { health: 3, sword_hit: 2, sword_dmg: 2, sword_parry: 1, stealth_rogue: 1 },
-    customEquipment: ['sword', 'medium_armor', 'wooden_shield'],
+    customSkills: { health: 3, axe_hit: 2, axe_dmg: 2, stealth_rogue: 2 },
+    customEquipment: ['axe', 'medium_armor', 'wooden_shield'],
     dialogueId: 'chief_skarnub'
 };
 window.campaign2GoblinLieutenant = {
@@ -240,9 +240,9 @@ window.campaign2GoblinShaman = {
     dialogueId: null
 };
 window.campaign2GoblinGuards = [
-    { name: 'Goblin Warrior', title: 'Goblin Warrior', monsterType: 'goblin', customSkills: { health: 1, sword_hit: 1, sword_dmg: 1 }, customEquipment: ['sword'] },
-    { name: 'Goblin Warrior', title: 'Goblin Warrior', monsterType: 'goblin', customSkills: { health: 1, spear_hit: 1, spear_dmg: 1 }, customEquipment: ['spear'] },
-    { name: 'Goblin Skulker', title: 'Goblin Skulker', monsterType: 'goblin', customSkills: { health: 1, dagger_hit: 1, stealth_rogue: 2 }, customEquipment: ['dagger'] }
+    { name: 'Goblin Warrior', title: 'Goblin Warrior', monsterType: 'goblin', customSkills: { health: 1, sword_hit: 1, sword_dmg: 1 }, customEquipment: ['sword'], color: '#5a7a3a' },
+    { name: 'Goblin Warrior', title: 'Goblin Warrior', monsterType: 'goblin', customSkills: { health: 1, spear_hit: 1, spear_dmg: 1 }, customEquipment: ['spear'], color: '#3a6a4a' },
+    { name: 'Goblin Skulker', title: 'Goblin Skulker', monsterType: 'goblin', customSkills: { health: 1, bow_hit: 1, stealth_rogue: 2 }, customEquipment: ['bow'], color: '#6a5a2a' }
 ];
 
 // Ser Aldric Thorne: a captive paladin, tied up at the goblin camp, rescued
