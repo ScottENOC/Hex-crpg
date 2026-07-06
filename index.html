@@ -82,6 +82,7 @@
                 <button id="inventory-btn">Inventory</button>
                 <button id="world-map-btn" style="background-color: #4CAF50;">World Map</button>
                 <button id="quest-log-btn" style="background-color: #8d6e63;">Quest Log</button>
+                <button id="roster-btn" style="background-color: #6d4c8d;">Roster</button>
                 <button id="save-menu-btn" style="background-color: #2196F3;">Save Game</button>
                 <button id="load-menu-btn" style="background-color: #9C27B0;">Load Game</button>
                 <button id="quick-save-btn" style="background-color: #1976D2;">Quick Save</button>
@@ -349,6 +350,18 @@
         </div>
     </div>
 
+    <div id="roster-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="width: 500px; max-width: 90%;">
+            <button class="close-btn" id="close-roster-modal">&times;</button>
+            <h2>Roster</h2>
+            <p style="color: #aaa; font-size: 0.85em; margin-top: -8px;">Only the main character plus 5 others can be with you at once. Everyone else waits safely off the field — swap freely, but only outside combat.</p>
+            <h3 style="margin-bottom: 4px;">Active Party</h3>
+            <div id="roster-active-list" style="max-height: 30vh; overflow-y: auto; margin-bottom: 12px;"></div>
+            <h3 style="margin-bottom: 4px;">Waiting</h3>
+            <div id="roster-benched-list" style="max-height: 30vh; overflow-y: auto;"></div>
+        </div>
+    </div>
+
     <div id="reaction-modal" class="modal" style="display: none;">
         <div class="modal-content">
             <h2 id="reaction-title">Reaction!</h2>
@@ -541,6 +554,7 @@
     <script src="name.js"></script>
     <script src="dialogue.js"></script>
     <script src="questLog.js"></script>
+    <script src="roster.js"></script>
     <script src="worldTime.js"></script>
     <script src="world_map_data.js"></script>
     <script src="worldMap.js"></script>

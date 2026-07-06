@@ -752,6 +752,22 @@ function buildSilverhartPalace(roadEnd) {
     if (window.campaign2IronbondEnvoy) window.entities.push(window.buildNPC({ ...window.campaign2IronbondEnvoy, hex: { q: ironbondOfficeCenter.q, r: ironbondOfficeCenter.r + 1 } }));
     if (window.campaign2HighCleric) window.entities.push(window.buildNPC({ ...window.campaign2HighCleric, hex: { q: cathedralCenter.q, r: cathedralCenter.r + 1 } }));
 
+    // Mercenary Recruiter: a raw Entity (not buildNPC) so it renders on the
+    // same arenamercenary sprite as the roguelike arena's recruiter, per the
+    // player's request to reuse that character/art in the capital.
+    if (window.campaign2MercenaryRecruiter) {
+        const recruiterHex = { q: plazaCenter.q + 3, r: plazaCenter.r };
+        const recruiter = new window.Entity(window.campaign2MercenaryRecruiter.name, 'cyan', recruiterHex, 10);
+        recruiter.isNPC = true;
+        recruiter.side = 'neutral';
+        recruiter.gender = 'male';
+        recruiter.race = 'elf';
+        recruiter.customImage = 'arenamercenary';
+        recruiter.dialogueId = window.campaign2MercenaryRecruiter.dialogueId;
+        window.entities.push(recruiter);
+        window.campaign2MercenaryRecruiterHex = recruiterHex;
+    }
+
     // One world-hex north of Millbrook [3][6], which is itself 3 north of
     // Hollowmere [6][6] — see the world map's [0][6] Silverhart placement in
     // worldMap.js's loadWorldMap.

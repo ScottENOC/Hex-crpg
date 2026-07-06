@@ -67,6 +67,7 @@ function saveGame(saveName = "rpg_save_game") {
         goblinScoutNoteRead: window.goblinScoutNoteRead,
         emberlodeRaided: window.emberlodeRaided,
         questLog: window.questLog,
+        benchedCompanions: window.benchedCompanions || [],
         worldMapNotes: window.worldMapNotes,
         activeStealthMission: window.activeStealthMission || null,
         guildAssassinTriggered: window.guildAssassinTriggered || false,
@@ -188,6 +189,7 @@ function loadGame(saveName = "rpg_save_game") {
         window.goblinScoutNoteRead = gameState.goblinScoutNoteRead || false;
         window.emberlodeRaided = gameState.emberlodeRaided || false;
         window.questLog = gameState.questLog || [];
+        window.benchedCompanions = gameState.benchedCompanions || [];
         window.worldMapNotes = gameState.worldMapNotes || {};
         window.activeStealthMission = gameState.activeStealthMission || null;
         window.guildAssassinTriggered = gameState.guildAssassinTriggered || false;

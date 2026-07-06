@@ -1629,6 +1629,45 @@ window.npcDialogueTrees = {
             },
             { label: "Good to know.", action: () => {} }
         ]);
+    },
+    silverhart_mercenary_broker: (npc) => {
+        const player = window.party[0];
+        const cost = 100;
+        const roomLine = window.party.length < window.MAX_ACTIVE_PARTY
+            ? "I've got someone ready to march out with you today."
+            : "Your company's full up for the road, but I can still find someone — they'll wait here 'til you've got room.";
+        window.showDialogue(npc, `Looking for some extra muscle? ${cost} gold and I'll find you a capable fighter. ${roomLine}`, [
+            {
+                label: `Hire a mercenary (${cost}g).`,
+                action: () => {
+                    if ((player.gold || 0) < cost) {
+                        window.showMessage("You don't have enough gold.");
+                        return;
+                    }
+                    player.gold -= cost;
+                    const taken = new Set([...window.party, ...(window.benchedCompanions || [])].map(p => p.name));
+                    const name = (window.campaign2MercenaryNamePool || []).find(n => !taken.has(n)) || `Sellsword ${Math.floor(Math.random() * 1000)}`;
+                    const mercenary = window.createCharacterData('human', 'fighter', name, Math.random() < 0.5 ? 'male' : 'female', 'pc_1');
+                    ['health', 'sword_hit', 'sword_dmg'].forEach(skillKey => {
+                        const skill = window.skills[skillKey];
+                        if (!skill) return;
+                        if (mercenary.attributes[skill.tree] > 0) mercenary.attributes[skill.tree]--;
+                        else if (mercenary.attributes.wildcard > 0) mercenary.attributes.wildcard--;
+                        mercenary.skills[skillKey] = (mercenary.skills[skillKey] || 0) + 1;
+                    });
+                    if (mercenary.skills.health) {
+                        const bonus = 10 * mercenary.skills.health;
+                        mercenary.hp += bonus;
+                        mercenary.maxHp += bonus;
+                    }
+                    const result = window.addCompanionToRoster(mercenary);
+                    window.showMessage(result === 'active'
+                        ? `${name} joins your party.`
+                        : `${name} waits for you — check the Roster once you have room.`);
+                }
+            },
+            { label: "Not right now.", action: () => {} }
+        ]);
     }
 };
 

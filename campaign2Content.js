@@ -499,3 +499,11 @@ window.campaign2HighCleric = {
     race: 'human', gender: 'male', classLevels: ['cleric'], skillPicks: [], equipment: [],
     side: 'neutral', factionId: 'silverhart_kingdom', color: '#c9a24f', dialogueId: 'high_cleric'
 };
+
+// A capital-city counterpart to the arena's Mercenary Recruiter (same
+// customImage — a raw Entity, not built via buildNPC, so the arenamercenary
+// sprite renders instead of the usual race/gender character layers). Offers
+// a randomized fighter-for-hire; see addCompanionToRoster in roster.js for
+// where hires land (active party if there's room, the bench otherwise).
+window.campaign2MercenaryRecruiter = { name: 'Mercenary Recruiter', title: 'Sellsword Broker', dialogueId: 'silverhart_mercenary_broker' };
+window.campaign2MercenaryNamePool = ['Bram Ashford', 'Corvin Tale', 'Sela Dunmore', 'Petra Kesh', 'Thorne Vance', 'Mira Solberg'];

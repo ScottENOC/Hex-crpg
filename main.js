@@ -223,6 +223,16 @@ document.addEventListener("DOMContentLoaded", () => {
                 modal.style.display = "block";
                 window.renderQuestLog();
             }
+        } else if (btnId === "roster-btn") {
+            if (window.isInCombat) {
+                window.showMessage("Can't manage the roster mid-fight.");
+            } else {
+                const modal = document.getElementById("roster-modal");
+                if (modal) {
+                    modal.style.display = "block";
+                    window.renderRoster();
+                }
+            }
         } else if (btnId === "move-group-btn") {
             window.groupMoveMode = !window.groupMoveMode;
             const btn = document.getElementById("move-group-btn");
@@ -408,7 +418,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // breaking character creation on touch devices entirely).
     const GLOBAL_BUTTON_ACTION_IDS = new Set([
         'create-room-btn', 'join-room-btn', 'leave-room-btn', 'character-screen-btn', 'spell-menu-btn',
-        'inventory-btn', 'world-map-btn', 'quest-log-btn', 'move-group-btn', 'party-formation-btn',
+        'inventory-btn', 'world-map-btn', 'quest-log-btn', 'roster-btn', 'move-group-btn', 'party-formation-btn',
         'load-btn-initial', 'save-menu-btn', 'load-menu-btn', 'game-over-load-btn', 'game-over-menu-btn',
         'confirm-save-btn', 'quick-save-btn', 'quick-load-btn', 'settings-menu-btn', 'host-game-btn',
         'confirm-hire-btn', 'cancel-hire-btn', 'close-shop-modal', 'cheat-jerry-btn', 'cheat-horse-btn',
