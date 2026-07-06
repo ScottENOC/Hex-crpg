@@ -2390,15 +2390,35 @@ function runTickInternal(isSleepCycle = false, skipUI = false, tickMultiplier = 
         window.currentTurnEntity.parriesRemaining = 3;
         takeTurn(window.currentTurnEntity);
     } else {
-        window.entities.forEach(e => { 
+        // Both per-entity spell-effect scans below (mySpells by casterName,
+        // silenceEffects by targetEntityId) filter the *entire*
+        // window.activeSpells array once per entity, every tick — with
+        // window.entities now well over 100 persistent world NPCs (soldiers,
+        // shopkeepers, guards...) that's an O(entities x activeSpells) cost
+        // paid every frame even though activeSpells is empty the vast
+        // majority of the time (no one has an ongoing spell running).
+        // Skipping both scans up front when there's nothing active at all
+        // is a pure perf win with no behavior change (filtering an empty
+        // array always produced the same "nothing to do" result anyway).
+        const hasActiveSpells = !!(window.activeSpells && window.activeSpells.length > 0);
+        window.entities.forEach(e => {
             if (e.alive) {
                 // ... rest of the ticking logic ...
                 // PASSIVE AI: Don't gain TP if idle enemy
                 if (e.side === 'enemy' && e.aiState === 'idle') return;
 
+                // Computed here (not just inside the TP-cap check below) since
+                // the silence-penalty damage further down also scales by it —
+                // that block runs regardless of the TP cap and previously
+                // referenced this same variable out of scope, throwing a
+                // ReferenceError whenever a fully-TP-capped entity was
+                // silenced (a pre-existing bug, found while investigating
+                // performance here — TP still shouldn't accrue past the cap,
+                // so e.timePoints += tpGained stays inside the gate below).
+                let tpGained = e.timePointsPerTick * tickMultiplier;
+                if (e.flyCheat) tpGained += 10 * tickMultiplier;
+
                 if (e.timePoints < 150) {
-                    let tpGained = e.timePointsPerTick * tickMultiplier;
-                    if (e.flyCheat) tpGained += 10 * tickMultiplier;
                     e.timePoints += tpGained;
 
                     // POISON TICK
@@ -2441,7 +2461,7 @@ function runTickInternal(isSleepCycle = false, skipUI = false, tickMultiplier = 
                     }
 
                     // Ongoing Spell Costs (2.5% of core mana cost per TP gained)
-                    const mySpells = (window.activeSpells || []).filter(s => s.casterName === e.name);
+                    const mySpells = hasActiveSpells ? window.activeSpells.filter(s => s.casterName === e.name) : [];
                     if (mySpells.length > 0) {
                         mySpells.sort((a, b) => b.coreManaCost - a.coreManaCost);
                         
@@ -2477,12 +2497,14 @@ function runTickInternal(isSleepCycle = false, skipUI = false, tickMultiplier = 
                 }
 
                 // TRIGGER SPELL PENALTIES (Ongoing Divine Silence)
-                const silenceEffects = (window.activeSpells || []).filter(s => s.debuffType === 'silence_penalty' && s.targetEntityId === e.id);
-                silenceEffects.forEach(s => {
-                    const dmg = (s.magnitude || 6) * 0.05 * tpGained; // Scaled damage
-                    e.hp -= dmg;
-                    if (e.hp <= 0 && e.alive) { e.alive = false; window.showMessage(`${e.name} succumbed to divine silence!`); checkCombatEnd(); }
-                });
+                if (hasActiveSpells) {
+                    const silenceEffects = window.activeSpells.filter(s => s.debuffType === 'silence_penalty' && s.targetEntityId === e.id);
+                    silenceEffects.forEach(s => {
+                        const dmg = (s.magnitude || 6) * 0.05 * tpGained; // Scaled damage
+                        e.hp -= dmg;
+                        if (e.hp <= 0 && e.alive) { e.alive = false; window.showMessage(`${e.name} succumbed to divine silence!`); checkCombatEnd(); }
+                    });
+                }
             }
         });
         if (window.updateTime && !window.isInCombat) {
