@@ -2404,15 +2404,53 @@ function updateVisualPositions(dt) {
 
 function processRealTimeStep(entity, overage = 0) {
     const moveEntity = entity.riding || entity;
-    const fullPath = window.findPath(entity.hex, entity.destination, undefined, moveEntity, true, window.leaderPath);
-    
-    if (fullPath && fullPath.length > 1) {
-        const nextHex = fullPath[1];
+    const dest = entity.destination;
+    if (!dest) { entity.moveCooldown = 0; entity.moveTotalTime = 0; return false; }
 
+    // PATH CACHE: recomputing the full A* path every single step, just to
+    // read the next hex and throw the rest away, was pure waste (findPath is
+    // the single most expensive thing a moving entity does). Instead compute
+    // the path once per destination, cache it on the entity, and just follow
+    // it hex by hex. Re-path (the "manual" fallback) only when the cache is
+    // stale — destination changed, we've drifted off the planned route — or
+    // when the next planned hex is now blocked by a hostile / impassable
+    // terrain that wasn't there when the path was planned. This is what lets
+    // an NPC walk a long route on one A* solve, and only recalculate when it
+    // actually bumps into something.
+    let fullPath = null;
+    let nextHex = null;
+    const cacheValid = entity._pathCache
+        && entity._pathCacheDest
+        && entity._pathCacheDest.q === dest.q && entity._pathCacheDest.r === dest.r
+        && entity._pathCache.length > 1
+        && entity._pathCache[0].q === entity.hex.q && entity._pathCache[0].r === entity.hex.r;
+
+    if (cacheValid) {
+        const candidate = entity._pathCache[1];
+        const occ = window.getEntityAtHex(candidate.q, candidate.r);
+        const blocked = (occ && occ.side !== entity.side) || window.getTerrainAt(candidate.q, candidate.r).impassable;
+        if (!blocked) {
+            nextHex = candidate;
+            fullPath = entity._pathCache;
+        }
+        // else: fall through to a fresh solve, which routes around the block.
+    }
+
+    if (!nextHex) {
+        fullPath = window.findPath(entity.hex, dest, undefined, moveEntity, true, window.leaderPath);
+        if (fullPath && fullPath.length > 1) {
+            entity._pathCache = fullPath;
+            entity._pathCacheDest = { q: dest.q, r: dest.r };
+            nextHex = fullPath[1];
+        }
+    }
+
+    if (fullPath && fullPath.length > 1) {
         // Prevent walking onto occupied hexes (collision) â€” enemies only; friendlies don't block
         const nextOccupant = window.getEntityAtHex(nextHex.q, nextHex.r);
         if (nextOccupant && nextOccupant.side !== entity.side) {
             entity.destination = null;
+            entity._pathCache = null;
             entity.moveCooldown = 0;
             entity.moveTotalTime = 0;
             return false;
@@ -2429,6 +2467,16 @@ function processRealTimeStep(entity, overage = 0) {
 
         entity.hex = nextHex;
         spendTP(entity, stepCost);
+
+        // Advance the cached path so its head is again the current hex; if the
+        // step we actually took wasn't the cache's next hex, drop the cache so
+        // the next step recomputes.
+        if (entity._pathCache && entity._pathCache.length > 1
+            && entity._pathCache[1].q === nextHex.q && entity._pathCache[1].r === nextHex.r) {
+            entity._pathCache.shift();
+        } else {
+            entity._pathCache = null;
+        }
 
         const duration = (stepCost / moveEntity.timePointsPerTick) * 0.4;
         entity.moveTotalTime = duration;
@@ -2461,6 +2509,7 @@ function processRealTimeStep(entity, overage = 0) {
         return true;
     } else {
         entity.destination = null;
+        entity._pathCache = null;
         entity.moveCooldown = 0;
         entity.moveTotalTime = 0;
         return false;

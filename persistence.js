@@ -29,6 +29,9 @@ function serializeEntity(e) {
     const data = {};
     for (let key in e) {
         if (typeof e[key] !== 'function') {
+            // Transient per-move pathfinding cache — recomputed on demand, no
+            // reason to persist (and it'd be a fat array on a mid-move NPC).
+            if (key === '_pathCache' || key === '_pathCacheDest') continue;
             if (key === 'riding') {
                 data.ridingId = e.riding ? e.riding.id : null;
             } else if (key === 'rider') {
