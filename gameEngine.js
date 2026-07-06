@@ -1000,6 +1000,10 @@ function startGameCore(isLoading = false) {
       door_closed: new Image(),
       path: new Image(),
       signpost: new Image(),
+      fountain: new Image(),
+      gate_arch: new Image(),
+      altar_unholy: new Image(),
+      locket: new Image(),
       ladder: new Image(),
       watchtower: new Image(),
       corpse_marker: new Image(),
@@ -1193,6 +1197,10 @@ function startGameCore(isLoading = false) {
   visuals.door_closed.src = 'images/door_closed.svg';
   visuals.path.src = 'images/path.svg';
   visuals.signpost.src = 'images/signpost.svg';
+  visuals.fountain.src = 'images/fountain.svg';
+  visuals.gate_arch.src = 'images/gate_arch.svg';
+  visuals.altar_unholy.src = 'images/altar_unholy.svg';
+  visuals.locket.src = 'images/locket.svg';
   visuals.ladder.src = 'images/ladder.svg';
   visuals.watchtower.src = 'images/watchtower.svg';
   visuals.corpse_marker.src = 'images/corpse_marker.svg';
@@ -1523,53 +1531,54 @@ function renderEntities() {
 
   // Render Tile Objects (Fireplaces etc.)
   for (const key in window.tileObjects) {
+    try {
       const obj = window.tileObjects[key];
       const [q, r] = key.split(',').map(Number);
       if (window.isVisibleToPlayer({q, r})) {
           const {x, y} = window.hexToPixel(q, r);
           const size = window.hexSize * 1.5 * z;
-          if (obj.type === 'fireplace' && window.gameVisuals.fireplace.complete) {
+          if (obj.type === 'fireplace' && window.gameVisuals.fireplace?.complete) {
               const { scale, alpha } = fireFlicker(key);
               const fSize = size * scale;
               window.mapCtx.globalAlpha = alpha;
               window.mapCtx.drawImage(window.gameVisuals.fireplace, x - fSize/2, y - fSize/2, fSize, fSize);
               window.mapCtx.globalAlpha = 1.0;
-          } else if (obj.type === 'table' && window.gameVisuals.table.complete) {
+          } else if (obj.type === 'table' && window.gameVisuals.table?.complete) {
               window.mapCtx.drawImage(window.gameVisuals.table, x - size/2, y - size/2, size, size);
-          } else if (obj.type === 'bench' && window.gameVisuals.bench.complete) {
+          } else if (obj.type === 'bench' && window.gameVisuals.bench?.complete) {
               window.mapCtx.drawImage(window.gameVisuals.bench, x - size/2, y - size/2, size, size);
-          } else if (obj.type === 'bed' && window.gameVisuals.bed.complete) {
+          } else if (obj.type === 'bed' && window.gameVisuals.bed?.complete) {
               window.mapCtx.drawImage(window.gameVisuals.bed, x - size/2, y - size/2, size, size);
-          } else if (obj.type === 'throne' && window.gameVisuals.throne.complete) {
+          } else if (obj.type === 'throne' && window.gameVisuals.throne?.complete) {
               window.mapCtx.drawImage(window.gameVisuals.throne, x - size/2, y - size/2, size, size);
-          } else if (obj.type === 'door_open' && window.gameVisuals.door_open.complete) {
+          } else if (obj.type === 'door_open' && window.gameVisuals.door_open?.complete) {
               window.mapCtx.drawImage(window.gameVisuals.door_open, x - size/2, y - size/2, size, size);
-          } else if (obj.type === 'door_closed' && window.gameVisuals.door_closed.complete) {
+          } else if (obj.type === 'door_closed' && window.gameVisuals.door_closed?.complete) {
               window.mapCtx.drawImage(window.gameVisuals.door_closed, x - size/2, y - size/2, size, size);
-          } else if (obj.type === 'signpost' && window.gameVisuals.signpost.complete) {
+          } else if (obj.type === 'signpost' && window.gameVisuals.signpost?.complete) {
               window.mapCtx.drawImage(window.gameVisuals.signpost, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'fountain' && window.gameVisuals.fountain?.complete) {
               window.mapCtx.drawImage(window.gameVisuals.fountain, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'gate_arch' && window.gameVisuals.gate_arch?.complete) {
               const gSize = size * 1.4;
               window.mapCtx.drawImage(window.gameVisuals.gate_arch, x - gSize/2, y - gSize/2, gSize, gSize);
-          } else if (obj.type === 'ladder' && window.gameVisuals.ladder.complete) {
+          } else if (obj.type === 'ladder' && window.gameVisuals.ladder?.complete) {
               window.mapCtx.drawImage(window.gameVisuals.ladder, x - size/2, y - size/2, size, size);
-          } else if (obj.type === 'watchtower' && window.gameVisuals.watchtower.complete) {
+          } else if (obj.type === 'watchtower' && window.gameVisuals.watchtower?.complete) {
               const tSize = size * 1.4;
               window.mapCtx.drawImage(window.gameVisuals.watchtower, x - tSize/2, y - tSize/2, tSize, tSize);
-          } else if (obj.type === 'corpse_marker' && window.gameVisuals.corpse_marker.complete) {
+          } else if (obj.type === 'corpse_marker' && window.gameVisuals.corpse_marker?.complete) {
               window.mapCtx.drawImage(window.gameVisuals.corpse_marker, x - size/2, y - size/2, size, size);
-          } else if (obj.type === 'fence_h' && window.gameVisuals.fence_h.complete) {
+          } else if (obj.type === 'fence_h' && window.gameVisuals.fence_h?.complete) {
               window.mapCtx.drawImage(window.gameVisuals.fence_h, x - size/2, y - size/2, size, size);
-          } else if (obj.type === 'fence_v' && window.gameVisuals.fence_v.complete) {
+          } else if (obj.type === 'fence_v' && window.gameVisuals.fence_v?.complete) {
               window.mapCtx.drawImage(window.gameVisuals.fence_v, x - size/2, y - size/2, size, size);
-          } else if (obj.type === 'fence_broken' && window.gameVisuals.fence_broken.complete) {
+          } else if (obj.type === 'fence_broken' && window.gameVisuals.fence_broken?.complete) {
               window.mapCtx.drawImage(window.gameVisuals.fence_broken, x - size/2, y - size/2, size, size);
-          } else if (obj.type === 'blood_spatter' && window.gameVisuals.blood_spatter.complete) {
+          } else if (obj.type === 'blood_spatter' && window.gameVisuals.blood_spatter?.complete) {
               const bSize = size * 0.4;
               window.mapCtx.drawImage(window.gameVisuals.blood_spatter, x - bSize/2, y - bSize/2, bSize, bSize);
-          } else if (obj.type === 'blood_spatter_faint' && window.gameVisuals.blood_spatter_faint.complete) {
+          } else if (obj.type === 'blood_spatter_faint' && window.gameVisuals.blood_spatter_faint?.complete) {
               // Only visible at all with Knowledge: Nature — the trail should
               // read as "fading out to nothing" without it, not just fainter.
               const knowsNature = window.party && window.party.some(p => window.hasKnowledgeNature && window.hasKnowledgeNature(p));
@@ -1579,23 +1588,23 @@ function renderEntities() {
                   window.mapCtx.drawImage(window.gameVisuals.blood_spatter_faint, x - bSize/2, y - bSize/2, bSize, bSize);
                   window.mapCtx.globalAlpha = 1.0;
               }
-          } else if (obj.type === 'hut' && window.gameVisuals.hut.complete) {
+          } else if (obj.type === 'hut' && window.gameVisuals.hut?.complete) {
               window.mapCtx.drawImage(window.gameVisuals.hut, x - size/2, y - size/2, size, size);
-          } else if (obj.type === 'hut_large' && window.gameVisuals.hut_large.complete) {
+          } else if (obj.type === 'hut_large' && window.gameVisuals.hut_large?.complete) {
               window.mapCtx.drawImage(window.gameVisuals.hut_large, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'journal' && obj.readId === 'phylactery_altar' && window.gameVisuals.altar_unholy?.complete) {
               // The necromancer's ritual altar reuses the journal
               // click-to-read plumbing, but shouldn't look like a letter.
               window.mapCtx.drawImage(window.gameVisuals.altar_unholy, x - size/2, y - size/2, size, size);
-          } else if (obj.type === 'journal' && window.gameVisuals.journal.complete) {
+          } else if (obj.type === 'journal' && window.gameVisuals.journal?.complete) {
               window.mapCtx.drawImage(window.gameVisuals.journal, x - size/2, y - size/2, size, size);
-          } else if (obj.type === 'evidence' && window.gameVisuals.journal.complete) {
+          } else if (obj.type === 'evidence' && window.gameVisuals.journal?.complete) {
               // Espionage-quest incriminating documents (see espionageQuests.js)
               // — reuses the journal sprite, faded out once already searched.
               if (obj.taken) window.mapCtx.globalAlpha = 0.3;
               window.mapCtx.drawImage(window.gameVisuals.journal, x - size/2, y - size/2, size, size);
               window.mapCtx.globalAlpha = 1.0;
-          } else if (obj.type === 'ore_node' && window.gameVisuals.ore_vein.complete) {
+          } else if (obj.type === 'ore_node' && window.gameVisuals.ore_vein?.complete) {
               // Depleted veins fade out until they regrow (see harvestOreNode).
               let img = window.gameVisuals.ore_vein;
               const hue = ORE_HUES[obj.oreType];
@@ -1606,7 +1615,7 @@ function renderEntities() {
               if (obj.depleted) window.mapCtx.globalAlpha = 0.3;
               window.mapCtx.drawImage(img, x - size/2, y - size/2, size, size);
               if (obj.depleted) window.mapCtx.globalAlpha = 1.0;
-          } else if (obj.type === 'fruit_tree' && window.gameVisuals.tree_large.complete) {
+          } else if (obj.type === 'fruit_tree' && window.gameVisuals.tree_large?.complete) {
               // Larger than the decorative small trees. Ripe fruit used to be
               // shown by tinting the *whole tree* warm orange-red, which read
               // as "this tree is a weird color" more than "this tree has
@@ -1624,7 +1633,7 @@ function renderEntities() {
               const treeX = x - tSize / 2, treeY = y + size * 0.5 - th;
               window.mapCtx.drawImage(img, treeX, treeY, tSize, th);
 
-              if (obj.hasFruit && window.gameVisuals.apple.complete) {
+              if (obj.hasFruit && window.gameVisuals.apple?.complete) {
                   const appleSize = tSize * 0.22;
                   // Offsets (fraction of canopy width/height) landing inside
                   // the upper canopy area, not the trunk.
@@ -1641,7 +1650,7 @@ function renderEntities() {
                       );
                   });
               }
-          } else if (obj.type === 'herb_patch' && window.gameVisuals.foliage.complete) {
+          } else if (obj.type === 'herb_patch' && window.gameVisuals.foliage?.complete) {
               const hSize = size * 0.6;
               window.mapCtx.globalAlpha = obj.hasHerbs ? 1.0 : 0.35;
               window.mapCtx.drawImage(window.gameVisuals.foliage, x - hSize/2, y - hSize/2, hSize, hSize);
@@ -1661,6 +1670,14 @@ function renderEntities() {
               window.mapCtx.fill();
           }
       }
+    } catch (err) {
+        // A single bad tile object (missing/unregistered sprite, etc.) must
+        // never abort the rest of this loop — that used to take out every
+        // entity drawn after it in the same frame (see gameEngine.js issue:
+        // teleporting somewhere with an unloaded asset made the whole party
+        // disappear).
+        console.warn('renderEntities: failed to draw tile object', key, err);
+    }
   }
 
   // 2. Sort entities by "z-index" for layering: Rider -> Normal -> Mounts (on top)
@@ -1671,6 +1688,7 @@ function renderEntities() {
   });
 
   sorted.forEach(e => {
+    try {
       // Wolf Rider Goblin draws its own mount inline (see the "SPECIAL: Wolf
       // Rider Layering" block below) so the small goblin rider stays visible
       // instead of being hidden under the mount's own independent (and much
@@ -1740,24 +1758,24 @@ function renderEntities() {
                           if (e.customImage === 'arenamercenary') widthMult = 0.61; // 5% smaller than 0.646 (rounding)
                   
                           let img = window.gameVisuals.monsterDefault;
-                          if (e.name === 'Orc' && window.gameVisuals.orcBase.complete) img = window.gameVisuals.orcBase;
-                          if (e.forceOrcSprite && window.gameVisuals.orcBase.complete) img = window.gameVisuals.orcBase;
-                          if (e.name === 'Grishnak' && window.gameVisuals.grishnak.complete) img = window.gameVisuals.grishnak;
+                          if (e.name === 'Orc' && window.gameVisuals.orcBase?.complete) img = window.gameVisuals.orcBase;
+                          if (e.forceOrcSprite && window.gameVisuals.orcBase?.complete) img = window.gameVisuals.orcBase;
+                          if (e.name === 'Grishnak' && window.gameVisuals.grishnak?.complete) img = window.gameVisuals.grishnak;
                           if (e.name === 'Spider' && e.spiderImage && window.gameVisuals[e.spiderImage]?.complete) img = window.gameVisuals[e.spiderImage];
                           if (e.customImage && window.gameVisuals[e.customImage]?.complete) img = window.gameVisuals[e.customImage];
-                          if (e.name === 'Horse' && window.gameVisuals.horse.complete) img = window.gameVisuals.horse;
-                          if (e.name === 'Wolf' && window.gameVisuals.wolf.complete) img = window.gameVisuals.wolf; 
-                          if (e.name === 'Boar' && window.gameVisuals.boar.complete) img = window.gameVisuals.boar;
-                          if (e.name === 'Tiger' && window.gameVisuals.tiger.complete) img = window.gameVisuals.tiger;
-                          if (e.name === 'Troll' && window.gameVisuals.troll.complete) img = window.gameVisuals.troll;
-                          if (e.dragonSizeTier && window.gameVisuals.dragon.complete) img = window.gameVisuals.dragon;
+                          if (e.name === 'Horse' && window.gameVisuals.horse?.complete) img = window.gameVisuals.horse;
+                          if (e.name === 'Wolf' && window.gameVisuals.wolf?.complete) img = window.gameVisuals.wolf; 
+                          if (e.name === 'Boar' && window.gameVisuals.boar?.complete) img = window.gameVisuals.boar;
+                          if (e.name === 'Tiger' && window.gameVisuals.tiger?.complete) img = window.gameVisuals.tiger;
+                          if (e.name === 'Troll' && window.gameVisuals.troll?.complete) img = window.gameVisuals.troll;
+                          if (e.dragonSizeTier && window.gameVisuals.dragon?.complete) img = window.gameVisuals.dragon;
                           if (e.name === 'Eagle') {
                               const eagleImg = e.isFlying ? window.gameVisuals.eagleflying : window.gameVisuals.eagle;
                               if (eagleImg?.complete) img = eagleImg;
                           }
-                          if (e.name === 'Skeleton' && window.gameVisuals.skeleton.complete) img = window.gameVisuals.skeleton;
-                          if (e.name === 'Zombie' && window.gameVisuals.zombie.complete) img = window.gameVisuals.zombie;
-                          if (e.name === 'Imp' && window.gameVisuals.imp.complete) img = window.gameVisuals.imp;
+                          if (e.name === 'Skeleton' && window.gameVisuals.skeleton?.complete) img = window.gameVisuals.skeleton;
+                          if (e.name === 'Zombie' && window.gameVisuals.zombie?.complete) img = window.gameVisuals.zombie;
+                          if (e.name === 'Imp' && window.gameVisuals.imp?.complete) img = window.gameVisuals.imp;
 
                           // Named bosses reusing a generic monster's sprite (e.g. Viper on
                           // elite_goblin art) get tinted toward their own color instead of
@@ -1865,6 +1883,12 @@ function renderEntities() {
     }
 
     window.mapCtx.globalAlpha = 1.0;
+    } catch (err) {
+        // Same reasoning as the tile-object loop above: one entity failing
+        // to draw (bad/missing sprite, etc.) must never take every entity
+        // after it in this frame down with it.
+        console.warn('renderEntities: failed to draw entity', e?.name, err);
+    }
   });
 
   // Speech bubbles render after entities (not in drawMap's pass order) so a

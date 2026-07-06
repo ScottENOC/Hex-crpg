@@ -67,7 +67,7 @@ document.addEventListener("DOMContentLoaded", () => {
             {key: 'axe', src: 'images/axe.png'},
             {key: 'troll', src: 'images/troll.png'},
             {key: 'spear', src: 'images/spear.png'},
-            {key: 'club', src: 'images/club.png'},
+            {key: 'club', src: 'images/club.svg'},
             {key: 'spiderweb', src: 'images/spiderweb.png'},
             {key: 'spider1', src: 'images/spider1.png'},
             {key: 'spider2', src: 'images/spider2.png'},
