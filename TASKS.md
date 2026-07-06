@@ -1,3 +1,24 @@
+# Recently shipped (this pass)
+
+- **Road-network census**: `buildRoadGraph()` (hexMap.js) flood-fills painted
+  `Path` terrain into connected components, run once after world-build
+  (campaign2World.js) and stored as `window._roadGraph`. Currently 9 separate
+  road networks exist (several spurs/forts aren't linked to the main
+  crossroads network) — `tests/road-graph.spec.js` pins this count so future
+  road changes surface as an intentional diff, not a silent regression. Not
+  yet a routing structure (junction-to-junction shortest path) — `findPath`'s
+  existing `prefersRoads` cost surcharge already handles road-hugging
+  behaviorally; a true routing graph for long-distance travel (the
+  "dropdown of visited locations" feature) is still a follow-up.
+- **Fog-of-war-aware player pathfinding cost** (hexMap.js `findPath`):
+  unexplored hexes now cost the player as plain ground regardless of real
+  terrain, so clicking a distant destination can't silently route around
+  hazards (swamp, mountains, etc.) the player character has never seen —
+  prevents trivializing maze-like terrain via omniscient pathing. NPCs
+  unaffected (always path with full terrain knowledge). Known walls were
+  already fog-gated this way; this extends the same idea to move cost.
+  See `tests/fog-pathfinding.spec.js`.
+
 # Backlog
 
 Scoped-but-deferred work. Not urgent at current scale — pick these up when

@@ -483,6 +483,46 @@ function heapPop(heap) {
     return top;
 }
 
+// ROAD GRAPH: scans painted 'Path' terrain into connected-component groups.
+// Not a per-junction routing graph (findPath + prefersRoads already handles
+// road-hugging cost-wise) — this is the connectivity census the "how many
+// separate road networks exist" question needs: flood-fill every Path hex
+// via hex adjacency, group into components. One call after world-build,
+// re-callable any time a new road segment is painted (deterministic and
+// cheap — only scans window.overrideTerrain, not the whole map).
+function buildRoadGraph() {
+    const pathHexes = [];
+    for (const key in window.overrideTerrain) {
+        if (window.overrideTerrain[key]?.name === 'Path') {
+            const [q, r] = key.split(',').map(Number);
+            pathHexes.push({ q, r, key });
+        }
+    }
+    const hexSet = new Set(pathHexes.map(h => h.key));
+    const componentOf = new Map();
+    let componentCount = 0;
+    for (const h of pathHexes) {
+        if (componentOf.has(h.key)) continue;
+        componentCount++;
+        const stack = [h];
+        componentOf.set(h.key, componentCount);
+        while (stack.length) {
+            const cur = stack.pop();
+            for (const n of getNeighbors(cur.q, cur.r)) {
+                const nKey = `${n.q},${n.r}`;
+                if (hexSet.has(nKey) && !componentOf.has(nKey)) {
+                    componentOf.set(nKey, componentCount);
+                    stack.push({ q: n.q, r: n.r, key: nKey });
+                }
+            }
+        }
+    }
+    const graph = { hexCount: pathHexes.length, componentCount, componentOf };
+    window._roadGraph = graph;
+    return graph;
+}
+window.buildRoadGraph = buildRoadGraph;
+
 function findPath(start, target, availableTP, entity, ignoreTP = false, preferredPath = null) {
     // Built once per call instead of re-scanning window.entities (a linear
     // scan) for every single neighbor of every expanded node — with
@@ -599,7 +639,16 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
                 if (isKnownWall) continue;
             }
 
-            let stepCost = baseCost * (window.getMoveCostMult ? window.getMoveCostMult(next.q, next.r, entity) : terrain.moveCostMult);
+            // FOG-OF-WAR COST: the player shouldn't get to optimize a route
+            // through terrain they've never seen (that would trivialise a
+            // maze — click the visible destination and the engine silently
+            // routes around hazards only the player character couldn't know
+            // about). Unexplored hexes cost the player as plain ground;
+            // known walls are still blocked above via isKnownWall, only the
+            // *cost* of unexplored-but-passable terrain is hidden. NPCs
+            // always path with full terrain knowledge (unaffected).
+            const useKnownCost = isPlayer && !isExplored;
+            let stepCost = baseCost * (useKnownCost ? 1.0 : (window.getMoveCostMult ? window.getMoveCostMult(next.q, next.r, entity) : terrain.moveCostMult));
 
             // ROAD PREFERENCE: an entity flagged prefersRoads (townsfolk on
             // their daily routine — the farmer walking to the pub, not a
@@ -610,7 +659,7 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
             // Bounded and additive, so it biases without ever hard-blocking.
             // Out-of-combat only — tactical combat movement ignores roads.
             if (entity && entity.prefersRoads && !window.isInCombat && terrain.name !== 'Path') {
-                stepCost += 3;
+                stepCost += 6;
             }
 
             const nextCost = cost + stepCost;

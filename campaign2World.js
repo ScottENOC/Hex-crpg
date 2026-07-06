@@ -1616,6 +1616,12 @@ function setupVillageScene(forLoadOnly = false) {
     window._campaign2TerrainBaseline = { ...window.overrideTerrain };
     window._campaign2TileObjectsBaseline = { ...window.tileObjects };
 
+    // Road-network census (hexMap.js) — flood-fills painted 'Path' terrain
+    // into connected components. Re-run here (not incrementally) since world
+    // build paints every road in one pass anyway; call again after any
+    // future road-painting added post-load if that ever happens.
+    if (window.buildRoadGraph) window.buildRoadGraph();
+
     // Same idea, applied to NPCs: every scripted world NPC (buildNPC/
     // buildGoblinNPC, always isNPC:true) is just as deterministic as the
     // terrain it stands on — same spec + same world-gen = same NPC. Snapshot
