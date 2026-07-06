@@ -60,6 +60,7 @@ function saveGame(saveName = "rpg_save_game") {
         firedBanterIds: window.firedBanterIds,
         interiorRegions: window.interiorRegions,
         hollowmereEventFired: window.hollowmereEventFired,
+        hollowmereFightTriggered: window.hollowmereFightTriggered,
         hollowmereVictoryBonusGiven: window.hollowmereVictoryBonusGiven,
         hollowmereSoldiersWaitingOutside: window.hollowmereSoldiersWaitingOutside,
         hollowmereQuestOfferFired: window.hollowmereQuestOfferFired,
@@ -188,6 +189,7 @@ function loadGame(saveName = "rpg_save_game") {
         if (gameState.firedBanterIds) window.firedBanterIds = gameState.firedBanterIds;
         window.interiorRegions = gameState.interiorRegions || [];
         window.hollowmereEventFired = gameState.hollowmereEventFired || false;
+        window.hollowmereFightTriggered = gameState.hollowmereFightTriggered || false;
         window.hollowmereVictoryBonusGiven = gameState.hollowmereVictoryBonusGiven || false;
         window.hollowmereSoldiersWaitingOutside = gameState.hollowmereSoldiersWaitingOutside || false;
         window.hollowmereQuestOfferFired = gameState.hollowmereQuestOfferFired || false;

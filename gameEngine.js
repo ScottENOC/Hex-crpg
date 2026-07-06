@@ -1599,6 +1599,7 @@ function renderEntities() {
       const items = window.mapItems[coord];
       if (items && items.length > 0) {
           const [q, r] = coord.split(',').map(Number);
+          if (!window.isVisibleToPlayer({ q, r })) continue;
           const {x, y} = window.hexToPixel(q, r);
           const size = window.hexSize * 0.8 * z;
           let icon = window.gameVisuals.swordIcon;
@@ -4440,7 +4441,7 @@ function checkCombatEnd() {
              window.saveGame("AutoSave_CombatEnd");
         }
 
-        if (window.currentCampaign === "2" && window.hollowmereEventFired && window.factions?.ironbond_company && !window.hollowmereVictoryBonusGiven) {
+        if (window.currentCampaign === "2" && window.hollowmereFightTriggered && window.factions?.ironbond_company && !window.hollowmereVictoryBonusGiven) {
             window.hollowmereVictoryBonusGiven = true;
 
             // Small extra goodwill bump from Hollowmere's locals for winning the

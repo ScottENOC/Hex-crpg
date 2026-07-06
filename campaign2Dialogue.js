@@ -1373,6 +1373,31 @@ window.npcDialogueTrees = {
             {
                 label: "Need any help around the village?",
                 action: () => {
+                    // The locket sits freely in the chapel from world-gen —
+                    // nothing gates it behind actually taking this quest
+                    // first, so a player can easily find it before ever
+                    // talking to Marta. Skip straight to the reveal +
+                    // turn-in instead of asking her to "keep an eye out"
+                    // for something already sitting in the player's pack.
+                    if (hasLocket) {
+                        window.showDialogue(npc, "Wait — is that... my mother's locket? You already have it! However did you find it out there?", [
+                            { label: "Found it lying around. Here.", action: () => {
+                                window.questLog.push({
+                                    id: 'elder_locket',
+                                    title: 'A Missing Locket',
+                                    giver: 'Elder Marta Wynfield',
+                                    status: 'completed',
+                                    description: "Find Elder Marta's mother's locket, lost somewhere near the old chapel."
+                                });
+                                player.inventory = player.inventory.filter(i => i !== 'elder_locket');
+                                window.adjustReputation(npc.reputation, 15, 20);
+                                player.gold = (player.gold || 0) + 20;
+                                if (window.gainExp) window.gainExp(100);
+                                window.showMessage('Quest complete: A Missing Locket. (+20 gold)');
+                            }}
+                        ]);
+                        return;
+                    }
                     window.showDialogue(npc, "As it happens... I lost my mother's locket years back, somewhere near the old chapel. Silly to still hope, but if you ever spot it...", [
                         { label: "I'll keep an eye out.", action: () => {
                             window.questLog.push({
@@ -1986,6 +2011,13 @@ function resolveShakedown(branch) {
         window.showMessage("You back the demand with a hard stare. The soldiers take their due and leave without further trouble.");
         exitSoldiersPeacefully(dray, enforcers);
     } else if (branch === 'fight') {
+        // Distinct from hollowmereEventFired (which is set for every
+        // branch, including the two peaceful ones) — checkCombatEnd's
+        // victory-dialogue/reward block needs to know specifically that
+        // the fight actually happened, not just that the scene played out,
+        // otherwise it fires the very next time ANY unrelated fight ends
+        // (e.g. the abandoned house's skeletons).
+        window.hollowmereFightTriggered = true;
         window.cascadeReputation(authorityChain, 25, 20);
         patrons.forEach(p => window.adjustReputation(p.reputation, 20, 20));
         window.adjustReputation(ironbond, -35, 25);

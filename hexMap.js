@@ -451,30 +451,61 @@ function getNeighbors(q, r) {
 }
 
 function findPath(start, target, availableTP, entity, ignoreTP = false, preferredPath = null) {
-    const queue = [{
-        hex: start,
-        path: [start],
-        cost: 0,
-        priority: distance(start, target)
-    }];
-    
+    // Built once per call instead of re-scanning window.entities (a linear
+    // scan) for every single neighbor of every expanded node — with
+    // iterations capped at 5000 and up to 6 neighbors each, that was up to
+    // 30000 * entities.length array scans for one long-distance path, and
+    // it only gets worse as a save accumulates more entities over a
+    // session (dead ones stick around with alive:false forever). This is
+    // the likely cause of the "click to move freezes, then teleports"
+    // symptom getting more common the longer a game runs.
+    const occupantsByHex = new Map();
+    for (const e of window.entities) {
+        if (!e.alive) continue;
+        for (const h of e.getAllHexes()) {
+            const k = `${h.q},${h.r}`;
+            if (!occupantsByHex.has(k)) occupantsByHex.set(k, []);
+            occupantsByHex.get(k).push(e);
+        }
+    }
+
+    // Parent-pointer reconstruction instead of copying the whole path array
+    // into every queue node (which made each node creation cost O(path
+    // length so far) — for a long path that's its own O(n^2) blowup on top
+    // of the occupant-scan one above).
+    const cameFrom = new Map();
+    const startKey = `${start.q},${start.r}`;
+    const queue = [{ hex: start, cost: 0, priority: distance(start, target) }];
+
     const visited = new Map(); // Store min cost to each hex
-    visited.set(`${start.q},${start.r}`, 0);
-    
+    visited.set(startKey, 0);
+
+    function reconstructPath(endKey) {
+        const path = [];
+        let k = endKey;
+        while (k !== undefined) {
+            const node = cameFrom.get(k);
+            path.unshift(node ? node.hex : start);
+            k = node ? node.parentKey : undefined;
+        }
+        return path;
+    }
+
     let iterations = 0;
     while (queue.length > 0) {
         if (iterations++ > 5000) return null; // Increased for larger map
 
         // Sort by priority (A*)
         queue.sort((a, b) => a.priority - b.priority);
-        const { hex: current, path, cost } = queue.shift();
+        const { hex: current, cost } = queue.shift();
+        const currentKey = `${current.q},${current.r}`;
 
-        if (current.q === target.q && current.r === target.r) return path;
+        if (current.q === target.q && current.r === target.r) return reconstructPath(currentKey);
 
         const neighbors = getNeighbors(current.q, current.r);
         for (let next of neighbors) {
             const key = `${next.q},${next.r}`;
-            
+
             // TASK 2: Knowledge-based pathing for player
             const isPlayer = (entity.side === 'player');
             const isVisible = window.isVisibleToPlayer(next);
@@ -482,10 +513,7 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
 
             // Check for ENEMY obstacles (Living enemies only)
             // Friendlies DO NOT block movement
-            const occupant = window.entities.find(e => 
-                e.alive && e.side !== entity.side &&
-                e.getAllHexes().some(h => h.q === next.q && h.r === next.r)
-            );
+            const occupant = (occupantsByHex.get(key) || []).find(e => e.side !== entity.side);
 
             const isLightOrNoArmorEntity = !entity.equipped || !entity.equipped.armor || window.items[entity.equipped.armor]?.id === 'light_armor';
             let acrobaticsCost = 0;
@@ -538,9 +566,9 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
 
             if (!visited.has(key) || nextCost < visited.get(key)) {
                 visited.set(key, nextCost);
+                cameFrom.set(key, { hex: next, parentKey: currentKey });
                 queue.push({
                     hex: next,
-                    path: [...path, next],
                     cost: nextCost,
                     priority: nextCost + distance(next, target)
                 });

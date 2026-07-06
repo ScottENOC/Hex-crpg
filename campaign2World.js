@@ -464,7 +464,10 @@ function buildAbandonedHouse(waypoint) {
     if (!waypoint) return;
     const center = { q: waypoint.q + 6, r: waypoint.r };
     const doorHex = { q: center.q - 3, r: center.r };
-    const houseRegion = carveBuilding(center.q, center.r, 3, 2, doorHex, 'Wood Floor');
+    // carveFlatRoom (not carveBuilding) so the house reads as a real square
+    // instead of carveBuilding's uncorrected hex-shear slant (its right
+    // side sitting visibly lower than its left).
+    const houseRegion = carveFlatRoom(center.q, center.r, 3, 2, doorHex, 'Wood Floor');
     window.interiorRegions.push(houseRegion);
 
     for (let q = waypoint.q + 1; q < doorHex.q; q++) window.setTerrainAt(q, waypoint.r, 'Path');
@@ -477,8 +480,14 @@ function buildAbandonedHouse(waypoint) {
     // true for the entire game from the moment Campaign 2 loads, since
     // checkInCombat() scans every entity regardless of distance. They're
     // woken via proximity instead (see worldTime.js's tick).
+    //
+    // hexRowShiftFlat(dq) compensates each skeleton's row for the same
+    // per-column shear carveFlatRoom itself applies to the floor — without
+    // it, an off-center skeleton (dq != 0) could land one row off the
+    // actual (corrected) floor and end up standing in the wall.
     (window.campaign2AbandonedHouseSkeletons || []).forEach((hexOffset, i) => {
-        const skeleton = window.createMonster('skeleton', { q: center.q + hexOffset.q, r: center.r + hexOffset.r }, null, null, 'enemy');
+        const shift = hexRowShiftFlat(hexOffset.q);
+        const skeleton = window.createMonster('skeleton', { q: center.q + hexOffset.q, r: center.r + hexOffset.r + shift }, null, null, 'enemy');
         skeleton.necromancerMinion = true; // defeating them costs necromancer_cult standing (see handleLethalDamage)
         window.entities.push(skeleton);
     });
@@ -532,12 +541,19 @@ window.fortifySilverhartManor = fortifySilverhartManor;
 // world-map hexes from Hollowmere — a start, not fully built out. One
 // building and a single villager for now.
 function buildMillbrook(roadEnd) {
-    const center = { q: roadEnd.q, r: roadEnd.r };
-    const doorHex = { q: center.q, r: center.r + 3 };
-    const millbrookRegion = carveBuilding(center.q, center.r, 3, 3, doorHex, 'Wood Floor');
+    // Offset off the through-road's own column (which continues north past
+    // this point all the way to Silverhart) rather than centered directly
+    // on it — building squarely on the road made the road look like it
+    // "stopped at her front door" and then a second, disconnected-looking
+    // stretch "came out the back of her house" toward the capital. Uses
+    // carveFlatRoom (not carveBuilding) so the building itself reads as a
+    // real square instead of carveBuilding's uncorrected hex-shear slant.
+    const center = { q: roadEnd.q - 6, r: roadEnd.r };
+    const doorHex = { q: center.q + 3, r: center.r };
+    const millbrookRegion = carveFlatRoom(center.q, center.r, 3, 3, doorHex, 'Wood Floor');
     window.interiorRegions.push(millbrookRegion);
 
-    for (let r = roadEnd.r + 1; r < doorHex.r; r++) window.setTerrainAt(center.q, r, 'Path');
+    for (let q = doorHex.q + 1; q < roadEnd.q; q++) window.setTerrainAt(q, roadEnd.r, 'Path');
 
     window.tileObjects[`${center.q},${center.r}`] = { type: 'fireplace', lightRadius: 6 };
     window.campaign2MillbrookCenter = center;
@@ -1217,7 +1233,11 @@ function setupVillageScene(forLoadOnly = false) {
     // cluster left the general store's approach corridor too tight against
     // both houses, with the east house's floor reaching into where the path
     // was meant to run.
-    const generalStoreRegion = carveBuilding(0, 18, 4, 3, { q: 0, r: 15 }, 'Wood Floor');
+    // carveFlatRoom (not carveBuilding) so the store reads as a real square
+    // instead of carveBuilding's uncorrected hex-shear slant — door and
+    // counter both sit on the center column (dq=0, where the two carving
+    // functions agree exactly), so this doesn't touch either.
+    const generalStoreRegion = carveFlatRoom(0, 18, 4, 3, { q: 0, r: 15 }, 'Wood Floor');
     window.tileObjects['0,17'] = { type: 'table', lightRadius: 0 }; // counter
 
     // Small homes for the tavern's regular patrons — Mira and Oskar go back
@@ -1838,7 +1858,7 @@ window.readDiscipleNote = readDiscipleNote;
 // two branches below and the necromancerMinion reputation hit in
 // handleLethalDamage), never a bespoke one-off flag.
 function interactPhylacteryAltar() {
-    const npc = { name: 'Ritual Altar', customImage: 'journal' };
+    const npc = { name: 'Ritual Altar', customImage: 'altar_unholy' };
     const hasShard = window.player.inventory.includes('phylactery_shard');
 
     if (window.phylacteryReturned) {
@@ -1864,7 +1884,7 @@ function interactPhylacteryAltar() {
                     window.player.inventory = window.player.inventory.filter(i => i !== 'phylactery_shard');
                     window.phylacteryReturned = true;
                     if (window.factions?.necromancer_cult) window.adjustReputation(window.factions.necromancer_cult, 40, 30);
-                    window.showDialogue({ name: 'A Cold Voice', customImage: 'journal' },
+                    window.showDialogue({ name: 'A Cold Voice', customImage: 'altar_unholy' },
                         "...You didn't have to. Few wouldn't have kept it. I won't forget this.");
                 }
             },
