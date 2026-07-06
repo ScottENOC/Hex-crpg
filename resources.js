@@ -35,8 +35,16 @@ function ensureWildernessResourceNode(q, r) {
         else if (oreRoll > 0.80) oreType = 'ore_gold';
         else if (oreRoll > 0.65) oreType = 'ore_silver';
         window.tileObjects[key] = { type: 'ore_node', oreType, depleted: false };
+    } else if (terrain.name === 'Rocky Outcrop' && roll >= 0.05 && roll < 0.12) {
+        // Plain quarriable stone — distinct from the rarer ore veins above,
+        // no tool required (just heavier lifting than picking fruit).
+        window.tileObjects[key] = { type: 'stone_deposit', depleted: false };
     } else if (terrain.name === 'Forest' && roll >= 0.5 && roll < 0.506) {
         window.tileObjects[key] = { type: 'fruit_tree', hasFruit: true, regrowAt: 0 };
+    } else if (terrain.name === 'Forest' && roll >= 0.506 && roll < 0.52) {
+        // Timber tree — chopped for building material, not food (see
+        // harvestTimberTree's axe requirement below).
+        window.tileObjects[key] = { type: 'timber_tree', hasTimber: true, regrowAt: 0 };
     } else if (terrain.name === 'Grass' && roll >= 0.96) {
         window.tileObjects[key] = { type: 'herb_patch', hasHerbs: true, regrowAt: 0 };
     } else if (terrain.name === 'Water' && roll < 0.008) {
@@ -82,6 +90,38 @@ function harvestFruitTree(q, r) {
     window.showMessage(`You gather ${amount}x fruit.`);
 }
 window.harvestFruitTree = harvestFruitTree;
+
+// Building material — requires an axe equipped or simply carried (same
+// "carrying it is enough" convention as the pickaxe unlocking ore mining).
+function harvestTimberTree(q, r) {
+    const key = `${q},${r}`;
+    const node = window.tileObjects[key];
+    if (!node || !node.hasTimber) { window.showMessage("This tree's already been stripped of usable timber."); return; }
+    const hasAxe = window.player.inventory.includes('axe') ||
+        (window.party || []).some(p => p.equipped?.weapon === 'axe' || p.equipped?.offhand === 'axe');
+    if (!hasAxe) { window.showMessage("You need an axe to chop this down."); return; }
+    const amount = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < amount; i++) window.player.inventory.push('wood');
+    node.hasTimber = false;
+    node.regrowAt = window.worldSeconds + 48 * 3600;
+    window.showMessage(`You chop ${amount}x wood.`);
+    if (window.showInventoryScreen && document.getElementById("inventory-modal")?.style.display === "block") window.showInventoryScreen();
+}
+window.harvestTimberTree = harvestTimberTree;
+
+// Building material — no tool required, just time and effort.
+function harvestStoneDeposit(q, r) {
+    const key = `${q},${r}`;
+    const node = window.tileObjects[key];
+    if (!node || node.depleted) { window.showMessage("Nothing left worth quarrying here."); return; }
+    const amount = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < amount; i++) window.player.inventory.push('stone');
+    node.depleted = true;
+    node.regrowAt = window.worldSeconds + 48 * 3600;
+    window.showMessage(`You quarry ${amount}x stone.`);
+    if (window.showInventoryScreen && document.getElementById("inventory-modal")?.style.display === "block") window.showInventoryScreen();
+}
+window.harvestStoneDeposit = harvestStoneDeposit;
 
 function harvestHerbPatch(q, r) {
     const key = `${q},${r}`;

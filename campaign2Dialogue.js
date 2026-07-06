@@ -111,6 +111,37 @@ window.npcDialogueTrees = {
             ]);
         }
     },
+    // Offers whichever build orders are currently available (see
+    // window.buildOrders in construction.js) — each with a resource-cost
+    // option and a flat-gold option, per the "gather it or just pay" design.
+    builder_tomas: (npc) => {
+        const orders = Object.entries(window.buildOrders).filter(([id, o]) => o.isAvailable());
+        if (orders.length === 0) {
+            const anyDone = Object.values(window.buildOrders).some(o => o.isDone());
+            window.showDialogue(npc, anyDone
+                ? "Nothing more for me to build right now — come back if you clear or claim somewhere new."
+                : "Get yourself a plot or a place worth fixing up, and I'll see what I can do.", [
+                { label: "Understood.", action: () => {} }
+            ]);
+            return;
+        }
+        const options = orders.map(([id, order]) => ({
+            label: `${order.name} (${window.buildOrderCostLabel(order)}, or ${order.goldCost} gold)`,
+            action: () => {
+                window.showDialogue(npc, `${order.name}. Pay with gathered materials, or just gold?`, [
+                    { label: `Pay with materials (${window.buildOrderCostLabel(order)})`, action: () => {
+                        if (window.fulfillBuildOrder(id, false)) window.showMessage("The work is done.");
+                    }},
+                    { label: `Pay ${order.goldCost} gold instead`, action: () => {
+                        if (window.fulfillBuildOrder(id, true)) window.showMessage("The work is done.");
+                    }},
+                    { label: "Never mind.", action: () => {} }
+                ]);
+            }
+        }));
+        options.push({ label: "Nothing right now.", action: () => {} });
+        window.showDialogue(npc, "Name it and I'll build it, so long as you bring the materials — or the coin to cover them.", options);
+    },
     wick_hallow: (npc) => {
         const ironbondQuest = window.questLog && window.questLog.find(q => q.id === 'ironbond_pitch');
         if (ironbondQuest && ironbondQuest.status === 'active' && !ironbondQuest.pitched) {

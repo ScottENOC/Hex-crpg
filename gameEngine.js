@@ -1719,6 +1719,25 @@ function renderEntities() {
                       );
                   });
               }
+          } else if (obj.type === 'timber_tree' && window.gameVisuals.tree_large?.complete) {
+              let img = window.gameVisuals.tree_large;
+              if (window.getSeasonalLeafTint && window.getRecoloredHairSprite) {
+                  const tint = window.getSeasonalLeafTint();
+                  const tinted = window.getRecoloredHairSprite(img, tint.hue, tint.light, tint.sat);
+                  if (tinted) img = tinted;
+              }
+              const tSize = size * 2.2;
+              const th = tSize * (window.gameVisuals.tree_large.naturalHeight / window.gameVisuals.tree_large.naturalWidth);
+              if (!obj.hasTimber) window.mapCtx.globalAlpha = 0.4;
+              window.mapCtx.drawImage(img, x - tSize / 2, y + size * 0.5 - th, tSize, th);
+              window.mapCtx.globalAlpha = 1.0;
+          } else if (obj.type === 'stone_deposit') {
+              window.mapCtx.fillStyle = obj.depleted ? '#8a8a82' : '#6e6e66';
+              window.mapCtx.globalAlpha = obj.depleted ? 0.4 : 1.0;
+              window.mapCtx.beginPath();
+              window.mapCtx.ellipse(x, y, size * 0.3, size * 0.22, 0, 0, Math.PI * 2);
+              window.mapCtx.fill();
+              window.mapCtx.globalAlpha = 1.0;
           } else if (obj.type === 'herb_patch' && window.gameVisuals.foliage?.complete) {
               const hSize = size * 0.6;
               window.mapCtx.globalAlpha = obj.hasHerbs ? 1.0 : 0.35;
@@ -2541,6 +2560,8 @@ function interactWithTileObject(q, r, player) {
     if (doorObj.type === 'building_plot' && window.buildPlayerCottage) { window.buildPlayerCottage(q, r); return; }
     if (doorObj.type === 'player_bed' && window.restAtHome) { window.restAtHome(); return; }
     if (doorObj.type === 'ore_node' && window.harvestOreNode) { window.harvestOreNode(q, r); return; }
+    if (doorObj.type === 'timber_tree' && window.harvestTimberTree) { window.harvestTimberTree(q, r); return; }
+    if (doorObj.type === 'stone_deposit' && window.harvestStoneDeposit) { window.harvestStoneDeposit(q, r); return; }
     if (doorObj.type === 'fruit_tree' && window.harvestFruitTree) { window.harvestFruitTree(q, r); return; }
     if (doorObj.type === 'herb_patch' && window.harvestHerbPatch) { window.harvestHerbPatch(q, r); return; }
     if (doorObj.type === 'fishing_spot' && window.harvestFishingSpot) { window.harvestFishingSpot(q, r); return; }
@@ -3468,7 +3489,7 @@ function handleClick(e){
     // and the pendingInteractHex arrival hook in autoMoveProcess) rather than
     // silently just moving onto it without ever interacting.
     const doorObj = window.tileObjects && window.tileObjects[`${clickedHex.q},${clickedHex.r}`];
-    const interactableTypes = ['door_open', 'door_closed', 'signpost', 'journal', 'ore_node', 'fruit_tree', 'herb_patch', 'fishing_spot', 'corpse', 'evidence', 'building_plot', 'player_bed'];
+    const interactableTypes = ['door_open', 'door_closed', 'signpost', 'journal', 'ore_node', 'timber_tree', 'stone_deposit', 'fruit_tree', 'herb_patch', 'fishing_spot', 'corpse', 'evidence', 'building_plot', 'player_bed'];
     if (doorObj && interactableTypes.includes(doorObj.type)) {
         if (window.distance(player.hex, clickedHex) <= 1) {
             interactWithTileObject(clickedHex.q, clickedHex.r, player);

@@ -439,6 +439,17 @@ window.campaign2WallGuards = [
     { name: 'Wall Guard Draven', title: 'Royal Guard', race: 'human', gender: 'male', classLevels: ['fighter', 'fighter'], skillPicks: ['health', 'health', 'sword_hit', 'sword_dmg', 'heavy_armor_training'], equipment: ['sword', 'heavy_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#3a3a6a' },
     { name: 'Wall Guard Ottilie', title: 'Royal Guard', race: 'human', gender: 'female', classLevels: ['fighter', 'fighter'], skillPicks: ['health', 'health', 'spear_hit', 'spear_dmg', 'heavy_armor_training'], equipment: ['spear', 'heavy_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#3a3a6a' }
 ];
+// Hollowmere's builder — carries out build orders (see construction.js) for
+// wood/stone or a flat gold price. One builder for now; a capital/Silverhart
+// builder or others just need their own NPC + placement, reusing the same
+// dialogueId and buildOrders registry.
+window.campaign2HollowmereBuilder = {
+    name: 'Tomas Wren', title: 'Builder',
+    race: 'human', gender: 'male',
+    classLevels: [], skillPicks: [], equipment: [],
+    side: 'neutral', factionId: null, color: '#8a6a3a',
+    dialogueId: 'builder_tomas'
+};
 window.campaign2PalaceChancellor = {
     name: 'Chancellor Merric Vane',
     title: "The Queen's Chancellor",

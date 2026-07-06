@@ -30,6 +30,8 @@ const items = {
     'game_meat': { id: 'game_meat', name: 'Game Meat', type: 'food', sellPrice: 3, description: "Harvested from an animal's corpse." },
     'hide': { id: 'hide', name: 'Hide', type: 'resource', sellPrice: 4, description: "A tanned-worthy hide, harvested from an animal's corpse." },
     'ore_iron': { id: 'ore_iron', name: 'Iron Ore', type: 'resource', sellPrice: 5, description: 'Common ore, the backbone of most tools and arms.' },
+    'wood': { id: 'wood', name: 'Timber', type: 'resource', sellPrice: 2, description: 'Rough-cut logs, chopped from a tree. Building material.' },
+    'stone': { id: 'stone', name: 'Quarried Stone', type: 'resource', sellPrice: 3, description: 'Broken from a rocky outcrop. Building material.' },
     'ore_silver': { id: 'ore_silver', name: 'Silver Ore', type: 'resource', sellPrice: 12, description: 'Uncommon ore, prized for fine jewelry and coin.' },
     'ore_gold': { id: 'ore_gold', name: 'Gold Ore', type: 'resource', sellPrice: 20, description: 'Rare ore, valuable and soft.' },
     'gem_red': { id: 'gem_red', name: 'Red Gem', type: 'resource', sellPrice: 30, description: 'A rare, uncut gemstone — flavor and favor, nothing more.' },

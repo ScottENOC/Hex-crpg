@@ -410,6 +410,10 @@ function buildPlayerCottagePlot(crossroads) {
     for (let r = crossroads.r + 1; r <= plot.r; r++) window.setTerrainAt(plot.q, r, 'Path');
     window.tileObjects[`${plot.q},${plot.r}`] = { type: 'building_plot' };
     window.campaign2PlayerCottagePlot = plot;
+
+    if (window.campaign2HollowmereBuilder) {
+        window.entities.push(window.buildNPC({ ...window.campaign2HollowmereBuilder, hex: { q: plot.q - 2, r: plot.r } }));
+    }
 }
 
 // Called when the player interacts with the building_plot marker (see
@@ -430,6 +434,25 @@ function buildPlayerCottage(q, r) {
     if (window.renderEntities) window.renderEntities();
 }
 window.buildPlayerCottage = buildPlayerCottage;
+
+// Build order target (see construction.js's upgrade_cottage): re-carves a
+// bigger footprint around the same plot center, keeping the existing bed
+// hex untouched (carveBuilding only paints floor/wall terrain, never
+// clobbers an existing tileObject at a floor hex) and adding real furniture.
+function upgradePlayerCottage() {
+    if (!window.campaign2PlayerCottageBuilt || window.campaign2PlayerCottageUpgraded) return;
+    const plot = window.campaign2PlayerCottagePlot;
+    const doorHex = { q: plot.q, r: plot.r + 3 };
+    const region = carveBuilding(plot.q, plot.r, 3, 3, doorHex, 'Wood Floor');
+    window.interiorRegions.push(region);
+    window.tileObjects[`${plot.q + 1},${plot.r}`] = { type: 'table' };
+    window.tileObjects[`${plot.q + 1},${plot.r - 1}`] = { type: 'bench' };
+    window.campaign2PlayerCottageUpgraded = true;
+    window.showMessage("The builders finish their work — your cottage is now a proper country house.");
+    if (window.drawMap) window.drawMap();
+    if (window.renderEntities) window.renderEntities();
+}
+window.upgradePlayerCottage = upgradePlayerCottage;
 
 // A small house standing alone partway up the north road — the first
 // breadcrumb toward a much larger plot arc (a necromancer working toward
@@ -465,6 +488,29 @@ function buildAbandonedHouse(waypoint) {
     // again while holding it offers to return it — see interactPhylacteryAltar.
     window.tileObjects[`${center.q + 1},${center.r}`] = { type: 'journal', readId: 'phylactery_altar', lightRadius: 0 };
 }
+
+// True once every skeleton guarding the abandoned house is dead — the
+// "squatting after clearing a location" acquisition path for this build
+// order (see construction.js's renovate_abandoned_house).
+function isAbandonedHouseCleared() {
+    return !window.entities.some(e => e.alive && e.necromancerMinion);
+}
+window.isAbandonedHouseCleared = isAbandonedHouseCleared;
+
+// Build order target: adds a bed once the place is cleared and paid for,
+// without touching the existing journal/altar tileObjects the necromancer
+// breadcrumb quest content still needs.
+function renovateAbandonedHouse() {
+    if (window.campaign2AbandonedHouseRenovated) return;
+    const center = window.campaign2AbandonedHouseCenter;
+    if (!center) return;
+    window.tileObjects[`${center.q - 1},${center.r}`] = { type: 'player_bed', lightRadius: 0 };
+    window.campaign2AbandonedHouseRenovated = true;
+    window.showMessage("The builders clean out the wreckage and patch the walls. It's a proper second home now.");
+    if (window.drawMap) window.drawMap();
+    if (window.renderEntities) window.renderEntities();
+}
+window.renovateAbandonedHouse = renovateAbandonedHouse;
 
 // Millbrook: a minimal stub village at the far end of the north road, three
 // world-map hexes from Hollowmere — a start, not fully built out. One
