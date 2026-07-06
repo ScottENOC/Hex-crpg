@@ -450,6 +450,39 @@ function getNeighbors(q, r) {
     return dirs.map(d => ({q: q + d.q, r: r + d.r})).filter(h => window.isHexInBounds(h));
 }
 
+// Binary min-heap on .priority, used by findPath below instead of sorting
+// the entire open-set array on every iteration (an O(n log n) full sort per
+// step, run up to 5000 times, for a queue that only ever needs its single
+// smallest element popped and one new element pushed each step).
+function heapPush(heap, node) {
+    heap.push(node);
+    let i = heap.length - 1;
+    while (i > 0) {
+        const parent = (i - 1) >> 1;
+        if (heap[parent].priority <= heap[i].priority) break;
+        [heap[parent], heap[i]] = [heap[i], heap[parent]];
+        i = parent;
+    }
+}
+function heapPop(heap) {
+    const top = heap[0];
+    const last = heap.pop();
+    if (heap.length > 0) {
+        heap[0] = last;
+        let i = 0;
+        while (true) {
+            const left = 2 * i + 1, right = 2 * i + 2;
+            let smallest = i;
+            if (left < heap.length && heap[left].priority < heap[smallest].priority) smallest = left;
+            if (right < heap.length && heap[right].priority < heap[smallest].priority) smallest = right;
+            if (smallest === i) break;
+            [heap[smallest], heap[i]] = [heap[i], heap[smallest]];
+            i = smallest;
+        }
+    }
+    return top;
+}
+
 function findPath(start, target, availableTP, entity, ignoreTP = false, preferredPath = null) {
     // Built once per call instead of re-scanning window.entities (a linear
     // scan) for every single neighbor of every expanded node — with
@@ -495,10 +528,17 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
     while (queue.length > 0) {
         if (iterations++ > 5000) return null; // Increased for larger map
 
-        // Sort by priority (A*)
-        queue.sort((a, b) => a.priority - b.priority);
-        const { hex: current, cost } = queue.shift();
+        const { hex: current, cost } = heapPop(queue);
         const currentKey = `${current.q},${current.r}`;
+
+        // The heap can hold a stale (higher-cost) entry for a hex that a
+        // later, cheaper route already superseded (visited.set overwrites
+        // the recorded cost but doesn't remove the old queue entry — same
+        // "leave it, it'll just be ignored" behavior the previous sort-based
+        // queue already had). Since costs only add positive weight, a
+        // stale/worse entry can't produce a better path than the one
+        // already recorded, so it's safe (and cheap) to skip it outright.
+        if (cost > visited.get(currentKey)) continue;
 
         if (current.q === target.q && current.r === target.r) return reconstructPath(currentKey);
 
@@ -567,7 +607,7 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
             if (!visited.has(key) || nextCost < visited.get(key)) {
                 visited.set(key, nextCost);
                 cameFrom.set(key, { hex: next, parentKey: currentKey });
-                queue.push({
+                heapPush(queue, {
                     hex: next,
                     cost: nextCost,
                     priority: nextCost + distance(next, target)
