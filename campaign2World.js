@@ -512,6 +512,22 @@ function renovateAbandonedHouse() {
 }
 window.renovateAbandonedHouse = renovateAbandonedHouse;
 
+// Build order target for fortify_manor (construction.js) — only reachable
+// once the Queen has actually granted the manor (see the silverhart_queen
+// dialogue tree). Adds the bed that makes it a real free-rest property.
+function fortifySilverhartManor() {
+    if (window.campaign2SilverhartManorFortified) return;
+    const center = window.campaign2SilverhartManorCenter;
+    if (!center) return;
+    window.tileObjects[`${center.q},${center.r}`] = { type: 'player_bed', lightRadius: 0 };
+    window.tileObjects[`${center.q - 1},${center.r}`] = { type: 'fireplace', lightRadius: 5 };
+    window.campaign2SilverhartManorFortified = true;
+    window.showMessage("The builders patch the roof and walls. Your manor is finally livable.");
+    if (window.drawMap) window.drawMap();
+    if (window.renderEntities) window.renderEntities();
+}
+window.fortifySilverhartManor = fortifySilverhartManor;
+
 // Millbrook: a minimal stub village at the far end of the north road, three
 // world-map hexes from Hollowmere — a start, not fully built out. One
 // building and a single villager for now.
@@ -959,6 +975,30 @@ function buildSilverhartPalace(roadEnd) {
         recruiter.dialogueId = window.campaign2MercenaryRecruiter.dialogueId;
         window.entities.push(recruiter);
         window.campaign2MercenaryRecruiterHex = recruiterHex;
+    }
+
+    // A noble family's abandoned townhouse, sitting empty past the far end
+    // of the diplomatic quarter's own path (well clear of every building
+    // above — no need to re-verify hex-shear collisions against a footprint
+    // that far out). Reachable, visibly neglected, and grantable by the
+    // Queen herself once reputation with the crown is high enough (see the
+    // silverhart_queen dialogue tree) — the "granted through a quest chain"
+    // acquisition path, distinct from the free cottage plot (built) and the
+    // abandoned house on the north road (cleared by force).
+    const manorRow = dqPathEnd + 6;
+    for (let r = dqPathEnd; r <= manorRow; r++) window.setTerrainAt(dqCenter, r, 'Path');
+    const manorCenter = { q: dqCenter - 10, r: manorRow };
+    const manorDoor = { q: manorCenter.q + 3, r: manorCenter.r };
+    const manorRegion = carveBuilding(manorCenter.q, manorCenter.r, 3, 2, manorDoor, 'Wood Floor');
+    window.interiorRegions.push(manorRegion);
+    for (let q = manorDoor.q + 1; q < dqCenter; q++) window.setTerrainAt(q, manorRow, 'Path');
+    window.campaign2SilverhartManorCenter = manorCenter;
+
+    if (window.campaign2ManorNeighbor) {
+        window.entities.push(window.buildNPC({ ...window.campaign2ManorNeighbor, hex: { q: manorCenter.q - 5, r: manorCenter.r } }));
+    }
+    if (window.campaign2SilverhartBuilder) {
+        window.entities.push(window.buildNPC({ ...window.campaign2SilverhartBuilder, hex: { q: manorCenter.q + 5, r: manorCenter.r } }));
     }
 
     // One world-hex north of Millbrook [3][6], which is itself 3 north of

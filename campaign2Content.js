@@ -450,6 +450,28 @@ window.campaign2HollowmereBuilder = {
     side: 'neutral', factionId: null, color: '#8a6a3a',
     dialogueId: 'builder_tomas'
 };
+// A Silverhart-side builder, mirroring Tomas Wren in Hollowmere — same
+// dialogueId ('builder_tomas'), since the dialogue tree reads generically
+// from window.buildOrders and doesn't care which NPC is asking.
+window.campaign2SilverhartBuilder = {
+    name: 'Master Builder Hallis', title: 'Builder',
+    race: 'dwarf', gender: 'female',
+    classLevels: [], skillPicks: [], equipment: [],
+    side: 'neutral', factionId: null, color: '#6a5a3a',
+    dialogueId: 'builder_tomas'
+};
+
+// Stands near the abandoned noble manor, grumbling about the eyesore —
+// flavor establishing the manor as a known local nuisance well before the
+// Queen ever offers to grant it (see the silverhart_queen dialogue tree).
+window.campaign2ManorNeighbor = {
+    name: 'Petra Ashfield', title: 'Concerned Resident',
+    race: 'human', gender: 'female',
+    classLevels: [], skillPicks: [], equipment: [],
+    side: 'neutral', factionId: null, color: '#7a6a5a',
+    dialogueId: 'manor_neighbor'
+};
+
 window.campaign2PalaceChancellor = {
     name: 'Chancellor Merric Vane',
     title: "The Queen's Chancellor",

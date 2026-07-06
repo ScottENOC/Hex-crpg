@@ -64,6 +64,11 @@ function saveGame(saveName = "rpg_save_game") {
         hollowmereSoldiersWaitingOutside: window.hollowmereSoldiersWaitingOutside,
         hollowmereQuestOfferFired: window.hollowmereQuestOfferFired,
         campaign2AbandonedHouseTriggered: window.campaign2AbandonedHouseTriggered,
+        campaign2PlayerCottageBuilt: window.campaign2PlayerCottageBuilt,
+        campaign2PlayerCottageUpgraded: window.campaign2PlayerCottageUpgraded,
+        campaign2AbandonedHouseRenovated: window.campaign2AbandonedHouseRenovated,
+        campaign2SilverhartManorGranted: window.campaign2SilverhartManorGranted,
+        campaign2SilverhartManorFortified: window.campaign2SilverhartManorFortified,
         goblinScoutNoteRead: window.goblinScoutNoteRead,
         emberlodeRaided: window.emberlodeRaided,
         questLog: window.questLog,
@@ -186,6 +191,11 @@ function loadGame(saveName = "rpg_save_game") {
         window.hollowmereSoldiersWaitingOutside = gameState.hollowmereSoldiersWaitingOutside || false;
         window.hollowmereQuestOfferFired = gameState.hollowmereQuestOfferFired || false;
         window.campaign2AbandonedHouseTriggered = gameState.campaign2AbandonedHouseTriggered || false;
+        window.campaign2PlayerCottageBuilt = gameState.campaign2PlayerCottageBuilt || false;
+        window.campaign2PlayerCottageUpgraded = gameState.campaign2PlayerCottageUpgraded || false;
+        window.campaign2AbandonedHouseRenovated = gameState.campaign2AbandonedHouseRenovated || false;
+        window.campaign2SilverhartManorGranted = gameState.campaign2SilverhartManorGranted || false;
+        window.campaign2SilverhartManorFortified = gameState.campaign2SilverhartManorFortified || false;
         window.goblinScoutNoteRead = gameState.goblinScoutNoteRead || false;
         window.emberlodeRaided = gameState.emberlodeRaided || false;
         window.questLog = gameState.questLog || [];

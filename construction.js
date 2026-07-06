@@ -17,13 +17,28 @@ window.buildOrders = {
         isDone: () => !!window.campaign2PlayerCottageUpgraded,
         apply: () => window.upgradePlayerCottage && window.upgradePlayerCottage(),
     },
+    // No goldCost — fortifying a ruin enough to sleep safely in it takes
+    // actual timber and stone, not just coin to wave at the problem, unlike
+    // the other orders where hiring more hands covers the gap.
     renovate_abandoned_house: {
-        name: 'Renovate the abandoned house on the north road',
+        name: 'Fortify the abandoned house into a safe rest house',
         cost: { wood: 8, stone: 8 },
-        goldCost: 120,
+        goldCost: null,
         isAvailable: () => window.isAbandonedHouseCleared && window.isAbandonedHouseCleared() && !window.campaign2AbandonedHouseRenovated,
         isDone: () => !!window.campaign2AbandonedHouseRenovated,
         apply: () => window.renovateAbandonedHouse && window.renovateAbandonedHouse(),
+    },
+    // Granted by the Queen (see the silverhart_queen dialogue tree), not
+    // built from scratch — this order only covers making the place livable
+    // once it's yours. Same "materials only" reasoning as the abandoned
+    // house above.
+    fortify_manor: {
+        name: 'Fortify the manor into a livable home',
+        cost: { wood: 10, stone: 10 },
+        goldCost: null,
+        isAvailable: () => window.campaign2SilverhartManorGranted && !window.campaign2SilverhartManorFortified,
+        isDone: () => !!window.campaign2SilverhartManorFortified,
+        apply: () => window.fortifySilverhartManor && window.fortifySilverhartManor(),
     },
 };
 
@@ -37,7 +52,7 @@ function canAffordResources(order) {
 window.canAffordResources = canAffordResources;
 
 function canAffordGold(order) {
-    return (window.party?.[0]?.gold || 0) >= order.goldCost;
+    return order.goldCost != null && (window.party?.[0]?.gold || 0) >= order.goldCost;
 }
 window.canAffordGold = canAffordGold;
 
@@ -48,6 +63,7 @@ function fulfillBuildOrder(orderId, useGold) {
     const order = window.buildOrders[orderId];
     if (!order || !order.isAvailable()) return false;
     if (useGold) {
+        if (order.goldCost == null) { window.showMessage("This one has to be done with real materials, not just coin."); return false; }
         if (!canAffordGold(order)) { window.showMessage("You don't have enough gold for that."); return false; }
         window.party[0].gold -= order.goldCost;
     } else {

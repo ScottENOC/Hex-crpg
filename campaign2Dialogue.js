@@ -126,21 +126,40 @@ window.npcDialogueTrees = {
             return;
         }
         const options = orders.map(([id, order]) => ({
-            label: `${order.name} (${window.buildOrderCostLabel(order)}, or ${order.goldCost} gold)`,
+            label: order.goldCost != null
+                ? `${order.name} (${window.buildOrderCostLabel(order)}, or ${order.goldCost} gold)`
+                : `${order.name} (${window.buildOrderCostLabel(order)} — materials only)`,
             action: () => {
-                window.showDialogue(npc, `${order.name}. Pay with gathered materials, or just gold?`, [
+                const subOptions = [
                     { label: `Pay with materials (${window.buildOrderCostLabel(order)})`, action: () => {
                         if (window.fulfillBuildOrder(id, false)) window.showMessage("The work is done.");
-                    }},
-                    { label: `Pay ${order.goldCost} gold instead`, action: () => {
+                    }}
+                ];
+                if (order.goldCost != null) {
+                    subOptions.push({ label: `Pay ${order.goldCost} gold instead`, action: () => {
                         if (window.fulfillBuildOrder(id, true)) window.showMessage("The work is done.");
-                    }},
-                    { label: "Never mind.", action: () => {} }
-                ]);
+                    }});
+                }
+                subOptions.push({ label: "Never mind.", action: () => {} });
+                const prompt = order.goldCost != null
+                    ? `${order.name}. Pay with gathered materials, or just gold?`
+                    : `${order.name}. This one needs real materials — no shortcut with coin.`;
+                window.showDialogue(npc, prompt, subOptions);
             }
         }));
         options.push({ label: "Nothing right now.", action: () => {} });
         window.showDialogue(npc, "Name it and I'll build it, so long as you bring the materials — or the coin to cover them.", options);
+    },
+    manor_neighbor: (npc) => {
+        if (window.campaign2SilverhartManorGranted) {
+            window.showDialogue(npc, "Well, at least someone's finally doing something with that place. Better a living soul than another empty house drawing rats.", [
+                { label: "Glad to help.", action: () => {} }
+            ]);
+            return;
+        }
+        window.showDialogue(npc, "That empty manor's been sitting there for years — no heir, no upkeep, just an eyesore drawing rats and worse. The crown really ought to do something with it.", [
+            { label: "Someone should ask the Queen about it.", action: () => {} }
+        ]);
     },
     wick_hallow: (npc) => {
         const ironbondQuest = window.questLog && window.questLog.find(q => q.id === 'ironbond_pitch');
@@ -1397,6 +1416,40 @@ window.npcDialogueTrees = {
                 window.showDialogue(npc, necroLine, [{ label: "I'll watch for it.", action: () => {} }]);
             }
         });
+
+        // The inner-city manor grant: deliberately gated well above every
+        // other tier in this tree (60, versus 40 for her warmest ordinary
+        // greeting) — a reward for genuinely exceptional standing with the
+        // crown, not something a single quest chain hands out. Shown once
+        // reachable, and again (differently) once already granted so it
+        // doesn't just vanish from the menu.
+        if (window.campaign2SilverhartManorGranted) {
+            options.push({
+                label: "About the manor you granted me...",
+                action: () => window.showDialogue(npc, "I trust it's serving you well. Silverhart's better for having someone worth the address living there.", [
+                    { label: "It is. Thank you, Your Majesty.", action: () => {} }
+                ])
+            });
+        } else if (standing >= 60) {
+            options.push({
+                label: "Your Majesty, might I ask a favor?",
+                action: () => {
+                    window.showDialogue(npc, "Few enough have earned the right to ask. Go on.", [
+                        {
+                            label: "That empty manor near the inner city — could it be mine?",
+                            action: () => {
+                                window.campaign2SilverhartManorGranted = true;
+                                window.showMessage("The Queen grants you the abandoned manor. It needs work before it's livable — a builder could see to that.");
+                                window.showDialogue(npc, "Done. It's stood empty long enough, and you've more than earned an address inside these walls. See that it doesn't sit derelict a day longer than it has to.", [
+                                    { label: "I won't waste it.", action: () => {} }
+                                ]);
+                            }
+                        },
+                        { label: "Never mind, Your Majesty.", action: () => {} }
+                    ]);
+                }
+            });
+        }
 
         options.push({ label: "Just paying my respects, Your Majesty.", action: () => {} });
         window.showDialogue(npc, line, options);
