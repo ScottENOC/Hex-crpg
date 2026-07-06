@@ -1616,6 +1616,36 @@ function setupVillageScene(forLoadOnly = false) {
     window._campaign2TerrainBaseline = { ...window.overrideTerrain };
     window._campaign2TileObjectsBaseline = { ...window.tileObjects };
 
+    // Same idea, applied to NPCs: every scripted world NPC (buildNPC/
+    // buildGoblinNPC, always isNPC:true) is just as deterministic as the
+    // terrain it stands on — same spec + same world-gen = same NPC. Snapshot
+    // them here (keyed by name, which every spec already gives a unique one)
+    // so saveGame/loadGame (persistence.js) can diff against this instead of
+    // saving/restoring full stat/skill/equipment dumps for NPCs nothing has
+    // changed on. Party members, mounts, hires, and anything built at
+    // runtime (siege-arena skirmishers, etc.) are never isNPC and so never
+    // get a baseline entry — they keep full serialization, unaffected.
+    if (window.serializeEntity) {
+        window._campaign2NpcBaseline = {};
+        window.entities.forEach(e => {
+            if (!e.isNPC) return;
+            // Pre-compute the same hash-derived cosmetic fields renderEntities
+            // would otherwise lazily assign on first draw (gameEngine.js
+            // ~1465-1481) — purely a function of e.name, so doing it here
+            // instead just means the baseline snapshot and the live entity
+            // start identical, rather than every NPC showing a permanent
+            // "changed" cosmetic diff before it's ever been rendered once.
+            if (e.shirtHue === undefined && window.pickClothingHue) { e.shirtHue = window.pickClothingHue((e.name || 'x') + '_shirt'); e.clothingSatMult = 0.85; }
+            if (e.pantsHue === undefined && window.pickClothingHue) { e.pantsHue = window.pickClothingHue((e.name || 'x') + '_pants'); e.clothingSatMult = 0.85; }
+            if (e.skinHue === undefined && window.hashStringToHue) e.skinHue = 5 + window.hashStringToHue((e.name || 'x') + '_skin') % 40;
+            if (e.hairHue === undefined && window.pickHairPreset) {
+                const preset = window.pickHairPreset((e.name || 'x') + '_hair');
+                e.hairHue = preset.hue; e.hairLightMult = preset.lightMult; e.hairSatMult = preset.satMult;
+            }
+            window._campaign2NpcBaseline[e.name] = window.serializeEntity(e);
+        });
+    }
+
     window.hollowmereEventFired = false;
 
     // Outside combat, the party should mostly move together — flip the

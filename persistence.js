@@ -21,6 +21,50 @@ function diffAgainstBaseline(current, baseline) {
     return diff;
 }
 
+// Flattens one entity into the same plain-data shape used for both the
+// real save and the deterministic-NPC baseline snapshot below — pulled out
+// as its own function so both call sites produce byte-identical output for
+// an unchanged entity (required for the entity-diffing to work at all).
+function serializeEntity(e) {
+    const data = {};
+    for (let key in e) {
+        if (typeof e[key] !== 'function') {
+            if (key === 'riding') {
+                data.ridingId = e.riding ? e.riding.id : null;
+            } else if (key === 'rider') {
+                data.riderId = e.rider ? e.rider.id : null;
+            } else {
+                data[key] = e[key];
+            }
+        }
+    }
+    data.isEnemy = e instanceof window.Enemy;
+    return data;
+}
+window.serializeEntity = serializeEntity;
+
+// Every scripted world NPC (soldiers, quest-givers, shopkeepers — anything
+// built via buildNPC/buildGoblinNPC from a campaign2Content.js spec, always
+// flagged isNPC:true) is exactly as deterministic as terrain already is:
+// same spec + same world-gen = same NPC, every time, and there's currently
+// no NPC leveling/skill-growth system to change that. So the same
+// diffAgainstBaseline trick that already shrinks terrain/tileObjects saves
+// applies here too — only what actually changes at runtime (hp, position,
+// alive/unconscious state, inventory, reputation) needs saving, not a full
+// re-dump of stats/skills/equipment the spec already defines. Party
+// members, hired mercenaries, summons, and anything else built at runtime
+// (siege-arena skirmishers, etc.) have no such spec baseline and keep full
+// serialization — this only applies to entities present at the moment
+// setupVillageScene snapshots window._campaign2NpcBaseline (campaign2World.js).
+function diffEntityAgainstNpcBaseline(entity) {
+    const baseline = window._campaign2NpcBaseline?.[entity.name];
+    if (!entity.isNPC || !baseline) return null;
+    const full = serializeEntity(entity);
+    const diff = diffAgainstBaseline(full, baseline);
+    diff.__diffOfName = entity.name;
+    return diff;
+}
+
 function saveGame(saveName = "rpg_save_game") {
     if (!window.player) {
         window.showMessage("Nothing to save yet!");
@@ -83,23 +127,7 @@ function saveGame(saveName = "rpg_save_game") {
         // (never rendered/AI-processed), so he needs his own save/load slot.
         regionalNPCBaron: window.regionalNPCs?.baron || null,
 
-        entities: window.entities.map(e => {
-            const data = {};
-            // Save all non-function properties
-            for (let key in e) {
-                if (typeof e[key] !== 'function') {
-                    if (key === 'riding') {
-                        data.ridingId = e.riding ? e.riding.id : null;
-                    } else if (key === 'rider') {
-                        data.riderId = e.rider ? e.rider.id : null;
-                    } else {
-                        data[key] = e[key];
-                    }
-                }
-            }
-            data.isEnemy = e instanceof window.Enemy;
-            return data;
-        }),
+        entities: window.entities.map(e => diffEntityAgainstNpcBaseline(e) || serializeEntity(e)),
         saveDate: new Date().toISOString(),
         saveName: saveName
     };
@@ -251,15 +279,26 @@ function loadGame(saveName = "rpg_save_game") {
             window.tileObjects = gameState.tileObjects || {};
         }
 
-        // 4. Reconstruct Entities
+        // 4. Reconstruct Entities. A diffed NPC (see diffEntityAgainstNpcBaseline,
+        // above) only carries the fields that actually changed at runtime —
+        // merge it back onto its window._campaign2NpcBaseline snapshot (kept
+        // in memory for the whole session, same as _campaign2TerrainBaseline,
+        // regardless of whether startGameCore(true) happened to re-run this
+        // particular load call) to get the full data back before
+        // reconstructing, rather than relying on whatever's currently in
+        // window.entities (which may be stale mid-session, unlike a fresh
+        // page load).
         window.entities = gameState.entities.map(d => {
+            const full = d.__diffOfName
+                ? { ...window._campaign2NpcBaseline?.[d.__diffOfName], ...d }
+                : d;
             let ent;
-            if (d.isEnemy) {
-                ent = new window.Enemy(d.name, d.color, d.hex, d.initiative, d.hp, d.expValue);
+            if (full.isEnemy) {
+                ent = new window.Enemy(full.name, full.color, full.hex, full.initiative, full.hp, full.expValue);
             } else {
-                ent = new window.Entity(d.name, d.color, d.hex, d.initiative);
+                ent = new window.Entity(full.name, full.color, full.hex, full.initiative);
             }
-            Object.assign(ent, d);
+            Object.assign(ent, full);
             return ent;
         });
 
