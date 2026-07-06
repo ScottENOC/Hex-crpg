@@ -463,6 +463,9 @@ function updateNpcSchedules() {
     window.entities.forEach(e => {
         const blocks = schedules[e.name];
         if (!e.alive || !blocks) return;
+        // Townsfolk on a daily routine follow the roads (the farmer walking to
+        // the pub sticks to the path); see the prefersRoads bias in findPath.
+        e.prefersRoads = true;
         const block = blocks.find(b => hour >= b.start && hour < b.end);
         if (!block) return;
         if (e.hex.q === block.hex.q && e.hex.r === block.hex.r) { e.destination = null; return; }

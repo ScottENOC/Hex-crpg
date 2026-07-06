@@ -599,7 +599,21 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
                 if (isKnownWall) continue;
             }
 
-            const nextCost = cost + (baseCost * (window.getMoveCostMult ? window.getMoveCostMult(next.q, next.r, entity) : terrain.moveCostMult));
+            let stepCost = baseCost * (window.getMoveCostMult ? window.getMoveCostMult(next.q, next.r, entity) : terrain.moveCostMult);
+
+            // ROAD PREFERENCE: an entity flagged prefersRoads (townsfolk on
+            // their daily routine — the farmer walking to the pub, not a
+            // ranger scouting off-trail) pays a surcharge for every off-road
+            // step, so A* strongly favours following the road even when it
+            // winds, while still leaving it for the last stretch to an
+            // off-road destination or when cutting across is *much* shorter.
+            // Bounded and additive, so it biases without ever hard-blocking.
+            // Out-of-combat only — tactical combat movement ignores roads.
+            if (entity && entity.prefersRoads && !window.isInCombat && terrain.name !== 'Path') {
+                stepCost += 3;
+            }
+
+            const nextCost = cost + stepCost;
 
             // Allow one last step that crosses the availableTP threshold
             if (!ignoreTP && availableTP !== undefined && nextCost > availableTP && cost >= availableTP) continue;
