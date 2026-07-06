@@ -147,7 +147,8 @@ function carveFlatRoom(centerQ, centerR, halfW, halfH, doorHex, floorType) {
             floorHexes.push({ q: centerQ + dq, r: centerR + dr + shift });
         }
     }
-    wallRingAroundFloor(floorHexes).forEach(h => window.setTerrainAt(h.q, h.r, 'Wall'));
+    const wallHexes = wallRingAroundFloor(floorHexes);
+    wallHexes.forEach(h => window.setTerrainAt(h.q, h.r, 'Wall'));
     floorHexes.forEach(h => window.setTerrainAt(h.q, h.r, floorType));
     if (doorHex) {
         window.setTerrainAt(doorHex.q, doorHex.r, floorType);
@@ -158,8 +159,37 @@ function carveFlatRoom(centerQ, centerR, halfW, halfH, doorHex, floorType) {
         minQ: centerQ - halfW + 1, maxQ: centerQ + halfW - 1,
         minR: centerR - halfH + 1 - maxShift, maxR: centerR + halfH - 1 + maxShift,
         lightMult: 0.3,
-        doorHex: doorHex ? { q: doorHex.q, r: doorHex.r } : null
+        doorHex: doorHex ? { q: doorHex.q, r: doorHex.r } : null,
+        floorHexes, wallHexes, floorType
     };
+}
+
+// Re-stamps a room's floor and wall ring back to their intended terrain,
+// undoing any accidental overwrite from a later path/corridor crossing
+// through it (the actual cause of the throne room's walls getting
+// partially replaced with Path — a connecting path drawn along the same
+// row as the wall, or overshooting into the interior). Call this AFTER
+// every path that connects to a room has been painted, so it's the true
+// final word on that room's own footprint. `extraDoorHexes` lets a room
+// with more than one door (e.g. the throne room's rear door to the
+// bedroom) keep every door open, not just the one carveFlatRoom itself
+// already knows about.
+function sealRoom(region, extraDoorHexes = []) {
+    if (!region) return;
+    const doorKeys = new Set([region.doorHex, ...extraDoorHexes].filter(Boolean).map(h => `${h.q},${h.r}`));
+    (region.floorHexes || []).forEach(h => {
+        if (doorKeys.has(`${h.q},${h.r}`)) return;
+        window.setTerrainAt(h.q, h.r, region.floorType);
+    });
+    (region.wallHexes || []).forEach(h => {
+        if (doorKeys.has(`${h.q},${h.r}`)) return;
+        window.setTerrainAt(h.q, h.r, 'Wall');
+    });
+    doorKeys.forEach(k => {
+        const [q, r] = k.split(',').map(Number);
+        window.setTerrainAt(q, r, region.floorType);
+        if (!window.tileObjects[k]) window.tileObjects[k] = { type: 'door_open', lightRadius: 0 };
+    });
 }
 
 // Old Mac's Farmstead: a small house + fenced pasture at the end of the
@@ -469,8 +499,32 @@ function buildSilverhartPalace(roadEnd) {
         window.campaign2QueenEntityName = queen.name;
     }
 
+    // Courtyard entry point: a few hexes south of the throne room's own
+    // door, safely clear of its wall/floor footprint — every externally-
+    // connected wing (barracks, council, tower) branches off from here
+    // instead of routing along/through the throne room's own wall row
+    // (the old bug: those spurs used to run straight down throneDoor.r,
+    // which IS the wall's row, carving extra "doors" through it).
+    //
+    // carveFlatRoom shears each column south/north by hexRowShiftFlat(dq)
+    // to keep the room looking flat-topped, so the throne room's southern
+    // wall does NOT sit at a single fixed r across all q — on the west
+    // side (toward council/tower, negative dq) it dips several rows
+    // further south than directly under the door. A horizontal corridor
+    // at a single fixed row can therefore cut clean under the room's own
+    // sheared wall on that side. Guard against it by reading the room's
+    // real wall-ring hexes and picking a row past the deepest one actually
+    // used by the westward corridors below (barracks mirrors it eastward,
+    // covered by the same margin).
+    const throneWallMaxR = Math.max(...throneRegion.wallHexes.map(h => h.r));
+    const courtyard = { q: throneCenter.q, r: Math.max(throneDoor.r + 2, throneWallMaxR + 1) };
+    for (let r = throneDoor.r + 1; r <= courtyard.r; r++) window.setTerrainAt(throneCenter.q, r, 'Path');
+
     // Barracks: east wing, bigger than before — off its own short spur from
     // the courtyard, where most of the "lots of guards" actually live.
+    // External connection: the door opens onto its own little path apron
+    // outside (never inside the room itself), which then runs west through
+    // the courtyard back to the palace's own front door.
     const barracksCenter = { q: throneCenter.q + 14, r: throneCenter.r + 2 };
     const barracksDoor = { q: barracksCenter.q - 4, r: barracksCenter.r };
     const barracksRegion = carveFlatRoom(barracksCenter.q, barracksCenter.r, 4, 4, barracksDoor, 'Wood Floor');
@@ -480,10 +534,11 @@ function buildSilverhartPalace(roadEnd) {
     window.tileObjects[`${barracksCenter.q},${barracksCenter.r + 1}`] = { type: 'bench' };
     window.tileObjects[`${barracksCenter.q - 1},${barracksCenter.r}`] = { type: 'table' };
     window.campaign2PalaceBarracksCenter = barracksCenter;
-    for (let q = throneDoor.q + 1; q <= barracksDoor.q - 1; q++) window.setTerrainAt(q, throneDoor.r, 'Path');
-    for (let q = barracksDoor.q + 1; q < barracksCenter.q; q++) window.setTerrainAt(q, barracksCenter.r, 'Path');
+    for (let q = courtyard.q + 1; q < barracksDoor.q; q++) window.setTerrainAt(q, courtyard.r, 'Path');
+    for (let r = Math.min(courtyard.r, barracksDoor.r); r <= Math.max(courtyard.r, barracksDoor.r); r++) window.setTerrainAt(barracksDoor.q - 1, r, 'Path');
 
-    // Council chamber: west wing, mirrored, for the Chancellor.
+    // Council chamber: west wing, mirrored, for the Chancellor. Same
+    // external-connection shape as the barracks, mirrored west.
     const councilCenter = { q: throneCenter.q - 14, r: throneCenter.r + 2 };
     const councilDoor = { q: councilCenter.q + 4, r: councilCenter.r };
     const councilRegion = carveFlatRoom(councilCenter.q, councilCenter.r, 4, 3, councilDoor, 'Wood Floor');
@@ -491,17 +546,25 @@ function buildSilverhartPalace(roadEnd) {
     window.tileObjects[`${councilCenter.q},${councilCenter.r}`] = { type: 'table' };
     window.tileObjects[`${councilCenter.q},${councilCenter.r - 1}`] = { type: 'bench' };
     window.campaign2PalaceCouncilCenter = councilCenter;
-    for (let q = councilDoor.q + 1; q <= throneDoor.q - 1; q++) window.setTerrainAt(q, throneDoor.r, 'Path');
-    for (let q = councilCenter.q + 1; q < councilDoor.q; q++) window.setTerrainAt(q, councilCenter.r, 'Path');
+    for (let q = councilDoor.q + 1; q < courtyard.q; q++) window.setTerrainAt(q, courtyard.r, 'Path');
+    for (let r = Math.min(courtyard.r, councilDoor.r); r <= Math.max(courtyard.r, councilDoor.r); r++) window.setTerrainAt(councilDoor.q + 1, r, 'Path');
 
     if (window.campaign2PalaceChancellor) {
         window.entities.push(window.buildNPC({ ...window.campaign2PalaceChancellor, hex: { q: councilCenter.q, r: councilCenter.r - 1 } }));
     }
 
-    // Royal Wizard's Tower: a small standalone chamber south-west of the
-    // courtyard, off its own spur — scale befitting a real royal seat, not
-    // just a throne room with two side rooms.
-    const towerCenter = { q: throneCenter.q - 7, r: throneCenter.r + 8 };
+    // Royal Wizard's Tower: a small standalone chamber further out to the
+    // south-west, clear of the throne room's own wall (it used to sit close
+    // enough that its own floor/wall carving overlapped and erased part of
+    // the throne room's south-west corner — see sealRoom below, which is
+    // the real fix, but moving the tower further out means there's nothing
+    // to reseal there in the first place).
+    // Pushed 2 rows further south than before so its own north wall doesn't
+    // land on the same row as the courtyard's east-west corridor (which is
+    // pinned to clear the throne room's sheared south wall) — otherwise the
+    // straight courtyard-row path would cut directly through the tower's
+    // own front wall.
+    const towerCenter = { q: throneCenter.q - 15, r: throneCenter.r + 14 };
     const towerDoor = { q: towerCenter.q, r: towerCenter.r - 2 };
     const towerRegion = carveFlatRoom(towerCenter.q, towerCenter.r, 3, 3, towerDoor, 'Wood Floor');
     window.interiorRegions.push(towerRegion);
@@ -509,8 +572,13 @@ function buildSilverhartPalace(roadEnd) {
     window.tileObjects[`${towerCenter.q + 1},${towerCenter.r}`] = { type: 'journal', readId: 'wizard_tower_tome', lightRadius: 0 };
     window.tileObjects[`${towerCenter.q - 1},${towerCenter.r}`] = { type: 'fireplace', lightRadius: 5 };
     window.campaign2PalaceTowerCenter = towerCenter;
-    for (let r = throneCenter.r + 5; r < towerDoor.r; r++) window.setTerrainAt(throneCenter.q - 7, r, 'Path');
-    for (let q = throneCenter.q - 7; q < throneDoor.q; q++) window.setTerrainAt(q, throneCenter.r + 5, 'Path');
+    // Like the throne room's own front door, towerDoor sits on the floor's
+    // own edge rather than on the wall ring itself — the wall ring hex is
+    // one further step out (north). That hex needs to be treated as part
+    // of the door apron so the corridor can actually pass through it.
+    const towerApron = { q: towerCenter.q, r: towerDoor.r - 1 };
+    for (let r = Math.min(towerDoor.r, courtyard.r); r <= Math.max(towerDoor.r, courtyard.r); r++) window.setTerrainAt(towerDoor.q, r, 'Path');
+    for (let q = Math.min(towerDoor.q, courtyard.q); q <= Math.max(towerDoor.q, courtyard.q); q++) window.setTerrainAt(q, courtyard.r, 'Path');
 
     if (window.campaign2RoyalWizard) {
         window.entities.push(window.buildNPC({ ...window.campaign2RoyalWizard, hex: { q: towerCenter.q, r: towerCenter.r + 1 } }));
@@ -518,7 +586,9 @@ function buildSilverhartPalace(roadEnd) {
 
     // Queen's private chambers: through a rear door behind the throne
     // itself, a small bedroom wing — the "multiple rooms, not just a throne
-    // room" scale the great hall alone doesn't give.
+    // room" scale the great hall alone doesn't give. Internal connection:
+    // reached only through the throne room's own rear door, never from
+    // outside the curtain wall.
     const rearDoor = { q: throneCenter.q, r: throneCenter.r - 4 };
     const bedroomCenter = { q: throneCenter.q, r: throneCenter.r - 9 };
     const bedroomDoor = { q: bedroomCenter.q, r: bedroomCenter.r + 2 };
@@ -530,6 +600,18 @@ function buildSilverhartPalace(roadEnd) {
     window.tileObjects[`${bedroomCenter.q + 1},${bedroomCenter.r}`] = { type: 'table' };
     window.tileObjects[`${bedroomCenter.q},${bedroomCenter.r - 1}`] = { type: 'fireplace', lightRadius: 5 };
     window.campaign2PalaceBedroomCenter = bedroomCenter;
+
+    // Reseal every room now that all connecting paths/corridors have been
+    // painted — undoes any accidental overwrite of a room's own floor/wall
+    // from a spur crossing near it (the actual cause of the throne room's
+    // south wall reading as broken/multi-doored, and stray Path bleeding
+    // into the room just past its real door). This is the definitive fix,
+    // applied last, regardless of the exact shape of the corridors above.
+    sealRoom(throneRegion, [rearDoor, { q: throneCenter.q, r: throneDoor.r + 1 }]);
+    sealRoom(barracksRegion);
+    sealRoom(councilRegion);
+    sealRoom(towerRegion, [towerApron]);
+    sealRoom(bedroomRegion);
 
     // A real curtain wall around the whole complex — hex-distance ring
     // (same "circle" technique the arena lobby's rooms already use), so it
@@ -675,48 +757,71 @@ function buildSilverhartPalace(roadEnd) {
     // there, and the Cathedral gives Knowledge: Religion content a real
     // building to live in instead of only Hollowmere's small chapel.
     const dqCenter = throneCenter.q;
-    for (let r = throneCenter.r + 24; r <= throneCenter.r + 36; r++) window.setTerrainAt(dqCenter, r, 'Path');
 
     // Gate entry: a formal arch marking where the road out of the palace
     // gate becomes the Diplomatic Quarter proper.
     window.tileObjects[`${dqCenter},${throneCenter.r + 24}`] = { type: 'gate_arch' };
     window.campaign2DiplomaticGateCenter = { q: dqCenter, r: throneCenter.r + 24 };
 
-    const embassyRow1 = throneCenter.r + 26;
-    const embassyRow2 = throneCenter.r + 32;
-    const officeRow = throneCenter.r + 38;
+    // Left column (elven/aldenreach/ironbond) is pushed further south than
+    // its original spacing — the elven embassy's own carveFlatRoom wall
+    // ring sheared far enough north (same hex-shear effect that broke the
+    // throne room's connectors) to land directly on the curtain wall's
+    // south edge, reading as "the embassy's wall overlaps the palace
+    // wall". Ironbond moves 2 hexes further still than the row above it,
+    // widening that gap rather than just carrying the same spacing down.
+    const leftShift = 4;
+    const embassyRow1L = throneCenter.r + 26 + leftShift;       // elven
+    const embassyRow2L = throneCenter.r + 32 + leftShift;       // aldenreach
+    const officeRowL = throneCenter.r + 38 + leftShift + 2;     // ironbond
 
-    const elvenCenter = { q: dqCenter - 8, r: embassyRow1 };
+    // Right column (dwarven/corvane/cathedral): the Corvane embassy and the
+    // Cathedral below it were only 6 rows apart — tight enough for their
+    // own wall rings to touch. Rather than dragging Corvane/Dwarven
+    // further north (which would walk them straight back into the curtain
+    // wall/gate the same way the elven embassy collided with it), the fix
+    // widens the row-to-row gaps instead: Dwarven stays put, Corvane's gap
+    // from it grows from 6 to 10, and the Cathedral's gap from Corvane
+    // grows from 6 to 14 — strictly more separation everywhere, verified
+    // clear of both the curtain wall and each other.
+    const embassyRow1R = throneCenter.r + 26;                   // dwarven (unchanged)
+    const embassyRow2R = embassyRow1R + 10;                     // corvane
+    const officeRowR = embassyRow2R + 14;                       // cathedral
+
+    const dqPathEnd = Math.max(officeRowL, officeRowR) + 2;
+    for (let r = throneCenter.r + 24; r <= dqPathEnd; r++) window.setTerrainAt(dqCenter, r, 'Path');
+
+    const elvenCenter = { q: dqCenter - 8, r: embassyRow1L };
     const elvenDoor = { q: elvenCenter.q + 3, r: elvenCenter.r };
     window.interiorRegions.push(carveFlatRoom(elvenCenter.q, elvenCenter.r, 3, 2, elvenDoor, 'Wood Floor'));
-    for (let q = elvenDoor.q + 1; q < dqCenter; q++) window.setTerrainAt(q, embassyRow1, 'Path');
+    for (let q = elvenDoor.q + 1; q < dqCenter; q++) window.setTerrainAt(q, embassyRow1L, 'Path');
     window.tileObjects[`${elvenCenter.q},${elvenCenter.r}`] = { type: 'table' };
     window.campaign2ElvenEmbassyCenter = elvenCenter;
 
-    const dwarvenCenter = { q: dqCenter + 8, r: embassyRow1 };
+    const dwarvenCenter = { q: dqCenter + 8, r: embassyRow1R };
     const dwarvenDoor = { q: dwarvenCenter.q - 3, r: dwarvenCenter.r };
     window.interiorRegions.push(carveFlatRoom(dwarvenCenter.q, dwarvenCenter.r, 3, 2, dwarvenDoor, 'Wood Floor'));
-    for (let q = dqCenter + 1; q < dwarvenDoor.q; q++) window.setTerrainAt(q, embassyRow1, 'Path');
+    for (let q = dqCenter + 1; q < dwarvenDoor.q; q++) window.setTerrainAt(q, embassyRow1R, 'Path');
     window.tileObjects[`${dwarvenCenter.q},${dwarvenCenter.r}`] = { type: 'table' };
     window.campaign2DwarvenEmbassyCenter = dwarvenCenter;
 
-    const aldenreachCenter = { q: dqCenter - 8, r: embassyRow2 };
+    const aldenreachCenter = { q: dqCenter - 8, r: embassyRow2L };
     const aldenreachDoor = { q: aldenreachCenter.q + 3, r: aldenreachCenter.r };
     window.interiorRegions.push(carveFlatRoom(aldenreachCenter.q, aldenreachCenter.r, 3, 2, aldenreachDoor, 'Wood Floor'));
-    for (let q = aldenreachDoor.q + 1; q < dqCenter; q++) window.setTerrainAt(q, embassyRow2, 'Path');
+    for (let q = aldenreachDoor.q + 1; q < dqCenter; q++) window.setTerrainAt(q, embassyRow2L, 'Path');
     window.tileObjects[`${aldenreachCenter.q},${aldenreachCenter.r}`] = { type: 'table' };
     window.campaign2AldenreachEmbassyCenter = aldenreachCenter;
 
-    const corvaneCenter = { q: dqCenter + 8, r: embassyRow2 };
+    const corvaneCenter = { q: dqCenter + 8, r: embassyRow2R };
     const corvaneDoor = { q: corvaneCenter.q - 3, r: corvaneCenter.r };
     window.interiorRegions.push(carveFlatRoom(corvaneCenter.q, corvaneCenter.r, 3, 2, corvaneDoor, 'Wood Floor'));
-    for (let q = dqCenter + 1; q < corvaneDoor.q; q++) window.setTerrainAt(q, embassyRow2, 'Path');
+    for (let q = dqCenter + 1; q < corvaneDoor.q; q++) window.setTerrainAt(q, embassyRow2R, 'Path');
     window.tileObjects[`${corvaneCenter.q},${corvaneCenter.r}`] = { type: 'table' };
     window.campaign2CorvaneEmbassyCenter = corvaneCenter;
 
-    // Central plaza and fountain: a small open square between the two rows
-    // of embassies, on the way to the Ironbond office and cathedral.
-    const plazaCenter = { q: dqCenter, r: throneCenter.r + 35 };
+    // Central plaza and fountain: a small open square roughly midway down
+    // the quarter, on the way to the Ironbond office and cathedral.
+    const plazaCenter = { q: dqCenter, r: throneCenter.r + 41 };
     for (let dq = -2; dq <= 2; dq++) {
         for (let dr = -2; dr <= 2; dr++) {
             if (window.distance({ q: 0, r: 0 }, { q: dq, r: dr }) > 2) continue;
@@ -728,18 +833,18 @@ function buildSilverhartPalace(roadEnd) {
     window.tileObjects[`${plazaCenter.q + 2},${plazaCenter.r}`] = { type: 'bench' };
     window.campaign2DiplomaticPlazaCenter = plazaCenter;
 
-    const ironbondOfficeCenter = { q: dqCenter - 8, r: officeRow };
+    const ironbondOfficeCenter = { q: dqCenter - 8, r: officeRowL };
     const ironbondOfficeDoor = { q: ironbondOfficeCenter.q + 4, r: ironbondOfficeCenter.r };
     window.interiorRegions.push(carveFlatRoom(ironbondOfficeCenter.q, ironbondOfficeCenter.r, 4, 3, ironbondOfficeDoor, 'Wood Floor'));
-    for (let q = ironbondOfficeDoor.q + 1; q < dqCenter; q++) window.setTerrainAt(q, officeRow, 'Path');
+    for (let q = ironbondOfficeDoor.q + 1; q < dqCenter; q++) window.setTerrainAt(q, officeRowL, 'Path');
     window.tileObjects[`${ironbondOfficeCenter.q},${ironbondOfficeCenter.r}`] = { type: 'table' };
     window.tileObjects[`${ironbondOfficeCenter.q + 1},${ironbondOfficeCenter.r}`] = { type: 'bench' };
     window.campaign2IronbondOfficeCenter = ironbondOfficeCenter;
 
-    const cathedralCenter = { q: dqCenter + 8, r: officeRow };
+    const cathedralCenter = { q: dqCenter + 8, r: officeRowR };
     const cathedralDoor = { q: cathedralCenter.q - 4, r: cathedralCenter.r };
     window.interiorRegions.push(carveFlatRoom(cathedralCenter.q, cathedralCenter.r, 4, 4, cathedralDoor, 'Wood Floor'));
-    for (let q = dqCenter + 1; q < cathedralDoor.q; q++) window.setTerrainAt(q, officeRow, 'Path');
+    for (let q = dqCenter + 1; q < cathedralDoor.q; q++) window.setTerrainAt(q, officeRowR, 'Path');
     window.tileObjects[`${cathedralCenter.q},${cathedralCenter.r - 2}`] = { type: 'throne' }; // stands in for an altar — same "focal furniture at the head of the room" reuse as the throne room
     window.tileObjects[`${cathedralCenter.q - 2},${cathedralCenter.r}`] = { type: 'bench' };
     window.tileObjects[`${cathedralCenter.q + 2},${cathedralCenter.r}`] = { type: 'bench' };
