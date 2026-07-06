@@ -106,9 +106,13 @@ test.describe('regions.js: security/prosperity simulation', () => {
             Math.random = () => 0; // always "hits" the encounter chance if a roll happens at all
 
             // Low security: encounters should trigger just past a modest radius.
+            // Far enough out that even the closest candidate hex (10-16 away
+            // from the player) clears the 30-hex no-wolves-near-any-building
+            // exclusion around Hollowmere's own buildings, not just the
+            // security-based safe radius.
             window.regions.hollowmere.security = 0;
             window.wildernessEncounterAccum = 0;
-            const nearPlayerLowSecurity = { hex: { q: 26, r: 0 }, side: 'player' }; // distance 26 from center
+            const nearPlayerLowSecurity = { hex: { q: 70, r: 0 }, side: 'player' };
             const beforeLow = window.entities.filter(e => e.name === 'Wolf').length;
             window.checkWildernessEncounter(nearPlayerLowSecurity, 200);
             const afterLow = window.entities.filter(e => e.name === 'Wolf').length;

@@ -55,19 +55,29 @@ test.describe('Silverhart Palace: hexagonal curtain wall, gate, towers, wall gua
         const result = await page.evaluate(() => {
             const center = window.campaign2PalaceThroneCenter;
             const plainWallHex = { q: center.q + 5, r: center.r - 23 };
-            const ladderHex = { q: center.q + 12, r: center.r - 23 };
+            const ladderHex = Object.keys(window.tileObjects).map(k => {
+                const [q, r] = k.split(',').map(Number);
+                return { q, r, obj: window.tileObjects[k] };
+            }).find(h => h.obj.type === 'ladder');
             const p = window.entities.find(e => e.side === 'player' && !e.rider);
             const baseline = window.getMoveCostMult(plainWallHex.q, plainWallHex.r, p);
             p.skills = p.skills || {};
             p.skills.agile_climber = 1;
             const withSkill = window.getMoveCostMult(plainWallHex.q, plainWallHex.r, p);
             delete p.skills.agile_climber;
+            // A ladder only bridges the specific edge it's propped across —
+            // stepping onto its wall hex from its own interior-side neighbor.
+            const originalHex = { ...p.hex };
+            p.hex = { ...ladderHex.obj.interiorHex };
             const withLadder = window.getMoveCostMult(ladderHex.q, ladderHex.r, p);
-            return { baseline, withSkill, withLadder };
+            const fromWrongSide = window.getMoveCostMult(ladderHex.q, ladderHex.r, { ...p, hex: { q: ladderHex.q - 5, r: ladderHex.r - 5 } });
+            p.hex = originalHex;
+            return { baseline, withSkill, withLadder, fromWrongSide };
         });
         expect(result.baseline).toBeGreaterThan(10);
         expect(result.withSkill).toBeLessThan(3);
         expect(result.withLadder).toBeLessThan(3);
+        expect(result.fromWrongSide).toBeGreaterThan(10);
     });
 
     test('Palisade Wall is not the fully-impassable "Wall" terrain, so it does not hit the hardcoded impassable-terrain checks', async ({ page }) => {

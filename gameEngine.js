@@ -147,15 +147,48 @@ window.openDoorContextMenu = openDoorContextMenu;
 // to it (processRealTimeStep's findPath returns null with no feedback),
 // reading as "stuck at the wall." Snap to the nearest actually-passable hex
 // instead so they path around it like the A* search already intends.
+function assignFollowerDestination(f, leader, clickedHex) {
+    const offset = f === leader ? { q: 0, r: 0 } : window.getFormationOffset(f, leader);
+    const raw = { q: clickedHex.q + offset.q, r: clickedHex.r + offset.r };
+    const terrain = window.getTerrainAt(raw.q, raw.r);
+    const blocked = terrain.name === 'Wall' || terrain.name === 'Water' || window.getEntityAtHex(raw.q, raw.r);
+    f.destination = blocked ? findNearestPassableHex(raw) : raw;
+}
+
+// A ladder crossing is one hex wide — if the whole party set off across it in
+// lockstep, followers would start climbing the wall right alongside the
+// leader instead of queuing behind them. If the leader's own path crosses a
+// ladder hex, hold followers back (they keep their current position) until
+// the leader has actually climbed across it, then release them to follow.
 function assignGroupMoveDestinations(leader, clickedHex) {
     const friendlies = window.entities.filter(e => e.alive && e.side === 'player' && !e.rider && !e.aiControlled);
-    friendlies.forEach(f => {
-        const offset = f === leader ? { q: 0, r: 0 } : window.getFormationOffset(f, leader);
-        const raw = { q: clickedHex.q + offset.q, r: clickedHex.r + offset.r };
-        const terrain = window.getTerrainAt(raw.q, raw.r);
-        const blocked = terrain.name === 'Wall' || terrain.name === 'Water' || window.getEntityAtHex(raw.q, raw.r);
-        f.destination = blocked ? findNearestPassableHex(raw) : raw;
+    assignFollowerDestination(leader, leader, clickedHex);
+
+    const path = (window.leaderPath || []).map(k => { const [q, r] = k.split(',').map(Number); return { q, r }; });
+    const ladderHex = path.find(h => {
+        const t = window.getTerrainAt(h.q, h.r);
+        const obj = window.tileObjects && window.tileObjects[`${h.q},${h.r}`];
+        return t.name === 'Palisade Wall' && obj && obj.type === 'ladder';
     });
+    const followers = friendlies.filter(f => f !== leader);
+
+    if (!ladderHex) {
+        followers.forEach(f => assignFollowerDestination(f, leader, clickedHex));
+        return;
+    }
+
+    let leaderReachedLadder = false;
+    let ticks = 0;
+    const waitForLeader = setInterval(() => {
+        ticks++;
+        if (leader.hex.q === ladderHex.q && leader.hex.r === ladderHex.r) leaderReachedLadder = true;
+        const leaderCrossed = leaderReachedLadder && (leader.hex.q !== ladderHex.q || leader.hex.r !== ladderHex.r);
+        const leaderGaveUp = !leader.destination; // reached destination, or path got blocked
+        if (leaderCrossed || leaderGaveUp || ticks > 200) { // ~50s safety cap
+            clearInterval(waitForLeader);
+            followers.forEach(f => assignFollowerDestination(f, leader, clickedHex));
+        }
+    }, 250);
 }
 window.assignGroupMoveDestinations = assignGroupMoveDestinations;
 
@@ -1410,7 +1443,12 @@ function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
         const tintedHair = window.getRecoloredHairSprite ? window.getRecoloredHairSprite(hairImg, e.hairHue, e.hairLightMult, e.hairSatMult) : hairImg;
         const drawHair = tintedHair || hairImg;
         if (hc.type === 'full') {
-            ctx.drawImage(drawHair, left, top + (hc.yRaw || 0) * z, bW, bH);
+            // Per-entity override for an otherwise-fixed full-body hair sprite
+            // (e.g. Ambassador Elarion's absurdly oversized default) — scales
+            // around the head anchor (top-center) rather than stretching.
+            const sizeMult = e.hairSizeMult !== undefined ? e.hairSizeMult : 1;
+            const hW = bW * sizeMult, hH = bH * sizeMult;
+            ctx.drawImage(drawHair, x - hW / 2, top + (hc.yRaw || 0) * z, hW, hH);
         } else {
             const hW = bW * hc.wFrac;
             const hH = bH * hc.hFrac;
@@ -1563,7 +1601,17 @@ function renderEntities() {
               const gSize = size * 1.4;
               window.mapCtx.drawImage(window.gameVisuals.gate_arch, x - gSize/2, y - gSize/2, gSize, gSize);
           } else if (obj.type === 'ladder' && window.gameVisuals.ladder?.complete) {
-              window.mapCtx.drawImage(window.gameVisuals.ladder, x - size/2, y - size/2, size, size);
+              // Drawn half a hex toward the interior side so it visually sits
+              // on the border between the wall and the interior hex it
+              // actually bridges, rather than looking centered on the wall
+              // crest itself.
+              let lx = x, ly = y;
+              if (obj.interiorHex) {
+                  const interiorPx = window.hexToPixel(obj.interiorHex.q, obj.interiorHex.r);
+                  lx = x + (interiorPx.x - x) * 0.5;
+                  ly = y + (interiorPx.y - y) * 0.5;
+              }
+              window.mapCtx.drawImage(window.gameVisuals.ladder, lx - size/2, ly - size/2, size, size);
           } else if (obj.type === 'watchtower' && window.gameVisuals.watchtower?.complete) {
               const tSize = size * 1.4;
               window.mapCtx.drawImage(window.gameVisuals.watchtower, x - tSize/2, y - tSize/2, tSize, tSize);
@@ -2619,7 +2667,12 @@ function getMoveCostMult(q, r, entity) {
     // still slow) way over instead of requiring the fully-impassable 'Wall'
     // terrain the palace's actual room walls use.
     if (terrain.name === 'Palisade Wall') {
-        const hasLadder = obj && obj.type === 'ladder';
+        // A ladder only bridges the one edge it's actually propped across
+        // (the wall hex <-> its interior-side neighbor) — stepping onto the
+        // wall hex from the exterior side, or along the wall ring itself,
+        // gets no benefit from it.
+        const hasLadder = obj && obj.type === 'ladder' && entity?.hex && obj.interiorHex &&
+            entity.hex.q === obj.interiorHex.q && entity.hex.r === obj.interiorHex.r;
         const canClimb = entity?.skills?.agile_climber;
         mult = (hasLadder || canClimb) ? 2 : terrain.moveCostMult;
     }

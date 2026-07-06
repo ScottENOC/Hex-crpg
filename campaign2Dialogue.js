@@ -2082,6 +2082,23 @@ function triggerEyesOnBorder() {
 }
 window.triggerEyesOnBorder = triggerEyesOnBorder;
 
+// Every building carved anywhere in the game (village houses, the palace's
+// rooms, embassies, farmsteads...) registers itself in window.interiorRegions
+// with a bounding box — reused here rather than hand-maintaining a separate
+// list of "town center" coordinates, so this stays correct as new buildings
+// get added anywhere (it's how the palace/curtain-wall wolf spawns got
+// caught: nothing special-cased Silverhart, it's just another building).
+function isNearAnyBuilding(hex, radius) {
+    const regions = window.interiorRegions || [];
+    for (const region of regions) {
+        if (region.minQ === undefined) continue;
+        const center = { q: (region.minQ + region.maxQ) / 2, r: (region.minR + region.maxR) / 2 };
+        if (window.distance(hex, center) < radius) return true;
+    }
+    return false;
+}
+window.isNearAnyBuilding = isNearAnyBuilding;
+
 // Random wilderness encounters: out past the village/farmland (35+ hexes
 // from the village center), wandering risks a wolf pack — especially
 // heading west, toward the unnamed, skull-marked road. Rolled at most once
@@ -2130,6 +2147,7 @@ function checkWildernessEncounter(playerEntity, delta) {
             if (window.getEntityAtHex(candidate.q, candidate.r)) continue;
             if (window.getTerrainAt(candidate.q, candidate.r).name === 'Water') continue;
             if (window.isVisibleToPlayer(candidate)) continue;
+            if (window.isNearAnyBuilding(candidate, 30)) continue;
             spot = candidate;
         }
         if (!spot) continue;

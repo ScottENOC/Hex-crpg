@@ -680,7 +680,13 @@ function buildSilverhartPalace(roadEnd) {
         { q: throneCenter.q - 12, r: throneCenter.r - 11 },           // NW edge
     ];
     ladderSpots.forEach(h => {
-        window.tileObjects[`${h.q},${h.r}`] = { type: 'ladder' };
+        // The speed bonus only applies crossing the specific edge between the
+        // wall hex and its interior-side neighbor (see getMoveCostMult) — the
+        // neighbor closest to the throne is unambiguously "interior".
+        const neighbors = window.getNeighbors(h.q, h.r);
+        const interiorHex = neighbors.reduce((best, n) =>
+            window.distance(n, throneCenter) < window.distance(best, throneCenter) ? n : best, neighbors[0]);
+        window.tileObjects[`${h.q},${h.r}`] = { type: 'ladder', interiorHex };
     });
 
     // Wall guards: at the gate and atop most of the corner watchtowers —
@@ -850,7 +856,11 @@ function buildSilverhartPalace(roadEnd) {
     window.tileObjects[`${cathedralCenter.q + 2},${cathedralCenter.r}`] = { type: 'bench' };
     window.campaign2CathedralCenter = cathedralCenter;
 
-    if (window.campaign2ElvenAmbassador) window.entities.push(window.buildNPC({ ...window.campaign2ElvenAmbassador, hex: { q: elvenCenter.q, r: elvenCenter.r + 1 } }));
+    if (window.campaign2ElvenAmbassador) {
+        const elarion = window.buildNPC({ ...window.campaign2ElvenAmbassador, hex: { q: elvenCenter.q, r: elvenCenter.r + 1 } });
+        elarion.hairSizeMult = 0.15; // the default full-body elf hair sprite reads absurdly oversized on him specifically
+        window.entities.push(elarion);
+    }
     if (window.campaign2DwarvenAmbassador) window.entities.push(window.buildNPC({ ...window.campaign2DwarvenAmbassador, hex: { q: dwarvenCenter.q, r: dwarvenCenter.r + 1 } }));
     if (window.campaign2AldenreachAmbassador) window.entities.push(window.buildNPC({ ...window.campaign2AldenreachAmbassador, hex: { q: aldenreachCenter.q, r: aldenreachCenter.r + 1 } }));
     if (window.campaign2CorvaneAmbassador) window.entities.push(window.buildNPC({ ...window.campaign2CorvaneAmbassador, hex: { q: corvaneCenter.q, r: corvaneCenter.r + 1 } }));
