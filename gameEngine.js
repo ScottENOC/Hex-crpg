@@ -2591,6 +2591,7 @@ function interactWithTileObject(q, r, player) {
         if (doorObj.readId === 'phylactery_altar' && window.interactPhylacteryAltar) { window.interactPhylacteryAltar(); return; }
         if (doorObj.readId === 'disciple_note' && window.readDiscipleNote) { window.readDiscipleNote(); return; }
         if (doorObj.readId === 'wizard_tower_tome' && window.readWizardTowerTome) { window.readWizardTowerTome(); return; }
+        if (doorObj.readId === 'wizard_corruption_ledger' && window.readWizardCorruptionLedger) { window.readWizardCorruptionLedger(); return; }
         if (doorObj.readId === 'vampire_grave' && window.readVampireGrave) { window.readVampireGrave(); return; }
         if (window.readAbandonedHouseJournal) window.readAbandonedHouseJournal();
         return;

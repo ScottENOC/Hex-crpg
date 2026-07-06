@@ -665,6 +665,11 @@ function buildSilverhartPalace(roadEnd) {
     window.tileObjects[`${towerCenter.q},${towerCenter.r}`] = { type: 'table' };
     window.tileObjects[`${towerCenter.q + 1},${towerCenter.r}`] = { type: 'journal', readId: 'wizard_tower_tome', lightRadius: 0 };
     window.tileObjects[`${towerCenter.q - 1},${towerCenter.r}`] = { type: 'fireplace', lightRadius: 5 };
+    // The evidence for the wizard_vendetta quest (campaign2Dialogue.js) —
+    // tucked in her own tower, findable whether or not the quest has been
+    // picked up yet (same "flavor readable regardless of quest state"
+    // convention as every other journal in the game).
+    window.tileObjects[`${towerCenter.q},${towerCenter.r + 1}`] = { type: 'journal', readId: 'wizard_corruption_ledger', lightRadius: 0 };
     window.campaign2PalaceTowerCenter = towerCenter;
     // Like the throne room's own front door, towerDoor sits on the floor's
     // own edge rather than on the wall ring itself — the wall ring hex is
@@ -997,6 +1002,9 @@ function buildSilverhartPalace(roadEnd) {
     if (window.campaign2ManorNeighbor) {
         window.entities.push(window.buildNPC({ ...window.campaign2ManorNeighbor, hex: { q: manorCenter.q - 5, r: manorCenter.r } }));
     }
+    if (window.campaign2NobleCorstane) {
+        window.entities.push(window.buildNPC({ ...window.campaign2NobleCorstane, hex: { q: manorCenter.q - 7, r: manorCenter.r } }));
+    }
     if (window.campaign2SilverhartBuilder) {
         window.entities.push(window.buildNPC({ ...window.campaign2SilverhartBuilder, hex: { q: manorCenter.q + 5, r: manorCenter.r } }));
     }
@@ -1058,6 +1066,27 @@ window.readWizardTowerTome = function() {
     window.showDialogue({ name: "Thessaly's Tome", customImage: 'journal' },
         "A page near the back, in a hand shakier than the rest: \"Old magic doesn't die, it just stops answering court summons. There is a grove west of the mountains where the druids still keep faith with something older than any crown — and where, if the stories hold, something far rarer than a spell still runs wild. Not for a court wizard to go chasing. Perhaps for someone less tied to a throne.\"",
         [{ label: "Interesting.", action: () => {} }]
+    );
+};
+
+// Evidence for the wizard_vendetta quest (campaign2Dialogue.js) — readable
+// any time, same "flavor works regardless of quest state" convention as
+// every other journal, but only actually grants the quest item once and
+// only while the quest is active (so it can't be farmed or picked up
+// meaninglessly before the quest is even offered).
+window.readWizardCorruptionLedger = function() {
+    const quest = (window.questLog || []).find(q => q.id === 'wizard_vendetta');
+    if (quest && quest.status === 'active' && !window.player.inventory.includes('wizard_corruption_evidence')) {
+        window.player.inventory.push('wizard_corruption_evidence');
+        window.showDialogue({ name: "Thessaly's Ledger", customImage: 'journal' },
+            "Tucked behind a shelf of components: a page of private accounts, dated and initialed — favors bought and sold that never crossed the crown's own books. Exactly the kind of thing someone could use against her.",
+            [{ label: "Pocket it.", action: () => {} }]
+        );
+        return;
+    }
+    window.showDialogue({ name: "Thessaly's Ledger", customImage: 'journal' },
+        "Columns of figures in a precise hand — mundane household accounts, as far as you can tell.",
+        [{ label: "Put it back.", action: () => {} }]
     );
 };
 

@@ -509,6 +509,20 @@ window.campaign2MagicShopItems = [
     'moonlit_armor', 'huntsman_helm',
 ];
 
+// A political-intrigue quest giver: a noble with a personal grudge against
+// the Court Wizard (see the wizard_vendetta quest, campaign2Dialogue.js).
+// factionId is still silverhart_kingdom — she's a citizen of the same
+// nation as the wizard, this is a personal feud, not a national one (see
+// the royal_wizard dialogue tree's split between npc.reputation.standing,
+// personal, and window.factions.silverhart_kingdom.standing, national).
+window.campaign2NobleCorstane = {
+    name: 'Lady Miriel Corstane', title: 'of House Corstane',
+    race: 'human', gender: 'female',
+    classLevels: [], skillPicks: [], equipment: [],
+    side: 'neutral', factionId: 'silverhart_kingdom', color: '#5a2a4a',
+    dialogueId: 'lady_corstane'
+};
+
 window.campaign2PalaceChancellor = {
     name: 'Chancellor Merric Vane',
     title: "The Queen's Chancellor",

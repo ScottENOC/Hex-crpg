@@ -36,6 +36,42 @@ Object.assign(window.dialogueData, {
     }
 });
 
+// Shared resolution for the wizard_vendetta quest (see lady_corstane,
+// royal_wizard, and silverhart_queen dialogue trees below) — exactly one
+// of three outcomes, each an ally gained and (in two of the three cases)
+// one or two personal relationships burned. Only personal reputation
+// (npc.reputation) moves for the noble/wizard; the Queen path instead
+// moves the kingdom's national standing, since turning evidence over to
+// the crown itself is a matter of state, not a private favor.
+function resolveWizardVendetta(resolution) {
+    const quest = (window.questLog || []).find(q => q.id === 'wizard_vendetta');
+    if (!quest || quest.status === 'completed') return;
+    const idx = window.player.inventory.indexOf('wizard_corruption_evidence');
+    if (idx === -1) return;
+    window.player.inventory.splice(idx, 1);
+    quest.status = 'completed';
+    quest.resolution = resolution;
+
+    const wizard = window.entities.find(e => e.name === 'Court Wizard Thessaly');
+    const noble = window.entities.find(e => e.name === 'Lady Miriel Corstane');
+
+    if (resolution === 'noble') {
+        if (noble) window.adjustReputation(noble.reputation, 30, 25);
+        if (wizard) window.adjustReputation(wizard.reputation, -30, 20);
+        window.showMessage("Lady Corstane takes the evidence with a satisfied smile. House Corstane owes you a real favor.");
+    } else if (resolution === 'wizard') {
+        if (wizard) window.adjustReputation(wizard.reputation, 30, 25);
+        if (noble) window.adjustReputation(noble.reputation, -30, 20);
+        window.showMessage("Thessaly's expression hardens as she reads, then eases toward you. \"Forewarned. I won't forget this.\"");
+    } else if (resolution === 'queen') {
+        window.adjustReputation(window.factions.silverhart_kingdom, 15, 10);
+        if (wizard) window.adjustReputation(wizard.reputation, -20, 15);
+        if (noble) window.adjustReputation(noble.reputation, -20, 15);
+        window.showMessage("The Queen takes the evidence without expression. \"I'll deal with this myself. You did right to bring it to me and no one else.\"");
+    }
+}
+window.resolveWizardVendetta = resolveWizardVendetta;
+
 window.npcDialogueTrees = {
     garrick_holt: (npc) => {
         const restOption = { label: "Can we get a room to rest? (1 gold)", action: () => window.restAtInn(npc) };
@@ -1479,6 +1515,17 @@ window.npcDialogueTrees = {
             });
         }
 
+        const wizardQuest = (window.questLog || []).find(q => q.id === 'wizard_vendetta');
+        if (wizardQuest && wizardQuest.status === 'active' && window.player.inventory.includes('wizard_corruption_evidence')) {
+            options.push({
+                label: "I have evidence concerning your Court Wizard.",
+                action: () => window.showDialogue(npc, "Show me.", [
+                    { label: "Hand it over.", action: () => window.resolveWizardVendetta('queen') },
+                    { label: "On second thought, no.", action: () => {} }
+                ])
+            });
+        }
+
         options.push({ label: "Just paying my respects, Your Majesty.", action: () => {} });
         window.showDialogue(npc, line, options);
     },
@@ -1496,12 +1543,92 @@ window.npcDialogueTrees = {
         ]);
     },
     royal_wizard: (npc) => {
-        window.showDialogue(npc, "The Queen keeps me for omens and old books, mostly — court wizardry is duller than the stories make it sound. Still, I read a great deal I probably shouldn't.", [
+        const quest = (window.questLog || []).find(q => q.id === 'wizard_vendetta');
+        const hasEvidence = window.player.inventory.includes('wizard_corruption_evidence');
+        if (quest && quest.status === 'active' && hasEvidence) {
+            window.showDialogue(npc, "You've the look of someone with something to say. Out with it.", [
+                { label: "Someone's building a case against you. I thought you should have it first.", action: () => window.resolveWizardVendetta('wizard') },
+                { label: "Nothing, actually.", action: () => {} }
+            ]);
+            return;
+        }
+
+        // Demonstrates the personal/national reputation split: her own
+        // opinion of the player (npc.reputation.standing) is tracked
+        // completely separately from the kingdom's opinion of them
+        // (window.factions.silverhart_kingdom.standing) — she can dislike
+        // the player personally while still acknowledging they're a citizen
+        // in good standing with the crown. Neither ever affects whether she
+        // fights the player; that's driven entirely by side/aiState, not by
+        // how much she personally likes them.
+        const personal = npc.reputation?.standing ?? 0;
+        let line;
+        if (quest?.resolution === 'wizard') {
+            line = "I haven't forgotten what you did for me. Ask, if you ever need it returned.";
+        } else if (quest?.resolution && quest.resolution !== 'wizard') {
+            line = "You're a citizen of this kingdom, and I'll extend you the courtesy that demands — nothing warmer than that. Don't mistake civility for forgiveness.";
+        } else if (personal < -10) {
+            line = "The crown speaks well of you, for whatever that's worth to me personally. I have my own opinion, and it isn't as generous.";
+        } else {
+            line = "The Queen keeps me for omens and old books, mostly — court wizardry is duller than the stories make it sound. Still, I read a great deal I probably shouldn't.";
+        }
+        window.showDialogue(npc, line, [
             { label: "Anything worth sharing?", action: () => {
                 if (window.readWizardTowerTome) window.readWizardTowerTome();
             }},
             { label: "Another time.", action: () => {} }
         ]);
+    },
+    // A political-intrigue quest with three mutually-exclusive resolutions
+    // (see resolveWizardVendetta below): hand the evidence to Lady Corstane
+    // (ally with her, alienate the wizard), to the Court Wizard herself
+    // (the reverse), or to the Queen (ally with the crown, alienate both
+    // of them). The evidence itself lives in the wizard's own tower — see
+    // readWizardCorruptionLedger, campaign2World.js.
+    lady_corstane: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'wizard_vendetta');
+
+        if (quest && quest.status === 'completed') {
+            const line = quest.resolution === 'noble'
+                ? "You did right by House Corstane. That kind of loyalty isn't forgotten."
+                : "We're not exactly friends anymore, are we. I'd mind myself around my house, if I were you.";
+            window.showDialogue(npc, line, [{ label: "Understood.", action: () => {} }]);
+            return;
+        }
+
+        if (!quest) {
+            window.showDialogue(npc, "Court Wizard Thessaly has undermined my family at court one too many times. If you're capable of quiet work, find me something on her — the kind of thing she'd rather stayed buried. Do this, and House Corstane won't forget it.", [
+                {
+                    label: "I'll see what I can find.",
+                    action: () => {
+                        window.questLog.push({
+                            id: 'wizard_vendetta',
+                            title: "A Noble's Grudge",
+                            giver: 'Lady Miriel Corstane',
+                            status: 'active',
+                            resolution: null,
+                            description: "Find evidence against Court Wizard Thessaly — then decide who's actually worth giving it to: Lady Corstane, the Wizard herself, or the Queen.",
+                            offeredAt: window.worldSeconds
+                        });
+                        window.showMessage("Quest started: A Noble's Grudge");
+                    }
+                },
+                { label: "Not interested.", action: () => {} }
+            ]);
+            return;
+        }
+
+        if (window.player.inventory.includes('wizard_corruption_evidence')) {
+            window.showDialogue(npc, "You found something? Let's see it.", [
+                { label: "Hand over the evidence.", action: () => window.resolveWizardVendetta('noble') },
+                { label: "Not yet.", action: () => {} }
+            ]);
+        } else {
+            window.showDialogue(npc, "Still nothing? She keeps her secrets close, but she's not careful enough to have none at all.", [
+                { label: "I'm still looking.", action: () => {} }
+            ]);
+        }
     },
     // Diplomatic Quarter — each ambassador/envoy/cleric is a real (if modest)
     // quest giver. The four foreign embassies deliberately don't trust the
