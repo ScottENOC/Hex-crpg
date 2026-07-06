@@ -459,12 +459,25 @@ function updateNpcSchedules() {
     if (window.currentCampaign !== '2' || window.isInCombat) return;
     const schedules = getNpcSchedules();
     const hour = window.getCurrentHour ? window.getCurrentHour() : 12;
+    const partyHexes = collectPartyHexes();
     window.entities.forEach(e => {
         const blocks = schedules[e.name];
         if (!e.alive || !blocks) return;
         const block = blocks.find(b => hour >= b.start && hour < b.end);
         if (!block) return;
         if (e.hex.q === block.hex.q && e.hex.r === block.hex.r) { e.destination = null; return; }
+        // SUPERPOSITION COLLAPSE: if the player is nowhere near, the NPC's
+        // walk is unobserved — so just snap it to where its schedule says it
+        // should be right now, rather than setting a destination the
+        // real-time movement loop then pathfinds across the map step by
+        // step. Only walk visibly (set destination) when within the active
+        // radius, so the player still sees smooth movement when watching.
+        if (isDormantAmbientNpc(e, partyHexes)) {
+            e.hex = { q: block.hex.q, r: block.hex.r };
+            e.visualQ = block.hex.q; e.visualR = block.hex.r;
+            e.destination = null;
+            return;
+        }
         if (e.destination && e.destination.q === block.hex.q && e.destination.r === block.hex.r) return;
         e.destination = { q: block.hex.q, r: block.hex.r };
     });
@@ -2067,6 +2080,77 @@ function checkInCombat() {
     return window.entities.some(e => e.alive && e.side === 'enemy' && e.aiState === 'combat');
 }
 
+// AMBIENT-NPC "SUPERPOSITION" / ACTIVE SET
+// The per-frame tick loops (regen bookkeeping in runTickInternal, real-time
+// movement in tick()) used to iterate every entity in the game every frame,
+// regardless of distance from the player — with Campaign 2's persistent
+// world roster now 80+ NPCs, that's real work paid continuously for
+// shopkeepers and guards the player is nowhere near (the reported slowdown,
+// worse on phones). Beyond the ~30-hex vision cap an NPC is never actually
+// on screen, so there's nothing to simulate smoothly: a distant ambient NPC
+// is left in "superposition" — not ticked at all — and its position is only
+// *collapsed* (snapped to wherever its schedule says it should be at the
+// current time) when the player comes close enough to observe it, exactly
+// like BG1/Skyrim snap townsfolk to their scheduled spot when you round the
+// corner. 40 > 30 (+margin) guarantees a dormant NPC is off-screen, so the
+// snap is never visible.
+//
+// Only neutral ambient NPCs (isNPC) are ever dormant. Party members,
+// enemies, mounts, summons, and aiControlled allies are always fully
+// simulated — anything that can meaningfully act off-screen (a fleeing
+// enemy, a companion) is never put in superposition.
+const ACTIVE_SIM_RADIUS = 40;
+
+// Collected once per frame (party is small) so the per-entity dormancy test
+// below is O(entities x party), not O(entities^2).
+function collectPartyHexes() {
+    const hexes = [];
+    for (const e of window.entities) {
+        if (e.side === 'player' && e.alive) hexes.push(e.hex);
+    }
+    return hexes;
+}
+
+function isDormantAmbientNpc(e, partyHexes) {
+    if (!e.isNPC || e.side !== 'neutral') return false;
+    for (const ph of partyHexes) {
+        if (window.distance(ph, e.hex) <= ACTIVE_SIM_RADIUS) return false;
+    }
+    return true;
+}
+window.isDormantAmbientNpc = isDormantAmbientNpc;
+window.collectPartyHexes = collectPartyHexes;
+
+// "RESTLESS SET" — the per-frame regen/poison/mana loop out of combat only
+// ever needs to touch entities that are NOT at full rest: below max HP or
+// mana, poisoned, withering, or tied to an ongoing spell. A capital full of
+// idle, full-health NPCs is all at rest, so the working set is (almost)
+// always empty and the loop does nothing — no more "confirming 30 townsfolk
+// are still at full health" every frame. Rebuilt on a throttle (the ~1s
+// UI-refresh cadence in tick(), and once when combat ends so post-fight
+// healing starts promptly); the periodic rebuild is the robustness net, so
+// no scattered "mark dirty" calls are needed at every damage site. In
+// combat the full entity loop is kept (combat is small and near the player,
+// and TP granting there is correctness-critical).
+function rebuildRestlessSet() {
+    const list = [];
+    for (const e of window.entities) {
+        if (!e.alive) continue;
+        if (e.hp < e.maxHp || (e.currentMana || 0) < (e.maxMana || 0) || e.poisonTicks > 0 || e.witherTicks > 0) {
+            list.push(e);
+        }
+    }
+    if (window.activeSpells && window.activeSpells.length) {
+        for (const e of window.entities) {
+            if (!e.alive || list.includes(e)) continue;
+            if (window.activeSpells.some(s => s.casterName === e.name || s.targetEntityId === e.id)) list.push(e);
+        }
+    }
+    window._restlessEntities = list;
+    return list;
+}
+window.rebuildRestlessSet = rebuildRestlessSet;
+
 let lastTimestamp = performance.now();
 let tickCounter = 0;
 
@@ -2129,6 +2213,7 @@ function tick() {
             window.updateActionButtons();
             checkEquipmentAuras();
             updateNpcSchedules();
+            rebuildRestlessSet(); // refresh whose HP/mana/poison the regen loop needs to touch
             tickCounter = 0;
         }
     }
@@ -2195,7 +2280,14 @@ function tick() {
         runTickInternal(false, true, scaledDt / 0.4);
 
         // REAL-TIME LOGICAL MOVEMENT
+        const _movePartyHexes = collectPartyHexes();
         window.entities.forEach(ent => {
+            // Dormant ambient NPCs don't walk step-by-step off-screen — their
+            // schedule-driven position is snapped in updateNpcSchedules
+            // instead (no unobserved pathfinding). Skipping them here is what
+            // eliminates the "NPC walks all the way home while nobody's
+            // watching" cost.
+            if (isDormantAmbientNpc(ent, _movePartyHexes)) return;
             if (ent.castCooldown > 0) {
                 ent.castCooldown -= scaledDt;
                 if (ent.castCooldown <= 0) {
@@ -2380,9 +2472,13 @@ function runTickInternal(isSleepCycle = false, skipUI = false, tickMultiplier = 
         return;
     }
     if (window.currentTurnEntity && !isSleepCycle) return;
-    
-    const readyEntities = window.entities.filter(e => e.timePoints >= 100 && e.alive && !e.unconscious && !e.rider);
-    
+
+    // Only scan for whose turn it is when actually in combat — out of combat
+    // this full-array filter ran every frame for nothing.
+    const readyEntities = (window.isInCombat && !isSleepCycle)
+        ? window.entities.filter(e => e.timePoints >= 100 && e.alive && !e.unconscious && !e.rider)
+        : [];
+
     // Only trigger turn-based logic if in combat
     if (window.isInCombat && readyEntities.length > 0 && !isSleepCycle) {
         readyEntities.sort((a, b) => (b.timePoints !== a.timePoints) ? (b.timePoints - a.timePoints) : (Math.random() - 0.5));
@@ -2401,8 +2497,22 @@ function runTickInternal(isSleepCycle = false, skipUI = false, tickMultiplier = 
         // is a pure perf win with no behavior change (filtering an empty
         // array always produced the same "nothing to do" result anyway).
         const hasActiveSpells = !!(window.activeSpells && window.activeSpells.length > 0);
-        window.entities.forEach(e => {
+        // Dormant ambient NPCs (far from every party member) are in
+        // superposition — skipped entirely here. Their TP/regen bookkeeping
+        // is meaningless off-screen (out of combat, capped TP, no poison/
+        // spells) and resumes the moment they re-enter the active radius.
+        const _partyHexes = collectPartyHexes();
+        // In combat (or during sleep fast-forward) every combatant needs TP
+        // granted / effects ticked, so iterate all (combat is small and near
+        // the player). Out of combat, only entities not at full rest need
+        // anything — iterate the small restless set instead of all ~80+
+        // world entities, so a full-health, unpoisoned capital costs nothing.
+        const workingSet = (window.isInCombat || isSleepCycle)
+            ? window.entities
+            : (window._restlessEntities || rebuildRestlessSet());
+        workingSet.forEach(e => {
             if (e.alive) {
+                if (isDormantAmbientNpc(e, _partyHexes)) return;
                 // ... rest of the ticking logic ...
                 // PASSIVE AI: Don't gain TP if idle enemy
                 if (e.side === 'enemy' && e.aiState === 'idle') return;
@@ -4531,6 +4641,11 @@ function checkCombatEnd() {
     if (!window.entities.some(e => e.side === 'enemy' && e.alive)) {
         // Ambush is over — armor protection applies again.
         window.entities.forEach(e => { if (e.caughtOffGuard) e.caughtOffGuard = false; });
+
+        // Combat just ended — capture who's hurt/low on mana so the
+        // out-of-combat regen loop starts healing them immediately rather
+        // than waiting for the next throttled restless-set rebuild.
+        if (window.rebuildRestlessSet) window.rebuildRestlessSet();
 
         // A sleep-ambush fight doesn't end the night's rest — go back to sleep.
         if (window._resumeSleepAfterCombat) {

@@ -3,46 +3,41 @@
 Scoped-but-deferred work. Not urgent at current scale — pick these up when
 their trigger condition below is actually hit, not before.
 
-## 0. [Trigger hit — see below] Global per-tick entity loop, now confirmed as a real perf regression
+## 0. [DONE] Global per-tick entity loop — fixed via superposition + restless-set
 
-**Status:** trigger condition for item #1 below has now actually been hit —
-this isn't hypothetical anymore, it's the diagnosed cause of a user-reported
-slowdown (worse on phones) after the Border War content landed.
+**Was:** `runTickInternal` (gameEngine.js) iterated **every** entity in the
+game every real-time frame for regen/poison/mana bookkeeping, and the
+real-time movement loop + schedule walker did the same, regardless of
+distance from the player. With Campaign 2's roster at 80+ persistent NPCs,
+that was the diagnosed cause of a user-reported slowdown (worse on phones)
+after Border War landed.
 
-**Root cause confirmed:** `runTickInternal` (gameEngine.js) does
-`window.entities.forEach(...)` over **every** entity in the game, every
-single real-time frame (`tick()` calls it unconditionally via
-requestAnimationFrame), regardless of distance from the player or whether
-anything about that entity is actually changing. Campaign 2's persistent
-NPC roster has grown to 80+ entities from cumulative content this session
-(goblin camp, Ironvein, Silverhart palace + embassies, Reddale, Emberlode,
-the farm, and now ~15 more from the two Border War forts) — all ticked,
-forever, whether the player is standing next to them or on the other side
-of the map.
+**Fixed, in three layers (all shipped, benchmarked, tested in
+tests/tick-perf.spec.js and tests/border-war has the schedule-snap side):**
+1. Empty-`activeSpells` scans hoisted out of the per-entity loop (also fixed
+   a latent `tpGained`-out-of-scope crash on silencing a TP-capped entity).
+2. **Superposition / active set:** neutral ambient NPCs beyond a 40-hex
+   active radius (`isDormantAmbientNpc`) are skipped in both per-frame loops
+   entirely, and their schedule-driven position is *snapped* to the correct
+   scheduled hex (updateNpcSchedules) rather than pathfinding+walking there
+   unobserved — BG1/Skyrim-style "collapse on approach."
+3. **Restless set:** out of combat, the regen loop iterates only entities
+   NOT at full rest (below max HP/mana, poisoned, withering, or tied to an
+   active spell — `rebuildRestlessSet`), rebuilt on the ~1s refresh and at
+   combat-end. A full-health capital costs ~0 per frame instead of
+   re-confirming every townsperson's HP/mana. Measured: 0.068 → 0.003
+   ms/tick in the "standing in a full-health city" scenario (~20x).
 
-**Fixed this pass (cheap, safe, no behavior change):** both per-entity
-`window.activeSpells` scans inside that loop (ongoing-spell mana upkeep,
-silence-penalty damage) were filtering the *entire* activeSpells array once
-per entity, every tick, even though it's empty the overwhelming majority of
-the time. Hoisted a single `hasActiveSpells` check above the loop so both
-scans are skipped entirely with nothing active — measured ~20%+ reduction
-in per-tick cost at 232 entities in a synthetic benchmark (tests/tick-perf.spec.js
-has the regression coverage). Also fixed a pre-existing bug this exposed:
-the silence-penalty block referenced `tpGained`, a variable scoped inside
-the TP-cap check above it, so a fully-TP-capped silenced entity threw a
-ReferenceError instead of taking damage.
-
-**What's NOT fixed yet, and is the bigger lever:** the loop itself still
-runs full regen/poison/wither bookkeeping for every entity every frame
-regardless of proximity to the player. The real fix is distance-gating (or
-a coarser tick rate for anything far outside the player's vision range) —
-same load/unload hysteresis-radius idea already used for corpse/explored-hex
-pruning this session, applied to *how often* an entity gets ticked rather
-than whether it exists at all. Needs care: patrol/campRoutine NPCs still
-need to keep moving on their own schedule even off-screen (players expect
-a soldier to still be walking the wall when they come back), so "far away"
-should mean a much coarser tick (e.g. once every few seconds) rather than
-fully frozen, not zero-cost-but-inconsistent-feeling.
+**Remaining (lower priority, only if a huge world needs it):** the ~1s
+throttled schedule-snap still touches the small scheduled-NPC set even while
+dormant; a fully-lazy version would compute an NPC's position purely on
+observation (trigger = player nears any hex on its schedule/behavior path)
+and never touch it otherwise. Not worth it at current scale. Also latent
+(content, not perf): patrol/campRoutine NPCs — the fort wall guards, goblin
+camp — currently only move *during combat* (their movement is driven
+through the combat turn loop), so they stand still during exploration.
+Separate fix: drive `behaviorTick` for near-player neutral NPCs out of
+combat too.
 
 ## 1. Spatial index for entity-at-hex lookups
 

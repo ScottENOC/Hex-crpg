@@ -22,6 +22,14 @@ test.describe('runTickInternal: ongoing spell effects (mana upkeep, silence)', (
                 spellInstanceId: 'test_upkeep', baseId: 'firebolt', casterName: caster.name,
                 coreManaCost: 20, name: 'Test Ongoing Spell'
             });
+            // Out of combat the regen loop only touches the "restless" set
+            // (entities below max HP/mana, poisoned, or tied to an active
+            // spell). Real gameplay refreshes that set on the ~1s tick and at
+            // combat-end; this manual-injection test drives that same contract
+            // explicitly. (In real play a caster is restless anyway — casting
+            // spends mana — so this is only needed because the test builds a
+            // full-mana caster by hand.)
+            window.rebuildRestlessSet();
             const before = caster.currentMana;
             window.runTickInternal(false, true, 5.0);
             const after = caster.currentMana;
@@ -40,6 +48,7 @@ test.describe('runTickInternal: ongoing spell effects (mana upkeep, silence)', (
             window.activeSpells.push({
                 spellInstanceId: 'test_silence', debuffType: 'silence_penalty', targetEntityId: target.id, magnitude: 6
             });
+            window.rebuildRestlessSet(); // silence target must be in the out-of-combat working set (see note above)
             let threw = null;
             try {
                 window.runTickInternal(false, true, 5.0);
@@ -52,6 +61,31 @@ test.describe('runTickInternal: ongoing spell effects (mana upkeep, silence)', (
         });
         expect(result.threw).toBeNull();
         expect(result.hpAfter).toBeLessThan(result.hpBefore);
+    });
+
+    test('restless set: full-health idle NPCs are excluded, hurt entities are included and still regenerate', async ({ page }) => {
+        await createCharacter(page);
+        const result = await page.evaluate(() => {
+            window.isInCombat = false;
+            // Everyone topped up -> the out-of-combat working set is empty.
+            window.entities.forEach(e => { e.hp = e.maxHp; e.currentMana = e.maxMana || 0; e.poisonTicks = 0; });
+            window.rebuildRestlessSet();
+            const emptyWhenAllFull = window._restlessEntities.length;
+
+            // A hurt party member joins the set and regenerates over ticks.
+            const player = window.entities.find(e => e.side === 'player');
+            player.hp = player.maxHp - 10;
+            window.rebuildRestlessSet();
+            const inSetWhenHurt = window._restlessEntities.includes(player);
+            const hpBefore = player.hp;
+            for (let i = 0; i < 30; i++) window.runTickInternal(false, true, 1.0);
+            const regenerated = player.hp > hpBefore;
+
+            return { emptyWhenAllFull, inSetWhenHurt, regenerated };
+        });
+        expect(result.emptyWhenAllFull).toBe(0);
+        expect(result.inSetWhenHurt).toBe(true);
+        expect(result.regenerated).toBe(true);
     });
 
     test('with no active spells at all, runTickInternal does not throw and entities tick normally', async ({ page }) => {
