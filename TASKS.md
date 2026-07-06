@@ -56,3 +56,93 @@ back in (its baseline is deterministic from world-gen, same idea as the
 existing save-diff mechanism). Same load/unload hysteresis-radius pattern
 as the corpse/explored-hex pruning already shipped, applied to terrain
 blocks instead of entities.
+
+## 3. Save-file compression + localStorage → IndexedDB migration
+
+**Trigger:** measured save file size approaching a few MB (check via
+`JSON.stringify(gameState).length` on a real save), or once the world
+actually reaches "5 kingdoms + greenskins + 10x today's towns" scale.
+
+**Problem:** persistence is 100% `localStorage` (persistence.js —
+`localStorage.setItem(key, JSON.stringify(gameState))`), which is commonly
+capped around 5MB per origin (Firefox/Safari; Chromium is often more
+generous but not guaranteed), with no current limit on the number of named
+save slots. Rough estimate at 10x scale: terrain/tileObject diffs scale
+with authored content, not exploration, so ~0.5-1.5MB; NPCs (full
+stat/skill/inventory serialization, ~1-3KB each) are the actual multiplier
+— 500-1500 NPCs is 0.5-4.5MB; `window.exploredHexes` is a genuinely
+permanent "have I ever seen this hex" bit (drives the fog-of-war render,
+matching BG1's black/never-seen vs. dimmed/seen-before distinction — see
+the correction in `pruneDistantExploredHexes`, campaign2Dialogue.js, which
+used to incorrectly delete far-away entries from it and no longer does)
+and, unlike `lastSeenTimeMap`, is NOT eligible for distance-based
+forgetting — it will genuinely grow with total distinct area ever
+explored, unbounded, for the life of a save. At 10x world scale with real
+exploration, this could plausibly be the single largest structure in the
+save file, not just a rounding error alongside NPCs.
+
+**Why it's deferred:** not urgent until a save actually approaches that
+size; premature compression work now would be guessing at a format before
+knowing the real NPC-count multiplier and how much of the map players
+actually explore.
+
+**Shape of the fix (once triggered):** this is exactly BG1's own trick,
+just needs the equivalent structure for a seamless (non-chunked) world:
+- `exploredHexes`: replace the per-hex string-keyed Set with a **chunked
+  bitset** — partition the world into fixed-size blocks (same partition
+  item #2 above would use for live terrain), one packed bitset per chunk
+  (one bit per hex instead of a ~10-11 byte string), stored only for
+  chunks that have any explored hexes at all. This is the actual reason
+  BG1 saves stay small despite "never forgetting" a tile — each area's
+  explored bitmap is bounded by that area's own fixed size, and there are
+  only ever as many area-records as areas actually visited. A ~10-20x cut
+  per visited region, and — unlike distance-based pruning — it never loses
+  information.
+- The bigger lever: migrate save/load off `localStorage` onto `IndexedDB`
+  (no realistic content-size ceiling, browser-quota-managed instead of a
+  hard 5-10MB wall) — a real migration (async API, existing save/load call
+  sites all assume synchronous `localStorage`), not a data-format tweak.
+
+## 4. Diff scripted NPCs against their code-defined spec, like terrain already does
+
+**Trigger:** same as #3 — bundle with the save-compression pass once
+triggered, since it's the same idea applied to a different structure.
+
+**Problem:** `saveGame` (persistence.js ~85-100) dumps every non-function
+property of every entity in `window.entities` — full skills object,
+equipped items, race, stats, everything — for every NPC in the game, not
+just the player's own party. But every scripted world NPC (soldiers,
+quest-givers, shopkeepers — anything built via `buildNPC`/`buildGoblinNPC`
+from a `campaign2Content.js` spec) is exactly as deterministic as terrain
+already is: same spec + same world-gen = same NPC, every time. There's
+currently no NPC leveling/skill-growth system, so in the common case
+100% of that per-NPC data is redundant with the code that already defines
+it — this is precisely the problem `diffAgainstBaseline` (persistence.js)
+already solved for `overrideTerrain`/`tileObjects` (task #127), just not
+yet applied to entities.
+
+**Why it's deferred:** unlike terrain (naturally keyed by hex, one
+canonical baseline snapshot taken once after world-gen), entities are an
+array without an obvious stable diffing key, and — critically — not
+every entity is spec-driven: the player's own party, hired mercenaries,
+summoned creatures, and anything built at runtime (siege-arena
+skirmishers, etc.) have no code-defined baseline to diff against at all,
+so this only ever applies to a subset of `window.entities`, not the
+mechanism as a whole. That subset-vs-not distinction needs to be gotten
+right, not guessed at while mid-feature.
+
+**Shape of the fix (once triggered):** give every spec-built NPC a stable
+identity key (each spec already has a unique `name`, e.g.
+`campaign2FortSoldiers`'s `'Fort Soldier Halric'` — reuse that rather than
+inventing a new id scheme). Take a baseline snapshot the same way
+`_campaign2TerrainBaseline` already does (right after `setupVillageScene`
+runs, before any player interaction) keyed by that name. On save, for any
+entity whose name matches a known spec, store only the diff against that
+baseline (hp, position, alive/unconscious state, inventory changes,
+reputation/knowledge — the things that actually change at runtime) instead
+of the full object; on load, rebuild the NPC fresh from its spec via the
+normal world-build path and reapply the diff, exactly like terrain already
+does. Entities with no matching spec (party, hires, summons, siege-arena
+combatants) keep today's full-object serialization unchanged — this only
+removes redundant data for the part of the roster that's actually
+redundant.

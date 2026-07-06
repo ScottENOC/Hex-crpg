@@ -2467,39 +2467,44 @@ function pruneDistantEncounterCorpses(playerEntity, delta) {
 }
 window.pruneDistantEncounterCorpses = pruneDistantEncounterCorpses;
 
-// Explored-hex memory: window.exploredHexes (updateExploration, hexMap.js)
-// and window.lastSeenTimeMap add one entry per hex the player has ever laid
-// eyes on and never remove one — both grow forever and both get written out
-// in full on every save (persistence.js). The actual persistent world state
-// lives in window.overrideTerrain/tileObjects, which are already sparse diffs
-// against deterministic world-gen (only real changes — a carved building, a
-// painted road, an opened door, a depleted resource node — get an entry), so
-// that tier scales with "how much has actually changed," not "how far the
-// player has walked." A house upgrade or two is a handful of diff entries
-// regardless of map size; explored-hex memory is the one part of the
-// architecture that scales with distance traveled instead.
+// IMPORTANT CORRECTION: this used to also delete distant entries from
+// window.exploredHexes itself, on the theory that "forgetting" a
+// far-away hex's explored flag had no gameplay effect since it gets
+// re-added the moment the player is close enough to see it again. That
+// was wrong — exploredHexes is the permanent "have I ever seen this hex"
+// bit that drives the fog-of-war render (isHexExplored, hexMap.js:258):
+// unlike a scratch cache, players expect it to work like BG1's
+// black/never-seen vs. dimmed/seen-before-but-not-currently-visible
+// distinction, which never re-darkens a place you've already been. BG1
+// affords that permanently because its world is chunked into small,
+// separately-loaded areas — each area's explored bitmap is bounded by
+// that area's own fixed size regardless of how many areas the whole game
+// has, not because it forgets anything. That's the real fix for this
+// game's single seamless hex plane too (chunked bitset storage — see
+// TASKS.md's chunk-streaming/save-compression backlog items), not
+// deletion. So: window.exploredHexes is no longer touched here at all —
+// once seen, a hex stays revealed, forever, exactly like BG1.
 //
-// Fix: local fog-of-war only matters for hexes on-screen (or about to be),
-// so forgetting a hex's "explored" flag once the player is far away has no
-// gameplay effect — updateExploration re-adds it the moment the player is
-// close enough to see it again, rebuilt from the same deterministic
-// generation code plus whatever diff already exists for that hex. The coarse
-// per-world-hex "have I been to this village" flag used by the world map is
-// a separate, tiny, bounded structure and is untouched.
+// What's still safe to prune: window.lastSeenTimeMap, which is NOT a
+// fog-of-war flag — it's pure recency bookkeeping (see the guild
+// assassin's backtrack-detection read of it, gameEngine.js ~3070-3084,
+// which only ever cares about *recent* history). Old, far-away
+// timestamps there have no remaining gameplay use, so they're pruned to
+// keep that structure (and the save) from growing forever — the actual
+// permanent memory (exploredHexes) is untouched.
 window.explorationPruneAccum = 0;
 function pruneDistantExploredHexes(playerEntity, delta) {
-    if (!playerEntity || !window.exploredHexes) return;
+    if (!playerEntity || !window.lastSeenTimeMap) return;
     window.explorationPruneAccum += delta;
     const checkInterval = 60;
     if (window.explorationPruneAccum < checkInterval) return;
     window.explorationPruneAccum = 0;
 
     const pruneRadius = 66; // 2.2x base vision range (30), same hysteresis gap as pruneDistantEncounterCorpses
-    for (const key of window.exploredHexes) {
+    for (const key in window.lastSeenTimeMap) {
         const [q, r] = key.split(',').map(Number);
         if (window.distance(playerEntity.hex, { q, r }) > pruneRadius) {
-            window.exploredHexes.delete(key);
-            if (window.lastSeenTimeMap) delete window.lastSeenTimeMap[key];
+            delete window.lastSeenTimeMap[key];
         }
     }
 }
@@ -2560,6 +2565,111 @@ function checkOrcRaiderEncounter(playerEntity, delta) {
     }
 }
 window.checkOrcRaiderEncounter = checkOrcRaiderEncounter;
+
+// --- Border War: the payoff of readGoblinScoutNote's foreshadowing (see
+// campaign2World.js comment there) — the Skarn-tooth goblins were scouting
+// for a larger orc force, now pressing on Northwatch. Same quest shape as
+// goblin_threat: one questLog entry with a `.resolution` field. First pass
+// ships one success branch (siege_broken); failure states are an explicit
+// follow-up (see the Border War plan). ---
+
+window.npcDialogueTrees.border_war_quartermaster = (npc) => {
+    const quest = (window.questLog || []).find(q => q.id === 'border_war');
+    if (quest) {
+        window.showDialogue(npc, "Northwatch needs every blade it can get. If you're headed that way, the commander will have use for you.", [
+            { label: "I'll head there.", action: () => {} }
+        ]);
+        return;
+    }
+    if (!window.goblinScoutNoteRead) {
+        window.showDialogue(npc, "Quartermaster's business, mostly — counting spears and grain sacks. Nothing that concerns you.", [
+            { label: "Fair enough.", action: () => {} }
+        ]);
+        return;
+    }
+    const goblinQuest = (window.questLog || []).find(q => q.id === 'goblin_threat');
+    const peacefulWithGoblins = ['goblin_diplomacy', 'goblin_alliance'].includes(goblinQuest?.resolution);
+    const openingLine = peacefulWithGoblins
+        ? "Word from the Skarn-tooth tribe you dealt with — the same one, oddly enough — says a real orc warband is massing near Northwatch Fort, east of Reddale. If they gave you a straight answer, take it seriously."
+        : "Reports from Northwatch Fort, east of Reddale — an orc warband's been probing the walls for weeks now, worse than any raiding party. Whatever those goblin scouts you dealt with were counting things for, this is it.";
+    window.showDialogue(npc, openingLine, [
+        { label: "I'll head to Northwatch.", action: () => {
+            window.questLog.push({
+                id: 'border_war', title: 'The Northwatch Line', giver: 'Quartermaster Rurik Voss',
+                status: 'active', description: 'Report to the garrison commander at Northwatch Fort, east of Reddale.',
+                resolution: null
+            });
+            window.showMessage('Quest started: The Northwatch Line.');
+        }},
+        { label: "Not my fight.", action: () => {} }
+    ]);
+};
+
+window.npcDialogueTrees.northwatch_commander = (npc) => {
+    const quest = (window.questLog || []).find(q => q.id === 'border_war');
+    if (quest?.status === 'completed') {
+        window.showDialogue(npc, "That engine won't trouble this wall again. Well fought.", [
+            { label: "Glad to help.", action: () => {} }
+        ]);
+        return;
+    }
+    if (window.borderWarSallyActive) {
+        window.showDialogue(npc, "Go — that engine won't wait for us to finish talking.", [
+            { label: "On it.", action: () => {} }
+        ]);
+        return;
+    }
+    window.showDialogue(npc, "You're the outside help Voss sent word of. Good — I can't spare a single soldier off this wall, not with that engine still battering it. But a small, elite party could slip out, hit the engine directly, and be back before the garrison even notices the gap. That's you.", [
+        { label: "We'll destroy it.", action: () => {
+            if (!quest) {
+                window.questLog.push({
+                    id: 'border_war', title: 'The Northwatch Line', giver: 'Commander Ysolde Hart',
+                    status: 'active', description: 'Destroy the siege engine battering Northwatch\'s wall.',
+                    resolution: null
+                });
+            }
+            window.startNorthwatchSally();
+        }},
+        { label: "Not yet.", action: () => {} }
+    ]);
+};
+
+// Triggered by the commander's dialogue — flips the ambient (neutral,
+// noAttack) siege engine placed at world-build time (buildNorthwatchFort,
+// campaign2World.js) into a real combat target and spawns its escort
+// skirmishers around it. The fight happens right at the fort on the open
+// map, same as every other Campaign 2 scripted encounter (farm wolves,
+// goblin camp, Ironvein raids) — no separate arena/teleport. Resolves via
+// checkCombatEnd's border_war branch (gameEngine.js) once all enemies are
+// dead.
+function startNorthwatchSally() {
+    const engine = window.campaign2NorthwatchSiegeEngine;
+    if (!engine || !engine.alive) return;
+    window.borderWarSallyActive = true;
+    engine.side = 'enemy';
+    engine.noAttack = false;
+    engine.isNPC = false;
+    engine.aiState = 'idle';
+
+    const escortTypes = window.campaign2SiegeEscortTypes || ['orc', 'orc', 'goblin', 'goblin'];
+    escortTypes.forEach((type, i) => {
+        const angle = (i / escortTypes.length) * Math.PI * 2;
+        const hex = window.hexRound(
+            engine.hex.q + Math.round(Math.cos(angle) * 3),
+            engine.hex.r + Math.round(Math.sin(angle) * 3)
+        );
+        if (window.getEntityAtHex(hex.q, hex.r) || window.getTerrainAt(hex.q, hex.r).impassable) return;
+        const escort = window.createMonster(type, hex, null, null, 'enemy');
+        escort.aiState = 'idle';
+        window.entities.push(escort);
+    });
+
+    window.showMessage("You break from the fort and sprint for the siege engine — the escort turns to meet you!");
+    window.drawMap();
+    window.renderEntities();
+    if (window.updateTurnIndicator) window.updateTurnIndicator();
+}
+window.startNorthwatchSally = startNorthwatchSally;
 
 // --- Companion attitude (BG3-style approval): a 0-100 meter per companion
 // name, moved by tagged actions and shown to the player as a toast message

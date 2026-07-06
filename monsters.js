@@ -37,7 +37,7 @@ const monsterTemplates = {
     },
     'orc': {
         name: 'Orc',
-        color: '#a52a2a', 
+        color: '#a52a2a',
         hp: 10,
         expValue: 200,
         riderSize: 3,
@@ -47,6 +47,24 @@ const monsterTemplates = {
             'health': 3
         },
         defaultEquipment: 'random'
+    },
+    // A real objective, not a combatant in the usual sense — high HP (the
+    // point of the sally-out fight), no weapon, no loot. Its only "attack"
+    // is the isSiegeEngine behaviorTick branch in gameEngine.js, which calls
+    // window.damageWall instead of tryAttack. The ambient open-world copy
+    // (buildNorthwatchFort) sets noAttack:true so it's purely cosmetic
+    // there; the sally-out arena's copy leaves noAttack unset so it's the
+    // real fight target.
+    'siege_engine': {
+        name: 'Siege Engine',
+        color: '#4a3a2a',
+        hp: 60,
+        expValue: 400,
+        canLoot: false,
+        tags: ['construct'],
+        voice: null,
+        skills: {},
+        defaultEquipment: []
     },
     'wolf': {
         name: 'Wolf',

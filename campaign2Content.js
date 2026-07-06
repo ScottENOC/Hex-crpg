@@ -590,4 +590,51 @@ window.campaign2HighCleric = {
 // a randomized fighter-for-hire; see addCompanionToRoster in roster.js for
 // where hires land (active party if there's room, the bench otherwise).
 window.campaign2MercenaryRecruiter = { name: 'Mercenary Recruiter', title: 'Sellsword Broker', dialogueId: 'silverhart_mercenary_broker' };
+
+// The Border War arc. Same template-array pattern as campaign2RoyalGuards —
+// one shared roster, `.forEach(buildNPC)` against hardcoded hex offsets in
+// campaign2World.js's buildNorthwatchFort/buildRidgeholdFort. `side: 'neutral'`
+// like every other garrison NPC — these defend the fort, they don't fight
+// the player.
+window.campaign2FortSoldiers = [
+    { name: 'Fort Soldier Halric', title: 'Border Soldier', race: 'human', gender: 'male', classLevels: ['fighter'], skillPicks: ['health', 'spear_hit', 'spear_dmg', 'light_armor_training'], equipment: ['spear', 'light_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#5a5a6a' },
+    { name: 'Fort Soldier Wenna', title: 'Border Soldier', race: 'human', gender: 'female', classLevels: ['fighter'], skillPicks: ['health', 'bow_hit', 'bow_dmg', 'light_armor_training'], equipment: ['bow', 'light_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#5a5a6a' },
+    { name: 'Fort Soldier Dunstan', title: 'Border Soldier', race: 'human', gender: 'male', classLevels: ['fighter'], skillPicks: ['health', 'sword_hit', 'sword_dmg', 'light_armor_training'], equipment: ['sword', 'light_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#5a5a6a' },
+    { name: 'Fort Soldier Ysolt', title: 'Border Soldier', race: 'human', gender: 'female', classLevels: ['fighter'], skillPicks: ['health', 'bow_hit', 'bow_dmg', 'light_armor_training'], equipment: ['bow', 'light_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#5a5a6a' },
+    { name: 'Fort Soldier Bram', title: 'Border Soldier', race: 'human', gender: 'male', classLevels: ['fighter'], skillPicks: ['health', 'spear_hit', 'spear_dmg', 'light_armor_training'], equipment: ['spear', 'light_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#5a5a6a' },
+    { name: 'Fort Soldier Cadha', title: 'Border Soldier', race: 'human', gender: 'female', classLevels: ['fighter'], skillPicks: ['health', 'sword_hit', 'sword_dmg', 'light_armor_training'], equipment: ['sword', 'light_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#5a5a6a' }
+];
+
+// The commander stationed in Northwatch's keep — quest-giver 2. Assigns the
+// actual sally-out objective (destroy the siege engine), explicitly framing
+// the player as an outside strike team because the garrison can't be spared.
+window.campaign2NorthwatchCommander = {
+    name: 'Commander Ysolde Hart', title: 'Garrison Commander of Northwatch',
+    race: 'human', gender: 'female', classLevels: ['fighter', 'fighter'],
+    skillPicks: ['health', 'health', 'sword_hit', 'sword_dmg', 'heavy_armor_training', 'shield_proficiency'],
+    equipment: ['sword', 'wooden_shield', 'heavy_armor'],
+    side: 'neutral', factionId: 'silverhart_kingdom', color: '#2a3a6a',
+    dialogueId: 'northwatch_commander'
+};
+
+// Quest-giver 1 (the hook), placed in Millbrook — reachable well before the
+// player ever gets near Northwatch, per the "breadcrumbs point the way"
+// design. Not a soldier — a quartermaster passing through, not garrisoned.
+window.campaign2BorderWarQuartermaster = {
+    name: 'Quartermaster Rurik Voss', title: "The King's Quartermaster",
+    race: 'human', gender: 'male', classLevels: ['fighter'],
+    skillPicks: ['health', 'sword_hit'], equipment: ['sword', 'light_armor'],
+    side: 'neutral', factionId: 'silverhart_kingdom', color: '#4a4a2a',
+    dialogueId: 'border_war_quartermaster'
+};
+
+// The sally-out arena's escort skirmishers — the "not hundreds of soldiers"
+// small fight the player actually plays. Built via window.createMonster
+// (like every other goblin/orc, e.g. checkOrcRaiderEncounter's wilderness
+// bands, gameEngine.js) rather than buildNPC, which only handles the
+// player-race roster (see buildGoblinNPC, campaign2World.js, for the same
+// distinction). `orc_raiders` faction, not `goblin_tribe` — this is the
+// larger force the goblin scouts were reporting to (see the Border War
+// context in campaign2Dialogue.js's border_war quest push).
+window.campaign2SiegeEscortTypes = ['orc', 'orc', 'goblin', 'goblin', 'wolf_rider_goblin'];
 window.campaign2MercenaryNamePool = ['Bram Ashford', 'Corvin Tale', 'Sela Dunmore', 'Petra Kesh', 'Thorne Vance', 'Mira Solberg'];

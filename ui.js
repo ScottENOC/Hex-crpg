@@ -340,6 +340,8 @@ function showCharacterScreen() {
             <strong>Level:</strong> ${char.level} | 
             <strong>EXP:</strong> ${char.exp} / ${expNext}
             <button onclick="window.gainExp(1000)" style="margin-left: 20px; font-size: 0.7em;">Cheat: +1000 EXP</button>
+            <button onclick="window.cheatTeleportNorthwatch && window.cheatTeleportNorthwatch()" style="margin-left: 10px; font-size: 0.7em;">Cheat: Teleport to Northwatch</button>
+            <button onclick="window.cheatTeleportRidgehold && window.cheatTeleportRidgehold()" style="margin-left: 10px; font-size: 0.7em;">Cheat: Teleport to Ridgehold</button>
         `;
         contentDiv.appendChild(expDiv);
 

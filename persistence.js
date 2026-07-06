@@ -64,6 +64,7 @@ function saveGame(saveName = "rpg_save_game") {
         hollowmereVictoryBonusGiven: window.hollowmereVictoryBonusGiven,
         hollowmereSoldiersWaitingOutside: window.hollowmereSoldiersWaitingOutside,
         hollowmereQuestOfferFired: window.hollowmereQuestOfferFired,
+        borderWarSallyActive: window.borderWarSallyActive,
         campaign2AbandonedHouseTriggered: window.campaign2AbandonedHouseTriggered,
         campaign2PlayerCottageBuilt: window.campaign2PlayerCottageBuilt,
         campaign2PlayerCottageUpgraded: window.campaign2PlayerCottageUpgraded,
@@ -193,6 +194,7 @@ function loadGame(saveName = "rpg_save_game") {
         window.hollowmereVictoryBonusGiven = gameState.hollowmereVictoryBonusGiven || false;
         window.hollowmereSoldiersWaitingOutside = gameState.hollowmereSoldiersWaitingOutside || false;
         window.hollowmereQuestOfferFired = gameState.hollowmereQuestOfferFired || false;
+        window.borderWarSallyActive = gameState.borderWarSallyActive || false;
         window.campaign2AbandonedHouseTriggered = gameState.campaign2AbandonedHouseTriggered || false;
         window.campaign2PlayerCottageBuilt = gameState.campaign2PlayerCottageBuilt || false;
         window.campaign2PlayerCottageUpgraded = gameState.campaign2PlayerCottageUpgraded || false;

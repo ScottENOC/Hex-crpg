@@ -7,12 +7,12 @@ const terrainTypes = {
     'sand': { name: 'Sand', color: '#edc9af', moveCostMult: 1.5, hitBonus: 0, dodgeBonus: 0, stealthBonus: 0 },
     'swamp': { name: 'Swamp', color: '#4f7942', moveCostMult: 2, hitBonus: -5, dodgeBonus: 0, stealthBonus: 30 },
     'water': { name: 'Water', color: '#4169e1', moveCostMult: 2, hitBonus: -10, dodgeBonus: -5, stealthBonus: -20 },
-    'wall': { name: 'Wall', color: '#696969', moveCostMult: 2, hitBonus: 5, dodgeBonus: 5, stealthBonus: 0 },
+    'wall': { name: 'Wall', color: '#696969', moveCostMult: 2, hitBonus: 5, dodgeBonus: 5, stealthBonus: 0, impassable: true },
     'cave_floor': { name: 'Cave Floor', color: '#3e3e3e', moveCostMult: 1, hitBonus: 0, dodgeBonus: 0, stealthBonus: 0 },
     'wood_floor': { name: 'Wood Floor', color: '#8d5a2b', moveCostMult: 1, hitBonus: 0, dodgeBonus: 0, stealthBonus: 0 },
     'path': { name: 'Path', color: '#c2a878', moveCostMult: 0.9, hitBonus: 0, dodgeBonus: 0, stealthBonus: -10 },
     'dirt': { name: 'Dirt', color: '#8a6d4a', moveCostMult: 1, hitBonus: 0, dodgeBonus: 0, stealthBonus: -15 },
-    'pedestal': { name: 'Pedestal', color: '#888', moveCostMult: 2, hitBonus: 10, dodgeBonus: -5, stealthBonus: 0, blocksLOS: true },
+    'pedestal': { name: 'Pedestal', color: '#888', moveCostMult: 2, hitBonus: 10, dodgeBonus: -5, stealthBonus: 0, blocksLOS: true, elevated: true },
     'foliage': { name: 'Foliage', color: '#2e7d32', moveCostMult: 1.5, hitBonus: -10, dodgeBonus: 15, stealthBonus: 40 },
     'rocky_outcrop': { name: 'Rocky Outcrop', color: '#8a7f6b', moveCostMult: 1.5, hitBonus: 5, dodgeBonus: 0, stealthBonus: 0 },
     // A third wall tier, between plain 'Wall' (fully impassable — used for
@@ -22,7 +22,23 @@ const terrainTypes = {
     // for the agile_climber/ladder-tileObject discount). Not literally
     // 'Wall' so it doesn't hit any of the hardcoded impassable-terrain
     // checks scattered through pathfinding/targeting.
-    'palisade_wall': { name: 'Palisade Wall', color: '#5a4632', moveCostMult: 15, hitBonus: 10, dodgeBonus: -10, stealthBonus: -30, blocksLOS: true }
+    'palisade_wall': { name: 'Palisade Wall', color: '#5a4632', moveCostMult: 15, hitBonus: 10, dodgeBonus: -10, stealthBonus: -30, blocksLOS: true },
+    // Border-fort rampart: a real curtain wall you CAN climb onto (costly,
+    // via the same elevated/height-cost logic Pedestal already uses — see
+    // getMoveCostMult/the height-transition block in gameEngine.js), not
+    // impassable like plain Wall. Standing here gives ranged cover and
+    // blocks melee against/from ground-level entities (see
+    // isCoveredFromRangedAttack and the elevation-immunity check in
+    // tryAttack, both keyed off elevated, gameEngine.js).
+    'climbable_wall': { name: 'Climbable Wall', color: '#7a6a52', moveCostMult: 3, hitBonus: 15, dodgeBonus: 10, stealthBonus: 0, elevated: true },
+    // The inner keep's wall: genuinely impassable (can't be climbed at all)
+    // and roofed (blocks LOS, see isOpaqueWallName in hexMap.js) — the one
+    // wall type in the fort that a siege engine can actually break down
+    // (see damageWall/siege_wall tileObject, gameEngine.js).
+    'keep_wall': { name: 'Keep Wall', color: '#4a4a4a', moveCostMult: 999, hitBonus: 10, dodgeBonus: 0, stealthBonus: 0, impassable: true },
+    // What a keep_wall hex becomes once a siege engine breaks it down — a
+    // walkable breach, cosmetically distinct from untouched floor.
+    'rubble': { name: 'Rubble', color: '#8a8378', moveCostMult: 1.5, hitBonus: 0, dodgeBonus: 0, stealthBonus: 0 }
 };
 
 window.mapItems = {}; // Key format: "q,r", Value: array of item IDs

@@ -139,7 +139,7 @@ function hexRowShiftFlat(dq) {
     return -Math.floor(dq / 2);
 }
 
-function carveFlatRoom(centerQ, centerR, halfW, halfH, doorHex, floorType) {
+function carveFlatRoom(centerQ, centerR, halfW, halfH, doorHex, floorType, wallType = 'Wall') {
     const floorHexes = [];
     for (let dq = -halfW + 1; dq <= halfW - 1; dq++) {
         const shift = hexRowShiftFlat(dq);
@@ -148,7 +148,7 @@ function carveFlatRoom(centerQ, centerR, halfW, halfH, doorHex, floorType) {
         }
     }
     const wallHexes = wallRingAroundFloor(floorHexes);
-    wallHexes.forEach(h => window.setTerrainAt(h.q, h.r, 'Wall'));
+    wallHexes.forEach(h => window.setTerrainAt(h.q, h.r, wallType));
     floorHexes.forEach(h => window.setTerrainAt(h.q, h.r, floorType));
     if (doorHex) {
         window.setTerrainAt(doorHex.q, doorHex.r, floorType);
@@ -161,6 +161,89 @@ function carveFlatRoom(centerQ, centerR, halfW, halfH, doorHex, floorType) {
         lightMult: 0.3,
         doorHex: doorHex ? { q: doorHex.q, r: doorHex.r } : null,
         floorHexes, wallHexes, floorType
+    };
+}
+
+// The 6 native hex directions (same order getNeighbors uses, hexMap.js) —
+// carveStarFort walks these outward to build each of a star fort's 6
+// points, one per direction, so the shape always has exactly 6 points
+// (arbitrary point counts would need bearing-interpolation between two
+// directions, not worth the complexity for a first pass).
+const STAR_FORT_DIRECTIONS = [
+    { q: 1, r: 0 }, { q: 1, r: -1 }, { q: 0, r: -1 },
+    { q: -1, r: 0 }, { q: -1, r: 1 }, { q: 0, r: 1 }
+];
+
+// A hex-radius disk of floor hexes around a center point (true hex
+// adjacency via BFS through getNeighbors, not a q/r rectangle) — the core
+// of a star fort, and reused for each point's own lateral spread below.
+function hexDisk(centerQ, centerR, radius) {
+    const hexes = [{ q: centerQ, r: centerR }];
+    const seen = new Set([`${centerQ},${centerR}`]);
+    let frontier = [{ q: centerQ, r: centerR }];
+    for (let ring = 0; ring < radius; ring++) {
+        const next = [];
+        frontier.forEach(h => {
+            window.getNeighbors(h.q, h.r).forEach(n => {
+                const key = `${n.q},${n.r}`;
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    hexes.push(n);
+                    next.push(n);
+                }
+            });
+        });
+        frontier = next;
+    }
+    return hexes;
+}
+
+// Builds a 6-pointed star fort: a small core disk plus 6 outward wedges
+// (one per native hex direction), each wide enough at the tip to be a real
+// archer platform. Returns the same bbox/doorHex shape carveFlatRoom
+// returns, so fort-population code can reuse bbox-based placement helpers.
+// `wallType` lets the inner keep reuse this same shape with 'keep_wall'
+// instead (see buildNorthwatchFort/buildRidgeholdFort).
+function carveStarFort(centerQ, centerR, coreRadius, pointLength, pointWidth, gateHex, floorType, wallType = 'Climbable Wall') {
+    const floorSet = new Map();
+    hexDisk(centerQ, centerR, coreRadius).forEach(h => floorSet.set(`${h.q},${h.r}`, h));
+
+    STAR_FORT_DIRECTIONS.forEach(dir => {
+        // Walk outward along this direction from the edge of the core; at
+        // each step out, spread laterally by up to pointWidth via the two
+        // directions adjacent to `dir` in the 6-direction cycle, so the tip
+        // reads as a flat wedge (wide enough for several archers) rather
+        // than a single-hex spike.
+        const dirIndex = STAR_FORT_DIRECTIONS.indexOf(dir);
+        const lateralA = STAR_FORT_DIRECTIONS[(dirIndex + 2) % 6];
+        const lateralB = STAR_FORT_DIRECTIONS[(dirIndex + 4) % 6];
+        for (let step = coreRadius + 1; step <= coreRadius + pointLength; step++) {
+            const base = { q: centerQ + dir.q * step, r: centerR + dir.r * step };
+            floorSet.set(`${base.q},${base.r}`, base);
+            for (let w = 1; w <= pointWidth; w++) {
+                const a = { q: base.q + lateralA.q * w, r: base.r + lateralA.r * w };
+                const b = { q: base.q + lateralB.q * w, r: base.r + lateralB.r * w };
+                floorSet.set(`${a.q},${a.r}`, a);
+                floorSet.set(`${b.q},${b.r}`, b);
+            }
+        }
+    });
+
+    const floorHexes = [...floorSet.values()];
+    const wallHexes = wallRingAroundFloor(floorHexes);
+    wallHexes.forEach(h => window.setTerrainAt(h.q, h.r, wallType));
+    floorHexes.forEach(h => window.setTerrainAt(h.q, h.r, floorType));
+    if (gateHex) window.setTerrainAt(gateHex.q, gateHex.r, floorType); // no door tileObject — the gate is just the intended gap in an otherwise-uniformly-climbable ring
+
+    let minQ = Infinity, maxQ = -Infinity, minR = Infinity, maxR = -Infinity;
+    floorHexes.forEach(h => {
+        minQ = Math.min(minQ, h.q); maxQ = Math.max(maxQ, h.q);
+        minR = Math.min(minR, h.r); maxR = Math.max(maxR, h.r);
+    });
+    return {
+        minQ, maxQ, minR, maxR, lightMult: 1.0,
+        doorHex: gateHex ? { q: gateHex.q, r: gateHex.r } : null,
+        floorHexes, wallHexes, floorType, center: { q: centerQ, r: centerR }
     };
 }
 
@@ -561,6 +644,13 @@ function buildMillbrook(roadEnd) {
     if (window.campaign2MillbrookVillager) {
         const villager = window.buildNPC({ ...window.campaign2MillbrookVillager, hex: { q: center.q + 1, r: center.r } });
         window.entities.push(villager);
+    }
+
+    // Border War quest-giver 1 (the hook) — passing through, not a
+    // resident, so he's placed just outside the house rather than inside.
+    if (window.campaign2BorderWarQuartermaster) {
+        const quartermaster = window.buildNPC({ ...window.campaign2BorderWarQuartermaster, hex: { q: doorHex.q + 1, r: doorHex.r } });
+        window.entities.push(quartermaster);
     }
 
     if (window.worldMapData && window.worldMapData[3] && window.worldMapData[3][6] !== undefined) {
@@ -1481,6 +1571,18 @@ function setupVillageScene(forLoadOnly = false) {
     });
     const farmRoadEnd = paintRoad({ q: 0, r: 1 }, WORLD_HEX_SIZE + 40); // South: past the hex border, to Old Mac's Farmstead
     const eastRoadEnd = paintRoad({ q: 1, r: 0 }, WORLD_HEX_SIZE); // East: Reddale
+    // The Border War arc: repaints the same east-road hexes as eastRoadEnd
+    // above out to Reddale (idempotent — deterministic wiggle, same primary
+    // direction, so it's identical over the shared range) and continues two
+    // more world-hexes further east, right up against the human/orc border
+    // (see worldMap.js's isOrcLands cutoff and checkOrcRaiderEncounter's
+    // headingEast threshold, both already east-of-Reddale-flavored).
+    // Northwatch turns off north at the 2nd world-hex; Ridgehold sits at the
+    // 3rd (the road's actual end).
+    let northwatchTurnHex = null;
+    const borderRoadEnd = paintRoad({ q: 1, r: 0 }, WORLD_HEX_SIZE * 3, 18, 0.35, (i, hex) => {
+        if (i === WORLD_HEX_SIZE * 2) northwatchTurnHex = hex;
+    });
     // West: runs a full two world hexes now — the goblin camp sits at the
     // original one-hex border (captured via onStep so its position is
     // unchanged from before), and Emberlode (village + gold mine) sits a
@@ -1500,6 +1602,8 @@ function setupVillageScene(forLoadOnly = false) {
     buildEmberlode(westRoadEnd);
     buildReddale(eastRoadEnd);
     buildVampireGrave(westRoadEnd);
+    buildNorthwatchFort(northwatchTurnHex);
+    buildRidgeholdFort(borderRoadEnd);
 
     // Campaign 2's entire world is this one deterministic layout, regenerated
     // by this function every time it runs (fresh game or the "engine not
@@ -1817,6 +1921,147 @@ function buildReddale(roadEnd) {
         window.worldMapData[6][7] = { t: 'G', f: 'T', o: 'h', p: 1, n: 'Reddale' };
     }
 }
+
+// Northwatch Fort: the Border War's active front. A 6-pointed star fort
+// (see carveStarFort above) — a core plus 6 outward archer-platform wedges,
+// ringed by Climbable Wall (costly-but-possible, see the elevated-terrain
+// generalization in gameEngine.js). A separate, genuinely impassable/roofed
+// keep sits at the core (carveFlatRoom with wallType:'Keep Wall'). Garrison
+// soldiers patrol the wall ring; the commander (quest-giver 2) waits in the
+// keep. A live siege engine sits just outside, already chipping at the
+// north wall — Ridgehold (below) is the not-yet-besieged contrast fort.
+function buildNorthwatchFort(turnHex) {
+    if (!turnHex) return;
+    // Short spur north off the border road to the fort's south gate.
+    const SPUR_LENGTH = 24;
+    for (let i = 1; i <= SPUR_LENGTH; i++) window.setTerrainAt(turnHex.q, turnHex.r - i, 'Path');
+    const center = { q: turnHex.q, r: turnHex.r - SPUR_LENGTH - 10 };
+    const gateHex = { q: center.q, r: center.r + 10 }; // south point, facing the road
+
+    const fortRegion = carveStarFort(center.q, center.r, 3, 6, 2, gateHex, 'Wood Floor', 'Climbable Wall');
+    window.interiorRegions.push(fortRegion);
+
+    const keepDoor = { q: center.q, r: center.r + 3 };
+    const keepRegion = carveFlatRoom(center.q, center.r, 3, 2, keepDoor, 'Wood Floor', 'Keep Wall');
+    window.interiorRegions.push(keepRegion);
+    window.tileObjects[`${center.q},${center.r}`] = { type: 'fireplace', lightRadius: 6 };
+
+    window.campaign2NorthwatchCenter = center;
+    window.campaign2NorthwatchFortRegion = fortRegion;
+    window.campaign2NorthwatchGateHex = gateHex;
+
+    // Garrison: patrol the wall ring (behaviorType 'patrol' over the fort's
+    // own wallHexes, same mechanism as any other patrol NPC).
+    const wallPatrolPath = fortRegion.wallHexes.filter((h, i) => i % 3 === 0); // a sparse loop, not every single wall hex
+    (window.campaign2FortSoldiers || []).forEach((spec, i) => {
+        const postHex = wallPatrolPath[i % wallPatrolPath.length] || fortRegion.wallHexes[0];
+        const soldier = window.buildNPC({ ...spec, hex: { q: postHex.q, r: postHex.r } });
+        soldier.behaviorType = 'patrol';
+        soldier.patrolPath = wallPatrolPath;
+        soldier.homeHex = { ...postHex };
+        window.entities.push(soldier);
+    });
+
+    if (window.campaign2NorthwatchCommander) {
+        const commander = window.buildNPC({ ...window.campaign2NorthwatchCommander, hex: { q: center.q, r: center.r - 1 } });
+        window.entities.push(commander);
+    }
+
+    // The siege engine already battering the north wall — visible from a
+    // distance the moment the fort exists, reinforcing "under siege" before
+    // the player ever takes the quest. side:'neutral' + noAttack (same
+    // pattern as the arena lobby's dialogue-only preview combatants,
+    // gameEngine.js ~5013) so it's inert and — importantly — doesn't count
+    // against the many `!entities.some(e => e.side==='enemy' && e.alive)`
+    // combat-end checks used all over the game. startNorthwatchSally
+    // (campaign2Dialogue.js) flips it to side:'enemy'/noAttack:false and
+    // spawns its escorts once the commander's quest is actually accepted —
+    // the real fight happens right here at the fort, not a separate arena
+    // (matches every other Campaign 2 scripted encounter: farm wolves,
+    // goblin camp, Ironvein raids all fight in place on the open map).
+    const siegeHex = { q: center.q, r: center.r - 10 };
+    const siegeEngine = window.createMonster('siege_engine', siegeHex, null, null, 'neutral');
+    if (siegeEngine) {
+        siegeEngine.isSiegeEngine = true;
+        siegeEngine.isNPC = true;
+        siegeEngine.aiState = 'idle';
+        siegeEngine.noAttack = true;
+        window.entities.push(siegeEngine);
+        window.campaign2NorthwatchSiegeEngine = siegeEngine;
+    }
+
+    if (window.worldMapData && window.worldMapData[5] && window.worldMapData[5][9] !== undefined) {
+        window.worldMapData[5][9] = { t: 'H', f: 'F', o: 'h', p: 1, n: 'Northwatch Fort (Under Siege)' };
+    }
+}
+
+// Ridgehold Fort: populated and patrol-behaviored like Northwatch, but not
+// (yet) under siege — the reserve front, contrasting with Northwatch's
+// active one. Same star-fort + keep shape; no siege engine, no commander
+// quest (that's Northwatch-specific for this pass — see TASKS.md-equivalent
+// scoping note in the Border War plan about a second front being a
+// follow-up, not this pass).
+function buildRidgeholdFort(roadEnd) {
+    if (!roadEnd) return;
+    const center = { q: roadEnd.q + 14, r: roadEnd.r + 10 };
+    const gateHex = { q: center.q - 10, r: center.r - 4 }; // west-ish point, facing the road
+
+    for (let q = roadEnd.q + 1; q < center.q - 8; q++) window.setTerrainAt(q, roadEnd.r + Math.round((q - roadEnd.q) * 10 / 14), 'Path');
+
+    const fortRegion = carveStarFort(center.q, center.r, 3, 6, 2, gateHex, 'Wood Floor', 'Climbable Wall');
+    window.interiorRegions.push(fortRegion);
+
+    const keepDoor = { q: center.q, r: center.r + 3 };
+    const keepRegion = carveFlatRoom(center.q, center.r, 3, 2, keepDoor, 'Wood Floor', 'Keep Wall');
+    window.interiorRegions.push(keepRegion);
+    window.tileObjects[`${center.q},${center.r}`] = { type: 'fireplace', lightRadius: 6 };
+
+    window.campaign2RidgeholdCenter = center;
+    window.campaign2RidgeholdFortRegion = fortRegion;
+
+    const wallPatrolPath = fortRegion.wallHexes.filter((h, i) => i % 3 === 0);
+    (window.campaign2FortSoldiers || []).forEach((spec, i) => {
+        const postHex = wallPatrolPath[i % wallPatrolPath.length] || fortRegion.wallHexes[0];
+        const soldier = window.buildNPC({ ...spec, hex: { q: postHex.q, r: postHex.r }, name: spec.name + ' (Ridgehold)' });
+        soldier.behaviorType = 'patrol';
+        soldier.patrolPath = wallPatrolPath;
+        soldier.homeHex = { ...postHex };
+        window.entities.push(soldier);
+    });
+
+    if (window.worldMapData && window.worldMapData[9] && window.worldMapData[9][9] !== undefined) {
+        window.worldMapData[9][9] = { t: 'H', f: 'F', o: 'h', p: 1, n: 'Ridgehold Fort' };
+    }
+}
+
+// Moves every party member (not just window.player) to a cluster around
+// centerHex — used by the two fort teleport cheats below so the whole party
+// arrives together instead of stranding companions back wherever they were.
+function teleportPartyTo(centerHex) {
+    const partyEntities = window.entities.filter(e => e.side === 'player' && !e.rider);
+    partyEntities.forEach((e, i) => {
+        const hex = { q: centerHex.q + (i % 3), r: centerHex.r + Math.floor(i / 3) };
+        e.hex = hex;
+        e.visualQ = hex.q; e.visualR = hex.r;
+        e.destination = null;
+    });
+    if (window.drawMap) window.drawMap();
+    if (window.renderEntities) window.renderEntities();
+    if (window.centerCameraOn) window.centerCameraOn(centerHex);
+}
+
+// Cheat teleports — straight to the fort's gate, no travel required. Useful
+// for testing/skipping ahead; not tied to any quest gate.
+window.cheatTeleportNorthwatch = function() {
+    if (!window.campaign2NorthwatchGateHex) { window.showMessage('Northwatch Fort has not been built yet.'); return; }
+    teleportPartyTo(window.campaign2NorthwatchGateHex);
+    window.showMessage('Teleported to Northwatch Fort.');
+};
+window.cheatTeleportRidgehold = function() {
+    if (!window.campaign2RidgeholdFortRegion?.doorHex) { window.showMessage('Ridgehold Fort has not been built yet.'); return; }
+    teleportPartyTo(window.campaign2RidgeholdFortRegion.doorHex);
+    window.showMessage('Teleported to Ridgehold Fort.');
+};
 
 // Reads the journal at the abandoned house — the first breadcrumb toward
 // the necromancer/lichdom plot arc. Knowledge: Religion reveals specifics

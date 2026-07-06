@@ -556,15 +556,15 @@ function playerMoveProcess(player, path) {
         return;
     }
 
-    if (targetTerrain.name === 'Pedestal') {
+    if (targetTerrain.elevated) {
         const myHexes = player.getAllHexes();
-        const allOnPedestal = myHexes.every(h => {
+        const allOnElevated = myHexes.every(h => {
             const relQ = h.q - player.hex.q;
             const relR = h.r - player.hex.r;
-            return window.getTerrainAt(nextHex.q + relQ, nextHex.r + relR).name === 'Pedestal';
+            return window.getTerrainAt(nextHex.q + relQ, nextHex.r + relR).elevated;
         });
-        if (!allOnPedestal) {
-            window.showMessage("This creature is too large to fit on the pedestal.");
+        if (!allOnElevated) {
+            window.showMessage("This creature is too large to fit up here.");
             finalizePlayerAction(player, true);
             return;
         }
@@ -610,12 +610,12 @@ function playerMoveProcess(player, path) {
             terrainMult = 1.0; 
         }
 
-        // HEIGHT PENALTY (Pedestals)
-        if (previousTerrain.name !== terrain.name && (previousTerrain.name === 'Pedestal' || terrain.name === 'Pedestal')) {
+        // HEIGHT PENALTY (any elevated terrain — Pedestals, and now fort ramparts)
+        if (previousTerrain.name !== terrain.name && (previousTerrain.elevated || terrain.elevated)) {
             let heightPenalty = 1.0;
             if (moveEntity.skills?.agile_climber) heightPenalty = 0.5;
             terrainMult += heightPenalty;
-        } else if (previousTerrain.name === 'Pedestal' && terrain.name === 'Pedestal') {
+        } else if (previousTerrain.elevated && terrain.elevated) {
             terrainMult = 1.0; // Flat movement on same level
         }
 
@@ -1820,9 +1820,9 @@ function renderEntities() {
       // Basic off-screen culling for drawing
       if (x < -100 || y < -100 || x > window.mapCanvas.width + 100 || y > window.mapCanvas.height + 100) return;
       
-      // TERRAIN OFFSET: Stand on top of pedestals
+      // TERRAIN OFFSET: stand on top of any elevated terrain (pedestals, fort ramparts)
       const t = window.getTerrainAt(e.hex.q, e.hex.r);
-      if (t.name === 'Pedestal') {
+      if (t.elevated) {
           y -= (window.hexSize * 0.6) * z; // 30% of hex height (2*size is full height)
       }
 
@@ -2771,8 +2771,8 @@ window.getMoveCostMult = getMoveCostMult;
 // them walk through walls now that the arena generates real ones.
 function isOpenHex(h) {
     if (getEntityAtHex(h.q, h.r)) return false;
-    const name = window.getTerrainAt(h.q, h.r).name;
-    return name !== 'Water' && name !== 'Wall';
+    const terrain = window.getTerrainAt(h.q, h.r);
+    return terrain.name !== 'Water' && !terrain.impassable;
 }
 window.isOpenHex = isOpenHex;
 
@@ -2899,6 +2899,36 @@ function aiProcess(entity) {
         } else {
             entity.timePoints = 0;
         }
+        window.currentTurnEntity = null;
+        window.gamePhase = 'WAITING';
+        return;
+    }
+
+    // SIEGE ENGINE: never targets/engages the player like a normal 'enemy'
+    // (it's an objective, not a combatant — see monsters.js's siege_engine
+    // template) — its only action is chipping away at the nearest
+    // Keep Wall hex within range, via damageWall rather than tryAttack,
+    // since a wall has no hp/dodge/passiveDodge shape to resolve an attack
+    // roll against.
+    if (entity.isSiegeEngine) {
+        if (entity.timePoints >= 15) {
+            const range = 3;
+            let targetWall = null;
+            for (let dq = -range; dq <= range && !targetWall; dq++) {
+                for (let dr = Math.max(-range, -dq - range); dr <= Math.min(range, -dq + range) && !targetWall; dr++) {
+                    const h = { q: entity.hex.q + dq, r: entity.hex.r + dr };
+                    if (window.getTerrainAt(h.q, h.r).name === 'Keep Wall' && window.distance(entity.hex, h) <= range) targetWall = h;
+                }
+            }
+            if (targetWall) {
+                window.damageWall(targetWall.q, targetWall.r, 3);
+                spendTP(entity, 15);
+                window.currentTurnEntity = null;
+                window.gamePhase = 'WAITING';
+                return;
+            }
+        }
+        entity.timePoints = 0;
         window.currentTurnEntity = null;
         window.gamePhase = 'WAITING';
         return;
@@ -3892,6 +3922,18 @@ function tryAttack(attacker, target, isFeint = false, isOffhand = false, bonusDa
         return;
     }
 
+    // ELEVATION MELEE IMMUNITY: a defender on a wall/rampart can't be melee'd
+    // from the ground, and can't melee the ground from up there either —
+    // symmetric, same shape as the flying-immunity check above.
+    const attackerElevated = window.getTerrainAt(attacker.hex.q, attacker.hex.r).elevated;
+    const targetElevated = window.getTerrainAt(target.hex.q, target.hex.r).elevated;
+    if (!isRanged && !!attackerElevated !== !!targetElevated) {
+        if (attacker.side === 'player') {
+            window.showMessage(`Cannot reach ${target.name} with a melee attack across that height difference!`);
+        }
+        return;
+    }
+
     // Wake up target if attacked
     if (target.side === 'enemy' && target.aiState === 'idle') wakeUp(target);
 
@@ -4093,6 +4135,46 @@ function canSee(viewer, target) {
     return true;
 }
 
+// Shared by both the physical ranged path (below) and the Firebolt spell
+// path (tryCastSpell) — previously duplicated as two separate Pedestal-only
+// checks. Generalized to any elevated terrain (Pedestal, and now fort
+// ramparts) rather than a name check, so a defender tucked behind a
+// climbable wall segment gets the same cover bonus a pedestal already gave.
+function isCoveredFromRangedAttack(target) {
+    const blockedHexes = [{ q: target.hex.q, r: target.hex.r - 1 }, { q: target.hex.q + 1, r: target.hex.r - 1 }];
+    return blockedHexes.some(bh => window.getTerrainAt(bh.q, bh.r).elevated);
+}
+window.isCoveredFromRangedAttack = isCoveredFromRangedAttack;
+
+// Attack-vs-terrain, deliberately separate from tryAttack/resolveAttack
+// (which assume an entity target with hp/dodge/passiveDodge — a wall has
+// none of that). Durability lives in window.tileObjects rather than on the
+// terrain type itself, since terrain objects are shared singletons
+// (terrainTypes['keep_wall'] is one instance for the whole map) — a
+// per-hex tileObjects entry is created lazily, only once a hex is actually
+// damaged, so undamaged wall hexes cost nothing extra. At 0 hp the hex
+// becomes passable Rubble and the tileObject is cleared.
+function damageWall(q, r, amount) {
+    const terrain = window.getTerrainAt(q, r);
+    if (!terrain.impassable) return; // only the keep's real walls are destructible this way
+    const key = `${q},${r}`;
+    const maxHp = 40;
+    if (!window.tileObjects[key] || window.tileObjects[key].type !== 'siege_wall') {
+        window.tileObjects[key] = { type: 'siege_wall', hp: maxHp, maxHp };
+    }
+    const wall = window.tileObjects[key];
+    wall.hp -= amount;
+    if (wall.hp <= 0) {
+        window.setTerrainAt(q, r, 'Rubble');
+        delete window.tileObjects[key];
+        window.showMessage('The wall gives way with a groan of shattered stone — a breach opens!');
+        window.drawMap();
+    } else {
+        window.showMessage(`The wall groans under the impact (${wall.hp}/${wall.maxHp}).`);
+    }
+}
+window.damageWall = damageWall;
+
 function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallback = null, bonusDamage = 0) {
   if (isFeint) {
       if (!isOffhand) attacker.offhandAttackAvailable = (attacker.equipped?.offhand && window.items[attacker.equipped.offhand].type === 'weapon');
@@ -4115,11 +4197,9 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
       hitChance -= foliagePenalty;
   }
 
-  // COVER: Pedestals
-  const blockedHexes = [{q: target.hex.q, r: target.hex.r-1}, {q: target.hex.q+1, r: target.hex.r-1}];
-  const isCovered = blockedHexes.some(bh => window.getTerrainAt(bh.q, bh.r).name === 'Pedestal');
-  if (isCovered) {
-      window.showMessage(`${target.name} is behind a pedestal (Cover bonus: -5 hit)`);
+  // COVER: behind any elevated terrain (pedestals, fort ramparts)
+  if (window.isCoveredFromRangedAttack(target)) {
+      window.showMessage(`${target.name} has cover (Cover bonus: -5 hit)`);
       hitChance -= 5;
   }
 
@@ -4481,6 +4561,26 @@ function checkCombatEnd() {
             if (window.updateTurnIndicator) window.updateTurnIndicator();
             window.drawMap();
             window.renderEntities();
+        }
+
+        // Border War: the sally-out fight against Northwatch's siege engine
+        // (see startNorthwatchSally, campaign2Dialogue.js) resolves through
+        // this same "all enemies dead" gate every other Campaign 2 scripted
+        // fight uses — same known limitation as the Hollowmere branch above
+        // (any unrelated alive enemy elsewhere on the map blocks this check
+        // too), accepted for the same reason it was there.
+        if (window.currentCampaign === "2" && window.borderWarSallyActive) {
+            window.borderWarSallyActive = false;
+            const quest = (window.questLog || []).find(q => q.id === 'border_war');
+            if (quest) { quest.status = 'completed'; quest.resolution = 'siege_broken'; }
+            if (window.factions?.orc_raiders) window.adjustReputation(window.factions.orc_raiders, -20, 15);
+            if (window.adjustRegionStat) window.adjustRegionStat('aldervale', 'security', 10);
+            window.isInCombat = false;
+            window.gamePhase = 'WAITING';
+            window.currentTurnEntity = null;
+            window.showMessage("The siege engine splinters into wreckage — Northwatch's wall holds.");
+            if (window.updateActionButtons) window.updateActionButtons();
+            if (window.updateTurnIndicator) window.updateTurnIndicator();
         }
 
         if (window.currentCampaign === "1" && window.isInArena) {
@@ -5626,14 +5726,10 @@ function resolveSpell(caster, spell, target, clickedHex) {
         
         let hitChance = 50 + (caster.toHitSpell || 0) + spellHitBonus - (target ? target.passiveDodge : 0);
         
-        // COVER: Pedestals
-        if (target && spell.baseId === 'firebolt') {
-            const blockedHexes = [{q: target.hex.q, r: target.hex.r-1}, {q: target.hex.q+1, r: target.hex.r-1}];
-            const isCovered = blockedHexes.some(bh => window.getTerrainAt(bh.q, bh.r).name === 'Pedestal');
-            if (isCovered) {
-                window.showMessage(`${target.name} is behind a pedestal (Cover bonus: -5 hit)`);
-                hitChance -= 5;
-            }
+        // COVER: behind any elevated terrain (pedestals, fort ramparts)
+        if (target && spell.baseId === 'firebolt' && window.isCoveredFromRangedAttack(target)) {
+            window.showMessage(`${target.name} has cover (Cover bonus: -5 hit)`);
+            hitChance -= 5;
         }
 
         const roll = Math.floor(Math.random() * 100);

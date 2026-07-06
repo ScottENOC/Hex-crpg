@@ -593,8 +593,8 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
             }
 
             const terrain = window.getTerrainAt(next.q, next.r);
-            // Wall check
-            if (terrain.name === 'Wall') {
+            // Impassable-terrain check (Wall, and now the keep's Keep Wall)
+            if (terrain.impassable) {
                 const isKnownWall = !isPlayer || isExplored;
                 if (isKnownWall) continue;
             }
@@ -678,17 +678,25 @@ function hasLineOfSight(start, end) {
 
     if (d > effectiveVisionCap) return false;
 
-    const startOnWall = window.getTerrainAt(start.q, start.r).name === 'Wall';
-    const endOnWall = window.getTerrainAt(end.q, end.r).name === 'Wall';
+    // Note: this only ever checked the literal 'Wall' name, not the (mostly
+    // unused elsewhere) blocksLOS field — Pedestal/Palisade Wall have never
+    // actually blocked LOS despite declaring blocksLOS:true. Left as-is to
+    // avoid changing established behavior; the keep's roofed wall is added
+    // as a second explicit name here rather than switching this whole check
+    // over to blocksLOS (which would also newly block LOS through every
+    // existing Pedestal/Palisade Wall hex on the map).
+    const isOpaqueWallName = (name) => name === 'Wall' || name === 'Keep Wall';
+    const startOnWall = isOpaqueWallName(window.getTerrainAt(start.q, start.r).name);
+    const endOnWall = isOpaqueWallName(window.getTerrainAt(end.q, end.r).name);
 
     for (let i = 0; i <= d; i++) {
         const t = d === 0 ? 0 : i / d;
         const current = hexRound(hexLerp(start, end, t).q, hexLerp(start, end, t).r);
-        
+
         if ((current.q === start.q && current.r === start.r) || (current.q === end.q && current.r === end.r)) continue;
 
         const terrain = window.getTerrainAt(current.q, current.r);
-        if (terrain.name === 'Wall') {
+        if (isOpaqueWallName(terrain.name)) {
             const adjacentToStart = distance(start, current) === 1;
             const adjacentToEnd = distance(end, current) === 1;
 
