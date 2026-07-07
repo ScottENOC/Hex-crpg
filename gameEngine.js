@@ -2239,6 +2239,7 @@ function tick() {
             checkEquipmentAuras();
             updateNpcSchedules();
             rebuildRestlessSet(); // refresh whose HP/mana/poison the regen loop needs to touch
+            if (window.siegeState?.active) tickSiegeState();
             tickCounter = 0;
         }
     }
@@ -4713,6 +4714,120 @@ function checkGameOverState(target) {
 window.checkGameOverState = checkGameOverState;
 window.handleLethalDamage = handleLethalDamage;
 
+// ============================================================
+// NORTHWATCH SIEGE STATE — an abstracted, side-agnostic siege.
+// ============================================================
+// Deliberately small numbers, not a mass-combat sim (matches this
+// project's stance elsewhere: the player's own fight stays small and
+// deliberate; this is the abstraction that turns it into a fort-wide
+// outcome). pressure drifts with ZERO expected long-run direction on its
+// own — "evenly matched" — so the player's actions (each bounded, not
+// compounding) are what actually tip it, in either direction, from
+// whichever of the four angles (human, goblin, undercover either way)
+// they're playing.
+//
+// Wall segments are derived from the star fort's own wallHexes (built by
+// carveStarFort, campaign2World.js) bucketed into 6 groups by angle from
+// the fort's center using the existing hexToPixel — no changes needed to
+// the fort-building code itself.
+function buildSiegeSegments(center, wallHexes) {
+    const buckets = [[], [], [], [], [], []];
+    const c = window.hexToPixel(center.q, center.r);
+    (wallHexes || []).forEach(h => {
+        const p = window.hexToPixel(h.q, h.r);
+        const angle = Math.atan2(p.y - c.y, p.x - c.x);
+        const idx = Math.floor(((angle + Math.PI) / (Math.PI * 2)) * 6) % 6;
+        buckets[idx].push(h);
+    });
+    return buckets.map((hexes, i) => ({ id: i, wallHexes: hexes, defenderStrength: 10, attackerStrength: 10 }));
+}
+
+// Idempotent — safe to call from any of the four entry points (human
+// commander's quest, a goblin contact's quest, or just the player showing
+// up and picking a side) without worrying about double-initializing.
+function activateNorthwatchSiege() {
+    if (window.siegeState && window.siegeState.active) return window.siegeState;
+    const center = window.campaign2NorthwatchCenter;
+    const fortRegion = window.campaign2NorthwatchFortRegion;
+    window.siegeState = {
+        active: true,
+        pressure: 0, // -100 defenders firmly hold .. +100 fort falls
+        commanderAlive: true,
+        gateHeld: true,
+        siegeEngineAlive: true,
+        segments: fortRegion ? buildSiegeSegments(center, fortRegion.wallHexes) : [],
+        lastTickWorldSeconds: window.worldSeconds || 0,
+    };
+    return window.siegeState;
+}
+window.activateNorthwatchSiege = activateNorthwatchSiege;
+
+// Bounded, one-shot-per-call nudge — never a runaway multiplier. Used for
+// every discrete player action (killing the siege engine, pulling the
+// gate lever, assassinating the commander, winning/losing the sally
+// fight) so no single action can decide the whole siege by itself.
+function applySiegePressure(delta, message) {
+    if (!window.siegeState) return;
+    window.siegeState.pressure = Math.max(-100, Math.min(100, window.siegeState.pressure + delta));
+    if (message) window.showMessage(message);
+    checkSiegeResolution();
+}
+window.applySiegePressure = applySiegePressure;
+
+// Called on the same ~1s out-of-combat refresh cadence runTickInternal
+// already uses for updateNpcSchedules/rebuildRestlessSet. Zero-expected-
+// value random walk (the "evenly matched" baseline) plus the commander's
+// visible reserve dispatch (stops permanently the moment he dies — a real
+// mechanical consequence of killing him, not just flavor).
+function tickSiegeState() {
+    const s = window.siegeState;
+    if (!s || !s.active) return;
+    s.pressure += (Math.random() - 0.5) * 2;
+
+    if (s.commanderAlive && s.segments.length) {
+        let worst = s.segments[0];
+        s.segments.forEach(seg => {
+            if ((seg.attackerStrength - seg.defenderStrength) > (worst.attackerStrength - worst.defenderStrength)) worst = seg;
+        });
+        if (worst.attackerStrength > worst.defenderStrength) {
+            worst.defenderStrength += 0.5;
+            if (Math.random() < 0.1) {
+                window.showMessage("Commander Hart barks an order — reserves peel off toward the wall under the worst pressure!");
+            }
+        }
+    }
+    checkSiegeResolution();
+}
+window.tickSiegeState = tickSiegeState;
+
+function checkSiegeResolution() {
+    const s = window.siegeState;
+    if (!s || !s.active) return;
+    if (s.pressure <= -100) resolveNorthwatchSiege('siege_broken');
+    else if (s.pressure >= 100) resolveNorthwatchSiege('fort_fallen');
+}
+
+// Shared cleanup for both outcomes — win/lose share the "stop the
+// simulation, settle the quest, swing reputation the direction that
+// actually happened" bookkeeping instead of duplicating it per-outcome.
+function resolveNorthwatchSiege(outcome) {
+    const s = window.siegeState;
+    if (!s || !s.active) return;
+    s.active = false;
+    const quest = (window.questLog || []).find(q => q.id === 'border_war');
+    if (quest) { quest.status = 'completed'; quest.resolution = outcome; }
+    if (outcome === 'siege_broken') {
+        if (window.factions?.orc_raiders) window.adjustReputation(window.factions.orc_raiders, -20, 15);
+        if (window.adjustRegionStat) window.adjustRegionStat('aldervale', 'security', 10);
+        window.showMessage("Northwatch's wall holds — the greenskin assault breaks against it.");
+    } else if (outcome === 'fort_fallen') {
+        if (window.factions?.orc_raiders) window.adjustReputation(window.factions.orc_raiders, 15, 15);
+        if (window.adjustRegionStat) window.adjustRegionStat('aldervale', 'security', -15);
+        window.showMessage("A horn sounds from the walls — Northwatch has fallen to the greenskins.");
+    }
+}
+window.resolveNorthwatchSiege = resolveNorthwatchSiege;
+
 function checkCombatEnd() {
     // Track Boss defeats
     if (!window.roguelikeData.bossesDefeated) window.roguelikeData.bossesDefeated = [];
@@ -4798,17 +4913,21 @@ function checkCombatEnd() {
         // this same "all enemies dead" gate every other Campaign 2 scripted
         // fight uses — same known limitation as the Hollowmere branch above
         // (any unrelated alive enemy elsewhere on the map blocks this check
-        // too), accepted for the same reason it was there.
+        // too), accepted for the same reason it was there. Winning the sally
+        // no longer resolves the siege instantly — it's one bounded input
+        // into the ongoing siegeState simulation (see applySiegePressure
+        // below): destroying the engine removes the attackers' main
+        // pressure source, but the fort only actually falls or holds once
+        // siegeState.pressure crosses a threshold via its own drift/tick.
         if (window.currentCampaign === "2" && window.borderWarSallyActive) {
             window.borderWarSallyActive = false;
-            const quest = (window.questLog || []).find(q => q.id === 'border_war');
-            if (quest) { quest.status = 'completed'; quest.resolution = 'siege_broken'; }
-            if (window.factions?.orc_raiders) window.adjustReputation(window.factions.orc_raiders, -20, 15);
-            if (window.adjustRegionStat) window.adjustRegionStat('aldervale', 'security', 10);
+            if (window.siegeState) {
+                window.siegeState.siegeEngineAlive = false;
+                if (window.applySiegePressure) window.applySiegePressure(-15, "The siege engine splinters into wreckage!");
+            }
             window.isInCombat = false;
             window.gamePhase = 'WAITING';
             window.currentTurnEntity = null;
-            window.showMessage("The siege engine splinters into wreckage — Northwatch's wall holds.");
             if (window.updateActionButtons) window.updateActionButtons();
             if (window.updateTurnIndicator) window.updateTurnIndicator();
         }

@@ -2645,6 +2645,7 @@ window.npcDialogueTrees.northwatch_commander = (npc) => {
 function startNorthwatchSally() {
     const engine = window.campaign2NorthwatchSiegeEngine;
     if (!engine || !engine.alive) return;
+    if (window.activateNorthwatchSiege) window.activateNorthwatchSiege();
     window.borderWarSallyActive = true;
     engine.side = 'enemy';
     engine.noAttack = false;
