@@ -6410,6 +6410,14 @@ window.tryShove = tryShove;
 function resolveSpell(caster, spell, target, clickedHex) {
     let actionHandled = false;
     if (spell.type === 'summon') {
+        // Defensive guard (the UI dropdown already hides this option
+        // otherwise, see updateSpellPreview in ui.js) — a unicorn can only
+        // ever be summoned as THE permanent animal companion, granted by
+        // the druid grove questline, never as an ordinary temporary summon.
+        if (spell.animalId === 'unicorn' && !(caster.skills?.learn_unicorn_summon && caster.skills?.animal_companion && !caster.animalCompanion)) {
+            window.showMessage("The unicorn does not answer this call.");
+            return false;
+        }
         const template = window.monsterTemplates[spell.animalId];
         const extraOffsets = template.extraHexes || [];
         

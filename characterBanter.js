@@ -18,6 +18,29 @@ function nearHex(hex, radius) {
     return !!(p && hex && window.distance(p.hex, hex) <= radius);
 }
 
+// The player's world-map position (see finalizePlayerAction's playerWorldPos
+// sync, gameEngine.js) resolved against worldMapData's settlement names — a
+// "city" is one of the two larger settlements (Silverhart, the capital;
+// Reddale, "bigger than Hollowmere, with an honest-to-goodness guardhouse"),
+// distinct from villages/hamlets like Hollowmere or Millbrook. Used only for
+// flavor (companion/mount personality banter below), not any mechanical gate.
+function isInCityRegion() {
+    const pos = window.playerWorldPos;
+    if (!pos || !window.worldMapData) return false;
+    const cell = window.worldMapData[pos.y]?.[pos.x];
+    return !!(cell && ['Silverhart', 'Reddale'].includes(cell.n));
+}
+
+// The player's current permanent animal companion or ridden mount, if any —
+// used by the companion/mount personality banter below. Returns the actual
+// entity (not party data) since that's what carries .name for the speech
+// bubble's speaker-lookup (spawnSpeechBubble matches by entity name).
+function getCompanionOrMount() {
+    const p = window.entities && window.entities.find(e => e.side === 'player' && !e.rider);
+    if (!p) return null;
+    return p.animalCompanion || p.riding || null;
+}
+
 // Each entry: { id, once?, cooldownSeconds?, condition(), lines: [{speaker, mood, text}, ...] }
 // `lines` with more than one entry plays as a staggered exchange (2.5s apart)
 // so it reads like a conversation rather than a wall of text.
@@ -141,6 +164,48 @@ window.characterBanterLines = [
         cooldownSeconds: 6 * 3600,
         condition: () => partyHas('Ser Aldric Thorne') && !!(window.player && window.player.skills && Object.keys(window.player.skills).some(k => k.startsWith('lich_'))),
         lines: [{ speaker: 'Ser Aldric Thorne', mood: 'grave', text: "Something's changed in you. I won't pretend I understand it, but I'll be watching — for your sake as much as anyone's." }]
+    },
+    // Companion/mount personality flavor: animal companions (Nature's
+    // permanent summon, see resolveSpell's animal_companion branch,
+    // gameEngine.js) and purchased horses aren't silent scenery — a couple
+    // of ambient one-liners react to being somewhere they plainly don't
+    // belong. speaker matches the animal entity's own .name so the speech
+    // bubble anchors on it, not the player.
+    {
+        id: 'unicorn_uneasy_in_city',
+        cooldownSeconds: 3 * 3600,
+        condition: () => { const c = getCompanionOrMount(); return !!c && c.name === 'Unicorn' && isInCityRegion(); },
+        lines: [{ speaker: 'Unicorn', mood: 'restless', text: "*stamps a hoof impatiently, ears pinned back at the crowded street*" }]
+    },
+    {
+        id: 'horse_uneasy_in_city',
+        cooldownSeconds: 3 * 3600,
+        condition: () => { const c = getCompanionOrMount(); return !!c && c.name === 'Horse' && isInCityRegion(); },
+        lines: [{ speaker: 'Horse', mood: 'skittish', text: "*shifts its weight and snorts at the crowd, unhappy with the noise*" }]
+    },
+    {
+        id: 'wolf_content_wilderness',
+        cooldownSeconds: 4 * 3600,
+        condition: () => { const c = getCompanionOrMount(); return !!c && c.name === 'Wolf' && !isInCityRegion(); },
+        lines: [{ speaker: 'Wolf', mood: 'content', text: "*trots along at the treeline, nose to the wind*" }]
+    },
+    {
+        id: 'tiger_content_wilderness',
+        cooldownSeconds: 4 * 3600,
+        condition: () => { const c = getCompanionOrMount(); return !!c && c.name === 'Tiger' && !isInCityRegion(); },
+        lines: [{ speaker: 'Tiger', mood: 'content', text: "*pads along low and silent, eyes on the shadows between the trees*" }]
+    },
+    {
+        id: 'boar_content_wilderness',
+        cooldownSeconds: 4 * 3600,
+        condition: () => { const c = getCompanionOrMount(); return !!c && c.name === 'Boar' && !isInCityRegion(); },
+        lines: [{ speaker: 'Boar', mood: 'content', text: "*snorts contentedly, rooting at the undergrowth as it walks*" }]
+    },
+    {
+        id: 'unicorn_reverence_wilderness',
+        cooldownSeconds: 5 * 3600,
+        condition: () => { const c = getCompanionOrMount(); return !!c && c.name === 'Unicorn' && !isInCityRegion(); },
+        lines: [{ speaker: 'Unicorn', mood: 'serene', text: "*walks with an unhurried, deliberate grace, utterly at ease among the trees*" }]
     }
 ];
 

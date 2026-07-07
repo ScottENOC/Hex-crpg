@@ -1169,6 +1169,7 @@ function buildSilverhartPalace(roadEnd) {
 // A first breadcrumb toward the Druid/unicorn quest chain — read once, same
 // convention as every other journal (see readAbandonedHouseJournal etc).
 window.readWizardTowerTome = function() {
+    window.wizardTowerTomeRead = true;
     window.showDialogue({ name: "Thessaly's Tome", customImage: 'journal' },
         "A page near the back, in a hand shakier than the rest: \"Old magic doesn't die, it just stops answering court summons. There is a grove west of the mountains where the druids still keep faith with something older than any crown — and where, if the stories hold, something far rarer than a spell still runs wild. Not for a court wizard to go chasing. Perhaps for someone less tied to a throne.\"",
         [{ label: "Interesting.", action: () => {} }]
@@ -1205,6 +1206,39 @@ function buildVampireGrave(westRoadEnd) {
     const q = westRoadEnd.q - 4, r = westRoadEnd.r + 6;
     window.tileObjects[`${q},${r}`] = { type: 'journal', readId: 'vampire_grave', lightRadius: 0 };
     window.campaign2VampireGraveCenter = { q, r };
+}
+
+// The Emberwood Grove: pays off the "someone less tied to a throne" hook in
+// Thessaly's tome (readWizardTowerTome below). Deliberately unmarked and
+// off-road, well past Emberlode — found by exploration, same "hidden
+// location, not a quest-marker destination" convention as buildVampireGrave.
+// A ring of Foliage around a Grass clearing, a spring at its heart, and
+// Elder Nessa Wren (the druid_grove questline's gatekeeper, campaign2Dialogue.js).
+function buildDruidGrove(westRoadEnd) {
+    const center = { q: westRoadEnd.q - 14, r: westRoadEnd.r - 12 };
+    const CLEARING_RADIUS = 5;
+    for (let dq = -CLEARING_RADIUS; dq <= CLEARING_RADIUS; dq++) {
+        for (let dr = -CLEARING_RADIUS; dr <= CLEARING_RADIUS; dr++) {
+            const hex = { q: center.q + dq, r: center.r + dr };
+            const dist = window.distance(center, hex);
+            if (dist > CLEARING_RADIUS) continue;
+            window.setTerrainAt(hex.q, hex.r, dist >= CLEARING_RADIUS - 1 ? 'Foliage' : 'Grass');
+        }
+    }
+    window.setTerrainAt(center.q, center.r - 1, 'Water'); // the grove's spring
+    window.tileObjects[`${center.q + 1},${center.r - 1}`] = { type: 'herb_patch', hasHerbs: true };
+    window.tileObjects[`${center.q - 1},${center.r + 1}`] = { type: 'herb_patch', hasHerbs: true };
+
+    window.campaign2DruidGroveCenter = center;
+    window.campaign2DruidGroveSpringHex = { q: center.q, r: center.r - 1 };
+    // Where the trust-task's feral wolf den spawns once accepted (see
+    // startDruidGroveTrial, campaign2Dialogue.js) — upstream of the spring,
+    // just outside the clearing itself.
+    window.campaign2DruidGroveDenHex = { q: center.q - 3, r: center.r - 8 };
+
+    if (window.campaign2DruidElder) {
+        window.entities.push(window.buildNPC({ ...window.campaign2DruidElder, hex: { q: center.q, r: center.r + 1 } }));
+    }
 }
 
 window.readVampireGrave = function() {
@@ -1602,6 +1636,7 @@ function setupVillageScene(forLoadOnly = false) {
     buildEmberlode(westRoadEnd);
     buildReddale(eastRoadEnd);
     buildVampireGrave(westRoadEnd);
+    buildDruidGrove(westRoadEnd);
     buildNorthwatchFort(northwatchTurnHex);
     buildRidgeholdFort(borderRoadEnd);
 

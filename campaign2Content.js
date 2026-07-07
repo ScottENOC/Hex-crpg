@@ -638,3 +638,17 @@ window.campaign2BorderWarQuartermaster = {
 // context in campaign2Dialogue.js's border_war quest push).
 window.campaign2SiegeEscortTypes = ['orc', 'orc', 'goblin', 'goblin', 'wolf_rider_goblin'];
 window.campaign2MercenaryNamePool = ['Bram Ashford', 'Corvin Tale', 'Sela Dunmore', 'Petra Kesh', 'Thorne Vance', 'Mira Solberg'];
+
+// The Emberwood Grove: the "someone less tied to a throne" breadcrumb from
+// Thessaly's tome (readWizardTowerTome, campaign2World.js) pays off here.
+// Placed off the west road, past Emberlode, discovered by exploration —
+// same "hidden, unmarked location" convention as buildVampireGrave, not a
+// quest-marker destination. Elder Nessa Wren wards the grove and gates the
+// druid_grove questline (campaign2Dialogue.js).
+window.campaign2DruidElder = {
+    name: 'Elder Nessa Wren', title: 'Warden of the Emberwood Grove',
+    race: 'elf', gender: 'female', classLevels: ['druid'],
+    skillPicks: ['health', 'barkskin_active', 'wild_shape_adaptation'], equipment: ['club'],
+    side: 'neutral', factionId: null, color: '#4f7942',
+    dialogueId: 'elder_nessa_wren'
+};

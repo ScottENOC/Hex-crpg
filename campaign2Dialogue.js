@@ -3113,3 +3113,86 @@ window.parleyWithEnemy = parleyWithEnemy;
 window.triggerHollowmereQuestOffer = triggerHollowmereQuestOffer;
 window.startOskarDuel = startOskarDuel;
 window.endOskarDuel = endOskarDuel;
+
+// --- The Emberwood Grove / "The Old Faith" — pays off the "someone less
+// tied to a throne" hook in Thessaly's tome (readWizardTowerTome,
+// campaign2World.js). Elder Nessa Wren is wary of outsiders; a single
+// trust-task (clear the feral den fouling the grove's spring) earns the
+// druids' faith and, with it, the learn_unicorn_summon skill — granted
+// directly via grantSkillRank, never purchasable with skill points (see
+// skills.js). The unicorn itself is not a party member: it only ever
+// answers as the player's ONE permanent Nature animal companion (see
+// ui.js's dropdown gating and resolveSpell's guard, gameEngine.js). ---
+window.npcDialogueTrees.elder_nessa_wren = (npc) => {
+    window.questLog = window.questLog || [];
+    const quest = window.questLog.find(q => q.id === 'druid_grove');
+
+    if (quest?.status === 'completed') {
+        window.showDialogue(npc, "The grove remembers a friend. Go well — and listen for hoofbeats, when you need them most.", [
+            { label: "Thank you, Elder.", action: () => {} }
+        ]);
+        return;
+    }
+
+    if (quest?.status === 'active') {
+        const denCleared = !window.entities.some(e => e.alive && e.isDruidGroveFeral);
+        if (!denCleared) {
+            window.showDialogue(npc, "The spring still runs foul. Something's denned upstream and won't be reasoned with — deal with it, and we'll talk.", [
+                { label: "I'll see to it.", action: () => {} }
+            ]);
+            return;
+        }
+        window.showDialogue(npc, "The water runs clear again — I felt it the moment the den broke. You've more respect for this place than most who wear a crown's colors.", [
+            {
+                label: "What now?",
+                action: () => {
+                    quest.status = 'completed';
+                    if (window.grantSkillRank) window.grantSkillRank(window.player, 'learn_unicorn_summon');
+                    window.showDialogue(npc, "She won't come to just anyone who calls her kind — but she'll come to you now, if you've truly earned this place's trust.", [
+                        { label: "I understand.", action: () => {} }
+                    ]);
+                }
+            }
+        ]);
+        return;
+    }
+
+    window.showDialogue(npc, "Few find this place who aren't looking for it, and fewer still who should. What is it you want here?", [
+        {
+            label: "I'm looking for the unicorn the stories speak of.",
+            action: () => {
+                window.showDialogue(npc, "Stories. Always stories, never respect. Prove you've something more than curiosity — the spring below has run foul for a week now. Something's denned upstream of it and won't move on. Clear it, and we'll speak again.", [
+                    {
+                        label: "I'll clear the den.",
+                        action: () => {
+                            window.questLog.push({
+                                id: 'druid_grove', title: 'The Old Faith', giver: 'Elder Nessa Wren',
+                                status: 'active', description: "Clear the feral den fouling the Emberwood Grove's spring.", resolution: null
+                            });
+                            if (window.startDruidGroveTrial) window.startDruidGroveTrial();
+                        }
+                    },
+                    { label: "Not now.", action: () => {} }
+                ]);
+            }
+        },
+        { label: "Just passing through.", action: () => {} }
+    ]);
+};
+
+function startDruidGroveTrial() {
+    const den = window.campaign2DruidGroveDenHex;
+    if (!den) return;
+    for (let i = 0; i < 3; i++) {
+        const hex = { q: den.q + (i === 1 ? 1 : (i === 2 ? -1 : 0)), r: den.r + i };
+        if (window.getEntityAtHex(hex.q, hex.r) || window.getTerrainAt(hex.q, hex.r).impassable) continue;
+        const wolf = window.createMonster('wolf', hex, null, null, 'enemy');
+        wolf.name = 'Feral Wolf';
+        wolf.isDruidGroveFeral = true;
+        window.entities.push(wolf);
+    }
+    window.showMessage("You head upstream to root out whatever's fouling the spring.");
+    window.drawMap();
+    window.renderEntities();
+}
+window.startDruidGroveTrial = startDruidGroveTrial;

@@ -259,6 +259,32 @@ const monsterTemplates = {
         },
         defaultEquipment: []
     },
+    // Not a mount (mountSize: 0, deliberately — the druids' unicorn is a
+    // Nature summon-companion, never a rideable animal, so it can't be
+    // reached by riderSize checks). Only ever obtainable as the ONE
+    // permanent animal companion, gated by the learn_unicorn_summon skill
+    // (quest-granted only — see the druid grove questline, campaign2Dialogue.js)
+    // — see the ui.js dropdown filter and resolveSpell's guard in
+    // gameEngine.js, both keyed off spell.animalId === 'unicorn'.
+    'unicorn': {
+        name: 'Unicorn',
+        color: '#f5f5f0',
+        hp: 50,
+        expValue: 800,
+        canLoot: false,
+        mountSize: 0,
+        tags: ['animal', 'fey'],
+        visionBonus: 15,
+        skills: {
+            'health': 6,
+            'meleeDamage': 5,
+            'furious_charge': 1,
+            'fastMovement': 2,
+            'quickRecovery': 5,
+            'initiativeBonus': 5
+        },
+        defaultEquipment: []
+    },
     // ── NEW MONSTERS ──────────────────────────────────────────────────────────
 
     'wraith': {

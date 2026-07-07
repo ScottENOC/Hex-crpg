@@ -956,6 +956,11 @@ function updateSpellPreview() {
             if (animalId === 'boar' && (!player.skills?.learn_boar_summon)) return;
             if (animalId === 'tiger' && (!player.skills?.learn_tiger_summon)) return;
             if (animalId === 'eagle' && (!player.skills?.learn_eagle_summon)) return;
+            // Unicorn is never an ordinary temporary summon — only listed at
+            // the exact moment it could actually be cast: the druid-granted
+            // skill, the permanent-companion passive, and no existing
+            // companion yet (matches resolveSpell's own guard, gameEngine.js).
+            if (animalId === 'unicorn' && (!player.skills?.learn_unicorn_summon || !player.skills?.animal_companion || player.animalCompanion)) return;
             optionsHtml += `<option value="${animalId}">${window.monsterTemplates[animalId].name}</option>`;
         });
         html += `

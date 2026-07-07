@@ -61,7 +61,13 @@ const baseSpells = {
         school: 'nature',
         baseMana: 10,
         type: 'summon',
-        summons: ['wolf', 'boar', 'tiger', 'eagle']
+        // 'unicorn' is real content but not a normal option here — see
+        // ui.js's updateSpellPreview, which only lists it once
+        // learn_unicorn_summon is granted (druid grove questline) AND the
+        // permanent-companion conditions are actually met (animal_companion,
+        // no existing companion). It can never be cast as an ordinary
+        // temporary summon.
+        summons: ['wolf', 'boar', 'tiger', 'eagle', 'unicorn']
     },
     'counterspell': {
         name: 'Counterspell',

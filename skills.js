@@ -588,6 +588,14 @@ const skills = {
         prereq: 'learn_summon_animal',
         apply: (player) => {}
     },
+    'learn_unicorn_summon': {
+        name: 'Unicorn Bond',
+        description: "Allows a unicorn to answer your call for a permanent animal companion — a trust earned from the druids of the grove, not bought with skill points.",
+        tree: 'druid',
+        maxRanks: 1,
+        prereq_eval: () => false, // quest-granted only (see grantSkillRank in the druid grove questline, campaign2Dialogue.js) — never purchasable
+        apply: (player) => {}
+    },
     'poison_bite': {
         name: 'Poison Bite',
         description: 'Passive: Melee attacks have a 50% chance to poison targets for 2 damage per TP tick (10 times).',
