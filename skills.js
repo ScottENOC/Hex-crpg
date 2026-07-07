@@ -52,6 +52,13 @@ const skills = {
         prereq: 'medium_armor_training',
         apply: (player) => {}
     },
+    'iron_grip': {
+        name: 'Iron Grip',
+        description: 'Reduces the TP cost of climbing (fort ramparts and similar) and lowers the chance of a failed climb in combat. Stacks with other climbing skills.',
+        tree: 'strength',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
     'shove': {
         name: 'Shove',
         description: 'Grants the Shove action, pushing an adjacent enemy 1 hex away.',
@@ -133,6 +140,13 @@ const skills = {
     'stealth_agility': {
         name: 'Inconspicuous',
         description: 'Grants +5 bonus to stealth checks.',
+        tree: 'agility',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+    'sure_footed': {
+        name: 'Sure-Footed',
+        description: 'Reduces the TP cost of climbing (fort ramparts and similar) and lowers the chance of a failed climb in combat. Stacks with other climbing skills.',
         tree: 'agility',
         maxRanks: 1,
         apply: (player) => {}
@@ -268,7 +282,7 @@ const skills = {
     },
     'agile_climber': {
         name: 'Agile Climber',
-        description: 'Reduces movement TP penalty when moving up or down terrain levels.',
+        description: 'Reduces movement TP penalty when moving up or down terrain levels. Also reduces the TP cost of climbing (fort ramparts and similar) and lowers the chance of a failed climb in combat — stacks with other climbing skills.',
         tree: 'monk',
         maxRanks: 1,
         apply: (player) => {}

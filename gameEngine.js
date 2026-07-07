@@ -586,6 +586,23 @@ function playerMoveProcess(player, path) {
         }
     }
 
+    // CLIMB FAILURE (in combat only — no time pressure out of combat means
+    // guaranteed success there). Rolled once, on the actual transition onto
+    // climbRisk terrain, not on every subsequent step while already walking
+    // along the top of it. Failing costs a chunk of TP for the wasted
+    // attempt but leaves the climber right where they started.
+    if (window.isInCombat && targetTerrain.climbRisk && !window.getTerrainAt(player.hex.q, player.hex.r).climbRisk) {
+        const climbMoveEntity = player.riding || player;
+        const skillCount = countClimbingSkills(climbMoveEntity);
+        const fallChance = Math.max(0, 0.30 - 0.10 * skillCount);
+        if (Math.random() < fallChance) {
+            window.showMessage(`${player.name} loses their grip and fails to climb!`);
+            spendTP(climbMoveEntity, 10);
+            finalizePlayerAction(player, true);
+            return;
+        }
+    }
+
     const previousHex = { q: player.hex.q, r: player.hex.r };
 
     checkMovementReactions(player, nextHex, (forceEnd) => {
@@ -629,7 +646,12 @@ function playerMoveProcess(player, path) {
         // HEIGHT PENALTY (any elevated terrain — Pedestals, and now fort ramparts)
         if (previousTerrain.name !== terrain.name && (previousTerrain.elevated || terrain.elevated)) {
             let heightPenalty = 1.0;
-            if (moveEntity.skills?.agile_climber) heightPenalty = 0.5;
+            const climbRiskSide = terrain.climbRisk ? terrain : (previousTerrain.climbRisk ? previousTerrain : null);
+            if (climbRiskSide) {
+                heightPenalty *= getClimbCostMult(moveEntity); // stacking climbing skills
+            } else if (moveEntity.skills?.agile_climber) {
+                heightPenalty = 0.5;
+            }
             terrainMult += heightPenalty;
         } else if (previousTerrain.elevated && terrain.elevated) {
             terrainMult = 1.0; // Flat movement on same level
@@ -2925,9 +2947,28 @@ function autoMoveProcess(entity) {
 // A fence is a tileObject decoration (fence_h/fence_v), not its own terrain
 // type, so plain terrain.moveCostMult lookups never noticed it — climbing
 // over one should cost extra regardless of the ground terrain underneath.
+// The three climbing skills (one each in strength/agility/monk) stack: each
+// present skill knocks 20% off the TP surcharge for climbRisk terrain (a
+// floor of 40% remaining with all three — still not instant) and, in
+// combat, 10 percentage points off the fall chance (see the climbRisk roll
+// in playerMove below).
+const CLIMBING_SKILLS = ['agile_climber', 'sure_footed', 'iron_grip'];
+function countClimbingSkills(entity) {
+    if (!entity?.skills) return 0;
+    return CLIMBING_SKILLS.filter(k => entity.skills[k]).length;
+}
+window.countClimbingSkills = countClimbingSkills;
+function getClimbCostMult(entity) {
+    return Math.max(0.4, 1 - 0.2 * countClimbingSkills(entity));
+}
+window.getClimbCostMult = getClimbCostMult;
+
 function getMoveCostMult(q, r, entity) {
     const terrain = window.getTerrainAt(q, r);
     let mult = terrain.moveCostMult || 1;
+    if (terrain.climbRisk) {
+        mult = 1 + (terrain.moveCostMult - 1) * getClimbCostMult(entity);
+    }
     const obj = window.tileObjects && window.tileObjects[`${q},${r}`];
     if (obj && (obj.type === 'fence_h' || obj.type === 'fence_v')) {
         mult *= 1.6;

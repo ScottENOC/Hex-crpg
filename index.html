@@ -550,42 +550,48 @@
     </div>
 
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <script src="data.js"></script>
-    <script src="name.js"></script>
-    <script src="dialogue.js"></script>
-    <script src="questLog.js"></script>
-    <script src="roster.js"></script>
-    <script src="worldTime.js"></script>
-    <script src="world_map_data.js"></script>
-    <script src="worldMap.js"></script>
-    <script src="characterCreation.js"></script>
-    <script src="spriteRecolor.js"></script>
-    <script src="hexMap.js"></script>
-    <script src="terrain.js"></script>
-    <script src="entities.js"></script>
-    <script src="monsters.js"></script>
-    <script src="equipment.js"></script>
-    <script src="spells.js"></script>
-    <script src="skills.js"></script>
-    <script src="leverage.js"></script>
-    <script src="factions.js"></script>
-    <script src="regions.js"></script>
-    <script src="resources.js"></script>
-    <script src="construction.js"></script>
-    <script src="stable.js"></script>
-    <script src="combatFX.js"></script>
-    <script src="espionageQuests.js"></script>
-    <script src="characterBanter.js"></script>
-    <script src="campaign2Content.js"></script>
-    <script src="npcBuilder.js"></script>
-    <script src="campaign2World.js"></script>
-    <script src="campaign2Dialogue.js"></script>
-    <script src="persistence.js"></script>
-    <script src="audio.js"></script>
-    <script src="network.js"></script>
-    <script src="ui.js"></script>
-    <script src="gameEngine.js"></script>
-    <script src="controller.js"></script>
-    <script src="main.js?v=2"></script>
+    <!-- Cache-busting: every local script below shares one ?v=N query param.
+         Mobile Safari (regular tabs, not private/incognito) caches these
+         far more aggressively than desktop browsers and won't pick up a
+         changed file just because the server sent a new Last-Modified/ETag
+         — bump this number on every deploy that changes any .js file, or
+         returning players get served stale code until they clear site data. -->
+    <script src="data.js?v=3"></script>
+    <script src="name.js?v=3"></script>
+    <script src="dialogue.js?v=3"></script>
+    <script src="questLog.js?v=3"></script>
+    <script src="roster.js?v=3"></script>
+    <script src="worldTime.js?v=3"></script>
+    <script src="world_map_data.js?v=3"></script>
+    <script src="worldMap.js?v=3"></script>
+    <script src="characterCreation.js?v=3"></script>
+    <script src="spriteRecolor.js?v=3"></script>
+    <script src="hexMap.js?v=3"></script>
+    <script src="terrain.js?v=3"></script>
+    <script src="entities.js?v=3"></script>
+    <script src="monsters.js?v=3"></script>
+    <script src="equipment.js?v=3"></script>
+    <script src="spells.js?v=3"></script>
+    <script src="skills.js?v=3"></script>
+    <script src="leverage.js?v=3"></script>
+    <script src="factions.js?v=3"></script>
+    <script src="regions.js?v=3"></script>
+    <script src="resources.js?v=3"></script>
+    <script src="construction.js?v=3"></script>
+    <script src="stable.js?v=3"></script>
+    <script src="combatFX.js?v=3"></script>
+    <script src="espionageQuests.js?v=3"></script>
+    <script src="characterBanter.js?v=3"></script>
+    <script src="campaign2Content.js?v=3"></script>
+    <script src="npcBuilder.js?v=3"></script>
+    <script src="campaign2World.js?v=3"></script>
+    <script src="campaign2Dialogue.js?v=3"></script>
+    <script src="persistence.js?v=3"></script>
+    <script src="audio.js?v=3"></script>
+    <script src="network.js?v=3"></script>
+    <script src="ui.js?v=3"></script>
+    <script src="gameEngine.js?v=3"></script>
+    <script src="controller.js?v=3"></script>
+    <script src="main.js?v=3"></script>
 </body>
 </html>
