@@ -3124,7 +3124,15 @@ function aiProcess(entity) {
         setTimeout(() => aiProcess(entity), 20);
         return;
     }
-    if (entity.side === 'neutral') {
+    // A neutral entity with a combatDirective (e.g. Northwatch's garrison —
+    // 'neutral' toward the player, but ordered to fight the orc assault) is
+    // NOT a no-op — it falls through to the full combat logic below instead
+    // of returning here, using directive.hostileTo to decide who its actual
+    // opponents are (see the opponentSide resolution further down) rather
+    // than the player/enemy inference that only makes sense for the other
+    // two sides. Plain neutrals (shopkeepers, quest-givers, camp guards)
+    // keep the exact original behavior.
+    if (entity.side === 'neutral' && !entity.combatDirective) {
         // Neutral NPCs with a behaviorType (e.g. camp guards) still putter
         // around their post even though they're not a combat threat; plain
         // neutrals (shopkeepers, quest-givers) keep the old no-op turn.
@@ -3136,6 +3144,28 @@ function aiProcess(entity) {
         window.currentTurnEntity = null;
         window.gamePhase = 'WAITING';
         return;
+    }
+
+    // COMBAT DIRECTIVE: opt-in layered orders (constraints/priorities/
+    // contingencies — see the plan's "Layered combat AI" section). Entirely
+    // additive: an entity with no combatDirective takes the exact same path
+    // as before this existed. Contingencies are checked first, every turn —
+    // if one matches it can flip `mode` to 'retreat', which short-circuits
+    // straight to "move toward the fallback point" and skips normal target
+    // selection for this turn entirely.
+    if (entity.combatDirective) {
+        const directive = entity.combatDirective;
+        (directive.contingencies || []).forEach(c => {
+            if (c.when(entity)) directive.mode = 'retreat';
+        });
+        if (directive.mode === 'retreat' && directive.retreatTo) {
+            const next = window.stepToward(entity.hex, directive.retreatTo);
+            if (next && isOpenHex(next)) entity.hex = next;
+            spendTP(entity, 10);
+            window.currentTurnEntity = null;
+            window.gamePhase = 'WAITING';
+            return;
+        }
     }
 
     // SIEGE ENGINE: never targets/engages the player like a normal 'enemy'
@@ -3370,10 +3400,21 @@ function aiProcess(entity) {
     }
 
     // Combat Logic
-    const opponentSide = entity.side === 'player' ? 'enemy' : 'player';
+    // directive.hostileTo lets a directed 'neutral' entity (e.g. Northwatch's
+    // garrison — neutral toward the player, but ordered to fight the orc
+    // assault) declare its actual opponents explicitly, instead of the
+    // binary player/enemy inference that only makes sense for those two
+    // sides. directive.hostileToPlayer is a separate, independently
+    // mutable flag — a faction can be simultaneously "not fighting the
+    // player" (both humans and goblins can think they're allied with the
+    // player at once, attacking only each other) and later flip to also
+    // treating the player as an opponent once something reveals otherwise
+    // (see the suspicion/cover mechanic), without touching hostileTo at all.
+    const opponentSide = entity.combatDirective?.hostileTo || (entity.side === 'player' ? 'enemy' : 'player');
+    const isOpponent = (e) => e.side === opponentSide || (entity.combatDirective?.hostileToPlayer && e.side === 'player');
     // LICH: Command the Dead - undead never treat a commandsUndead player-side
     // entity as an opponent (recognizes a kindred will instead of fighting it).
-    const opponents = window.entities.filter(e => e.alive && e.side === opponentSide &&
+    const opponents = window.entities.filter(e => e.alive && isOpponent(e) &&
         !(entity.tags?.includes('undead') && e.commandsUndead));
     const visibleOpponents = opponents.filter(t => canSee(entity, t));
 
@@ -3548,6 +3589,12 @@ function aiProcess(entity) {
             if (t.name === 'Wall') s -= 20;
             if (t.name === 'Water') s -= 10;
             if (getEntityAtHex(h.q, h.r)) s -= 5;
+            // CONSTRAINT: a hex outside the directive's allowed area is
+            // effectively unpickable while any legal alternative exists —
+            // this is what stops a defender leaping over their own wall to
+            // chase someone standing just out of range.
+            const stayWithin = entity.combatDirective?.constraints?.stayWithinHexes;
+            if (stayWithin && !stayWithin.has(`${h.q},${h.r}`)) s -= 1000;
             return {h, s};
         }).sort((a,b) => b.s - a.s)[0].h;
 
@@ -4604,7 +4651,26 @@ function opponentsHaveHealerCapability(opponents) {
 // Deprioritizes unconscious (downed but not yet truly dead) opponents unless
 // the opposing side has a healer, in which case finishing off a downed
 // target before they can be saved becomes the priority instead.
+// Scores a candidate target against an ordered combatDirective.priorities
+// list — first tier wins outright; used only as a tie-break ahead of the
+// existing downed/distance logic below, and only for entities that opted
+// into a directive at all.
+function directivePriorityScore(priorities, target) {
+    for (let i = 0; i < priorities.length; i++) {
+        const p = priorities[i];
+        const tierWeight = (priorities.length - i) * 1000;
+        if (p.type === 'nearHex' && window.distance(target.hex, p.hex) <= p.radius) return tierWeight;
+        if (p.type === 'insideRegion' && p.hexes.has(`${target.hex.q},${target.hex.r}`)) return tierWeight;
+    }
+    return 0;
+}
+
 function targetPriorityCompare(entity, a, b, opponentsHaveHealer) {
+    if (entity.combatDirective?.priorities) {
+        const scoreA = directivePriorityScore(entity.combatDirective.priorities, a);
+        const scoreB = directivePriorityScore(entity.combatDirective.priorities, b);
+        if (scoreA !== scoreB) return scoreB - scoreA; // higher tier score wins
+    }
     const aDown = !!a.unconscious, bDown = !!b.unconscious;
     if (aDown !== bDown) {
         // Difficulty guard for the Hollowmere shakedown tutorial fight: a

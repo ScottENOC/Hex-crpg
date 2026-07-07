@@ -1990,8 +1990,15 @@ function buildNorthwatchFort(turnHex) {
     window.campaign2NorthwatchFortRegion = fortRegion;
     window.campaign2NorthwatchGateHex = gateHex;
 
-    // Garrison: patrol the wall ring (behaviorType 'patrol' over the fort's
-    // own wallHexes, same mechanism as any other patrol NPC).
+    // Garrison: patrol the wall ring out of combat (behaviorType 'patrol'
+    // over the fort's own wallHexes, same mechanism as any other patrol
+    // NPC). In combat, combatDirective (gameEngine.js — see the "Layered
+    // combat AI" plan) gives them real orders instead of the plain generic
+    // AI: never leave the fort, prioritize whoever's threatening the gate,
+    // then whoever's already inside the walls, and fall back toward the
+    // keep once the walls are overrun rather than fighting to the last man
+    // at the point of breach.
+    const fortInterior = new Set([...fortRegion.floorHexes, ...fortRegion.wallHexes].map(h => `${h.q},${h.r}`));
     const wallPatrolPath = fortRegion.wallHexes.filter((h, i) => i % 3 === 0); // a sparse loop, not every single wall hex
     (window.campaign2FortSoldiers || []).forEach((spec, i) => {
         const postHex = wallPatrolPath[i % wallPatrolPath.length] || fortRegion.wallHexes[0];
@@ -1999,6 +2006,21 @@ function buildNorthwatchFort(turnHex) {
         soldier.behaviorType = 'patrol';
         soldier.patrolPath = wallPatrolPath;
         soldier.homeHex = { ...postHex };
+        soldier.combatDirective = {
+            hostileTo: 'enemy', // these soldiers are side:'neutral' toward the player — this is who they actually fight
+            constraints: { stayWithinHexes: fortInterior },
+            priorities: [
+                { type: 'nearHex', hex: gateHex, radius: 3 },
+                { type: 'insideRegion', hexes: fortInterior },
+            ],
+            retreatTo: { q: center.q, r: center.r },
+            contingencies: [{
+                id: 'retreat_if_walls_overrun',
+                when: () => window.entities.filter(e =>
+                    e.alive && e.side === 'enemy' && fortInterior.has(`${e.hex.q},${e.hex.r}`)
+                ).length >= 5,
+            }],
+        };
         window.entities.push(soldier);
     });
 
