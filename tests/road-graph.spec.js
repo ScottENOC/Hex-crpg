@@ -1,22 +1,22 @@
 // tests/road-graph.spec.js
 // Road-network census: buildRoadGraph (hexMap.js) flood-fills every painted
-// 'Path' hex into connected components. This isn't a claim that the world
-// *should* be one connected network ("all roads lead to Rome") — today it
-// isn't, several spurs/forts are painted as separate islands. The point is
-// to pin down the count so a future road-painting change that accidentally
-// disconnects (or connects) a network shows up as an intentional test edit,
-// not a silent regression.
+// 'Path' hex into connected components. World-build now runs
+// connectAllRoadNetworks (greedily bridges any disconnected islands with a
+// straight Path connector) so "all roads lead to Rome" - one single network
+// - is the actual invariant, not just an observed count. If a future road
+// addition creates a genuinely-intentional isolated network, this test
+// needs an explicit update, not a silent pass.
 
 const { test, expect } = require('@playwright/test');
 const { createCharacter } = require('./helpers.js');
 
 test.describe('road graph', () => {
-    test('road terrain forms a known, fixed number of connected networks', async ({ page }) => {
+    test('all road terrain forms a single connected network', async ({ page }) => {
         await createCharacter(page);
         const graph = await page.evaluate(() => window._roadGraph);
         expect(graph).toBeTruthy();
         expect(graph.hexCount).toBeGreaterThan(0);
-        expect(graph.componentCount).toBe(9);
+        expect(graph.componentCount).toBe(1);
     });
 
     test('painting a fresh isolated road spur is reflected as a new component on rebuild', async ({ page }) => {

@@ -523,6 +523,116 @@ function buildRoadGraph() {
 }
 window.buildRoadGraph = buildRoadGraph;
 
+// Cube-coordinate line between two axial hexes, standard lerp+round
+// technique (Red Blob Games' "hex line drawing"). Used only to bridge
+// disconnected road networks with a straight Path connector.
+function hexLine(a, b) {
+    const ac = { x: a.q, z: a.r, y: -a.q - a.r };
+    const bc = { x: b.q, z: b.r, y: -b.q - b.r };
+    const n = Math.max(Math.abs(ac.x - bc.x), Math.abs(ac.y - bc.y), Math.abs(ac.z - bc.z));
+    const results = [];
+    for (let i = 0; i <= n; i++) {
+        const t = n === 0 ? 0 : i / n;
+        const x = ac.x + (bc.x - ac.x) * t;
+        const y = ac.y + (bc.y - ac.y) * t;
+        const z = ac.z + (bc.z - ac.z) * t;
+        let rx = Math.round(x), ry = Math.round(y), rz = Math.round(z);
+        const xDiff = Math.abs(rx - x), yDiff = Math.abs(ry - y), zDiff = Math.abs(rz - z);
+        if (xDiff > yDiff && xDiff > zDiff) rx = -ry - rz;
+        else if (yDiff > zDiff) ry = -rx - rz;
+        else rz = -rx - ry;
+        results.push({ q: rx, r: rz });
+    }
+    return results;
+}
+
+// A connector must never punch through a building or wall — same guard
+// campaign2World.js's own paintPath already applies to the village ring
+// (see its comment: reshaped buildings can reach further than their old
+// fixed-row footprint, so an unguarded path can cut through a wall). This
+// is an ALLOWLIST of plain outdoor ground rather than a blocklist of wall
+// names, on purpose: terrain.js has three separate wall tiers (impassable
+// 'Wall'/'Keep Wall', the brown climb-but-costly 'Climbable Wall', and the
+// 'Palisade Wall' curtain-wall tier) plus indoor floors ('Wood Floor',
+// 'Cave Floor') — a blocklist has to be kept in sync with every new wall
+// type that gets added; an allowlist of "these are the natural terrains a
+// road may cross" doesn't, and Water is deliberately excluded too (a road
+// connector has no business laying a land bridge across a river/lake).
+const ROAD_SAFE_TERRAIN = new Set(['Grass', 'Forest', 'Mountain', 'Sand', 'Swamp', 'Dirt', 'Foliage', 'Rocky Outcrop', 'Rubble', 'Path']);
+function isSafeToPaintRoad(q, r) {
+    return ROAD_SAFE_TERRAIN.has(window.getTerrainAt(q, r).name);
+}
+window.isSafeToPaintRoad = isSafeToPaintRoad;
+
+// Greedily merges every disconnected road network into one by repeatedly
+// finding the two closest components (by min hex distance between any pair
+// of their hexes) and connecting them, then re-running buildRoadGraph. Run
+// once at world-build time — this is a one-shot content fix, not a
+// per-frame system. Bails after a generous iteration cap so a genuinely-
+// intentional isolated network (if one is ever added on purpose) can't
+// spin this into an infinite loop.
+//
+// Prefers routing the connector through findPath (a fake non-side entity,
+// so it's treated exactly like an NPC: full terrain knowledge, impassable
+// walls always block) so it naturally detours around any building sitting
+// between the two networks, rather than a straight line punching through
+// one. Falls back to a straight hex line, skipping any unsafe (building)
+// tile, only if no route exists at all (e.g. a network is fully walled in).
+function connectAllRoadNetworks() {
+    let graph = buildRoadGraph();
+    let guard = 0;
+    while (graph.componentCount > 1 && guard++ < 50) {
+        const byComp = new Map();
+        for (const [key, comp] of graph.componentOf.entries()) {
+            const [q, r] = key.split(',').map(Number);
+            if (!byComp.has(comp)) byComp.set(comp, []);
+            byComp.get(comp).push({ q, r });
+        }
+        const comps = [...byComp.values()];
+
+        // Every cross-component hex pair, nearest first. If the nearest
+        // pair's connector turns out to cross something unpaveable (a
+        // building, a lake — anything outside ROAD_SAFE_TERRAIN), the whole
+        // connector is rejected and the next-nearest pair is tried instead,
+        // rather than silently skipping just the blocked tiles (which would
+        // leave a broken, non-continuous "road").
+        const pairs = [];
+        for (let i = 0; i < comps.length; i++) {
+            for (let j = i + 1; j < comps.length; j++) {
+                let best = Infinity, bestA = null, bestB = null;
+                for (const h1 of comps[i]) {
+                    for (const h2 of comps[j]) {
+                        const d = distance(h1, h2);
+                        if (d < best) { best = d; bestA = h1; bestB = h2; }
+                    }
+                }
+                if (bestA) pairs.push({ dist: best, a: bestA, b: bestB });
+            }
+        }
+        pairs.sort((x, y) => x.dist - y.dist);
+
+        let merged = false;
+        for (const pair of pairs) {
+            const routed = findPath(pair.a, pair.b, undefined, { side: '_roadGraphConnector' }, true);
+            const candidates = [routed, hexLine(pair.a, pair.b)];
+            for (const candidate of candidates) {
+                if (!candidate || candidate.length < 2) continue;
+                const allSafe = candidate.every(h => window.isHexInBounds(h) && isSafeToPaintRoad(h.q, h.r));
+                if (!allSafe) continue;
+                candidate.forEach(h => window.setTerrainAt(h.q, h.r, 'Path'));
+                merged = true;
+                break;
+            }
+            if (merged) break;
+        }
+        if (!merged) break; // every pair blocked by unpaveable terrain — stop rather than loop forever
+
+        graph = buildRoadGraph();
+    }
+    return graph;
+}
+window.connectAllRoadNetworks = connectAllRoadNetworks;
+
 function findPath(start, target, availableTP, entity, ignoreTP = false, preferredPath = null) {
     // Built once per call instead of re-scanning window.entities (a linear
     // scan) for every single neighbor of every expanded node — with

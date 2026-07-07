@@ -1605,6 +1605,16 @@ function setupVillageScene(forLoadOnly = false) {
     buildNorthwatchFort(northwatchTurnHex);
     buildRidgeholdFort(borderRoadEnd);
 
+    // Road-network connectivity (hexMap.js): every road painted above should
+    // form one connected network so NPC/long-travel road-following never
+    // hits a dead island. connectAllRoadNetworks greedily bridges any
+    // disconnected components with a straight Path connector, then leaves
+    // the final census in window._roadGraph. Must run BEFORE the terrain
+    // baseline snapshot just below — otherwise its connector tiles would be
+    // treated as a player-caused save diff instead of part of the
+    // deterministic world-gen layout they actually are.
+    if (window.connectAllRoadNetworks) window.connectAllRoadNetworks();
+
     // Campaign 2's entire world is this one deterministic layout, regenerated
     // by this function every time it runs (fresh game or the "engine not
     // initialized yet" branch of loading a save). There's no reason to store
@@ -1615,12 +1625,6 @@ function setupVillageScene(forLoadOnly = false) {
     // baseline to diff against instead.
     window._campaign2TerrainBaseline = { ...window.overrideTerrain };
     window._campaign2TileObjectsBaseline = { ...window.tileObjects };
-
-    // Road-network census (hexMap.js) — flood-fills painted 'Path' terrain
-    // into connected components. Re-run here (not incrementally) since world
-    // build paints every road in one pass anyway; call again after any
-    // future road-painting added post-load if that ever happens.
-    if (window.buildRoadGraph) window.buildRoadGraph();
 
     // Same idea, applied to NPCs: every scripted world NPC (buildNPC/
     // buildGoblinNPC, always isNPC:true) is just as deterministic as the
