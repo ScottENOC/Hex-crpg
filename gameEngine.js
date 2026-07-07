@@ -747,9 +747,17 @@ function finalizePlayerAction(player, actionHandled) {
         window.clearHighlights();
         window.currentTurnEntity = null;
         window.gamePhase = 'WAITING';
-        
+
         if (player.riding && player.riding.timePoints > 80) {
             player.riding.timePoints = 80;
+        }
+
+        // Arena scenario turn counter — the only clean, once-per-round hook
+        // available without touching the initiative loop itself. Future
+        // timed objectives (e.g. "hold the flag N turns") read this instead
+        // of adding their own turn tracking.
+        if (window.isInArena && window.arenaScenario) {
+            window.arenaScenario.turnsElapsed = (window.arenaScenario.turnsElapsed || 0) + 1;
         }
 
         window.drawMap();
@@ -4934,6 +4942,7 @@ function checkCombatEnd() {
 
         if (window.currentCampaign === "1" && window.isInArena) {
             window.isInArena = false;
+            window.arenaScenario = null;
             window.triggerAmbientDialogue('arena_victory');
             
             // AUDIO: Victory fade out
@@ -5462,10 +5471,22 @@ function startArenaFight() {
 
     // 2. Create arena map (Hexagon area)
     const arenaSize = 25;
-    const isWaterArena = Math.random() < 0.3;
-    const isPedestalArena = Math.random() < 0.4;
-    const isFoliageArena = !isIndoor && Math.random() < 0.5;
-    
+
+    // ARENA SCENARIO: a small, growing set of alternate objectives/shapes
+    // layered on top of the default "clear the field" fight (see the plan's
+    // "Arena scenario variety" section). Only 'void_bridge' is wired so far
+    // (a positional/ranged-duel map shape — needs no new win/loss logic,
+    // checkCombatEnd's existing "all enemies dead" gate still applies).
+    // More types land here over time; each gets its own isXArena roll below
+    // and, if it needs a real objective (not just a map shape), its own
+    // read of window.arenaScenario in checkCombatEnd.
+    const isVoidBridgeArena = Math.random() < 0.15;
+    window.arenaScenario = { type: isVoidBridgeArena ? 'void_bridge' : 'standard', turnsElapsed: 0 };
+
+    const isWaterArena = !isVoidBridgeArena && Math.random() < 0.3;
+    const isPedestalArena = !isVoidBridgeArena && Math.random() < 0.4;
+    const isFoliageArena = !isVoidBridgeArena && !isIndoor && Math.random() < 0.5;
+
     // Fill the arena area with terrain
     for (let q = -arenaSize; q <= arenaSize; q++) {
         for (let r = -arenaSize; r <= arenaSize; r++) {
@@ -5481,19 +5502,27 @@ function startArenaFight() {
                  // of hitting a hard, visible wall.
                  const isBoundaryRing = distFromCenter >= arenaSize - 1;
 
-                 if (isWaterArena && !isBoundaryRing) {
-                     const waterNoise = Math.abs(Math.sin(q * 0.2 + r * 0.15));
-                     if (waterNoise > 0.8) tType = 'Water';
-                 }
+                 if (isVoidBridgeArena) {
+                     // A narrow floor bridge (width 3, |r|<=1) crossing a
+                     // sea of Void — everything off the bridge is impassable
+                     // but still fully visible/shootable-through, so ranged
+                     // combat across the gap is the whole point of the map.
+                     tType = (!isBoundaryRing && Math.abs(r) <= 1) ? 'Cave Floor' : 'Void';
+                 } else {
+                     if (isWaterArena && !isBoundaryRing) {
+                         const waterNoise = Math.abs(Math.sin(q * 0.2 + r * 0.15));
+                         if (waterNoise > 0.8) tType = 'Water';
+                     }
 
-                 if (isPedestalArena && tType === 'Cave Floor') {
-                     const pNoise = Math.abs(Math.sin(q * 0.5 + r * 0.05));
-                     if (pNoise > 0.9) tType = 'Pedestal';
-                 }
+                     if (isPedestalArena && tType === 'Cave Floor') {
+                         const pNoise = Math.abs(Math.sin(q * 0.5 + r * 0.05));
+                         if (pNoise > 0.9) tType = 'Pedestal';
+                     }
 
-                 if (isFoliageArena && tType === 'Cave Floor') {
-                     const fNoise = Math.abs(Math.sin(q * 0.3 + r * 0.3 + 5));
-                     if (fNoise > 0.85) tType = 'foliage';
+                     if (isFoliageArena && tType === 'Cave Floor') {
+                         const fNoise = Math.abs(Math.sin(q * 0.3 + r * 0.3 + 5));
+                         if (fNoise > 0.85) tType = 'foliage';
+                     }
                  }
 
                  if (isBoundaryRing) tType = 'Wall';
@@ -5512,7 +5541,9 @@ function startArenaFight() {
     // to fight around instead of being one flat open field. Left as plain
     // hex rings (not full rectangles) since that's cheap to compute on a hex
     // grid and still reads as "a ruined room" once walls block LOS/movement.
-    const numStructures = 3 + Math.floor(Math.random() * 3); // 3-5
+    // Skipped entirely for the void-bridge scenario — a wall ring dropped
+    // onto a narrow bridge would just wall off the bridge itself.
+    const numStructures = isVoidBridgeArena ? 0 : 3 + Math.floor(Math.random() * 3); // 3-5
     for (let s = 0; s < numStructures; s++) {
         let center = null;
         for (let attempt = 0; attempt < 20; attempt++) {
@@ -5576,7 +5607,7 @@ function startArenaFight() {
                     const h = { q: startQ + q, r: startR + rr };
                     const terrain = window.getTerrainAt(h.q, h.r);
                     if (terrain.name !== 'Wall' && terrain.name !== 'Water' &&
-                        terrain.name !== 'Pedestal' && !window.getEntityAtHex(h.q, h.r)) {
+                        terrain.name !== 'Pedestal' && terrain.name !== 'Void' && !window.getEntityAtHex(h.q, h.r)) {
                         return h;
                     }
                 }
@@ -5589,7 +5620,7 @@ function startArenaFight() {
                     const h = { q: q, r: rr };
                     const terrain = window.getTerrainAt(h.q, h.r);
                     if (terrain.name !== 'Wall' && terrain.name !== 'Water' &&
-                        terrain.name !== 'Pedestal' && !window.getEntityAtHex(h.q, h.r)) {
+                        terrain.name !== 'Pedestal' && terrain.name !== 'Void' && !window.getEntityAtHex(h.q, h.r)) {
                         return h;
                     }
                 }
