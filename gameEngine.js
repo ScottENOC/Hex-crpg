@@ -2248,6 +2248,7 @@ function tick() {
             updateNpcSchedules();
             rebuildRestlessSet(); // refresh whose HP/mana/poison the regen loop needs to touch
             if (window.siegeState?.active) tickSiegeState();
+            if (window.warState?.active) tickWarState();
             tickCounter = 0;
         }
     }
@@ -4976,8 +4977,85 @@ function resolveNorthwatchSiege(outcome) {
     else playerSide = outcome === 'fort_fallen' ? 'greenskin' : 'human';
     window.northwatchPlayerSide = playerSide;
     if (window.grantStarFortCompanion) window.grantStarFortCompanion(playerSide);
+
+    // The fort fight settles who the player is now fighting for, not the
+    // whole war — that's window.warState, a slower, mission-driven tug of
+    // war that picks up from here (see WAR_MISSION_TYPES/offerWarMission
+    // below).
+    window.warState = { active: true, playerSide, pressure: 0, majorMissionUnlocked: false };
 }
 window.resolveNorthwatchSiege = resolveNorthwatchSiege;
+
+// War-pressure mission system: a slower, side-committed tug of war that
+// picks up once the player has a side (window.warState.playerSide, set by
+// resolveNorthwatchSiege above). Unlike siegeState's zero-drift random
+// walk, doing nothing here has a direction — pressure always decays back
+// toward 0 (very slowly), so "sit still" is never a winning strategy but
+// also never suddenly loses the war on its own.
+window.WAR_MISSION_TYPES = {
+    scout: { label: 'Scout enemy positions', pressureReward: 5 },
+    raid: { label: 'Raid a supply line', pressureReward: 8 },
+    hit_and_run: { label: 'Eliminate a VIP', pressureReward: 12 },
+};
+
+function offerWarMission(type) {
+    if (!window.warState?.active) return null;
+    const spec = window.WAR_MISSION_TYPES[type];
+    if (!spec) return null;
+    window.questLog = window.questLog || [];
+    const mission = {
+        id: `war_mission_${type}_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
+        type,
+        title: spec.label,
+        status: 'active',
+        isWarMission: true,
+        pressureReward: spec.pressureReward,
+    };
+    window.questLog.push(mission);
+    window.showMessage(`New mission: ${spec.label}`);
+    return mission;
+}
+window.offerWarMission = offerWarMission;
+
+function completeWarMission(missionId) {
+    const mission = (window.questLog || []).find(q => q.id === missionId);
+    if (!mission || mission.status !== 'active') return;
+    mission.status = 'completed';
+    applyWarPressure(mission.pressureReward, `Mission complete: ${mission.title}.`);
+}
+window.completeWarMission = completeWarMission;
+
+// Bounded, one-shot nudge — same shape as applySiegePressure, so a single
+// mission (however juicy) can't swing the war by itself.
+function applyWarPressure(delta, message) {
+    if (!window.warState?.active) return;
+    window.warState.pressure = Math.max(-100, Math.min(100, window.warState.pressure + delta));
+    if (message) window.showMessage(message);
+    checkWarPressureThresholds();
+}
+window.applyWarPressure = applyWarPressure;
+
+function tickWarState() {
+    const w = window.warState;
+    if (!w || !w.active) return;
+    const decay = 0.1;
+    if (w.pressure > 0) w.pressure = Math.max(0, w.pressure - decay);
+    else if (w.pressure < 0) w.pressure = Math.min(0, w.pressure + decay);
+}
+window.tickWarState = tickWarState;
+
+// Crossing this threshold doesn't resolve anything by itself — it's a flag
+// content can check (dialogue offering bigger missions: taking more forts,
+// hitting greenskin camps) once the player's side has real momentum.
+function checkWarPressureThresholds() {
+    const w = window.warState;
+    if (!w || w.majorMissionUnlocked) return;
+    if (w.pressure >= 60) {
+        w.majorMissionUnlocked = true;
+        window.showMessage("Your side's momentum is turning heads — bigger operations are opening up.");
+    }
+}
+window.checkWarPressureThresholds = checkWarPressureThresholds;
 
 function checkCombatEnd() {
     // Track Boss defeats

@@ -1048,6 +1048,22 @@ window.npcDialogueTrees = {
                 window.showDialogue(npc, "Northwatch still stands. Get in there and help our warband bring it down.", [{ label: "On it.", action: () => {} }]);
                 return;
             }
+            if (spyQuest?.status === 'completed' && window.warState?.active && window.warState.playerSide === 'greenskin') {
+                const activeMission = (window.questLog || []).find(q => q.isWarMission && q.status === 'active');
+                if (activeMission) {
+                    window.showDialogue(npc, `Still out on that ${activeMission.title.toLowerCase()}. Bring me word when it's done.`, [
+                        { label: "I'm on it.", action: () => {} }
+                    ]);
+                    return;
+                }
+                const options = Object.entries(window.WAR_MISSION_TYPES).map(([type, spec]) => ({
+                    label: spec.label,
+                    action: () => window.offerWarMission(type),
+                }));
+                options.push({ label: "Nothing right now.", action: () => {} });
+                window.showDialogue(npc, "Northwatch is ours, but the humans won't stop pushing back. Keep the pressure on them and there's a place for you at my fire.", options);
+                return;
+            }
             if (mineQuest && mineQuest.status === 'completed') {
                 window.showDialogue(npc, "We're settled here, thanks to you. That mine haul didn't hurt either.", [{ label: "Good.", action: () => {} }]);
                 return;
@@ -2635,6 +2651,22 @@ window.npcDialogueTrees.border_war_quartermaster = (npc) => {
 window.npcDialogueTrees.northwatch_commander = (npc) => {
     const quest = (window.questLog || []).find(q => q.id === 'border_war');
     if (quest?.status === 'completed') {
+        if (window.warState?.active && window.warState.playerSide === 'human') {
+            const activeMission = (window.questLog || []).find(q => q.isWarMission && q.status === 'active');
+            if (activeMission) {
+                window.showDialogue(npc, `Still on that ${activeMission.title.toLowerCase()}, I take it. Report back once it's done.`, [
+                    { label: "I'm on it.", action: () => {} }
+                ]);
+                return;
+            }
+            const options = Object.entries(window.WAR_MISSION_TYPES).map(([type, spec]) => ({
+                label: spec.label,
+                action: () => window.offerWarMission(type),
+            }));
+            options.push({ label: "Nothing right now.", action: () => {} });
+            window.showDialogue(npc, "That engine won't trouble this wall again — but the war isn't won. If you want to keep pressing the greenskins back, I've got work.", options);
+            return;
+        }
         window.showDialogue(npc, "That engine won't trouble this wall again. Well fought.", [
             { label: "Glad to help.", action: () => {} }
         ]);
