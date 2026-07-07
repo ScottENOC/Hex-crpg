@@ -53,6 +53,16 @@ const terrainTypes = {
     // so it's see-and-shoot-through by construction, no LOS code changes
     // needed. Used for the arena's bridge-over-void scenario.
     'void': { name: 'Void', color: '#0a0a14', moveCostMult: 999, hitBonus: 0, dodgeBonus: 0, stealthBonus: 0, impassable: true },
+    // Arena "periodic lava flood" scenario: passable terrain, not inherently
+    // dangerous — the flood toggle (window.arenaScenario.flooded, tickArenaScenario
+    // in gameEngine.js) is what actually deals damage to whoever's standing
+    // on a Lava hex while it's active, the same shape poisonTicks already uses.
+    'lava': { name: 'Lava', color: '#b33f1e', moveCostMult: 1, hitBonus: 0, dodgeBonus: 0, stealthBonus: 0 },
+    // High ground for the lava-flood scenario: elevated (real ranged-cover/
+    // melee-block rules via the same 'elevated' flag Pedestal/Climbable Wall
+    // already use) but, unlike Pedestal, doesn't block LOS and is never a
+    // lava hex — the safe spot to retreat to when the floor floods.
+    'high_ground': { name: 'High Ground', color: '#a99873', moveCostMult: 1.3, hitBonus: 10, dodgeBonus: 5, stealthBonus: 0, elevated: true },
 };
 
 window.mapItems = {}; // Key format: "q,r", Value: array of item IDs

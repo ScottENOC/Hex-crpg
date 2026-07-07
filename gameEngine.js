@@ -758,6 +758,7 @@ function finalizePlayerAction(player, actionHandled) {
         // of adding their own turn tracking.
         if (window.isInArena && window.arenaScenario) {
             window.arenaScenario.turnsElapsed = (window.arenaScenario.turnsElapsed || 0) + 1;
+            if (window.tickArenaScenario) window.tickArenaScenario();
         }
 
         window.drawMap();
@@ -1826,6 +1827,22 @@ function renderEntities() {
               window.mapCtx.ellipse(x, y, size * 0.35, size * 0.2, 0, 0, Math.PI * 2);
               window.mapCtx.fill();
               window.mapCtx.globalAlpha = 1.0;
+          } else if (obj.type === 'flag') {
+              // Arena flag-defense/flag-attack scenarios: no dedicated art
+              // asset, so drawn as a simple pole + banner like the other
+              // shape-only tile objects above.
+              window.mapCtx.strokeStyle = '#8a6d4a';
+              window.mapCtx.lineWidth = 2;
+              window.mapCtx.beginPath();
+              window.mapCtx.moveTo(x, y + size * 0.4);
+              window.mapCtx.lineTo(x, y - size * 0.5);
+              window.mapCtx.stroke();
+              window.mapCtx.fillStyle = obj.friendly ? '#3a7de0' : '#c0392b';
+              window.mapCtx.beginPath();
+              window.mapCtx.moveTo(x, y - size * 0.5);
+              window.mapCtx.lineTo(x + size * 0.35, y - size * 0.35);
+              window.mapCtx.lineTo(x, y - size * 0.2);
+              window.mapCtx.fill();
           } else if (obj.type === 'fishing_spot') {
               const ready = (window.worldSeconds - (obj.lastFishedAt || 0)) >= 4 * 3600;
               window.mapCtx.fillStyle = ready ? '#dff' : '#89a';
@@ -3435,7 +3452,14 @@ function aiProcess(entity) {
     // treating the player as an opponent once something reveals otherwise
     // (see the suspicion/cover mechanic), without touching hostileTo at all.
     const opponentSide = entity.combatDirective?.hostileTo || (entity.side === 'player' ? 'enemy' : 'player');
-    const isOpponent = (e) => e.side === opponentSide || (entity.combatDirective?.hostileToPlayer && e.side === 'player');
+    // THREE-WAY HOSTILE ARENA (scoped special case, not a general faction
+    // rewrite): a rivalGroup-tagged enemy band also fights plain 'enemy'
+    // entities and vice versa, on top of everyone still fighting the
+    // player as normal. Local to this one arena scenario type so it can't
+    // change targeting anywhere else in the game.
+    const isThreeWayArena = window.arenaScenario?.type === 'three_way';
+    const isOpponent = (e) => e.side === opponentSide || (entity.combatDirective?.hostileToPlayer && e.side === 'player') ||
+        (isThreeWayArena && entity.side === 'enemy' && e.side === 'enemy' && !!e.rivalGroup !== !!entity.rivalGroup);
     // LICH: Command the Dead - undead never treat a commandsUndead player-side
     // entity as an opponent (recognizes a kindred will instead of fighting it).
     const opponents = window.entities.filter(e => e.alive && isOpponent(e) &&
@@ -3530,10 +3554,17 @@ function aiProcess(entity) {
         huntTargetHex = null;
     }
 
-    if (!huntTargetHex) { 
-        entity.timePoints = threshold; 
-        aiProcess(entity); 
-        return; 
+    // FLAG DEFENSE (player holds): with no opponent in sight, an attacker
+    // advances on the flag itself rather than idling — the objective is
+    // reaching the flag hex, not necessarily finding the player first.
+    if (!huntTargetHex && entity.side === 'enemy' && window.arenaScenario?.type === 'flag_defend' && window.arenaScenario.flagHex) {
+        huntTargetHex = window.arenaScenario.flagHex;
+    }
+
+    if (!huntTargetHex) {
+        entity.timePoints = threshold;
+        aiProcess(entity);
+        return;
     }
 
     if (entity.canLoot) {
@@ -3669,6 +3700,7 @@ function aiProcess(entity) {
         }
     }
 }
+window.aiProcess = aiProcess;
 
 // Real-time "close" formation movement can leave trailing party members
 // detouring onto the same hex as whoever's ahead of them (never actually
@@ -5655,6 +5687,89 @@ function setupArenaLobby() {
     }
 }
 
+// Ends the current arena fight outside the normal "all enemies dead" gate
+// (checkCombatEnd) — used by scenario objectives that can resolve before
+// (flag captured/held) or without (flag rushed past) every enemy dying.
+// `won` controls flavor only; loot/XP for a clean kill still comes through
+// checkCombatEnd as before for scenarios that don't call this early.
+function endArenaScenario(won, message) {
+    if (!window.isInArena) return;
+    window.isInArena = false;
+    window.arenaScenario = null;
+    window.isInCombat = false;
+    window.gamePhase = 'WAITING';
+    window.currentTurnEntity = null;
+    if (message) window.showMessage(message);
+    window.triggerAmbientDialogue(won ? 'arena_victory' : 'arena_fight_start');
+    if (window.stopAllMusic) window.stopAllMusic(0.8);
+    if (window.updateActionButtons) window.updateActionButtons();
+    if (window.updateTurnIndicator) window.updateTurnIndicator();
+    setTimeout(() => {
+        setupArenaLobby();
+        window.drawMap();
+        window.renderEntities();
+        const firstPlayer = window.entities.find(e => e.side === 'player' && !e.rider);
+        if (firstPlayer) window.centerCameraOn(firstPlayer.hex);
+        if (window.updateActionButtons) window.updateActionButtons();
+    }, 2000);
+}
+window.endArenaScenario = endArenaScenario;
+
+// Per-player-turn arena scenario objective check — called from
+// finalizePlayerAction right alongside the existing turnsElapsed counter.
+// Handles the objectives that can't be expressed as "all enemies dead"
+// (checkCombatEnd's existing gate): flag defense's turn-timer/flag-reached
+// win-loss, and the periodic lava flood's toggle + damage tick.
+function tickArenaScenario() {
+    const s = window.arenaScenario;
+    if (!s || !window.isInArena) return;
+
+    if (s.type === 'flag_defend' && s.flagHex) {
+        const attackerOnFlag = window.entities.some(e => e.side === 'enemy' && e.alive && e.hex.q === s.flagHex.q && e.hex.r === s.flagHex.r);
+        if (attackerOnFlag) {
+            endArenaScenario(false, "The flag falls — the line is broken!");
+            return;
+        }
+        if (s.turnsToHold && s.turnsElapsed >= s.turnsToHold) {
+            endArenaScenario(true, "You held the line! The flag stands.");
+            return;
+        }
+    }
+
+    if (s.type === 'flag_attack' && s.flagHex) {
+        const playerOnFlag = window.entities.some(e => e.side === 'player' && e.alive && e.hex.q === s.flagHex.q && e.hex.r === s.flagHex.r);
+        if (playerOnFlag) {
+            endArenaScenario(true, "The flag is yours!");
+            return;
+        }
+    }
+
+    if (s.type === 'lava_flood' && s.lavaHexes && s.lavaHexes.length > 0) {
+        if (s.turnsElapsed > 0 && s.turnsElapsed % s.floodInterval === 0 && s._lastFloodToggleTurn !== s.turnsElapsed) {
+            s._lastFloodToggleTurn = s.turnsElapsed;
+            s.flooded = !s.flooded;
+            window.showMessage(s.flooded ? "Molten rock surges up through the cracks!" : "The lava recedes, hissing as it cools.");
+        }
+        if (s.flooded) {
+            const lavaKeys = new Set(s.lavaHexes.map(h => `${h.q},${h.r}`));
+            window.entities.forEach(e => {
+                if (!e.alive) return;
+                if (!lavaKeys.has(`${e.hex.q},${e.hex.r}`)) return;
+                e.hp -= 8;
+                if (e.hp <= 0 && e.alive) {
+                    // Lava has no attacker of its own — pass a neutral
+                    // stand-in so handleLethalDamage's attacker.side reads
+                    // don't throw; environmental deaths shouldn't count as
+                    // a player kill for ROGUELIKE reward-tracking either.
+                    handleLethalDamage(e, { side: 'environment' });
+                }
+            });
+            checkCombatEnd();
+        }
+    }
+}
+window.tickArenaScenario = tickArenaScenario;
+
 function startArenaFight() {
     console.log('[ARENA] startArenaFight called');
     window.triggerAmbientDialogue('arena_fight_start');
@@ -5712,12 +5827,24 @@ function startArenaFight() {
     // More types land here over time; each gets its own isXArena roll below
     // and, if it needs a real objective (not just a map shape), its own
     // read of window.arenaScenario in checkCombatEnd.
-    const isVoidBridgeArena = Math.random() < 0.15;
-    window.arenaScenario = { type: isVoidBridgeArena ? 'void_bridge' : 'standard', turnsElapsed: 0 };
+    const scenarioRoll = Math.random();
+    let scenarioType = 'standard';
+    if (scenarioRoll < 0.06) scenarioType = 'void_bridge';
+    else if (scenarioRoll < 0.12) scenarioType = 'ranged_standoff';
+    else if (scenarioRoll < 0.18) scenarioType = 'tunnel_boss';
+    else if (scenarioRoll < 0.24) scenarioType = 'flag_defend';
+    else if (scenarioRoll < 0.30) scenarioType = 'flag_attack';
+    else if (scenarioRoll < 0.36) scenarioType = 'lava_flood';
+    else if (scenarioRoll < 0.40) scenarioType = 'three_way';
+    window.arenaScenario = { type: scenarioType, turnsElapsed: 0 };
 
-    const isWaterArena = !isVoidBridgeArena && Math.random() < 0.3;
-    const isPedestalArena = !isVoidBridgeArena && Math.random() < 0.4;
-    const isFoliageArena = !isVoidBridgeArena && !isIndoor && Math.random() < 0.5;
+    const isVoidBridgeArena = scenarioType === 'void_bridge';
+    const isTunnelBossArena = scenarioType === 'tunnel_boss';
+    const isLavaFloodArena = scenarioType === 'lava_flood';
+
+    const isWaterArena = scenarioType === 'standard' && Math.random() < 0.3;
+    const isPedestalArena = scenarioType === 'standard' && Math.random() < 0.4;
+    const isFoliageArena = scenarioType === 'standard' && !isIndoor && Math.random() < 0.5;
 
     // Fill the arena area with terrain
     for (let q = -arenaSize; q <= arenaSize; q++) {
@@ -5740,6 +5867,19 @@ function startArenaFight() {
                      // but still fully visible/shootable-through, so ranged
                      // combat across the gap is the whole point of the map.
                      tType = (!isBoundaryRing && Math.abs(r) <= 1) ? 'Cave Floor' : 'Void';
+                 } else if (isTunnelBossArena) {
+                     // A long, narrow east-west corridor (width 3). Enemies
+                     // spaced along it spawn aiState:'idle' and wake via the
+                     // existing seen-wakes-idle mechanic as the player
+                     // advances — no new trigger system needed.
+                     tType = (!isBoundaryRing && Math.abs(r) <= 1 && q >= -arenaSize + 2) ? 'Cave Floor' : 'Wall';
+                 } else if (isLavaFloodArena) {
+                     tType = 'Cave Floor';
+                     if (!isBoundaryRing) {
+                         const lavaNoise = Math.abs(Math.sin(q * 0.25 + r * 0.2));
+                         if (lavaNoise > 0.78) tType = 'Lava';
+                         else if (lavaNoise > 0.68) tType = 'High Ground';
+                     }
                  } else {
                      if (isWaterArena && !isBoundaryRing) {
                          const waterNoise = Math.abs(Math.sin(q * 0.2 + r * 0.15));
@@ -5761,11 +5901,23 @@ function startArenaFight() {
 
                  window.setTerrainAt(q, r, tType);
 
+                 if (isLavaFloodArena && tType === 'Lava') {
+                     window.arenaScenario.lavaHexes = window.arenaScenario.lavaHexes || [];
+                     window.arenaScenario.lavaHexes.push({ q, r });
+                 }
+
                  if (isIndoor && Math.random() < 0.02 && tType === 'Cave Floor') {
                      window.tileObjects[`${q},${r}`] = { type: 'fireplace', lightRadius: 10 };
                  }
             }
         }
+    }
+
+    if (isLavaFloodArena) {
+        // Toggled by tickArenaScenario on the turn counter (finalizePlayerAction) —
+        // a periodic on/off flood, not a one-shot event.
+        window.arenaScenario.floodInterval = 6;
+        window.arenaScenario.flooded = false;
     }
 
     // Carve a handful of ring-shaped ruin structures — wall rings with 2-3
@@ -5775,7 +5927,7 @@ function startArenaFight() {
     // grid and still reads as "a ruined room" once walls block LOS/movement.
     // Skipped entirely for the void-bridge scenario — a wall ring dropped
     // onto a narrow bridge would just wall off the bridge itself.
-    const numStructures = isVoidBridgeArena ? 0 : 3 + Math.floor(Math.random() * 3); // 3-5
+    const numStructures = (isVoidBridgeArena || isTunnelBossArena) ? 0 : 3 + Math.floor(Math.random() * 3); // 3-5
     for (let s = 0; s < numStructures; s++) {
         let center = null;
         for (let attempt = 0; attempt < 20; attempt++) {
@@ -5839,7 +5991,7 @@ function startArenaFight() {
                     const h = { q: startQ + q, r: startR + rr };
                     const terrain = window.getTerrainAt(h.q, h.r);
                     if (terrain.name !== 'Wall' && terrain.name !== 'Water' &&
-                        terrain.name !== 'Pedestal' && terrain.name !== 'Void' && !window.getEntityAtHex(h.q, h.r)) {
+                        terrain.name !== 'Pedestal' && terrain.name !== 'Void' && terrain.name !== 'Lava' && !window.getEntityAtHex(h.q, h.r)) {
                         return h;
                     }
                 }
@@ -5852,7 +6004,7 @@ function startArenaFight() {
                     const h = { q: q, r: rr };
                     const terrain = window.getTerrainAt(h.q, h.r);
                     if (terrain.name !== 'Wall' && terrain.name !== 'Water' &&
-                        terrain.name !== 'Pedestal' && terrain.name !== 'Void' && !window.getEntityAtHex(h.q, h.r)) {
+                        terrain.name !== 'Pedestal' && terrain.name !== 'Void' && terrain.name !== 'Lava' && !window.getEntityAtHex(h.q, h.r)) {
                         return h;
                     }
                 }
@@ -5873,6 +6025,25 @@ function startArenaFight() {
     const firstPlayer = window.entities.find(e => e.side === 'player' && !e.rider);
     if (firstPlayer) {
         window.centerCameraOn(firstPlayer.hex);
+    }
+
+    // FLAG DEFENSE (player holds): the flag sits right behind the party's
+    // own base — win by surviving turnsToHold turns; lose the instant an
+    // attacker reaches it (checked by tickArenaScenario, called from
+    // finalizePlayerAction's per-turn hook).
+    if (scenarioType === 'flag_defend') {
+        const flagHex = findSafeHex(partyBase.q + 2, partyBase.r, 4);
+        window.arenaScenario.flagHex = flagHex;
+        window.arenaScenario.turnsToHold = 15;
+        window.tileObjects[`${flagHex.q},${flagHex.r}`] = { type: 'flag', friendly: true };
+    }
+    // FLAG DEFENSE (player attacks): the flag is posted deep in enemy
+    // territory, defended by guards spawned near it below (see the normal
+    // encounter spawn section) — win by reaching it.
+    if (scenarioType === 'flag_attack') {
+        const flagHex = findSafeHex(arenaSize - 8, 0, 6);
+        window.arenaScenario.flagHex = flagHex;
+        window.tileObjects[`${flagHex.q},${flagHex.r}`] = { type: 'flag', friendly: false };
     }
 
     // 4. Spawn enemies based on scaled difficulty
@@ -5904,11 +6075,22 @@ function startArenaFight() {
     const validHexes = getAllValidSpawnHexes();
     let lastSpawnHex = validHexes.length > 0 ? validHexes[Math.floor(Math.random() * validHexes.length)] : { q: 0, r: 0 };
 
-    // BOSS ENCOUNTER (15% chance if any bosses remain)
+    // TUNNEL + BOSS: the corridor carve above already confines validHexes to
+    // the tunnel itself (everything off it is Wall), so a normal encounter
+    // roll already reads as "enemies spaced down the corridor" for free —
+    // they spawn aiState:'idle' and wake via the existing seen-wakes-idle
+    // mechanic (gameEngine.js) as the player advances. The one deliberate
+    // override: force the boss to wait at the tunnel's far end instead of a
+    // random valid hex.
+    if (isTunnelBossArena) {
+        lastSpawnHex = findSafeHex(arenaSize - 4, 0, 6);
+    }
+
+    // BOSS ENCOUNTER (15% chance if any bosses remain, guaranteed for tunnel_boss)
     const bossesDefeated = window.roguelikeData.bossesDefeated || [];
     const availableBosses = Object.keys(arenaBosses).filter(name => !bossesDefeated.includes(name));
-    
-    if (availableBosses.length > 0 && Math.random() < 0.15) {
+
+    if (availableBosses.length > 0 && (isTunnelBossArena || Math.random() < 0.15)) {
         const bossName = availableBosses[Math.floor(Math.random() * availableBosses.length)];
         const config = arenaBosses[bossName];
         
@@ -6078,6 +6260,15 @@ function startArenaFight() {
                 if (window.applyClassLevelScaling) window.applyClassLevelScaling(m, bonusLevels);
             }
 
+            // FORTIFIED RANGED STANDOFF: content-only — a bow-armed humanoid
+            // already shoots from range and only closes distance when a
+            // target's out of it (see aiProcess's existing attackRange/
+            // huntTargetHex logic), so "hold ground, shoot in range" needs
+            // no new mechanic, just equipping the pool with bows.
+            if (scenarioType === 'ranged_standoff' && m.tags?.includes('humanoid') && window.equipToMonster) {
+                window.equipToMonster(m, 'bow');
+            }
+
             // Half the time, patrol a short loop near the spawn point instead
             // of pure random wander, so groups read as actually guarding a
             // spot rather than idling in place.
@@ -6095,6 +6286,26 @@ function startArenaFight() {
             window.entities.push(m);
             currentSP += baseSP;
             lastSpawnHex = spawnHex;
+        }
+    }
+
+    // THREE-WAY HOSTILE PARTIES (scoped): a second monster group, tagged
+    // side:'enemy' as usual (so every existing "is this hostile to the
+    // player" check keeps working unmodified) plus rivalGroup:true, which
+    // the isOpponent patch above uses to make the two groups fight each
+    // other too. Spawned away from the main pool so it reads as a rival
+    // warband, not the same encounter.
+    if (scenarioType === 'three_way') {
+        const rivalTypes = ARENA_MONSTER_POOL.filter(t => t !== 'skeleton' && t !== 'zombie');
+        const rivalBase = findSafeHex(arenaSize - 8, arenaSize - 8, 8);
+        for (let i = 0; i < 4; i++) {
+            const type = rivalTypes[Math.floor(Math.random() * rivalTypes.length)];
+            const neighbors = window.getNeighbors(rivalBase.q, rivalBase.r);
+            const spawnHex = i === 0 ? rivalBase : (neighbors.find(h => !getEntityAtHex(h.q, h.r) && window.getTerrainAt(h.q, h.r).name !== 'Wall') || rivalBase);
+            const rival = window.createMonster(type, spawnHex, null, null, 'enemy');
+            rival.rivalGroup = true;
+            rival.aiState = 'idle';
+            window.entities.push(rival);
         }
     }
 
