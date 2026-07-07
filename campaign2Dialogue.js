@@ -1021,6 +1021,33 @@ window.npcDialogueTrees = {
 
         if (quest && quest.resolution === 'goblin_alliance') {
             const mineQuest = window.questLog.find(q => q.id === 'goblin_mine_raid');
+            const spyQuest = window.questLog.find(q => q.id === 'greenskin_spy');
+            // Same continuity signal the human quartermaster's Border War
+            // breadcrumb uses (goblinScoutNoteRead) — the tribe you're now
+            // allied with is exactly who those scouts were counting walls
+            // for. Only offered once the mine-raid favor is settled, so it
+            // doesn't compete with/preempt that quest.
+            if (window.goblinScoutNoteRead && mineQuest?.status === 'completed' && !spyQuest) {
+                window.showDialogue(npc, "You've proven useful, human. There's a bigger prize than a mine — the warband pressing Northwatch Fort could use eyes and a hand on the inside. Help us take it, and there'll be a place for you when it falls.", [
+                    {
+                        label: "I'll help you take Northwatch.",
+                        action: () => {
+                            window.questLog.push({
+                                id: 'greenskin_spy', title: 'A Hand on the Inside', giver: 'Chief Skarnub',
+                                status: 'active', description: "Help the greenskin warband take Northwatch Fort.", resolution: null
+                            });
+                            if (window.joinGreenskinAssault) window.joinGreenskinAssault();
+                            window.showMessage('Quest started: A Hand on the Inside.');
+                        }
+                    },
+                    { label: "Not yet.", action: () => {} }
+                ]);
+                return;
+            }
+            if (spyQuest && spyQuest.status !== 'completed') {
+                window.showDialogue(npc, "Northwatch still stands. Get in there and help our warband bring it down.", [{ label: "On it.", action: () => {} }]);
+                return;
+            }
             if (mineQuest && mineQuest.status === 'completed') {
                 window.showDialogue(npc, "We're settled here, thanks to you. That mine haul didn't hurt either.", [{ label: "Good.", action: () => {} }]);
                 return;
@@ -2671,6 +2698,61 @@ function startNorthwatchSally() {
     if (window.updateTurnIndicator) window.updateTurnIndicator();
 }
 window.startNorthwatchSally = startNorthwatchSally;
+
+// The greenskin-side mirror of startNorthwatchSally: instead of flipping
+// the ambient siege engine/escorts hostile to the player, this flips them
+// to side:'neutral' with factionTag 'greenskin_assault' and the same
+// combatDirective shape Northwatch's own soldiers use (hostileTo the human
+// garrison, hostileToPlayer false until an unforgivable act) — the player
+// can walk among them, fight alongside them against the humans, and isn't
+// attacked by them. This is what makes the "destroy their siege equipment/
+// leader" unforgivable act (checkCombatEnd's border_war branch) and the
+// generalized attack-trigger (tryAttack, gameEngine.js) actually live,
+// rather than inert, for this path. Triggered by Chief Skarnub's
+// greenskin_spy quest offer.
+function joinGreenskinAssault() {
+    const engine = window.campaign2NorthwatchSiegeEngine;
+    if (!engine || !engine.alive) return;
+    if (window.activateNorthwatchSiege) window.activateNorthwatchSiege();
+
+    const region = window.campaign2NorthwatchFortRegion;
+    const fortInterior = region
+        ? new Set([...region.floorHexes, ...region.wallHexes].map(h => `${h.q},${h.r}`))
+        : new Set();
+    const assaultDirective = () => ({
+        hostileTo: 'northwatch_human',
+        priorities: [{ type: 'insideRegion', hexes: fortInterior }],
+    });
+
+    engine.side = 'neutral';
+    engine.factionTag = 'greenskin_assault';
+    engine.noAttack = false;
+    engine.isNPC = false;
+    engine.aiState = 'idle';
+    engine.combatDirective = assaultDirective();
+
+    const escortTypes = window.campaign2SiegeEscortTypes || ['orc', 'orc', 'goblin', 'goblin'];
+    escortTypes.forEach((type, i) => {
+        const angle = (i / escortTypes.length) * Math.PI * 2;
+        const hex = window.hexRound(
+            engine.hex.q + Math.round(Math.cos(angle) * 3),
+            engine.hex.r + Math.round(Math.sin(angle) * 3)
+        );
+        if (window.getEntityAtHex(hex.q, hex.r) || window.getTerrainAt(hex.q, hex.r).impassable) return;
+        const escort = window.createMonster(type, hex, null, null, 'neutral');
+        escort.aiState = 'idle';
+        escort.factionTag = 'greenskin_assault';
+        escort.combatDirective = assaultDirective();
+        window.entities.push(escort);
+    });
+
+    window.playerAidingGreenskins = true;
+    window.showMessage("You fall in beside the warband — for now, they take you as one of their own.");
+    window.drawMap();
+    window.renderEntities();
+    if (window.updateTurnIndicator) window.updateTurnIndicator();
+}
+window.joinGreenskinAssault = joinGreenskinAssault;
 
 // --- Companion attitude (BG3-style approval): a 0-100 meter per companion
 // name, moved by tagged actions and shown to the player as a toast message

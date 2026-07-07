@@ -4192,16 +4192,18 @@ function tryAttack(attacker, target, isFeint = false, isOffhand = false, bonusDa
         return;
     }
 
-    // UNFORGIVABLE ACT: deliberately, directly attacking a Northwatch
-    // defender (the commander or any soldier) during the siege. Discrete,
-    // not a points/suspicion meter — anything short of this (being seen
-    // near the gate, general suspicion) stays excusable as "pretending to
-    // get close enough to spy." Only reachable via a real single-target
-    // attack (this function) — an AoE spell applies its damage directly
-    // (see the aoe_damage branch) and never calls tryAttack, so incidental
-    // splash damage to a bystander never counts, exactly as intended.
-    if (attacker.side === 'player' && target.factionTag === 'northwatch_human' && window.siegeState?.active && window.setFactionHostileToPlayer) {
-        window.setFactionHostileToPlayer('northwatch_human', `"Traitor! To arms!" — Northwatch's garrison turns on you!`);
+    // UNFORGIVABLE ACT: deliberately, directly attacking a faction-tagged
+    // defender (a Northwatch soldier/commander, or — symmetrically, once
+    // any entity carries the tag — a greenskin escort) during the siege.
+    // Discrete, not a points/suspicion meter — anything short of this
+    // (being seen near the gate, general suspicion) stays excusable as
+    // "pretending to get close enough to spy." Only reachable via a real
+    // single-target attack (this function) — an AoE spell applies its
+    // damage directly (see the aoe_damage branch) and never calls
+    // tryAttack, so incidental splash damage to a bystander never counts.
+    if (attacker.side === 'player' && target.factionTag && window.siegeState?.active && window.setFactionHostileToPlayer) {
+        const factionLabel = target.factionTag === 'northwatch_human' ? "Northwatch's garrison" : 'the warband';
+        window.setFactionHostileToPlayer(target.factionTag, `"Traitor! To arms!" — ${factionLabel} turns on you!`);
     }
 
     // SANCTUARY TRIGGER
@@ -4953,6 +4955,10 @@ function resolveNorthwatchSiege(outcome) {
         if (window.factions?.orc_raiders) window.adjustReputation(window.factions.orc_raiders, 15, 15);
         if (window.adjustRegionStat) window.adjustRegionStat('aldervale', 'security', -15);
         window.showMessage("A horn sounds from the walls — Northwatch has fallen to the greenskins.");
+        if (window.playerAidingGreenskins) {
+            const spyQuest = (window.questLog || []).find(q => q.id === 'greenskin_spy');
+            if (spyQuest) { spyQuest.status = 'completed'; spyQuest.resolution = 'fort_fallen'; }
+        }
     }
 }
 window.resolveNorthwatchSiege = resolveNorthwatchSiege;
