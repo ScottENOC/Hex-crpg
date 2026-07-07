@@ -2849,6 +2849,43 @@ function rescuePaladin() {
 }
 window.rescuePaladin = rescuePaladin;
 
+// --- Star Fort companion reward: whichever side the player ends up on when
+// the Northwatch siege resolves (win or lose — see resolveNorthwatchSiege in
+// gameEngine.js), that side sends someone to fight alongside the player from
+// then on. ---
+function grantStarFortCompanion(side) {
+    const spawnHex = window.campaign2NorthwatchGateHex || (window.party[0] ? window.entities.find(e => e.side === 'player')?.hex : null);
+    if (!spawnHex) return;
+
+    let name, race, cls, gender, customImage;
+    if (side === 'greenskin') {
+        name = 'Snik Fangtooth'; race = 'goblin'; cls = 'rogue'; gender = 'male'; customImage = 'goblin';
+    } else {
+        name = 'Brother Alden'; race = 'human'; cls = 'monk'; gender = 'male'; customImage = null;
+    }
+    if (window.party.some(p => p.name === name)) return; // already granted
+
+    const companion = window.createCharacterData(race, cls, name, gender, 'pc_1');
+    if (customImage) companion.customImage = customImage;
+
+    window.party.push(companion);
+    const ent = new window.Entity(companion.name, 'red', spawnHex, (companion.attributes.agility || 10) + 10);
+    ent.side = 'player';
+    Object.assign(ent, companion);
+    ent.hex = spawnHex;
+    ent.visualQ = ent.hex.q; ent.visualR = ent.hex.r;
+    ent.startQ = ent.hex.q; ent.startR = ent.hex.r;
+    ent.destination = null; ent.moveCooldown = 0;
+
+    window.entities.push(ent);
+    window.companionAttitude[name] = 60;
+    if (window.updatePartyTabs) window.updatePartyTabs();
+    window.showMessage(`${name} joins your party.`);
+    window.drawMap();
+    window.renderEntities();
+}
+window.grantStarFortCompanion = grantStarFortCompanion;
+
 // --- Goblin-reputation / diplomacy path: small favors for the chief raise
 // goblin_tribe standing (and cost the kingdom's), building toward a peaceful
 // departure once trust is high enough (see chief_skarnub's tree above). One

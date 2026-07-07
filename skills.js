@@ -499,6 +499,22 @@ const skills = {
             player.forcedMoveResistance = (player.forcedMoveResistance || 0) + 5;
         }
     },
+    'goblin_opportunist': {
+        name: 'Opportunist',
+        description: 'Deals +3 damage against a target that is caught off-guard.',
+        tree: 'goblin',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+    'goblin_keen_senses': {
+        name: 'Keen Senses',
+        description: 'Increases vision range by 3.',
+        tree: 'goblin',
+        maxRanks: 1,
+        apply: (player) => {
+            player.visionBonus = (player.visionBonus || 0) + 3;
+        }
+    },
     'cleric_trigger_damage': {
         name: 'Divine Retribution',
         description: 'Whenever your trigger spells (Divine Silence, Sanctuary) activate, the target takes 1 damage immediately per rank.',

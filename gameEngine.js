@@ -4576,6 +4576,9 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   // DWARF AXE MASTERY
   if (weapon?.id === 'axe' && attacker.skills?.dwarf_axe_mastery) dmg += 2;
 
+  // GOBLIN OPPORTUNIST — extra damage against a target that's already off-guard
+  if (attacker.skills?.goblin_opportunist && target.caughtOffGuard) dmg += 3;
+
   // SNEAK ATTACK / BACKSTAB
   if (attacker.skills?.sneak_attack_dmg) {
       const enemies = window.entities.filter(e => e.alive && e.side !== attacker.side);
@@ -4960,6 +4963,19 @@ function resolveNorthwatchSiege(outcome) {
             if (spyQuest) { spyQuest.status = 'completed'; spyQuest.resolution = 'fort_fallen'; }
         }
     }
+
+    // Force a side commitment: whoever the player actually fought against
+    // (via the unforgivable-act hostility flips) wins by default; if the
+    // player never directly fought anyone, fall back to whoever won the siege.
+    const betrayedHumans = window.entities.some(e => e.factionTag === 'northwatch_human' && e.combatDirective?.hostileToPlayer);
+    const betrayedGreenskins = window.entities.some(e => e.factionTag === 'greenskin_assault' && e.combatDirective?.hostileToPlayer);
+    let playerSide;
+    if (betrayedHumans && !betrayedGreenskins) playerSide = 'greenskin';
+    else if (betrayedGreenskins && !betrayedHumans) playerSide = 'human';
+    else if (window.playerAidingGreenskins) playerSide = 'greenskin';
+    else playerSide = outcome === 'fort_fallen' ? 'greenskin' : 'human';
+    window.northwatchPlayerSide = playerSide;
+    if (window.grantStarFortCompanion) window.grantStarFortCompanion(playerSide);
 }
 window.resolveNorthwatchSiege = resolveNorthwatchSiege;
 

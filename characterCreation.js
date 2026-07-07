@@ -64,7 +64,7 @@ function createCharacterData(race, cls, name, gender = "female", voice = "pc_1")
     offhandAttackAvailable: false,
     side: 'player',
     tags: ['humanoid'],
-    riderSize: (race === 'human' || race === 'elf' || race === 'dwarf') ? 3 : 0,
+    riderSize: (race === 'human' || race === 'elf' || race === 'dwarf' || race === 'goblin') ? 3 : 0,
     mountSize: 0,
     riding: null,
     rider: null,
