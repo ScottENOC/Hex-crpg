@@ -2006,6 +2006,7 @@ function buildNorthwatchFort(turnHex) {
         soldier.behaviorType = 'patrol';
         soldier.patrolPath = wallPatrolPath;
         soldier.homeHex = { ...postHex };
+        soldier.factionTag = 'northwatch_human'; // the "unforgivable act" hostility flip (gameEngine.js) keys off this
         soldier.combatDirective = {
             hostileTo: 'enemy', // these soldiers are side:'neutral' toward the player — this is who they actually fight
             constraints: { stayWithinHexes: fortInterior },
@@ -2026,8 +2027,39 @@ function buildNorthwatchFort(turnHex) {
 
     if (window.campaign2NorthwatchCommander) {
         const commander = window.buildNPC({ ...window.campaign2NorthwatchCommander, hex: { q: center.q, r: center.r - 1 } });
+        commander.factionTag = 'northwatch_human';
         window.entities.push(commander);
     }
+
+    // Gate lever: the deliberate, guarded way to open the fort from the
+    // inside during a siege. First pull is just a warning (a nearby guard
+    // stops you); a second pull actually opens it AND is, on its own, one
+    // of the "unforgivable acts" (see gameEngine.js's pullNorthwatchGateLever/
+    // setFactionHostileToPlayer) that turns the whole garrison hostile —
+    // there's no partial-suspicion state in between.
+    const leverHex = { q: gateHex.q, r: gateHex.r - 1 };
+    window.tileObjects[`${leverHex.q},${leverHex.r}`] = { type: 'gate_lever' };
+    window.campaign2NorthwatchGateLeverHex = leverHex;
+    const leverGuardSpots = [{ q: gateHex.q - 1, r: gateHex.r - 1 }, { q: gateHex.q + 1, r: gateHex.r - 1 }];
+    leverGuardSpots.forEach((spot, i) => {
+        const spec = (window.campaign2FortSoldiers || [])[i];
+        if (!spec) return;
+        const guard = window.buildNPC({ ...spec, name: `${spec.name} (Gate Guard)`, title: 'Gate Guard', hex: spot });
+        guard.behaviorType = 'guard';
+        guard.homeHex = { ...spot };
+        guard.factionTag = 'northwatch_human';
+        guard.combatDirective = {
+            hostileTo: 'enemy',
+            constraints: { stayWithinHexes: fortInterior },
+            priorities: [{ type: 'nearHex', hex: gateHex, radius: 3 }, { type: 'insideRegion', hexes: fortInterior }],
+            retreatTo: { q: center.q, r: center.r },
+            contingencies: [{
+                id: 'retreat_if_walls_overrun',
+                when: () => window.entities.filter(e => e.alive && e.side === 'enemy' && fortInterior.has(`${e.hex.q},${e.hex.r}`)).length >= 5,
+            }],
+        };
+        window.entities.push(guard);
+    });
 
     // The siege engine already battering the north wall — visible from a
     // distance the moment the fort exists, reinforcing "under siege" before

@@ -2824,8 +2824,31 @@ function interactWithTileObject(q, r, player) {
     if (doorObj.type === 'fishing_spot' && window.harvestFishingSpot) { window.harvestFishingSpot(q, r); return; }
     if (doorObj.type === 'corpse' && window.harvestCorpse) { window.harvestCorpse(q, r); return; }
     if (doorObj.type === 'evidence' && window.searchEvidence) { window.searchEvidence(q, r); return; }
+    if (doorObj.type === 'gate_lever' && window.pullNorthwatchGateLever) { window.pullNorthwatchGateLever(); return; }
 }
 window.interactWithTileObject = interactWithTileObject;
+
+// Northwatch's gate lever (campaign2World.js, near campaign2NorthwatchGateHex).
+// First pull is just a warning — a guard stops you, no consequence. Second
+// pull actually opens the gate (a real, one-time siege-pressure shove
+// toward the attackers) AND is, on its own, one of the discrete
+// "unforgivable acts" (see the plan) that turns the whole garrison
+// hostile — no partial-suspicion state in between.
+function pullNorthwatchGateLever() {
+    if (!window._northwatchGateWarned) {
+        window._northwatchGateWarned = true;
+        window.showMessage(`A soldier grabs your arm: "Are you mad? You'll let them in!"`);
+        return;
+    }
+    if (window.siegeState) {
+        window.siegeState.gateHeld = false;
+        if (window.applySiegePressure) window.applySiegePressure(20, "You wrench the lever — the gate swings open!");
+    }
+    if (window.setFactionHostileToPlayer) {
+        window.setFactionHostileToPlayer('northwatch_human', "Soldiers turn their spears on you — you've opened the gate to the enemy!");
+    }
+}
+window.pullNorthwatchGateLever = pullNorthwatchGateLever;
 
 // Fires once autoMoveProcess clears a player's destination — if they were
 // walking toward a tile object clicked from out of interact range, interact
@@ -4169,6 +4192,18 @@ function tryAttack(attacker, target, isFeint = false, isOffhand = false, bonusDa
         return;
     }
 
+    // UNFORGIVABLE ACT: deliberately, directly attacking a Northwatch
+    // defender (the commander or any soldier) during the siege. Discrete,
+    // not a points/suspicion meter — anything short of this (being seen
+    // near the gate, general suspicion) stays excusable as "pretending to
+    // get close enough to spy." Only reachable via a real single-target
+    // attack (this function) — an AoE spell applies its damage directly
+    // (see the aoe_damage branch) and never calls tryAttack, so incidental
+    // splash damage to a bystander never counts, exactly as intended.
+    if (attacker.side === 'player' && target.factionTag === 'northwatch_human' && window.siegeState?.active && window.setFactionHostileToPlayer) {
+        window.setFactionHostileToPlayer('northwatch_human', `"Traitor! To arms!" — Northwatch's garrison turns on you!`);
+    }
+
     // SANCTUARY TRIGGER
     const sanctuary = (window.activeSpells || []).find(s => s.debuffType === 'sanctuary_protected' && s.targetEntityId === target?.id);
     if (sanctuary && attacker.side !== target?.side) {
@@ -4848,6 +4883,26 @@ function applySiegePressure(delta, message) {
 }
 window.applySiegePressure = applySiegePressure;
 
+// Discrete faction-vs-player hostility flip — deliberately NOT a points/
+// suspicion meter. A faction is either still willing to excuse the
+// player's presence (everything short of an unforgivable act — being
+// seen near the gate, general wariness) or it isn't; there's no partial
+// credit. Flips every already-spawned entity carrying a matching
+// factionTag (and a combatDirective — see the "Layered combat AI" plan)
+// at once via the same hostileToPlayer field targetPriorityCompare/
+// aiProcess already read, so no new wiring is needed on the AI side.
+function setFactionHostileToPlayer(factionTag, message) {
+    let changed = false;
+    window.entities.forEach(e => {
+        if (e.factionTag === factionTag && e.combatDirective && !e.combatDirective.hostileToPlayer) {
+            e.combatDirective.hostileToPlayer = true;
+            changed = true;
+        }
+    });
+    if (changed && message) window.showMessage(message);
+}
+window.setFactionHostileToPlayer = setFactionHostileToPlayer;
+
 // Called on the same ~1s out-of-combat refresh cadence runTickInternal
 // already uses for updateNpcSchedules/rebuildRestlessSet. Zero-expected-
 // value random walk (the "evenly matched" baseline) plus the commander's
@@ -4998,6 +5053,17 @@ function checkCombatEnd() {
             if (window.siegeState) {
                 window.siegeState.siegeEngineAlive = false;
                 if (window.applySiegePressure) window.applySiegePressure(-15, "The siege engine splinters into wreckage!");
+            }
+            // UNFORGIVABLE ACT (greenskin side): destroying their siege
+            // equipment (or, once one exists, their warband leader). Inert
+            // today — no entity yet carries factionTag 'greenskin_assault'
+            // (the escorts spawned by startNorthwatchSally are still plain
+            // side:'enemy', always hostile to the player from the start) —
+            // this becomes live the moment a future undercover-with-the-
+            // goblins path spawns escorts as neutral, provisional allies
+            // instead, with no other change needed here.
+            if (window.setFactionHostileToPlayer) {
+                window.setFactionHostileToPlayer('greenskin_assault', "The warband turns on you — you've broken faith with them!");
             }
             window.isInCombat = false;
             window.gamePhase = 'WAITING';
