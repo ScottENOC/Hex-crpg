@@ -1661,12 +1661,20 @@ function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
 
 function renderEntities() {
   const z = window.cameraZoom || 1.0;
-  
+
+  // Computed once for the whole function instead of once per mapItems/
+  // tileObjects/entity check below — isVisibleToPlayer otherwise re-filters
+  // all of window.entities on every single call, and this function can call
+  // it hundreds of times per frame (once per tileObject in the entire
+  // persistent world, not just what's on screen). See the matching comment
+  // in drawMap (hexMap.js) for the measured cost.
+  const _friendlies = window.entities.filter(e => e.alive && e.side === 'player');
+
   for (const coord in window.mapItems) {
       const items = window.mapItems[coord];
       if (items && items.length > 0) {
           const [q, r] = coord.split(',').map(Number);
-          if (!window.isVisibleToPlayer({ q, r })) continue;
+          if (!window.isVisibleToPlayer({ q, r }, _friendlies)) continue;
           const {x, y} = window.hexToPixel(q, r);
           const size = window.hexSize * 0.8 * z;
           let icon = window.gameVisuals.swordIcon;
@@ -1682,7 +1690,7 @@ function renderEntities() {
     try {
       const obj = window.tileObjects[key];
       const [q, r] = key.split(',').map(Number);
-      if (window.isVisibleToPlayer({q, r})) {
+      if (window.isVisibleToPlayer({q, r}, _friendlies)) {
           const {x, y} = window.hexToPixel(q, r);
           const size = window.hexSize * 1.5 * z;
           if (obj.type === 'fireplace' && window.gameVisuals.fireplace?.complete) {
@@ -1913,7 +1921,7 @@ function renderEntities() {
   }
 
   // 2. Sort entities by "z-index" for layering: Rider -> Normal -> Mounts (on top)
-  const sorted = [...window.entities].filter(e => e.alive && window.isVisibleToPlayer(e.hex)).sort((a, b) => {
+  const sorted = [...window.entities].filter(e => e.alive && window.isVisibleToPlayer(e.hex, _friendlies)).sort((a, b) => {
       const az = a.rider ? 3 : (a.riding ? 1 : 2); // Mounts (has rider) get 3, Riders (riding something) get 1
       const bz = b.rider ? 3 : (b.riding ? 1 : 2);
       return az - bz;
