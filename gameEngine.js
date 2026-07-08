@@ -2981,7 +2981,7 @@ function autoMoveProcess(entity) {
     const enemies = window.entities.filter(e => e.alive && e.side === 'enemy');
     const seenEnemy = enemies.find(e => {
         const d = window.distance(entity.hex, e.hex);
-        const visionCap = 30 + (entity.visionBonus || 0);
+        const visionCap = (window.LIVE_VISION_RANGE || 25) + (entity.visionBonus || 0);
         return d <= visionCap && window.hasLineOfSight(entity.hex, e.hex);
     });
     
@@ -4529,7 +4529,7 @@ function canSee(viewer, target) {
     const d = window.distance(viewer.hex, target.hex);
     
     // Vision Range affected by light
-    let visionRange = 30 + (viewer.visionBonus || 0);
+    let visionRange = (window.LIVE_VISION_RANGE || 25) + (viewer.visionBonus || 0);
     const light = window.lightLevel || 1.0;
     const effectiveLight = (viewer.skills?.elf_darkvision) ? 1.0 : light;
     const visionCap = visionRange * Math.max(0.2, effectiveLight);

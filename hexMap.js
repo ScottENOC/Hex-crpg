@@ -246,6 +246,7 @@ function getVisibleHexes() {
 function drawMap() {
   if (!mapCtx) return;
   invalidateLightSourcesCache();
+  refreshVisibilityCacheIfStale();
   if (window.applyScreenShake) window.applyScreenShake();
   mapCtx.clearRect(0,0,mapCanvas.width,mapCanvas.height);
 
@@ -826,6 +827,36 @@ function hexLerp(a, b, t) {
 // below) — bounds staleness to "at most one frame old", which light
 // sources never change fast enough to matter.
 let _lightSourcesCache = null;
+
+// The tileObjects half of the scan above (every door/watchtower/fireplace in
+// the *entire persistent world*, not just what's nearby) is the one part of
+// this cache that keeps getting more expensive as the world grows, no
+// matter how small a dense scene's viewport is — unlike the viewport-bounded
+// hex-gather loop, this was O(total tileObjects ever placed). tileObjects
+// only actually changes when something is built/placed/destroyed (rare —
+// doors toggling replace their own key's value, not the object count), so
+// re-deriving the lit subset is skipped entirely whenever the key count
+// hasn't moved since the last time, which is nearly always. This bounds the
+// full-object-iteration cost to "once per actual world change" instead of
+// "once per tick", regardless of how large tileObjects eventually gets.
+let _tileLightsCache = null;
+let _tileLightsCacheCount = -1;
+function getTileLights() {
+    const count = Object.keys(window.tileObjects).length;
+    if (_tileLightsCache && count === _tileLightsCacheCount) return _tileLightsCache;
+    const tileLights = []; // { q, r, radius }
+    for (const key in window.tileObjects) {
+        const obj = window.tileObjects[key];
+        if (obj.lightRadius > 0) {
+            const [oq, orr] = key.split(',').map(Number);
+            tileLights.push({ q: oq, r: orr, radius: obj.lightRadius });
+        }
+    }
+    _tileLightsCache = tileLights;
+    _tileLightsCacheCount = count;
+    return tileLights;
+}
+
 function getLightSourcesCache() {
     if (_lightSourcesCache) return _lightSourcesCache;
     const entityLights = []; // { hex, radius }
@@ -840,25 +871,66 @@ function getLightSourcesCache() {
         });
         if (r > 0) entityLights.push({ hex: e.hex, radius: r });
     });
-    const tileLights = []; // { q, r, radius }
-    for (const key in window.tileObjects) {
-        const obj = window.tileObjects[key];
-        if (obj.lightRadius > 0) {
-            const [oq, orr] = key.split(',').map(Number);
-            tileLights.push({ q: oq, r: orr, radius: obj.lightRadius });
-        }
-    }
-    _lightSourcesCache = { entityLights, tileLights, viewersByHex };
+    _lightSourcesCache = { entityLights, tileLights: getTileLights(), viewersByHex };
     return _lightSourcesCache;
 }
 function invalidateLightSourcesCache() { _lightSourcesCache = null; }
 window.invalidateLightSourcesCache = invalidateLightSourcesCache;
 
+// VISIBILITY CACHE (memoizes hasLineOfSight's boolean result per start/end
+// pair). Even with the light-source fix above, a stationary camera still
+// re-raycasts the same ~700 candidate hexes from scratch every single 10ms
+// tick — real work (walking every intermediate hex between viewer and
+// target checking for walls), but wholly redundant when nothing that
+// affects visibility actually changed since the last tick. Invalidated by:
+// (a) a per-drawMap-call fingerprint check (any friendly's hex, vision
+// bonus, or the ambient light level) — covers movement and day/night/torch
+// changes; (b) setTerrainAt calling invalidateVisibilityCache directly
+// (terrain.js) — covers doors opening/closing and any other real-time
+// terrain mutation, which the fingerprint alone can't see.
+let _visibilityCache = new Map();
+function invalidateVisibilityCache() { _visibilityCache.clear(); }
+window.invalidateVisibilityCache = invalidateVisibilityCache;
+
+let _lastVisibilityFingerprint = null;
+function refreshVisibilityCacheIfStale() {
+    const friendlies = window.entities.filter(e => e.alive && e.side === 'player');
+    const parts = friendlies.map(f => `${f.hex.q},${f.hex.r}:${f.visionBonus || 0}:${f.skills?.elf_darkvision ? 1 : 0}`);
+    parts.push(`L${(window.lightLevel || 1).toFixed(2)}`);
+    const fp = parts.join('|');
+    if (fp !== _lastVisibilityFingerprint) {
+        _visibilityCache.clear();
+        _lastVisibilityFingerprint = fp;
+    }
+}
+
 function hasLineOfSight(start, end) {
+    const key = `${start.q},${start.r}|${end.q},${end.r}`;
+    const cached = _visibilityCache.get(key);
+    if (cached !== undefined) return cached;
+    const result = hasLineOfSightUncached(start, end);
+    _visibilityCache.set(key, result);
+    return result;
+}
+
+// LIVE_VISION_RANGE governs what's actually seen right now — enemy
+// spotting, full-detail rendering, combat LOS — deliberately smaller than
+// the 30-hex EXPLORE_VISION_RANGE (updateExploration, below) that permanently
+// reveals fog-of-war on the map. Splitting them keeps map discovery feeling
+// generous while shrinking the genuinely expensive check (a per-hex raycast,
+// vs. exploration's one-time Set write) — shorter raycasts, and far more
+// candidate hexes rejected by the cheap distance check before ever reaching
+// hasLineOfSightUncached at all.
+const LIVE_VISION_RANGE = 25;
+const EXPLORE_VISION_RANGE = 30;
+window.LIVE_VISION_RANGE = LIVE_VISION_RANGE;
+window.EXPLORE_VISION_RANGE = EXPLORE_VISION_RANGE;
+
+function hasLineOfSightUncached(start, end) {
     const d = distance(start, end);
     const nightFactor = window.lightLevel || 1.0;
 
-    let baseVisionCap = 30;
+    let baseVisionCap = LIVE_VISION_RANGE;
     let viewerTorchRadius = 0;
 
     const { entityLights, tileLights, viewersByHex } = getLightSourcesCache();
@@ -877,7 +949,13 @@ function hasLineOfSight(start, end) {
     const targetIsIlluminated = entityLights.some(l => distance(l.hex, end) <= l.radius)
         || tileLights.some(l => distance({ q: l.q, r: l.r }, end) <= l.radius);
 
-    let effectiveVisionCap = baseVisionCap * nightFactor;
+    // Same 0.2 floor isVisibleToPlayer/updateExploration apply — vision never
+    // drops below 20% of base range even in pitch dark. This function used to
+    // multiply by the raw (unfloored) nightFactor instead, which happened to
+    // stay harmless while LIVE_VISION_RANGE was 30 (30*0.15=4.5, still enough
+    // headroom for most short indoor LOS checks) but became a real bug once
+    // it dropped to 25 (25*0.15=3.75) — surfaced by a dim-tavern LOS test.
+    let effectiveVisionCap = baseVisionCap * Math.max(0.2, nightFactor);
     effectiveVisionCap = Math.max(effectiveVisionCap, viewerTorchRadius);
     
     if (targetIsIlluminated) {
@@ -938,7 +1016,7 @@ function isVisibleToPlayer(targetHex, friendliesOverride) {
             const dist = distance(fh, targetHex);
 
             // Vision Range affected by light
-            let visionRange = 30 + (f.visionBonus || 0);
+            let visionRange = LIVE_VISION_RANGE + (f.visionBonus || 0);
             const light = window.lightLevel || 1.0;
 
             // Elf Darkvision: treat light as 1.0 for range if they have the skill
@@ -961,7 +1039,7 @@ function updateExploration() {
     for (let f of friendlies) {
         f.hasBeenSeenByPlayer = true;
         const myHexes = f.getAllHexes();
-        const visionRange = 30 + (f.visionBonus || 0);
+        const visionRange = EXPLORE_VISION_RANGE + (f.visionBonus || 0);
         const effectiveLight = (f.skills?.elf_darkvision) ? 1.0 : light;
         const finalRange = visionRange * Math.max(0.2, effectiveLight);
         const intRange = Math.ceil(finalRange);

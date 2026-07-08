@@ -377,7 +377,7 @@ const skills = {
         name: 'Keen Elf Sight',
         description: 'Increases vision range by 4 per rank.',
         tree: 'elf',
-        maxRanks: 3,
+        maxRanks: 2,
         apply: (player) => {
             player.visionBonus = (player.visionBonus || 0) + 4;
         }
@@ -394,9 +394,14 @@ const skills = {
         description: 'Reduces vision penalties and stealth detection penalties in low light.',
         tree: 'elf',
         maxRanks: 1,
-        apply: (player) => {
-            player.visionBonus = (player.visionBonus || 0) + 5;
-        }
+        // No flat visionBonus here on purpose — this skill's actual effect is
+        // the elf_darkvision check elsewhere (gameEngine.js's canSee, hexMap.js's
+        // isVisibleToPlayer/updateExploration) that pins effectiveLight to 1.0,
+        // negating the low-light range penalty entirely. It was previously also
+        // granting an unconditional +5 vision bonus active even in broad
+        // daylight, which matched neither its own description nor the intended
+        // "keeps you near the ceiling in the dark" design.
+        apply: (player) => {}
     },
     'elf_foliage_expertise': {
         name: 'Woodland Stride',

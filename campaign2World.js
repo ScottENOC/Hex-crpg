@@ -2653,6 +2653,48 @@ window.cheatTeleportRidgehold = function() {
     teleportPartyTo(window.campaign2RidgeholdFortRegion.doorHex);
     window.showMessage('Teleported to Ridgehold Fort.');
 };
+window.cheatTeleportSilverhart = function() {
+    if (!window.campaign2PalaceThroneCenter) { window.showMessage('Silverhart has not been built yet.'); return; }
+    teleportPartyTo(window.campaign2PalaceThroneCenter);
+    window.showMessage('Teleported to Silverhart.');
+};
+
+// Benchmarking/debug aid: marks every hex the world has ever painted
+// (every settlement, road, fort, camp — anything in overrideTerrain) as
+// permanently explored, so performance testing isn't confounded by
+// fog-of-war reveal cost or first-time asset loads happening mid-measurement.
+// Does not affect procedurally-generated wilderness between settlements
+// (there's nothing there to "reveal" — it's default grass/forest noise
+// either way), only the hand-built content this is meant to stress-test.
+// Benchmarking/debug aid: grants max ranks of every skill to the main
+// character via grantSkillRank (the same bypass-SP mechanism quest rewards
+// already use), useful for load-testing anything gated behind skill checks
+// without a long grind first.
+window.cheatMaxAllSkills = function() {
+    const player = window.party?.[0];
+    if (!player || !window.skills) { window.showMessage('No character loaded.'); return; }
+    let granted = 0;
+    Object.keys(window.skills).forEach(key => {
+        const skill = window.skills[key];
+        const cap = skill.maxRanks > 0 ? skill.maxRanks : 5; // uncapped (maxRanks:0) skills get a reasonable finite ceiling here, not literally infinite
+        while ((player.skills[key] || 0) < cap) {
+            const before = player.skills[key] || 0;
+            window.grantSkillRank(player, key);
+            if ((player.skills[key] || 0) === before) break; // safety valve against any skill that can't actually be incremented
+            granted++;
+        }
+    });
+    if (window.showCharacter) window.showCharacter();
+    window.showMessage(`Cheat: granted ${granted} skill ranks across every skill.`);
+};
+
+window.cheatExploreEverything = function() {
+    if (!window.exploredHexes) window.exploredHexes = new Set();
+    const keys = Object.keys(window.overrideTerrain);
+    keys.forEach(key => window.exploredHexes.add(key));
+    if (window.drawMap) window.drawMap();
+    window.showMessage(`Cheat: marked ${keys.length} hexes as explored.`);
+};
 
 // Reads the journal at the abandoned house — the first breadcrumb toward
 // the necromancer/lichdom plot arc. Knowledge: Religion reveals specifics

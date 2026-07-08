@@ -107,6 +107,12 @@ function setTerrainAt(q, r, typeName) {
     const typeKey = typeName.toLowerCase().replace(' ', '_');
     if (terrainTypes[typeKey]) {
         window.overrideTerrain[key] = terrainTypes[typeKey];
+        // A door opening/closing (or any other real-time terrain mutation —
+        // spell walls, siege damage) can flip whether a hex blocks line of
+        // sight, which hasLineOfSight's cross-tick visibility cache
+        // (hexMap.js) has no other way to detect — the fingerprint check it
+        // runs on its own only covers party movement/lighting changes.
+        if (window.invalidateVisibilityCache) window.invalidateVisibilityCache();
     }
 }
 

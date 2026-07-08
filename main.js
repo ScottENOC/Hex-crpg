@@ -19,6 +19,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Asset Preloading Logic
+    //
+    // Three tiers, loaded strictly in order, instead of one flat "everything
+    // after the arena floor tiles" list — a fresh page load has nothing
+    // rendered yet, so *what the player sees in the first few seconds* (the
+    // tavern's opening room, the arena lobby, and whatever race/gender the
+    // character creator is currently showing) should win the race against
+    // the other ~70 sprites (every monster, every other race/gender combo,
+    // every piece of world furniture) that won't be on screen for minutes,
+    // if ever, in a given playthrough.
     async function preloadAssets() {
         const priorityImages = [
             {key: 'floor1', src: 'images/arenaHexFloor1.png'},
@@ -26,32 +35,49 @@ document.addEventListener("DOMContentLoaded", () => {
             {key: 'floor3', src: 'images/arenaHexFloor3.png'},
             {key: 'floor4', src: 'images/arenaHexFloor4.png'}
         ];
-        
-        const otherImages = [
+
+        // The exact race/gender combo tags used everywhere else in this
+        // file (APPEARANCE_BASE_SRC keys, CHAR_CONFIG) — reused here so
+        // there's one single source of truth for "which two images does
+        // this race/gender combo need."
+        const raceGenderImages = {
+            human_female: [{key: 'humanBase', src: 'images/humanfemale.png'}, {key: 'humanHair', src: 'images/humanfemalehair.png'}],
+            human_male: [{key: 'humanMaleBase', src: 'images/humanmale.png'}, {key: 'humanMaleHair', src: 'images/humanmalehair.png'}],
+            elf_female: [{key: 'elfFemaleBase', src: 'images/elffemale.png'}, {key: 'elfFemaleHair', src: 'images/elffemalehair.png'}],
+            elf_male: [{key: 'elfMaleBase', src: 'images/elfmale.png'}, {key: 'elfMaleHair', src: 'images/elfmalehair.png'}],
+            dwarf_female: [{key: 'dwarfFemaleBase', src: 'images/dwarffemale.png'}, {key: 'dwarfFemaleHair', src: 'images/dwarffemalehair.png'}],
+            dwarf_male: [{key: 'dwarfMaleBase', src: 'images/dwarfmale.png'}, {key: 'dwarfMaleHair', src: 'images/dwarfmalehair.png'}],
+        };
+
+        // Everything visible in the Hollowmere tavern's starting room
+        // (where every campaign begins — see setupVillageScene's tavern
+        // furniture in campaign2World.js) and the Campaign 1 arena lobby,
+        // both seen within seconds of clicking "Create Character."
+        const earlyRoomImages = [
+            {key: 'wood_floor', src: 'images/wood_floor.svg'},
+            {key: 'table', src: 'images/table.svg'},
+            {key: 'bench', src: 'images/bench.svg'},
+            {key: 'fireplace', src: 'images/fireplace.svg'},
+            {key: 'door_open', src: 'images/door_open.svg'},
+            {key: 'door_closed', src: 'images/door_closed.svg'},
+            {key: 'swordIcon', src: 'images/sword.png'},
+            {key: 'shield', src: 'images/shield.png'},
+            {key: 'nasal_helm', src: 'images/nasalHelm.png'},
+            {key: 'arenaannouncer', src: 'images/arenaannouncer.png'},
+            {key: 'arenamercenary', src: 'images/arenamercenary.png'},
+            {key: 'arenashopkeeper', src: 'images/arenashopkeeper.png'},
+        ];
+
+        const restImages = [
             {key: 'playerBase', src: 'images/elf.png'},
             {key: 'leatherArmor', src: 'images/elfleatherarmour.png'},
             {key: 'chainArmor', src: 'images/elfchainarmour.png'},
             {key: 'monsterDefault', src: 'images/goblin.png'},
             {key: 'orcBase', src: 'images/orc.png'},
-            {key: 'swordIcon', src: 'images/sword.png'},
-            {key: 'humanBase', src: 'images/humanfemale.png'},
-            {key: 'humanHair', src: 'images/humanfemalehair.png'},
-            {key: 'humanMaleHair', src: 'images/humanmalehair.png'},
             {key: 'humanLight', src: 'images/humanlightarmour.png'},
             {key: 'humanMedium', src: 'images/humanmediumarmour.png'},
             {key: 'humanHeavy', src: 'images/humanheavyarmour.png'},
             {key: 'horse', src: 'images/horse.png'},
-            {key: 'nasal_helm', src: 'images/nasalHelm.png'},
-            {key: 'humanMaleBase', src: 'images/humanmale.png'},
-            {key: 'elfMaleBase', src: 'images/elfmale.png'},
-            {key: 'elfMaleHair', src: 'images/elfmalehair.png'},
-            {key: 'elfFemaleBase', src: 'images/elffemale.png'},
-            {key: 'elfFemaleHair', src: 'images/elffemalehair.png'},
-            {key: 'dwarfMaleBase', src: 'images/dwarfmale.png'},
-            {key: 'dwarfMaleHair', src: 'images/dwarfmalehair.png'},
-            {key: 'dwarfFemaleBase', src: 'images/dwarffemale.png'},
-            {key: 'dwarfFemaleHair', src: 'images/dwarffemalehair.png'},
-            {key: 'shield', src: 'images/shield.png'},
             {key: 'skeleton', src: 'images/skeleton.svg'},
             {key: 'zombie', src: 'images/zombie.svg'},
             {key: 'imp', src: 'images/imp.svg'},
@@ -63,7 +89,6 @@ document.addEventListener("DOMContentLoaded", () => {
             {key: 'revenantBase', src: 'images/revenant.svg'},
             {key: 'wolf', src: 'images/wolf.png'},
             {key: 'torch_lit', src: 'images/torch_lit.svg'},
-            {key: 'fireplace', src: 'images/fireplace.svg'},
             {key: 'axe', src: 'images/axe.png'},
             {key: 'troll', src: 'images/troll.png'},
             {key: 'spear', src: 'images/spear.png'},
@@ -71,9 +96,6 @@ document.addEventListener("DOMContentLoaded", () => {
             {key: 'spiderweb', src: 'images/spiderweb.png'},
             {key: 'spider1', src: 'images/spider1.png'},
             {key: 'spider2', src: 'images/spider2.png'},
-            {key: 'arenaannouncer', src: 'images/arenaannouncer.png'},
-            {key: 'arenamercenary', src: 'images/arenamercenary.png'},
-            {key: 'arenashopkeeper', src: 'images/arenashopkeeper.png'},
             {key: 'grishnak', src: 'images/Grishnak.png'},
             {key: 'overlay_blood', src: 'images/overlay blood.png'},
             {key: 'overlay_skull', src: 'images/overlay skull.png'},
@@ -84,14 +106,9 @@ document.addEventListener("DOMContentLoaded", () => {
             {key: 'eagle', src: 'images/eagle.png'},
             {key: 'eagleflying', src: 'images/eagleflying.png'},
             {key: 'foliage', src: 'images/foliage.png'},
-            {key: 'wood_floor', src: 'images/wood_floor.svg'},
-            {key: 'table', src: 'images/table.svg'},
-            {key: 'bench', src: 'images/bench.svg'},
             {key: 'bed', src: 'images/bed.svg'},
             {key: 'throne', src: 'images/throne.svg'},
             {key: 'apple', src: 'images/apple.svg'},
-            {key: 'door_open', src: 'images/door_open.svg'},
-            {key: 'door_closed', src: 'images/door_closed.svg'},
             {key: 'path', src: 'images/path.svg'},
             {key: 'signpost', src: 'images/signpost.svg'},
             {key: 'fountain', src: 'images/fountain.svg'},
@@ -110,8 +127,11 @@ document.addEventListener("DOMContentLoaded", () => {
         ];
 
         window.gameVisuals = {};
+        const _loadedKeys = new Set();
 
         function load(asset) {
+            if (_loadedKeys.has(asset.key)) return Promise.resolve(); // already loaded (or in flight) via an earlier tier / a race-select change
+            _loadedKeys.add(asset.key);
             return new Promise((resolve) => {
                 const img = new Image();
                 img.onload = () => { window.gameVisuals[asset.key] = img; resolve(); };
@@ -120,13 +140,39 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         }
 
-        // Priority load
-        await Promise.all(priorityImages.map(load));
+        // Re-prioritizable on demand: if the player changes race/gender in
+        // the character creator mid-load, that combo's two images jump the
+        // queue immediately rather than waiting for their turn in
+        // raceGenderImages/restImages further down.
+        function loadRaceGender(race, gender) {
+            const images = raceGenderImages[`${race}_${gender}`];
+            if (!images) return Promise.resolve();
+            return Promise.all(images.map(load));
+        }
+        window._preloadRaceGender = loadRaceGender;
+
+        function currentRaceGender() {
+            const raceSelect = document.getElementById('race-select');
+            const genderSelect = document.getElementById('gender-select');
+            return { race: raceSelect?.value || 'human', gender: genderSelect?.value || 'female' };
+        }
+
+        // Priority load: arena floor tiles, this room's furniture/NPCs, and
+        // whichever race/gender the creator defaults to (or is already set
+        // to, if this runs after the DOM's initial state is established).
+        await Promise.all([
+            ...priorityImages.map(load),
+            ...earlyRoomImages.map(load),
+            loadRaceGender(currentRaceGender().race, currentRaceGender().gender),
+        ]);
         console.log("Priority assets loaded");
         if (window.updateAppearancePreview) window.updateAppearancePreview(); // sprites just finished loading — refresh the (until-now-blank) preview
-        
-        // Background load
-        await Promise.all(otherImages.map(load));
+
+        // Background load: every other race/gender combo, then everything else.
+        await Promise.all([
+            ...Object.entries(raceGenderImages).flatMap(([key, images]) => images.map(load)),
+            ...restImages.map(load),
+        ]);
         console.log("All assets loaded");
 
         // Audio pre-fetch (minimal)
@@ -134,6 +180,21 @@ document.addEventListener("DOMContentLoaded", () => {
             console.log("Preloading audio buffers...");
         }
     }
+
+    // If the player changes race/gender while background assets are still
+    // loading, jump that combo to the front of the queue instead of waiting
+    // for its turn — keeps "whatever the character creator is currently set
+    // to make" accurate even after the initial preload snapshot.
+    ['race-select', 'gender-select'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('change', () => {
+            const raceSelect = document.getElementById('race-select');
+            const genderSelect = document.getElementById('gender-select');
+            if (window._preloadRaceGender && raceSelect && genderSelect) {
+                window._preloadRaceGender(raceSelect.value, genderSelect.value);
+            }
+        });
+    });
 
     // Menu/Cheat dropdowns rely on CSS :hover, which is unreliable on
     // trackpads/touch — also toggle them on click, closing any other open
