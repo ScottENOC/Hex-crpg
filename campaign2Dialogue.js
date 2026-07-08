@@ -405,6 +405,35 @@ window.npcDialogueTrees = {
             return;
         }
 
+        // The Vessel-Seeker's Crypt: only offered once Mirella's exposed —
+        // that's the real signal the player is actively hunting the
+        // necromancer, not just having stumbled onto a haunted house.
+        const huntQuest = window.questLog.find(q => q.id === 'necromancer_hunt');
+        if (discipleQuest?.status === 'completed' && !huntQuest) {
+            window.showDialogue(npc, "That disciple was one thread. Whatever she served isn't done — there are crypts north of here, past that ruined house, that no one's cleared out in a generation. If it's building itself a body that won't die, that's where it's doing it.", [
+                {
+                    label: "I'll find it and end this.",
+                    action: () => {
+                        window.questLog.push({
+                            id: 'necromancer_hunt', title: "The Vessel-Seeker's Crypt", giver: 'Captain Ilsa Rennick',
+                            status: 'active', description: "Find the necromancer's crypt north past the abandoned house and put an end to the ritual.", resolution: null
+                        });
+                        window.showMessage('Quest added: "The Vessel-Seeker\'s Crypt."');
+                    }
+                },
+                { label: "Not yet.", action: () => {} }
+            ]);
+            return;
+        }
+        if (huntQuest?.status === 'active') {
+            window.showDialogue(npc, "Careful going in. Whatever's down there has had a long time to get stronger.", [{ label: "I'll manage.", action: () => {} }]);
+            return;
+        }
+        if (huntQuest?.status === 'completed') {
+            window.showDialogue(npc, "You did what none of us could. Reddale won't forget it.", [{ label: "Just doing what's needed.", action: () => {} }]);
+            return;
+        }
+
         const quest = window.questLog.find(q => q.id === 'reddale_missing_watch');
 
         if (!quest) {

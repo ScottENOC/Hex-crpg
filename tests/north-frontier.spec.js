@@ -34,7 +34,11 @@ test.describe('the north road, Millbrook, and the abandoned house', () => {
         const result = await page.evaluate(() => {
             const cp = window.campaign2Landmarks.crossroads;
             const house = window.campaign2AbandonedHouseCenter;
-            const skeletons = window.entities.filter(e => e.name === 'Skeleton');
+            // Scoped to the house itself — the necromancer's crypt
+            // (buildNecromancerCrypt, campaign2World.js) adds its own
+            // skeletons elsewhere in the world, which a global name filter
+            // would double-count.
+            const skeletons = window.entities.filter(e => e.name === 'Skeleton' && window.distance(e.hex, house) <= 5);
             return {
                 distanceFromCrossroads: window.distance(cp, house),
                 floor: window.getTerrainAt(house.q, house.r).name,

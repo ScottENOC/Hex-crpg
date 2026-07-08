@@ -1056,6 +1056,7 @@ function startGameCore(isLoading = false) {
       basilisk: new Image(),
       minotaur: new Image(),
       revenantBase: new Image(),
+      skeletonBase: new Image(),
       wolf: new Image(),
       torch_lit: new Image(),
       fireplace: new Image(),
@@ -1254,6 +1255,7 @@ function startGameCore(isLoading = false) {
   visuals.basilisk.src = 'images/basilisk.svg';
   visuals.minotaur.src = 'images/minotaur.svg';
   visuals.revenantBase.src = 'images/revenant.svg';
+  visuals.skeletonBase.src = 'images/skeletonBase.svg';
   visuals.wolf.src = 'images/wolf.png';
   visuals.torch_lit.src = 'images/torch_lit.svg';
   visuals.fireplace.src = 'images/fireplace.svg';
@@ -1454,6 +1456,13 @@ const CHAR_CONFIG = {
     // Use backtick debug overlay to tune anchor dots once sprites are loaded.
     revenant_male:   { bodyW:1.85, bodyH:2.20, yOff:-0.18, baseKey:'revenantBase', hair:{ key:null }, armour:{ wMult:1.05, topShift:0 }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.35, y:0.64 }, offHand:{ x:0.59, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
     revenant_female: { bodyW:1.65, bodyH:1.96, yOff:-0.16, baseKey:'revenantBase', hair:{ key:null }, armour:{ wMult:1.05, topShift:0 }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.40, y:0.66 }, offHand:{ x:0.60, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
+    // Skeleton: a real limbed body (skeletonBase.svg, arms/legs distinct
+    // from the torso) instead of the old flat single-image sprite, so
+    // whatever it's randomly equipped with (assignRandomEquipment,
+    // monsters.js) actually layers on visibly — same anchor tuning as
+    // revenant (closest existing "bony humanoid" posture).
+    skeleton_male:   { bodyW:1.85, bodyH:2.20, yOff:-0.18, baseKey:'skeletonBase', hair:{ key:null }, armour:{ wMult:1.05, topShift:0 }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.35, y:0.64 }, offHand:{ x:0.59, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
+    skeleton_female: { bodyW:1.65, bodyH:1.96, yOff:-0.16, baseKey:'skeletonBase', hair:{ key:null }, armour:{ wMult:1.05, topShift:0 }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.40, y:0.66 }, offHand:{ x:0.60, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
 };
 
 // Cosmetic outfits for the 'clothes' equip slot (equipment.js) — fixed
@@ -2866,6 +2875,7 @@ function interactWithTileObject(q, r, player) {
         if (doorObj.readId === 'wizard_tower_tome' && window.readWizardTowerTome) { window.readWizardTowerTome(); return; }
         if (doorObj.readId === 'wizard_corruption_ledger' && window.readWizardCorruptionLedger) { window.readWizardCorruptionLedger(); return; }
         if (doorObj.readId === 'vampire_grave' && window.readVampireGrave) { window.readVampireGrave(); return; }
+        if (doorObj.readId === 'crypt_entrance_note' && window.readCryptEntranceNote) { window.readCryptEntranceNote(); return; }
         if (window.readAbandonedHouseJournal) window.readAbandonedHouseJournal();
         return;
     }
@@ -4874,7 +4884,11 @@ function handleLethalDamage(target, attacker) {
         target.inventory.forEach(i => window.player.inventory.push(i));
         // Killing the necromancer's undead minions is plain reputation, same
         // as fighting any other faction's forces — no bespoke flag needed.
-        if (target.necromancerMinion && window.factions?.necromancer_cult) {
+        // cryptMinion (the necromancer's crypt, see buildNecromancerCrypt)
+        // is a separate tag from necromancerMinion (the abandoned house)
+        // specifically so isAbandonedHouseCleared's global `.some()` check
+        // isn't accidentally gated behind clearing the whole crypt too.
+        if ((target.necromancerMinion || target.cryptMinion) && window.factions?.necromancer_cult) {
             window.adjustReputation(window.factions.necromancer_cult, -5, 5);
         }
     }
@@ -5329,6 +5343,24 @@ function checkCombatEnd() {
             window.currentTurnEntity = null;
             if (window.updateActionButtons) window.updateActionButtons();
             if (window.updateTurnIndicator) window.updateTurnIndicator();
+        }
+
+        // The Vessel-Seeker's Crypt: same "all enemies dead" gate every
+        // other Campaign 2 scripted fight resolves through (same known
+        // limitation as the border_war/Hollowmere branches above — any
+        // unrelated alive enemy elsewhere on the map blocks this check too,
+        // accepted for the same reason it's accepted there).
+        if (window.currentCampaign === "2") {
+            const huntQuest = (window.questLog || []).find(q => q.id === 'necromancer_hunt');
+            if (huntQuest?.status === 'active' && !window.entities.some(e => e.isNecromancerBoss && e.alive)) {
+                huntQuest.status = 'completed';
+                window.necromancerDefeated = true;
+                if (window.factions?.necromancer_cult) window.adjustReputation(window.factions.necromancer_cult, -40, 25);
+                if (window.adjustRegionStat) window.adjustRegionStat('hollowmere', 'security', 10);
+                window.party[0].gold = (window.party[0].gold || 0) + 100;
+                if (window.gainExp) window.gainExp(500);
+                window.showMessage("Malachar crumbles to ash and old bone — whatever it was building toward, it ends here. (+100 gold, quest complete: The Vessel-Seeker's Crypt)");
+            }
         }
 
         if (window.currentCampaign === "1" && window.isInArena) {

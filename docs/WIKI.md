@@ -21,6 +21,7 @@ Roads run out from the Hollowmere crossroads in four directions; distances are i
 | **Emberwood Grove** | Hidden, off-road past Emberlode | Druid clearing, spring, herb patches. Elder Nessa Wren. |
 | **Vampire Grave** | Hidden, off-road near Emberlode | Journal-only lead (ashen fang) for the vampire quest. |
 | **Abandoned House** | North road, partway to Millbrook | 3 dormant skeletons, necromancer journal, phylactery-shard altar. |
+| **The Vessel-Seeker's Crypt** | Hidden, off-road past the abandoned house | 3-room dungeon (entrance/ossuary/ritual chamber): skeletons, zombies, wraiths, culminating in the boss Malachar. |
 | **Millbrook** | North road, 3rd world-hex | One building; villager + the Border War quest-hook NPC. |
 | **Silverhart** | North road, 4th world-hex (past Millbrook) | Capital: palace (throne/barracks/council/wizard tower/queen's chambers), Diplomatic Quarter (4 embassies + plaza + cathedral + Ironbond office), abandoned manor, merchant district. |
 | **Reddale** | East road, 1st world-hex | Guardhouse, reeve's house, inn, Ironbond guildhouse, Baron's manor. |
@@ -36,7 +37,7 @@ Roads run out from the Hollowmere crossroads in four directions; distances are i
 | The Silverhart Kingdom | `silverhart_kingdom` | human | Queen Seraphine Corrin · Baron Corwin Aldervale · Chancellor Merric Vane · Court Wizard Thessaly · Captain Ilsa Rennick (Reddale) · Commander Ysolde Hart (Northwatch) · Reeve Aldous Finch (Reddale) · Elder Marta Wynfield (Hollowmere) |
 | The Ironbond Company | `ironbond_company` | human (merchant co.) | Sergeant Dray Coltayne (Hollowmere) · Guildmaster Petra Voss (Reddale) · Factor Willem Drass (Silverhart) · Investigator Renn Ashby |
 | The Skarn-tooth Tribe | `goblin_tribe` | goblin | Chief Skarnub · Lieutenant Nix Sharpear · Shaman Gralk the Bonecaster |
-| The Vessel-Seeker | `necromancer_cult` | undead | Mirella Thorn (disciple, cover identity as Reddale herbalist) — the necromancer itself stays unnamed/off-screen |
+| The Vessel-Seeker | `necromancer_cult` | undead | Mirella Thorn (disciple, cover identity as Reddale herbalist) · Malachar (the crypt boss — a lieutenant/vessel candidate, not the necromancer itself, which stays unnamed/off-screen) |
 | The Borderland Raiders | `orc_raiders` | orc | No named leadership — wilderness/siege faction behind the Border War |
 
 Note: two espionage quests (`spy_on_guild`, `spy_on_baron`) can end in a "double-cross"
@@ -123,6 +124,8 @@ Each entry: **id** — title — giver — prereq/trigger — outcome(s).
 ### Reddale arc
 - **reddale_missing_watch** — Captain Ilsa Rennick — no prereq — clear 2 goblins east of town.
 - **disciple_exposed** — Captain Ilsa Rennick — requires evidence found in Reddale — expose or bribe-silence Mirella Thorn (the hidden necromancer disciple).
+- **necromancer_hunt** — *The Vessel-Seeker's Crypt* — Captain Ilsa Rennick — gated on `disciple_exposed` being completed — find the hidden crypt past the abandoned house and clear it: an entrance chamber (skeletons), an ossuary (zombies + a wraith), and a ritual chamber where **Malachar** (a revenant-tier named boss) waits. Defeating him resolves the quest.
+  - **Outcome**: -40 `necromancer_cult` standing, +10 Hollowmere security, +100 gold, +500 exp, sets `necromancerDefeated`.
 - **eyes_on_border** — Captain Ilsa Rennick — gated on the goblin scout note read, or `goblin_threat` resolving `assault`/`betrayal`, and after the missing watch — investigate an orc scout (can be buried by bribing a guard).
 - **reddale_cut** — Reeve Aldous Finch — gated on Ironbond merchant influence ≥40 — decide how Reddale answers Ironbond's pressure.
 - **a_stone_for_nella** — Nella Brook — bring a blue gem.

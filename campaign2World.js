@@ -589,6 +589,98 @@ function isAbandonedHouseCleared() {
 }
 window.isAbandonedHouseCleared = isAbandonedHouseCleared;
 
+// The Vessel-Seeker's Crypt: pays off the abandoned house/altar breadcrumb
+// with an actual dungeon crawl, once the player is genuinely hunting the
+// necromancer rather than just having stumbled onto a haunted house (see
+// necromancer_hunt, campaign2Dialogue.js — Captain Rennick offers it once
+// Mirella Thorn is exposed). Three rooms connected by corridors, same
+// carveFlatRoom + sealRoom pattern the Silverhart palace's wings use: an
+// entrance chamber, an ossuary, and the ritual chamber where Malachar
+// himself waits. Hidden, off-road, well past the abandoned house — found
+// by exploration, same convention as the vampire grave/druid grove.
+// cryptMinion is a SEPARATE tag from necromancerMinion (the abandoned
+// house's skeletons) specifically so isAbandonedHouseCleared's global
+// `.some()` check isn't accidentally gated behind clearing the crypt too —
+// see the reputation-on-kill hook in handleLethalDamage (gameEngine.js),
+// which checks both tags.
+function buildNecromancerCrypt() {
+    const anchor = window.campaign2AbandonedHouseCenter;
+    if (!anchor) return;
+    const entranceCenter = { q: anchor.q + 18, r: anchor.r + 22 };
+
+    const entranceDoor = { q: entranceCenter.q - 3, r: entranceCenter.r };
+    const entranceRegion = carveFlatRoom(entranceCenter.q, entranceCenter.r, 3, 2, entranceDoor, 'Cave Floor');
+    window.interiorRegions.push(entranceRegion);
+
+    const ossuaryCenter = { q: entranceCenter.q + 8, r: entranceCenter.r };
+    const ossuaryDoor = { q: ossuaryCenter.q - 3, r: ossuaryCenter.r };
+    const ossuaryRegion = carveFlatRoom(ossuaryCenter.q, ossuaryCenter.r, 3, 3, ossuaryDoor, 'Cave Floor');
+    window.interiorRegions.push(ossuaryRegion);
+    for (let q = entranceCenter.q + 4; q < ossuaryDoor.q; q++) window.setTerrainAt(q, entranceCenter.r, 'Cave Floor');
+
+    const ritualCenter = { q: ossuaryCenter.q + 9, r: ossuaryCenter.r };
+    const ritualDoor = { q: ritualCenter.q - 3, r: ritualCenter.r };
+    const ritualRegion = carveFlatRoom(ritualCenter.q, ritualCenter.r, 4, 3, ritualDoor, 'Cave Floor');
+    window.interiorRegions.push(ritualRegion);
+    for (let q = ossuaryCenter.q + 4; q < ritualDoor.q; q++) window.setTerrainAt(q, ossuaryCenter.r, 'Cave Floor');
+
+    // Corridors are painted last (above), so re-stamp each room's true
+    // footprint now in case a corridor overshot into it.
+    sealRoom(entranceRegion);
+    sealRoom(ossuaryRegion);
+    sealRoom(ritualRegion);
+
+    window.campaign2NecromancerCryptCenter = entranceCenter;
+    window.campaign2NecromancerRitualCenter = ritualCenter;
+
+    // Entrance chamber: a light guard, same dormant-until-seen skeletons
+    // as the abandoned house.
+    [{ q: -1, r: -1 }, { q: 1, r: 1 }].forEach(off => {
+        const s = window.createMonster('skeleton', { q: entranceCenter.q + off.q, r: entranceCenter.r + off.r }, null, null, 'enemy');
+        s.cryptMinion = true;
+        window.entities.push(s);
+    });
+    window.tileObjects[`${entranceCenter.q},${entranceCenter.r - 1}`] = { type: 'journal', readId: 'crypt_entrance_note', lightRadius: 0 };
+
+    // The ossuary: tougher fare guarding the way to the ritual chamber.
+    [
+        { off: { q: -1, r: -1 }, type: 'zombie' },
+        { off: { q: 1, r: -1 }, type: 'zombie' },
+        { off: { q: 0, r: 1 }, type: 'wraith' },
+    ].forEach(({ off, type }) => {
+        const m = window.createMonster(type, { q: ossuaryCenter.q + off.q, r: ossuaryCenter.r + off.r }, null, null, 'enemy');
+        m.cryptMinion = true;
+        window.entities.push(m);
+    });
+
+    // Malachar himself: built off the revenant template (already the
+    // strongest undead humanoid in the roster, real sword/armor rig) then
+    // renamed and given custom skills — the same "reuse a base monster's
+    // art, override name/stats" pattern arena bosses already use, so no new
+    // art asset is needed for a one-off named boss.
+    const boss = window.createMonster('revenant', { q: ritualCenter.q, r: ritualCenter.r }, {
+        health: 8, meleeDamage: 6, sword_hit: 3, sword_dmg: 3, life_drain: 2, spectral_form: 1, heavy_armor_training: 1,
+    }, ['sword', 'heavy_armor'], 'enemy');
+    boss.name = 'Malachar, the Vessel-Seeker';
+    boss.hp = 90; boss.maxHp = 90;
+    boss.spriteBase = 'revenant';
+    boss.cryptMinion = true;
+    boss.isNecromancerBoss = true;
+    window.entities.push(boss);
+
+    const escort = window.createMonster('wraith', { q: ritualCenter.q - 1, r: ritualCenter.r + 1 }, null, null, 'enemy');
+    escort.cryptMinion = true;
+    window.entities.push(escort);
+}
+window.buildNecromancerCrypt = buildNecromancerCrypt;
+
+window.readCryptEntranceNote = function() {
+    window.showDialogue({ name: "A Warning, Carved in Bone", customImage: 'journal' },
+        "Scratched into the stone by a hand that clearly didn't have much time left: \"IT WANTS A BODY THAT WON'T DIE. IT ALREADY HAS THE SHARD. DON'T LET IT FINISH THE REST.\"",
+        [{ label: "...", action: () => {} }]
+    );
+};
+
 // Build order target: adds a bed once the place is cleared and paid for,
 // without touching the existing journal/altar tileObjects the necromancer
 // breadcrumb quest content still needs.
@@ -1689,6 +1781,7 @@ function setupVillageScene(forLoadOnly = false) {
     buildGoblinCamp(goblinCampWaypoint);
     buildPlayerCottagePlot(CP);
     buildAbandonedHouse(abandonedHouseWaypoint);
+    buildNecromancerCrypt();
     buildMillbrook(millbrookWaypoint);
     buildSilverhartPalace(northRoadEnd);
     buildEmberlode(westRoadEnd);

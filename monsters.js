@@ -508,21 +508,38 @@ function createMonster(type, hex, customSkills = null, customEquipment = null, s
         monster.race   = 'revenant';
         monster.gender = template.gender || 'male';
     }
+    if (type === 'skeleton') {
+        // Same reasoning as revenant above: race/gender routes it through
+        // the CHAR_CONFIG paperdoll renderer (drawPlayerCharacter,
+        // gameEngine.js) instead of the flat single-image sprite, so
+        // whatever weapon/armor it's equipped with (assignRandomEquipment,
+        // or a hand-picked loadout) actually shows up layered on the body.
+        monster.race   = 'skeleton';
+        monster.gender = template.gender || 'male';
+    }
 
-    // 1. Assign Equipment First
+    // 1. Assign Equipment First — 'random' now picks a whole combat
+    // archetype (weapon + matching skill priority) rather than just a
+    // weapon roll with no skills to back it up; see assignCombatBuild below.
     const equipment = customEquipment || template.defaultEquipment;
+    let pendingArchetype = null;
     if (equipment === 'random') {
-        assignRandomEquipment(monster);
+        pendingArchetype = COMBAT_ARCHETYPES[Math.floor(Math.random() * COMBAT_ARCHETYPES.length)];
+        equipToMonster(monster, pendingArchetype.weapon);
+        if (pendingArchetype.offhand) equipToMonster(monster, pendingArchetype.offhand);
     } else if (Array.isArray(equipment)) {
         equipment.forEach(itemId => equipToMonster(monster, itemId));
     }
 
     // 2. Assign Skills
     monster.skills = customSkills ? { ...customSkills } : { ...template.skills };
-    if (type === 'orc' && monster.equipped.weapon) {
-        monster.skills[`${monster.equipped.weapon}_hit`] = 1;
-    }
     monster.applySkills();
+
+    // A 'random'-equipment monster spends a few skill points down its
+    // archetype's ordered priority list (mostly in sequence, with a little
+    // randomness) — done after applySkills() so it doesn't get clobbered by
+    // the {...template.skills} reset above.
+    if (pendingArchetype) spendArchetypePoints(monster, pendingArchetype, 3);
 
     // 3. Special: Rider initialization
     if (template.isRider && template.mountType) {
@@ -587,19 +604,60 @@ function equipToMonster(monster, itemId) {
     }
 }
 
-function assignRandomEquipment(monster) {
-    const lootRoll = Math.floor(Math.random() * 8);
-    switch(lootRoll) {
-        case 0: equipToMonster(monster, 'sword'); break;
-        case 1: equipToMonster(monster, 'spear'); break;
-        case 2: equipToMonster(monster, 'sword'); equipToMonster(monster, 'wooden_shield'); break;
-        case 3: equipToMonster(monster, 'spear'); equipToMonster(monster, 'wooden_shield'); break;
-        case 4: equipToMonster(monster, 'bow'); equipToMonster(monster, 'dagger'); break;
-        case 5: equipToMonster(monster, 'bow'); equipToMonster(monster, 'sword'); break;
-        case 6: equipToMonster(monster, 'bow'); break;
-        case 7: equipToMonster(monster, 'axe'); break;
+// A "combat build" pairs one weapon (+ optional offhand) with an ordered
+// list of skill picks that actually make sense for it — so a randomly
+// equipped goblin/orc/skeleton reads as a coherent fighter (an axe-wielder
+// only ever invests in axe_hit/axe_dmg, never sword_hit) instead of a
+// random weapon roll with no matching skill behind it. `${weapon}_hit`/
+// `${weapon}_dmg`/`${weapon}_parry` are generic, weapon-id-keyed lookups
+// (see resolveAttack/tryAttack, gameEngine.js) — not declared in skills.js
+// at all — so any weapon id here "just works" with no new skill defs
+// needed. A couple of entries reuse real skills.js trees (stealth_rogue,
+// sneak_attack_dmg, shield_proficiency) for extra flavor.
+const COMBAT_ARCHETYPES = [
+    { id: 'sword_duelist', weapon: 'sword', skills: ['sword_hit', 'fastMovement', 'sword_dmg', 'initiativeBonus', 'quickRecovery', 'health'] },
+    { id: 'sword_shield_defender', weapon: 'sword', offhand: 'wooden_shield', skills: ['shield_proficiency', 'sword_hit', 'health', 'sword_dmg', 'sword_parry', 'health'] },
+    { id: 'spear_reach', weapon: 'spear', skills: ['spear_hit', 'spear_dmg', 'initiativeBonus', 'health', 'meleeDamage'] },
+    { id: 'spear_shield_phalanx', weapon: 'spear', offhand: 'wooden_shield', skills: ['shield_proficiency', 'spear_hit', 'health', 'spear_dmg', 'health'] },
+    { id: 'axe_berserker', weapon: 'axe', skills: ['axe_hit', 'meleeDamage', 'axe_dmg', 'health', 'fastMovement'] },
+    { id: 'bow_ranger', weapon: 'bow', skills: ['bow_hit', 'bow_dmg', 'fastMovement', 'health', 'initiativeBonus'] },
+    { id: 'dagger_rogue', weapon: 'dagger', skills: ['dagger_hit', 'stealth_rogue', 'dagger_dmg', 'fastMovement', 'sneak_attack_dmg'] },
+];
+window.COMBAT_ARCHETYPES = COMBAT_ARCHETYPES;
+
+// Spends `points` skill ranks down an archetype's ordered priority list —
+// mostly in sequence (an agile swordsman keeps investing in swordplay/speed
+// before branching out), but each point has a 25% chance to jump back to a
+// random earlier pick instead of advancing, so two monsters sharing the
+// same archetype don't come out perfectly identical.
+function spendArchetypePoints(monster, archetype, points) {
+    monster.combatArchetype = archetype.id;
+    let cursor = 0;
+    for (let i = 0; i < points; i++) {
+        const idx = (cursor > 0 && Math.random() < 0.25) ? Math.floor(Math.random() * cursor) : cursor;
+        const pick = archetype.skills[Math.min(idx, archetype.skills.length - 1)];
+        monster.skills[pick] = (monster.skills[pick] || 0) + 1;
+        const skill = window.skills[pick];
+        if (skill && skill.apply) skill.apply(monster);
+        if (cursor < archetype.skills.length - 1) cursor++;
     }
+    monster.hp = monster.maxHp; // top off after any maxHp-raising skill (e.g. 'health')
 }
+window.spendArchetypePoints = spendArchetypePoints;
+
+// Public entry point for callers that want to hand-pick (or randomly roll)
+// a full weapon+skills build outside of createMonster's own 'random'
+// equipment path — e.g. giving a hand-placed monster a scaled build.
+function assignCombatBuild(monster, points, archetypeId = null) {
+    const archetype = archetypeId
+        ? COMBAT_ARCHETYPES.find(a => a.id === archetypeId)
+        : COMBAT_ARCHETYPES[Math.floor(Math.random() * COMBAT_ARCHETYPES.length)];
+    if (!archetype) return;
+    equipToMonster(monster, archetype.weapon);
+    if (archetype.offhand) equipToMonster(monster, archetype.offhand);
+    spendArchetypePoints(monster, archetype, points);
+}
+window.assignCombatBuild = assignCombatBuild;
 
 window.monsterTemplates = monsterTemplates;
 window.createMonster = createMonster;
