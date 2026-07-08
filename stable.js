@@ -13,6 +13,11 @@ window.HORSE_COAT_PRESETS = {
     white:    { name: 'White',    hue: 0,  light: 1.9,  sat: 0.05 },
     chestnut: { name: 'Chestnut', hue: 12, light: 0.6,  sat: 1.4 },
     gray:     { name: 'Gray',     hue: 0,  light: 1.0,  sat: 0.1 },
+    // Not offered by the stable — the Bone Trader's alternative to a living
+    // horse for a lich-path player (see buySkeletonHorse below and
+    // bone_trader, campaign2Dialogue.js). Same recolor mechanism, a
+    // deliberately bleached/bony hue rather than any natural coat.
+    skeleton: { name: 'Skeleton', hue: 0,  light: 1.6,  sat: 0.02 },
 };
 
 window.HORSE_PRICE = 150;
@@ -54,3 +59,32 @@ function buyHorse(coatKey) {
     return true;
 }
 window.buyHorse = buyHorse;
+
+// A skeleton horse isn't bought — it's raised. A lich player either
+// sacrifices their own living horse (this ritual does the killing itself;
+// there's no ordinary way to attack your own mount through the normal
+// combat path) or raises one already dead — an enemy's fallen mount found
+// on the battlefield, or their own horse's corpse from an earlier kill.
+// Wired to the "Raise Undead" action button (ui.js) via act.type
+// 'raise_undead' (gameEngine.js).
+function raiseSkeletonHorse(horseEntity) {
+    if (!window.playerIsLich) { window.showMessage("You don't have the will to command the dead — not yet."); return false; }
+    if (!horseEntity || horseEntity.name !== 'Horse') { window.showMessage("There's nothing here to raise."); return false; }
+    if (horseEntity.coatPreset === 'skeleton') { window.showMessage("It's already risen."); return false; }
+    if (!partyHasRiding()) { window.showMessage("Riding a horse takes the skill whether it's breathing or not."); return false; }
+
+    if (horseEntity.alive && horseEntity.rider) {
+        horseEntity.rider.riding = null;
+        horseEntity.rider = null;
+    }
+    horseEntity.alive = true;
+    horseEntity.hp = horseEntity.maxHp;
+    horseEntity.side = 'player';
+    horseEntity.coatPreset = 'skeleton';
+    horseEntity.undead = true;
+    window.showMessage("Bone knits over bone. What was flesh rises again, patient as the grave.");
+    if (window.drawMap) window.drawMap();
+    if (window.renderEntities) window.renderEntities();
+    return true;
+}
+window.raiseSkeletonHorse = raiseSkeletonHorse;

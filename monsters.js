@@ -385,6 +385,34 @@ const monsterTemplates = {
             'stealth_rogue': 1
         },
         defaultEquipment: ['bow', 'spear', 'wooden_shield']
+    },
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // isSkirmisher: hit-and-run — aiProcess (gameEngine.js) special-cases
+    // this flag to back off one hex the moment something closes to melee
+    // range, rather than standing and trading like every other ranged
+    // monster, then just shoots normally once it's back out to bow range.
+    // Deliberately NOT a chase-forever kiter (that's the "too annoying"
+    // failure mode) — it only reacts to being adjacent, so a player who
+    // closes distance in one move corners it in one more.
+    'horse_archer': {
+        name: 'Horse Archer',
+        color: '#8a6d3b',
+        hp: 12,
+        expValue: 220,
+        riderSize: 2,
+        isRider: true,
+        mountType: 'horse',
+        isSkirmisher: true,
+        preferredTerrain: 'Grass',
+        skills: {
+            'riding': 1,
+            'bow_hit': 2,
+            'bow_dmg': 1,
+            'health': 1,
+            'fastMovement': 1
+        },
+        defaultEquipment: ['bow']
     }
 };
 
@@ -481,6 +509,7 @@ function createMonster(type, hex, customSkills = null, customEquipment = null, s
     monster.behaviorType = template.behaviorType || 'wander';
     monster.isFlying = template.isFlying || false;
     monster.dragonSizeTier = template.dragonSizeTier || 0;
+    monster.isSkirmisher = template.isSkirmisher || false;
 
     if (template.extraHexes) monster.extraHexes = template.extraHexes;
     if (template.createdSpells) monster.createdSpells = template.createdSpells.map(s => ({ ...s }));

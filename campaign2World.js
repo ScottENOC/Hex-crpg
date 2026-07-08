@@ -443,7 +443,15 @@ function buildGoblinCamp(roadEnd) {
     };
     const lieutenant = buildGoblinNPC({ ...window.campaign2GoblinLieutenant, hex: { q: center.q - 2, r: center.r } });
     const shaman = buildGoblinNPC({ ...window.campaign2GoblinShaman, hex: { q: center.q + 2, r: center.r } });
-    window.entities.push(chief, lieutenant, shaman);
+    // The tribe's own trader — only open for business once genuinely
+    // allied (goblin_trader's dialogue tree gates it); placed unconditionally
+    // like every other camp NPC, same "gating happens in dialogue, not
+    // placement" convention as the Bone Trader (buildLichBarrow).
+    const trader = buildGoblinNPC({
+        name: 'Grondle', title: 'Camp Trader', monsterType: 'goblin',
+        hex: { q: center.q - 1, r: center.r + 2 }, side: 'neutral', dialogueId: 'goblin_trader', color: '#5a7a3a'
+    });
+    window.entities.push(chief, lieutenant, shaman, trader);
 
     const guardHexes = [{ q: center.q - 3, r: center.r + 1 }, { q: center.q + 3, r: center.r + 1 }, { q: center.q, r: center.r + 1 }];
     // Guards mostly hold their post, but drift off to the fire, a hut (food/
@@ -726,6 +734,13 @@ function buildLichBarrow() {
     });
     window.tileObjects[`${anteCenter.q},${anteCenter.r - 2}`] = { type: 'journal', readId: 'lich_phylactery_core', lightRadius: 0 };
 
+    // The Bone Trader: villain-path alternative to the human merchants that
+    // refuse a lich player (see isShunnedByHumanCommerce, factions.js) —
+    // reachable by anyone who clears the antechamber, not gated further.
+    if (window.campaign2BoneTrader) {
+        window.entities.push(window.buildNPC({ ...window.campaign2BoneTrader, hex: { q: anteCenter.q + 1, r: anteCenter.r + 2 } }));
+    }
+
     // Corvin Ashgrave himself — same "reuse a base monster's art, override
     // name/stats" pattern Malachar used, scaled up a tier since he's the
     // real necromancer, not a lieutenant.
@@ -767,6 +782,7 @@ window.readLichPhylacteryCoreNote = function() {
                 label: "Bind it to yourself instead.",
                 action: () => {
                     window.lichPhylacteryBound = true;
+                    window.playerIsLich = true;
                     if (window.grantSkillRank) {
                         window.grantSkillRank(window.player, 'lich_grave_chill');
                         window.grantSkillRank(window.player, 'lich_withering_touch');
@@ -775,6 +791,7 @@ window.readLichPhylacteryCoreNote = function() {
                         if (window.factions[id]) window.adjustReputation(window.factions[id], -20, 15);
                     });
                     window.showMessage("You take the shard instead of breaking it. Something of Ashgrave's undeath settles into you, cold and patient.");
+                    if (window.triggerLichCompanionFallout) window.triggerLichCompanionFallout();
                 }
             },
             { label: "Leave it for now.", action: () => {} }

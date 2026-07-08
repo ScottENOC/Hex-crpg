@@ -114,6 +114,21 @@ function tickFactionAgendas(deltaSeconds) {
     }
 }
 
+// Villain-path commerce gating: human-kingdom merchants (Silverhart's
+// stable/clothier/magic dealer, the Hollowmere general store, the
+// mercenary broker) refuse an overtly evil player outright rather than
+// silently charging them anyway — but each has a matching alternative
+// (the goblin camp's own trader once allied, the Bone Trader once you've
+// gone down the lich path) so neither path locks the player out of gear,
+// mounts, or hired muscle entirely, just redirects where they get it.
+window.isGoblinAligned = function() {
+    const q = (window.questLog || []).find(x => x.id === 'goblin_threat');
+    return !!(window.playerAidingGreenskins || q?.resolution === 'goblin_alliance');
+};
+window.isShunnedByHumanCommerce = function() {
+    return !!(window.playerIsLich || window.isGoblinAligned());
+};
+
 window.seedStanding = seedStanding;
 window.adjustReputation = adjustReputation;
 window.seedFactionStandings = seedFactionStandings;

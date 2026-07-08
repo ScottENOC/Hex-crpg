@@ -198,6 +198,10 @@ window.npcDialogueTrees = {
         ]);
     },
     silverhart_stablehand: (npc) => {
+        if (window.isShunnedByHumanCommerce && window.isShunnedByHumanCommerce()) {
+            window.showDialogue(npc, "I know what you are. Get away from my horses.", [{ label: "...", action: () => {} }]);
+            return;
+        }
         if (!window.partyHasRiding()) {
             window.showDialogue(npc, "Fine animals, every one — but they're wasted on someone who's never learned to sit a saddle. Come back once you've picked up Riding.", [
                 { label: "I'll be back.", action: () => {} }
@@ -214,12 +218,20 @@ window.npcDialogueTrees = {
         window.showDialogue(npc, `${window.HORSE_PRICE} gold buys you a horse — pick your color.`, colorOptions);
     },
     silverhart_clothier: (npc) => {
+        if (window.isShunnedByHumanCommerce && window.isShunnedByHumanCommerce()) {
+            window.showDialogue(npc, "Out. Now. Before you frighten the other customers.", [{ label: "...", action: () => {} }]);
+            return;
+        }
         window.showDialogue(npc, "Something for court, or something plainer for the road? Either way, it's all just for show — doesn't stop a blade any better than what you're already wearing.", [
             { label: "Let me see what you have.", action: () => window.openShop({ itemIds: window.campaign2ClothierItems, mounts: false }) },
             { label: "Not today.", action: () => {} }
         ]);
     },
     silverhart_magic_dealer: (npc) => {
+        if (window.isShunnedByHumanCommerce && window.isShunnedByHumanCommerce()) {
+            window.showDialogue(npc, "Not to you. Not for any price.", [{ label: "...", action: () => {} }]);
+            return;
+        }
         window.showDialogue(npc, "Every piece here is genuine, and priced like it. Careful browsing — some of these will empty a purse fast.", [
             { label: "Show me your wares.", action: () => window.openShop({ itemIds: window.campaign2MagicShopItems, mounts: false }) },
             { label: "Just looking.", action: () => {} }
@@ -230,6 +242,10 @@ window.npcDialogueTrees = {
         if (ironbondQuest && ironbondQuest.status === 'active' && !ironbondQuest.pitched) {
             ironbondQuest.pitched = true;
             window.showMessage("You put in a word for the Ironbond Company with Wick Hallow.");
+        }
+        if (window.isShunnedByHumanCommerce && window.isShunnedByHumanCommerce()) {
+            window.showDialogue(npc, "I've heard what you've become. Take your coin somewhere else.", [{ label: "...", action: () => {} }]);
+            return;
         }
         window.showDialogue(npc, "Welcome to Hallow's Goods. Soldier-grade gear, fair prices — what's left of my stock, anyway.", [
             { label: "Let me see your wares.", action: () => window.openShop({ itemIds: window.hollowmereStoreItems, stock: window.hollowmereStoreStock, mounts: false }) },
@@ -248,6 +264,17 @@ window.npcDialogueTrees = {
                     window.showMessage("Hollowmere's stores are a little fuller. (Prosperity rises.)");
                 }
             },
+            { label: "Just looking.", action: () => {} }
+        ]);
+    },
+    // The Bone Trader (campaign2World.js's buildLichBarrow): the villain
+    // path's alternative to the human merchants above, open to anyone who
+    // reaches the barrow's antechamber — not further gated, since the
+    // point is that a lich/goblin-aligned player still has somewhere to
+    // buy gear and a mount, not that this one spot is exclusive to them.
+    bone_trader: (npc) => {
+        window.showDialogue(npc, "Everything here came off someone who isn't using it anymore. Coin's coin, and I don't ask questions — you shouldn't either.", [
+            { label: "Let me see your wares.", action: () => window.openShop({ itemIds: window.campaign2BoneTraderItems, mounts: false }) },
             { label: "Just looking.", action: () => {} }
         ]);
     },
@@ -1063,6 +1090,19 @@ window.npcDialogueTrees = {
         window.showDialogue(npc, "Please... cut me loose. I came out here to deal with this goblin problem myself, and, well — here we are. Whatever you decide to do about them, I intend to see them gone from this land. I'll owe you a debt either way.", [
             { label: "I'll free you now.", action: () => window.rescuePaladin() },
             { label: "Not yet.", action: () => {} }
+        ]);
+    },
+    // The goblin camp's own trader — the villain/greenskin-alliance path's
+    // alternative to the human merchants isShunnedByHumanCommerce locks
+    // out, open only once the tribe is actually allied (not just tolerated).
+    goblin_trader: (npc) => {
+        if (!window.isGoblinAligned || !window.isGoblinAligned()) {
+            window.showDialogue(npc, "Nothing for you here, human.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "Ha! Ally's coin spends same as anyone's. Look, take, pay.", [
+            { label: "Let me see your wares.", action: () => window.openShop({ itemIds: window.campaign2GoblinTraderItems, mounts: false }) },
+            { label: "Just looking.", action: () => {} }
         ]);
     },
     chief_skarnub: (npc) => {
@@ -1997,6 +2037,10 @@ window.npcDialogueTrees = {
         ]);
     },
     silverhart_mercenary_broker: (npc) => {
+        if (window.isShunnedByHumanCommerce && window.isShunnedByHumanCommerce()) {
+            window.showDialogue(npc, "No one I know will march with you. Not for any price.", [{ label: "...", action: () => {} }]);
+            return;
+        }
         const player = window.party[0];
         const cost = 100;
         const roomLine = window.party.length < window.MAX_ACTIVE_PARTY
@@ -2303,6 +2347,7 @@ function parleyWithEnemy(target) {
                     const lichQuest = (window.questLog || []).find(q => q.id === 'necromancer_lichdom');
                     if (lichQuest) { lichQuest.status = 'completed'; lichQuest.resolution = 'allied'; }
                     window.necromancerAllied = true;
+                    window.playerIsLich = true;
                     if (window.grantSkillRank) window.grantSkillRank(window.player, 'lich_deathless_flesh');
                     if (window.factions?.necromancer_cult) window.adjustReputation(window.factions.necromancer_cult, 40, 30);
                     ['silverhart_kingdom', 'ironbond_company'].forEach(id => {
@@ -2313,6 +2358,7 @@ function parleyWithEnemy(target) {
                     target.hp = 0;
                     window.showMessage("\"Good,\" Ashgrave says, and something ancient and patient settles into you. \"Then let's begin properly.\"");
                     if (window.checkCombatEnd) window.checkCombatEnd();
+                    if (window.triggerLichCompanionFallout) window.triggerLichCompanionFallout();
                 }
             },
             { label: "No — this ends here.", action: () => {} }
@@ -2899,6 +2945,38 @@ function handleCompanionDeparture(name) {
     if (window.updatePartyTabs) window.updatePartyTabs();
 }
 window.handleCompanionDeparture = handleCompanionDeparture;
+
+// The lich-path fallout: everyone but Wren Talbot walks away the moment
+// you actually commit to lichdom (window.playerIsLich, set from either
+// readLichPhylacteryCoreNote's "bind it to yourself" or parleyWithEnemy's
+// "join you" against Ashgrave). Wren doesn't leave — she's the one
+// exception, and instead of departing she becomes a vampire, so a lich
+// playthrough isn't left with an empty party. Runs once (lichFalloutTriggered
+// guard) since either commitment path could otherwise fire it twice.
+function triggerLichCompanionFallout() {
+    if (window.lichFalloutTriggered) return;
+    window.lichFalloutTriggered = true;
+
+    const departing = window.party.slice(1).filter(p => p.name !== 'Wren Talbot');
+    departing.forEach(p => {
+        window.showMessage(`${p.name} looks at you like they've never seen you before. "I didn't sign up for this," they say, and mean it.`);
+        window.handleCompanionDeparture(p.name);
+    });
+
+    const wren = window.party.find(p => p.name === 'Wren Talbot');
+    if (wren) {
+        wren.isVampire = true;
+        wren.skills = wren.skills || {};
+        wren.skills.life_drain = (wren.skills.life_drain || 0) + 2;
+        const wrenEntity = window.entities.find(e => e.name === 'Wren Talbot');
+        if (wrenEntity) {
+            wrenEntity.isVampire = true;
+            wrenEntity.lifeDrainOnMeleeHit = (wrenEntity.lifeDrainOnMeleeHit || 0) + 4;
+        }
+        window.showMessage("\"Well,\" Wren says, studying her own too-sharp teeth in a puddle's reflection, \"I suppose someone has to keep you company. Guess I'm not getting any older from here.\" (Wren Talbot has become a vampire.)");
+    }
+}
+window.triggerLichCompanionFallout = triggerLichCompanionFallout;
 
 // Very slow attitude decay while the goblin problem sits unresolved and
 // Ser Aldric has already joined — "leaving due to inaction should be very

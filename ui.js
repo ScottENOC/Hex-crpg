@@ -658,6 +658,21 @@ function updateActionButtons() {
             buttonsDiv.appendChild(offhandBtn);
         }
 
+        if (window.playerIsLich) {
+            const raiseBtn = document.createElement('button');
+            raiseBtn.innerText = "Raise Undead";
+            raiseBtn.style.backgroundColor = "#4a4a3a";
+            raiseBtn.disabled = isCasting;
+            const raiseAction = () => {
+                window.playerAction = { type: 'raise_undead' };
+                showMessage("Click an adjacent corpse (or your own horse) to raise it.");
+                updateActionButtons();
+            };
+            raiseBtn.onclick = raiseAction;
+            raiseBtn.ontouchstart = (e) => { e.preventDefault(); raiseAction(); };
+            buttonsDiv.appendChild(raiseBtn);
+        }
+
         if (inCombat) {
             const forceAttackBtn = document.createElement('button');
             forceAttackBtn.innerText = "Attack Target";
@@ -1996,6 +2011,40 @@ function openShop(options) {
     };
     horseDiv.appendChild(buyHorseBtn);
     buyList.appendChild(horseDiv);
+
+    // Skeleton Horse — a straightforward gold-bought mount here (the arena
+    // shop, unlike Campaign 2, has no lich-path/raise-the-dead concept to
+    // gate this behind), reusing the same HORSE_COAT_PRESETS.skeleton
+    // recolor Campaign 2's Bone Trader/raiseSkeletonHorse mechanic uses.
+    const skeletonHorseDiv = document.createElement("div");
+    skeletonHorseDiv.style.display = "flex";
+    skeletonHorseDiv.style.justifyContent = "space-between";
+    skeletonHorseDiv.style.marginBottom = "5px";
+    skeletonHorseDiv.innerHTML = `<span>Skeleton Horse (100g)</span>`;
+    const buySkeletonHorseBtn = document.createElement("button");
+    buySkeletonHorseBtn.innerText = "Buy";
+    buySkeletonHorseBtn.style.fontSize = "0.8em";
+    buySkeletonHorseBtn.disabled = player.gold < 100;
+    buySkeletonHorseBtn.onclick = () => {
+        player.gold -= 100;
+        const pEnt = window.entities.find(e => e.name === player.name);
+        const neighbors = window.getNeighbors(pEnt.hex.q, pEnt.hex.r);
+        const h = neighbors.find(n => !window.entities.some(e => e.alive && e.getAllHexes().some(oh => oh.q === n.q && oh.r === n.r)) && window.getTerrainAt(n.q, n.r).name !== 'Water');
+        if (h) {
+            const horse = window.createMonster('horse', h, null, null, 'player');
+            horse.coatPreset = 'skeleton';
+            horse.undead = true;
+            window.entities.push(horse);
+            window.drawMap();
+            window.renderEntities();
+            window.showMessage("Skeleton Horse purchased and joined the party!");
+        } else {
+            window.showMessage("No space for a horse!");
+        }
+        openShop(options); // Refresh
+    };
+    skeletonHorseDiv.appendChild(buySkeletonHorseBtn);
+    buyList.appendChild(skeletonHorseDiv);
 
     // Add Boar to shop
     const boarDiv = document.createElement("div");

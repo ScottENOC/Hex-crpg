@@ -502,6 +502,25 @@ window.campaign2MagicDealer = {
     side: 'neutral', factionId: null, color: '#3a5a7a',
     dialogueId: 'silverhart_magic_dealer'
 };
+// The Bone Trader: the necromancer_cult's own equivalent of a general
+// store, placed in the crypt/barrow rather than any human settlement — the
+// villain-path player's alternative once human merchants refuse them (see
+// isShunnedByHumanCommerce, factions.js). Neutral side/no factionId like
+// the other shop NPCs — the gating happens in the dialogue tree, not here.
+window.campaign2BoneTrader = {
+    name: 'The Bone Trader', title: 'Grave-Goods Merchant',
+    race: 'human', gender: 'male',
+    classLevels: [], skillPicks: [], equipment: [],
+    side: 'neutral', factionId: null, color: '#4a4a3a',
+    dialogueId: 'bone_trader'
+};
+window.campaign2BoneTraderItems = ['sword', 'axe', 'heavy_armor', 'nasal_helm', 'wooden_shield', 'potion_health'];
+
+// The goblin camp's own trader, offered only once the tribe is genuinely
+// allied (goblin_threat resolved as goblin_alliance) — chief_skarnub's
+// dialogue tree gates it, this is just the inventory.
+window.campaign2GoblinTraderItems = ['club', 'axe', 'spear', 'light_armor', 'wooden_shield', 'potion_health'];
+
 window.campaign2MagicShopItems = [
     'sword_arrow_deflection', 'glowing_ring', 'orcbane_pendant', 'wolfward_charm',
     'undying_locket', 'silvertongue_ring', 'stormcaller_spear', 'nightowl_bow',

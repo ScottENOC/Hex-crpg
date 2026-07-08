@@ -16,7 +16,8 @@ const ORE_HUES = { ore_silver: 220, ore_gold: 48, gem_red: 0, gem_blue: 210, gem
 // hand-picked flavor list that could never match.
 const ARENA_MONSTER_POOL = ['goblin', 'orc', 'skeleton', 'zombie', 'imp', 'spider', 'troll',
     'wraith', 'basilisk', 'harpy', 'minotaur', 'revenant', 'wolf_rider_goblin', 'elite_goblin',
-    'wolf', 'boar', 'tiger'];
+    'wolf', 'boar', 'tiger', 'horse_archer'];
+window.ARENA_MONSTER_POOL = ARENA_MONSTER_POOL;
 const ARENA_BEAST_TYPES = ['wolf', 'boar', 'tiger', 'dragon_young', 'dragon_adult', 'dragon_ancient'];
 
 // One-line flavor for the lobby's dialogue-only "waiting combatant" and
@@ -3667,7 +3668,15 @@ function aiProcess(entity) {
 
     let hasLOE = target ? entity.getAllHexes().some(h => window.hasLineOfEffect(h, target.hex)) : false;
 
-    if (target && dist <= attackRange && hasLOE) {
+    // Skirmish AI (horse archers, etc.): a bow's range comfortably covers
+    // dist===1 too, so without this override a skirmisher adjacent to its
+    // target would just take the ordinary "in range, attack" branch below
+    // like any other archer. Forcing it into the movement branch instead is
+    // what makes it back off rather than trade blows at melee range — but
+    // only while actually adjacent, so it can't chain-kite indefinitely.
+    const isSkirmishRetreat = entity.isSkirmisher && target && dist <= 1 && attackRange > 1;
+
+    if (target && dist <= attackRange && hasLOE && !isSkirmishRetreat) {
         if (entity.skills['quarterstaff_trip'] && entity.timePoints >= 5 && Math.random() > 0.5) {
             const hitChance = 50 + entity.toHitMelee - target.passiveDodge;
             if (Math.random() * 100 < hitChance) {
@@ -3683,7 +3692,7 @@ function aiProcess(entity) {
     } else {
         const neighbors = window.getNeighbors(entity.hex.q, entity.hex.r);
         const bestHex = neighbors.map(h => {
-            let s = -window.distance(h, huntTargetHex);
+            let s = isSkirmishRetreat ? window.distance(h, huntTargetHex) : -window.distance(h, huntTargetHex);
             const t = window.getTerrainAt(h.q, h.r);
             // Was "+= 5" — a sign flip that made a Wall hex score BETTER than
             // an open one at the same distance, so chasing enemies picked
@@ -3995,6 +4004,20 @@ function handleClick(e){
         } else if (act.type === 'parley') {
             if (target && target.alive && target.side === 'enemy' && window.distance(player.hex, clickedHex) <= 3) {
                 if (window.parleyWithEnemy) window.parleyWithEnemy(target);
+            }
+            window.playerAction = null;
+            window.updateActionButtons();
+            return;
+        } else if (act.type === 'raise_undead') {
+            // getEntityAtHex only ever returns the living (see its e.alive
+            // filter, gameEngine.js:94) — a dead horse corpse (an enemy's
+            // fallen mount, or the player's own already sacrificed) has to
+            // be found directly instead, since `target` would be null for it.
+            const toRaise = target || window.entities.find(e => e.name === 'Horse' && !e.alive && e.hex.q === clickedHex.q && e.hex.r === clickedHex.r);
+            if (toRaise && window.distance(player.hex, clickedHex) <= 1 && window.raiseSkeletonHorse) {
+                window.raiseSkeletonHorse(toRaise);
+            } else {
+                window.showMessage("There's nothing here to raise.");
             }
             window.playerAction = null;
             window.updateActionButtons();

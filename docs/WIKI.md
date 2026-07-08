@@ -22,6 +22,7 @@ Roads run out from the Hollowmere crossroads in four directions; distances are i
 | **Vampire Grave** | Hidden, off-road near Emberlode | Journal-only lead (ashen fang) for the vampire quest. |
 | **Abandoned House** | North road, partway to Millbrook | 3 dormant skeletons, necromancer journal, phylactery-shard altar. |
 | **The Vessel-Seeker's Crypt** | Hidden, off-road past the abandoned house | 3-room dungeon (entrance/ossuary/ritual chamber): skeletons, zombies, wraiths, culminating in the boss Malachar. |
+| **The Barrow of Corvin Ashgrave** | Hidden, off-road past the crypt | 2-room dungeon (antechamber/sanctum): the phylactery core, Ashgrave himself, and — reachable regardless of alignment — The Bone Trader. |
 | **Millbrook** | North road, 3rd world-hex | One building; villager + the Border War quest-hook NPC. |
 | **Silverhart** | North road, 4th world-hex (past Millbrook) | Capital: palace (throne/barracks/council/wizard tower/queen's chambers), Diplomatic Quarter (4 embassies + plaza + cathedral + Ironbond office), abandoned manor, merchant district. |
 | **Reddale** | East road, 1st world-hex | Guardhouse, reeve's house, inn, Ironbond guildhouse, Baron's manor. |
@@ -151,6 +152,44 @@ Each entry: **id** — title — giver — prereq/trigger — outcome(s).
   - **Outcome**: the druids' trust, and a hint — she does **not** hand over the unicorn. Starts **unicorn_tracking**.
 - **unicorn_tracking** — *The Silver Trail* — Elder Nessa Wren (hook) — the unicorn wanders a fixed loop in the wilderness southwest of the grove (`campaign2UnicornPatrolPath`). Finding it means reading its tracks: fixed `unicorn_track` tile objects along the loop, whose visibility and click-detail (direction, then direction+age) scale with **Knowledge: Nature rank** (now ranks 1-3, not a flat yes/no — rank 1 reveals only ~5% of tracks with no detail, rank 3 reveals ~70% with full direction+age). Reaching and approaching the actual unicorn (`wild_unicorn` dialogue) completes the quest.
   - **Outcome**: grants `learn_unicorn_summon` — a skill (never purchasable with skill points) letting a **unicorn** answer as your one permanent Nature animal companion. Not a party member/mount — purely a Nature-summon unlock.
+
+---
+
+## Villain-path consequences: commerce, companions, mounts
+
+Two ways to end up an overt villain — a real goblin alliance (`goblin_threat` resolved
+`goblin_alliance`, or `window.playerAidingGreenskins`), or committing to lichdom
+(`window.playerIsLich`, set by binding or allying with Ashgrave's phylactery, see
+above). Neither locks the player out of the game — each has a matching alternative.
+
+- **`window.isShunnedByHumanCommerce()`** (`factions.js`) — true for either path.
+  Silverhart's stablehand/clothier/magic dealer, the Hollowmere general store
+  (Wick Hallow), and the Silverhart mercenary broker all refuse outright.
+- **The Bone Trader** — a necromancer_cult-flavored merchant in the barrow's
+  antechamber (`campaign2BoneTraderItems`), open to *anyone* who reaches it, not
+  gated further — the lich path's alternative general store.
+- **Grondle, the goblin camp's trader** (`campaign2GoblinTraderItems`) — refuses
+  until `goblin_threat` actually resolves as `goblin_alliance`; sells freely after.
+- **Lich-path companion fallout** (`triggerLichCompanionFallout`, fires once, from
+  either lichdom-commitment path) — every other companion deserts; **Wren Talbot**
+  is the one exception and becomes a vampire instead (`isVampire`, bonus
+  `life_drain`) rather than leaving.
+- **Skeleton horses** — never bought. A lich player (`window.playerIsLich` + Riding
+  skill) uses the **Raise Undead** action button (visible only to a lich) to either
+  sacrifice-and-raise their own living horse, or raise any dead horse found in the
+  world (a fallen enemy's mount). See `raiseSkeletonHorse`, `stable.js`.
+- **Campaign 1 (arena)**: no lich/goblin-alignment concept there, so its shop just
+  sells a Skeleton Horse outright alongside the regular mounts (100g, `ui.js`).
+
+## Horse Archer (arena monster + skirmish AI)
+
+`horse_archer` (`monsters.js`) — a mounted bow-user in `ARENA_MONSTER_POOL`, tagged
+`isSkirmisher: true`. `aiProcess` (gameEngine.js) special-cases that flag: the moment
+something closes to melee range (adjacent), it backs off one hex instead of trading
+blows like every other ranged monster, then just shoots normally once it's out to
+bow range again. Deliberately **reactive-only** — it only checks current adjacency
+each turn, so it can't chain-kite forever; a player who keeps closing distance
+corners it in one more step, same as any other cornered target.
 
 ---
 
