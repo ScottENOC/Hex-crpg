@@ -1,6 +1,34 @@
 const { test, expect } = require('@playwright/test');
 const { createCharacter } = require('./helpers.js');
 
+test.describe('Silverhart Palace: throne room rear door to the queen\'s chambers', () => {
+    test('the rear door sits on real floor terrain, not an untouched Wall hex behind a door graphic', async ({ page }) => {
+        await createCharacter(page);
+        const result = await page.evaluate(() => {
+            const throneCenter = window.campaign2PalaceThroneCenter;
+            const rearDoor = { q: throneCenter.q, r: throneCenter.r - 5 };
+            return {
+                terrain: window.getTerrainAt(rearDoor.q, rearDoor.r).name,
+                tileObj: window.tileObjects[`${rearDoor.q},${rearDoor.r}`]?.type,
+            };
+        });
+        expect(result.terrain).not.toBe('Wall');
+        expect(result.tileObj).toBe('door_open');
+    });
+
+    test('the corridor between the throne room and the bedroom is fully walkable (no gap of impassable Wall)', async ({ page }) => {
+        await createCharacter(page);
+        const result = await page.evaluate(() => {
+            const throneCenter = window.campaign2PalaceThroneCenter;
+            const bedroomCenter = window.campaign2PalaceBedroomCenter;
+            const rows = [];
+            for (let r = bedroomCenter.r + 2; r <= throneCenter.r - 5; r++) rows.push(r);
+            return rows.map(r => window.getTerrainAt(throneCenter.q, r).name);
+        });
+        result.forEach(name => expect(name).not.toBe('Wall'));
+    });
+});
+
 test.describe('Silverhart Palace: hexagonal curtain wall, gate, towers, wall guards', () => {
     test('the wall forms a true hex-distance ring (hexagon) around the whole complex', async ({ page }) => {
         await createCharacter(page);

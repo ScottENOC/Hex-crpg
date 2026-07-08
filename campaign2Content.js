@@ -502,6 +502,19 @@ window.campaign2MagicDealer = {
     side: 'neutral', factionId: null, color: '#3a5a7a',
     dialogueId: 'silverhart_magic_dealer'
 };
+
+// Fourth Merchant Quarter storefront: ordinary adventuring gear, the same
+// general-store role Wick Hallow's shop plays in Hollowmere, so the
+// capital's own district doesn't skew entirely toward the pricier clothier/
+// magic-dealer end.
+window.campaign2SilverhartGeneralGoods = {
+    name: 'Perrin Vance', title: 'General Goods',
+    race: 'human', gender: 'male',
+    classLevels: [], skillPicks: [], equipment: [],
+    side: 'neutral', factionId: null, color: '#5a4a2a',
+    dialogueId: 'silverhart_general_goods'
+};
+window.campaign2SilverhartGeneralGoodsItems = ['club', 'sword', 'axe', 'spear', 'dagger', 'light_armor', 'medium_armor', 'wooden_shield', 'nasal_helm', 'torch', 'potion_health'];
 // The Bone Trader: the necromancer_cult's own equivalent of a general
 // store, placed in the crypt/barrow rather than any human settlement — the
 // villain-path player's alternative once human merchants refuse them (see

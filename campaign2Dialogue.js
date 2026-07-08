@@ -269,6 +269,16 @@ window.npcDialogueTrees = {
             { label: "Just looking.", action: () => {} }
         ]);
     },
+    silverhart_general_goods: (npc) => {
+        if (window.isShunnedByHumanCommerce && window.isShunnedByHumanCommerce()) {
+            window.showDialogue(npc, "Not to you.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "Ordinary gear, honest prices — swords, shields, a decent helm, nothing fancy. The fancy stuff's a few doors down.", [
+            { label: "Let me see your wares.", action: () => window.openShop({ itemIds: window.campaign2SilverhartGeneralGoodsItems, mounts: false }) },
+            { label: "Just looking.", action: () => {} }
+        ]);
+    },
     wick_hallow: (npc) => {
         const ironbondQuest = window.questLog && window.questLog.find(q => q.id === 'ironbond_pitch');
         if (ironbondQuest && ironbondQuest.status === 'active' && !ironbondQuest.pitched) {
