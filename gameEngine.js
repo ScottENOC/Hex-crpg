@@ -2635,19 +2635,23 @@ function processRealTimeStep(entity, overage = 0) {
     }
 }
 
-// An 'enemy'-side entity more than this many hexes from every party member
-// cannot meaningfully reach the fight for many turns regardless of how the
-// initiative order plays out, so there's no reason to spend TP-bookkeeping
-// or turn-eligibility work on it every time runTickInternal runs — same
-// "not worth simulating yet" reasoning as ACTIVE_SIM_RADIUS (hexMap.js)
-// applies to ambient NPCs, just applied to combat specifically instead of
-// exploration. A 2,300-entity stress test (200 armed villagers plus ten
-// full star forts of 200 each, all turned hostile) measured this as the
-// single largest driver of combat-tick cost once more than a handful of
-// entities exist anywhere in the loaded world, not just nearby ones.
+// An 'enemy'-side entity that hasn't yet engaged (aiState !== 'combat') and
+// is more than this many hexes from every party member cannot meaningfully
+// join the fight for many turns, so there's no reason to spend TP-
+// bookkeeping or turn-eligibility work on it every time runTickInternal
+// runs — same "not worth simulating yet" reasoning as ACTIVE_SIM_RADIUS
+// (hexMap.js) applies to ambient NPCs, just applied to combat instead of
+// exploration. Once flagged aiState:'combat' an entity is an active
+// participant of the current fight and stays fully simulated regardless of
+// distance until it dies, flees, or the encounter resolves — a fleeing
+// enemy, a knockback effect, or the party sprinting away mid-fight must
+// never "pause" someone who's already engaged just because they crossed
+// this radius; the radius only ever gates *whether something not yet
+// involved is worth bothering with*, never an existing combatant.
 const COMBAT_DORMANT_RADIUS = 40;
 function isCombatDormant(e, partyHexes) {
     if (e.side !== 'enemy') return false;
+    if (e.aiState === 'combat') return false; // already engaged — never dormant, regardless of distance
     for (const ph of partyHexes) {
         if (window.distance(ph, e.hex) <= COMBAT_DORMANT_RADIUS) return false;
     }
