@@ -783,6 +783,7 @@ window.readLichPhylacteryCoreNote = function() {
                 action: () => {
                     window.lichPhylacteryBound = true;
                     window.playerIsLich = true;
+                    window.lichBecameKnownAt = window.worldSeconds;
                     if (window.grantSkillRank) {
                         window.grantSkillRank(window.player, 'lich_grave_chill');
                         window.grantSkillRank(window.player, 'lich_withering_touch');

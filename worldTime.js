@@ -121,6 +121,13 @@ function updateTime(delta) {
             window.checkOrcRaiderEncounter(p, delta);
         }
 
+        // The kingdom hunting a known lich — escalates the longer
+        // playerIsLich has been true (see checkLichHunterEncounter,
+        // campaign2Dialogue.js).
+        if (window.checkLichHunterEncounter && p) {
+            window.checkLichHunterEncounter(p, delta);
+        }
+
         // The abandoned house's skeletons are placed dormant at world-build
         // time (waking them all up immediately would make window.isInCombat
         // true for the whole game) and only aggro once the player actually

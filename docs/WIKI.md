@@ -131,6 +131,17 @@ Each entry: **id** — title — giver — prereq/trigger — outcome(s).
   - **Destroy the core** (`resolution: 'destroyed'`): -50 necromancer_cult standing, +15 Hollowmere security, +200 gold, +900 exp.
   - **Bind the core to yourself** (`resolution: 'claimed'`): same rewards, plus ranks in `lich_grave_chill`/`lich_withering_touch` and a further Silverhart/Ironbond standing hit — the seed of a future villain playthrough.
   - **Parley with Ashgrave mid-fight and ally instead** (`resolution: 'allied'`): skips killing him — grants `lich_deathless_flesh`, tanks Silverhart/Ironbond standing, raises necromancer_cult standing, sets `necromancerAllied`.
+
+### The kingdom reacts (post-lichdom)
+Once `window.playerIsLich` (either the `claimed` or `allied` resolution above),
+`checkLichHunterEncounter` (campaign2Dialogue.js, ticked from worldTime.js, same
+"well outside the village" gating as orc raiders) risks a hunter party the longer
+you've been a known lich (`lichBecameKnownAt`): local militia (day 0+) → trained
+knights (day 3+) → a paladin order's strike team (day 10+), via `LICH_HUNTER_TIERS`.
+**Explicit follow-up, not yet built**: the actual endgame payoff — a siege/invasion
+of Silverhart for the `claimed` (self-made lich) and `allied` (Ashgrave's apprentice)
+resolutions, meant to diverge into genuinely different final quests rather than one
+shared ending.
 - **eyes_on_border** — Captain Ilsa Rennick — gated on the goblin scout note read, or `goblin_threat` resolving `assault`/`betrayal`, and after the missing watch — investigate an orc scout (can be buried by bribing a guard).
 - **reddale_cut** — Reeve Aldous Finch — gated on Ironbond merchant influence ≥40 — decide how Reddale answers Ironbond's pressure.
 - **a_stone_for_nella** — Nella Brook — bring a blue gem.

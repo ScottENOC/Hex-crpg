@@ -2380,6 +2380,7 @@ function parleyWithEnemy(target) {
                     if (lichQuest) { lichQuest.status = 'completed'; lichQuest.resolution = 'allied'; }
                     window.necromancerAllied = true;
                     window.playerIsLich = true;
+                    window.lichBecameKnownAt = window.worldSeconds;
                     if (window.grantSkillRank) window.grantSkillRank(window.player, 'lich_deathless_flesh');
                     if (window.factions?.necromancer_cult) window.adjustReputation(window.factions.necromancer_cult, 40, 30);
                     ['silverhart_kingdom', 'ironbond_company'].forEach(id => {
@@ -2775,6 +2776,78 @@ function checkOrcRaiderEncounter(playerEntity, delta) {
     }
 }
 window.checkOrcRaiderEncounter = checkOrcRaiderEncounter;
+
+// The kingdom notices what you've become: once playerIsLich, wandering
+// wilderness (same "well past the village" gating as orc raiders) risks
+// a hunter party sent after you. Escalates in both frequency and strength
+// with how long you've been a known lich (lichBecameKnownAt, set the same
+// moment playerIsLich is set — see readLichPhylacteryCoreNote,
+// campaign2World.js, and parleyWithEnemy's ally branch above) rather than
+// being a flat, forever-identical encounter.
+window.lichHunterEncounterAccum = 0;
+const LICH_HUNTER_TIERS = [
+    { minDays: 0,  label: 'a band of local militia',        classLevels: ['fighter'],           chance: 0.06 },
+    { minDays: 3,  label: 'a company of trained knights',   classLevels: ['fighter', 'fighter'], chance: 0.10 },
+    { minDays: 10, label: "a paladin order's strike team",  classLevels: ['fighter', 'fighter', 'paladin'], chance: 0.16 },
+];
+function lichHunterTierFor(daysKnown) {
+    let tier = LICH_HUNTER_TIERS[0];
+    for (const t of LICH_HUNTER_TIERS) if (daysKnown >= t.minDays) tier = t;
+    return tier;
+}
+window.lichHunterTierFor = lichHunterTierFor;
+
+function checkLichHunterEncounter(playerEntity, delta) {
+    if (!playerEntity || window.isInCombat || !window.playerIsLich) return;
+    const cp = window.campaign2Landmarks?.crossroads || { q: 0, r: 0 };
+    if (window.distance(playerEntity.hex, cp) < 35) return; // village/farmland range — same threshold random wilderness encounters use
+
+    window.lichHunterEncounterAccum += delta;
+    const checkInterval = 200;
+    if (window.lichHunterEncounterAccum < checkInterval) return;
+    window.lichHunterEncounterAccum = 0;
+
+    const daysKnown = ((window.worldSeconds - (window.lichBecameKnownAt || window.worldSeconds)) / (24 * 3600));
+    const tier = lichHunterTierFor(daysKnown);
+    if (Math.random() >= tier.chance) return;
+
+    const count = 2 + Math.floor(Math.random() * 2); // 2-3, same small-band scale as orc raiders
+    let spawned = 0;
+    for (let n = 0; n < count; n++) {
+        let spot = null;
+        for (let attempt = 0; attempt < 12 && !spot; attempt++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 8 + Math.floor(Math.random() * 5);
+            const candidate = window.hexRound(
+                playerEntity.hex.q + Math.round(Math.cos(angle) * dist),
+                playerEntity.hex.r + Math.round(Math.sin(angle) * dist)
+            );
+            if (window.getEntityAtHex(candidate.q, candidate.r)) continue;
+            if (window.getTerrainAt(candidate.q, candidate.r).name === 'Water') continue;
+            if (window.isVisibleToPlayer(candidate)) continue;
+            spot = candidate;
+        }
+        if (!spot) continue;
+        const hunter = window.buildNPC({
+            name: `Silverhart Hunter`, race: 'human', gender: Math.random() < 0.5 ? 'male' : 'female',
+            classLevels: tier.classLevels, skillPicks: ['sword_hit', 'sword_dmg', 'health'],
+            equipment: ['sword', 'heavy_armor', 'wooden_shield'], hex: spot, side: 'enemy'
+        });
+        hunter.isNPC = false; // a fight, not a dialogue target — same convention as orc raiders
+        hunter.aiState = 'idle';
+        hunter.behaviorType = 'patrol';
+        hunter.lichHunterParty = true;
+        hunter.isRandomEncounter = true;
+        window.entities.push(hunter);
+        spawned++;
+    }
+    if (spawned > 0) {
+        window.showMessage(`Word has spread of what you've become. ${tier.label} moves against you.`);
+        window.drawMap();
+        window.renderEntities();
+    }
+}
+window.checkLichHunterEncounter = checkLichHunterEncounter;
 
 // --- Border War: the payoff of readGoblinScoutNote's foreshadowing (see
 // campaign2World.js comment there) — the Skarn-tooth goblins were scouting
