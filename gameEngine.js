@@ -2635,16 +2635,37 @@ function processRealTimeStep(entity, overage = 0) {
     }
 }
 
+// An 'enemy'-side entity more than this many hexes from every party member
+// cannot meaningfully reach the fight for many turns regardless of how the
+// initiative order plays out, so there's no reason to spend TP-bookkeeping
+// or turn-eligibility work on it every time runTickInternal runs — same
+// "not worth simulating yet" reasoning as ACTIVE_SIM_RADIUS (hexMap.js)
+// applies to ambient NPCs, just applied to combat specifically instead of
+// exploration. A 2,300-entity stress test (200 armed villagers plus ten
+// full star forts of 200 each, all turned hostile) measured this as the
+// single largest driver of combat-tick cost once more than a handful of
+// entities exist anywhere in the loaded world, not just nearby ones.
+const COMBAT_DORMANT_RADIUS = 40;
+function isCombatDormant(e, partyHexes) {
+    if (e.side !== 'enemy') return false;
+    for (const ph of partyHexes) {
+        if (window.distance(ph, e.hex) <= COMBAT_DORMANT_RADIUS) return false;
+    }
+    return true;
+}
+
 function runTickInternal(isSleepCycle = false, skipUI = false, tickMultiplier = 1.0) {
     if (window.multiplayer && window.multiplayer.roomCode && !window.multiplayer.isHost) {
         return;
     }
     if (window.currentTurnEntity && !isSleepCycle) return;
 
+    const _partyHexesForTurnOrder = collectPartyHexes();
+
     // Only scan for whose turn it is when actually in combat — out of combat
     // this full-array filter ran every frame for nothing.
     const readyEntities = (window.isInCombat && !isSleepCycle)
-        ? window.entities.filter(e => e.timePoints >= 100 && e.alive && !e.unconscious && !e.rider)
+        ? window.entities.filter(e => e.timePoints >= 100 && e.alive && !e.unconscious && !e.rider && !isCombatDormant(e, _partyHexesForTurnOrder))
         : [];
 
     // Only trigger turn-based logic if in combat
@@ -2669,15 +2690,19 @@ function runTickInternal(isSleepCycle = false, skipUI = false, tickMultiplier = 
         // superposition — skipped entirely here. Their TP/regen bookkeeping
         // is meaningless off-screen (out of combat, capped TP, no poison/
         // spells) and resumes the moment they re-enter the active radius.
-        const _partyHexes = collectPartyHexes();
-        // In combat (or during sleep fast-forward) every combatant needs TP
-        // granted / effects ticked, so iterate all (combat is small and near
-        // the player). Out of combat, only entities not at full rest need
-        // anything — iterate the small restless set instead of all ~80+
-        // world entities, so a full-health, unpoisoned capital costs nothing.
-        const workingSet = (window.isInCombat || isSleepCycle)
+        const _partyHexes = _partyHexesForTurnOrder;
+        // In combat (or during sleep fast-forward) every *reachable*
+        // combatant needs TP granted / effects ticked — "reachable" now
+        // excludes isCombatDormant entities (far-away 'enemy' side, see
+        // above) too, not just every entity unconditionally. Out of combat,
+        // only entities not at full rest need anything — iterate the small
+        // restless set instead of all ~80+ world entities, so a full-health,
+        // unpoisoned capital costs nothing.
+        const workingSet = isSleepCycle
             ? window.entities
-            : (window._restlessEntities || rebuildRestlessSet());
+            : window.isInCombat
+                ? window.entities.filter(e => !isCombatDormant(e, _partyHexes))
+                : (window._restlessEntities || rebuildRestlessSet());
         workingSet.forEach(e => {
             if (e.alive) {
                 if (isDormantAmbientNpc(e, _partyHexes)) return;
