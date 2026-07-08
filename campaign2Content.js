@@ -515,6 +515,18 @@ window.campaign2SilverhartGeneralGoods = {
     dialogueId: 'silverhart_general_goods'
 };
 window.campaign2SilverhartGeneralGoodsItems = ['club', 'sword', 'axe', 'spear', 'dagger', 'light_armor', 'medium_armor', 'wooden_shield', 'nasal_helm', 'torch', 'potion_health'];
+
+// The Warrens' fence: a Thieves' Guild contact based in the slums outside
+// the city wall, no faction-shunning gate (unlike the human merchants) —
+// available to everyone, villain-path or not.
+window.campaign2ThievesGuildFence = {
+    name: 'Tessa Nightshade', title: 'Fence',
+    race: 'human', gender: 'female',
+    classLevels: [], skillPicks: [], equipment: [],
+    side: 'neutral', factionId: null, color: '#2a2a2a',
+    dialogueId: 'thieves_guild_fence'
+};
+window.campaign2ThievesGuildFenceItems = ['dagger', 'light_armor', 'potion_health'];
 // The Bone Trader: the necromancer_cult's own equivalent of a general
 // store, placed in the crypt/barrow rather than any human settlement — the
 // villain-path player's alternative once human merchants refuse them (see

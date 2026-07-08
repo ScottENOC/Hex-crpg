@@ -279,6 +279,12 @@ window.npcDialogueTrees = {
             { label: "Just looking.", action: () => {} }
         ]);
     },
+    thieves_guild_fence: (npc) => {
+        window.showDialogue(npc, "Keep your voice down. I don't ask where coin comes from, and you don't ask where my stock comes from.", [
+            { label: "Show me what you've got.", action: () => window.openShop({ itemIds: window.campaign2ThievesGuildFenceItems, mounts: false }) },
+            { label: "Just passing through.", action: () => {} }
+        ]);
+    },
     wick_hallow: (npc) => {
         const ironbondQuest = window.questLog && window.questLog.find(q => q.id === 'ironbond_pitch');
         if (ironbondQuest && ironbondQuest.status === 'active' && !ironbondQuest.pitched) {

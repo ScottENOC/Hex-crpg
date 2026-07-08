@@ -1204,6 +1204,216 @@ function buildSilverhartPalace(roadEnd) {
         }
     }
 
+
+    // A real ring road around the curtain wall — a second hex-distance
+    // circle (same technique as WALL_RADIUS above), a few hexes further
+    // out, giving the merchant/noble districts an actual street to front
+    // onto instead of the old single-file corridor that ran nearly 60-80
+    // hexes off into the distance. Connects to the existing entrance road
+    // at the gate.
+    const RING_ROAD_RADIUS = WALL_RADIUS + 7; // 30 — enough clearance to feel like a real town green, not a moat
+    for (let q = -RING_ROAD_RADIUS; q <= RING_ROAD_RADIUS; q++) {
+        for (let r = -RING_ROAD_RADIUS; r <= RING_ROAD_RADIUS; r++) {
+            if (window.distance({ q: 0, r: 0 }, { q, r }) === RING_ROAD_RADIUS) {
+                window.setTerrainAt(throneCenter.q + q, throneCenter.r + r, 'Path');
+            }
+        }
+    }
+    // Extend the entrance road from the gate out to meet the ring.
+    for (let r = throneCenter.r + WALL_RADIUS; r <= throneCenter.r + RING_ROAD_RADIUS; r++) window.setTerrainAt(throneCenter.q, r, 'Path');
+    window.campaign2SilverhartRingRoadRadius = RING_ROAD_RADIUS;
+
+    // The city, thought of as concentric rings around the palace: the
+    // "nice" districts (Merchant, Noble) hug the curtain wall directly on
+    // its west/east faces — as close to the palace as the wall allows —
+    // rather than sitting off a single corridor. Real short street grids
+    // (two parallel streets + a cross-alley, which also happens to cross
+    // the ring road automatically, connecting the whole thing), buildings
+    // carved with carveFlatRoom (a level-topped rectangle) rather than
+    // carveBuilding (a slanted rhombus — the old shape complaint).
+    const DISTRICT_SPAN = 9; // rows north/south of throneCenter.r each district's streets run
+
+    // --- Merchant Quarter (hugging the west wall) ---
+    const merchantNearQ = throneCenter.q - 27; // just outside the wall (radius 23)
+    const merchantFarQ = throneCenter.q - 40;  // past the ring road (radius 30)
+    for (let r = throneCenter.r - DISTRICT_SPAN; r <= throneCenter.r + DISTRICT_SPAN; r++) {
+        window.setTerrainAt(merchantNearQ, r, 'Path');
+        window.setTerrainAt(merchantFarQ, r, 'Path');
+    }
+    for (let q = merchantFarQ; q <= throneCenter.q - RING_ROAD_RADIUS; q++) window.setTerrainAt(q, throneCenter.r, 'Path'); // cross-alley out to the ring road — NOT all the way to throneCenter.q, which would cut straight through the throne room's own floor
+
+    const stableCenter = { q: merchantNearQ - 4, r: throneCenter.r - 6 };
+    const stableDoor = { q: stableCenter.q + 4, r: stableCenter.r };
+    window.interiorRegions.push(carveFlatRoom(stableCenter.q, stableCenter.r, 4, 3, stableDoor, 'Wood Floor'));
+    window.campaign2SilverhartStableCenter = stableCenter;
+    window.tileObjects[`${stableCenter.q},${stableCenter.r}`] = { type: 'fence_h' }; // stalls/pen flavor
+    if (window.campaign2Stablehand) {
+        window.entities.push(window.buildNPC({ ...window.campaign2Stablehand, hex: { q: stableCenter.q, r: stableCenter.r - 1 } }));
+    }
+
+    const generalGoodsCenter = { q: merchantNearQ - 3, r: throneCenter.r + 6 };
+    const generalGoodsDoor = { q: generalGoodsCenter.q + 3, r: generalGoodsCenter.r };
+    window.interiorRegions.push(carveFlatRoom(generalGoodsCenter.q, generalGoodsCenter.r, 3, 2, generalGoodsDoor, 'Wood Floor'));
+    window.campaign2SilverhartGeneralGoodsCenter = generalGoodsCenter;
+    if (window.campaign2SilverhartGeneralGoods) {
+        window.entities.push(window.buildNPC({ ...window.campaign2SilverhartGeneralGoods, hex: { q: generalGoodsCenter.q, r: generalGoodsCenter.r + 1 } }));
+    }
+
+    const clothierCenter = { q: merchantFarQ + 3, r: throneCenter.r - 6 };
+    const clothierDoor = { q: clothierCenter.q - 3, r: clothierCenter.r };
+    window.interiorRegions.push(carveFlatRoom(clothierCenter.q, clothierCenter.r, 3, 2, clothierDoor, 'Wood Floor'));
+    if (window.campaign2Clothier) {
+        window.entities.push(window.buildNPC({ ...window.campaign2Clothier, hex: { q: clothierCenter.q, r: clothierCenter.r + 1 } }));
+    }
+
+    const magicShopCenter = { q: merchantFarQ + 3, r: throneCenter.r + 6 };
+    const magicShopDoor = { q: magicShopCenter.q - 3, r: magicShopCenter.r };
+    window.interiorRegions.push(carveFlatRoom(magicShopCenter.q, magicShopCenter.r, 3, 2, magicShopDoor, 'Wood Floor'));
+    if (window.campaign2MagicDealer) {
+        window.entities.push(window.buildNPC({ ...window.campaign2MagicDealer, hex: { q: magicShopCenter.q, r: magicShopCenter.r + 1 } }));
+    }
+    fillEnclosedPockets(merchantFarQ - 5, merchantNearQ + 5, throneCenter.r - DISTRICT_SPAN - 2, throneCenter.r + DISTRICT_SPAN + 2);
+    // Re-stamp the two streets: a building's own wall ring can land right on
+    // top of the street column it fronts (carved after the street was first
+    // painted), silently splitting the road into disconnected fragments —
+    // repaint last so the street always wins.
+    for (let r = throneCenter.r - DISTRICT_SPAN; r <= throneCenter.r + DISTRICT_SPAN; r++) {
+        window.setTerrainAt(merchantNearQ, r, 'Path');
+        window.setTerrainAt(merchantFarQ, r, 'Path');
+    }
+    for (let q = merchantFarQ; q <= throneCenter.q - RING_ROAD_RADIUS; q++) window.setTerrainAt(q, throneCenter.r, 'Path');
+
+    // --- Noble Quarter (hugging the east wall, mirrored) ---
+    const nobleNearQ = throneCenter.q + 27;
+    const nobleFarQ = throneCenter.q + 40;
+    for (let r = throneCenter.r - DISTRICT_SPAN; r <= throneCenter.r + DISTRICT_SPAN; r++) {
+        window.setTerrainAt(nobleNearQ, r, 'Path');
+        window.setTerrainAt(nobleFarQ, r, 'Path');
+    }
+    for (let q = throneCenter.q + RING_ROAD_RADIUS; q <= nobleFarQ; q++) window.setTerrainAt(q, throneCenter.r, 'Path'); // cross-alley out to the ring road — NOT all the way to throneCenter.q, which would cut straight through the throne room's own floor
+
+    // The Corstane family's abandoned townhouse — grantable by the Queen
+    // once reputation with the crown is high enough (see the
+    // silverhart_queen dialogue tree), distinct from the free cottage plot
+    // (built) and the abandoned house on the north road (cleared by force).
+    const manorCenter = { q: nobleNearQ + 4, r: throneCenter.r - 6 };
+    const manorDoor = { q: manorCenter.q - 4, r: manorCenter.r };
+    window.interiorRegions.push(carveFlatRoom(manorCenter.q, manorCenter.r, 4, 3, manorDoor, 'Wood Floor'));
+    window.campaign2SilverhartManorCenter = manorCenter;
+    if (window.campaign2NobleCorstane) {
+        window.entities.push(window.buildNPC({ ...window.campaign2NobleCorstane, hex: { q: manorCenter.q, r: manorCenter.r + 1 } }));
+    }
+
+    const builderHouseCenter = { q: nobleNearQ + 3, r: throneCenter.r + 6 };
+    const builderHouseDoor = { q: builderHouseCenter.q - 3, r: builderHouseCenter.r };
+    window.interiorRegions.push(carveFlatRoom(builderHouseCenter.q, builderHouseCenter.r, 3, 2, builderHouseDoor, 'Wood Floor'));
+    if (window.campaign2SilverhartBuilder) {
+        window.entities.push(window.buildNPC({ ...window.campaign2SilverhartBuilder, hex: { q: builderHouseCenter.q, r: builderHouseCenter.r + 1 } }));
+    }
+
+    const neighborHouseCenter = { q: nobleFarQ - 3, r: throneCenter.r - 6 };
+    const neighborHouseDoor = { q: neighborHouseCenter.q + 3, r: neighborHouseCenter.r };
+    window.interiorRegions.push(carveFlatRoom(neighborHouseCenter.q, neighborHouseCenter.r, 3, 2, neighborHouseDoor, 'Wood Floor'));
+    window.campaign2SilverhartNeighborHouseCenter = neighborHouseCenter;
+    if (window.campaign2ManorNeighbor) {
+        window.entities.push(window.buildNPC({ ...window.campaign2ManorNeighbor, hex: { q: neighborHouseCenter.q, r: neighborHouseCenter.r + 1 } }));
+    }
+    fillEnclosedPockets(nobleNearQ - 5, nobleFarQ + 5, throneCenter.r - DISTRICT_SPAN - 2, throneCenter.r + DISTRICT_SPAN + 2);
+    // Re-stamp the two streets for the same reason as the Merchant Quarter above.
+    for (let r = throneCenter.r - DISTRICT_SPAN; r <= throneCenter.r + DISTRICT_SPAN; r++) {
+        window.setTerrainAt(nobleNearQ, r, 'Path');
+        window.setTerrainAt(nobleFarQ, r, 'Path');
+    }
+    for (let q = throneCenter.q + RING_ROAD_RADIUS; q <= nobleFarQ; q++) window.setTerrainAt(q, throneCenter.r, 'Path');
+
+    // --- Middle-class ring: a handful of plain houses further out, past
+    // the inner ring road, cheaper than anything hugging the wall. A
+    // second ring road (same hex-distance-circle technique) at radius 45,
+    // connected to the inner one by extending the south entrance road. ---
+    const MIDDLE_RING_RADIUS = 45;
+    for (let q = -MIDDLE_RING_RADIUS; q <= MIDDLE_RING_RADIUS; q++) {
+        for (let r = -MIDDLE_RING_RADIUS; r <= MIDDLE_RING_RADIUS; r++) {
+            if (window.distance({ q: 0, r: 0 }, { q, r }) === MIDDLE_RING_RADIUS) {
+                window.setTerrainAt(throneCenter.q + q, throneCenter.r + r, 'Path');
+            }
+        }
+    }
+    for (let r = throneCenter.r + RING_ROAD_RADIUS; r <= throneCenter.r + MIDDLE_RING_RADIUS; r++) window.setTerrainAt(throneCenter.q, r, 'Path');
+    window.campaign2SilverhartMiddleRingRadius = MIDDLE_RING_RADIUS;
+
+    // 6 plain houses spaced around the middle ring's own hexagon corners
+    // (the same 6 axial offsets the palace wall's towers use), each a
+    // short spur off the ring itself.
+    const MIDDLE_RING_CORNERS = [
+        { q: MIDDLE_RING_RADIUS, r: 0 }, { q: MIDDLE_RING_RADIUS, r: -MIDDLE_RING_RADIUS }, { q: 0, r: -MIDDLE_RING_RADIUS },
+        { q: -MIDDLE_RING_RADIUS, r: 0 }, { q: -MIDDLE_RING_RADIUS, r: MIDDLE_RING_RADIUS }, { q: 0, r: MIDDLE_RING_RADIUS },
+    ];
+    window.campaign2SilverhartMiddleRingHouses = [];
+    MIDDLE_RING_CORNERS.forEach((offset, i) => {
+        const ringHex = { q: throneCenter.q + offset.q, r: throneCenter.r + offset.r };
+        const inward = { q: Math.round(offset.q * 0.9), r: Math.round(offset.r * 0.9) };
+        const houseCenter = { q: throneCenter.q + inward.q, r: throneCenter.r + inward.r };
+        const doorHex = { q: ringHex.q, r: ringHex.r }; // door faces straight back at the ring
+        for (let step = 0; step < 3; step++) { // short spur connecting the house to the ring
+            const t = step / 3;
+            window.setTerrainAt(Math.round(houseCenter.q + (ringHex.q - houseCenter.q) * t), Math.round(houseCenter.r + (ringHex.r - houseCenter.r) * t), 'Path');
+        }
+        window.interiorRegions.push(carveFlatRoom(houseCenter.q, houseCenter.r, 2, 2, doorHex, 'Wood Floor'));
+        window.campaign2SilverhartMiddleRingHouses.push(houseCenter);
+    });
+
+    // --- City wall: a much bigger version of the palace's own curtain
+    // wall (same Palisade Wall terrain — climbable with a ladder/skill,
+    // never a fully-impassable barrier), radius 60, one gate aligned with
+    // the south entrance road. ---
+    const CITY_WALL_RADIUS = 60;
+    const cityWallHexes = [];
+    for (let q = -CITY_WALL_RADIUS; q <= CITY_WALL_RADIUS; q++) {
+        for (let r = -CITY_WALL_RADIUS; r <= CITY_WALL_RADIUS; r++) {
+            if (window.distance({ q: 0, r: 0 }, { q, r }) === CITY_WALL_RADIUS) {
+                cityWallHexes.push({ q: throneCenter.q + q, r: throneCenter.r + r });
+            }
+        }
+    }
+    const cityGateHexes = [
+        { q: throneCenter.q, r: throneCenter.r + CITY_WALL_RADIUS },
+        { q: throneCenter.q - 1, r: throneCenter.r + CITY_WALL_RADIUS },
+        { q: throneCenter.q - 2, r: throneCenter.r + CITY_WALL_RADIUS },
+    ];
+    const cityGateKeys = new Set(cityGateHexes.map(h => `${h.q},${h.r}`));
+    cityWallHexes.forEach(h => {
+        window.setTerrainAt(h.q, h.r, cityGateKeys.has(`${h.q},${h.r}`) ? 'Path' : 'Palisade Wall');
+    });
+    for (let r = throneCenter.r + MIDDLE_RING_RADIUS; r <= throneCenter.r + CITY_WALL_RADIUS; r++) window.setTerrainAt(throneCenter.q, r, 'Path');
+    [{ q: throneCenter.q + 2, r: throneCenter.r + CITY_WALL_RADIUS - 2 }, { q: throneCenter.q - 4, r: throneCenter.r + CITY_WALL_RADIUS }].forEach(h => {
+        window.setTerrainAt(h.q, h.r, 'Palisade Wall');
+        window.tileObjects[`${h.q},${h.r}`] = { type: 'watchtower', lightRadius: 4 };
+    });
+    window.campaign2SilverhartCityWallRadius = CITY_WALL_RADIUS;
+    window.campaign2SilverhartCityGateHex = cityGateHexes[1];
+
+    // --- The Warrens: slums just outside the city wall, cheap ramshackle
+    // housing — and, tucked behind them with no signage, the Thieves'
+    // Guild. Placement/NPCs only this pass; quest content is a follow-up. ---
+    const warrensRow = throneCenter.r + CITY_WALL_RADIUS + 6;
+    for (let r = throneCenter.r + CITY_WALL_RADIUS; r <= warrensRow; r++) window.setTerrainAt(throneCenter.q, r, 'Path');
+    for (let q = -6; q <= 6; q += 3) window.setTerrainAt(throneCenter.q + q, warrensRow, 'Path');
+
+    [-6, -3, 3].forEach((dq, i) => {
+        const shackCenter = { q: throneCenter.q + dq, r: warrensRow + (i % 2 === 0 ? -3 : 3) };
+        const shackDoor = { q: shackCenter.q, r: shackCenter.r + (i % 2 === 0 ? 2 : -2) };
+        window.interiorRegions.push(carveFlatRoom(shackCenter.q, shackCenter.r, 2, 2, shackDoor, 'Wood Floor'));
+    });
+
+    const thievesGuildCenter = { q: throneCenter.q + 6, r: warrensRow + 4 };
+    const thievesGuildDoor = { q: thievesGuildCenter.q, r: thievesGuildCenter.r - 2 };
+    window.interiorRegions.push(carveFlatRoom(thievesGuildCenter.q, thievesGuildCenter.r, 3, 2, thievesGuildDoor, 'Wood Floor'));
+    window.campaign2ThievesGuildCenter = thievesGuildCenter;
+    if (window.campaign2ThievesGuildFence) {
+        window.entities.push(window.buildNPC({ ...window.campaign2ThievesGuildFence, hex: { q: thievesGuildCenter.q, r: thievesGuildCenter.r + 1 } }));
+    }
+    window.campaign2SilverhartWarrensCenter = { q: throneCenter.q, r: warrensRow };
+
     // Diplomatic Quarter: south of the gate, along the road's continued
     // extension — an elven embassy, a dwarven embassy, embassies for two
     // other human kingdoms (Aldenreach and Corvane), the Ironbond Company's
@@ -1334,119 +1544,20 @@ function buildSilverhartPalace(roadEnd) {
         window.campaign2MercenaryRecruiterHex = recruiterHex;
     }
 
-    // A real ring road around the curtain wall — a second hex-distance
-    // circle (same technique as WALL_RADIUS above), a few hexes further
-    // out, giving the merchant/noble districts an actual street to front
-    // onto instead of the old single-file corridor that ran nearly 60-80
-    // hexes off into the distance. Connects to the existing entrance road
-    // at the gate.
-    const RING_ROAD_RADIUS = WALL_RADIUS + 7; // 30 — enough clearance to feel like a real town green, not a moat
-    for (let q = -RING_ROAD_RADIUS; q <= RING_ROAD_RADIUS; q++) {
-        for (let r = -RING_ROAD_RADIUS; r <= RING_ROAD_RADIUS; r++) {
-            if (window.distance({ q: 0, r: 0 }, { q, r }) === RING_ROAD_RADIUS) {
+    // Re-stamp the middle ring road one last time, now that every building up
+    // to and including the Diplomatic Quarter has been carved: an embassy
+    // sitting close to radius 45 (the Corvane embassy/cathedral column in
+    // particular) carves its own wall ring directly on top of a stretch of
+    // the road, silently splitting it into two disconnected arcs. Path is
+    // safe to reassert unconditionally here (unlike the city wall's
+    // Palisade Wall ring, which must stay a wall except at its gate).
+    for (let q = -MIDDLE_RING_RADIUS; q <= MIDDLE_RING_RADIUS; q++) {
+        for (let r = -MIDDLE_RING_RADIUS; r <= MIDDLE_RING_RADIUS; r++) {
+            if (window.distance({ q: 0, r: 0 }, { q, r }) === MIDDLE_RING_RADIUS) {
                 window.setTerrainAt(throneCenter.q + q, throneCenter.r + r, 'Path');
             }
         }
     }
-    // Extend the entrance road from the gate out to meet the ring.
-    for (let r = throneCenter.r + WALL_RADIUS; r <= throneCenter.r + RING_ROAD_RADIUS; r++) window.setTerrainAt(throneCenter.q, r, 'Path');
-    window.campaign2SilverhartRingRoadRadius = RING_ROAD_RADIUS;
-
-    // Both districts branch off the entrance road partway between the wall
-    // and the ring, each a real short street grid: two parallel streets
-    // with buildings fronting them, joined by a cross-alley — not one
-    // single-file corridor.
-    const districtJunctionRow = throneCenter.r + WALL_RADIUS + 4;
-    const STREET_LEN = 12;
-
-    // --- Merchant Quarter (west of the entrance road) ---
-    const merchantNearQ = throneCenter.q - 12;  // front street, facing the entrance road
-    const merchantFarQ = throneCenter.q - 22;   // back street
-    for (let q = merchantFarQ; q <= throneCenter.q; q++) window.setTerrainAt(q, districtJunctionRow, 'Path'); // spur off the entrance road
-    for (let r = districtJunctionRow; r <= districtJunctionRow + STREET_LEN; r++) {
-        window.setTerrainAt(merchantNearQ, r, 'Path');
-        window.setTerrainAt(merchantFarQ, r, 'Path');
-    }
-    const merchantAlleyRow = districtJunctionRow + Math.floor(STREET_LEN / 2);
-    for (let q = merchantFarQ; q <= merchantNearQ; q++) window.setTerrainAt(q, merchantAlleyRow, 'Path'); // cross-alley
-
-    const stableCenter = { q: merchantNearQ - 3, r: districtJunctionRow + 3 };
-    const stableDoor = { q: stableCenter.q + 3, r: stableCenter.r };
-    const stableRegion = carveBuilding(stableCenter.q, stableCenter.r, 4, 3, stableDoor, 'Wood Floor');
-    window.interiorRegions.push(stableRegion);
-    window.campaign2SilverhartStableCenter = stableCenter;
-    window.tileObjects[`${stableCenter.q},${stableCenter.r}`] = { type: 'fence_h' }; // stalls/pen flavor
-    if (window.campaign2Stablehand) {
-        window.entities.push(window.buildNPC({ ...window.campaign2Stablehand, hex: { q: stableCenter.q, r: stableCenter.r - 1 } }));
-    }
-
-    const clothierCenter = { q: merchantFarQ + 3, r: districtJunctionRow + 3 };
-    const clothierDoor = { q: clothierCenter.q - 3, r: clothierCenter.r };
-    const clothierRegion = carveBuilding(clothierCenter.q, clothierCenter.r, 3, 2, clothierDoor, 'Wood Floor');
-    window.interiorRegions.push(clothierRegion);
-    if (window.campaign2Clothier) {
-        window.entities.push(window.buildNPC({ ...window.campaign2Clothier, hex: { q: clothierCenter.q, r: clothierCenter.r + 1 } }));
-    }
-
-    const magicShopCenter = { q: merchantNearQ - 3, r: districtJunctionRow + STREET_LEN - 2 };
-    const magicShopDoor = { q: magicShopCenter.q + 3, r: magicShopCenter.r };
-    const magicShopRegion = carveBuilding(magicShopCenter.q, magicShopCenter.r, 3, 2, magicShopDoor, 'Wood Floor');
-    window.interiorRegions.push(magicShopRegion);
-    if (window.campaign2MagicDealer) {
-        window.entities.push(window.buildNPC({ ...window.campaign2MagicDealer, hex: { q: magicShopCenter.q, r: magicShopCenter.r + 1 } }));
-    }
-
-    const generalGoodsCenter = { q: merchantFarQ + 3, r: districtJunctionRow + STREET_LEN - 2 };
-    const generalGoodsDoor = { q: generalGoodsCenter.q - 3, r: generalGoodsCenter.r };
-    const generalGoodsRegion = carveBuilding(generalGoodsCenter.q, generalGoodsCenter.r, 3, 2, generalGoodsDoor, 'Wood Floor');
-    window.interiorRegions.push(generalGoodsRegion);
-    window.campaign2SilverhartGeneralGoodsCenter = generalGoodsCenter;
-    if (window.campaign2SilverhartGeneralGoods) {
-        window.entities.push(window.buildNPC({ ...window.campaign2SilverhartGeneralGoods, hex: { q: generalGoodsCenter.q, r: generalGoodsCenter.r + 1 } }));
-    }
-    fillEnclosedPockets(merchantFarQ - 2, merchantNearQ + 2, districtJunctionRow - 2, districtJunctionRow + STREET_LEN + 2);
-
-    // --- Noble Quarter (east of the entrance road, mirrored) ---
-    const nobleNearQ = throneCenter.q + 12;
-    const nobleFarQ = throneCenter.q + 22;
-    for (let q = throneCenter.q; q <= nobleFarQ; q++) window.setTerrainAt(q, districtJunctionRow, 'Path');
-    for (let r = districtJunctionRow; r <= districtJunctionRow + STREET_LEN; r++) {
-        window.setTerrainAt(nobleNearQ, r, 'Path');
-        window.setTerrainAt(nobleFarQ, r, 'Path');
-    }
-    const nobleAlleyRow = districtJunctionRow + Math.floor(STREET_LEN / 2);
-    for (let q = nobleNearQ; q <= nobleFarQ; q++) window.setTerrainAt(q, nobleAlleyRow, 'Path');
-
-    // The Corstane family's abandoned townhouse — grantable by the Queen
-    // once reputation with the crown is high enough (see the
-    // silverhart_queen dialogue tree), distinct from the free cottage plot
-    // (built) and the abandoned house on the north road (cleared by force).
-    const manorCenter = { q: nobleNearQ + 3, r: districtJunctionRow + 3 };
-    const manorDoor = { q: manorCenter.q - 3, r: manorCenter.r };
-    const manorRegion = carveBuilding(manorCenter.q, manorCenter.r, 3, 2, manorDoor, 'Wood Floor');
-    window.interiorRegions.push(manorRegion);
-    window.campaign2SilverhartManorCenter = manorCenter;
-    if (window.campaign2NobleCorstane) {
-        window.entities.push(window.buildNPC({ ...window.campaign2NobleCorstane, hex: { q: manorCenter.q, r: manorCenter.r + 1 } }));
-    }
-
-    const neighborHouseCenter = { q: nobleFarQ - 3, r: districtJunctionRow + 3 };
-    const neighborHouseDoor = { q: neighborHouseCenter.q + 3, r: neighborHouseCenter.r };
-    const neighborHouseRegion = carveBuilding(neighborHouseCenter.q, neighborHouseCenter.r, 3, 2, neighborHouseDoor, 'Wood Floor');
-    window.interiorRegions.push(neighborHouseRegion);
-    window.campaign2SilverhartNeighborHouseCenter = neighborHouseCenter;
-    if (window.campaign2ManorNeighbor) {
-        window.entities.push(window.buildNPC({ ...window.campaign2ManorNeighbor, hex: { q: neighborHouseCenter.q, r: neighborHouseCenter.r + 1 } }));
-    }
-
-    const builderHouseCenter = { q: nobleNearQ + 3, r: districtJunctionRow + STREET_LEN - 2 };
-    const builderHouseDoor = { q: builderHouseCenter.q - 3, r: builderHouseCenter.r };
-    const builderHouseRegion = carveBuilding(builderHouseCenter.q, builderHouseCenter.r, 3, 2, builderHouseDoor, 'Wood Floor');
-    window.interiorRegions.push(builderHouseRegion);
-    if (window.campaign2SilverhartBuilder) {
-        window.entities.push(window.buildNPC({ ...window.campaign2SilverhartBuilder, hex: { q: builderHouseCenter.q, r: builderHouseCenter.r + 1 } }));
-    }
-    fillEnclosedPockets(nobleNearQ - 2, nobleFarQ + 2, districtJunctionRow - 2, districtJunctionRow + STREET_LEN + 2);
 
     // One world-hex north of Millbrook [3][6], which is itself 3 north of
     // Hollowmere [6][6] — see the world map's [0][6] Silverhart placement in
