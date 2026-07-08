@@ -39,21 +39,28 @@ function findClearNeighborHex(hex) {
     return null;
 }
 
-function buyHorse(coatKey) {
-    if (!window.HORSE_COAT_PRESETS[coatKey]) return false;
+// tierId: 'untrained' (default) | 'trained' | 'war_trained' — see
+// MOUNT_TRAINING_TIERS (monsters.js). Cost is HORSE_PRICE * the tier's
+// multiplier; a trained/war-trained horse arrives with its skill points
+// already spent and, at the higher tiers, a free barding fitting.
+function buyHorse(coatKey, tierId = 'untrained') {
+    const tier = window.MOUNT_TRAINING_TIERS?.[tierId];
+    if (!window.HORSE_COAT_PRESETS[coatKey] || !tier) return false;
     if (!partyHasRiding()) { window.showMessage("Nobody in your party knows how to ride yet."); return false; }
     const player = window.party?.[0];
-    if (!player || player.gold < window.HORSE_PRICE) { window.showMessage(`You need ${window.HORSE_PRICE} gold for a horse.`); return false; }
+    const price = Math.round(window.HORSE_PRICE * tier.costMultiplier);
+    if (!player || player.gold < price) { window.showMessage(`You need ${price} gold for a horse.`); return false; }
     const playerEntity = window.entities.find(e => e.side === 'player' && !e.rider && e.name === player.name);
     if (!playerEntity) return false;
     const spawnHex = findClearNeighborHex(playerEntity.hex);
     if (!spawnHex) { window.showMessage("No clear space nearby for the horse."); return false; }
 
-    player.gold -= window.HORSE_PRICE;
+    player.gold -= price;
     const horse = window.createMonster('horse', spawnHex, null, null, 'player');
     horse.coatPreset = coatKey;
+    window.grantMountTraining(horse, tierId);
     window.entities.push(horse);
-    window.showMessage(`You buy a ${window.HORSE_COAT_PRESETS[coatKey].name.toLowerCase()} horse.`);
+    window.showMessage(`You buy a ${tier.label.toLowerCase()} ${window.HORSE_COAT_PRESETS[coatKey].name.toLowerCase()} horse.`);
     if (window.drawMap) window.drawMap();
     if (window.renderEntities) window.renderEntities();
     return true;

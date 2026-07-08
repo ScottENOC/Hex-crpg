@@ -181,6 +181,22 @@ above). Neither locks the player out of the game — each has a matching alterna
 - **Campaign 1 (arena)**: no lich/goblin-alignment concept there, so its shop just
   sells a Skeleton Horse outright alongside the regular mounts (100g, `ui.js`).
 
+## Barding + mount training
+
+- **Barding** (`light_barding`/`medium_barding`/`heavy_barding`, `equipment.js`) — mount-
+  sized armor (reduction 1/2/3, same generic damage-reduction math every other armor
+  gets), fitted via `equipMountBarding(mount, itemId)` (`monsters.js`). Only fits
+  **Horse, Wolf, Boar, or Unicorn** — refuses any other entity or non-barding item.
+  Rendered as a real overlay image (`images/barding_light/medium/heavy.svg`, transparent
+  background) drawn over the mount's own sprite, gated on `window.BARDING_IMAGE_KEYS`.
+- **Mount training** (`MOUNT_TRAINING_TIERS`, `MOUNT_APPROPRIATE_SKILLS`, `monsters.js`)
+  — a mount can invest skill points, but only from a fixed, physically-plausible
+  allowlist (armor training, health, melee damage — never a weapon-hit or magic skill).
+  Buying a horse (`buyHorse(coatKey, tierId)`, `stable.js`) at **Trained** (1.5x price)
+  or **War-Trained** (2.5x price) comes with those points already spent and a free
+  barding fitting (light/medium respectively). The Silverhart stablehand also fits
+  barding onto a horse you already own, for gold, independent of purchase tier.
+
 ## Horse Archer (arena monster + skirmish AI)
 
 `horse_archer` (`monsters.js`) — a mounted bow-user in `ARENA_MONSTER_POOL`, tagged

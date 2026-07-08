@@ -1058,6 +1058,9 @@ function startGameCore(isLoading = false) {
       minotaur: new Image(),
       revenantBase: new Image(),
       skeletonBase: new Image(),
+      barding_light: new Image(),
+      barding_medium: new Image(),
+      barding_heavy: new Image(),
       wolf: new Image(),
       torch_lit: new Image(),
       fireplace: new Image(),
@@ -1257,6 +1260,9 @@ function startGameCore(isLoading = false) {
   visuals.minotaur.src = 'images/minotaur.svg';
   visuals.revenantBase.src = 'images/revenant.svg';
   visuals.skeletonBase.src = 'images/skeletonBase.svg';
+  visuals.barding_light.src = 'images/barding_light.svg';
+  visuals.barding_medium.src = 'images/barding_medium.svg';
+  visuals.barding_heavy.src = 'images/barding_heavy.svg';
   visuals.wolf.src = 'images/wolf.png';
   visuals.torch_lit.src = 'images/torch_lit.svg';
   visuals.fireplace.src = 'images/fireplace.svg';
@@ -2047,11 +2053,17 @@ function renderEntities() {
                                           }
                                       }
                                   } catch (err) {}
-                                                    if (e.mountSize > 0 && e.equipped && e.equipped.armor) {
-                              const armorId = e.equipped.armor;
-                              let armorImg = (armorId === 'medium_armor' || armorId === 'heavy_armor') ? window.gameVisuals.chainArmor : window.gameVisuals.leatherArmor;
-                              if (armorImg && armorImg.complete) {
-                                  window.mapCtx.drawImage(armorImg, x - size/2, y - size/2 + (5 * z), size, size);
+                          // Barding: light/medium/heavy overlays (images/barding_*.svg),
+                          // drawn over the same box as the mount's own sprite — real
+                          // mounts (mountSize > 0) plus the Unicorn specifically, since
+                          // it's a companion rather than a rider mount (mountSize: 0 by
+                          // design, see monsters.js) but should still be able to wear
+                          // barding cosmetically/defensively like any other animal ally.
+                          if ((e.mountSize > 0 || e.name === 'Unicorn') && e.equipped && window.BARDING_IMAGE_KEYS?.[e.equipped.armor]) {
+                              const bardingImg = window.gameVisuals[window.BARDING_IMAGE_KEYS[e.equipped.armor]];
+                              if (bardingImg && bardingImg.complete) {
+                                  const finalWidth = size * widthMult;
+                                  window.mapCtx.drawImage(bardingImg, x - finalWidth/2, y - size/2 + yOffset, finalWidth, size);
                               }
                           }
                   

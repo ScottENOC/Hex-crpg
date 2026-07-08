@@ -1,0 +1,10 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Light barding: a simple leather/cloth caparison draped over the torso and flanks, no metal. -->
+  <path d="M14 26C14 22 22 19 32 19C42 19 50 22 50 26L48 42C48 46 40 49 32 49C24 49 16 46 16 42Z"
+        fill="#8a5a2f" fill-opacity="0.85" stroke="#5c3a1a" stroke-width="1.5"/>
+  <path d="M18 30L46 30" stroke="#5c3a1a" stroke-width="1" opacity="0.5"/>
+  <path d="M17 36L47 36" stroke="#5c3a1a" stroke-width="1" opacity="0.5"/>
+  <path d="M20 42L44 42" stroke="#5c3a1a" stroke-width="1" opacity="0.4"/>
+  <!-- A simple trim edge -->
+  <path d="M14 26C14 22 22 19 32 19C42 19 50 22 50 26" fill="none" stroke="#c9975a" stroke-width="1.2" opacity="0.7"/>
+</svg>

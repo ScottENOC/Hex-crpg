@@ -208,14 +208,46 @@ window.npcDialogueTrees = {
             ]);
             return;
         }
-        const colorOptions = Object.entries(window.HORSE_COAT_PRESETS).map(([key, preset]) => ({
-            label: `${preset.name} (${window.HORSE_PRICE} gold)`,
+
+        const pickColorThenBuy = (tierId) => {
+            const tier = window.MOUNT_TRAINING_TIERS[tierId];
+            const price = Math.round(window.HORSE_PRICE * tier.costMultiplier);
+            const colorOptions = Object.entries(window.HORSE_COAT_PRESETS)
+                .filter(([key]) => key !== 'skeleton') // that one's raised, not bought — see raiseSkeletonHorse
+                .map(([key, preset]) => ({
+                    label: `${preset.name} (${price} gold)`,
+                    action: () => { if (window.buyHorse(key, tierId)) window.showMessage("Enjoy the ride."); }
+                }));
+            colorOptions.push({ label: "Never mind.", action: () => {} });
+            window.showDialogue(npc, `A ${tier.label.toLowerCase()} horse runs ${price} gold — pick your color.`, colorOptions);
+        };
+
+        const tierOptions = Object.entries(window.MOUNT_TRAINING_TIERS)
+            .filter(([key]) => key !== 'untrained')
+            .map(([key, tier]) => ({
+                label: `${tier.label} (from ${Math.round(window.HORSE_PRICE * tier.costMultiplier)}g)`,
+                action: () => pickColorThenBuy(key)
+            }));
+
+        const bardingOptions = ['light_barding', 'medium_barding', 'heavy_barding'].map(id => ({
+            label: `Fit ${window.items[id].name} on my horse (${window.items[id].buyPrice}g)`,
             action: () => {
-                if (window.buyHorse(key)) window.showMessage("Enjoy the ride.");
+                const player = window.party[0];
+                const mount = window.entities.find(e => e.name === 'Horse' && e.alive && e.side === 'player' && e.rider?.name === player.name);
+                if (!mount) { window.showMessage("You'd need to bring the horse along first."); return; }
+                if ((player.gold || 0) < window.items[id].buyPrice) { window.showMessage("Not enough gold."); return; }
+                player.gold -= window.items[id].buyPrice;
+                window.equipMountBarding(mount, id);
+                window.showMessage(`Your horse is fitted with ${window.items[id].name.toLowerCase()}.`);
             }
         }));
-        colorOptions.push({ label: "Just looking.", action: () => {} });
-        window.showDialogue(npc, `${window.HORSE_PRICE} gold buys you a horse — pick your color.`, colorOptions);
+
+        window.showDialogue(npc, `${window.HORSE_PRICE} gold buys you a plain horse — pay more and it comes already trained, with armor to match. I can also fit barding to a horse you've already got.`, [
+            { label: `Untrained (${window.HORSE_PRICE}g)`, action: () => pickColorThenBuy('untrained') },
+            ...tierOptions,
+            ...bardingOptions,
+            { label: "Just looking.", action: () => {} }
+        ]);
     },
     silverhart_clothier: (npc) => {
         if (window.isShunnedByHumanCommerce && window.isShunnedByHumanCommerce()) {

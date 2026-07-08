@@ -10,7 +10,16 @@ const items = {
     'light_armor': { id: 'light_armor', name: 'Light Armor', type: 'armor', reduction: 1, buyPrice: 25 },
     'medium_armor': { id: 'medium_armor', name: 'Medium Armor', type: 'armor', reduction: 2, buyPrice: 50 },
     'heavy_armor': { id: 'heavy_armor', name: 'Heavy Armor', type: 'armor', reduction: 3, buyPrice: 100 },
-    
+
+    // Barding: mount-sized armor (horse/wolf/boar/unicorn), fitted via
+    // equipMountBarding (monsters.js) rather than the player's own equip
+    // flow — same reduction math as the human tiers (armor's `reduction`
+    // is read generically off entity.equipped.armor), but priced for a
+    // much bigger animal and never offered in a player-facing equip slot.
+    'light_barding': { id: 'light_barding', name: 'Light Barding', type: 'armor', subType: 'barding', reduction: 1, buyPrice: 60 },
+    'medium_barding': { id: 'medium_barding', name: 'Medium Barding', type: 'armor', subType: 'barding', reduction: 2, buyPrice: 130 },
+    'heavy_barding': { id: 'heavy_barding', name: 'Heavy Barding', type: 'armor', subType: 'barding', reduction: 3, buyPrice: 240 },
+
     'nasal_helm': { id: 'nasal_helm', name: 'Nasal Helm', type: 'helmet', reduction: 1, buyPrice: 30 },
     'torch': { id: 'torch', name: 'Torch', type: 'weapon', subType: 'tool', damage: 0, range: 0, lightRadius: 10, canOffhand: true, buyPrice: 5 },
     
@@ -80,3 +89,12 @@ const items = {
 };
 
 window.items = items;
+
+// Maps a barding item id to its gameVisuals key (see the mount-rendering
+// overlay, gameEngine.js) — kept alongside the item defs above so the two
+// never drift out of sync.
+window.BARDING_IMAGE_KEYS = {
+    'light_barding': 'barding_light',
+    'medium_barding': 'barding_medium',
+    'heavy_barding': 'barding_heavy',
+};

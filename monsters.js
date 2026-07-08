@@ -633,6 +633,64 @@ function equipToMonster(monster, itemId) {
     }
 }
 
+// Barding: fits a light/medium/heavy barding item onto a mount (Horse,
+// Wolf, Boar, Unicorn — the same set the rendering overlay in gameEngine.js
+// covers). Refuses anything else, including a human armor item, so a
+// barding item can never end up equipped where the overlay wouldn't match
+// it, and a non-mount can never be handed barding by mistake.
+const BARDABLE_NAMES = ['Horse', 'Wolf', 'Boar', 'Unicorn'];
+function equipMountBarding(mount, bardingId) {
+    if (!mount || !BARDABLE_NAMES.includes(mount.name)) return false;
+    const item = window.items[bardingId];
+    if (!item || item.subType !== 'barding') return false;
+    mount.equipped = mount.equipped || { weapon: null, offhand: null, armor: null, helmet: null };
+    mount.inventory = mount.inventory || [];
+    mount.inventory.push(bardingId);
+    mount.equipped.armor = bardingId;
+    return true;
+}
+window.equipMountBarding = equipMountBarding;
+
+// Mounts can invest skill points, same pool/apply mechanism as any other
+// entity (window.skills[key].apply), but only in physical, animal-plausible
+// skills — armor training and raw toughness, never a weapon-hit skill or
+// anything from the arcane/divine trees (a horse doesn't cast spells or
+// swing a sword). Deliberately a fixed allowlist rather than "whatever's in
+// the strength/endurance trees," so a new skill added to those trees later
+// doesn't silently become mount-purchasable without a design decision.
+const MOUNT_APPROPRIATE_SKILLS = ['light_armor_training', 'medium_armor_training', 'heavy_armor_training', 'health', 'meleeDamage'];
+window.MOUNT_APPROPRIATE_SKILLS = MOUNT_APPROPRIATE_SKILLS;
+
+// Purchase tiers for a trained mount (see buyHorse, stable.js, and the
+// arena shop's mount purchase, ui.js): a flat cost multiplier, a fixed set
+// of skill points from the allowlist above, and — for the higher tiers —
+// a free barding fitting, so paying more for training visibly means
+// something even before the player buys any barding themselves.
+const MOUNT_TRAINING_TIERS = {
+    untrained:   { label: 'Untrained',   costMultiplier: 1,   skills: [], freeBarding: null },
+    trained:     { label: 'Trained',     costMultiplier: 1.5, skills: ['light_armor_training', 'health'], freeBarding: 'light_barding' },
+    war_trained: { label: 'War-Trained', costMultiplier: 2.5, skills: ['light_armor_training', 'medium_armor_training', 'health', 'health', 'meleeDamage'], freeBarding: 'medium_barding' },
+};
+window.MOUNT_TRAINING_TIERS = MOUNT_TRAINING_TIERS;
+
+function grantMountTraining(mount, tierId) {
+    const tier = MOUNT_TRAINING_TIERS[tierId];
+    if (!mount || !tier) return;
+    mount.skills = mount.skills || {};
+    tier.skills.forEach(skillKey => {
+        if (!MOUNT_APPROPRIATE_SKILLS.includes(skillKey)) return; // belt-and-suspenders against a bad tier definition
+        const skill = window.skills[skillKey];
+        if (!skill) return;
+        const current = mount.skills[skillKey] || 0;
+        if (skill.maxRanks > 0 && current >= skill.maxRanks) return;
+        mount.skills[skillKey] = current + 1;
+        if (skill.apply) skill.apply(mount);
+    });
+    mount.hp = mount.maxHp;
+    if (tier.freeBarding) equipMountBarding(mount, tier.freeBarding);
+}
+window.grantMountTraining = grantMountTraining;
+
 // A "combat build" pairs one weapon (+ optional offhand) with an ordered
 // list of skill picks that actually make sense for it — so a randomly
 // equipped goblin/orc/skeleton reads as a coherent fighter (an axe-wielder
