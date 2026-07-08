@@ -74,6 +74,18 @@ function updateTime(delta) {
             }
         }
 
+        // The necromancer achieves lichdom despite the crypt's fall: a few
+        // days after necromancer_hunt resolves, word reaches Reddale that
+        // whatever Corvin Ashgrave was building toward, it finished anyway. Gates
+        // Captain Rennick's necromancer_lichdom offer (campaign2Dialogue.js).
+        if (window.necromancerDefeated && !window.lichRisenNewsReady) {
+            const daysSince = (window.worldSeconds - (window.necromancerDefeatedAt || 0)) / (24 * 3600);
+            if (daysSince >= 3) {
+                window.lichRisenNewsReady = true;
+                window.showMessage("Word reaches you from Reddale: something crawled out of that crypt after all. It has a name now — Corvin Ashgrave — and it isn't finished.");
+            }
+        }
+
         // Wolves at the Farm: wandering near Old Mac's pasture resolves the
         // scripted encounter (see campaign2Dialogue.js).
         if (window.campaign2FarmPastureCenter && window.triggerFarmWolfEncounter && p) {

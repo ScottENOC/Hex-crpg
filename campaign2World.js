@@ -681,6 +681,107 @@ window.readCryptEntranceNote = function() {
     );
 };
 
+// The Barrow of Corvin Ashgrave: pays off "he achieves lichdom despite our
+// efforts" — Malachar (the crypt boss) was only ever a lieutenant/vessel
+// candidate; the necromancer himself, Corvin Ashgrave, completes the ritual
+// off-screen regardless of how the crypt or the abandoned-house altar went
+// (see necromancer_lichdom, campaign2Dialogue.js, time-gated off
+// necromancerDefeatedAt in worldTime.js). Two rooms: a guarded antechamber
+// holding the phylactery_core itself, then Ashgrave's sanctum — the player
+// must reach and resolve the core BEFORE killing Ashgrave for the kill to
+// stick; killed first, his body "dies" but he isn't actually gone (see
+// checkCombatEnd's necromancer_lichdom branch, gameEngine.js).
+function buildLichBarrow() {
+    const anchor = window.campaign2NecromancerRitualCenter;
+    if (!anchor) return;
+    const anteCenter = { q: anchor.q + 14, r: anchor.r - 6 };
+
+    const anteDoor = { q: anteCenter.q - 3, r: anteCenter.r };
+    const anteRegion = carveFlatRoom(anteCenter.q, anteCenter.r, 3, 3, anteDoor, 'Cave Floor');
+    window.interiorRegions.push(anteRegion);
+
+    const sanctumCenter = { q: anteCenter.q + 9, r: anteCenter.r };
+    const sanctumDoor = { q: sanctumCenter.q - 3, r: sanctumCenter.r };
+    const sanctumRegion = carveFlatRoom(sanctumCenter.q, sanctumCenter.r, 4, 3, sanctumDoor, 'Cave Floor');
+    window.interiorRegions.push(sanctumRegion);
+    for (let q = anteCenter.q + 4; q < sanctumDoor.q; q++) window.setTerrainAt(q, anteCenter.r, 'Cave Floor');
+
+    sealRoom(anteRegion);
+    sealRoom(sanctumRegion);
+
+    window.campaign2LichBarrowCenter = anteCenter;
+    window.campaign2LichSanctumCenter = sanctumCenter;
+
+    // The antechamber: tougher guards than the crypt had, plus the
+    // phylactery_core the player must destroy or bind before Ashgrave's
+    // eventual death can be made to last.
+    [
+        { off: { q: -1, r: -1 }, type: 'wraith' },
+        { off: { q: 1, r: -1 }, type: 'wraith' },
+        { off: { q: 0, r: 1 }, type: 'zombie' },
+    ].forEach(({ off, type }) => {
+        const m = window.createMonster(type, { q: anteCenter.q + off.q, r: anteCenter.r + off.r }, null, null, 'enemy');
+        m.barrowMinion = true;
+        window.entities.push(m);
+    });
+    window.tileObjects[`${anteCenter.q},${anteCenter.r - 2}`] = { type: 'journal', readId: 'lich_phylactery_core', lightRadius: 0 };
+
+    // Corvin Ashgrave himself — same "reuse a base monster's art, override
+    // name/stats" pattern Malachar used, scaled up a tier since he's the
+    // real necromancer, not a lieutenant.
+    const boss = window.createMonster('revenant', { q: sanctumCenter.q, r: sanctumCenter.r }, {
+        health: 12, meleeDamage: 8, sword_hit: 4, sword_dmg: 4, life_drain: 3, spectral_form: 2, heavy_armor_training: 2,
+    }, ['sword', 'heavy_armor'], 'enemy');
+    boss.name = 'Corvin Ashgrave, the Lich';
+    boss.hp = 130; boss.maxHp = 130;
+    boss.spriteBase = 'revenant';
+    boss.barrowMinion = true;
+    boss.isLichBoss = true;
+    window.entities.push(boss);
+
+    const escort = window.createMonster('wraith', { q: sanctumCenter.q + 1, r: sanctumCenter.r - 1 }, null, null, 'enemy');
+    escort.barrowMinion = true;
+    window.entities.push(escort);
+}
+window.buildLichBarrow = buildLichBarrow;
+
+window.readLichPhylacteryCoreNote = function() {
+    if (window.lichPhylacteryDestroyed || window.lichPhylacteryBound) {
+        window.showDialogue({ name: 'Corvin Ashgrave\'s Phylactery', customImage: 'altar_unholy' },
+            "Whatever it was, it's spent now — there's nothing left to decide about it.");
+        return;
+    }
+    window.showDialogue({ name: 'Corvin Ashgrave\'s Phylactery', customImage: 'altar_unholy' },
+        "A blackened shard, bound in wire and old wax, humming faintly even from across the room. This is what's keeping him from staying dead. Whatever you do with it, do it now — before he knows you found it.",
+        [
+            {
+                label: "Destroy it.",
+                action: () => {
+                    window.lichPhylacteryDestroyed = true;
+                    if (window.factions?.necromancer_cult) window.adjustReputation(window.factions.necromancer_cult, -20, 15);
+                    if (window.adjustRegionStat) window.adjustRegionStat('hollowmere', 'security', 5);
+                    window.showMessage("The shard cracks apart in your hands like old ash. Whatever tether Ashgrave had to this world just snapped.");
+                }
+            },
+            {
+                label: "Bind it to yourself instead.",
+                action: () => {
+                    window.lichPhylacteryBound = true;
+                    if (window.grantSkillRank) {
+                        window.grantSkillRank(window.player, 'lich_grave_chill');
+                        window.grantSkillRank(window.player, 'lich_withering_touch');
+                    }
+                    ['silverhart_kingdom', 'ironbond_company'].forEach(id => {
+                        if (window.factions[id]) window.adjustReputation(window.factions[id], -20, 15);
+                    });
+                    window.showMessage("You take the shard instead of breaking it. Something of Ashgrave's undeath settles into you, cold and patient.");
+                }
+            },
+            { label: "Leave it for now.", action: () => {} }
+        ]
+    );
+};
+
 // Build order target: adds a bed once the place is cleared and paid for,
 // without touching the existing journal/altar tileObjects the necromancer
 // breadcrumb quest content still needs.
@@ -1782,6 +1883,7 @@ function setupVillageScene(forLoadOnly = false) {
     buildPlayerCottagePlot(CP);
     buildAbandonedHouse(abandonedHouseWaypoint);
     buildNecromancerCrypt();
+    buildLichBarrow();
     buildMillbrook(millbrookWaypoint);
     buildSilverhartPalace(northRoadEnd);
     buildEmberlode(westRoadEnd);

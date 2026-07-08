@@ -430,6 +430,36 @@ window.npcDialogueTrees = {
             return;
         }
         if (huntQuest?.status === 'completed') {
+            const lichQuest = window.questLog.find(q => q.id === 'necromancer_lichdom');
+
+            if (!lichQuest && window.lichRisenNewsReady) {
+                window.showDialogue(npc, "Corvin Ashgrave. That's the name it goes by now, if it's still a 'who' at all. Whatever it built in that crypt, it finished — I've got scouts describing something that doesn't die twice. There's a barrow further out past the ritual chamber. If you're going, you'll want to find whatever's keeping it standing before you try to put it down for good.", [
+                    {
+                        label: "I'll finish what I started.",
+                        action: () => {
+                            window.questLog.push({
+                                id: 'necromancer_lichdom', title: "The Barrow of Corvin Ashgrave", giver: 'Captain Ilsa Rennick',
+                                status: 'active', description: "Find Corvin Ashgrave's barrow past the crypt, deal with whatever's keeping him alive, then end him for good.", resolution: null
+                            });
+                            window.showMessage('Quest added: "The Barrow of Corvin Ashgrave."');
+                        }
+                    },
+                    { label: "Not yet.", action: () => {} }
+                ]);
+                return;
+            }
+            if (lichQuest?.status === 'active') {
+                window.showDialogue(npc, "Whatever's out there past the crypt, it's had time to get worse. Watch yourself.", [{ label: "I will.", action: () => {} }]);
+                return;
+            }
+            if (lichQuest?.status === 'completed' && lichQuest.resolution === 'allied') {
+                window.showDialogue(npc, "You came back changed. I don't know what happened out there, and some days I'm not sure I want to.", [{ label: "...", action: () => {} }]);
+                return;
+            }
+            if (lichQuest?.status === 'completed') {
+                window.showDialogue(npc, "Ashgrave's gone for good this time. You've done more for this town than the Watch ever could.", [{ label: "Just doing what's needed.", action: () => {} }]);
+                return;
+            }
             window.showDialogue(npc, "You did what none of us could. Reddale won't forget it.", [{ label: "Just doing what's needed.", action: () => {} }]);
             return;
         }
@@ -2259,6 +2289,36 @@ function triggerHollowmereQuestOffer() {
 // get a "demand surrender" option; for now it's always declined (no mechanical
 // effect) per design — a place to hook morale/negotiation mechanics later.
 function parleyWithEnemy(target) {
+    // Corvin Ashgrave: the one enemy parley actually does something for — the
+    // player can end the necromancer_lichdom quest by allying with him
+    // instead of fighting, seeding the future "learn from the necromancer"
+    // villain arc. Resolves the quest directly (bypassing checkCombatEnd's
+    // usual "phylactery dealt with first" requirement — an alliance doesn't
+    // need him dead at all) then lets the normal combat-end gate clean up.
+    if (target.isLichBoss) {
+        window.showDialogue(target, "Ashgrave doesn't lower his blade, but he stops advancing. \"You didn't come all this way just to swing at a dead man. Say what you actually want.\"", [
+            {
+                label: "Join you. Teach me what you know.",
+                action: () => {
+                    const lichQuest = (window.questLog || []).find(q => q.id === 'necromancer_lichdom');
+                    if (lichQuest) { lichQuest.status = 'completed'; lichQuest.resolution = 'allied'; }
+                    window.necromancerAllied = true;
+                    if (window.grantSkillRank) window.grantSkillRank(window.player, 'lich_deathless_flesh');
+                    if (window.factions?.necromancer_cult) window.adjustReputation(window.factions.necromancer_cult, 40, 30);
+                    ['silverhart_kingdom', 'ironbond_company'].forEach(id => {
+                        if (window.factions[id]) window.adjustReputation(window.factions[id], -35, 20);
+                    });
+                    if (window.adjustRegionStat) window.adjustRegionStat('hollowmere', 'security', -10);
+                    target.alive = false;
+                    target.hp = 0;
+                    window.showMessage("\"Good,\" Ashgrave says, and something ancient and patient settles into you. \"Then let's begin properly.\"");
+                    if (window.checkCombatEnd) window.checkCombatEnd();
+                }
+            },
+            { label: "No — this ends here.", action: () => {} }
+        ]);
+        return;
+    }
     if (target.tags && target.tags.includes('humanoid')) {
         window.showDialogue(target, "They eye you warily, weapon still raised.", [
             { label: "Demand they surrender.", action: () => {

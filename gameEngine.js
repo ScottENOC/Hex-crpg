@@ -2876,6 +2876,7 @@ function interactWithTileObject(q, r, player) {
         if (doorObj.readId === 'wizard_corruption_ledger' && window.readWizardCorruptionLedger) { window.readWizardCorruptionLedger(); return; }
         if (doorObj.readId === 'vampire_grave' && window.readVampireGrave) { window.readVampireGrave(); return; }
         if (doorObj.readId === 'crypt_entrance_note' && window.readCryptEntranceNote) { window.readCryptEntranceNote(); return; }
+        if (doorObj.readId === 'lich_phylactery_core' && window.readLichPhylacteryCoreNote) { window.readLichPhylacteryCoreNote(); return; }
         if (window.readAbandonedHouseJournal) window.readAbandonedHouseJournal();
         return;
     }
@@ -5355,11 +5356,37 @@ function checkCombatEnd() {
             if (huntQuest?.status === 'active' && !window.entities.some(e => e.isNecromancerBoss && e.alive)) {
                 huntQuest.status = 'completed';
                 window.necromancerDefeated = true;
+                window.necromancerDefeatedAt = window.worldSeconds;
                 if (window.factions?.necromancer_cult) window.adjustReputation(window.factions.necromancer_cult, -40, 25);
                 if (window.adjustRegionStat) window.adjustRegionStat('hollowmere', 'security', 10);
                 window.party[0].gold = (window.party[0].gold || 0) + 100;
                 if (window.gainExp) window.gainExp(500);
                 window.showMessage("Malachar crumbles to ash and old bone — whatever it was building toward, it ends here. (+100 gold, quest complete: The Vessel-Seeker's Crypt)");
+            }
+        }
+
+        // The Barrow of Corvin Ashgrave: resolves once Ashgrave is dead AND the
+        // phylactery core has been dealt with first (destroyed or bound) —
+        // killed with the phylactery still intact, he "dies" but doesn't
+        // actually resolve the quest (see readLichPhylacteryCoreNote,
+        // campaign2World.js), nudging the player back to find it.
+        if (window.currentCampaign === "2") {
+            const lichQuest = (window.questLog || []).find(q => q.id === 'necromancer_lichdom');
+            const marrowDead = !window.entities.some(e => e.isLichBoss && e.alive);
+            if (lichQuest?.status === 'active' && marrowDead) {
+                if (!window.lichPhylacteryDestroyed && !window.lichPhylacteryBound) {
+                    window.showMessage("Ashgrave's body collapses — but the shard you never found is still out there, humming. He isn't done.");
+                } else {
+                    lichQuest.status = 'completed';
+                    lichQuest.resolution = window.lichPhylacteryBound ? 'claimed' : 'destroyed';
+                    if (window.factions?.necromancer_cult) window.adjustReputation(window.factions.necromancer_cult, -50, 30);
+                    if (window.adjustRegionStat) window.adjustRegionStat('hollowmere', 'security', 15);
+                    window.party[0].gold = (window.party[0].gold || 0) + 200;
+                    if (window.gainExp) window.gainExp(900);
+                    window.showMessage(window.lichPhylacteryBound
+                        ? "Corvin Ashgrave crumbles for good this time — and whatever kept him standing settles into you instead. (+200 gold, quest complete: The Barrow of Corvin Ashgrave)"
+                        : "Corvin Ashgrave crumbles for good this time, with nothing left to hold him together. (+200 gold, quest complete: The Barrow of Corvin Ashgrave)");
+                }
             }
         }
 
