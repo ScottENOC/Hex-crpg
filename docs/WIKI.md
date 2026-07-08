@@ -139,8 +139,10 @@ Each entry: **id** — title — giver — prereq/trigger — outcome(s).
 - **border_war** — *The Northwatch Line* — Quartermaster Voss (hook) → Commander Hart (objective) — gated on the scout note read — destroy the siege engine, then the abstracted siege simulation (`siegeState`) resolves the fort's fate over time.
   - **Outcome**: whichever side you end up committed to (human or greenskin — forced by whether you attacked either side, or whoever won if you never fought) grants a companion "win or lose": a **human monk** or a **goblin rogue** (see `grantStarFortCompanion`). Also starts the post-siege **war-pressure mission loop** (`warState`) — ongoing scout/raid/hit-and-run missions offered by Commander Hart or Chief Skarnub depending on your side.
 
-### The Old Faith (druid grove)
+### The Old Faith (druid grove) / The Silver Trail (unicorn tracking)
 - **druid_grove** — *The Old Faith* — Elder Nessa Wren — clear the feral wolf den fouling the grove's spring.
+  - **Outcome**: the druids' trust, and a hint — she does **not** hand over the unicorn. Starts **unicorn_tracking**.
+- **unicorn_tracking** — *The Silver Trail* — Elder Nessa Wren (hook) — the unicorn wanders a fixed loop in the wilderness southwest of the grove (`campaign2UnicornPatrolPath`). Finding it means reading its tracks: fixed `unicorn_track` tile objects along the loop, whose visibility and click-detail (direction, then direction+age) scale with **Knowledge: Nature rank** (now ranks 1-3, not a flat yes/no — rank 1 reveals only ~5% of tracks with no detail, rank 3 reveals ~70% with full direction+age). Reaching and approaching the actual unicorn (`wild_unicorn` dialogue) completes the quest.
   - **Outcome**: grants `learn_unicorn_summon` — a skill (never purchasable with skill points) letting a **unicorn** answer as your one permanent Nature animal companion. Not a party member/mount — purely a Nature-summon unlock.
 
 ---

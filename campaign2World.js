@@ -1241,6 +1241,64 @@ function buildDruidGrove(westRoadEnd) {
     }
 }
 
+// The wild unicorn itself: the druid doesn't hand it over, only points at
+// the general area — it wanders a fixed loop deep in the wilderness
+// southwest of the grove, and actually finding it means reading its tracks
+// back to wherever it currently is (see the unicorn_track tileObjects
+// below, and isUnicornTrackVisible/showUnicornTrackDetail in gameEngine.js,
+// both scaled by Knowledge: Nature rank). Talking to it once found starts
+// the final trust-trial (window.npcDialogueTrees.wild_unicorn,
+// campaign2Dialogue.js).
+function spawnWildUnicorn() {
+    const grove = window.campaign2DruidGroveCenter;
+    if (!grove) return;
+    const valeCenter = { q: grove.q - 20, r: grove.r + 14 };
+    const RADIUS = 12;
+    const WAYPOINTS = 8;
+    const path = [];
+    for (let i = 0; i < WAYPOINTS; i++) {
+        const angle = (i / WAYPOINTS) * Math.PI * 2;
+        path.push(window.hexRound(
+            valeCenter.q + Math.cos(angle) * RADIUS,
+            valeCenter.r + Math.sin(angle) * RADIUS
+        ));
+    }
+    window.campaign2UnicornPatrolPath = path;
+    window.campaign2UnicornPathIndex = 0;
+
+    const unicorn = window.createMonster('unicorn', path[0], null, null, 'neutral');
+    unicorn.isNPC = true;
+    unicorn.noAttack = true;
+    unicorn.aiState = 'idle';
+    unicorn.dialogueId = 'wild_unicorn';
+    window.entities.push(unicorn);
+    window.campaign2UnicornEntity = unicorn;
+
+    // Fixed track markers along the loop — not a literal movement trail,
+    // just deterministic waypoint-to-waypoint hexes, so visibility/detail
+    // can be computed from Knowledge: Nature rank without needing to record
+    // an actual movement history.
+    const trackHexes = [];
+    for (let i = 0; i < path.length; i++) {
+        const from = path[i];
+        const to = path[(i + 1) % path.length];
+        const STEPS = 3;
+        for (let s = 0; s < STEPS; s++) {
+            const t = s / STEPS;
+            trackHexes.push({
+                hex: window.hexRound(from.q + (to.q - from.q) * t, from.r + (to.r - from.r) * t),
+                dirQ: to.q - from.q, dirR: to.r - from.r, segmentIndex: i,
+            });
+        }
+    }
+    window.campaign2UnicornTrackHexes = trackHexes;
+    trackHexes.forEach(t => {
+        const key = `${t.hex.q},${t.hex.r}`;
+        if (window.tileObjects[key]) return; // never overwrite existing content
+        window.tileObjects[key] = { type: 'unicorn_track', dirQ: t.dirQ, dirR: t.dirR, segmentIndex: t.segmentIndex };
+    });
+}
+
 window.readVampireGrave = function() {
     const player = window.party[0];
     if (player.inventory && player.inventory.includes('ashen_fang')) {
@@ -1637,6 +1695,7 @@ function setupVillageScene(forLoadOnly = false) {
     buildReddale(eastRoadEnd);
     buildVampireGrave(westRoadEnd);
     buildDruidGrove(westRoadEnd);
+    spawnWildUnicorn();
     buildNorthwatchFort(northwatchTurnHex);
     buildRidgeholdFort(borderRoadEnd);
 

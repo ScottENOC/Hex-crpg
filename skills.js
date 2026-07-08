@@ -416,17 +416,17 @@ const skills = {
     },
     'druid_knowledge_nature': {
         name: 'Knowledge: Nature',
-        description: 'A trained eye for tracks, kills, and the wild in general — lets you read details others would miss. (Anti-requisite: elf Knowledge: Nature)',
+        description: 'A trained eye for tracks, kills, and the wild in general — lets you read details others would miss. Higher ranks reveal more of a trail (see the unicorn tracking mechanic) and read it in more detail. (Anti-requisite: elf Knowledge: Nature)',
         tree: 'druid',
-        maxRanks: 1,
+        maxRanks: 3,
         anti_prereq: 'elf_knowledge_nature',
         apply: (player) => {}
     },
     'elf_knowledge_nature': {
         name: 'Knowledge: Nature',
-        description: 'A trained eye for tracks, kills, and the wild in general — lets you read details others would miss. (Anti-requisite: druid Knowledge: Nature)',
+        description: 'A trained eye for tracks, kills, and the wild in general — lets you read details others would miss. Higher ranks reveal more of a trail (see the unicorn tracking mechanic) and read it in more detail. (Anti-requisite: druid Knowledge: Nature)',
         tree: 'elf',
-        maxRanks: 1,
+        maxRanks: 3,
         anti_prereq: 'druid_knowledge_nature',
         apply: (player) => {}
     },
@@ -1703,6 +1703,15 @@ function hasKnowledgeNature(entity) {
     return !!(entity?.skills?.druid_knowledge_nature || entity?.skills?.elf_knowledge_nature);
 }
 window.hasKnowledgeNature = hasKnowledgeNature;
+
+// Rank (1-3) of whichever Knowledge: Nature pickup the entity has, 0 if
+// neither — used to scale how much of a trail (e.g. the unicorn's tracks,
+// gameEngine.js) is visible and how much detail (direction/age) reading it
+// reveals, rather than Knowledge: Nature being a flat yes/no gate.
+function getKnowledgeNatureRank(entity) {
+    return entity?.skills?.druid_knowledge_nature || entity?.skills?.elf_knowledge_nature || 0;
+}
+window.getKnowledgeNatureRank = getKnowledgeNatureRank;
 
 function hasKnowledgeReligion(entity) {
     return !!entity?.skills?.knowledge_religion;

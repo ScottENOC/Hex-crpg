@@ -3118,14 +3118,28 @@ window.endOskarDuel = endOskarDuel;
 // tied to a throne" hook in Thessaly's tome (readWizardTowerTome,
 // campaign2World.js). Elder Nessa Wren is wary of outsiders; a single
 // trust-task (clear the feral den fouling the grove's spring) earns the
-// druids' faith and, with it, the learn_unicorn_summon skill — granted
-// directly via grantSkillRank, never purchasable with skill points (see
-// skills.js). The unicorn itself is not a party member: it only ever
-// answers as the player's ONE permanent Nature animal companion (see
-// ui.js's dropdown gating and resolveSpell's guard, gameEngine.js). ---
+// druids' faith — but she doesn't hand over the unicorn herself, only
+// points at the wilderness it wanders (unicorn_tracking below). Finding it
+// means reading its tracks (Knowledge: Nature — see isUnicornTrackVisible/
+// showUnicornTrackDetail, gameEngine.js) back to wherever it currently is,
+// then earning ITS trust directly (window.npcDialogueTrees.wild_unicorn) —
+// that final approach is what actually grants learn_unicorn_summon, never
+// purchasable with skill points (see skills.js). The unicorn itself is not
+// a party member: it only ever answers as the player's ONE permanent
+// Nature animal companion (see ui.js's dropdown gating and resolveSpell's
+// guard, gameEngine.js). ---
 window.npcDialogueTrees.elder_nessa_wren = (npc) => {
     window.questLog = window.questLog || [];
     const quest = window.questLog.find(q => q.id === 'druid_grove');
+    const trackingQuest = window.questLog.find(q => q.id === 'unicorn_tracking');
+
+    if (trackingQuest) {
+        const line = trackingQuest.status === 'completed'
+            ? "You've earned her trust, not mine — that was never mine to give. Go well."
+            : "She's out there, southwest of here, wherever her own path takes her. Read the ground and you'll find her — I can't walk it for you.";
+        window.showDialogue(npc, line, [{ label: "I understand.", action: () => {} }]);
+        return;
+    }
 
     if (quest?.status === 'completed') {
         window.showDialogue(npc, "The grove remembers a friend. Go well — and listen for hoofbeats, when you need them most.", [
@@ -3147,8 +3161,11 @@ window.npcDialogueTrees.elder_nessa_wren = (npc) => {
                 label: "What now?",
                 action: () => {
                     quest.status = 'completed';
-                    if (window.grantSkillRank) window.grantSkillRank(window.player, 'learn_unicorn_summon');
-                    window.showDialogue(npc, "She won't come to just anyone who calls her kind — but she'll come to you now, if you've truly earned this place's trust.", [
+                    window.questLog.push({
+                        id: 'unicorn_tracking', title: 'The Silver Trail', giver: 'Elder Nessa Wren',
+                        status: 'active', description: "Track the wild unicorn to wherever it currently roams and earn its trust directly.", resolution: null
+                    });
+                    window.showDialogue(npc, "There's one who still runs wild and free, southwest of this grove — I won't pretend to know exactly where; she keeps her own paths. A keen eye reads the ground well enough to follow. Find her yourself. Whatever happens after that is between the two of you, not me.", [
                         { label: "I understand.", action: () => {} }
                     ]);
                 }
@@ -3196,3 +3213,35 @@ function startDruidGroveTrial() {
     window.renderEntities();
 }
 window.startDruidGroveTrial = startDruidGroveTrial;
+
+// The final trust-trial: reached by actually tracking the wild unicorn down
+// (see spawnWildUnicorn/campaign2UnicornTrackHexes, campaign2World.js) and
+// clicking it — the same isNPC+talkToNPC path every other NPC uses. Only
+// resolves the unicorn_tracking quest if that quest is active; otherwise
+// it's just a flavor sighting (finding it before the druid ever pointed you
+// there shouldn't shortcut the quest, but shouldn't be a dead click either).
+window.npcDialogueTrees.wild_unicorn = (npc) => {
+    window.questLog = window.questLog || [];
+    const trackingQuest = window.questLog.find(q => q.id === 'unicorn_tracking');
+
+    if (!trackingQuest || trackingQuest.status !== 'active') {
+        window.showDialogue(npc, "A creature of old legend watches you a long moment, utterly still — then turns and is gone before you can take a single step closer.", [
+            { label: "...", action: () => {} }
+        ]);
+        return;
+    }
+
+    window.showDialogue(npc, "It doesn't flee. It watches you approach, head lowered, one measured step at a time — weighing you the way the grove itself seemed to.", [
+        {
+            label: "Approach slowly.",
+            action: () => {
+                trackingQuest.status = 'completed';
+                if (window.grantSkillRank) window.grantSkillRank(window.player, 'learn_unicorn_summon');
+                window.showDialogue(npc, "It closes the last of the distance itself and presses its brow briefly to your hand — then withdraws, watching, waiting to be called.", [
+                    { label: "I understand.", action: () => {} }
+                ]);
+            }
+        },
+        { label: "Not yet.", action: () => {} }
+    ]);
+};

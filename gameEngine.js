@@ -1084,6 +1084,7 @@ function startGameCore(isLoading = false) {
       water: new Image(),
       boar: new Image(),
       tiger: new Image(),
+      unicorn: new Image(),
       eagle: new Image(),
       eagleflying: new Image(),
       foliage: new Image(),
@@ -1281,6 +1282,7 @@ function startGameCore(isLoading = false) {
   visuals.water.src = 'images/water.png';
   visuals.boar.src = 'images/boar.png';
   visuals.tiger.src = 'images/tiger.png';
+  visuals.unicorn.src = 'images/unicorn.png';
   visuals.eagle.src = 'images/eagle.png';
   visuals.eagleflying.src = 'images/eagleflying.png';
   visuals.foliage.src = 'images/foliage.png';
@@ -1827,6 +1829,39 @@ function renderEntities() {
               window.mapCtx.ellipse(x, y, size * 0.35, size * 0.2, 0, 0, Math.PI * 2);
               window.mapCtx.fill();
               window.mapCtx.globalAlpha = 1.0;
+          } else if (obj.type === 'unicorn_track') {
+              // Only drawn at all if this hex's track happens to fall within
+              // the visible fraction for the player's current Knowledge:
+              // Nature rank (see isUnicornTrackVisible, gameEngine.js) — a
+              // rank-0 player never sees any of these.
+              if (!window.isUnicornTrackVisible(q, r)) {
+                  // skip silently
+              } else {
+                  const dq = obj.dirQ, dr = obj.dirR;
+                  const dxp = 1.5 * dq;
+                  const dyp = Math.sqrt(3) * dr + (Math.sqrt(3) / 2) * dq;
+                  const dirAngle = Math.atan2(dyp, dxp);
+                  window.mapCtx.save();
+                  window.mapCtx.translate(x, y);
+                  window.mapCtx.rotate(dirAngle);
+                  window.mapCtx.fillStyle = 'rgba(120, 100, 90, 0.75)';
+                  // Two small hoof-print ovals, offset like a walking gait,
+                  // plus a small chevron pointing the direction of travel.
+                  window.mapCtx.beginPath();
+                  window.mapCtx.ellipse(-size * 0.12, -size * 0.08, size * 0.08, size * 0.05, 0, 0, Math.PI * 2);
+                  window.mapCtx.fill();
+                  window.mapCtx.beginPath();
+                  window.mapCtx.ellipse(size * 0.05, size * 0.08, size * 0.08, size * 0.05, 0, 0, Math.PI * 2);
+                  window.mapCtx.fill();
+                  window.mapCtx.strokeStyle = 'rgba(120, 100, 90, 0.9)';
+                  window.mapCtx.lineWidth = 2;
+                  window.mapCtx.beginPath();
+                  window.mapCtx.moveTo(size * 0.2, -size * 0.1);
+                  window.mapCtx.lineTo(size * 0.32, 0);
+                  window.mapCtx.lineTo(size * 0.2, size * 0.1);
+                  window.mapCtx.stroke();
+                  window.mapCtx.restore();
+              }
           } else if (obj.type === 'flag') {
               // Arena flag-defense/flag-attack scenarios: no dedicated art
               // asset, so drawn as a simple pole + banner like the other
@@ -1948,6 +1983,7 @@ function renderEntities() {
                           if (e.name === 'Wolf' && window.gameVisuals.wolf?.complete) img = window.gameVisuals.wolf; 
                           if (e.name === 'Boar' && window.gameVisuals.boar?.complete) img = window.gameVisuals.boar;
                           if (e.name === 'Tiger' && window.gameVisuals.tiger?.complete) img = window.gameVisuals.tiger;
+                          if (e.name === 'Unicorn' && window.gameVisuals.unicorn?.complete) img = window.gameVisuals.unicorn;
                           if (e.name === 'Troll' && window.gameVisuals.troll?.complete) img = window.gameVisuals.troll;
                           if (e.dragonSizeTier && window.gameVisuals.dragon?.complete) img = window.gameVisuals.dragon;
                           if (e.name === 'Eagle') {
@@ -2266,6 +2302,7 @@ function tick() {
             rebuildRestlessSet(); // refresh whose HP/mana/poison the regen loop needs to touch
             if (window.siegeState?.active) tickSiegeState();
             if (window.warState?.active) tickWarState();
+            if (window.tickUnicornWander) window.tickUnicornWander();
             tickCounter = 0;
         }
     }
@@ -2843,6 +2880,7 @@ function interactWithTileObject(q, r, player) {
     if (doorObj.type === 'corpse' && window.harvestCorpse) { window.harvestCorpse(q, r); return; }
     if (doorObj.type === 'evidence' && window.searchEvidence) { window.searchEvidence(q, r); return; }
     if (doorObj.type === 'gate_lever' && window.pullNorthwatchGateLever) { window.pullNorthwatchGateLever(); return; }
+    if (doorObj.type === 'unicorn_track' && window.showUnicornTrackDetail) { window.showUnicornTrackDetail(doorObj, q, r); return; }
 }
 window.interactWithTileObject = interactWithTileObject;
 
@@ -5088,6 +5126,95 @@ function checkWarPressureThresholds() {
     }
 }
 window.checkWarPressureThresholds = checkWarPressureThresholds;
+
+// Wild unicorn tracking: the druid grove questline (campaign2Dialogue.js)
+// doesn't hand over the unicorn directly — it wanders a fixed loop
+// (window.campaign2UnicornPatrolPath, set up by spawnWildUnicorn in
+// campaign2World.js) and has to actually be tracked down. A ring of fixed
+// "track" tileObjects along that loop (window.campaign2UnicornTrackHexes)
+// stand in for footprints; how many are visible, and how much detail
+// clicking one reveals, scales with the player's Knowledge: Nature rank
+// (1-3, see getKnowledgeNatureRank in skills.js) rather than being an
+// all-or-nothing gate.
+
+// Advances the unicorn one waypoint at a time on the same ~1s out-of-combat
+// cadence tickSiegeState/tickWarState use (runTickInternal) — reuses the
+// exact same destination-based movement every scheduled NPC already walks
+// with (see updateNpcSchedules), just looping forever instead of a daily
+// route.
+function tickUnicornWander() {
+    const unicorn = window.campaign2UnicornEntity;
+    const path = window.campaign2UnicornPatrolPath;
+    if (!unicorn || !unicorn.alive || !path || path.length === 0) return;
+    if (unicorn.destination) return; // still walking to its current waypoint
+    window.campaign2UnicornPathIndex = ((window.campaign2UnicornPathIndex || 0) + 1) % path.length;
+    unicorn.destination = { q: path[window.campaign2UnicornPathIndex].q, r: path[window.campaign2UnicornPathIndex].r };
+}
+window.tickUnicornWander = tickUnicornWander;
+
+// Deterministic per-hex pseudo-random value in [0,1) — the same hex always
+// hashes to the same value, so a given track's visibility is stable at a
+// fixed Knowledge: Nature rank (it just gains company as rank rises, never
+// flickers on its own).
+function hashHex01(q, r) {
+    const n = Math.sin(q * 127.1 + r * 311.7) * 43758.5453;
+    return n - Math.floor(n);
+}
+
+// Fraction of the trail a given Knowledge: Nature rank reveals — "only a
+// few percent" at rank 1, most of it by rank 3.
+const UNICORN_TRACK_VISIBILITY = { 0: 0, 1: 0.05, 2: 0.35, 3: 0.7 };
+
+function isUnicornTrackVisible(q, r) {
+    const rank = window.getKnowledgeNatureRank ? window.getKnowledgeNatureRank(window.player) : 0;
+    const frac = UNICORN_TRACK_VISIBILITY[rank] || 0;
+    if (frac <= 0) return false;
+    return hashHex01(q, r) < frac;
+}
+window.isUnicornTrackVisible = isUnicornTrackVisible;
+
+// Axial-delta-to-compass label, independent of camera pan/zoom (unlike
+// hexToPixel) since only the direction of the vector matters here.
+function hexDirectionLabel(dq, dr) {
+    const x = 1.5 * dq;
+    const y = Math.sqrt(3) * dr + (Math.sqrt(3) / 2) * dq;
+    const deg = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    const dirs = ['east', 'southeast', 'south', 'southwest', 'west', 'northwest', 'north', 'northeast'];
+    return dirs[Math.round(deg / 45) % 8];
+}
+
+// Coarse "how long ago" read on a track, derived from how many waypoints
+// behind the unicorn's current position this track's segment is — no
+// literal elapsed-time bookkeeping needed since the loop itself is the clock.
+function getUnicornTrackAgeLabel(segmentIndex) {
+    const path = window.campaign2UnicornPatrolPath;
+    if (!path || path.length === 0) return 'an unknown age';
+    const curIdx = window.campaign2UnicornPathIndex || 0;
+    const behind = (curIdx - segmentIndex + path.length) % path.length;
+    if (behind <= 1) return 'fresh — the trail is warm';
+    if (behind <= 3) return 'a day or so old';
+    return 'old, gone cold';
+}
+
+// The click-to-read interaction (see interactWithTileObject's unicorn_track
+// case below) — deliberately click-based rather than hover/long-tap, the
+// same interaction verb this engine already uses for every other tile
+// object (journals, the gate lever, etc.).
+function showUnicornTrackDetail(obj, q, r) {
+    // A track that isn't currently revealed (see isUnicornTrackVisible)
+    // shouldn't be readable just because a click happened to land on that
+    // hex — there's nothing visibly there to click on in the first place.
+    if (!window.isUnicornTrackVisible(q, r)) return;
+    const rank = window.getKnowledgeNatureRank ? window.getKnowledgeNatureRank(window.player) : 0;
+    if (rank <= 1) {
+        window.showMessage("Faint hoofprints, half-obscured — hard to say which way they lead.");
+        return;
+    }
+    let msg = `Hoofprints lead ${hexDirectionLabel(obj.dirQ, obj.dirR)}.`;
+    if (rank >= 3) msg += ` They look ${getUnicornTrackAgeLabel(obj.segmentIndex)}.`;
+    window.showMessage(msg);
+}
+window.showUnicornTrackDetail = showUnicornTrackDetail;
 
 function checkCombatEnd() {
     // Track Boss defeats
