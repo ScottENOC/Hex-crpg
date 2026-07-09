@@ -4074,8 +4074,11 @@ function handleClick(e){
         return;
     }
 
-    // TALK TO NPC — suppressed during combat so clicks default to attacking instead
-    if (!window.isInCombat && target && target.isNPC && window.distance(player.hex, clickedHex) <= 3) {
+    // TALK TO NPC — suppressed during combat so clicks default to attacking
+    // instead, and suppressed whenever a skill/action is already armed (e.g.
+    // Pickpocket) so clicking the target actually performs that action
+    // instead of silently opening dialogue.
+    if (!window.isInCombat && !window.playerAction && target && target.isNPC && window.distance(player.hex, clickedHex) <= 3) {
         talkToNPC(target);
         return;
     }
@@ -4209,10 +4212,17 @@ function handleClick(e){
             } else if (act.id === 'pickpocket') {
                 if (target && (target.side === 'neutral' || !canSee(target, player))) {
                     if (window.distance(player.hex, target.hex) === 1) {
-                        if (target.inventory && target.inventory.length > 0) {
-                            const stolen = target.inventory.pop();
-                            player.inventory.push(stolen);
-                            window.showMessage(`${player.name} stole ${window.items[stolen].name} from ${target.name}!`);
+                        // Worn/wielded items live in the same .inventory array as
+                        // carried loot (equipToMonster pushes both), so anything
+                        // currently equipped has to be excluded here or pickpocket
+                        // could lift a weapon right off the target's hands.
+                        const equippedIds = new Set(Object.values(target.equipped || {}).filter(Boolean));
+                        const stealableIdx = (target.inventory || []).map((id, i) => ({ id, i })).filter(x => !equippedIds.has(x.id));
+                        if (stealableIdx.length > 0) {
+                            const pick = stealableIdx[stealableIdx.length - 1];
+                            target.inventory.splice(pick.i, 1);
+                            player.inventory.push(pick.id);
+                            window.showMessage(`${player.name} stole ${window.items[pick.id].name} from ${target.name}!`);
                         } else {
                             window.showMessage(`${target.name}'s pockets are empty.`);
                         }

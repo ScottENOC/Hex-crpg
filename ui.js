@@ -886,6 +886,8 @@ function updateActionButtons() {
                     } else if (skillKey === 'dagger_throw') {
                         const eq = charData.equipped.weapon;
                         if (eq !== 'dagger') weaponReqMet = false;
+                    } else if (skillKey === 'pickpocket') {
+                        if (!charData.isStealthed) weaponReqMet = false;
                     }
                     
                     if (weaponReqMet) {
