@@ -890,6 +890,74 @@ function buildMillbrook(roadEnd) {
     }
 }
 
+// A dragon, out past Millbrook — pure "there's a threat in the wilds" flavor
+// with no tie to the main plotlines. Its rampage (stolen sheep, a burned
+// barn) is told entirely through Petra Hollis's dialogue (campaign2Dialogue.js's
+// petra_hollis tree) rather than any ambient sighting or simulated raid — the
+// lair itself only exists so the quest has a real destination and a real
+// fight at the end of it. Deliberately far from Millbrook (window.distance
+// works out to exactly 100 for a pure-q offset at the same r) and well off
+// the north road's column, so nothing stumbles onto it by accident.
+function buildDragonLair() {
+    const millbrook = window.campaign2MillbrookCenter;
+    if (!millbrook) return;
+    const center = { q: millbrook.q + 100, r: millbrook.r };
+    const OUTER_RADIUS = 6;
+    const DEN_RADIUS = 2;
+    for (let dq = -OUTER_RADIUS; dq <= OUTER_RADIUS; dq++) {
+        for (let dr = -OUTER_RADIUS; dr <= OUTER_RADIUS; dr++) {
+            const hex = { q: center.q + dq, r: center.r + dr };
+            const d = window.distance(center, hex);
+            if (d <= DEN_RADIUS) window.setTerrainAt(hex.q, hex.r, 'Cave Floor');
+            else if (d <= OUTER_RADIUS) window.setTerrainAt(hex.q, hex.r, 'Rocky Outcrop');
+        }
+    }
+
+    const dragon = window.createMonster('dragon_young', { q: center.q, r: center.r });
+    dragon.name = 'Ashveil';
+    dragon.title = 'the Ember-Scaled';
+    dragon.isMillbrookDragon = true;
+    dragon.behaviorType = 'stationary'; // guards its hoard, doesn't wander off to be found by accident
+    // The hoard: far more gold than any single encounter elsewhere in the
+    // game, plus a couple of real treasures. Both the gold and the inventory
+    // transfer to the player automatically on the kill (handleLethalDamage,
+    // gameEngine.js) — no separate lootable object needed. Pushed directly
+    // rather than via equipToMonster so nothing here ends up worn/wielded,
+    // just carried hoard.
+    dragon.gold = 750;
+    dragon.inventory.push('glowing_ring', 'stormcaller_spear');
+    window.entities.push(dragon);
+
+    window.campaign2DragonLairCenter = center;
+}
+window.buildDragonLair = buildDragonLair;
+
+// Reveals a wide radius of terrain around the dragon's lair the moment Petra
+// tells the player roughly where to look — same exploredHexes mechanism
+// cheatExploreEverything (above) uses, just scoped to one area instead of
+// the whole world.
+function revealDragonLairArea() {
+    const center = window.campaign2DragonLairCenter;
+    if (!center) return;
+    const REVEAL_RADIUS = 10;
+    for (let dq = -REVEAL_RADIUS; dq <= REVEAL_RADIUS; dq++) {
+        for (let dr = -REVEAL_RADIUS; dr <= REVEAL_RADIUS; dr++) {
+            const hex = { q: center.q + dq, r: center.r + dr };
+            if (window.distance(center, hex) <= REVEAL_RADIUS) window.exploredHexes.add(`${hex.q},${hex.r}`);
+        }
+    }
+    if (window.drawMap) window.drawMap();
+}
+window.revealDragonLairArea = revealDragonLairArea;
+
+// Dead entities stay in window.entities with alive:false (see
+// checkDisappearance/handleLethalDamage) rather than being spliced out, so
+// this is a simple lookup, not a separately tracked flag.
+window.isMillbrookDragonSlain = function() {
+    const dragon = window.entities.find(e => e.isMillbrookDragon);
+    return !dragon || !dragon.alive;
+};
+
 // Silverhart Palace: the kingdom's capital, one more world-hex north of
 // Millbrook on the same road (see setupVillageScene's northRoadEnd). Three
 // separate carveBuilding wings clustered around a short courtyard, the same
@@ -2093,6 +2161,7 @@ function setupVillageScene(forLoadOnly = false) {
     buildNecromancerCrypt();
     buildLichBarrow();
     buildMillbrook(millbrookWaypoint);
+    buildDragonLair();
     buildSilverhartPalace(northRoadEnd);
     buildEmberlode(westRoadEnd);
     buildReddale(eastRoadEnd);

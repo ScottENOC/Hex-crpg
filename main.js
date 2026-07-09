@@ -448,6 +448,11 @@ document.addEventListener("DOMContentLoaded", () => {
             const modal = isCloseBtn ? e.target.closest(".modal") : e.target;
             if (modal) {
                 if (modal.id === "end-run-modal" && isModalOverlay) return;
+                // Dialogue choices (e.g. "which side do I back in this fight?")
+                // must be picked explicitly — clicking the backdrop or the X
+                // used to silently dismiss the prompt with no way to bring it
+                // back, leaving whatever the choice was meant to gate unresolved.
+                if (modal.id === "dialogue-modal") return;
 
                 modal.style.display = "none";
                 window.isPausedForReaction = false;

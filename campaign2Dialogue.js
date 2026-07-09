@@ -1356,10 +1356,62 @@ window.npcDialogueTrees = {
         ]);
     },
     petra_hollis: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const dragonQuest = window.questLog.find(q => q.id === 'millbrook_dragon');
+
+        if (dragonQuest && dragonQuest.resolution) {
+            window.showDialogue(npc, "Ashveil's gone, and good riddance. Sheep haven't slept easier in a generation. Millbrook won't forget it, traveler — nor will word stop there, I'd wager.", [{ label: "Glad to help.", action: () => {} }]);
+            return;
+        }
+
+        if (dragonQuest) {
+            if (window.isMillbrookDragonSlain && window.isMillbrookDragonSlain()) {
+                window.showDialogue(npc, "You're back — and you're standing, so I take it Ashveil isn't anymore?", [
+                    {
+                        label: "It's dead. The hoard's yours to hear about, not to share.",
+                        action: () => {
+                            dragonQuest.status = 'complete';
+                            dragonQuest.resolution = 'dragon_slain';
+                            if (window.cascadeReputation) {
+                                window.cascadeReputation([npc.reputation, window.factions?.silverhart_kingdom], 50, 40);
+                            }
+                            window.showDialogue(npc, "Gods above. You actually did it. I don't know how Millbrook thanks someone for that, but I'll make sure it does — and the crown will hear Ashveil's dead by nightfall, one way or another. Whatever you carried out of that cave, you earned every coin of it.", [{ label: "It was worth the risk.", action: () => {} }]);
+                        }
+                    },
+                    { label: "Not yet. Still working up the nerve.", action: () => {} }
+                ]);
+            } else {
+                window.showDialogue(npc, "Please tell me you're not going up there without a real plan. Ashveil's no wolf pack — that thing burned the Aldric barn to cinders and carried off half our flock in one night, and it barely noticed we were there at all. I marked the direction on your map. That's the most I can do for you.", [{ label: "I'll be careful.", action: () => {} }]);
+            }
+            return;
+        }
+
         window.showDialogue(npc, "Don't get many travelers this far. Word is something's stirred up trouble on the road south of here — a house gone quiet, no one seen in or out for weeks. Nobody round here's brave enough to go look.", [
             {
                 label: "I've been to that house.",
                 action: () => window.showDialogue(npc, "Then you know more than I care to. Keep whatever you found to yourself, if you can.", [{ label: "Noted.", action: () => {} }])
+            },
+            {
+                label: "What was that about a dragon?",
+                action: () => {
+                    window.showDialogue(npc, "You've heard, then. Something's nested out east in the high rocks — nobody's seen it up close and lived to draw it proper, but we've seen what it leaves behind. The Aldric barn's a scorch mark now. We've lost more sheep than I can count to something swooping down out of a clear sky. Whatever it is, it's not natural-sized, and it is not friendly.", [
+                        {
+                            label: "I'll go kill it.",
+                            action: () => {
+                                if (!window.questLog.find(q => q.id === 'millbrook_dragon')) {
+                                    window.questLog.push({
+                                        id: 'millbrook_dragon', title: 'Ashveil of the Ashfall Peaks',
+                                        giver: 'Petra Hollis', status: 'active',
+                                        description: 'A dragon has been raiding livestock and burning outbuildings east of Millbrook. Petra marked its lair on the map — this is a dangerous, high-level fight, not a wolf hunt. Slay it and return to Petra.'
+                                    });
+                                }
+                                if (window.revealDragonLairArea) window.revealDragonLairArea();
+                                window.showDialogue(npc, "Brave, or mad — we'll see which. I've marked roughly where the smoke rises from, out past the ridgeline. Understand me: this isn't a bandit or a hungry wolf. Whole villages have burned to things smaller than what's living up there. Go in with everything you've got, or don't go at all.", [{ label: "Understood.", action: () => {} }]);
+                            }
+                        },
+                        { label: "That's not my problem.", action: () => {} }
+                    ]);
+                }
             },
             {
                 label: "Anything else I should know?",
