@@ -4216,6 +4216,17 @@ function handleClick(e){
                         } else {
                             window.showMessage(`${target.name}'s pockets are empty.`);
                         }
+                        // Being caught doesn't cost the item or turn violent — it's a
+                        // reputation/legal consequence, not a combat one.
+                        const catchChance = Math.max(5, 25 - (player.skills?.stealth_agility ? 5 : 0) - (player.skills?.stealth_rogue ? 5 : 0));
+                        if (Math.random() * 100 < catchChance) {
+                            if (target.reputation) window.adjustReputation(target.reputation, -15, 25);
+                            const faction = target.factionId && window.factions[target.factionId];
+                            if (faction) window.adjustReputation(faction, -5, 5);
+                            const fine = Math.min(player.gold || 0, 10 + Math.floor(Math.random() * 20));
+                            player.gold = (player.gold || 0) - fine;
+                            window.showMessage(`${target.name} notices! Word of the theft spreads, and the local watch fines you ${fine} gold.`);
+                        }
                         spendTP(player, 5);
                         actionHandled = true;
                     }

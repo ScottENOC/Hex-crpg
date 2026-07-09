@@ -390,6 +390,31 @@ function drawMap() {
       }
   });
 
+  // 4b. PASS 3b: Enemy vision-range overlay while stealthed. Only enemies the
+  // player can currently see are shown (you don't get intel on enemies you
+  // haven't spotted), and only the on-screen hex set already gathered above
+  // is checked, so cost is bounded by (screen hexes) x (visible enemy count)
+  // with hasLineOfSight's existing per-pair memoization doing the heavy
+  // lifting — cheap even with several enemies in view. No facing/cone yet
+  // (that's a separate, bigger mechanic) so this is a plain vision-range
+  // radius clipped by line of sight, not a true cone.
+  if (window.player?.isStealthed) {
+      const visibleEnemies = window.entities.filter(e => e.alive && e.side === 'enemy' && isVisibleToPlayer(e.hex, friendlies));
+      if (visibleEnemies.length) {
+          visibleAndExplored.forEach(({q, r, visible}) => {
+              if (!visible) return;
+              const seenByAny = visibleEnemies.some(en => {
+                  const visionRange = (window.LIVE_VISION_RANGE || 25) + (en.visionBonus || 0);
+                  return distance(en.hex, {q, r}) <= visionRange && hasLineOfSight(en.hex, {q, r});
+              });
+              if (seenByAny) {
+                  const {x, y} = hexToPixel(q, r);
+                  drawHex(x, y, hexSize, { fill: 'rgba(255,0,0,0.10)' });
+              }
+          });
+      }
+  }
+
   // 5. PASS 4: Highlights
   highlightedHexes.forEach(hex => {
       const {x,y} = hexToPixel(hex.q, hex.r);
