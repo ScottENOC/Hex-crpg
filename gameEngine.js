@@ -2211,8 +2211,31 @@ function triggerPenalty(casterName, victim, spell) {
     }
 }
 
+// Called from tick() every 10ms. A true dirty-flag (updated wherever
+// aiState is set) would need every one of the 20+ scattered
+// `entity.aiState = 'combat'` assignment sites across the codebase to
+// reliably flip it — a real risk that a future content addition misses one
+// and silently goes stale. Throttling instead needs no such bookkeeping:
+// while nothing is in combat, .some() must scan every entity to confirm
+// that (its expensive worst case), so that full recheck is capped to once
+// every IN_COMBAT_RECHECK_MS instead of every single tick. Once something
+// IS in combat, .some() finds a match almost immediately (cheap either
+// way) and is rechecked on every call with no throttle, so combat ending
+// is still detected without delay.
+const IN_COMBAT_RECHECK_MS = 100;
+let _cachedInCombat = false;
+let _lastInCombatCheckTime = -Infinity;
 function checkInCombat() {
-    return window.entities.some(e => e.alive && e.side === 'enemy' && e.aiState === 'combat');
+    if (_cachedInCombat) {
+        _cachedInCombat = window.entities.some(e => e.alive && e.side === 'enemy' && e.aiState === 'combat');
+        _lastInCombatCheckTime = performance.now();
+        return _cachedInCombat;
+    }
+    const now = performance.now();
+    if (now - _lastInCombatCheckTime < IN_COMBAT_RECHECK_MS) return false;
+    _lastInCombatCheckTime = now;
+    _cachedInCombat = window.entities.some(e => e.alive && e.side === 'enemy' && e.aiState === 'combat');
+    return _cachedInCombat;
 }
 
 // AMBIENT-NPC "SUPERPOSITION" / ACTIVE SET
