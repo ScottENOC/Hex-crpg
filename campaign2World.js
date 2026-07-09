@@ -1111,7 +1111,7 @@ function buildSilverhartPalace(roadEnd) {
     const throneSeat = { q: throneCenter.q, r: throneCenter.r - 3 };
     window.tileObjects[`${throneSeat.q},${throneSeat.r}`] = { type: 'throne' };
     window.tileObjects[`${throneSeat.q - 2},${throneSeat.r}`] = { type: 'fireplace', lightRadius: 6 };
-    window.tileObjects[`${throneSeat.q + 2},${throneSeat.r}`] = { type: 'fireplace', lightRadius: 6 };
+    window.tileObjects[`${throneSeat.q + 2},${throneSeat.r-2}`] = { type: 'fireplace', lightRadius: 6 };
     window.tileObjects[`${throneCenter.q - 1},${throneCenter.r - 1}`] = { type: 'table' };
     window.tileObjects[`${throneCenter.q + 1},${throneCenter.r - 1}`] = { type: 'table' };
     window.tileObjects[`${throneCenter.q - 1},${throneCenter.r + 1}`] = { type: 'table' };
@@ -1284,8 +1284,8 @@ function buildSilverhartPalace(roadEnd) {
     // meets the wall, flanked by two watchtowers.
     const gateHexes = [
         { q: throneCenter.q, r: throneCenter.r + WALL_RADIUS },
-        { q: throneCenter.q - 1, r: throneCenter.r + WALL_RADIUS },
-        { q: throneCenter.q - 2, r: throneCenter.r + WALL_RADIUS },
+    //    { q: throneCenter.q - 1, r: throneCenter.r + WALL_RADIUS },
+    //   { q: throneCenter.q - 2, r: throneCenter.r + WALL_RADIUS },
     ];
     const gateKeys = new Set(gateHexes.map(h => `${h.q},${h.r}`));
     ringHexes.forEach(h => {
@@ -1307,7 +1307,7 @@ function buildSilverhartPalace(roadEnd) {
     // in favor of two towers flanking the gate itself instead.
     const towerSpots = [
         { q: throneCenter.q + 2, r: throneCenter.r + 21 },                 // flanking the gate (east)
-        { q: throneCenter.q - 4, r: throneCenter.r + WALL_RADIUS },        // flanking the gate (west)
+        { q: throneCenter.q - 2, r: throneCenter.r + WALL_RADIUS },        // flanking the gate (west)
         { q: throneCenter.q + WALL_RADIUS, r: throneCenter.r },            // east corner
         { q: throneCenter.q - WALL_RADIUS, r: throneCenter.r },            // west corner
         { q: throneCenter.q, r: throneCenter.r - WALL_RADIUS },            // north corner
@@ -1623,7 +1623,7 @@ function buildSilverhartPalace(roadEnd) {
     // Gate entry: a formal arch marking where the road out of the palace
     // gate becomes the Diplomatic Quarter proper.
     window.tileObjects[`${dqCenter},${throneCenter.r + 24}`] = { type: 'gate_arch' };
-    window.campaign2DiplomaticGateCenter = { q: dqCenter, r: throneCenter.r + 24 };
+    window.campaign2DiplomaticGateCenter = { q: dqCenter, r: throneCenter.r + 23 };
 
     // Left column (elven/aldenreach/ironbond) is pushed further south than
     // its original spacing — the elven embassy's own carveFlatRoom wall
@@ -1674,7 +1674,7 @@ function buildSilverhartPalace(roadEnd) {
     window.tileObjects[`${aldenreachCenter.q},${aldenreachCenter.r}`] = { type: 'table' };
     window.campaign2AldenreachEmbassyCenter = aldenreachCenter;
 
-    const corvaneCenter = { q: dqCenter + 8, r: embassyRow2R };
+    const corvaneCenter = { q: dqCenter + 8, r: embassyRow2R-3 };
     const corvaneDoor = { q: corvaneCenter.q - 3, r: corvaneCenter.r };
     window.interiorRegions.push(carveFlatRoom(corvaneCenter.q, corvaneCenter.r, 3, 2, corvaneDoor, 'Wood Floor'));
     for (let q = dqCenter + 1; q < corvaneDoor.q; q++) window.setTerrainAt(q, embassyRow2R, 'Path');
@@ -1695,9 +1695,9 @@ function buildSilverhartPalace(roadEnd) {
     window.tileObjects[`${plazaCenter.q + 2},${plazaCenter.r}`] = { type: 'bench' };
     window.campaign2DiplomaticPlazaCenter = plazaCenter;
 
-    const ironbondOfficeCenter = { q: dqCenter - 8, r: officeRowL };
+    const ironbondOfficeCenter = { q: dqCenter - 7, r: officeRowL -2 };
     const ironbondOfficeDoor = { q: ironbondOfficeCenter.q + 4, r: ironbondOfficeCenter.r };
-    window.interiorRegions.push(carveFlatRoom(ironbondOfficeCenter.q, ironbondOfficeCenter.r, 4, 3, ironbondOfficeDoor, 'Wood Floor'));
+    window.interiorRegions.push(carveFlatRoom(ironbondOfficeCenter.q, ironbondOfficeCenter.r, 3,2 ironbondOfficeDoor, 'Wood Floor'));
     for (let q = ironbondOfficeDoor.q + 1; q < dqCenter; q++) window.setTerrainAt(q, officeRowL, 'Path');
     window.tileObjects[`${ironbondOfficeCenter.q},${ironbondOfficeCenter.r}`] = { type: 'table' };
     window.tileObjects[`${ironbondOfficeCenter.q + 1},${ironbondOfficeCenter.r}`] = { type: 'bench' };
