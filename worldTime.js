@@ -170,6 +170,10 @@ function updateTime(delta) {
         // the player is engaging with them (see factions.js).
         if (window.tickFactionAgendas) window.tickFactionAgendas(delta);
 
+        // The lich hunt (lichHunt.js): crownAwareness climbs on its own once
+        // the player becomes a lich, same "the world doesn't wait" principle.
+        if (window.tickLichHunt) window.tickLichHunt(delta);
+
         // Region security/prosperity decay toward their (parent-influenced)
         // baselines on the same clock (see regions.js).
         if (window.tickRegions) window.tickRegions(delta);

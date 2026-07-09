@@ -1261,6 +1261,53 @@ window.npcDialogueTrees = {
             { label: "Just looking.", action: () => {} }
         ]);
     },
+    orc_warlord: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'orc_stronghold_trust');
+        const trollAlive = window.entities.some(e => e.isOrcStrongholdTroll && e.alive);
+
+        if (quest && quest.status === 'completed') {
+            window.showDialogue(npc, "Skarnak's Hold remembers who dealt with the troll. Kesh will trade with you properly now.", [{ label: "Good to know.", action: () => {} }]);
+            return;
+        }
+        if (quest && quest.status === 'active') {
+            if (!trollAlive) {
+                quest.status = 'completed';
+                window.adjustReputation(window.factions.orc_raiders, 25, 25);
+                window.party[0].gold = (window.party[0].gold || 0) + 40;
+                if (window.gainExp) window.gainExp(150);
+                window.showMessage("Quest complete: Prove Your Strength. (+40 gold)");
+                window.showDialogue(npc, "The denning troll stops taking our scouts, and a stranger's the one who stopped it. Good work. You've earned a proper welcome here.", [{ label: "Glad to help.", action: () => {} }]);
+                return;
+            }
+            window.showDialogue(npc, "That troll still denning east of here? Deal with it and we'll talk properly.", [{ label: "Working on it.", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "Humans don't usually walk in here and expect to walk out. Something's been picking off our scouts and cattle east of the stockade — a troll, denned in the rocks. Kill it, and maybe you're worth talking to.", [
+            {
+                label: "I'll deal with it.",
+                action: () => {
+                    window.questLog.push({
+                        id: 'orc_stronghold_trust', title: 'Prove Your Strength', giver: 'Warlord Grukk Ironhide', status: 'active',
+                        description: "A troll denning east of Skarnak's Hold has been killing orc scouts and cattle. Kill it to earn the stronghold's trust."
+                    });
+                    window.showMessage("Quest added: Prove Your Strength.");
+                }
+            },
+            { label: "Not interested.", action: () => {} }
+        ]);
+    },
+    orc_trader: (npc) => {
+        const trusted = (window.factions?.orc_raiders?.standing || 0) >= 20;
+        if (!trusted) {
+            window.showDialogue(npc, "Nothing for you here, human.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "Coin's coin. What do you need?", [
+            { label: "Let me see your wares.", action: () => window.openShop({ itemIds: window.campaign2OrcTraderItems, mounts: false }) },
+            { label: "Just looking.", action: () => {} }
+        ]);
+    },
     chief_skarnub: (npc) => {
         if (!window.questLog) window.questLog = [];
         const quest = window.questLog.find(q => q.id === 'goblin_threat');

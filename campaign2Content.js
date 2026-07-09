@@ -245,6 +245,25 @@ window.campaign2GoblinGuards = [
     { name: 'Goblin Skulker', title: 'Goblin Skulker', monsterType: 'goblin', customSkills: { health: 1, bow_hit: 1, stealth_rogue: 2 }, customEquipment: ['bow'], color: '#6a5a2a' }
 ];
 
+// Skarnak's Hold: the orc_raiders faction's first real settlement (see
+// buildOrcStronghold, campaign2World.js) — built the same way the goblin
+// camp's roster is (buildOrcNPC wraps window.createMonster('orc', ...)
+// rather than the raceData/buildNPC playable-character path, since
+// raceData has no 'orc' entry).
+window.campaign2OrcWarlord = {
+    name: 'Warlord Grukk Ironhide', title: 'Warlord of Skarnak\'s Hold', monsterType: 'orc',
+    customSkills: { health: 4, meleeDamage: 3, axe_hit: 2, axe_dmg: 2, heavy_armor_training: 1 },
+    customEquipment: ['axe', 'heavy_armor', 'wooden_shield'],
+    color: '#7a3a1f', dialogueId: 'orc_warlord'
+};
+window.campaign2OrcGuards = [
+    { name: 'Orc Guard', title: 'Stronghold Guard', monsterType: 'orc', customSkills: { health: 2, axe_hit: 1, axe_dmg: 1 }, customEquipment: ['axe', 'medium_armor'], color: '#8a5a2a' },
+    { name: 'Orc Guard', title: 'Stronghold Guard', monsterType: 'orc', customSkills: { health: 2, spear_hit: 1, spear_dmg: 1 }, customEquipment: ['spear', 'medium_armor'], color: '#6a4a1a' },
+    { name: 'Orc Skirmisher', title: 'Stronghold Skirmisher', monsterType: 'orc', customSkills: { health: 2, bow_hit: 1, bow_dmg: 1 }, customEquipment: ['bow', 'light_armor'], color: '#9a6a3a' },
+    { name: 'Orc Guard', title: 'Stronghold Guard', monsterType: 'orc', customSkills: { health: 2, club_hit: 1, club_dmg: 1 }, customEquipment: ['club', 'medium_armor', 'wooden_shield'], color: '#7a5a2a' },
+];
+window.campaign2OrcTraderItems = ['axe', 'spear', 'club', 'medium_armor', 'wooden_shield', 'torch', 'potion_health'];
+
 // Ser Aldric Thorne: a captive paladin, tied up at the goblin camp, rescued
 // by whichever resolution path the player takes. Built like Wren Talbot
 // (createCharacterData + manual skill purchase, real window.party member) —

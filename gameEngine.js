@@ -5027,6 +5027,12 @@ function handleLethalDamage(target, attacker) {
         if ((target.necromancerMinion || target.cryptMinion) && window.factions?.necromancer_cult) {
             window.adjustReputation(window.factions.necromancer_cult, -5, 5);
         }
+        // Being seen killing a living human while a known lich draws more of
+        // the crown's attention than just existing quietly does (see
+        // lichHunt.js).
+        if (window.playerIsLich && target.race === 'human' && window.bumpLichHuntAwarenessFromKill) {
+            window.bumpLichHuntAwarenessFromKill();
+        }
     }
     if (side === 'enemy') checkCombatEnd();
 }
@@ -5381,6 +5387,22 @@ function checkCombatEnd() {
         window.ironbondArc.activeEncounterSide = null;
         const advanced = window.advanceIronbondArcEndgameStage && window.advanceIronbondArcEndgameStage();
         if (!advanced && window.resolveIronbondArcEndgame) window.resolveIronbondArcEndgame();
+    }
+
+    // Lich hunt (lichHunt.js): same "check on its own precise condition"
+    // reasoning as the Ironbond block above — a spawned hunting-party wave
+    // resolves the moment every isLichHuntCombatant is dead, regardless of
+    // unrelated enemies alive elsewhere on the map.
+    if (window.currentCampaign === "2" && window.lichHuntState?.huntTriggered &&
+        !window.entities.some(e => e.isLichHuntCombatant && e.alive)) {
+        if (window.resolveLichHuntWave) window.resolveLichHuntWave();
+    }
+    // The chapterhouse itself — a one-time, permanent resolution once all
+    // its named defenders are dead.
+    if (window.currentCampaign === "2" && window.lichHuntState && !window.lichHuntState.chapterhouseDestroyed &&
+        window.entities.some(e => e.isLichChapterhouseDefender) &&
+        !window.entities.some(e => e.isLichChapterhouseDefender && e.alive)) {
+        if (window.resolveLichChapterhouseDestroyed) window.resolveLichChapterhouseDestroyed();
     }
 
     // Track Boss defeats

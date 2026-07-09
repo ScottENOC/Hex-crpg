@@ -102,6 +102,7 @@ function saveGame(saveName = "rpg_save_game") {
         activeSpells: window.activeSpells,
         roguelikeData: window.roguelikeData,
         ironbondArc: window.ironbondArc,
+        lichHuntState: window.lichHuntState,
         factions: window.factions,
         regions: window.regions,
         companionAttitude: window.companionAttitude,
@@ -217,6 +218,7 @@ function loadGame(saveName = "rpg_save_game") {
         window.roguelikeData = gameState.roguelikeData || { fightsCompleted: 0, mercenaryGraveyard: [], bossesDefeated: [] };
         if (!window.roguelikeData.bossesDefeated) window.roguelikeData.bossesDefeated = [];
         if (gameState.ironbondArc) window.ironbondArc = gameState.ironbondArc;
+        if (gameState.lichHuntState) window.lichHuntState = gameState.lichHuntState;
         if (gameState.factions) window.factions = gameState.factions;
         if (gameState.regions) window.regions = gameState.regions;
         if (gameState.companionAttitude) window.companionAttitude = gameState.companionAttitude;

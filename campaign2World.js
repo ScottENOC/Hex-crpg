@@ -511,6 +511,133 @@ function buildGoblinCamp(roadEnd) {
     }
 }
 
+// Same shape as buildGoblinNPC above, but for the orc_raiders faction —
+// orc_raiders existed purely as a wilderness-encounter/reputation target
+// with no settlement of its own until buildOrcStronghold below gave it one.
+function buildOrcNPC({ name, title, monsterType, hex, customSkills, customEquipment, side, dialogueId, color }) {
+    const ent = window.createMonster(monsterType, hex, customSkills || null, customEquipment || null, side || 'neutral');
+    ent.name = name;
+    ent.title = title || null;
+    ent.isNPC = true;
+    ent.dialogueId = dialogueId || null;
+    ent.factionId = 'orc_raiders';
+    if (color) {
+        ent.color = color;
+        ent.spriteBase = monsterType;
+    }
+    const playerRace = window.party && window.party[0] ? window.party[0].race : 'human';
+    ent.reputation = { knowledge: 0, standing: window.seedStanding ? window.seedStanding('orc', playerRace) : 0 };
+    return ent;
+}
+
+// Skarnak's Hold: a real orc stronghold, east of Ridgehold Fort in
+// orc-held territory (see worldMap.js's isOrcLands cutoff) — orc_raiders'
+// first actual settlement rather than just a wilderness-encounter faction.
+// A stockade (wallRingAroundFloor + a gate gap facing the road) around a
+// dirt clearing, same "hostile only if you make it so" convention as the
+// Skarn-tooth goblin camp — a human-aligned player can raid it like any
+// other fort; a greenskin-aligned one gets quests and a trader instead.
+function buildOrcStronghold(roadEnd) {
+    if (!roadEnd) return;
+    const center = { q: roadEnd.q + 30, r: roadEnd.r - 6 };
+    const CLEARING_RADIUS = 7;
+    const floorHexes = [];
+    for (let dq = -CLEARING_RADIUS; dq <= CLEARING_RADIUS; dq++) {
+        for (let dr = -CLEARING_RADIUS; dr <= CLEARING_RADIUS; dr++) {
+            const hex = { q: center.q + dq, r: center.r + dr };
+            if (window.distance(center, hex) <= CLEARING_RADIUS) {
+                window.setTerrainAt(hex.q, hex.r, 'Dirt');
+                floorHexes.push(hex);
+            }
+        }
+    }
+    const gateHex = { q: center.q - CLEARING_RADIUS, r: center.r };
+    wallRingAroundFloor(floorHexes).forEach(h => {
+        if (h.q === gateHex.q && h.r === gateHex.r) return; // gap facing the road west
+        window.setTerrainAt(h.q, h.r, 'Climbable Wall');
+    });
+    for (let q = roadEnd.q + 1; q < gateHex.q; q++) window.setTerrainAt(q, roadEnd.r + Math.round((q - roadEnd.q) * (center.r - roadEnd.r) / (gateHex.q - roadEnd.q)), 'Path');
+
+    window.tileObjects[`${center.q},${center.r - 3}`] = { type: 'hut_large', lightRadius: 0 }; // Warlord's hut
+    [[-4, -1], [4, -1], [-4, 2], [4, 2], [0, 3], [-2, 3], [2, -3]].forEach(([dq, dr]) => {
+        window.tileObjects[`${center.q + dq},${center.r + dr}`] = { type: 'hut', lightRadius: 0 };
+    });
+    window.tileObjects[`${center.q},${center.r}`] = { type: 'fireplace', lightRadius: 6 };
+
+    window.campaign2OrcStrongholdCenter = center;
+
+    const warlord = buildOrcNPC({ ...window.campaign2OrcWarlord, hex: { q: center.q, r: center.r - 2 } });
+    const trader = buildOrcNPC({
+        name: 'Kesh', title: "Stronghold Trader", monsterType: 'orc',
+        hex: { q: center.q - 1, r: center.r + 2 }, side: 'neutral', dialogueId: 'orc_trader', color: '#6a4a2a'
+    });
+    window.entities.push(warlord, trader);
+
+    (window.campaign2OrcGuards || []).forEach((spec, i) => {
+        const guard = buildOrcNPC({ ...spec, hex: { q: center.q + (i % 2 === 0 ? -3 : 3), r: center.r + 1 + Math.floor(i / 2) } });
+        guard.behaviorType = 'campRoutine';
+        guard.homeHex = { ...guard.hex };
+        guard.campSpots = [{ q: center.q, r: center.r }, { q: center.q - 4, r: center.r - 1 }, { q: center.q + 4, r: center.r - 1 }];
+        window.entities.push(guard);
+    });
+
+    // "Prove Your Strength": a troll denning just outside the stockade has
+    // been picking off scouts and cattle — the warlord's own trust-quest
+    // (see orc_warlord in campaign2Dialogue.js), distinct from the goblin
+    // camp's gift-based unlock for some variety. Placed well clear of the
+    // stronghold itself so it reads as a real nearby threat, not camp decor.
+    const trollHex = { q: center.q + CLEARING_RADIUS + 6, r: center.r + 4 };
+    const troll = window.createMonster('troll', trollHex, null, null, 'neutral');
+    troll.name = 'Denning Troll';
+    troll.isOrcStrongholdTroll = true;
+    window.entities.push(troll);
+    window.campaign2OrcStrongholdTrollHex = trollHex;
+
+    if (window.worldMapData && window.worldMapData[9] && window.worldMapData[9][12] !== undefined) {
+        window.worldMapData[9][12] = { t: 'H', f: 'F', o: 'o', p: 1, n: "Skarnak's Hold" };
+    }
+}
+
+// The Chapterhouse of the Silver Flame: the source of the hunting parties
+// that come for a player who's become a lich (see lichHunt.js). Deliberately
+// independent of Silverhart Palace's geography (which is being redesigned
+// separately) — anchored off Millbrook instead, on the opposite side from
+// the dragon lair (see buildDragonLair) so the two don't collide.
+function buildLichChapterhouse() {
+    const millbrook = window.campaign2MillbrookCenter;
+    if (!millbrook) return;
+    const center = { q: millbrook.q - 40, r: millbrook.r + 20 };
+    const doorHex = { q: center.q + 3, r: center.r };
+    const region = carveFlatRoom(center.q, center.r, 4, 3, doorHex, 'Stone Floor', 'Keep Wall');
+    window.interiorRegions.push(region);
+    window.tileObjects[`${center.q},${center.r}`] = { type: 'fireplace', lightRadius: 6 };
+
+    window.campaign2LichChapterhouseCenter = center;
+
+    const inquisitor = window.buildNPC({
+        name: 'Inquisitor Halden Voss', title: 'Inquisitor of the Silver Flame', race: 'human', gender: 'male',
+        classLevels: ['fighter', 'cleric'], skillPicks: ['health', 'health', 'sword_hit', 'sword_dmg', 'heavy_armor_training'],
+        equipment: ['sword', 'heavy_armor', 'nasal_helm'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#c0c0c0',
+        expValue: 600, gold: 60,
+    });
+    inquisitor.hex = { q: center.q - 1, r: center.r };
+    inquisitor.isLichChapterhouseDefender = true;
+    window.entities.push(inquisitor);
+
+    ['Witch Hunter Perren', 'Witch Hunter Oswin'].forEach((name, i) => {
+        const hunter = window.buildNPC({
+            name, title: 'Witch Hunter', race: 'human', gender: i === 0 ? 'female' : 'male',
+            classLevels: ['fighter', 'fighter'], skillPicks: ['health', 'sword_hit', 'sword_dmg', 'light_armor_training'],
+            equipment: ['sword', 'light_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#a0a0a0',
+            expValue: 250, gold: 20,
+        });
+        hunter.hex = { q: center.q + (i === 0 ? -2 : 2), r: center.r + 1 };
+        hunter.isLichChapterhouseDefender = true;
+        window.entities.push(hunter);
+    });
+}
+window.buildLichChapterhouse = buildLichChapterhouse;
+
 // Player housing (MVP): a surveyed plot near the crossroads the player can
 // build on for free, no resource cost yet — that's a later system. Building
 // swaps the plot marker for a real one-room cottage with a bed that gives a
@@ -2162,6 +2289,7 @@ function setupVillageScene(forLoadOnly = false) {
     buildLichBarrow();
     buildMillbrook(millbrookWaypoint);
     buildDragonLair();
+    buildLichChapterhouse();
     buildSilverhartPalace(northRoadEnd);
     buildEmberlode(westRoadEnd);
     buildReddale(eastRoadEnd);
@@ -2170,6 +2298,7 @@ function setupVillageScene(forLoadOnly = false) {
     spawnWildUnicorn();
     buildNorthwatchFort(northwatchTurnHex);
     buildRidgeholdFort(borderRoadEnd);
+    buildOrcStronghold(borderRoadEnd);
 
     // Road-network connectivity (hexMap.js): every road painted above should
     // form one connected network so NPC/long-travel road-following never
