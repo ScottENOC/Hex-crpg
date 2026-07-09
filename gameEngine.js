@@ -1670,10 +1670,24 @@ function renderEntities() {
   // in drawMap (hexMap.js) for the measured cost.
   const _friendlies = window.entities.filter(e => e.alive && e.side === 'player');
 
+  // The mapItems/tileObjects loops below used to iterate *every* entry in
+  // those two dictionaries — every fireplace, table, door, watchtower ever
+  // placed anywhere in the persistent world, not just what's nearby — and
+  // call isVisibleToPlayer on each just to find out. That's the same
+  // "full-world scan to answer a question that should only ever consider
+  // what's near the camera" shape hasLineOfSight had. Reusing drawMap's own
+  // viewport bounding box (hexMap.js) as a cheap pre-filter means only
+  // objects that could conceivably be on screen ever reach the (still
+  // real, but now rarely-called) isVisibleToPlayer check.
+  const _viewBounds = window.getVisibleHexes ? window.getVisibleHexes() : null;
+  const _inViewBounds = (q, r) => !_viewBounds
+      || (q >= _viewBounds.minQ && q <= _viewBounds.maxQ && r >= _viewBounds.minR && r <= _viewBounds.maxR);
+
   for (const coord in window.mapItems) {
       const items = window.mapItems[coord];
       if (items && items.length > 0) {
           const [q, r] = coord.split(',').map(Number);
+          if (!_inViewBounds(q, r)) continue;
           if (!window.isVisibleToPlayer({ q, r }, _friendlies)) continue;
           const {x, y} = window.hexToPixel(q, r);
           const size = window.hexSize * 0.8 * z;
@@ -1690,7 +1704,7 @@ function renderEntities() {
     try {
       const obj = window.tileObjects[key];
       const [q, r] = key.split(',').map(Number);
-      if (window.isVisibleToPlayer({q, r}, _friendlies)) {
+      if (_inViewBounds(q, r) && window.isVisibleToPlayer({q, r}, _friendlies)) {
           const {x, y} = window.hexToPixel(q, r);
           const size = window.hexSize * 1.5 * z;
           if (obj.type === 'fireplace' && window.gameVisuals.fireplace?.complete) {
@@ -1921,7 +1935,12 @@ function renderEntities() {
   }
 
   // 2. Sort entities by "z-index" for layering: Rider -> Normal -> Mounts (on top)
-  const sorted = [...window.entities].filter(e => e.alive && window.isVisibleToPlayer(e.hex, _friendlies)).sort((a, b) => {
+  // Same viewport pre-filter as above: a cheap bounding-box check on every
+  // entity's own hex before the real (and now much cheaper, but still non-
+  // free) isVisibleToPlayer call and the sort — avoids copying/sorting the
+  // *entire* entity roster (thousands, in a populous world) every frame
+  // when only a handful can possibly be on screen.
+  const sorted = window.entities.filter(e => e.alive && _inViewBounds(e.hex.q, e.hex.r) && window.isVisibleToPlayer(e.hex, _friendlies)).sort((a, b) => {
       const az = a.rider ? 3 : (a.riding ? 1 : 2); // Mounts (has rider) get 3, Riders (riding something) get 1
       const bz = b.rider ? 3 : (b.riding ? 1 : 2);
       return az - bz;

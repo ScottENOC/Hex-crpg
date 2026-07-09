@@ -1361,6 +1361,7 @@ window.findPath = findPath;
 window.hasLineOfSight = hasLineOfSight;
 window.hasLineOfEffect = hasLineOfEffect;
 window.isVisibleToPlayer = isVisibleToPlayer;
+window.getVisibleHexes = getVisibleHexes;
 window.getHexBehind = getHexBehind;
 window.isHexInBounds = isHexInBounds;
 window.initHexMap = initHexMap;
