@@ -1284,8 +1284,8 @@ function buildSilverhartPalace(roadEnd) {
     // meets the wall, flanked by two watchtowers.
     const gateHexes = [
         { q: throneCenter.q, r: throneCenter.r + WALL_RADIUS },
-    //    { q: throneCenter.q - 1, r: throneCenter.r + WALL_RADIUS },
-    //   { q: throneCenter.q - 2, r: throneCenter.r + WALL_RADIUS },
+       { q: throneCenter.q - 1, r: throneCenter.r + WALL_RADIUS },
+      { q: throneCenter.q - 2, r: throneCenter.r + WALL_RADIUS },
     ];
     const gateKeys = new Set(gateHexes.map(h => `${h.q},${h.r}`));
     ringHexes.forEach(h => {
