@@ -5367,6 +5367,22 @@ function showUnicornTrackDetail(obj, q, r) {
 window.showUnicornTrackDetail = showUnicornTrackDetail;
 
 function checkCombatEnd() {
+    // Ironbond-arc endgame (ironbondArc.js/campaign2World.js's
+    // launchIronbondArcEndgame): checked on its own, precise condition
+    // ("every ironbondArcCombatant dead") rather than nested inside the
+    // "no enemy anywhere on the map is alive" gate below — the necromancer
+    // crypt's undead (and any other Campaign 2 wilderness enemy) are alive
+    // somewhere on the map for most of the game, which would otherwise
+    // starve this branch of ever firing in a real playthrough. Fires once,
+    // then clears the active-encounter flag so an unrelated later fight
+    // can't retrigger it.
+    if (window.currentCampaign === "2" && window.ironbondArc?.endgameTriggered && window.ironbondArc?.activeEncounterSide &&
+        !window.entities.some(e => e.isIronbondArcCombatant && e.alive)) {
+        window.ironbondArc.activeEncounterSide = null;
+        const advanced = window.advanceIronbondArcEndgameStage && window.advanceIronbondArcEndgameStage();
+        if (!advanced && window.resolveIronbondArcEndgame) window.resolveIronbondArcEndgame();
+    }
+
     // Track Boss defeats
     if (!window.roguelikeData.bossesDefeated) window.roguelikeData.bossesDefeated = [];
 

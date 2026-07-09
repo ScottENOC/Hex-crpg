@@ -2484,6 +2484,9 @@ function buildReddale(roadEnd) {
     if (window.campaign2ReddaleGuildmaster) {
         window.entities.push(window.buildNPC({ ...window.campaign2ReddaleGuildmaster, hex: { q: guildCenter.q, r: guildCenter.r + 1 } }));
     }
+    if (window.campaign2IronbondMerchant) {
+        window.entities.push(window.buildNPC({ ...window.campaign2IronbondMerchant, hex: { q: guildCenter.q + 1, r: guildCenter.r + 1 } }));
+    }
     if (window.campaign2ReddaleGuildGuard) {
         const guildGuard = window.buildNPC({ ...window.campaign2ReddaleGuildGuard, hex: { q: guildCenter.q - 1, r: guildCenter.r } });
         guildGuard.behaviorType = 'patrol';
@@ -2709,6 +2712,195 @@ function teleportPartyTo(centerHex) {
     if (window.renderEntities) window.renderEntities();
     if (window.centerCameraOn) window.centerCameraOn(centerHex);
 }
+
+// Ironbond-arc endgame: 4 world-outcomes (see ironbondArc.js's
+// checkIronbondArcEndgame) x 2 sides = the 8 scenarios. Both locations
+// already exist (the throne room from buildSilverhartPalace, the guildhouse
+// from buildReddale) — no new geography needed, just themed combatants and
+// distinct narration/rewards per branch.
+const IRONBOND_ARC_ENFORCER_SPECS = [
+    { name: 'Company Blade', title: 'Ironbond Enforcer', race: 'human', gender: 'male', classLevels: ['fighter', 'fighter'], skillPicks: ['health', 'sword_hit', 'sword_dmg'], equipment: ['sword', 'medium_armor'], factionId: 'ironbond_company', color: '#8c4b4b', expValue: 200, gold: 15 },
+    { name: 'Company Blade', title: 'Ironbond Enforcer', race: 'human', gender: 'female', classLevels: ['fighter', 'fighter'], skillPicks: ['health', 'axe_hit', 'axe_dmg'], equipment: ['axe', 'medium_armor', 'wooden_shield'], factionId: 'ironbond_company', color: '#8c4b4b', expValue: 200, gold: 15 },
+    { name: 'Company Marksman', title: 'Ironbond Enforcer', race: 'human', gender: 'male', classLevels: ['fighter', 'rogue'], skillPicks: ['health', 'bow_hit', 'bow_dmg'], equipment: ['bow', 'light_armor'], factionId: 'ironbond_company', color: '#8c4b4b', expValue: 200, gold: 15 },
+];
+
+function spawnIronbondArcCombatants(specs, centerHex, side, count) {
+    const spawned = [];
+    for (let i = 0; i < count; i++) {
+        const spec = specs[i % specs.length];
+        const hex = { q: centerHex.q + (i % 3) - 1, r: centerHex.r + Math.floor(i / 3) + 1 };
+        const npc = window.buildNPC({ ...spec, name: `${spec.name} ${i + 1}`, hex, side });
+        npc.aiState = 'combat';
+        npc.isIronbondArcCombatant = true;
+        window.entities.push(npc);
+        spawned.push(npc);
+    }
+    return spawned;
+}
+
+// Dispatches by (quadrant, playerSide) — the 8 scenarios. Teleports the
+// party to the right location, spawns the right combatants on the right
+// sides, and opens with a scene-setting dialogue. Resolution/rewards fire
+// from checkCombatEnd (gameEngine.js) once every ironbondArcCombatant is
+// dead — see resolveIronbondArcEndgame below.
+function launchIronbondArcEndgame() {
+    const arc = window.ironbondArc;
+    const quadrant = arc.endgameQuadrant;
+    const side = arc.playerSide;
+    const throne = window.campaign2PalaceThroneCenter;
+    const guildhouse = window.campaign2ReddaleGuildhouseCenter;
+
+    const scenes = {
+        // High surfacePower, low crownInfiltration: Ironbond is strong and
+        // the crown never saw it coming — the coup happens at the throne room.
+        coup: {
+            crown: {
+                location: throne, title: 'The Ironbond Coup',
+                text: "Steel in the throne room! Ironbond's men are already inside — no warning, no time to muster the guard. Whatever happens here, happens now.",
+                enemySide: 'ironbond', spawnCount: 5,
+            },
+            ironbond: {
+                location: throne, title: 'The Ironbond Coup',
+                text: "This is it — the Company's people are already through the gates, and the crown has no idea it's coming. Put the puppet on the throne while you still have the advantage.",
+                enemySide: 'crown', spawnCount: 4,
+            },
+        },
+        // High surfacePower, high crownInfiltration: the crown was warned in
+        // time and strikes first at Ironbond's own headquarters.
+        counter_raid: {
+            crown: {
+                location: guildhouse, title: 'The Counter-Raid',
+                text: "Word reached the Queen in time — Ironbond was planning to move on the throne, but you're moving on them first, while they're still unprepared. Take the guildhouse.",
+                enemySide: 'ironbond', spawnCount: 4,
+            },
+            ironbond: {
+                location: guildhouse, title: 'The Counter-Raid',
+                text: "The crown's people hit the guildhouse without warning — somehow they knew. You're caught flat-footed, but this is still your ground. Hold it.",
+                enemySide: 'crown', spawnCount: 5,
+            },
+        },
+        // Low surfacePower, low crownInfiltration: Ironbond's too weak to
+        // act and the crown has no inside help — a real, unglamorous fight
+        // to finish the job.
+        hard_mopup: {
+            crown: {
+                location: guildhouse, title: 'The Hard Mop-Up',
+                text: "No shortcuts here — no spy network to lean on, just the evidence and whatever muscle the Company has left to defend it. Take the guildhouse the old-fashioned way.",
+                enemySide: 'ironbond', spawnCount: 3,
+            },
+            ironbond: {
+                location: guildhouse, title: 'The Hard Mop-Up',
+                text: "No warning came from inside — there was nothing inside to warn you. The crown's people are already at the door, grinding down what's left of the Company. Whatever you save today, you save with your own hands.",
+                enemySide: 'crown', spawnCount: 3,
+            },
+        },
+        // Low surfacePower, high crownInfiltration: the cleanest possible
+        // resolution for the crown. For an Ironbond-sider this is the
+        // worst starting position of all 8 — but per design, every
+        // scenario needs a real (if long) shot at victory, not a scripted
+        // loss. Two stages: hold the last stronghold the crown hasn't
+        // already rolled up (a real defensive fight), then — only if that
+        // holds — a hail-mary strike at the capital while the crown's
+        // forces are still busy hunting down the rest of the Company.
+        clean_sweep: {
+            crown: {
+                location: guildhouse, title: 'The Clean Sweep',
+                text: "You barely need to lift a blade. Whatever quiet work you did for the crown fed a network already running the guildhouse from the inside — this is a formality more than a fight.",
+                enemySide: 'ironbond', spawnCount: 2,
+            },
+            ironbond: {
+                location: guildhouse, title: 'The Last Stronghold',
+                text: "Every other Ironbond holding is falling, one after another, methodical and quiet — the crown's people were inside all along. This guildhouse is the last one standing. Hold it, rally who's left, and there's still one card to play: strike the capital now, while the crown's own forces are stretched thin finishing everyone else off.",
+                enemySide: 'crown', spawnCount: 4,
+                nextStage: {
+                    location: throne, title: 'The Hail Mary',
+                    text: "It's now or never. The throne's own guard is thinner than it's ever been — every spare soldier is out hunting the Company's last footholds. This won't come again.",
+                    enemySide: 'crown', spawnCount: 3,
+                },
+            },
+        },
+    };
+
+    const scene = scenes[quadrant]?.[side];
+    if (!scene || !scene.location) return;
+
+    const stage = arc.endgameStage || 1;
+    const activeScene = (stage === 2 && scene.nextStage) ? scene.nextStage : scene;
+
+    teleportPartyTo(activeScene.location);
+    arc.activeEncounterSide = activeScene.enemySide;
+    // Whichever faction the scene casts as the opposition, the spawned
+    // combatants are always side:'enemy' from the player's perspective —
+    // enemySide only picks their colors/equipment flavor.
+    spawnIronbondArcCombatants(IRONBOND_ARC_ENFORCER_SPECS, activeScene.location, 'enemy', activeScene.spawnCount);
+
+    window.showDialogue({ name: activeScene.title }, activeScene.text, [{ label: "Understood.", action: () => {} }]);
+    window.showMessage(activeScene.text);
+}
+window.launchIronbondArcEndgame = launchIronbondArcEndgame;
+
+// Called from checkCombatEnd once a stage's combatants are all dead — a
+// two-stage branch (currently only clean_sweep/ironbond) advances to its
+// second stage instead of resolving immediately; everything else resolves
+// on the spot. Returns true if it advanced (caller should NOT also resolve).
+function advanceIronbondArcEndgameStage() {
+    const arc = window.ironbondArc;
+    if (arc.endgameQuadrant === 'clean_sweep' && arc.playerSide === 'ironbond' && (arc.endgameStage || 1) === 1) {
+        arc.endgameStage = 2;
+        launchIronbondArcEndgame();
+        return true;
+    }
+    return false;
+}
+window.advanceIronbondArcEndgameStage = advanceIronbondArcEndgameStage;
+
+// Called from checkCombatEnd (gameEngine.js) once every ironbondArcCombatant
+// is dead. Reward/reputation shape mirrors the quadrant's narrative: a clean
+// win pays well and cheaply, a hard-fought one pays in relief rather than
+// triumph, and Ironbond's two losing branches (hard_mopup, clean_sweep) are
+// explicitly framed as damage control, not victory.
+function resolveIronbondArcEndgame() {
+    const arc = window.ironbondArc;
+    const quadrant = arc.endgameQuadrant;
+    const side = arc.playerSide;
+    const player = window.party[0];
+
+    const outcomes = {
+        coup: {
+            crown: { rep: 40, gold: 150, msg: "The coup is broken. The throne holds — barely — and everyone in the room knows how close it came.", res: 'crown_coup_defended' },
+            ironbond: { rep: 40, gold: 300, msg: "The throne is yours to give. Ironbond's puppet takes the crown, and the kingdom answers to the Company now.", res: 'ironbond_coup_won' },
+        },
+        counter_raid: {
+            crown: { rep: 35, gold: 200, msg: "The guildhouse falls before Ironbond ever launches its own move. A clean, decisive strike.", res: 'crown_raid_won' },
+            ironbond: { rep: 30, gold: 100, msg: "You hold the guildhouse against the crown's surprise raid — bloodied, but the Company survives to plan its own move another day.", res: 'ironbond_raid_defended' },
+        },
+        hard_mopup: {
+            crown: { rep: 25, gold: 80, msg: "The guildhouse falls, hex by hex, ledger by ledger. No cleverness to it — just the work, finished.", res: 'crown_mopup_won' },
+            ironbond: { rep: 10, gold: 40, msg: "You save what you can. The Company survives, diminished — this was never going to be a victory, only damage control.", res: 'ironbond_mopup_survived' },
+        },
+        clean_sweep: {
+            crown: { rep: 50, gold: 100, msg: "It's over almost before it starts. Whatever quiet work fed the network inside Ironbond, it did its job — this is barely a footnote.", res: 'crown_clean_sweep' },
+            // Only reached after both stages (see advanceIronbondArcEndgameStage
+            // above) — a real, earned reversal, not a guaranteed win.
+            ironbond: { rep: 45, gold: 250, msg: "Against every expectation, it works. While the crown's forces were busy scouring the countryside for the last of the Company, you struck the undefended heart of it. Ironbond doesn't just survive today — it wins.", res: 'ironbond_hail_mary_won' },
+        },
+    };
+
+    const outcome = outcomes[quadrant]?.[side];
+    if (!outcome) return;
+
+    arc.endgameResolution = outcome.res;
+    if (side === 'crown' && window.factions?.silverhart_kingdom) {
+        window.adjustReputation(window.factions.silverhart_kingdom, outcome.rep, 30);
+    } else if (side === 'ironbond' && window.factions?.ironbond_company) {
+        window.adjustReputation(window.factions.ironbond_company, outcome.rep, 30);
+    }
+    player.gold = (player.gold || 0) + outcome.gold;
+    window.showMessage(`${outcome.msg} (+${outcome.gold} gold)`);
+    window.questLog = window.questLog || [];
+    window.questLog.push({ id: 'ironbond_arc_endgame', title: 'The Ironbond Rivalry', giver: null, status: 'complete', resolution: outcome.res, description: outcome.msg });
+}
+window.resolveIronbondArcEndgame = resolveIronbondArcEndgame;
 
 // Cheat teleports — straight to the fort's gate, no travel required. Useful
 // for testing/skipping ahead; not tied to any quest gate.

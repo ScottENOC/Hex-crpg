@@ -274,8 +274,42 @@ window.npcDialogueTrees = {
             window.showDialogue(npc, "Not to you.", [{ label: "...", action: () => {} }]);
             return;
         }
-        window.showDialogue(npc, "Ordinary gear, honest prices — swords, shields, a decent helm, nothing fancy. The fancy stuff's a few doors down.", [
-            { label: "Let me see your wares.", action: () => window.openShop({ itemIds: window.campaign2SilverhartGeneralGoodsItems, mounts: false }) },
+        // World signal for surfacePower, the "regular merchants get worse"
+        // half of the pair (see ironbond_merchant below for the other
+        // half): once Ironbond's grip is strong, this shop's better stock
+        // (armor/shield/helm) dries up unless the kingdom actually trusts
+        // the player enough to make an exception.
+        const strained = window.getSurfacePower && window.getSurfacePower() >= 60;
+        const trusted = (window.factions?.silverhart_kingdom?.standing || 0) >= 20;
+        const items = (strained && !trusted)
+            ? window.campaign2SilverhartGeneralGoodsItems.filter(id => !['medium_armor', 'wooden_shield', 'nasal_helm'].includes(id))
+            : window.campaign2SilverhartGeneralGoodsItems;
+        const tone = (strained && !trusted)
+            ? "Ordinary gear, honest prices — though half my usual orders never arrived this month. Company's buying up the good stock before it reaches me."
+            : "Ordinary gear, honest prices — swords, shields, a decent helm, nothing fancy. The fancy stuff's a few doors down.";
+        window.showDialogue(npc, tone, [
+            { label: "Let me see your wares.", action: () => window.openShop({ itemIds: items, mounts: false }) },
+            { label: "Just looking.", action: () => {} }
+        ]);
+    },
+    ironbond_merchant: (npc) => {
+        // World signal for surfacePower, mirrored against
+        // silverhart_general_goods above: the good stock only exists to
+        // sell once the Company's grip is real (surfacePower), and only
+        // opens up to a player Ironbond actually trusts (its own standing),
+        // regardless of which side the player picked.
+        const strongEnough = window.getSurfacePower && window.getSurfacePower() >= 40;
+        const trusted = (window.factions?.ironbond_company?.standing || 0) >= 20;
+        if (!strongEnough) {
+            window.showDialogue(npc, "We're still finding our feet out here. Come back once the Company's better established in these parts.", [{ label: "I'll check back.", action: () => {} }]);
+            return;
+        }
+        if (!trusted) {
+            window.showDialogue(npc, "The Company doesn't arm strangers. Prove you're worth the trust and we'll talk.", [{ label: "Understood.", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "Ironbond doesn't stock what the crown's armorers do — we stock what they can't get anymore.", [
+            { label: "Let me see your wares.", action: () => window.openShop({ itemIds: window.campaign2IronbondMerchantItems, mounts: false }) },
             { label: "Just looking.", action: () => {} }
         ]);
     },
@@ -726,6 +760,46 @@ window.npcDialogueTrees = {
             return;
         }
 
+        // Repeatable missions: for a crown-sider, mirrors Petra's above —
+        // same shape, but the crownInfiltration breadcrumb here stays a
+        // total blackout until the early->mid phase transition (per
+        // design, the crown-sider only starts to suspect something bigger
+        // is happening once they're already deep into "helping"). Early
+        // missions hit surfacePower directly and are framed as stalling;
+        // once ironbondArc.phase reaches 'mid' the pool leans toward the
+        // quieter feed_informant/protect_asset missions instead.
+        if (window.ironbondArc?.playerSide === 'crown') {
+            const activeMission = (window.questLog || []).find(q => q.isIronbondArcMission && q.status === 'active');
+            if (activeMission) {
+                window.showDialogue(npc, `Any progress on "${window.IRONBOND_ARC_MISSION_TYPES[activeMission.type]?.label}"?`, [
+                    { label: "Working on it.", action: () => {} },
+                    { label: "It's done.", action: () => { window.completeIronbondArcMission(activeMission.id); } },
+                ]);
+                return;
+            }
+            if (window.ironbondArc.phase !== 'early' && !window.ironbondArc.crownInfiltrationRevealed) {
+                window.ironbondArc.crownInfiltrationRevealed = true;
+                window.showDialogue(npc, "I'll be honest — pushing back on the Company one shipment at a time feels like bailing out a ship with a cup. Someone above my station is working a slower angle, I think. Whatever it is, keep doing what you're doing. It matters more than it looks like it does.", [
+                    { label: "I'll keep at it.", action: () => {} }
+                ]);
+                return;
+            }
+            const isMid = window.ironbondArc.phase !== 'early';
+            const pool = Object.keys(window.IRONBOND_ARC_MISSION_TYPES).filter(k => {
+                const spec = window.IRONBOND_ARC_MISSION_TYPES[k];
+                if (spec.side !== 'crown') return false;
+                return isMid ? !!spec.infiltrationDelta : !spec.infiltrationDelta;
+            });
+            const pick = pool[Math.floor(Math.random() * pool.length)];
+            window.showDialogue(npc, isMid
+                ? "Quieter work, this time — not the kind that shows up in a ledger."
+                : "Ironbond's not getting any gentler. Willing to make their week harder?", [
+                { label: `Take on: ${window.IRONBOND_ARC_MISSION_TYPES[pick].label}`, action: () => window.offerIronbondArcMission(pick) },
+                { label: "Not right now.", action: () => {} }
+            ]);
+            return;
+        }
+
         const tone = influence >= 40
             ? "Reddale answers to Silverhart same as anywhere, but I'll admit the Company's shadow reaches further east than it used to."
             : "Reddale answers to Silverhart same as anywhere, but out here it's my word that keeps the peace. Trade's been steady — long may it stay that way.";
@@ -1122,6 +1196,40 @@ window.npcDialogueTrees = {
                     }
                 },
                 { label: "Not my business.", action: () => {} }
+            ]);
+            return;
+        }
+
+        // Repeatable missions + the crownInfiltration breadcrumb: for a
+        // player who's already thrown in with the Company, Petra keeps
+        // handing out work indefinitely (same repeatable-mission shape as
+        // window.WAR_MISSION_TYPES, see ironbondArc.js), and — starting
+        // almost immediately, per design — something about her own ledgers
+        // stops adding up. It becomes explicit well before the mid-game
+        // reveal, not held back as a late twist for this side.
+        if (window.ironbondArc?.playerSide === 'ironbond') {
+            const activeMission = (window.questLog || []).find(q => q.isIronbondArcMission && q.status === 'active');
+            if (activeMission) {
+                window.showDialogue(npc, `Still working on "${window.IRONBOND_ARC_MISSION_TYPES[activeMission.type]?.label}"? Take your time — but not too much of it.`, [
+                    { label: "Almost there.", action: () => {} },
+                    { label: "It's done.", action: () => { window.completeIronbondArcMission(activeMission.id); } },
+                ]);
+                return;
+            }
+            if (!window.ironbondArc.crownInfiltrationRevealed && window.ironbondArc.phase !== 'early') {
+                window.ironbondArc.crownInfiltrationRevealed = true;
+                window.showDialogue(npc, "Between us — something's wrong in this guildhouse. Orders come down that don't trace back to anyone I trust, ledgers balance to numbers nobody wrote. I don't think we're as secure as the coin makes us look. I need people I can actually rely on.", [
+                    { label: "I'll look into it.", action: () => {} }
+                ]);
+                return;
+            }
+            const missionPool = Object.keys(window.IRONBOND_ARC_MISSION_TYPES).filter(k => window.IRONBOND_ARC_MISSION_TYPES[k].side === 'ironbond');
+            const pick = missionPool[Math.floor(Math.random() * missionPool.length)];
+            window.showDialogue(npc, window.ironbondArc.crownInfiltrationRevealed
+                ? "Coin and contracts mean nothing if the Company's rotten at the core. There's always more to do — inside and out."
+                : "Always more work than hands to do it. You interested?", [
+                { label: `Take on: ${window.IRONBOND_ARC_MISSION_TYPES[pick].label}`, action: () => window.offerIronbondArcMission(pick) },
+                { label: "Not right now.", action: () => {} }
             ]);
             return;
         }
@@ -2254,6 +2362,7 @@ function resolveShakedown(branch) {
         patrons.forEach(p => window.adjustReputation(p.reputation, 0, 10));
         window.adjustReputation(ironbond, 15, 15);
         window.adjustMerchantInfluence(ironbond, 'silverhart_kingdom', 2);
+        if (window.setIronbondArcSide) window.setIronbondArcSide('ironbond');
         window.showMessage("You back the demand with a hard stare. The soldiers take their due and leave without further trouble.");
         exitSoldiersPeacefully(dray, enforcers);
     } else if (branch === 'fight') {
@@ -2268,6 +2377,7 @@ function resolveShakedown(branch) {
         patrons.forEach(p => window.adjustReputation(p.reputation, 20, 20));
         window.adjustReputation(ironbond, -35, 25);
         window.adjustMerchantInfluence(ironbond, 'silverhart_kingdom', -2);
+        if (window.setIronbondArcSide) window.setIronbondArcSide('crown');
         window.showMessage("Steel rings out! Garrick grabs his club — this is happening.");
 
         // Allies stay side:'player' (so all the existing friend/foe checks treat

@@ -516,6 +516,22 @@ window.campaign2SilverhartGeneralGoods = {
 };
 window.campaign2SilverhartGeneralGoodsItems = ['club', 'sword', 'axe', 'spear', 'dagger', 'light_armor', 'medium_armor', 'wooden_shield', 'nasal_helm', 'torch', 'potion_health'];
 
+// Ironbond's own quartermaster, placed at the Reddale guildhouse (see
+// buildReddale) — the one world-signal for surfacePower that's a genuine
+// mechanical gate rather than flavor: the good stock only opens up once the
+// Company actually trusts the player (ironbond_company.standing), and only
+// exists to sell at all once the Company's grip on the kingdom
+// (surfacePower) is real enough to have anything worth selling. See
+// ironbond_merchant in campaign2Dialogue.js.
+window.campaign2IronbondMerchant = {
+    name: 'Quartermaster Osric Vane', title: "Ironbond Quartermaster",
+    race: 'human', gender: 'male',
+    classLevels: [], skillPicks: [], equipment: [],
+    side: 'neutral', factionId: 'ironbond_company', color: '#7a1f1f',
+    dialogueId: 'ironbond_merchant'
+};
+window.campaign2IronbondMerchantItems = ['sword_arrow_deflection', 'stormcaller_spear', 'nightowl_bow', 'bulwark_shield', 'moonlit_armor'];
+
 // The Warrens' fence: a Thieves' Guild contact based in the slums outside
 // the city wall, no faction-shunning gate (unlike the human merchants) —
 // available to everyone, villain-path or not.

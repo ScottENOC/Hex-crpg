@@ -99,7 +99,12 @@ test.describe('reputation math (factions.js)', () => {
         expect(result.low).toBe(0);
     });
 
-    test('tickFactionAgendas drifts merchant influence based on the Company\'s own standing trend, not while neutral', async ({ page }) => {
+    // ironbondArc.js now wraps window.tickFactionAgendas to also drive
+    // surfacePower's own always-climbing baseline drift (see
+    // SURFACE_POWER_BASE_DRIFT_PER_HOUR) — deliberate, per the design: the
+    // player should never be able to "wait it out" by staying neutral, on
+    // top of whichever side's rivalry drift this original test covers.
+    test("tickFactionAgendas drifts merchant influence based on the Company's own standing trend, on top of surfacePower's always-on baseline climb", async ({ page }) => {
         const result = await page.evaluate(() => {
             const before = window.factions.ironbond_company.merchantInfluence.silverhart_kingdom;
             window.tickFactionAgendas(3600); // 1 in-game hour, standing still at its seeded default (0-5, not >10)
@@ -113,10 +118,18 @@ test.describe('reputation math (factions.js)', () => {
             window.tickFactionAgendas(3600);
             const strugglingAfter = window.factions.ironbond_company.merchantInfluence.silverhart_kingdom;
 
-            return { before, neutralAfter, thrivingAfter, strugglingAfter };
+            return {
+                before, neutralAfter, thrivingAfter, strugglingAfter,
+                neutralDelta: neutralAfter - before,
+                thrivingDelta: thrivingAfter - neutralAfter,
+                strugglingDelta: strugglingAfter - thrivingAfter,
+            };
         });
-        expect(result.neutralAfter).toBe(result.before);
-        expect(result.thrivingAfter).toBeGreaterThan(result.neutralAfter);
-        expect(result.strugglingAfter).toBeLessThan(result.thrivingAfter);
+        // Baseline climb applies even while neutral — no more "wait it out".
+        expect(result.neutralAfter).toBeGreaterThan(result.before);
+        // The old standing-trend drift still shows up as a real difference
+        // in the *rate* of climb (a thriving tick gains more than a
+        // struggling one), even though both are now net-positive overall.
+        expect(result.thrivingDelta).toBeGreaterThan(result.strugglingDelta);
     });
 });
