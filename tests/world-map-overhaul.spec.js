@@ -6,20 +6,28 @@ test.describe('world map overhaul: river, capital, forts, orc lands, borders', (
         await createCharacter(page, { campaign: '2' });
         const result = await page.evaluate(() => {
             window.renderWorldMap();
-            const capitalCell = window.worldMapData[0][6];
-            return { name: capitalCell.n, marker: capitalCell.f, faction: capitalCell.o };
+            const cell = window.worldMapCellFromLocalHex({ q: 8, r: 24 - 130 * 4 });
+            const capitalCell = window.worldMapData[cell.row][cell.col];
+            return { name: capitalCell.n, marker: capitalCell.f, faction: capitalCell.o, row: cell.row };
         });
         expect(result.name).toBe('Silverhart');
         expect(result.marker).toBe('K');
         expect(result.faction).toBe('h');
+        expect(result.row).toBeLessThan(6); // north of Hollowmere's row
     });
 
     test('border forts sit between the human west and orc-held east', async ({ page }) => {
         await createCharacter(page, { campaign: '2' });
         const result = await page.evaluate(() => {
-            const forts = [window.worldMapData[5][9], window.worldMapData[9][9]];
+            const forts = [];
+            for (const row of window.worldMapData) {
+                for (const cell of row) {
+                    if (cell.f === 'F' && cell.o === 'h') forts.push(cell);
+                }
+            }
             return forts.map(f => ({ marker: f.f, faction: f.o, name: f.n }));
         });
+        expect(result.length).toBeGreaterThanOrEqual(2); // Northwatch + Ridgehold
         result.forEach(f => {
             expect(f.marker).toBe('F');
             expect(f.faction).toBe('h');

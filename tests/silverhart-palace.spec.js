@@ -97,7 +97,13 @@ test.describe('Silverhart Palace: the capital, one world-hex north of Millbrook'
 
     test('Silverhart is marked on the world map as the Capital', async ({ page }) => {
         await createCharacter(page);
-        const cell = await page.evaluate(() => window.worldMapData[0][6]);
+        const cell = await page.evaluate(() => {
+            for (const row of window.worldMapData) {
+                const found = row.find(c => c.n === 'Silverhart');
+                if (found) return found;
+            }
+            return null;
+        });
         expect(cell.n).toBe('Silverhart');
         expect(cell.f).toBe('K');
     });

@@ -25,11 +25,13 @@ test.describe('first-five-minutes presentation polish', () => {
         });
         expect(legendHtml).toContain('Human Lands');
         // Orc-held territory is now actually painted on the map (east of the
-        // border forts), so it's correct for it to appear here — dwarves and
-        // elves still aren't represented anywhere in this part of the world.
+        // border forts), and the goblin camp now gets a real marker (scaled
+        // down from its true local coordinates), so both correctly appear
+        // here — dwarves and elves still aren't represented anywhere in this
+        // part of the world.
         expect(legendHtml).toContain('Orc Tribes');
+        expect(legendHtml).toContain('Goblin Hordes');
         expect(legendHtml).not.toContain('Dwarven Kingdom');
         expect(legendHtml).not.toContain('Elven Realm');
-        expect(legendHtml).not.toContain('Goblin Hordes');
     });
 });

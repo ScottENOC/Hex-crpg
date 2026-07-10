@@ -15,6 +15,52 @@ window.campaign2Landmarks = {
     crossroads: { q: 8, r: 24 } // q=8 keeps the long roads clear of the tavern's east wall (q:-6..6)
 };
 
+// One world-map grid cell = WORLD_HEX_SIZE local hexes (see setupVillageScene's
+// paintRoad calls, which already measure every road in multiples of this).
+// The crossroads (campaign2Landmarks.crossroads) is the local origin all
+// roads radiate from, and sits at [WORLD_MAP_ORIGIN.row][WORLD_MAP_ORIGIN.col]
+// on the 16x16 world grid (worldMap.js) — Hollowmere's own cell. Every other
+// settlement/feature marker should be computed from its real local hex via
+// worldMapCellFromLocalHex rather than hand-picked, so the world map's scale
+// actually matches the local map it's meant to summarize.
+window.WORLD_HEX_SIZE = 130;
+window.WORLD_MAP_ORIGIN = { row: 6, col: 6 };
+function worldMapCellFromLocalHex(hex) {
+    const cp = window.campaign2Landmarks.crossroads;
+    return {
+        row: window.WORLD_MAP_ORIGIN.row + Math.round((hex.r - cp.r) / window.WORLD_HEX_SIZE),
+        col: window.WORLD_MAP_ORIGIN.col + Math.round((hex.q - cp.q) / window.WORLD_HEX_SIZE),
+    };
+}
+window.worldMapCellFromLocalHex = worldMapCellFromLocalHex;
+
+// Writes a world-map marker at the grid cell computed from a real local hex,
+// bounds-checked against the actual grid size instead of a hardcoded index.
+// The grid is coarse (WORLD_HEX_SIZE local hexes per cell) so two genuinely
+// distinct features can round to the same cell (e.g. Ridgehold Fort and the
+// orc stronghold both sit near the same stretch of border road) — rather
+// than silently overwriting whichever was placed first, this nudges to an
+// adjacent free cell so both stay visible.
+function setWorldMapMarker(localHex, marker) {
+    if (!window.worldMapData || !window.worldMapData.length) return;
+    const { row, col } = worldMapCellFromLocalHex(localHex);
+    const candidates = [[row, col], [row, col + 1], [row + 1, col], [row, col - 1], [row - 1, col]];
+    for (const [r, c] of candidates) {
+        if (r < 0 || r >= window.worldMapData.length) continue;
+        if (c < 0 || c >= window.worldMapData[r].length) continue;
+        if (!window.worldMapData[r][c].n) {
+            window.worldMapData[r][c] = marker;
+            return;
+        }
+    }
+    // No free adjacent cell — fall back to the original target so the
+    // marker is at least written somewhere close to correct.
+    if (row >= 0 && row < window.worldMapData.length && col >= 0 && col < window.worldMapData[row].length) {
+        window.worldMapData[row][col] = marker;
+    }
+}
+window.setWorldMapMarker = setWorldMapMarker;
+
 // Forest as scattered clumps rather than individual random hexes: a coarse
 // grid decides whether a 4x4-hex cell has a patch at all (~40% do), and only
 // within a patch cell does per-hex noise decide Forest vs Grass. Reuses
@@ -389,6 +435,8 @@ function buildFarmstead(roadEnd) {
         const mac = window.buildNPC({ ...window.campaign2OldMac, hex: { q: houseCenter.q + 1, r: houseCenter.r } });
         window.entities.push(mac);
     }
+
+    setWorldMapMarker(houseCenter, { t: 'G', f: 'V', o: 'h', p: 1, n: "Old Mac's Farmstead" });
 }
 
 // Wraps window.createMonster with the NPC-ish fields buildNPC normally
@@ -509,6 +557,8 @@ function buildGoblinCamp(roadEnd) {
         captive.dialogueId = 'ser_aldric_captive';
         window.entities.push(captive);
     }
+
+    setWorldMapMarker(center, { t: 'G', f: 'V', o: 'g', p: 1, n: 'Skarn-tooth Camp' });
 }
 
 // Same shape as buildGoblinNPC above, but for the orc_raiders faction —
@@ -593,9 +643,7 @@ function buildOrcStronghold(roadEnd) {
     window.entities.push(troll);
     window.campaign2OrcStrongholdTrollHex = trollHex;
 
-    if (window.worldMapData && window.worldMapData[9] && window.worldMapData[9][12] !== undefined) {
-        window.worldMapData[9][12] = { t: 'H', f: 'F', o: 'o', p: 1, n: "Skarnak's Hold" };
-    }
+    setWorldMapMarker(center, { t: 'H', f: 'F', o: 'o', p: 1, n: "Skarnak's Hold" });
 }
 
 // The Chapterhouse of the Silver Flame: the source of the hunting parties
@@ -1115,9 +1163,7 @@ function buildMillbrook(roadEnd) {
         window.entities.push(quartermaster);
     }
 
-    if (window.worldMapData && window.worldMapData[3] && window.worldMapData[3][6] !== undefined) {
-        window.worldMapData[3][6] = { t: 'G', f: 'V', o: 'h', p: 1, n: 'Millbrook' };
-    }
+    setWorldMapMarker(center, { t: 'G', f: 'V', o: 'h', p: 1, n: 'Millbrook' });
 }
 
 // A dragon, out past Millbrook — pure "there's a threat in the wilds" flavor
@@ -1883,12 +1929,7 @@ function buildSilverhartPalace(roadEnd) {
         }
     }
 
-    // One world-hex north of Millbrook [3][6], which is itself 3 north of
-    // Hollowmere [6][6] — see the world map's [0][6] Silverhart placement in
-    // worldMap.js's loadWorldMap.
-    if (window.worldMapData && window.worldMapData[0] && window.worldMapData[0][6] !== undefined) {
-        window.worldMapData[0][6] = { t: 'G', f: 'K', o: 'h', p: 3, n: 'Silverhart' };
-    }
+    setWorldMapMarker(throneCenter, { t: 'G', f: 'K', o: 'h', p: 3, n: 'Silverhart' });
 }
 
 // A first breadcrumb toward the Druid/unicorn quest chain — read once, same
@@ -2659,11 +2700,7 @@ function buildEmberlode(roadEnd) {
         window.entities.push(window.buildNPC({ ...window.campaign2EmberlodeMiner, hex: { q: bunkCenter.q - 1, r: bunkCenter.r } }));
     }
 
-    // Two world-hexes west of Hollowmere [6][6] (Millbrook, three hexes
-    // north, registers at [3][6] the same way — one row/col per world-hex).
-    if (window.worldMapData && window.worldMapData[6] && window.worldMapData[6][4] !== undefined) {
-        window.worldMapData[6][4] = { t: 'G', f: 'V', o: 'h', p: 1, n: 'Emberlode' };
-    }
+    setWorldMapMarker(center, { t: 'G', f: 'V', o: 'h', p: 1, n: 'Emberlode' });
 }
 
 // Reddale: the east road's small town — bigger than the single-building
@@ -2807,9 +2844,7 @@ function buildReddale(roadEnd) {
     }
 
     // One world-hex east of Hollowmere [6][6].
-    if (window.worldMapData && window.worldMapData[6] && window.worldMapData[6][7] !== undefined) {
-        window.worldMapData[6][7] = { t: 'G', f: 'T', o: 'h', p: 1, n: 'Reddale' };
-    }
+    setWorldMapMarker(roadEnd, { t: 'G', f: 'T', o: 'h', p: 1, n: 'Reddale' });
 }
 
 // Northwatch Fort: the Border War's active front. A 6-pointed star fort
@@ -2943,9 +2978,7 @@ function buildNorthwatchFort(turnHex) {
     window.tileObjects[`${gateHex.q - 1},${gateHex.r - 4}`] = { type: 'oil_barrel' };
     window.tileObjects[`${gateHex.q + 1},${gateHex.r - 4}`] = { type: 'oil_barrel' };
 
-    if (window.worldMapData && window.worldMapData[5] && window.worldMapData[5][9] !== undefined) {
-        window.worldMapData[5][9] = { t: 'H', f: 'F', o: 'h', p: 1, n: 'Northwatch Fort (Under Siege)' };
-    }
+    setWorldMapMarker(center, { t: 'H', f: 'F', o: 'h', p: 1, n: 'Northwatch Fort (Under Siege)' });
 }
 
 // Ridgehold Fort: populated and patrol-behaviored like Northwatch, but not
@@ -2982,9 +3015,7 @@ function buildRidgeholdFort(roadEnd) {
         window.entities.push(soldier);
     });
 
-    if (window.worldMapData && window.worldMapData[9] && window.worldMapData[9][9] !== undefined) {
-        window.worldMapData[9][9] = { t: 'H', f: 'F', o: 'h', p: 1, n: 'Ridgehold Fort' };
-    }
+    setWorldMapMarker(center, { t: 'H', f: 'F', o: 'h', p: 1, n: 'Ridgehold Fort' });
 }
 
 // Moves every party member (not just window.player) to a cluster around

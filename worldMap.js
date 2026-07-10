@@ -74,27 +74,33 @@ function loadWorldMap() {
             // Note: cell.f is the marker SHAPE ('K' capital/'C' city/'T' town/
             // 'V' village/'F' fort), cell.o is the faction-color code — see
             // drawWorldHex, which reads them this way.
+            // Hollowmere sits at the local origin (the crossroads) by
+            // definition, so this is the one marker that's genuinely fixed —
+            // every other settlement/fort/camp marker is written later, once
+            // its real local hex is known, via setWorldMapMarker
+            // (campaign2World.js), which scales the real coordinate down by
+            // WORLD_HEX_SIZE instead of a hand-picked grid cell. Doing it by
+            // hand here was exactly the bug: Silverhart, the farm, and both
+            // forts all ended up 1-6 cells off from where their local
+            // coordinates actually place them.
             window.worldMapData[6][6] = { t: 'G', f: 'V', o: 'h', p: 1, n: 'Hollowmere' };
-            window.worldMapData[0][6] = { t: 'G', f: 'K', o: 'h', p: 3, n: 'Silverhart' };
-            window.worldMapData[9][6] = { t: 'G', f: 'V', o: 'h', p: 1, n: "Old Mac's Farmstead" };
-            window.worldMapData[5][9] = { t: 'H', f: 'F', o: 'h', p: 1, n: 'Northwatch Fort' };
-            window.worldMapData[9][9] = { t: 'H', f: 'F', o: 'h', p: 1, n: 'Ridgehold Fort' };
 
             // Matches the actual local stream (campaign2World.js's
-            // buildReddale/buildVillage terrain painting: a strictly
-            // east-west line at r=-25, crossed by the north road's bridge)
-            // — running west-to-east between the capital (row0) and
-            // Hollowmere/Millbrook (rows 3 and 6), not north-to-south. It
-            // crosses the human/orc border right where Northwatch Fort (row5,
-            // col9) stands watch over the bank, same "bridge guarded by a
-            // fort" read as the local river/road crossing, with a gentle
-            // bend further east
-            // (mirroring the local river's own big bend before it levels
-            // back out — see paintStreamSegment's leg 3).
+            // paintStreamSegment calls: a strictly east-west line at r=-25,
+            // spanning roughly q=-90..220) — that's just north of the
+            // crossroads (CP.r=24), close enough to round to the same
+            // WORLD_HEX_SIZE-scaled row as every settlement (row 6). Drawn
+            // one row north (row 5) instead of exactly on row 6 so it reads
+            // as a river next to the villages rather than a line running
+            // straight through every settlement icon — still the correct
+            // side (north) of the crossroads, just nudged off the settlement
+            // row for legibility. Bends south toward row 6 for two columns
+            // at the human/orc border crossing, mirroring the local river's
+            // own bend before it levels back out.
             window.worldRiverPath = [
-                { x: 0, y: 4 }, { x: 1, y: 4 }, { x: 2, y: 4 }, { x: 3, y: 4 }, { x: 4, y: 4 },
-                { x: 5, y: 4 }, { x: 6, y: 4 }, { x: 7, y: 4 }, { x: 8, y: 4 }, { x: 9, y: 4 },
-                { x: 10, y: 4 }, { x: 11, y: 5 }, { x: 12, y: 5 }, { x: 13, y: 4 }, { x: 14, y: 4 }, { x: 15, y: 4 }
+                { x: 0, y: 5 }, { x: 1, y: 5 }, { x: 2, y: 5 }, { x: 3, y: 5 }, { x: 4, y: 5 },
+                { x: 5, y: 5 }, { x: 6, y: 5 }, { x: 7, y: 5 }, { x: 8, y: 5 }, { x: 9, y: 5 },
+                { x: 10, y: 5 }, { x: 11, y: 6 }, { x: 12, y: 6 }, { x: 13, y: 5 }, { x: 14, y: 5 }, { x: 15, y: 5 }
             ];
 
             window.playerWorldPos = { x: 6, y: 6 };
