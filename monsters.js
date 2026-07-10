@@ -207,6 +207,38 @@ const monsterTemplates = {
         },
         defaultEquipment: []
     },
+    'bear': {
+        name: 'Bear',
+        color: '#4a3520',
+        hp: 30,
+        expValue: 200,
+        canLoot: false,
+        tags: ['animal'],
+        behaviorType: 'wander',
+        skills: {
+            'health': 3,
+            'unarmed_hit': 2,
+            'unarmed_dmg': 3,
+            'meleeDamage': 1
+        },
+        defaultEquipment: []
+    },
+    'ogre': {
+        name: 'Ogre',
+        color: '#5a6a3a',
+        hp: 50,
+        expValue: 450,
+        riderSize: 4,
+        extraHexes: [{ q: 0, r: 1 }],
+        tags: ['giant'],
+        skills: {
+            'health': 5,
+            'meleeDamage': 4,
+            'club_hit': 2,
+            'club_dmg': 2
+        },
+        defaultEquipment: ['club']
+    },
     'boar': {
         name: 'Boar',
         color: '#8d6e63',

@@ -272,6 +272,15 @@ window.campaign2OrcTraderItems = ['axe', 'spear', 'club', 'medium_armor', 'woode
 // attribute pool in campaign2World.js's buildGoblinCamp/rescue logic).
 window.campaign2Paladin = { name: 'Ser Aldric Thorne', title: 'Wandering Paladin', race: 'human', gender: 'male', color: '#d4c9a8', voice: 'pc_1' };
 
+// Three small recruitment quest chains, same "placeholder Entity + real
+// stats only applied at the moment of recruitment via createCharacterData"
+// shape as Ser Aldric/grantStarFortCompanion (campaign2Dialogue.js) — no
+// combat stats live on these specs, just enough identity to place and talk
+// to them before they join.
+window.campaign2ArcherCompanion = { name: 'Reyna Fletcher', title: 'Huntress', race: 'human', gender: 'female', color: '#6a4a2a', voice: 'pc_1', dialogueId: 'reyna_fletcher' };
+window.campaign2WizardCompanion = { name: 'Mirabel Quill', title: 'Wandering Scholar', race: 'elf', gender: 'female', color: '#3a2a5a', voice: 'pc_1', dialogueId: 'mirabel_quill' };
+window.campaign2DruidCompanion = { name: 'Fenn Oakheart', title: 'Grove Apprentice', race: 'human', gender: 'male', color: '#3a5a2a', voice: 'pc_1', dialogueId: 'fenn_oakheart' };
+
 // The abandoned house partway up the north road: three skeletons left
 // behind, positioned around the journal at its center (offsets relative to
 // buildAbandonedHouse's house center).

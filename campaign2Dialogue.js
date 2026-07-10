@@ -332,6 +332,46 @@ window.npcDialogueTrees = {
         window.showDialogue(npc, "Welcome to Hallow's Goods. Soldier-grade gear, fair prices — what's left of my stock, anyway.", [
             { label: "Let me see your wares.", action: () => window.openShop({ itemIds: window.hollowmereStoreItems, stock: window.hollowmereStoreStock, mounts: false }) },
             {
+                label: "Heard you've had some trouble.",
+                action: () => {
+                    if (!window.questLog) window.questLog = [];
+                    const quest = window.questLog.find(q => q.id === 'stolen_delivery');
+                    const thiefAlive = window.entities.some(e => e.isDeliveryThief && e.alive);
+                    if (quest && quest.status === 'completed') {
+                        window.showDialogue(npc, "That delivery business is sorted, thanks to you.", [{ label: "Anytime.", action: () => {} }]);
+                        return;
+                    }
+                    if (quest && quest.status === 'active') {
+                        if (!thiefAlive) {
+                            const idx = window.player.inventory.indexOf('potion_health');
+                            if (idx === -1) {
+                                window.showDialogue(npc, "Killed the little thief, did you? Where's my delivery, then?", [{ label: "...", action: () => {} }]);
+                                return;
+                            }
+                            window.player.inventory.splice(idx, 1);
+                            quest.status = 'completed';
+                            window.player.gold = (window.player.gold || 0) + 15;
+                            if (window.gainExp) window.gainExp(40);
+                            window.showMessage("Quest complete: A Snatched Delivery. (+15 gold)");
+                            window.showDialogue(npc, "My goods! Much obliged, traveler.", [{ label: "Happy to help.", action: () => {} }]);
+                        } else {
+                            window.showDialogue(npc, "That goblin scout's still out there with my delivery, far as I know.", [{ label: "I'll deal with it.", action: () => {} }]);
+                        }
+                        return;
+                    }
+                    window.showDialogue(npc, "A goblin scout snatched a delivery of mine not far from here — just south and west of the shop. Little thing, shouldn't be hard to catch, but I can't leave the counter to do it myself.", [
+                        {
+                            label: "I'll get it back.",
+                            action: () => {
+                                window.questLog.push({ id: 'stolen_delivery', title: 'A Snatched Delivery', giver: 'Wick Hallow', status: 'active', description: "A goblin scout stole a delivery meant for Wick Hallow's store. Kill it and return the goods." });
+                                window.showMessage("Quest added: A Snatched Delivery.");
+                            }
+                        },
+                        { label: "Not my problem.", action: () => {} }
+                    ]);
+                }
+            },
+            {
                 label: "Donate 5 fish/fruit/herbs to the village stores.",
                 action: () => {
                     const foodLike = ['fish', 'fruit', 'herbs'];
@@ -1248,6 +1288,69 @@ window.npcDialogueTrees = {
             { label: "Not yet.", action: () => {} }
         ]);
     },
+    // Reyna Fletcher (archer-specialist fighter companion): already tracking
+    // the bear raiding Old Mac's grain stores (see buildSideQuestContent,
+    // campaign2World.js) — an easy Hollowmere-area quest doubling as her
+    // recruitment hook.
+    reyna_fletcher: (npc) => {
+        if (window.party.some(p => p.name === window.campaign2ArcherCompanion.name)) return;
+        const bearAlive = window.entities.some(e => e.isSideQuestBear && e.alive);
+        if (!bearAlive) {
+            window.showDialogue(npc, "That's the last of it dead, then. Good riddance — it's cost Old Mac more grain than he can spare. I owe you for the help. I've been meaning to travel further than these woods for a while now — mind the company?", [
+                { label: "Join me.", action: () => window.recruitReyna() },
+                { label: "Not right now.", action: () => {} }
+            ]);
+            return;
+        }
+        window.showDialogue(npc, "Careful — there's a bear gone bold, raiding the grain stores at night. I've been tracking it a few days now. Help me finish it and I might just travel on with you afterward.", [
+            { label: "I'll help.", action: () => {} },
+            { label: "Not my business.", action: () => {} }
+        ]);
+    },
+    // Mirabel Quill (wizard companion): after a book/reagent inside the
+    // spider-infested ruin near Reddale (see buildSideQuestContent).
+    mirabel_quill: (npc) => {
+        if (window.party.some(p => p.name === window.campaign2WizardCompanion.name)) return;
+        const spidersAlive = window.entities.some(e => e.isSpiderRuinDefender && e.alive);
+        if (!spidersAlive) {
+            window.showDialogue(npc, "The nest's cleared, then — I felt them go quiet from here. Whatever's still readable in there is mine now, and I owe you for the opening. I travel light and I don't stay anywhere long, but I could use a steadier direction for a while.", [
+                { label: "Join me.", action: () => window.recruitMirabel() },
+                { label: "Not right now.", action: () => {} }
+            ]);
+            return;
+        }
+        window.showDialogue(npc, "There's a ruin nearby with something in it worth reading — old enough to matter, if the rumors are even half true. Spiders have made a nest of the entrance, though, and I'm no fighter. Clear them out and whatever's inside is worth knowing about.", [
+            { label: "I'll clear it out.", action: () => {} },
+            { label: "Not my business.", action: () => {} }
+        ]);
+    },
+    // Fenn Oakheart (druid companion): a grove apprentice, distinct from
+    // Elder Nessa Wren — recruited via a simple herb-gathering fetch using
+    // the grove's existing herb_patch tileObjects, not combat.
+    fenn_oakheart: (npc) => {
+        if (window.party.some(p => p.name === window.campaign2DruidCompanion.name)) return;
+        const herbCount = (window.player.inventory || []).filter(i => i === 'herbs').length;
+        if (herbCount >= 3) {
+            window.showDialogue(npc, "Three bundles, gathered clean — you've got a feel for this place. The grove doesn't need me the way it used to. I think I'm ready to see more of the world than these trees.", [
+                {
+                    label: "Give the herbs, and join me.",
+                    action: () => {
+                        let removed = 0;
+                        window.player.inventory = window.player.inventory.filter(i => {
+                            if (i === 'herbs' && removed < 3) { removed++; return false; }
+                            return true;
+                        });
+                        window.recruitFenn();
+                    }
+                },
+                { label: "Not right now.", action: () => {} }
+            ]);
+            return;
+        }
+        window.showDialogue(npc, "The Elder keeps the grove's peace; I mostly just gather. Bring me three bundles of herbs from the patches here and I'll know you respect the place, not just what grows in it.", [
+            { label: "I'll gather some.", action: () => {} }
+        ]);
+    },
     // The goblin camp's own trader — the villain/greenskin-alliance path's
     // alternative to the human merchants isShunnedByHumanCommerce locks
     // out, open only once the tribe is actually allied (not just tolerated).
@@ -1565,6 +1668,41 @@ window.npcDialogueTrees = {
                             }
                         },
                         { label: "That's not my problem.", action: () => {} }
+                    ]);
+                }
+            },
+            {
+                label: "Heard anything else on the road?",
+                action: () => {
+                    if (!window.questLog) window.questLog = [];
+                    const ogreQuest = window.questLog.find(q => q.id === 'toll_ogre');
+                    const ogreAlive = window.entities.some(e => e.isTollOgre && e.alive);
+                    if (ogreQuest && ogreQuest.status === 'completed') {
+                        window.showDialogue(npc, "Word is the toll problem sorted itself out. Good riddance.", [{ label: "Wasn't easy.", action: () => {} }]);
+                        return;
+                    }
+                    if (ogreQuest && ogreQuest.status === 'active') {
+                        if (!ogreAlive) {
+                            ogreQuest.status = 'completed';
+                            if (window.factions?.silverhart_kingdom) window.adjustReputation(window.factions.silverhart_kingdom, 10, 10);
+                            window.party[0].gold = (window.party[0].gold || 0) + 30;
+                            if (window.gainExp) window.gainExp(120);
+                            window.showMessage("Quest complete: The Toll-Taker. (+30 gold)");
+                            window.showDialogue(npc, "You actually did it? Travelers on that road owe you a drink or ten.", [{ label: "Glad to help.", action: () => {} }]);
+                        } else {
+                            window.showDialogue(npc, "Still charging a toll in blood, last I heard.", [{ label: "I'll finish it.", action: () => {} }]);
+                        }
+                        return;
+                    }
+                    window.showDialogue(npc, "A trader passed through cursing about an ogre camped past the old abandoned house, demanding a 'toll' off anyone using the road — and eating the ones who argue. Silverhart's watch hasn't done anything about it, out this far.", [
+                        {
+                            label: "I'll clear it out.",
+                            action: () => {
+                                window.questLog.push({ id: 'toll_ogre', title: 'The Toll-Taker', giver: 'Petra Hollis', status: 'active', description: 'An ogre is demanding a toll (in blood) from travelers on the north road, past the abandoned house. Kill it.' });
+                                window.showMessage("Quest added: The Toll-Taker.");
+                            }
+                        },
+                        { label: "Not my problem.", action: () => {} }
                     ]);
                 }
             },
@@ -3414,6 +3552,104 @@ function grantStarFortCompanion(side) {
     window.renderEntities();
 }
 window.grantStarFortCompanion = grantStarFortCompanion;
+
+// Converts a placeholder Entity (placed by buildSideQuestContent,
+// campaign2World.js) into a real party member — same shape as
+// rescuePaladin/grantStarFortCompanion above, repeated per companion rather
+// than shared, since each one's skill/equipment build is genuinely
+// different rather than parameterizable in a way worth the abstraction.
+function recruitReyna() {
+    const name = window.campaign2ArcherCompanion.name;
+    if (window.party.some(p => p.name === name)) return;
+    const placeholder = window.entities.find(e => e.name === name && e.isNPC);
+    if (!placeholder) return;
+
+    const companion = window.createCharacterData('human', 'fighter', name, 'female', 'pc_1');
+    ['health', 'bow_hit', 'bow_dmg', 'fastMovement'].forEach(skillKey => {
+        const skill = window.skills[skillKey];
+        if (!skill) return;
+        if (companion.attributes[skill.tree] > 0) companion.attributes[skill.tree]--;
+        else if (companion.attributes.wildcard > 0) companion.attributes.wildcard--;
+        companion.skills[skillKey] = (companion.skills[skillKey] || 0) + 1;
+    });
+    if (companion.skills.health) {
+        const bonus = 10 * companion.skills.health;
+        companion.hp += bonus; companion.maxHp += bonus;
+    }
+    companion.inventory.push('bow');
+    companion.equipped.weapon = 'bow';
+    finishRecruiting(companion, placeholder);
+}
+window.recruitReyna = recruitReyna;
+
+function recruitMirabel() {
+    const name = window.campaign2WizardCompanion.name;
+    if (window.party.some(p => p.name === name)) return;
+    const placeholder = window.entities.find(e => e.name === name && e.isNPC);
+    if (!placeholder) return;
+
+    const companion = window.createCharacterData('elf', 'wizard', name, 'female', 'pc_1');
+    ['health', 'arcane_mana', 'firebolt_hit', 'firebolt_dmg'].forEach(skillKey => {
+        const skill = window.skills[skillKey];
+        if (!skill) return;
+        if (companion.attributes[skill.tree] > 0) companion.attributes[skill.tree]--;
+        else if (companion.attributes.wildcard > 0) companion.attributes.wildcard--;
+        companion.skills[skillKey] = (companion.skills[skillKey] || 0) + 1;
+    });
+    if (companion.skills.health) {
+        const bonus = 10 * companion.skills.health;
+        companion.hp += bonus; companion.maxHp += bonus;
+    }
+    companion.createdSpells = [{ name: 'Firebolt', baseId: 'firebolt', school: 'arcane', type: 'damage', manaCost: 5, tpCost: 10, magnitude: 5, range: 8 }];
+    finishRecruiting(companion, placeholder);
+}
+window.recruitMirabel = recruitMirabel;
+
+function recruitFenn() {
+    const name = window.campaign2DruidCompanion.name;
+    if (window.party.some(p => p.name === name)) return;
+    const placeholder = window.entities.find(e => e.name === name && e.isNPC);
+    if (!placeholder) return;
+
+    const companion = window.createCharacterData('human', 'druid', name, 'male', 'pc_1');
+    ['health', 'barkskin_active', 'wild_shape_adaptation'].forEach(skillKey => {
+        const skill = window.skills[skillKey];
+        if (!skill) return;
+        if (companion.attributes[skill.tree] > 0) companion.attributes[skill.tree]--;
+        else if (companion.attributes.wildcard > 0) companion.attributes.wildcard--;
+        companion.skills[skillKey] = (companion.skills[skillKey] || 0) + 1;
+    });
+    if (companion.skills.health) {
+        const bonus = 10 * companion.skills.health;
+        companion.hp += bonus; companion.maxHp += bonus;
+    }
+    companion.inventory.push('club');
+    companion.equipped.weapon = 'club';
+    finishRecruiting(companion, placeholder);
+}
+window.recruitFenn = recruitFenn;
+
+// Shared tail end of recruitment: swap the placeholder Entity for a real
+// party-side one and register it everywhere the game expects a party member.
+function finishRecruiting(companion, placeholder) {
+    window.party.push(companion);
+    const ent = new window.Entity(companion.name, 'red', placeholder.hex, (companion.attributes.agility || 10) + 10);
+    ent.side = 'player';
+    Object.assign(ent, companion);
+    ent.hex = placeholder.hex;
+    ent.visualQ = ent.hex.q; ent.visualR = ent.hex.r;
+    ent.startQ = ent.hex.q; ent.startR = ent.hex.r;
+    ent.destination = null; ent.moveCooldown = 0;
+
+    window.entities = window.entities.filter(e => e !== placeholder);
+    window.entities.push(ent);
+    window.companionAttitude[companion.name] = 60;
+    if (window.updatePartyTabs) window.updatePartyTabs();
+    window.showMessage(`${companion.name} joins your party.`);
+    window.drawMap();
+    window.renderEntities();
+}
+window.finishRecruiting = finishRecruiting;
 
 // --- Goblin-reputation / diplomacy path: small favors for the chief raise
 // goblin_tribe standing (and cost the kingdom's), building toward a peaceful

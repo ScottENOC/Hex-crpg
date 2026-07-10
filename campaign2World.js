@@ -638,6 +638,109 @@ function buildLichChapterhouse() {
 }
 window.buildLichChapterhouse = buildLichChapterhouse;
 
+// A batch of small side quests + companion recruitment hooks spread across
+// existing locations — two easy ones near Hollowmere, two harder ones
+// further out, plus a druid recruitment tied to content the Druid Grove
+// already had (its herb patches). Called last in setupVillageScene so every
+// anchor global (farm/grove/abandoned-house/Reddale centers) is already set.
+function buildSideQuestContent() {
+    // Easy #1: a bear got into Old Mac's grain stores — Reyna Fletcher, a
+    // huntress already tracking it, offers to team up (see reyna_fletcher
+    // in campaign2Dialogue.js). Placed at the edge of the farm's own
+    // clearing so it reads as local wilderness, not a separate site.
+    const farm = window.campaign2FarmHouseCenter;
+    if (farm) {
+        const bearHex = { q: farm.q + 8, r: farm.r + 5 };
+        const bear = window.createMonster('bear', bearHex, null, null, 'neutral');
+        bear.name = 'Grain-Raiding Bear';
+        bear.isSideQuestBear = true;
+        window.entities.push(bear);
+        window.campaign2SideQuestBearHex = bearHex;
+
+        const reynaEnt = new window.Entity(window.campaign2ArcherCompanion.name, window.campaign2ArcherCompanion.color, { q: farm.q + 6, r: farm.r + 4 }, 10);
+        reynaEnt.side = 'neutral';
+        reynaEnt.isNPC = true;
+        reynaEnt.race = window.campaign2ArcherCompanion.race;
+        reynaEnt.gender = window.campaign2ArcherCompanion.gender;
+        reynaEnt.title = window.campaign2ArcherCompanion.title;
+        reynaEnt.dialogueId = window.campaign2ArcherCompanion.dialogueId;
+        window.entities.push(reynaEnt);
+    }
+
+    // Easy #2: a goblin scout snatched a delivery meant for Wick Hallow's
+    // store — a quick, low-stakes fetch (see wick_hallow's new branch in
+    // campaign2Dialogue.js). Placed a short walk from the store itself.
+    const wick = window.entities.find(e => e.name === 'Wick Hallow');
+    if (wick) {
+        const scoutHex = { q: wick.hex.q - 6, r: wick.hex.r + 4 };
+        const scout = window.createMonster('goblin', scoutHex, null, ['dagger'], 'neutral');
+        scout.name = 'Goblin Scout';
+        scout.isDeliveryThief = true;
+        scout.inventory.push('potion_health'); // the "stolen delivery" — dropped/looted on death
+        window.entities.push(scout);
+        window.campaign2DeliveryThiefHex = scoutHex;
+    }
+
+    // Harder #1: an ogre demanding a toll further up the north road, past
+    // the abandoned house — Petra Hollis (Millbrook) has already heard
+    // travelers' rumors about it (see her dialogue's new branch).
+    const abandoned = window.campaign2AbandonedHouseCenter;
+    if (abandoned) {
+        const ogreHex = { q: abandoned.q + 12, r: abandoned.r + 8 };
+        const ogre = window.createMonster('ogre', ogreHex, null, null, 'neutral');
+        ogre.name = 'Toll-Taker Ogre';
+        ogre.isTollOgre = true;
+        window.entities.push(ogre);
+        window.campaign2TollOgreHex = ogreHex;
+    }
+
+    // Harder #2: a small spider-infested ruin near Reddale — Mirabel Quill
+    // is after a book/reagent inside and needs the spiders cleared first
+    // (see mirabel_quill in campaign2Dialogue.js). A miniature version of
+    // the dragon lair's "carve a small den, place a monster" shape.
+    const guildhouse = window.campaign2ReddaleGuildhouseCenter;
+    if (guildhouse) {
+        const ruinCenter = { q: guildhouse.q + 14, r: guildhouse.r - 10 };
+        for (let dq = -3; dq <= 3; dq++) {
+            for (let dr = -3; dr <= 3; dr++) {
+                const hex = { q: ruinCenter.q + dq, r: ruinCenter.r + dr };
+                if (window.distance(ruinCenter, hex) <= 3) window.setTerrainAt(hex.q, hex.r, 'Rocky Outcrop');
+            }
+        }
+        window.campaign2SpiderRuinCenter = ruinCenter;
+        ['spider', 'spider'].forEach((type, i) => {
+            const spider = window.createMonster(type, { q: ruinCenter.q + (i === 0 ? -1 : 1), r: ruinCenter.r }, null, null, 'neutral');
+            spider.isSpiderRuinDefender = true;
+            window.entities.push(spider);
+        });
+
+        const mirabelEnt = new window.Entity(window.campaign2WizardCompanion.name, window.campaign2WizardCompanion.color, { q: guildhouse.q + 10, r: guildhouse.r - 8 }, 10);
+        mirabelEnt.side = 'neutral';
+        mirabelEnt.isNPC = true;
+        mirabelEnt.race = window.campaign2WizardCompanion.race;
+        mirabelEnt.gender = window.campaign2WizardCompanion.gender;
+        mirabelEnt.title = window.campaign2WizardCompanion.title;
+        mirabelEnt.dialogueId = window.campaign2WizardCompanion.dialogueId;
+        window.entities.push(mirabelEnt);
+    }
+
+    // Druid companion: Fenn Oakheart, a grove apprentice distinct from
+    // Elder Nessa Wren (the existing unicorn-quest NPC) — recruited via a
+    // simple herb-gathering fetch using the grove's two existing
+    // herb_patch tileObjects, not combat.
+    const grove = window.campaign2DruidGroveCenter;
+    if (grove) {
+        const fennEnt = new window.Entity(window.campaign2DruidCompanion.name, window.campaign2DruidCompanion.color, { q: grove.q + 1, r: grove.r + 2 }, 10);
+        fennEnt.side = 'neutral';
+        fennEnt.isNPC = true;
+        fennEnt.race = window.campaign2DruidCompanion.race;
+        fennEnt.gender = window.campaign2DruidCompanion.gender;
+        fennEnt.title = window.campaign2DruidCompanion.title;
+        fennEnt.dialogueId = window.campaign2DruidCompanion.dialogueId;
+        window.entities.push(fennEnt);
+    }
+}
+
 // Player housing (MVP): a surveyed plot near the crossroads the player can
 // build on for free, no resource cost yet — that's a later system. Building
 // swaps the plot marker for a real one-room cottage with a bed that gives a
@@ -2313,6 +2416,7 @@ function setupVillageScene(forLoadOnly = false) {
     buildNorthwatchFort(northwatchTurnHex);
     buildRidgeholdFort(borderRoadEnd);
     buildOrcStronghold(borderRoadEnd);
+    buildSideQuestContent();
 
     // Road-network connectivity (hexMap.js): every road painted above should
     // form one connected network so NPC/long-travel road-following never
