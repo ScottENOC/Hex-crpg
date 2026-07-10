@@ -1230,8 +1230,16 @@ function buildSilverhartPalace(roadEnd) {
     // door graphic one hex short of an otherwise-untouched, re-sealed Wall.
     const rearDoor = { q: throneCenter.q, r: throneCenter.r - 5 };
     const bedroomCenter = { q: throneCenter.q, r: throneCenter.r - 9 };
+    // bedroomDoor sits one hex inside the bedroom's own floor (its real
+    // south wall row is bedroomCenter.r+3, not +2 — see the sealRoom call
+    // below), so it's kept only as the corridor-painting loop's bound, NOT
+    // passed to carveFlatRoom as a doorHex — that used to auto-place a
+    // second, spurious door graphic on plain interior floor, stacking with
+    // rearDoor and the wall's real door into three doors in a row where
+    // there should be exactly one (rearDoor, the throne room's own north
+    // wall gap — the single passage between the two rooms).
     const bedroomDoor = { q: bedroomCenter.q, r: bedroomCenter.r + 2 };
-    const bedroomRegion = carveFlatRoom(bedroomCenter.q, bedroomCenter.r, 3, 3, bedroomDoor, 'Wood Floor');
+    const bedroomRegion = carveFlatRoom(bedroomCenter.q, bedroomCenter.r, 3, 3, null, 'Wood Floor');
     window.interiorRegions.push(bedroomRegion);
     window.setTerrainAt(rearDoor.q, rearDoor.r, 'Wood Floor');
     window.tileObjects[`${rearDoor.q},${rearDoor.r}`] = { type: 'door_open', lightRadius: 0 };
@@ -1251,13 +1259,19 @@ function buildSilverhartPalace(roadEnd) {
     sealRoom(barracksRegion);
     sealRoom(councilRegion);
     sealRoom(towerRegion, [towerApron]);
-    // Same class of bug as the throne room's rearDoor above: bedroomDoor
-    // (passed to carveFlatRoom) sits one hex short of the bedroom's own
-    // true wall-ring row on its south side — carveFlatRoom's door-punch is
-    // a no-op there since that hex is already floor. The real gap the
-    // corridor cuts through is one row further out; without excepting it
-    // here, this reseal silently walls it back up.
-    sealRoom(bedroomRegion, [{ q: bedroomCenter.q, r: bedroomCenter.r + 3 }]);
+    // The bedroom's own true wall-ring row (its south side) is
+    // bedroomCenter.r+3, one hex further out than bedroomDoor. It needs to
+    // stay passable (not resealed to solid Wall, which would cut the
+    // bedroom off from rearDoor entirely) but deliberately gets no door
+    // tileObject of its own — rearDoor above is the only door between the
+    // throne room and the bedroom. Reopened as plain floor immediately
+    // after sealing, with any tileObject there removed, rather than passed
+    // to sealRoom as a door exception (which would recreate a second door
+    // graphic right next to rearDoor).
+    sealRoom(bedroomRegion);
+    const bedroomWallGap = { q: bedroomCenter.q, r: bedroomCenter.r + 3 };
+    window.setTerrainAt(bedroomWallGap.q, bedroomWallGap.r, 'Wood Floor');
+    delete window.tileObjects[`${bedroomWallGap.q},${bedroomWallGap.r}`];
 
     // A real curtain wall around the whole complex — hex-distance ring
     // (same "circle" technique the arena lobby's rooms already use), so it
@@ -1623,7 +1637,7 @@ function buildSilverhartPalace(roadEnd) {
     // Gate entry: a formal arch marking where the road out of the palace
     // gate becomes the Diplomatic Quarter proper.
     window.tileObjects[`${dqCenter},${throneCenter.r + 24}`] = { type: 'gate_arch' };
-    window.campaign2DiplomaticGateCenter = { q: dqCenter, r: throneCenter.r + 23 };
+    window.campaign2DiplomaticGateCenter = { q: dqCenter, r: throneCenter.r + 24 };
 
     // Left column (elven/aldenreach/ironbond) is pushed further south than
     // its original spacing — the elven embassy's own carveFlatRoom wall
@@ -1697,7 +1711,7 @@ function buildSilverhartPalace(roadEnd) {
 
     const ironbondOfficeCenter = { q: dqCenter - 7, r: officeRowL -2 };
     const ironbondOfficeDoor = { q: ironbondOfficeCenter.q + 4, r: ironbondOfficeCenter.r };
-    window.interiorRegions.push(carveFlatRoom(ironbondOfficeCenter.q, ironbondOfficeCenter.r, 3,2 ironbondOfficeDoor, 'Wood Floor'));
+    window.interiorRegions.push(carveFlatRoom(ironbondOfficeCenter.q, ironbondOfficeCenter.r, 3, 2, ironbondOfficeDoor, 'Wood Floor'));
     for (let q = ironbondOfficeDoor.q + 1; q < dqCenter; q++) window.setTerrainAt(q, officeRowL, 'Path');
     window.tileObjects[`${ironbondOfficeCenter.q},${ironbondOfficeCenter.r}`] = { type: 'table' };
     window.tileObjects[`${ironbondOfficeCenter.q + 1},${ironbondOfficeCenter.r}`] = { type: 'bench' };
