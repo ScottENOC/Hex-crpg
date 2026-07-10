@@ -1402,6 +1402,86 @@ function hasClassLevel(char, cls) {
 }
 window.hasClassLevel = hasClassLevel;
 
+// Retrainer NPC (silverhart_retrainer, campaign2Dialogue.js): resets every
+// normally-purchased skill back into spendable attribute points, recomputed
+// fresh from race + classLevels rather than incrementally refunded — this is
+// what lets it work without ever having tracked which tree/wildcard a given
+// rank was paid from. Left untouched: lich-tree skills (never funded by the
+// pool to begin with), monster-only skills, quest-granted skills flagged
+// questGrantedOnly (e.g. the druid unicorn bond), and any ranks recorded in
+// freeSkillRanks (e.g. Easy mode's free Health rank at creation).
+function resolveRespec(char) {
+    const preserved = {}; // skillKey -> rank, for anything respec doesn't touch
+    const freeFloors = char.freeSkillRanks || {};
+
+    for (const key in char.skills) {
+        const rank = char.skills[key];
+        if (!rank) continue;
+        const skill = window.skills[key];
+        if (!skill) { preserved[key] = rank; continue; } // unknown skill def — leave it alone rather than silently drop it
+        if (skill.tree === 'lich' || skill.tree === 'monster_skills' || skill.questGrantedOnly) {
+            preserved[key] = rank;
+        } else if (freeFloors[key]) {
+            preserved[key] = Math.min(rank, freeFloors[key]);
+        }
+    }
+
+    // Reset derived combat stats to the same baseline createCharacterData
+    // starts from, then replay only the preserved skills' apply() so their
+    // effects (extra HP, spell unlocks, etc.) survive the reset.
+    Object.assign(char, {
+        hp: 10, maxHp: 10, currentMana: 0, maxMana: 0, baseDamage: 1,
+        toHitMelee: 0, toHitRanged: 0, toHitSpell: 0, passiveDodge: 0,
+        parriesRemaining: 3, offhandAttackAvailable: false,
+        manaCaps: { arcane: 10, divine: 10, nature: 10 },
+        unlockedBaseSpells: [], unlockedCastingOptions: {}, createdSpells: [],
+        baseReduction: 0, lifeDrainOnMeleeHit: 0, witheringTouchStacks: 0,
+        commandsUndead: false, hasSoulAnchor: false,
+    });
+    char.skills = {};
+    for (const key in preserved) {
+        const skill = window.skills[key];
+        char.skills[key] = preserved[key];
+        if (skill?.apply) for (let i = 0; i < preserved[key]; i++) skill.apply(char);
+    }
+
+    // Recompute the full attribute pool from scratch: race bonus applies
+    // once per level (creation counts as level 1), class bonus applies once
+    // per level taken in that class — see applyLevelUp for why this is an
+    // exact match for how the pool was built up in the first place.
+    const rb = window.raceData[char.race].bonus;
+    const allAttrs = new Set(Object.keys(char.attributes || {}));
+    Object.keys(rb).forEach(k => allAttrs.add(k));
+    for (const cls in (char.classLevels || {})) {
+        const cb = window.classData[cls]?.bonus;
+        if (cb) Object.keys(cb).forEach(k => allAttrs.add(k));
+    }
+    const newAttributes = {};
+    allAttrs.forEach(k => newAttributes[k] = 0);
+    Object.keys(rb).forEach(k => newAttributes[k] += (rb[k] || 0) * char.level);
+    for (const cls in (char.classLevels || {})) {
+        const cb = window.classData[cls]?.bonus;
+        if (!cb) continue;
+        const count = char.classLevels[cls];
+        Object.keys(cb).forEach(k => newAttributes[k] += (cb[k] || 0) * count);
+    }
+    // Roguelike arena boons (Campaign 1) are a flat one-time attribute bonus
+    // outside the class/level system entirely — preserve them across respec.
+    const roguelikeBonuses = window.roguelikeData?.permanentSkillBonuses || {};
+    Object.keys(roguelikeBonuses).forEach(tree => {
+        newAttributes[tree] = (newAttributes[tree] || 0) + roguelikeBonuses[tree];
+    });
+    char.attributes = newAttributes;
+    char.hp = char.maxHp; // full heal, matches "walk out of the retrainer's shop ready to go"
+
+    const partyChar = window.party?.find(p => p.name === char.name);
+    if (partyChar && partyChar !== char) Object.assign(partyChar, char);
+    const ent = window.entities?.find(e => e.name === char.name);
+    if (ent) Object.assign(ent, char);
+    if (window.showCharacter) window.showCharacter();
+}
+window.resolveRespec = resolveRespec;
+
 function doLevelUp() {
     if (window.player.level >= (window.currentLevelCap || 50)) {
         window.showMessage("You have reached the level cap for this campaign!");
@@ -2099,8 +2179,11 @@ function openShop(options) {
         const item = window.items[id];
         if (!item) continue;
         // Gathered raw materials (food/resource items) aren't buyable, so they
-        // carry an explicit sellPrice instead of half a buyPrice.
-        const sellPrice = item.sellPrice || Math.floor((item.buyPrice || 0) * 0.5);
+        // carry an explicit sellPrice instead of half a buyPrice. The 0.5
+        // baseline shifts with difficulty: easier to fence goods on Easy,
+        // harsher fencing penalty on Hard.
+        const sellFraction = window.difficultyMode === 'easy' ? 0.7 : (window.difficultyMode === 'hard' ? 0.35 : 0.5);
+        const sellPrice = item.sellPrice ? Math.floor(item.sellPrice * (sellFraction / 0.5)) : Math.floor((item.buyPrice || 0) * sellFraction);
         if (sellPrice <= 0) continue;
 
         const div = document.createElement("div");

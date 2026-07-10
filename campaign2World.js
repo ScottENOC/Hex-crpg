@@ -1856,6 +1856,18 @@ function buildSilverhartPalace(roadEnd) {
         window.campaign2MercenaryRecruiterHex = recruiterHex;
     }
 
+    // Retrainer: sits right next to the Mercenary Recruiter (both are
+    // "spend gold to reshape your party" services) and offers a full skill
+    // respec — see resolveRespec (ui.js) and silverhart_retrainer
+    // (campaign2Dialogue.js). Not placed at all under Iron Man Mode, per the
+    // player's request that Iron Man remove the safety net entirely.
+    if (window.campaign2Retrainer && !window.ironmanMode) {
+        const retrainerHex = { q: plazaCenter.q + 3, r: plazaCenter.r + 1 };
+        const retrainer = window.buildNPC({ ...window.campaign2Retrainer, hex: retrainerHex });
+        window.entities.push(retrainer);
+        window.campaign2RetrainerHex = retrainerHex;
+    }
+
     // Re-stamp the middle ring road one last time, now that every building up
     // to and including the Diplomatic Quarter has been carved: an embassy
     // sitting close to radius 45 (the Corvane embassy/cathedral column in

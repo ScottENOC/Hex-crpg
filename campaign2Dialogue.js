@@ -2471,6 +2471,27 @@ window.npcDialogueTrees = {
             },
             { label: "Not right now.", action: () => {} }
         ]);
+    },
+    // The Retrainer: full respec, see resolveRespec (ui.js). Cost scales
+    // with level since a higher-level respec is refunding more points.
+    silverhart_retrainer: (npc) => {
+        const player = window.party[0];
+        const cost = 50 + player.level * 25;
+        window.showDialogue(npc, `Spent your points somewhere you regret? For ${cost} gold I'll set every skill you've bought back to points, keeping only what's outside my trade — your unnatural gifts, whatever the arena burned into you, that sort of thing. Race and the classes you've taken decide how many points you'll have to spend again.`, [
+            {
+                label: `Retrain me (${cost}g).`,
+                action: () => {
+                    if ((player.gold || 0) < cost) {
+                        window.showMessage("You don't have enough gold.");
+                        return;
+                    }
+                    player.gold -= cost;
+                    window.resolveRespec(player);
+                    window.showMessage("Your skills have been reset — visit the character screen to respend your points.");
+                }
+            },
+            { label: "Not right now.", action: () => {} }
+        ]);
     }
 };
 

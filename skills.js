@@ -599,6 +599,7 @@ const skills = {
         tree: 'druid',
         maxRanks: 1,
         prereq_eval: () => false, // quest-granted only (see grantSkillRank in the druid grove questline, campaign2Dialogue.js) — never purchasable
+        questGrantedOnly: true, // excluded from respec's refund pass (resolveRespec, ui.js) — nothing was ever spent on this
         apply: (player) => {}
     },
     'poison_bite': {

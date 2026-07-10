@@ -4816,7 +4816,14 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
             (target.tempReduction || 0) +
             (target.skills?.spectral_form ? 2 : 0);
   let fd = Math.max(1, dmg - red);
-  
+
+  // Hard mode: the player's side deals less and takes more, applied last so
+  // it scales the final post-reduction number rather than raw damage.
+  if (window.difficultyMode === 'hard') {
+      if (attacker.side === 'player') fd = Math.max(1, Math.round(fd * 0.9));
+      if (target.side === 'player') fd = Math.round(fd * 1.1);
+  }
+
   // HEALING REDUCTION / PENALTIES (Not applicable to damage directly but noted)
 
   sharedMessage(`${attacker.name} hits ${target.name} for ${fd} damage! (${dmg} base - ${red} reduction)`);
@@ -6614,7 +6621,8 @@ function startArenaFight() {
             // real class levels — extra HP and combat skill ranks — so late
             // arena runs don't stay trivial forever.
             if (m.tags?.includes('humanoid') && window.party?.length) {
-                const avgPartyLevel = window.party.reduce((sum, c) => sum + c.level, 0) / window.party.length;
+                let avgPartyLevel = window.party.reduce((sum, c) => sum + c.level, 0) / window.party.length;
+                if (window.difficultyMode === 'easy') avgPartyLevel = Math.round(avgPartyLevel * 0.75);
                 const bonusLevels = Math.floor(avgPartyLevel / 3);
                 if (window.applyClassLevelScaling) window.applyClassLevelScaling(m, bonusLevels);
             }

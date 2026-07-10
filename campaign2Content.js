@@ -679,6 +679,11 @@ window.campaign2HighCleric = {
 // where hires land (active party if there's room, the bench otherwise).
 window.campaign2MercenaryRecruiter = { name: 'Mercenary Recruiter', title: 'Sellsword Broker', dialogueId: 'silverhart_mercenary_broker' };
 
+// The Retrainer: a full skill respec for a steep gold price (see
+// resolveRespec, ui.js, and silverhart_retrainer, campaign2Dialogue.js).
+// Placed right next to the Mercenary Recruiter, per the player's request.
+window.campaign2Retrainer = { name: 'Old Hessa', title: 'Retrainer', race: 'dwarf', gender: 'female', dialogueId: 'silverhart_retrainer' };
+
 // The Border War arc. Same template-array pattern as campaign2RoyalGuards —
 // one shared roster, `.forEach(buildNPC)` against hardcoded hex offsets in
 // campaign2World.js's buildNorthwatchFort/buildRidgeholdFort. `side: 'neutral'`

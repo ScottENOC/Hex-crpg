@@ -9,7 +9,13 @@ function initializePlayer(race, cls, gender, campaign = "3", voice = "pc_1") {
   // over after buying a starting armor piece and its training skill.
   if (campaign === "1") mainChar.gold = 150;
   if (campaign === "2") mainChar.gold = 65;
-  
+
+  if (window.difficultyMode === 'easy') {
+      mainChar.gold = Math.round(mainChar.gold * 1.5);
+      if (window.grantSkillRank) window.grantSkillRank(mainChar, 'health'); // a free rank, not paid from the attribute pool
+      mainChar.freeSkillRanks = { health: 1 }; // respec (resolveRespec, ui.js) preserves ranks recorded here instead of refunding them
+  }
+
   window.party.push(mainChar);
   window.player = mainChar; // Keep window.player as a reference to the selected one for compatibility
 }

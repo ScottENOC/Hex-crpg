@@ -87,6 +87,7 @@ function saveGame(saveName = "rpg_save_game") {
         exploredHexes: Array.from(window.exploredHexes),
         lastSeenTimeMap: window.lastSeenTimeMap || {},
         ironmanMode: window.ironmanMode || false,
+        difficultyMode: window.difficultyMode || 'normal',
         mapItems: window.mapItems,
         gamePhase: window.gamePhase,
         currentTurnIndex: window.entities.indexOf(window.currentTurnEntity),
@@ -208,6 +209,7 @@ function loadGame(saveName = "rpg_save_game") {
         window.exploredHexes = new Set(gameState.exploredHexes || []);
         window.lastSeenTimeMap = gameState.lastSeenTimeMap || {};
         window.ironmanMode = gameState.ironmanMode || false;
+        window.difficultyMode = gameState.difficultyMode || 'normal';
         window.mapItems = gameState.mapItems || {};
 
         // Restore Global States

@@ -35,7 +35,8 @@ function tickLichHunt(deltaSeconds) {
     state.active = true;
     if (!state.chapterhouseDestroyed) {
         const hours = deltaSeconds / 3600;
-        state.crownAwareness = Math.min(100, state.crownAwareness + LICH_HUNT_AWARENESS_BASE_DRIFT_PER_HOUR * hours);
+        const difficultyDriftFactor = window.difficultyMode === 'easy' ? 0.5 : 1;
+        state.crownAwareness = Math.min(100, state.crownAwareness + LICH_HUNT_AWARENESS_BASE_DRIFT_PER_HOUR * hours * difficultyDriftFactor);
     }
     checkLichHuntTrigger();
 }

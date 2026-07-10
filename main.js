@@ -551,6 +551,7 @@ window.updateRoguelikePreview = function() {
         } else {
             if (optionsDiv) optionsDiv.style.display = "none";
             if (ironmanCheck) {
+                if (ironmanCheck.disabled) ironmanCheck.checked = false; // was forced on for Arena — don't leak that into other campaigns
                 ironmanCheck.disabled = false;
             }
         }
@@ -848,6 +849,9 @@ window.startGame = function() {
   const voice = document.getElementById("voice-select").value;
   let name = document.getElementById("character-name").value;
   if (!name) name = window.getRandomName(race, gender);
+
+  const difficultySelect = document.getElementById("difficulty-select");
+  window.difficultyMode = difficultySelect ? difficultySelect.value : 'normal';
 
   window.initializePlayer(race, cls, gender, campaign, voice);
   window.party[0].name = name; // Update with generated name if needed

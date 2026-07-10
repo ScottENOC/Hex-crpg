@@ -169,14 +169,15 @@ function tickIronbondArc(deltaSeconds) {
     const arc = window.ironbondArc;
     const hours = deltaSeconds / 3600;
     const now = window.worldSeconds || 0;
+    const difficultyDriftFactor = window.difficultyMode === 'easy' ? 0.5 : 1; // easy mode: the plot waits on you more
 
     // Expire temp modifiers, sum active ones.
     arc.tempSurfaceDriftModifiers = arc.tempSurfaceDriftModifiers.filter(m => m.expiresAtWorldSeconds > now);
     const tempDrift = arc.tempSurfaceDriftModifiers.reduce((sum, m) => sum + m.perHour, 0);
 
     const surfaceDriftPerHour = SURFACE_POWER_BASE_DRIFT_PER_HOUR + tempDrift + arc.permSurfaceDriftPerHour;
-    adjustSurfacePower(surfaceDriftPerHour * hours);
-    adjustCrownInfiltration(CROWN_INFILTRATION_BASE_DRIFT_PER_HOUR * hours);
+    adjustSurfacePower(surfaceDriftPerHour * hours * difficultyDriftFactor);
+    adjustCrownInfiltration(CROWN_INFILTRATION_BASE_DRIFT_PER_HOUR * hours * difficultyDriftFactor);
 
     // Phase advance: early -> mid once a side is chosen and enough in-game
     // time has passed for that side's "immediate followup" content to have
