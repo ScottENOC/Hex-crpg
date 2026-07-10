@@ -11,7 +11,7 @@ test.describe('village and party-movement changes', () => {
 
     test('regression: the character-select tab is populated on scene load, without any manual updatePartyTabs() call', async ({ page }) => {
         const names = await page.evaluate(() =>
-            Array.from(document.getElementById('party-selection').children).map(b => b.innerText));
+            Array.from(document.getElementById('party-selection').children).map(b => b.innerText).filter(t => t !== 'Talk'));
         expect(names).toHaveLength(2); // main character + Wren
         expect(names).toEqual(expect.arrayContaining(['Wren']));
     });

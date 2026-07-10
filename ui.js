@@ -69,6 +69,23 @@ function updatePartyTabs() {
         // already used elsewhere in this UI (e.g. the old info-mode toggle).
         btn.ontouchstart = (e) => { e.preventDefault(); selectAction(); };
         partyDiv.appendChild(btn);
+
+        // A dedicated "Talk" button for companions with real personality
+        // dialogue (dialogueId set at recruitment) — clicking their map
+        // sprite switches who you control instead of opening dialogue, so
+        // this is the only way to hear what they have to say outside combat.
+        if (index > 0 && ent.dialogueId && window.npcDialogueTrees?.[ent.dialogueId] && !window.isInCombat) {
+            const talkBtn = document.createElement("button");
+            talkBtn.innerText = `Talk`;
+            talkBtn.title = `Talk to ${ent.name}`;
+            talkBtn.style.fontSize = "0.7em";
+            talkBtn.style.padding = "2px 4px";
+            talkBtn.style.marginLeft = "2px";
+            const talkAction = () => window.talkToNPC(ent);
+            talkBtn.onclick = talkAction;
+            talkBtn.ontouchstart = (e) => { e.preventDefault(); talkAction(); };
+            partyDiv.appendChild(talkBtn);
+        }
     });
 
     if (friendlies.length > 1 && window.showTutorialTip) {
@@ -1401,6 +1418,12 @@ function hasClassLevel(char, cls) {
     return !!(char.classLevels && char.classLevels[cls] > 0);
 }
 window.hasClassLevel = hasClassLevel;
+
+/** True if the selected character or anyone in the active party is `race` — used by NPCs whose dialogue reacts to who's standing in front of them. */
+function partyHasRace(race) {
+    return !!(window.party || []).some(p => p.race === race);
+}
+window.partyHasRace = partyHasRace;
 
 // Retrainer NPC (silverhart_retrainer, campaign2Dialogue.js): resets every
 // normally-purchased skill back into spendable attribute points, recomputed

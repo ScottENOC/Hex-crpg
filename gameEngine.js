@@ -1064,6 +1064,8 @@ function startGameCore(isLoading = false) {
       wolf: new Image(),
       torch_lit: new Image(),
       fireplace: new Image(),
+      fireplace_unlit: new Image(),
+      oil_barrel: new Image(),
       axe: new Image(),
       troll: new Image(),
       dragon: new Image(),
@@ -1165,6 +1167,8 @@ function startGameCore(isLoading = false) {
   visuals.wolf.onload = () => { window.drawMap(); };
   visuals.torch_lit.onload = () => { window.drawMap(); };
   visuals.fireplace.onload = () => { window.drawMap(); };
+  visuals.fireplace_unlit.onload = () => { window.drawMap(); };
+  visuals.oil_barrel.onload = () => { window.drawMap(); };
   visuals.axe.onload = () => { window.drawMap(); };
   visuals.troll.onload = () => { window.drawMap(); };
   visuals.dragon.onload = () => { window.drawMap(); };
@@ -1266,6 +1270,8 @@ function startGameCore(isLoading = false) {
   visuals.wolf.src = 'images/wolf.png';
   visuals.torch_lit.src = 'images/torch_lit.svg';
   visuals.fireplace.src = 'images/fireplace.svg';
+  visuals.fireplace_unlit.src = 'images/fireplace_unlit.svg';
+  visuals.oil_barrel.src = 'images/oil_barrel.svg';
   visuals.axe.src = 'images/axe.png';
   visuals.troll.src = 'images/troll.png';
   visuals.dragon.src = 'images/dragon.svg';
@@ -1707,12 +1713,16 @@ function renderEntities() {
       if (_inViewBounds(q, r) && window.isVisibleToPlayer({q, r}, _friendlies)) {
           const {x, y} = window.hexToPixel(q, r);
           const size = window.hexSize * 1.5 * z;
-          if (obj.type === 'fireplace' && window.gameVisuals.fireplace?.complete) {
+          if (obj.type === 'fireplace' && obj.lit === false && window.gameVisuals.fireplace_unlit?.complete) {
+              window.mapCtx.drawImage(window.gameVisuals.fireplace_unlit, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'fireplace' && window.gameVisuals.fireplace?.complete) {
               const { scale, alpha } = fireFlicker(key);
               const fSize = size * scale;
               window.mapCtx.globalAlpha = alpha;
               window.mapCtx.drawImage(window.gameVisuals.fireplace, x - fSize/2, y - fSize/2, fSize, fSize);
               window.mapCtx.globalAlpha = 1.0;
+          } else if (obj.type === 'oil_barrel' && window.gameVisuals.oil_barrel?.complete) {
+              window.mapCtx.drawImage(window.gameVisuals.oil_barrel, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'table' && window.gameVisuals.table?.complete) {
               window.mapCtx.drawImage(window.gameVisuals.table, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'bench' && window.gameVisuals.bench?.complete) {
@@ -2984,8 +2994,61 @@ function interactWithTileObject(q, r, player) {
     if (doorObj.type === 'evidence' && window.searchEvidence) { window.searchEvidence(q, r); return; }
     if (doorObj.type === 'gate_lever' && window.pullNorthwatchGateLever) { window.pullNorthwatchGateLever(); return; }
     if (doorObj.type === 'unicorn_track' && window.showUnicornTrackDetail) { window.showUnicornTrackDetail(doorObj, q, r); return; }
+    if (doorObj.type === 'fireplace') { toggleFireplace(q, r, player); return; }
 }
 window.interactWithTileObject = interactWithTileObject;
+
+// Lighting/dousing a campfire by hand requires a torch equipped (weapon or
+// offhand) and, in turn-based combat, 5 TP — the same shape as a reaction
+// ability's TP gate. From range, a firebolt lights an unlit one instead (see
+// resolveSpell's fire-on-world-objects check) with no torch/TP requirement.
+function toggleFireplace(q, r, actor) {
+    const obj = window.tileObjects[`${q},${r}`];
+    if (!obj || obj.type !== 'fireplace') return;
+    const hasTorch = actor?.equipped?.weapon === 'torch' || actor?.equipped?.offhand === 'torch';
+    if (!hasTorch) {
+        window.showMessage("You need a torch equipped to light or douse a campfire.");
+        return;
+    }
+    if (window.isInCombat) {
+        if ((actor.timePoints || 0) < 5) {
+            window.showMessage("Not enough time points (needs 5).");
+            return;
+        }
+        spendTP(actor, 5);
+    }
+    const currentlyLit = obj.lit !== false;
+    obj.lit = !currentlyLit;
+    if (window.invalidateTileLightsCache) window.invalidateTileLightsCache();
+    window.showMessage(obj.lit ? "You light the campfire." : "You douse the campfire.");
+    window.drawMap();
+    window.renderEntities();
+}
+window.toggleFireplace = toggleFireplace;
+
+// A barrel of oil: harmless-looking terrain until fire touches it — see the
+// firebolt-on-tileObject check in resolveSpell. Meant for defenders to place
+// near a chokepoint an attacker will walk through, not for guards to stand
+// next to (that just hands the player a free kill).
+function explodeOilBarrel(q, r, caster) {
+    const key = `${q},${r}`;
+    if (!window.tileObjects[key] || window.tileObjects[key].type !== 'oil_barrel') return;
+    delete window.tileObjects[key];
+    const dmg = 25;
+    window.showMessage("The oil barrel bursts into a fireball!");
+    if (window.spawnFloatingText) window.spawnFloatingText({ q, r }, 'BOOM', '#ff8800');
+    [{ q, r }, ...window.getNeighbors(q, r)].forEach(h => {
+        const e = getEntityAtHex(h.q, h.r);
+        if (!e || !e.alive) return;
+        e.hp -= dmg; syncBackToPlayer(e); wakeUp(e);
+        if (window.flashEntity) window.flashEntity(e, '#ff8800');
+        if (window.spawnFloatingText) window.spawnFloatingText(e.hex, `-${dmg}`, '#ff4d4d');
+        if (e.hp <= 0 && e.alive) handleLethalDamage(e, caster);
+    });
+    window.drawMap();
+    window.renderEntities();
+}
+window.explodeOilBarrel = explodeOilBarrel;
 
 // Northwatch's gate lever (campaign2World.js, near campaign2NorthwatchGateHex).
 // First pull is just a warning — a guard stops you, no consequence. Second
@@ -4047,7 +4110,7 @@ function handleClick(e){
     // and the pendingInteractHex arrival hook in autoMoveProcess) rather than
     // silently just moving onto it without ever interacting.
     const doorObj = window.tileObjects && window.tileObjects[`${clickedHex.q},${clickedHex.r}`];
-    const interactableTypes = ['door_open', 'door_closed', 'signpost', 'journal', 'ore_node', 'timber_tree', 'stone_deposit', 'fruit_tree', 'herb_patch', 'fishing_spot', 'corpse', 'evidence', 'building_plot', 'player_bed'];
+    const interactableTypes = ['door_open', 'door_closed', 'signpost', 'journal', 'ore_node', 'timber_tree', 'stone_deposit', 'fruit_tree', 'herb_patch', 'fishing_spot', 'corpse', 'evidence', 'building_plot', 'player_bed', 'fireplace'];
     if (doorObj && interactableTypes.includes(doorObj.type)) {
         if (window.distance(player.hex, clickedHex) <= 1) {
             interactWithTileObject(clickedHex.q, clickedHex.r, player);
@@ -6919,9 +6982,29 @@ function resolveSpell(caster, spell, target, clickedHex) {
             actionHandled = true;
         }
     } else {
+        // FIRE ON WORLD OBJECTS: a firebolt reaching an unlit campfire lights
+        // it from range (no torch/TP needed, unlike the hands-on toggle in
+        // interactWithTileObject); one hitting an oil barrel sets it off.
+        // Checked ahead of the normal entity-only damage dispatch below,
+        // since these don't need a living target to react to fire.
+        if (spell.type === 'damage' && spell.baseId === 'firebolt' && clickedHex) {
+            const worldObj = window.tileObjects[`${clickedHex.q},${clickedHex.r}`];
+            if (worldObj?.type === 'fireplace' && worldObj.lit === false) {
+                worldObj.lit = true;
+                if (window.invalidateTileLightsCache) window.invalidateTileLightsCache();
+                window.showMessage(`${caster.name}'s firebolt catches the campfire alight!`);
+                window.drawMap(); window.renderEntities();
+                return true;
+            }
+            if (worldObj?.type === 'oil_barrel') {
+                explodeOilBarrel(clickedHex.q, clickedHex.r, caster);
+                return true;
+            }
+        }
+
         let spellHitBonus = 0;
         if (spell.baseId === 'firebolt' && caster.skills?.firebolt_hit) spellHitBonus = caster.skills.firebolt_hit * 5;
-        
+
         let hitChance = 50 + (caster.toHitSpell || 0) + spellHitBonus - (target ? target.passiveDodge : 0);
         
         // COVER: behind any elevated terrain (pedestals, fort ramparts)

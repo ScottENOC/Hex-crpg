@@ -2200,13 +2200,22 @@ window.npcDialogueTrees = {
         const quest = window.questLog.find(q => q.id === 'elven_gift');
         const player = window.party[0];
         const have = () => (player.inventory || []).filter(i => i === 'herbs').length;
+        // "Anyone in the vicinity" is approximated as the active party — the
+        // people actually standing in front of Elarion when this triggers,
+        // not just the selected character.
+        const kin = window.partyHasRace && window.partyHasRace('elf');
+        const herbsNeeded = kin ? 2 : 3; // one of his own makes the ask smaller
+        const isDruid = window.hasClassLevel && window.hasClassLevel(player, 'druid');
 
         if (quest && quest.status === 'active') {
-            if (have() >= 3) {
-                window.showDialogue(npc, "You've brought herbs? The Court will be glad of it — small gestures matter more than gold, out here.", [
+            if (have() >= herbsNeeded) {
+                const line = kin
+                    ? "Kin, and herbs besides — the Court will hear of this twice over."
+                    : "You've brought herbs? The Court will be glad of it — small gestures matter more than gold, out here.";
+                window.showDialogue(npc, line, [
                     { label: "Here you go.", action: () => {
                         let removed = 0;
-                        player.inventory = player.inventory.filter(i => { if (i === 'herbs' && removed < 3) { removed++; return false; } return true; });
+                        player.inventory = player.inventory.filter(i => { if (i === 'herbs' && removed < herbsNeeded) { removed++; return false; } return true; });
                         quest.status = 'completed';
                         window.adjustReputation(npc.reputation, 10, 15);
                         player.gold = (player.gold || 0) + 15;
@@ -2216,7 +2225,10 @@ window.npcDialogueTrees = {
                 ]);
                 return;
             }
-            window.showDialogue(npc, "Herbs, if you can find them — three should do. The Sylvan Court sends its regards to the Queen, and its patience with her borders' woodcutters. Both are finite, in their way.", [
+            const askLine = kin
+                ? `Herbs, if you can spare them — ${herbsNeeded} will do, less than I'd ask a stranger.`
+                : `Herbs, if you can find them — ${herbsNeeded} should do. The Sylvan Court sends its regards to the Queen, and its patience with her borders' woodcutters. Both are finite, in their way.`;
+            window.showDialogue(npc, askLine, [
                 { label: "Still looking.", action: () => {} }
             ]);
             return;
@@ -2225,16 +2237,26 @@ window.npcDialogueTrees = {
             window.showDialogue(npc, "The Sylvan Court remembers a kindness. Small as it was.", [{ label: "Glad to help.", action: () => {} }]);
             return;
         }
-        window.showDialogue(npc, "The Sylvan Court sends its regards to the Queen, and its patience with her borders' woodcutters. Both are finite, in their way. A gift of good herbs would go some way toward the latter — three, if you can spare them.", [
+        const opening = kin
+            ? "Well met, kin — a strange road to find one of our own on, but not an unwelcome one. The Sylvan Court sends its regards to the Queen, and its patience with her borders' woodcutters wears thinner by the season. A gift of good herbs would ease that some — two, from you, would carry the same weight as three from anyone else."
+            : "The Sylvan Court sends its regards to the Queen, and its patience with her borders' woodcutters. Both are finite, in their way. A gift of good herbs would go some way toward the latter — three, if you can spare them.";
+        const options = [
             {
                 label: "I'll bring you some herbs.",
                 action: () => {
-                    window.questLog.push({ id: 'elven_gift', title: 'A Gift of Green', giver: 'Ambassador Elarion', status: 'active', description: 'Bring 3 herbs to Ambassador Elarion as a gesture of goodwill to the Sylvan Court.' });
+                    window.questLog.push({ id: 'elven_gift', title: 'A Gift of Green', giver: 'Ambassador Elarion', status: 'active', description: `Bring ${herbsNeeded} herbs to Ambassador Elarion as a gesture of goodwill to the Sylvan Court.` });
                     window.showMessage('Quest added: A Gift of Green.');
                 }
             },
-            { label: "I'll keep that in mind.", action: () => {} }
-        ]);
+        ];
+        if (isDruid) {
+            options.push({
+                label: "The grove taught me to read the land, if that's worth anything to you.",
+                action: () => window.showDialogue(npc, "It is, more than herbs. Someone still teaching that is worth more to the Court than a bundle of clippings — but I'll not turn down both.", [{ label: "Noted.", action: () => {} }])
+            });
+        }
+        options.push({ label: "I'll keep that in mind.", action: () => {} });
+        window.showDialogue(npc, opening, options);
     },
     dwarven_ambassador: (npc) => {
         if (!window.questLog) window.questLog = [];
@@ -2492,6 +2514,78 @@ window.npcDialogueTrees = {
             },
             { label: "Not right now.", action: () => {} }
         ]);
+    },
+    // Companion personal-story dialogue (see the "Talk" button in
+    // updatePartyTabs, ui.js) — a handful of branches per companion, some
+    // reacting to the player's race/class the way the elven ambassador does,
+    // so recruiting a wizard elf plays differently than a fighter dwarf.
+    companion_wren_talbot: (npc) => {
+        const player = window.party[0];
+        const attitude = window.companionAttitude?.['Wren Talbot'] ?? 50;
+        const isElf = window.partyHasRace && window.partyHasRace('elf');
+        const options = [];
+        options.push({
+            label: "How are you holding up?",
+            action: () => {
+                const line = attitude >= 70
+                    ? "Better than I've any right to, honestly. Didn't expect to still be standing next to you this far out — but here we are."
+                    : attitude >= 40
+                    ? "Sore feet, worse company some days, but standing. Can't complain more than that and still call myself useful."
+                    : "Tired. Of the road, mostly. Not of you — don't read into it more than that.";
+                window.showDialogue(npc, line, [{ label: "Fair enough.", action: () => {} }]);
+            }
+        });
+        options.push({
+            label: "Tell me about your parents.",
+            action: () => window.showDialogue(npc, "Went north a couple years back — work in Millbrook, they said. Stopped writing after the first winter. I used to tell myself the roads were just bad. I still half do.", [{ label: "I'm sorry.", action: () => {} }])
+        });
+        if (isElf) {
+            options.push({
+                label: "(Ask about traveling with an elf.)",
+                action: () => window.showDialogue(npc, "First few days I kept waiting for you to correct my sword grip and quote me a proverb about patience. You haven't yet. I'm choosing to take that as a compliment to my grip.", [{ label: "Ha.", action: () => {} }])
+            });
+        }
+        if (window.hasClassLevel && window.hasClassLevel(player, 'wizard')) {
+            options.push({
+                label: "(Ask what she thinks of magic.)",
+                action: () => window.showDialogue(npc, "Makes my skin crawl a bit, if I'm honest — the good kind of crawl, like standing too close to a cliff edge. I trust you not to drop us both off it.", [{ label: "Noted.", action: () => {} }])
+            });
+        }
+        options.push({ label: "Never mind.", action: () => {} });
+        window.showDialogue(npc, "What's on your mind?", options);
+    },
+    companion_ser_aldric: (npc) => {
+        const player = window.party[0];
+        const attitude = window.companionAttitude?.['Ser Aldric'] ?? 60;
+        const isDwarf = window.partyHasRace && window.partyHasRace('dwarf');
+        const options = [];
+        options.push({
+            label: "Do you regret the vow that got you tied to a post?",
+            action: () => {
+                const line = attitude >= 70
+                    ? "Not for a moment. I swore to stand against what came through that camp, and I'd have died at that post before breaking it. You just made sure I didn't have to."
+                    : "Some days. The vow was never the mistake — trusting the wrong company to hold the line with me was.";
+                window.showDialogue(npc, line, [{ label: "A fair answer.", action: () => {} }]);
+            }
+        });
+        options.push({
+            label: "What does the order teach about mercy?",
+            action: () => window.showDialogue(npc, "That it costs more than the sword arm ever will, and that's exactly why it's worth spending. I've watched you decide who lives more than once now. I'm still deciding what I think of how you've chosen.", [{ label: "Understood.", action: () => {} }])
+        });
+        if (isDwarf) {
+            options.push({
+                label: "(Ask about fighting alongside a dwarf.)",
+                action: () => window.showDialogue(npc, "Stubborn as a mountain and twice as hard to move once you've dug in — I mean that as the highest compliment I've got. My order could use a few more like you at the wall.", [{ label: "Ha.", action: () => {} }])
+            });
+        }
+        if (window.hasClassLevel && window.hasClassLevel(player, 'paladin')) {
+            options.push({
+                label: "(Ask what he thinks, one paladin to another.)",
+                action: () => window.showDialogue(npc, "That we don't get to choose easy fights, only honest ones. Glad to have someone else who understands that at my shoulder, for once.", [{ label: "Likewise.", action: () => {} }])
+            });
+        }
+        options.push({ label: "Never mind.", action: () => {} });
+        window.showDialogue(npc, "You wished to speak with me?", options);
     }
 };
 
@@ -3516,6 +3610,7 @@ function rescuePaladin() {
     }
     companion.inventory.push('wooden_shield');
     companion.equipped.offhand = 'wooden_shield';
+    companion.dialogueId = 'companion_ser_aldric';
 
     window.party.push(companion);
     const ent = new window.Entity(companion.name, 'red', captiveEnt.hex, (companion.attributes.agility || 10) + 10);

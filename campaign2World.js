@@ -2250,6 +2250,7 @@ function setupVillageScene(forLoadOnly = false) {
             companion.hp += bonus;
             companion.maxHp += bonus;
         }
+        companion.dialogueId = 'companion_wren_talbot'; // "Talk" button in the party tab (updatePartyTabs, ui.js) dispatches through talkToNPC
         window.party.push(companion);
     }
 
@@ -2911,6 +2912,15 @@ function buildNorthwatchFort(turnHex) {
         window.entities.push(siegeEngine);
         window.campaign2NorthwatchSiegeEngine = siegeEngine;
     }
+
+    // Oil barrels: a defender's ambush, not a trap the AI stands guard next
+    // to — placed one hex past the gate lever's guards, inside the funnel an
+    // attacker has to walk through after breaching the gate, well off the
+    // sparse wall patrol loop. Nobody's posted beside them; the player (or,
+    // symmetrically, an NPC ally) has to actually choose to firebolt one as
+    // the enemy closes in.
+    window.tileObjects[`${gateHex.q - 1},${gateHex.r - 4}`] = { type: 'oil_barrel' };
+    window.tileObjects[`${gateHex.q + 1},${gateHex.r - 4}`] = { type: 'oil_barrel' };
 
     if (window.worldMapData && window.worldMapData[5] && window.worldMapData[5][9] !== undefined) {
         window.worldMapData[5][9] = { t: 'H', f: 'F', o: 'h', p: 1, n: 'Northwatch Fort (Under Siege)' };

@@ -866,13 +866,19 @@ let _lightSourcesCache = null;
 // "once per tick", regardless of how large tileObjects eventually gets.
 let _tileLightsCache = null;
 let _tileLightsCacheCount = -1;
+// The count-based cache check below doesn't catch a tileObject's lightRadius
+// changing in place (e.g. a fireplace being lit/doused) since the object
+// count stays the same — callers that mutate lightRadius/lit without
+// adding/removing a tileObject must call this explicitly.
+function invalidateTileLightsCache() { _tileLightsCache = null; }
+window.invalidateTileLightsCache = invalidateTileLightsCache;
 function getTileLights() {
     const count = Object.keys(window.tileObjects).length;
     if (_tileLightsCache && count === _tileLightsCacheCount) return _tileLightsCache;
     const tileLights = []; // { q, r, radius }
     for (const key in window.tileObjects) {
         const obj = window.tileObjects[key];
-        if (obj.lightRadius > 0) {
+        if (obj.lightRadius > 0 && !(obj.type === 'fireplace' && obj.lit === false)) {
             const [oq, orr] = key.split(',').map(Number);
             tileLights.push({ q: oq, r: orr, radius: obj.lightRadius });
         }
