@@ -21,6 +21,12 @@ window.factions = {
     // to the Silverhart Kingdom's on purpose in most quest resolutions —
     // strengthening/earning favor with the goblins tends to come at the
     // human kingdom's expense (see campaign2Dialogue.js's goblin questline).
+    // Narratively, the Skarn-tooth tribe isn't its own power — it's a
+    // scouting warband sent out by the orc horde (see nix_sharpear's
+    // "someone with a lot more banners than we've got" line and the
+    // goblin_scout_note breadcrumb) to watch Hollowmere's roads ahead of
+    // the Border War. adjustReputation below cascades a dampened fraction
+    // of every goblin_tribe swing onto orc_raiders for exactly that reason.
     goblin_tribe:       { id: 'goblin_tribe',       name: 'The Skarn-tooth Tribe',  race: 'goblin', knowledge: 0, standing: 0 },
     // The necromancer haunting the abandoned house north of Millbrook.
     // Standing here is deliberately just reputation like any other faction
@@ -59,6 +65,14 @@ function adjustReputation(target, standingDelta, knowledgeDelta) {
     const dampening = 1 - (target.knowledge / 100) * 0.7;
     target.standing = Math.max(-100, Math.min(100, target.standing + standingDelta * dampening));
     target.knowledge = Math.max(0, Math.min(100, target.knowledge + (knowledgeDelta || 0)));
+    // The Skarn-tooth tribe reports back to the horde it scouts for — any
+    // swing in standing toward/against them is heard about by orc_raiders
+    // too, just muted (they're one scouting party's word, not the whole
+    // horde's). Recurse rather than reimplementing the dampening math, and
+    // guard against the reverse case (this is never called the other way).
+    if (target === window.factions?.goblin_tribe && window.factions?.orc_raiders) {
+        adjustReputation(window.factions.orc_raiders, standingDelta * 0.35, (knowledgeDelta || 0) * 0.35);
+    }
 }
 
 function seedFactionStandings(playerRace) {
@@ -132,8 +146,18 @@ window.isGoblinAligned = function() {
     const q = (window.questLog || []).find(x => x.id === 'goblin_threat');
     return !!(window.playerAidingGreenskins || q?.resolution === 'goblin_alliance');
 };
+// A goblin-race player is never just "aligned" with the tribe — they *are*
+// greenskin kin from the moment they're created (see seedStanding above),
+// independent of how the goblin_threat quest ever resolves. Shunned by
+// human commerce by default, same as an overtly evil player, until they've
+// actually earned Elder Marta's vouching (resolveGoblinSpyForHumans,
+// campaign2Dialogue.js) — the goblin-side mirror of a human player earning
+// the tribe's trust via diplomacy.
+window.isPlayerGoblin = function() {
+    return !!(window.party && window.party[0] && window.party[0].race === 'goblin');
+};
 window.isShunnedByHumanCommerce = function() {
-    return !!(window.playerIsLich || window.isGoblinAligned());
+    return !!(window.playerIsLich || window.isGoblinAligned() || (window.isPlayerGoblin() && !window.goblinVouchedByMarta));
 };
 
 window.seedStanding = seedStanding;

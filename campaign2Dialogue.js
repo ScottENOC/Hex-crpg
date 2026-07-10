@@ -1597,7 +1597,14 @@ window.npcDialogueTrees = {
             return;
         }
         if (quest && quest.resolution === 'goblin_alliance') {
-            window.showDialogue(npc, "We're not going anywhere now — you saw to that. Skarnub speaks for us; take it up with him.", [{ label: "Understood.", action: () => {} }]);
+            if (window.party.some(p => p.name === window.campaign2GoblinLieutenant.name)) {
+                window.showDialogue(npc, "Still watching your back. What is it?", [{ label: "Nothing, carry on.", action: () => {} }]);
+                return;
+            }
+            window.showDialogue(npc, "We're not going anywhere now — you saw to that. Skarnub speaks for us, but I never much liked sitting still watching a road. You're headed for more trouble than this camp's seen in years. Room for one more?", [
+                { label: "Come with me.", action: () => window.recruitGoblinCompanion() },
+                { label: "Not yet.", action: () => {} }
+            ]);
             return;
         }
         if (quest && quest.resolution) {
@@ -1834,6 +1841,43 @@ window.npcDialogueTrees = {
         }
     },
     marta_wynfield: (npc) => {
+        // A goblin player is the very thing Hollowmere's watching the west
+        // road for — Marta won't deal with the tribe's own kin on sight, but
+        // (mirroring how a human player can win the tribe's trust via
+        // diplomacy) offers a way to earn hers: report on your own chief's
+        // plans. See resolveGoblinSpyForHumans below — completing it flips
+        // window.goblinVouchedByMarta, which is what actually opens up
+        // Silverhart (silverhart_queen) and human commerce
+        // (isShunnedByHumanCommerce, factions.js).
+        if (window.isPlayerGoblin && window.isPlayerGoblin()) {
+            if (window.goblinVouchedByMarta) {
+                window.showDialogue(npc, "I still don't sleep easy seeing you on this street, but you kept your word to us. That's more than most of your lot manage — or most of ours, some days.", [{ label: "...", action: () => {} }]);
+                return;
+            }
+            if (!window.questLog) window.questLog = [];
+            const spyQuest = window.questLog.find(q => q.id === 'goblin_spy_for_humans');
+            if (spyQuest && spyQuest.status === 'active') {
+                window.showDialogue(npc, "Well? What word do you bring of your chief's true plans?", [
+                    { label: "They mean Hollowmere no harm, so far as I've seen.", action: () => window.resolveGoblinSpyForHumans() },
+                    { label: "Not yet — give me more time.", action: () => {} }
+                ]);
+                return;
+            }
+            window.showDialogue(npc, "A greenskin, bold as you like, walking Hollowmere's own streets? Give me one reason the Watch shouldn't drag you out right now.", [
+                {
+                    label: "I'll bring you word of my own chief's plans, if that buys me anything.",
+                    action: () => {
+                        window.questLog.push({
+                            id: 'goblin_spy_for_humans', title: 'Prove Your Worth', giver: 'Elder Marta Wynfield', status: 'active',
+                            description: "Learn what the Skarn-tooth tribe truly intends and report back to Elder Marta."
+                        });
+                        window.showMessage('Quest added: Prove Your Worth.');
+                    }
+                },
+                { label: "...", action: () => {} }
+            ]);
+            return;
+        }
         const aldenreachQuest = window.questLog && window.questLog.find(q => q.id === 'aldenreach_message');
         if (aldenreachQuest && aldenreachQuest.status === 'active' && !aldenreachQuest.delivered) {
             aldenreachQuest.delivered = true;
@@ -1975,9 +2019,19 @@ window.npcDialogueTrees = {
     // exact same state every other NPC in those arcs already reads/writes,
     // rather than a separate parallel tracker just for her.
     silverhart_queen: (npc) => {
+        // A greenskin doesn't get past the throne room doors on sight — but
+        // once Elder Marta has actually vouched for them (see
+        // resolveGoblinSpyForHumans above), the same convergence a human
+        // player reaches with the tribe via diplomacy applies in reverse.
+        if (window.isPlayerGoblin && window.isPlayerGoblin() && !window.goblinVouchedByMarta) {
+            window.showDialogue(npc, "Guards! Get that thing out of my hall before I have it removed the hard way.", [{ label: "...", action: () => {} }]);
+            return;
+        }
         const standing = window.factions?.silverhart_kingdom?.standing ?? 0;
         let line;
-        if (standing >= 40) {
+        if (window.isPlayerGoblin && window.isPlayerGoblin()) {
+            line = "Elder Marta vouches for you, of all things. I still don't trust a greenskin in my hall, but I trust her judgment more than I distrust you. Speak your piece.";
+        } else if (standing >= 40) {
             line = "So — you're the one Reddale and Hollowmere keep writing to me about. Good work, whatever you've been doing out there. The crown remembers those who make its work easier.";
         } else if (standing >= 10) {
             line = "You've kept my barony's business in decent order, from what reaches my desk. Keep it that way.";
@@ -2586,6 +2640,29 @@ window.npcDialogueTrees = {
         }
         options.push({ label: "Never mind.", action: () => {} });
         window.showDialogue(npc, "You wished to speak with me?", options);
+    },
+    companion_nix_sharpear: (npc) => {
+        const attitude = window.companionAttitude?.[window.campaign2GoblinLieutenant.name] ?? 60;
+        const isGoblin = window.isPlayerGoblin && window.isPlayerGoblin();
+        const options = [];
+        options.push({
+            label: "Any word from the tribe?",
+            action: () => window.showDialogue(npc, attitude >= 70
+                ? "Skarnub's still holding the camp, last I heard. Doing better than I expected, honestly — turns out he didn't need me looking over his shoulder after all."
+                : "Nothing recent. Road-watching teaches you patience, if nothing else — I'll hear when there's something worth hearing.", [{ label: "Fair enough.", action: () => {} }])
+        });
+        options.push({
+            label: "What were you really watching for, all those months?",
+            action: () => window.showDialogue(npc, "Anything moving on the road worth reporting back — troop counts, wagons, who came and went from Hollowmere. Small stuff, in the end. The horde wanted eyes here long before anyone thought to ask why.", [{ label: "...", action: () => {} }])
+        });
+        if (isGoblin) {
+            options.push({
+                label: "(Say nothing — you don't need it explained.)",
+                action: () => window.showDialogue(npc, "Right. You'd know better than these humans ever will.", [{ label: "...", action: () => {} }])
+            });
+        }
+        options.push({ label: "Never mind.", action: () => {} });
+        window.showDialogue(npc, "Yeah?", options);
     }
 };
 
@@ -3584,6 +3661,24 @@ function tickCompanionPatience(deltaSeconds) {
 }
 window.tickCompanionPatience = tickCompanionPatience;
 
+// A goblin player's mirror of the diplomacy/alliance resolutions a human
+// player can reach with the tribe (see marta_wynfield/chief_skarnub above) —
+// reporting on your own chief is a real betrayal, so it costs standing with
+// the tribe (and, via adjustReputation's cascade, a smaller hit with
+// orc_raiders too), not a free pass.
+function resolveGoblinSpyForHumans() {
+    if (!window.questLog) window.questLog = [];
+    const quest = window.questLog.find(q => q.id === 'goblin_spy_for_humans');
+    if (!quest || quest.status === 'completed') return;
+    quest.status = 'completed';
+    window.goblinVouchedByMarta = true;
+    window.adjustReputation(window.factions.silverhart_kingdom, 20, 20);
+    window.adjustReputation(window.factions.goblin_tribe, -15, 15);
+    if (window.gainExp) window.gainExp(150);
+    window.showMessage('Elder Marta nods slowly. "Begrudgingly... you\'ve earned a little trust. Don\'t make me regret it." Quest complete: Prove Your Worth.');
+}
+window.resolveGoblinSpyForHumans = resolveGoblinSpyForHumans;
+
 // Converts the tied-up captive entity into a real party member — the
 // physical rescue, available any time the player reaches him (independent
 // of which resolution path, if any, is chosen for the tribe as a whole).
@@ -3631,6 +3726,56 @@ function rescuePaladin() {
     window.renderEntities();
 }
 window.rescuePaladin = rescuePaladin;
+
+// Nix Sharpear: only offered once the goblin_threat quest resolves as
+// goblin_alliance (see chief_skarnub/nix_sharpear above) — the tribe's own
+// scout joining the player rather than a rescue, so this builds off
+// createCharacterData's 'goblin' race path directly (goblin is a real
+// playable race, unlike the elite_goblin monster template Nix spawned from)
+// instead of buildGoblinNPC/createMonster.
+function recruitGoblinCompanion() {
+    const name = window.campaign2GoblinLieutenant.name;
+    if (window.party.some(p => p.name === name)) return; // already joined
+    const nixEnt = window.entities.find(e => e.name === name);
+    if (!nixEnt) return;
+
+    const companion = window.createCharacterData('goblin', 'rogue', name, 'male', window.campaign2GoblinLieutenant.voice);
+    ['dagger_hit', 'dagger_dmg', 'stealth_rogue', 'stealth_agility'].forEach(skillKey => {
+        const skill = window.skills[skillKey];
+        if (!skill) return;
+        if (companion.attributes[skill.tree] > 0) companion.attributes[skill.tree]--;
+        else if (companion.attributes.wildcard > 0) companion.attributes.wildcard--;
+        companion.skills[skillKey] = (companion.skills[skillKey] || 0) + 1;
+    });
+    if (companion.skills.health) {
+        const bonus = 10 * companion.skills.health;
+        companion.hp += bonus; companion.maxHp += bonus;
+    }
+    companion.inventory.push('dagger', 'light_armor');
+    companion.equipped.weapon = 'dagger';
+    companion.equipped.armor = 'light_armor';
+    companion.factionId = 'goblin_tribe';
+    companion.dialogueId = 'companion_nix_sharpear';
+
+    window.party.push(companion);
+    const ent = new window.Entity(companion.name, '#5a7a3a', nixEnt.hex, (companion.attributes.agility || 10) + 10);
+    ent.side = 'player';
+    Object.assign(ent, companion);
+    ent.hex = nixEnt.hex;
+    ent.visualQ = ent.hex.q; ent.visualR = ent.hex.r;
+    ent.startQ = ent.hex.q; ent.startR = ent.hex.r;
+    ent.destination = null; ent.moveCooldown = 0;
+
+    window.entities = window.entities.filter(e => e !== nixEnt);
+    window.entities.push(ent);
+
+    window.companionAttitude[name] = 60;
+    if (window.updatePartyTabs) window.updatePartyTabs();
+    window.showMessage(`${name} joins your party, glad to be off road-watch.`);
+    window.drawMap();
+    window.renderEntities();
+}
+window.recruitGoblinCompanion = recruitGoblinCompanion;
 
 // --- Star Fort companion reward: whichever side the player ends up on when
 // the Northwatch siege resolves (win or lose — see resolveNorthwatchSiege in

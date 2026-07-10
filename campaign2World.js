@@ -1463,6 +1463,41 @@ function buildSilverhartPalace(roadEnd) {
     // roadEnd to throneDoor.
     for (let r = throneDoor.r + 1; r < throneCenter.r + WALL_RADIUS; r++) window.setTerrainAt(throneCenter.q, r, 'Path');
 
+    // Reputation-gated checkpoints, deepest room = highest bar: the
+    // compound gate, the great hall's own door, and the door to the Queen's
+    // private chambers (rearDoor, carved above) each start closed and
+    // locked behind a rising silverhart_kingdom standing threshold — even
+    // a human player has to actually earn their way further in, not just
+    // walk to the throne. toggleDoor's accessThreshold check re-evaluates
+    // live every time someone tries the door, so there's no separate
+    // "unlock" step to wire up elsewhere — clearing the threshold IS the
+    // unlock, the next time it's opened.
+    const gateDoorHex = gateHexes[1]; // the middle of the 3-hex gap carved above
+    // The other two gap hexes were painted Path by the ringHexes loop above
+    // (part of the 3-hex gate gap) — close them back to wall so the only
+    // way through is the single gated door hex.
+    window.setTerrainAt(gateHexes[0].q, gateHexes[0].r, 'Palisade Wall');
+    window.setTerrainAt(gateHexes[2].q, gateHexes[2].r, 'Palisade Wall');
+    window.setTerrainAt(gateDoorHex.q, gateDoorHex.r, 'Palisade Wall');
+    window.tileObjects[`${gateDoorHex.q},${gateDoorHex.r}`] = {
+        type: 'door_closed', lightRadius: 0, locked: true, hp: 40, maxHp: 40,
+        closedTerrain: 'Palisade Wall', openTerrain: 'Path',
+        accessThreshold: { faction: 'silverhart_kingdom', standing: -10 },
+        accessDeniedMessage: 'The gate guards bar your way. "Kingdom business only. Move along."'
+    };
+    window.setTerrainAt(throneDoor.q, throneDoor.r, 'Wall');
+    window.tileObjects[`${throneDoor.q},${throneDoor.r}`] = {
+        type: 'door_closed', lightRadius: 0, locked: true, hp: 30, maxHp: 30,
+        accessThreshold: { faction: 'silverhart_kingdom', standing: 15 },
+        accessDeniedMessage: 'A guard blocks the great hall doors. "Her Majesty isn\'t holding audience for the likes of you."'
+    };
+    window.setTerrainAt(rearDoor.q, rearDoor.r, 'Wall');
+    window.tileObjects[`${rearDoor.q},${rearDoor.r}`] = {
+        type: 'door_closed', lightRadius: 0, locked: true, hp: 20, maxHp: 20,
+        accessThreshold: { faction: 'silverhart_kingdom', standing: 40 },
+        accessDeniedMessage: "This leads to the Queen's private chambers. It's locked, and clearly not for you."
+    };
+
     // Watchtowers flanking the gate, plus one at each of the hexagon's
     // other five true corners. A hex ring's 6 corners are the well-known
     // (R,0), (R,-R), (0,-R), (-R,0), (-R,R), (0,R) axial offsets — the last
@@ -2575,17 +2610,32 @@ function setupVillageScene(forLoadOnly = false) {
     }, 8000);
 }
 
-// Toggles a door hex between open (walkable Wood Floor) and closed (Wall,
-// blocks line-of-sight/movement via the existing wall-terrain LOS check —
-// no new LOS logic needed).
+// Toggles a door hex between open (walkable) and closed (blocks LOS/movement
+// via the existing wall-terrain check — no new LOS logic needed).
+// closedTerrain/openTerrain default to the original Wall/Wood Floor pair
+// (indoor doors) but can be overridden per-door — an outdoor gate uses
+// Palisade Wall/Path instead (see the Silverhart curtain-wall gate below).
 function toggleDoor(q, r, opener) {
     const key = `${q},${r}`;
     const existing = window.tileObjects[key] || {};
-    const isOpen = window.getTerrainAt(q, r).name !== 'Wall';
-    // Locked doors only yield to someone standing inside the building —
-    // approximated as standing on the same indoor floor terrain the door
-    // leads to, since buildings don't otherwise track a room boundary.
-    if (!isOpen && existing.locked && opener) {
+    const closedTerrain = existing.closedTerrain || 'Wall';
+    const openTerrain = existing.openTerrain || 'Wood Floor';
+    const isOpen = window.getTerrainAt(q, r).name !== closedTerrain;
+    // Reputation-gated checkpoints (the Silverhart palace gate/throne room/
+    // bedroom doors — see buildSilverhartPalace) refuse entry outright below
+    // a faction-standing threshold, regardless of who's opening it or where
+    // from — these are guarded checkpoints, not a room's own interior lock.
+    if (!isOpen && existing.accessThreshold) {
+        const { faction, standing } = existing.accessThreshold;
+        const met = (window.factions?.[faction]?.standing ?? -Infinity) >= standing;
+        if (!met) {
+            window.showMessage(existing.accessDeniedMessage || "You aren't welcome here yet.");
+            return;
+        }
+    } else if (!isOpen && existing.locked && opener) {
+        // Locked doors only yield to someone standing inside the building —
+        // approximated as standing on the same indoor floor terrain the door
+        // leads to, since buildings don't otherwise track a room boundary.
         const openerTerrain = window.getTerrainAt(opener.hex.q, opener.hex.r).name;
         if (openerTerrain !== 'Wood Floor' && openerTerrain !== 'Cave Floor') {
             window.showMessage("The door is locked.");
@@ -2594,12 +2644,13 @@ function toggleDoor(q, r, opener) {
     }
     const hp = existing.hp !== undefined ? existing.hp : 20;
     const maxHp = existing.maxHp !== undefined ? existing.maxHp : 20;
+    const shared = { lightRadius: 0, locked: existing.locked || false, hp, maxHp, closedTerrain, openTerrain, accessThreshold: existing.accessThreshold, accessDeniedMessage: existing.accessDeniedMessage };
     if (isOpen) {
-        window.setTerrainAt(q, r, 'Wall');
-        window.tileObjects[key] = { type: 'door_closed', lightRadius: 0, locked: false, hp, maxHp };
+        window.setTerrainAt(q, r, closedTerrain);
+        window.tileObjects[key] = { type: 'door_closed', ...shared };
     } else {
-        window.setTerrainAt(q, r, 'Wood Floor');
-        window.tileObjects[key] = { type: 'door_open', lightRadius: 0, locked: false, hp, maxHp };
+        window.setTerrainAt(q, r, openTerrain);
+        window.tileObjects[key] = { type: 'door_open', ...shared };
     }
     window.drawMap();
     window.renderEntities();
@@ -2618,8 +2669,9 @@ function attackDoor(q, r, attacker) {
     const dmg = (weaponId && window.items[weaponId]?.damage) ? window.items[weaponId].damage : 2;
     door.hp -= dmg;
     if (door.hp <= 0) {
-        window.setTerrainAt(q, r, 'Wood Floor');
-        window.tileObjects[key] = { type: 'door_open', lightRadius: 0, locked: false, broken: true, hp: 0, maxHp: door.maxHp };
+        const openTerrain = door.openTerrain || 'Wood Floor';
+        window.setTerrainAt(q, r, openTerrain);
+        window.tileObjects[key] = { type: 'door_open', lightRadius: 0, locked: false, broken: true, hp: 0, maxHp: door.maxHp, closedTerrain: door.closedTerrain, openTerrain };
         window.showMessage("The door is smashed off its hinges!");
     } else {
         window.showMessage(`The door takes ${dmg} damage (${Math.max(0, door.hp)}/${door.maxHp} HP).`);

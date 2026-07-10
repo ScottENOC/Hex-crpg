@@ -123,6 +123,7 @@ function saveGame(saveName = "rpg_save_game") {
         campaign2SilverhartManorFortified: window.campaign2SilverhartManorFortified,
         clothingDisplayMode: window.clothingDisplayMode,
         goblinScoutNoteRead: window.goblinScoutNoteRead,
+        goblinVouchedByMarta: window.goblinVouchedByMarta,
         emberlodeRaided: window.emberlodeRaided,
         questLog: window.questLog,
         benchedCompanions: window.benchedCompanions || [],
@@ -240,6 +241,7 @@ function loadGame(saveName = "rpg_save_game") {
         window.campaign2SilverhartManorFortified = gameState.campaign2SilverhartManorFortified || false;
         window.clothingDisplayMode = gameState.clothingDisplayMode || 'armor';
         window.goblinScoutNoteRead = gameState.goblinScoutNoteRead || false;
+        window.goblinVouchedByMarta = gameState.goblinVouchedByMarta || false;
         window.emberlodeRaided = gameState.emberlodeRaided || false;
         window.questLog = gameState.questLog || [];
         window.benchedCompanions = gameState.benchedCompanions || [];
