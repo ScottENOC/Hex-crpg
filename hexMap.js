@@ -926,7 +926,7 @@ window.invalidateVisibilityCache = invalidateVisibilityCache;
 let _lastVisibilityFingerprint = null;
 function refreshVisibilityCacheIfStale() {
     const friendlies = window.entities.filter(e => e.alive && e.side === 'player');
-    const parts = friendlies.map(f => `${f.hex.q},${f.hex.r}:${f.visionBonus || 0}:${f.skills?.elf_darkvision ? 1 : 0}`);
+    const parts = friendlies.map(f => `${f.hex.q},${f.hex.r}:${f.visionBonus || 0}:${(f.skills?.elf_darkvision || f.skills?.goblin_low_light_eyes) ? 1 : 0}`);
     parts.push(`L${(window.lightLevel || 1).toFixed(2)}`);
     const fp = parts.join('|');
     if (fp !== _lastVisibilityFingerprint) {
@@ -1051,7 +1051,7 @@ function isVisibleToPlayer(targetHex, friendliesOverride) {
             const light = window.lightLevel || 1.0;
 
             // Elf Darkvision: treat light as 1.0 for range if they have the skill
-            const effectiveLight = (f.skills?.elf_darkvision) ? 1.0 : light;
+            const effectiveLight = (f.skills?.elf_darkvision || f.skills?.goblin_low_light_eyes) ? 1.0 : light;
             const finalRange = visionRange * Math.max(0.2, effectiveLight);
 
             if (dist <= finalRange && hasLineOfSight(fh, targetHex)) {
@@ -1071,7 +1071,7 @@ function updateExploration() {
         f.hasBeenSeenByPlayer = true;
         const myHexes = f.getAllHexes();
         const visionRange = EXPLORE_VISION_RANGE + (f.visionBonus || 0);
-        const effectiveLight = (f.skills?.elf_darkvision) ? 1.0 : light;
+        const effectiveLight = (f.skills?.elf_darkvision || f.skills?.goblin_low_light_eyes) ? 1.0 : light;
         const finalRange = visionRange * Math.max(0.2, effectiveLight);
         const intRange = Math.ceil(finalRange);
 

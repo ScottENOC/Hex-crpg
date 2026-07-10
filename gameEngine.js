@@ -1493,6 +1493,14 @@ window.CLOTHING_PRESETS = {
 function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
     const cfg = CHAR_CONFIG[`${e.race}_${e.gender}`];
     if (!cfg || !window.gameVisuals) {
+        // Goblin players/companions have no layered CHAR_CONFIG rig — reuse
+        // the same flat goblin.png the goblin monster template already uses
+        // (window.gameVisuals.monsterDefault) instead of the generic circle.
+        if (e.race === 'goblin' && window.gameVisuals?.monsterDefault?.complete) {
+            const size = window.hexSize * 1.5 * z;
+            ctx.drawImage(window.gameVisuals.monsterDefault, x - size / 2, y - size / 2 + flyOff, size, size);
+            return;
+        }
         // Fallback: draw a colored circle so the entity is always visible
         const r = window.hexSize * 0.45 * z;
         ctx.beginPath();
@@ -4686,7 +4694,7 @@ function canSee(viewer, target) {
     // Vision Range affected by light
     let visionRange = (window.LIVE_VISION_RANGE || 25) + (viewer.visionBonus || 0);
     const light = window.lightLevel || 1.0;
-    const effectiveLight = (viewer.skills?.elf_darkvision) ? 1.0 : light;
+    const effectiveLight = ((viewer.skills?.elf_darkvision || viewer.skills?.goblin_low_light_eyes)) ? 1.0 : light;
     const visionCap = visionRange * Math.max(0.2, effectiveLight);
     
     // Line of sight check first (Physical obstruction)
@@ -4858,6 +4866,12 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
 
   // GOBLIN OPPORTUNIST — extra damage against a target that's already off-guard
   if (attacker.skills?.goblin_opportunist && target.caughtOffGuard) dmg += 3;
+
+  // GOBLIN PACK HUNTER — extra damage against a target already flanked by an ally
+  if (attacker.skills?.goblin_pack_hunter) {
+      const flanked = window.entities.some(e => e.alive && e !== attacker && e.side === attacker.side && window.distance(e.hex, target.hex) <= 1);
+      if (flanked) dmg += attacker.skills.goblin_pack_hunter * 2;
+  }
 
   // SNEAK ATTACK / BACKSTAB
   if (attacker.skills?.sneak_attack_dmg) {

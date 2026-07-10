@@ -520,6 +520,29 @@ const skills = {
             player.visionBonus = (player.visionBonus || 0) + 3;
         }
     },
+    'goblin_low_light_eyes': {
+        name: 'Low-Light Eyes',
+        description: 'Reduced vision/stealth-detection penalties in low light — same effect as elf Darkvision, a goblin trait from a life spent in warrens and caves.',
+        tree: 'goblin',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+    'goblin_quick_reflexes': {
+        name: 'Quick Reflexes',
+        description: 'Increases passive dodge chance by 2 per rank.',
+        tree: 'goblin',
+        maxRanks: 2,
+        apply: (player) => {
+            player.passiveDodge = (player.passiveDodge || 0) + 2;
+        }
+    },
+    'goblin_pack_hunter': {
+        name: 'Pack Hunter',
+        description: 'Deals +2 damage per rank against a target that already has an ally of yours standing next to it.',
+        tree: 'goblin',
+        maxRanks: 3,
+        apply: (player) => {}
+    },
     'cleric_trigger_damage': {
         name: 'Divine Retribution',
         description: 'Whenever your trigger spells (Divine Silence, Sanctuary) activate, the target takes 1 damage immediately per rank.',

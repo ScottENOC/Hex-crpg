@@ -41,7 +41,14 @@ window.factions = {
 };
 
 function seedStanding(race, playerRace) {
-    return race === playerRace ? 5 : 0;
+    if (race === playerRace) return 5;
+    // A goblin player starts distrusted by the "civilized" races on sight,
+    // but is kin-adjacent to the other greenskins right away.
+    if (playerRace === 'goblin') {
+        if (race === 'orc') return 15;
+        if (race === 'human' || race === 'elf' || race === 'dwarf') return -15;
+    }
+    return 0;
 }
 
 // dampening: 1.0 at knowledge=0 (full-strength first impressions), down to a

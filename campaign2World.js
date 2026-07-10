@@ -2236,7 +2236,10 @@ function setupVillageScene(forLoadOnly = false) {
     // does in the shakedown. Built through the same createCharacterData path
     // as the player character, then hand skills are purchased from her
     // starting attribute pool exactly like npcBuilder.js does for NPCs.
-    if (!window.party.some(p => p.name === 'Wren Talbot')) {
+    // Wren is a tavern regular tied to the Hollowmere shakedown scene — she
+    // doesn't make sense for a goblin start, which skips the tavern (and
+    // that whole scripted scene) entirely in favor of Skarn-tooth camp.
+    if (window.party[0]?.race !== 'goblin' && !window.party.some(p => p.name === 'Wren Talbot')) {
         const companion = window.createCharacterData('human', 'fighter', 'Wren Talbot', 'female', 'pc_1');
         ['health', 'sword_hit', 'sword_dmg'].forEach(skillKey => {
             const skill = window.skills[skillKey];
@@ -2482,7 +2485,24 @@ function setupVillageScene(forLoadOnly = false) {
         });
     }
 
-    window.hollowmereEventFired = false;
+    // A goblin player starts in Skarn-tooth's camp instead of the Hollowmere
+    // tavern — the whole tavern shakedown scene (soldiers, Dray, Wren) is
+    // human-village-specific and never makes sense to trigger for them.
+    // hollowmereEventFired is forced true up front (belt-and-braces on top
+    // of skipping the setTimeout below) so nothing can accidentally fire it
+    // later for a party that never set foot in the tavern.
+    const isGoblinStart = window.party[0]?.race === 'goblin';
+    window.hollowmereEventFired = isGoblinStart;
+    if (isGoblinStart && window.campaign2GoblinCampCenter) {
+        const camp = window.campaign2GoblinCampCenter;
+        window.entities.filter(e => e.side === 'player' && !e.rider).forEach((ent, i) => {
+            const hex = { q: camp.q + (i % 3) - 1, r: camp.r + 4 + Math.floor(i / 3) };
+            ent.hex = hex;
+            ent.visualQ = hex.q; ent.visualR = hex.r;
+            ent.startQ = hex.q; ent.startR = hex.r;
+        });
+        if (window.centerCameraOn) window.centerCameraOn(camp);
+    }
 
     // Outside combat, the party should mostly move together — flip the
     // existing group-move toggle on by default here and sync its button.
@@ -2500,6 +2520,7 @@ function setupVillageScene(forLoadOnly = false) {
     if (window.snapVisuals) window.snapVisuals();
 
     if (forLoadOnly) return; // terrain/tileObjects baseline is all a load needs — skip the scripted intro entirely
+    if (isGoblinStart) return; // no tavern, no Wren, no shakedown — the goblin camp has no scripted opener of its own yet
 
     setTimeout(() => {
         if (window.triggerAmbientDialogue) window.triggerAmbientDialogue('wren_intro');
