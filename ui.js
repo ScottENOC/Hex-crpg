@@ -1388,10 +1388,19 @@ function applyLevelUp(char, cls) {
     char.level += 1;
     const cb = window.classData[cls].bonus;
     for (let key in cb) char.attributes[key] = (char.attributes[key] || 0) + cb[key];
-    
+
     const rb = window.raceData[char.race].bonus;
     for (let key in rb) char.attributes[key] = (char.attributes[key] || 0) + rb[key];
+
+    if (!char.classLevels) char.classLevels = {}; // characters/saves predating this tracking start with no history
+    char.classLevels[cls] = (char.classLevels[cls] || 0) + 1;
 }
+
+/** True if `char` has taken at least one level in `cls` (character creation counts as a level). */
+function hasClassLevel(char, cls) {
+    return !!(char.classLevels && char.classLevels[cls] > 0);
+}
+window.hasClassLevel = hasClassLevel;
 
 function doLevelUp() {
     if (window.player.level >= (window.currentLevelCap || 50)) {

@@ -54,6 +54,7 @@ function createCharacterData(race, cls, name, gender = "female", voice = "pc_1")
     timePoints: 0,
     timePointsPerTick: 1,
     skills: {},
+    classLevels: { [cls]: 1 }, // total levels taken in each class, order not tracked — used for dialogue gating and respec
     attributes: initialAttributes,
     unlockedBaseSpells: [],
     unlockedCastingOptions: {}, 
