@@ -3704,9 +3704,24 @@ function aiProcess(entity) {
     // "no target because of flying" retreat branch further down, which this
     // directly starves of a target). Once it can no longer afford its only
     // ranged option, ground it for melee instead of leaving it stuck evading.
-    const attackSpell = entity.createdSpells?.find(s => s.baseId === 'firebolt' || s.baseId === 'dragon_breath');
+    // A caster may have built more than one variant of the same attack spell
+    // (e.g. a full-power Firebolt and a cheaper "Slowed" one from the
+    // casting-speed metamagic options in the spell builder — see ui.js's
+    // quickened/slowed sliders). `.find()` used to only ever look at the
+    // first one ever created, so a caster who'd built a slowed variant
+    // specifically to keep fighting on low mana would never actually use
+    // it — it'd hit the first (usually the full-price) variant, find it
+    // unaffordable, and go straight to melee instead of trying the cheaper
+    // option. Sort priciest-first and take the strongest one currently
+    // affordable, so it only falls back to a weaker/cheaper cast (and,
+    // failing that, melee) as mana actually runs low.
+    const attackSpellVariants = (entity.createdSpells || [])
+        .filter(s => s.baseId === 'firebolt' || s.baseId === 'dragon_breath')
+        .sort((a, b) => b.manaCost - a.manaCost);
+    const attackSpell = attackSpellVariants.find(s => entity.currentMana >= s.manaCost && entity.timePoints >= s.tpCost)
+        || attackSpellVariants[0];
     const reliesOnSpellForRange = !!attackSpell && !isRanged;
-    const canAffordAttackSpell = !!attackSpell && entity.currentMana >= attackSpell.manaCost;
+    const canAffordAttackSpell = !!attackSpell && entity.currentMana >= attackSpell.manaCost && entity.timePoints >= attackSpell.tpCost;
     const attackableOpponents = visibleOpponents.filter(o => {
         const bothFlying = entity.isFlying && o.isFlying;
         const eitherFlying = entity.isFlying || o.isFlying;
@@ -3727,14 +3742,42 @@ function aiProcess(entity) {
     }
 
     // BOSS AI: HEALING PRIORITY (Alistair / Clerics)
-    if (entity.skills?.learn_heal && entity.hp < entity.maxHp * 0.6 && entity.timePoints >= 10 && entity.currentMana >= 10) {
+    // Considers every friendly target in range (allies, not just itself)
+    // and scores them so it puts real weight behind healing whoever needs
+    // it most, rather than only ever topping itself off. A target scores
+    // higher the lower its current HP%, the fuller the caster's own mana
+    // (a healer flush with mana should lean into using it), and the less
+    // of the heal would be wasted as overheal; healing itself gets a small
+    // — not dominant — edge over an equally-needy ally so ties don't
+    // become a coinflip, but a genuinely worse-off ally still wins.
+    if (entity.skills?.learn_heal && entity.timePoints >= 10) {
         const healSpell = entity.createdSpells?.find(s => s.baseId === 'heal');
-        if (healSpell) {
-            window.showMessage(`${entity.name} prays for healing!`);
-            tryCastSpell(entity, healSpell, entity, entity.hex);
-            spendTP(entity, 10);
-            setTimeout(() => aiProcess(entity), 20);
-            return;
+        if (healSpell && entity.currentMana >= healSpell.manaCost && entity.timePoints >= healSpell.tpCost) {
+            const manaPct = entity.maxMana > 0 ? entity.currentMana / entity.maxMana : 0;
+            const candidates = window.entities.filter(t => t.alive && t.side === entity.side &&
+                t.hp < t.maxHp && window.distance(entity.hex, t.hex) <= healSpell.range &&
+                (t === entity || canSee(entity, t)));
+            if (candidates.length > 0) {
+                const scored = candidates.map(t => {
+                    const hpPct = t.maxHp > 0 ? t.hp / t.maxHp : 1;
+                    const overheal = Math.max(0, (t.hp + healSpell.magnitude) - t.maxHp);
+                    const overhealFraction = healSpell.magnitude > 0 ? overheal / healSpell.magnitude : 0;
+                    let score = (1 - hpPct) * 2 + manaPct * 1 - overhealFraction * 1.5;
+                    if (t === entity) score += 0.15; // slight, not major, self-preference
+                    return { t, score };
+                });
+                scored.sort((a, b) => b.score - a.score);
+                const best = scored[0];
+                // A floor so a healer at low mana / everyone near-full HP
+                // doesn't burn its turn topping off a one-point scratch.
+                if (best.score > 0.5) {
+                    window.showMessage(best.t === entity ? `${entity.name} prays for healing!` : `${entity.name} channels healing toward ${best.t.name}!`);
+                    tryCastSpell(entity, healSpell, best.t, best.t.hex);
+                    spendTP(entity, healSpell.tpCost);
+                    setTimeout(() => aiProcess(entity), 20);
+                    return;
+                }
+            }
         }
     }
 
@@ -3755,7 +3798,12 @@ function aiProcess(entity) {
     }
 
     // SPELLCASTING AI (Grishnak / Casters)
-    if (entity.createdSpells && entity.createdSpells.length > 0 && entity.timePoints >= 10) {
+    // Gate lowered to 5 (Quickened's discounted TP cost, the cheapest any
+    // cast can be) rather than a flat 10 — canAffordAttackSpell below
+    // checks the actually-selected variant's real tpCost precisely; this
+    // is just a cheap pre-filter so a caster with 6-9 TP left doesn't skip
+    // considering a Quickened cast it can actually afford.
+    if (entity.createdSpells && entity.createdSpells.length > 0 && entity.timePoints >= 5) {
         // ... (existing spell logic) ...
         // attackSpell/canAffordAttackSpell computed above, alongside the
         // attackableOpponents filter that grounds this entity for melee
@@ -3764,7 +3812,7 @@ function aiProcess(entity) {
             const inRange = visibleOpponents.find(o => window.distance(entity.hex, o.hex) <= attackSpell.range);
             if (inRange) {
                 tryCastSpell(entity, attackSpell, inRange, inRange.hex);
-                spendTP(entity, 10);
+                spendTP(entity, attackSpell.tpCost);
                 setTimeout(() => aiProcess(entity), 20);
                 return;
             }
