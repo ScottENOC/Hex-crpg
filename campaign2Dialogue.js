@@ -2343,6 +2343,7 @@ window.npcDialogueTrees = {
                         player.gold -= 15;
                         quest.status = 'completed';
                         window.adjustReputation(npc.reputation, 10, 15);
+                        window.adjustReputation(window.factions.dwarven_kingdom, 10, 15);
                         if (window.gainExp) window.gainExp(60);
                         window.showMessage('Quest complete: Coin for the Deepholds.');
                     }},
@@ -2351,6 +2352,36 @@ window.npcDialogueTrees = {
                 return;
             }
             window.showDialogue(npc, "Fifteen gold, when you have it. The Deepholds trade in iron and good sense, in roughly that order.", [{ label: "Soon.", action: () => {} }]);
+            return;
+        }
+        // "A Word to the King": only offered once the toll's paid — a real
+        // errand for the ambassador, and the thread that actually connects
+        // Silverhart's court to Kragmoor itself (see dwarf_king below).
+        const letterQuest = window.questLog.find(q => q.id === 'deepholds_letter');
+        if (quest && quest.status === 'completed' && !letterQuest) {
+            window.showDialogue(npc, "One more thing, if you're willing. A letter for the King, sealed — I'd send it by our own courier, but the passes have been unquiet lately. A human face on the road draws less attention than one of ours.", [
+                {
+                    label: "I'll carry it.",
+                    action: () => {
+                        player.inventory = player.inventory || [];
+                        player.inventory.push('deepholds_sealed_letter');
+                        window.questLog.push({
+                            id: 'deepholds_letter', title: 'A Word to the King', giver: 'Ambassador Brokk Stonehammer', status: 'active',
+                            description: 'Deliver Ambassador Stonehammer\'s sealed letter to King Balrik Deepholm at Kragmoor.'
+                        });
+                        window.showMessage('Quest added: A Word to the King.');
+                    }
+                },
+                { label: "Not right now.", action: () => {} }
+            ]);
+            return;
+        }
+        if (letterQuest && letterQuest.status === 'active') {
+            window.showDialogue(npc, "Straight to the King's own hand, mind — not the seneschal, not a guard captain.", [{ label: "Understood.", action: () => {} }]);
+            return;
+        }
+        if (letterQuest && letterQuest.status === 'completed') {
+            window.showDialogue(npc, "Word came back from Kragmoor already — you made a good account of yourself there. That'll do more for relations between our two courts than another decade of tolls.", [{ label: "Glad to help.", action: () => {} }]);
             return;
         }
         if (quest && quest.status === 'completed') {
@@ -4333,5 +4364,95 @@ window.npcDialogueTrees.wild_unicorn = (npc) => {
             }
         },
         { label: "Not yet.", action: () => {} }
+    ]);
+};
+
+// --- Kragmoor / the Deepholds (see buildDwarvenKingdom, campaign2World.js).
+window.npcDialogueTrees.dwarf_king = (npc) => {
+    window.questLog = window.questLog || [];
+    const player = window.party[0];
+    const letterQuest = window.questLog.find(q => q.id === 'deepholds_letter');
+    const standing = window.factions?.dwarven_kingdom?.standing ?? 0;
+
+    if (letterQuest && letterQuest.status === 'active' && (player.inventory || []).includes('deepholds_sealed_letter')) {
+        window.showDialogue(npc, "A human, carrying Brokk's own seal. He always did trust a stranger's face over one of our own couriers on a bad road — can't say he's wrong, given how quiet the passes have gone.", [
+            {
+                label: "Here — from Ambassador Stonehammer.",
+                action: () => {
+                    player.inventory = player.inventory.filter(i => i !== 'deepholds_sealed_letter');
+                    letterQuest.status = 'completed';
+                    window.adjustReputation(window.factions.dwarven_kingdom, 20, 20);
+                    window.adjustReputation(window.factions.silverhart_kingdom, 5, 10);
+                    if (window.gainExp) window.gainExp(150);
+                    window.showMessage('Quest complete: A Word to the King. (+reputation with the Deepholds and Silverhart)');
+                }
+            }
+        ]);
+        return;
+    }
+
+    const infestationQuest = window.questLog.find(q => q.id === 'deepholds_infestation');
+    if (infestationQuest && infestationQuest.status === 'active') {
+        const stillAlive = window.entities.some(e => e.alive && e.deepholdsVermin);
+        if (!stillAlive) {
+            infestationQuest.status = 'completed';
+            window.adjustReputation(window.factions.dwarven_kingdom, 20, 20);
+            if (window.gainExp) window.gainExp(200);
+            window.showMessage('Quest complete: What Nests Below. (+reputation with the Deepholds)');
+            window.showDialogue(npc, "The lower tunnels have gone quiet the right way, for once. The Deepholds don't forget a debt like that.", [{ label: "Glad to help.", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "Whatever's nesting in the lower tunnels is still down there, near as the foreman can tell. Mind yourself.", [{ label: "I'll deal with it.", action: () => {} }]);
+        return;
+    }
+
+    let opening;
+    if (standing >= 30) opening = "You've done right by the Deepholds more than once now. Speak freely in my hall.";
+    else if (standing <= -10) opening = "I know your name, and not from anything I'd call good. Mind your tongue in my hall.";
+    else opening = "Few surface-dwellers find their way this deep. State your business.";
+
+    const options = [];
+    if (!infestationQuest) {
+        options.push({
+            label: "The Foreman mentioned trouble in the lower tunnels.",
+            action: () => {
+                window.questLog.push({
+                    id: 'deepholds_infestation', title: 'What Nests Below', giver: 'King Balrik Deepholm', status: 'active',
+                    description: 'Clear whatever has nested in Kragmoor\'s lower tunnels.'
+                });
+                window.showMessage('Quest added: What Nests Below.');
+                window.showDialogue(npc, "Clear it out and the Deepholds won't forget it. Dornik can point you to the sealed gallery.", [{ label: "I'll see to it.", action: () => {} }]);
+            }
+        });
+    }
+    options.push({ label: "Tell me of the Deepholds.", action: () => window.showDialogue(npc, "One hold, one mountain, one king to answer for it — Kragmoor's all that's left since the old halls further north fell quiet a generation back. We don't spread thin a second time.", [{ label: "...", action: () => {} }]) });
+    options.push({ label: "Just passing through.", action: () => {} });
+    window.showDialogue(npc, opening, options);
+};
+
+window.npcDialogueTrees.deepholds_foreman = (npc) => {
+    window.questLog = window.questLog || [];
+    const infestationQuest = window.questLog.find(q => q.id === 'deepholds_infestation');
+    if (!infestationQuest) {
+        window.showDialogue(npc, "Third gallery's sealed off — something moved in a few weeks back, webbing thick as rope. Lost two crews before I called the retreat. Talk to the King if you're looking for real work.", [{ label: "I'll ask him.", action: () => {} }]);
+        return;
+    }
+    const stillAlive = window.entities.some(e => e.alive && e.deepholdsVermin);
+    if (stillAlive) {
+        window.showDialogue(npc, "Sealed gallery's due north of the hall, straight tunnel. Whatever's in there, it's still in there.", [{ label: "On my way.", action: () => {} }]);
+    } else {
+        window.showDialogue(npc, "Crews are already back at the vein. Whatever you did down there, it worked.", [{ label: "Good.", action: () => {} }]);
+    }
+};
+
+window.npcDialogueTrees.deepholds_trader = (npc) => {
+    const trusted = (window.factions?.dwarven_kingdom?.standing || 0) >= 10;
+    if (!trusted) {
+        window.showDialogue(npc, "The Vault doesn't open for strangers.", [{ label: "...", action: () => {} }]);
+        return;
+    }
+    window.showDialogue(npc, "Kragmoor steel, if you can afford it.", [
+        { label: "Let me see your wares.", action: () => window.openShop({ itemIds: window.campaign2DeepholdsTraderItems, mounts: false }) },
+        { label: "Just looking.", action: () => {} }
     ]);
 };

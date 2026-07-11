@@ -37,13 +37,20 @@ window.factions = {
     // Small orc raiding/scouting bands pressing in from the borderlands.
     // Currently pure wilderness-encounter flavor + reputation target for
     // "Eyes on the Border" — no camp/settlement of their own yet.
-    orc_raiders:        { id: 'orc_raiders',        name: 'The Borderland Raiders', race: 'orc', knowledge: 0, standing: 0 }
+    orc_raiders:        { id: 'orc_raiders',        name: 'The Borderland Raiders', race: 'orc', knowledge: 0, standing: 0 },
     // Reddale's espionage side-quests (spy_on_guild/spy_on_baron, see
     // espionageQuests.js/campaign2Dialogue.js) are also Ironbond content —
     // the same Company straining for influence against the Baron/kingdom
     // there as in Hollowmere, not a separate guild. Its Reddale guildhouse
     // and the hired-assassin retaliation both key off ironbond_company
     // above, not a second faction entry.
+    // The Deepholds: the dwarven kingdom, one mountain city-and-mine
+    // (Kragmoor) tucked in the NW mountain range (see buildDwarvenKingdom,
+    // campaign2World.js, and worldMap.js's reserved MOUNTAIN block). Its
+    // ambassador already sat at Silverhart's court (dwarven_ambassador,
+    // campaign2Dialogue.js) well before this kingdom existed in the world —
+    // that quest thread now actually leads somewhere.
+    dwarven_kingdom:    { id: 'dwarven_kingdom',    name: 'The Deepholds',          race: 'dwarf', knowledge: 0, standing: 0 }
 };
 
 function seedStanding(race, playerRace) {

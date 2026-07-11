@@ -3000,6 +3000,7 @@ function interactWithTileObject(q, r, player) {
         if (doorObj.readId === 'vampire_grave' && window.readVampireGrave) { window.readVampireGrave(); return; }
         if (doorObj.readId === 'crypt_entrance_note' && window.readCryptEntranceNote) { window.readCryptEntranceNote(); return; }
         if (doorObj.readId === 'lich_phylactery_core' && window.readLichPhylacteryCoreNote) { window.readLichPhylacteryCoreNote(); return; }
+        if (doorObj.readId === 'deepholds_mine_ledger' && window.readDeepholdsMineLedger) { window.readDeepholdsMineLedger(); return; }
         if (window.readAbandonedHouseJournal) window.readAbandonedHouseJournal();
         return;
     }

@@ -85,7 +85,8 @@ const items = {
     'guild_ledger_evidence': { id: 'guild_ledger_evidence', name: 'Guild Ledger Pages', type: 'quest_item', description: 'Torn pages from the merchants guild\'s private ledgers — untaxed shipments, dates, and names.' },
     'baron_tariff_evidence': { id: 'baron_tariff_evidence', name: 'Tariff Skimming Records', type: 'quest_item', description: "A steward's private tally of tariffs collected that never reached the crown's coffers." },
     'disciple_evidence': { id: 'disciple_evidence', name: "Mirella's Cult Letters", type: 'quest_item', description: "Correspondence in a cramped hand, signed with a sigil that matches the phylactery altar's markings." },
-    'wizard_corruption_evidence': { id: 'wizard_corruption_evidence', name: "Thessaly's Ledger Page", type: 'quest_item', description: "A page of the Court Wizard's private accounts — favors bought and sold that the crown never sanctioned." }
+    'wizard_corruption_evidence': { id: 'wizard_corruption_evidence', name: "Thessaly's Ledger Page", type: 'quest_item', description: "A page of the Court Wizard's private accounts — favors bought and sold that the crown never sanctioned." },
+    'deepholds_sealed_letter': { id: 'deepholds_sealed_letter', name: 'Sealed Letter', type: 'quest_item', description: "Ambassador Stonehammer's own seal, pressed in wax. Meant for the King's hand, not yours." }
 };
 
 window.items = items;

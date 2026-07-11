@@ -646,6 +646,99 @@ function buildOrcStronghold(roadEnd) {
     setWorldMapMarker(center, { t: 'H', f: 'F', o: 'o', p: 1, n: "Skarnak's Hold" });
 }
 
+// Kragmoor, the Deepholds' one city-and-mine: a real Moria-style hold —
+// a genuinely solid mountain (a hex-disk of impassable Wall, not a walled
+// perimeter around open ground) with rooms and tunnels excavated out of
+// that solid mass via carveFlatRoom, same technique buildLichBarrow's crypt
+// uses, just at city scale. Lands in worldMap.js's reserved NW mountain
+// block (see setWorldMapMarker below) — the ambassador at Silverhart's
+// court (dwarven_ambassador, campaign2Dialogue.js) predates this kingdom's
+// construction; that quest thread now actually leads somewhere real.
+function buildDwarvenKingdom(anchor) {
+    const MASSIF_RADIUS = 25;
+    hexDisk(anchor.q, anchor.r, MASSIF_RADIUS).forEach(h => window.setTerrainAt(h.q, h.r, 'Wall'));
+
+    // Gate Hall: just inside the mountain's south face, where the surface
+    // approach road actually arrives.
+    const gateCenter = { q: anchor.q, r: anchor.r + 18 };
+    const gateDoor = { q: gateCenter.q, r: gateCenter.r + 3 };
+    const gateRegion = carveFlatRoom(gateCenter.q, gateCenter.r, 4, 3, gateDoor, 'Cave Floor');
+    window.interiorRegions.push(gateRegion);
+
+    // A short surface approach + a Path stub right at the gate — enough for
+    // connectAllRoadNetworks (hexMap.js) to bridge this into the rest of the
+    // road network with its own straight connector, same as every other
+    // settlement's road.
+    for (let i = 1; i <= 12; i++) window.setTerrainAt(gateDoor.q, gateDoor.r + i, 'Path');
+
+    // Great Hall: the throne room, deeper in.
+    const hallCenter = { q: anchor.q, r: anchor.r };
+    const hallDoor = { q: hallCenter.q, r: hallCenter.r + 5 };
+    const hallRegion = carveFlatRoom(hallCenter.q, hallCenter.r, 6, 4, hallDoor, 'Cave Floor');
+    window.interiorRegions.push(hallRegion);
+    for (let r = gateCenter.r - 3; r > hallDoor.r; r--) window.setTerrainAt(hallCenter.q, r, 'Cave Floor');
+
+    window.tileObjects[`${hallCenter.q},${hallCenter.r - 3}`] = { type: 'throne' };
+    window.tileObjects[`${hallCenter.q - 3},${hallCenter.r}`] = { type: 'fireplace', lightRadius: 6 };
+    window.tileObjects[`${hallCenter.q + 3},${hallCenter.r}`] = { type: 'fireplace', lightRadius: 6 };
+    window.campaign2DeepholdsHallCenter = hallCenter;
+
+    if (window.campaign2DwarfKing) {
+        window.entities.push(window.buildNPC({ ...window.campaign2DwarfKing, hex: { q: hallCenter.q, r: hallCenter.r - 1 } }));
+    }
+    (window.campaign2DwarfGuards || []).forEach((spec, i) => {
+        const pos = [{ q: hallCenter.q - 2, r: hallCenter.r + 2 }, { q: hallCenter.q + 2, r: hallCenter.r + 2 }][i];
+        if (!pos) return;
+        window.entities.push(window.buildNPC({ ...spec, hex: pos }));
+    });
+
+    // The Deep Mine: the real ore vein — a foreman/journal ledger, same
+    // shape as Emberlode's own mine room.
+    const mineCenter = { q: anchor.q + 16, r: anchor.r - 4 };
+    const mineDoor = { q: mineCenter.q - 4, r: mineCenter.r };
+    const mineRegion = carveFlatRoom(mineCenter.q, mineCenter.r, 4, 3, mineDoor, 'Cave Floor');
+    window.interiorRegions.push(mineRegion);
+    for (let q = hallCenter.q + 6; q < mineDoor.q; q++) window.setTerrainAt(q, hallCenter.r - 2, 'Cave Floor');
+    window.tileObjects[`${mineCenter.q},${mineCenter.r}`] = { type: 'journal', readId: 'deepholds_mine_ledger', lightRadius: 0 };
+    if (window.campaign2DwarfForeman) {
+        window.entities.push(window.buildNPC({ ...window.campaign2DwarfForeman, hex: { q: mineCenter.q, r: mineCenter.r + 1 } }));
+    }
+    window.campaign2DeepholdsMineCenter = mineCenter;
+
+    // The Vault: the kingdom's own trader.
+    const vaultCenter = { q: anchor.q - 16, r: anchor.r - 4 };
+    const vaultDoor = { q: vaultCenter.q + 4, r: vaultCenter.r };
+    const vaultRegion = carveFlatRoom(vaultCenter.q, vaultCenter.r, 3, 3, vaultDoor, 'Cave Floor');
+    window.interiorRegions.push(vaultRegion);
+    for (let q = vaultDoor.q + 1; q < hallCenter.q - 6; q++) window.setTerrainAt(q, hallCenter.r - 2, 'Cave Floor');
+    if (window.campaign2DwarfTrader) {
+        window.entities.push(window.buildNPC({ ...window.campaign2DwarfTrader, hex: { q: vaultCenter.q, r: vaultCenter.r + 1 } }));
+    }
+
+    // The Lower Tunnels: gone quiet, something's nesting down there — the
+    // side quest (see resolveDeepholdsInfestation, campaign2Dialogue.js).
+    const tunnelCenter = { q: anchor.q, r: anchor.r - 16 };
+    const tunnelDoor = { q: tunnelCenter.q, r: tunnelCenter.r + 4 };
+    const tunnelRegion = carveFlatRoom(tunnelCenter.q, tunnelCenter.r, 4, 3, tunnelDoor, 'Cave Floor');
+    window.interiorRegions.push(tunnelRegion);
+    for (let r = hallCenter.r - 5; r > tunnelDoor.r; r--) window.setTerrainAt(hallCenter.q, r, 'Cave Floor');
+    window.campaign2DeepholdsTunnelCenter = tunnelCenter;
+    (window.campaign2DeepholdsVermin || []).forEach((spec, i) => {
+        const m = window.createMonster(spec.monsterType, { q: tunnelCenter.q + (i - 1), r: tunnelCenter.r }, spec.customSkills || null, spec.customEquipment || null, 'enemy');
+        m.name = spec.name;
+        m.deepholdsVermin = true;
+        window.entities.push(m);
+    });
+
+    sealRoom(gateRegion);
+    sealRoom(hallRegion);
+    sealRoom(mineRegion);
+    sealRoom(vaultRegion);
+    sealRoom(tunnelRegion);
+
+    setWorldMapMarker(gateCenter, { t: 'M', f: 'K', o: 'd', p: 2, n: 'Kragmoor' });
+}
+
 // The Chapterhouse of the Silver Flame: the source of the hunting parties
 // that come for a player who's become a lich (see lichHunt.js). Deliberately
 // independent of Silverhart Palace's geography (which is being redesigned
@@ -2509,6 +2602,47 @@ function setupVillageScene(forLoadOnly = false) {
     buildNorthwatchFort(northwatchTurnHex);
     buildRidgeholdFort(borderRoadEnd);
     buildOrcStronghold(borderRoadEnd);
+    // Kragmoor, the Deepholds' one city-and-mine: independent of the road
+    // network above (a mountain kingdom isn't reached by the same roads
+    // everyone else uses) — a large NW displacement from the crossroads,
+    // landing squarely inside worldMap.js's reserved NW mountain block.
+    // Its own short surface approach (painted inside buildDwarvenKingdom)
+    // is bridged into the rest of the road network by
+    // connectAllRoadNetworks below, same as any other settlement's road.
+    {
+        const dwarfAnchor = { q: CP.q - 500, r: CP.r - 650 };
+        buildDwarvenKingdom(dwarfAnchor);
+        // A direct hand-painted connector, rather than relying on
+        // connectAllRoadNetworks' nearest-pair heuristic below — Kragmoor
+        // sits far enough out (500+/-650+ hexes) that the heuristic
+        // sometimes can't find a straight connector that clears the
+        // mountain massif itself. Runs straight from the crossroads to the
+        // surface end of Kragmoor's own approach spur (18+3+12 hexes south
+        // of the anchor — see buildDwarvenKingdom's gateCenter/gateDoor/stub
+        // offsets), which sits safely outside the massif's own radius (25),
+        // so this line never needs to cross solid Wall.
+        const dwarfSpurTip = { q: dwarfAnchor.q, r: dwarfAnchor.r + 18 + 3 + 12 };
+        // A proper hex line (cube-coordinate lerp + cube rounding, not a
+        // naive independent q/r lerp — that produces a "dotted" line of
+        // non-adjacent hexes, which is exactly what fragmented this into
+        // hundreds of disconnected one-hex road-graph components the first
+        // time around) so every consecutive hex is a real neighbor of the
+        // last, guaranteeing one unbroken Path from the crossroads to
+        // Kragmoor's own spur.
+        const x1 = CP.q, z1 = CP.r, y1 = -x1 - z1;
+        const x2 = dwarfSpurTip.q, z2 = dwarfSpurTip.r, y2 = -x2 - z2;
+        const steps = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1), Math.abs(z2 - z1));
+        for (let i = 0; i <= steps; i++) {
+            const t = i / steps;
+            let x = x1 + (x2 - x1) * t, y = y1 + (y2 - y1) * t, z = z1 + (z2 - z1) * t;
+            let rx = Math.round(x), ry = Math.round(y), rz = Math.round(z);
+            const dx = Math.abs(rx - x), dy = Math.abs(ry - y), dz = Math.abs(rz - z);
+            if (dx > dy && dx > dz) rx = -ry - rz;
+            else if (dy > dz) ry = -rx - rz;
+            else rz = -rx - ry;
+            window.setTerrainAt(rx, rz, 'Path');
+        }
+    }
     buildSideQuestContent();
 
     // Road-network connectivity (hexMap.js): every road painted above should
@@ -3454,6 +3588,20 @@ function readEmberlodeLedger() {
     }
 }
 window.readEmberlodeLedger = readEmberlodeLedger;
+
+function readDeepholdsMineLedger() {
+    const quest = window.questLog && window.questLog.find(q => q.id === 'deepholds_infestation');
+    if (quest && quest.status === 'completed') {
+        window.showDialogue({ name: 'Ledger', customImage: 'journal' },
+            "The last entries pick back up mid-sentence, same steady hand as before the gap: \"Tunnels clear. Back to the deep vein by first shift. Whoever cleared them out has the Deepholds' thanks, whether they know it or not.\""
+        );
+    } else {
+        window.showDialogue({ name: 'Ledger', customImage: 'journal' },
+            "Entries stop abruptly a few weeks back: \"Something's moved into the lower tunnels. Webbing on the third gallery, two crews haven't reported back. Foreman's sealed that level until it's dealt with.\""
+        );
+    }
+}
+window.readDeepholdsMineLedger = readDeepholdsMineLedger;
 
 window.setupVillageScene = setupVillageScene;
 window.toggleDoor = toggleDoor;

@@ -745,3 +745,45 @@ window.campaign2DruidElder = {
     side: 'neutral', factionId: null, color: '#4f7942',
     dialogueId: 'elder_nessa_wren'
 };
+
+// --- Kragmoor, the Deepholds' one city-and-mine (see buildDwarvenKingdom,
+// campaign2World.js). Real playable-race dwarf NPCs built through buildNPC
+// (raceData/classData attribute pools), same as Emberlode's own dwarf miner
+// — not the monster-template path goblin/orc NPCs use, since dwarf is a
+// full playable race.
+window.campaign2DwarfKing = {
+    name: 'King Balrik Deepholm', title: 'King Under the Mountain',
+    race: 'dwarf', gender: 'male',
+    classLevels: ['fighter', 'fighter'], skillPicks: ['health', 'axe_hit', 'axe_dmg', 'heavy_armor_training'],
+    equipment: ['axe', 'heavy_armor', 'wooden_shield'],
+    side: 'neutral', factionId: 'dwarven_kingdom', color: '#8a6d4a', goldGear: true,
+    dialogueId: 'dwarf_king'
+};
+window.campaign2DwarfGuards = [
+    { name: 'Hall Guard', title: 'Hall Guard', race: 'dwarf', gender: 'male', classLevels: ['fighter'], skillPicks: ['health', 'axe_hit'], equipment: ['axe', 'medium_armor'], side: 'neutral', factionId: 'dwarven_kingdom', color: '#6a5a4a' },
+    { name: 'Hall Guard', title: 'Hall Guard', race: 'dwarf', gender: 'female', classLevels: ['fighter'], skillPicks: ['health', 'axe_dmg'], equipment: ['axe', 'medium_armor'], side: 'neutral', factionId: 'dwarven_kingdom', color: '#6a5a4a' },
+];
+window.campaign2DwarfForeman = {
+    name: 'Foreman Dornik Coalbeard', title: 'Foreman of the Deep Mine',
+    race: 'dwarf', gender: 'male',
+    classLevels: ['fighter'], skillPicks: ['health'], equipment: ['club'],
+    side: 'neutral', factionId: 'dwarven_kingdom', color: '#5a5a5a',
+    dialogueId: 'deepholds_foreman'
+};
+window.campaign2DwarfTrader = {
+    name: 'Ingra Silvertongue', title: 'Keeper of the Vault',
+    race: 'dwarf', gender: 'female',
+    classLevels: ['fighter'], skillPicks: ['health'], equipment: ['dagger'],
+    side: 'neutral', factionId: 'dwarven_kingdom', color: '#5a4a3a',
+    dialogueId: 'deepholds_trader'
+};
+window.campaign2DeepholdsTraderItems = ['sword', 'axe', 'medium_armor', 'heavy_armor', 'wooden_shield', 'nasal_helm'];
+
+// The Lower Tunnels' infestation: what's actually gone quiet down there —
+// same "reuse existing monster templates, tag them for the quest" pattern
+// as barrowMinion/isOrcStrongholdTroll.
+window.campaign2DeepholdsVermin = [
+    { name: 'Cave Spider', monsterType: 'spider', customSkills: { health: 2 } },
+    { name: 'Cave Spider', monsterType: 'spider', customSkills: { health: 2 } },
+    { name: 'Broodmother', monsterType: 'spider', customSkills: { health: 6, meleeDamage: 4 } },
+];
