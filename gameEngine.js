@@ -3696,9 +3696,21 @@ function aiProcess(entity) {
     const weaponSlot = 'weapon';
     const weapon = entity.equipped?.[weaponSlot] ? window.items[entity.equipped[weaponSlot]] : null;
     const isRanged = weapon?.subType === 'ranged';
+    // A flying creature with no ranged weapon that relies on a spell for
+    // reach (e.g. a dragon's breath) normally can't melee a ground target at
+    // all under the flying/ground mismatch rule below — which used to mean
+    // that once it ran out of mana for that spell, it would kite forever,
+    // permanently out of reach, rather than ever landing to fight (see the
+    // "no target because of flying" retreat branch further down, which this
+    // directly starves of a target). Once it can no longer afford its only
+    // ranged option, ground it for melee instead of leaving it stuck evading.
+    const attackSpell = entity.createdSpells?.find(s => s.baseId === 'firebolt' || s.baseId === 'dragon_breath');
+    const reliesOnSpellForRange = !!attackSpell && !isRanged;
+    const canAffordAttackSpell = !!attackSpell && entity.currentMana >= attackSpell.manaCost;
     const attackableOpponents = visibleOpponents.filter(o => {
         const bothFlying = entity.isFlying && o.isFlying;
         const eitherFlying = entity.isFlying || o.isFlying;
+        if (eitherFlying && !bothFlying && reliesOnSpellForRange && !canAffordAttackSpell) return true;
         return isRanged || !eitherFlying || bothFlying;
     });
 
@@ -3745,8 +3757,10 @@ function aiProcess(entity) {
     // SPELLCASTING AI (Grishnak / Casters)
     if (entity.createdSpells && entity.createdSpells.length > 0 && entity.timePoints >= 10) {
         // ... (existing spell logic) ...
-        const attackSpell = entity.createdSpells.find(s => s.baseId === 'firebolt' || s.baseId === 'dragon_breath');
-        if (attackSpell && entity.currentMana >= attackSpell.manaCost) {
+        // attackSpell/canAffordAttackSpell computed above, alongside the
+        // attackableOpponents filter that grounds this entity for melee
+        // once it can't afford the cast.
+        if (attackSpell && canAffordAttackSpell) {
             const inRange = visibleOpponents.find(o => window.distance(entity.hex, o.hex) <= attackSpell.range);
             if (inRange) {
                 tryCastSpell(entity, attackSpell, inRange, inRange.hex);
@@ -3770,9 +3784,21 @@ function aiProcess(entity) {
     // If no target because of flying, move towards favorable terrain or away
     if (!target && visibleOpponents.length > 0) {
         const nearestFlyer = visibleOpponents.sort((a, b) => window.distance(entity.hex, a.hex) - window.distance(entity.hex, b.hex))[0];
-        // Move away from flyer
-        const neighbors = window.getNeighbors(entity.hex.q, entity.hex.r);
-        huntTargetHex = neighbors.sort((a, b) => window.distance(b, nearestFlyer.hex) - window.distance(a, nearestFlyer.hex))[0];
+        if (canAffordAttackSpell) {
+            // This entity itself still has a usable ranged spell (e.g. a
+            // dragon with breath mana left) — it has no melee target only
+            // because everyone's out of *cast* range, so it should close
+            // the distance to get within spell range, not retreat. Retreating
+            // here (the branch below) was written for a ground unit that
+            // truly can't reach a flyer at all; applying the same "back
+            // away" logic to the flyer's own turn made it kite forever
+            // instead of ever closing to spell range.
+            huntTargetHex = nearestFlyer.hex;
+        } else {
+            // Move away from flyer
+            const neighbors = window.getNeighbors(entity.hex.q, entity.hex.r);
+            huntTargetHex = neighbors.sort((a, b) => window.distance(b, nearestFlyer.hex) - window.distance(a, nearestFlyer.hex))[0];
+        }
     }
 
     if (huntTargetHex && !target && entity.hex.q === huntTargetHex.q && entity.hex.r === huntTargetHex.r) {

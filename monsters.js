@@ -129,7 +129,7 @@ const monsterTemplates = {
         isFlying: true,
         dragonSizeTier: 1,
         extraHexes: [{ q: 0, r: 1 }],
-        skills: { 'health': 5, 'meleeDamage': 3, 'arcane_mana': 1, 'firebolt_hit': 1, 'firebolt_dmg': 1 },
+        skills: { 'health': 5, 'meleeDamage': 3, 'arcane_mana': 2, 'firebolt_hit': 1, 'firebolt_dmg': 1 },
         createdSpells: [
             { name: 'Dragon Breath', baseId: 'dragon_breath', school: 'arcane', type: 'aoe_damage', manaCost: 15, tpCost: 10, magnitude: 12, range: 3, radius: 1 }
         ],
@@ -145,7 +145,7 @@ const monsterTemplates = {
         isFlying: true,
         dragonSizeTier: 2,
         extraHexes: [{ q: 0, r: 1 }, { q: 1, r: 0 }, { q: 1, r: -1 }],
-        skills: { 'health': 10, 'meleeDamage': 6, 'arcane_mana': 2, 'firebolt_hit': 2, 'firebolt_dmg': 2, 'arcane_expand': 1 },
+        skills: { 'health': 10, 'meleeDamage': 6, 'arcane_mana': 3, 'firebolt_hit': 2, 'firebolt_dmg': 2, 'arcane_expand': 1 },
         createdSpells: [
             { name: 'Dragon Breath', baseId: 'dragon_breath', school: 'arcane', type: 'aoe_damage', manaCost: 25, tpCost: 10, magnitude: 22, range: 4, radius: 2 }
         ],

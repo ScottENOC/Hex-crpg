@@ -488,24 +488,74 @@ async function main() {
         ['meta (ranger/monk/paladin/spellblade)', metaParty],
     ];
 
-    console.log('--- vs 10 goblins ---');
+    // "How many goblins can this party beat?" — escalate the goblin count
+    // until win rate drops to/below 50%, rather than testing one arbitrary
+    // fixed count that tells you "yes" or "no" but not where the real
+    // ceiling is. Stops early on two consecutive 0% results (once a party
+    // is clearly broken there's no need to keep climbing).
+    async function findGoblinCapacity(label, party) {
+        let lastGoodCount = 0;
+        let consecutiveZero = 0;
+        for (const count of [2, 4, 6, 8, 10, 12, 14, 16, 18, 20]) {
+            const row = await run(`${label} vs ${count} goblins`, party, 'goblin', count, 1, 4);
+            if (row.winRate >= 0.5) { lastGoodCount = count; consecutiveZero = 0; }
+            else {
+                consecutiveZero++;
+                if (consecutiveZero >= 2) break;
+            }
+        }
+        console.log(`  -> ${label}: can reliably beat up to ~${lastGoodCount} goblins`);
+        return lastGoodCount;
+    }
+
+    console.log('--- how many goblins can each party beat? ---');
     for (const [label, party] of compositions) {
-        await run(`${label} vs 10 goblins`, party, 'goblin', 10, 1, 5);
+        await findGoblinCapacity(label, party);
     }
 
     console.log('--- vs a young dragon ---');
-    for (const [label, party] of compositions) {
-        const partySpecs = party.map(k => ARCHETYPES[k]);
+    async function fightDragon(partySpecs, trials, maxTicks) {
         const enemyDefs = [namedMonster('dragon_young', 'Young Dragon')];
         const outcomes = [];
-        for (let t = 0; t < 5; t++) {
-            outcomes.push(await evalWithRecovery(({ partySpecs, enemyDefs }) => window.aiSim.runFightMixed(partySpecs, enemyDefs, { maxTicks: 700 }), { partySpecs, enemyDefs }));
+        for (let t = 0; t < trials; t++) {
+            outcomes.push(await evalWithRecovery(({ partySpecs, enemyDefs, maxTicks }) => window.aiSim.runFightMixed(partySpecs, enemyDefs, { maxTicks }), { partySpecs, enemyDefs, maxTicks }));
         }
         const winRate = outcomes.filter(o => o.winner === 'party').length / outcomes.length;
         const avgHpLeft = outcomes.reduce((a, o) => a + o.partyHpFractionRemaining, 0) / outcomes.length;
         const avgTicks = outcomes.reduce((a, o) => a + o.ticks, 0) / outcomes.length;
-        console.log(`${(label + ' vs young dragon').padEnd(55)} winRate=${(winRate * 100).toFixed(0).padStart(3)}%  avgPartyHpLeft=${(avgHpLeft * 100).toFixed(0).padStart(3)}%  avgTicks=${avgTicks.toFixed(0)}`);
-        results.push({ label: label + ' vs young dragon', winRate, avgHpLeft, avgTicks, n: 5 });
+        return { winRate, avgHpLeft, avgTicks };
+    }
+    for (const [label, party] of compositions) {
+        const partySpecs = party.map(k => ARCHETYPES[k]);
+        const r = await fightDragon(partySpecs, 5, 700);
+        console.log(`${(label + ' vs young dragon').padEnd(55)} winRate=${(r.winRate * 100).toFixed(0).padStart(3)}%  avgPartyHpLeft=${(r.avgHpLeft * 100).toFixed(0).padStart(3)}%  avgTicks=${r.avgTicks.toFixed(0)}`);
+        results.push({ label: label + ' vs young dragon', ...r, n: 5 });
+    }
+
+    // What level does the (balanced) party need to be to beat the dragon,
+    // now that it's actually fixed (enough mana for one cast, and grounds
+    // for melee once out of mana instead of kiting forever)? Scale all four
+    // core archetypes up in class levels together, dumping any extra skill
+    // picks beyond each one's original build into health (a conservative
+    // scaling — not cherry-picking mana/damage ranks to make this look better).
+    function scaledBalancedParty(level) {
+        const scale = (base, cls) => ({
+            ...base,
+            classLevels: Array(level).fill(cls),
+            skillPicks: [...base.skillPicks, ...Array(Math.max(0, level - 5)).fill('health')],
+        });
+        return [
+            scale(ARCHETYPES.elf_wizard, 'wizard'),
+            scale(ARCHETYPES.goblin_rogue, 'rogue'),
+            scale(ARCHETYPES.dwarf_fighter, 'fighter'),
+            scale(ARCHETYPES.human_cleric, 'cleric'),
+        ];
+    }
+    console.log('--- what level does the balanced party need to beat the young dragon? ---');
+    for (const level of [5, 10, 15, 20, 25, 30]) {
+        const r = await fightDragon(scaledBalancedParty(level), 5, 700);
+        console.log(`balanced party @ lvl ${String(level).padEnd(3)} vs young dragon`.padEnd(55) + `winRate=${(r.winRate * 100).toFixed(0).padStart(3)}%  avgPartyHpLeft=${(r.avgHpLeft * 100).toFixed(0).padStart(3)}%  avgTicks=${r.avgTicks.toFixed(0)}`);
+        if (r.winRate >= 0.75) { console.log(`  -> reliably wins from level ${level}`); break; }
     }
 
     console.log('\n=== AI TWEAK: focus-fire lowest-HP target vs baseline targeting ===');
