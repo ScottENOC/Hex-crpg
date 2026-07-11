@@ -387,18 +387,28 @@ async function bootPage(browser) {
 
 async function main() {
     const serverProc = await ensureServer();
-    const browser = await chromium.launch({ headless: true });
+    let browser = await chromium.launch({ headless: true });
     let page = await bootPage(browser);
 
-    // Wraps a page.evaluate call; on a crashed/closed page, boots a
-    // replacement (once) and retries instead of aborting the whole run.
+    // Wraps a page.evaluate call; on a crashed/closed page (or, worse, a
+    // dead browser process entirely — bootPage's own newPage() call then
+    // also throws, which previously went uncaught and silently killed the
+    // whole harness mid-run), relaunches whatever's actually dead and
+    // retries once instead of aborting.
     async function evalWithRecovery(fn, arg) {
         try {
             return await page.evaluate(fn, arg);
         } catch (e) {
-            if (!/closed|crash/i.test(e.message)) throw e;
+            if (!/closed|crash|disconnected|Target page/i.test(e.message)) throw e;
             console.log(`  [page died: ${e.message} — rebooting and retrying]`);
-            page = await bootPage(browser);
+            try {
+                page = await bootPage(browser);
+            } catch (e2) {
+                console.log(`  [browser also died: ${e2.message} — relaunching browser too]`);
+                try { await browser.close(); } catch (e3) { /* already dead */ }
+                browser = await chromium.launch({ headless: true });
+                page = await bootPage(browser);
+            }
             return await page.evaluate(fn, arg);
         }
     }
