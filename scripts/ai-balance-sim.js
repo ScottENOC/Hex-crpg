@@ -228,6 +228,27 @@ const ARCHETYPES = {
         ],
         equipment: WEAPON_SETS.fighter,
     },
+    // Fights unarmed — unarmed_dmg is a no-op in the current damage formula
+    // (resolveAttack keys off `${weapon.id}_dmg`, and there's no weapon to
+    // key off of unarmed), so a monk's real damage scaling has to come from
+    // the generic strength-tree 'meleeDamage' skill instead. Left off any
+    // reaction skills (trip_reaction/deflect_arrows) for the same reason as
+    // the fighter archetypes above.
+    human_monk: {
+        name: 'Human Monk', race: 'human', classLevels: Array(5).fill('monk'),
+        skillPicks: ['unarmed_hit', 'unarmed_dmg', 'swift_step', 'agile_climber', 'meleeDamage', 'meleeDamage', 'health', 'health'],
+        equipment: [],
+    },
+    // Gish: fighter durability/melee + a wizard's firebolt as backup ranged
+    // burst. Mirrors human_paladin's shape (3 fighter levels + 2 caster
+    // levels) but with wizard instead of cleric.
+    elf_spellblade: {
+        name: 'Elf Spellblade (wizard+fighter)', race: 'elf',
+        classLevels: [...Array(3).fill('fighter'), ...Array(2).fill('wizard')],
+        skillPicks: ['sword_hit', 'sword_dmg', 'health', 'learn_firebolt', 'arcane_mana'],
+        equipment: ['sword', 'medium_armor'],
+        spells: [{ baseId: 'firebolt' }],
+    },
 };
 
 // Weapon-scaling matrix: for each weapon, build a level-10 fighter whose
@@ -256,10 +277,31 @@ function enemySquad(type, count, healthRank) {
     }));
 }
 
-async function main() {
-    const serverProc = await ensureServer();
-    const browser = await chromium.launch({ headless: true });
+// customSkills: null keeps the monster template's own hand-tuned skills
+// (createMonster replaces rather than merges skills when customSkills is
+// given) — needed for the dragon templates, whose firebolt_hit/arcane_mana
+// skills back the mana pool their pre-baked Dragon Breath createdSpells
+// entry draws from; passing a healthRank override here would silently
+// leave them unable to actually cast it.
+function namedMonster(type, name) {
+    return { name: name || type, race: null, classLevels: null, __monster: { type, customSkills: null } };
+}
+
+// Boots a fresh page and installs window.aiSim.runFightMixed on it. Split
+// out of main() so a crashed/closed page (long sim runs accumulate a lot of
+// combat-log/floating-text/DOM state across hundreds of fights in one tab —
+// this harness has hit "Target page, context or browser has been closed"
+// after ~70 fights in a single session) can be transparently replaced
+// mid-run instead of losing the whole harness invocation.
+async function bootPage(browser) {
     const page = await browser.newPage();
+    // The combat log calls console.log for every hit/miss/kill message —
+    // across hundreds of headless fights in one tab that's tens of
+    // thousands of CDP console events, which appears to be what eventually
+    // crashes the tab ("Target page, context or browser has been closed").
+    // Silencing it before any game code runs is a pure perf/stability win
+    // with no behavioral effect (the harness never reads console output).
+    await page.addInitScript(() => { window.console.log = () => {}; });
     await page.goto(BASE_URL + '/');
     // Bootstrap the engine exactly like tests/helpers.js's createCharacter,
     // then hand off to our own scenario code — we don't need the resulting
@@ -340,6 +382,26 @@ async function main() {
             };
         };
     });
+    return page;
+}
+
+async function main() {
+    const serverProc = await ensureServer();
+    const browser = await chromium.launch({ headless: true });
+    let page = await bootPage(browser);
+
+    // Wraps a page.evaluate call; on a crashed/closed page, boots a
+    // replacement (once) and retries instead of aborting the whole run.
+    async function evalWithRecovery(fn, arg) {
+        try {
+            return await page.evaluate(fn, arg);
+        } catch (e) {
+            if (!/closed|crash/i.test(e.message)) throw e;
+            console.log(`  [page died: ${e.message} — rebooting and retrying]`);
+            page = await bootPage(browser);
+            return await page.evaluate(fn, arg);
+        }
+    }
 
     const results = [];
     async function run(label, partyKeys, enemyType, enemyCount, healthRank, trials) {
@@ -348,7 +410,7 @@ async function main() {
         for (let t = 0; t < trials; t++) {
             const partySpecs = partyKeys.map(k => ARCHETYPES[k]);
             const enemyDefs = enemySquad(enemyType, enemyCount, healthRank);
-            const r = await page.evaluate(({ partySpecs, enemyDefs }) => window.aiSim.runFightMixed(partySpecs, enemyDefs), { partySpecs, enemyDefs });
+            const r = await evalWithRecovery(({ partySpecs, enemyDefs }) => window.aiSim.runFightMixed(partySpecs, enemyDefs), { partySpecs, enemyDefs });
             outcomes.push(r);
         }
         const winRate = outcomes.filter(o => o.winner === 'party').length / outcomes.length;
@@ -411,6 +473,39 @@ async function main() {
     console.log('\n--- same late-game weapon builds, vs a single tougher orc (healthRank=3) ---');
     for (const weapon of ['sword', 'axe', 'spear', 'club', 'dagger', 'bow']) {
         await run(`lvl10 fighter w/ ${weapon} vs 1 tough orc`, [`__lvl10_${weapon}`], 'orc', 1, 3, 6);
+    }
+
+    console.log('\n=== PARTY COMPOSITION SHOWDOWN (all four parties vs the same encounters) ===');
+    const balancedParty = fullParty; // elf_wizard, goblin_rogue, dwarf_fighter, human_cleric
+    const fourFighters = ['dwarf_fighter', 'dwarf_fighter', 'dwarf_fighter', 'dwarf_fighter'];
+    const fourWizards = ['elf_wizard', 'elf_wizard', 'elf_wizard', 'elf_wizard'];
+    const metaParty = ['elf_ranger', 'human_monk', 'human_paladin', 'elf_spellblade'];
+
+    const compositions = [
+        ['balanced (wizard/rogue/fighter/cleric)', balancedParty],
+        ['4 fighters', fourFighters],
+        ['4 wizards', fourWizards],
+        ['meta (ranger/monk/paladin/spellblade)', metaParty],
+    ];
+
+    console.log('--- vs 10 goblins ---');
+    for (const [label, party] of compositions) {
+        await run(`${label} vs 10 goblins`, party, 'goblin', 10, 1, 5);
+    }
+
+    console.log('--- vs a young dragon ---');
+    for (const [label, party] of compositions) {
+        const partySpecs = party.map(k => ARCHETYPES[k]);
+        const enemyDefs = [namedMonster('dragon_young', 'Young Dragon')];
+        const outcomes = [];
+        for (let t = 0; t < 5; t++) {
+            outcomes.push(await evalWithRecovery(({ partySpecs, enemyDefs }) => window.aiSim.runFightMixed(partySpecs, enemyDefs, { maxTicks: 700 }), { partySpecs, enemyDefs }));
+        }
+        const winRate = outcomes.filter(o => o.winner === 'party').length / outcomes.length;
+        const avgHpLeft = outcomes.reduce((a, o) => a + o.partyHpFractionRemaining, 0) / outcomes.length;
+        const avgTicks = outcomes.reduce((a, o) => a + o.ticks, 0) / outcomes.length;
+        console.log(`${(label + ' vs young dragon').padEnd(55)} winRate=${(winRate * 100).toFixed(0).padStart(3)}%  avgPartyHpLeft=${(avgHpLeft * 100).toFixed(0).padStart(3)}%  avgTicks=${avgTicks.toFixed(0)}`);
+        results.push({ label: label + ' vs young dragon', winRate, avgHpLeft, avgTicks, n: 5 });
     }
 
     console.log('\n=== AI TWEAK: focus-fire lowest-HP target vs baseline targeting ===');
