@@ -53,6 +53,14 @@ function loadWorldMap() {
             // row6/col4, row6/col7).
             window.worldMapWidth = 16;
             window.worldMapHeight = 16;
+            // A real mountain range in the north-west, big enough to eventually
+            // hold a dwarven kingdom (not built yet — this just reserves the
+            // ground so it lands somewhere sensible whenever that content
+            // exists), and a strip of open ocean along the east edge, past the
+            // orc-held lands — "a wall a few tiles deep," not a wasted expanse
+            // of empty sea tiles.
+            const MOUNTAIN_COLS = 4, MOUNTAIN_ROWS = 5; // NW corner block, clear of Silverhart (row2,col6)/Millbrook (row3,col6)
+            const OCEAN_COLS = 2; // eastmost columns
             window.worldMapData = [];
             for (let y = 0; y < 16; y++) {
                 const row = [];
@@ -62,12 +70,18 @@ function loadWorldMap() {
                     // hills/mountains for flavor, using the same pseudoRandom
                     // hash the local terrain generators already use.
                     const isOrcLands = x >= 10;
+                    const isOcean = x >= 16 - OCEAN_COLS;
+                    const isMountainRange = !isOrcLands && x < MOUNTAIN_COLS && y < MOUNTAIN_ROWS;
                     let t = 'G';
                     const rough = window.pseudoRandom(x * 2.3 + 5, y * 1.7 + 3);
-                    if (isOrcLands && rough > 0.8) t = 'M';
+                    if (isOcean) t = 'W';
+                    else if (isMountainRange) t = 'M';
+                    else if (isOrcLands && rough > 0.8) t = 'M';
                     else if (isOrcLands && rough > 0.6) t = 'H';
-                    else if (!isOrcLands && y <= 1) t = 'M'; // northern range behind the capital
-                    row.push({ t, f: '', o: isOrcLands ? 'o' : 'h', p: 0, n: '' });
+                    // Unclaimed geography (ocean/mountains) carries no faction
+                    // color — it isn't anyone's territory yet.
+                    const o = (isOcean || isMountainRange) ? '' : (isOrcLands ? 'o' : 'h');
+                    row.push({ t, f: '', o, p: 0, n: '' });
                 }
                 window.worldMapData.push(row);
             }
@@ -96,9 +110,13 @@ function loadWorldMap() {
             // side (north) of the crossroads, just nudged off the settlement
             // row for legibility. Bends south toward row 6 for two columns
             // at the human/orc border crossing, mirroring the local river's
-            // own bend before it levels back out.
+            // own bend before it levels back out. The west end bends up into
+            // the new NW mountain range (its real source) and the east end
+            // now runs straight into the new ocean strip (its mouth) — a
+            // river that actually flows from mountain to sea, not just an
+            // artistic embellishment beyond the mapped local area.
             window.worldRiverPath = [
-                { x: 0, y: 5 }, { x: 1, y: 5 }, { x: 2, y: 5 }, { x: 3, y: 5 }, { x: 4, y: 5 },
+                { x: 0, y: 4 }, { x: 1, y: 5 }, { x: 2, y: 5 }, { x: 3, y: 5 }, { x: 4, y: 5 },
                 { x: 5, y: 5 }, { x: 6, y: 5 }, { x: 7, y: 5 }, { x: 8, y: 5 }, { x: 9, y: 5 },
                 { x: 10, y: 5 }, { x: 11, y: 6 }, { x: 12, y: 6 }, { x: 13, y: 5 }, { x: 14, y: 5 }, { x: 15, y: 5 }
             ];
@@ -298,20 +316,47 @@ function drawWorldHex(ctx, x, y, size, cell, q, r) {
     ctx.strokeStyle = "rgba(0,0,0,0.1)";
     ctx.stroke();
 
-    // Country border: re-stroke this hex's outline in its own faction's
-    // color whenever at least one real neighbor belongs to a different,
-    // non-empty faction — reads as a colored line along the border between
-    // territories (each side draws its own edge in its own color).
+    // Country border: stroke only the specific edge(s) that actually face a
+    // different, non-empty faction — not the hex's whole outline, which
+    // would paint a solid colored ring around every border hex regardless
+    // of which side(s) the border was actually on.
     if (cell.o) {
-        const isBorder = getWorldNeighbors(q, r).some(n => {
+        const corners = [];
+        for (let i = 0; i < 6; i++) {
+            const angle = Math.PI / 180 * (60 * i);
+            corners.push({ x: x + size * Math.cos(angle), y: y + size * Math.sin(angle) });
+        }
+        const borderNeighbors = getWorldNeighbors(q, r).filter(n => {
             const row = window.worldMapData[n.y];
             const neighborCell = row && row[n.x];
             return neighborCell && neighborCell.o && neighborCell.o !== cell.o;
         });
-        if (isBorder) {
+        if (borderNeighbors.length) {
             ctx.lineWidth = Math.max(1, 2.5 * window.worldCameraZoom);
             ctx.strokeStyle = factionColors[cell.o] || 'white';
-            ctx.stroke();
+            borderNeighbors.forEach(n => {
+                // Match each bordering neighbor to whichever hex edge (pair
+                // of adjacent corners) actually faces it, by comparing the
+                // neighbor's real screen-space direction against each edge
+                // midpoint's direction from this hex's center — robust
+                // against the offset-direction table's exact ordering,
+                // since it's driven by real pixel geometry, not assumed
+                // index alignment.
+                const { x: nx, y: ny } = worldHexToPixel(n.x, n.y);
+                const toNeighborAngle = Math.atan2(ny - y, nx - x);
+                let bestEdge = 0, bestDiff = Infinity;
+                for (let i = 0; i < 6; i++) {
+                    const mid = { x: (corners[i].x + corners[(i + 1) % 6].x) / 2, y: (corners[i].y + corners[(i + 1) % 6].y) / 2 };
+                    const edgeAngle = Math.atan2(mid.y - y, mid.x - x);
+                    let diff = Math.abs(edgeAngle - toNeighborAngle);
+                    if (diff > Math.PI) diff = 2 * Math.PI - diff;
+                    if (diff < bestDiff) { bestDiff = diff; bestEdge = i; }
+                }
+                ctx.beginPath();
+                ctx.moveTo(corners[bestEdge].x, corners[bestEdge].y);
+                ctx.lineTo(corners[(bestEdge + 1) % 6].x, corners[(bestEdge + 1) % 6].y);
+                ctx.stroke();
+            });
         }
     }
 
@@ -577,3 +622,6 @@ window.renderWorldMap = renderWorldMap;
 window.initWorldMapEvents = initWorldMapEvents;
 window.getWorldCellAtScreenPos = getWorldCellAtScreenPos;
 window.selectWorldMapCell = selectWorldMapCell;
+window.drawWorldHex = drawWorldHex;
+window.worldHexToPixel = worldHexToPixel;
+window.getWorldNeighbors = getWorldNeighbors;

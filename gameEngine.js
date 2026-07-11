@@ -1501,6 +1501,15 @@ function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
             ctx.drawImage(window.gameVisuals.monsterDefault, x - size / 2, y - size / 2 + flyOff, size, size);
             return;
         }
+        // Same reasoning as goblin above — orc players/companions have no
+        // layered CHAR_CONFIG rig either, so reuse the orc monster's own
+        // flat sprite (window.gameVisuals.orcBase, already loaded for orc
+        // monster rendering) instead of the generic circle.
+        if (e.race === 'orc' && window.gameVisuals?.orcBase?.complete) {
+            const size = window.hexSize * 1.5 * z;
+            ctx.drawImage(window.gameVisuals.orcBase, x - size / 2, y - size / 2 + flyOff, size, size);
+            return;
+        }
         // Fallback: draw a colored circle so the entity is always visible
         const r = window.hexSize * 0.45 * z;
         ctx.beginPath();
@@ -2737,6 +2746,10 @@ function runTickInternal(isSleepCycle = false, skipUI = false, tickMultiplier = 
         readyEntities.sort((a, b) => (b.timePoints !== a.timePoints) ? (b.timePoints - a.timePoints) : (Math.random() - 0.5));
         window.currentTurnEntity = readyEntities[0];
         window.currentTurnEntity.parriesRemaining = 3;
+        // Snapshot for orc_momentum (resolveAttack) — bonus damage on an
+        // attack made after covering real ground this turn, compared
+        // against wherever the entity started it.
+        window.currentTurnEntity.turnStartHex = { ...window.currentTurnEntity.hex };
         takeTurn(window.currentTurnEntity);
     } else {
         // Both per-entity spell-effect scans below (mySpells by casterName,
@@ -4871,6 +4884,19 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   if (attacker.skills?.goblin_pack_hunter) {
       const flanked = window.entities.some(e => e.alive && e !== attacker && e.side === attacker.side && window.distance(e.hex, target.hex) <= 1);
       if (flanked) dmg += attacker.skills.goblin_pack_hunter * 2;
+  }
+
+  // ORC BRUTE STRENGTH — flat extra melee damage per rank
+  if (attacker.skills?.orc_brute_strength) dmg += attacker.skills.orc_brute_strength * 2;
+
+  // ORC FEROCITY — extra damage while at or below half HP
+  if (attacker.skills?.orc_ferocity && attacker.hp <= attacker.maxHp / 2) dmg += 4;
+
+  // ORC MOMENTUM — extra damage per rank on an attack made after covering
+  // real ground (2+ hexes) since this turn started (see turnStartHex,
+  // set when an entity's turn begins).
+  if (attacker.skills?.orc_momentum && attacker.turnStartHex && window.distance(attacker.hex, attacker.turnStartHex) >= 2) {
+      dmg += attacker.skills.orc_momentum * 3;
   }
 
   // SNEAK ATTACK / BACKSTAB

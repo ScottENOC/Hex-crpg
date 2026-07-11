@@ -7,6 +7,13 @@ const terrainTypes = {
     'sand': { name: 'Sand', color: '#edc9af', moveCostMult: 1.5, hitBonus: 0, dodgeBonus: 0, stealthBonus: 0 },
     'swamp': { name: 'Swamp', color: '#4f7942', moveCostMult: 2, hitBonus: -5, dodgeBonus: 0, stealthBonus: 30 },
     'water': { name: 'Water', color: '#4169e1', moveCostMult: 2, hitBonus: -10, dodgeBonus: -5, stealthBonus: -20 },
+    // Genuinely impassable (unlike shallow 'water', which just slows you
+    // down) — the sea itself, and the world map's ocean edge in particular.
+    // Not literally 'Wall' so it never hits the hardcoded impassable-wall
+    // checks, and its name is never added to isOpaqueWallName (hexMap.js)
+    // so it doesn't block line of sight — you can see across open water,
+    // you just can't walk (or wade) into it.
+    'deep_water': { name: 'Deep Water', color: '#0d2b52', moveCostMult: 999, hitBonus: -10, dodgeBonus: -10, stealthBonus: -20, impassable: true },
     'wall': { name: 'Wall', color: '#696969', moveCostMult: 2, hitBonus: 5, dodgeBonus: 5, stealthBonus: 0, impassable: true },
     'cave_floor': { name: 'Cave Floor', color: '#3e3e3e', moveCostMult: 1, hitBonus: 0, dodgeBonus: 0, stealthBonus: 0 },
     'wood_floor': { name: 'Wood Floor', color: '#8d5a2b', moveCostMult: 1, hitBonus: 0, dodgeBonus: 0, stealthBonus: 0 },

@@ -95,10 +95,11 @@ test.describe('World map scale', () => {
             const overlapsSettlement = path.some(pt => window.worldMapData[pt.y]?.[pt.x]?.n);
             return { rows, overlapsSettlement };
         });
-        // Hollowmere is row 6 — the river should be adjacent (row 5-6), not
-        // the old row 4/5 which was 1-2 rows further off than the real
-        // local stream coordinate implies.
-        result.rows.forEach(r => expect(r).toBeGreaterThanOrEqual(5));
+        // Hollowmere is row 6 — the river should run adjacent to it (row
+        // 5-6) for almost its whole length, with a single-hex bend up to
+        // row 4 at its western end where it meets its mountain source
+        // (see worldRiverPath's comment, worldMap.js).
+        result.rows.forEach(r => expect(r).toBeGreaterThanOrEqual(4));
         result.rows.forEach(r => expect(r).toBeLessThanOrEqual(6));
         expect(result.overlapsSettlement).toBe(false);
     });

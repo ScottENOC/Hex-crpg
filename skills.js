@@ -543,6 +543,46 @@ const skills = {
         maxRanks: 3,
         apply: (player) => {}
     },
+    'orc_brute_strength': {
+        name: 'Brute Strength',
+        description: 'Deals +2 melee damage per rank.',
+        tree: 'orc',
+        maxRanks: 3,
+        apply: (player) => {}
+    },
+    'orc_thick_hide': {
+        name: 'Thick Hide',
+        description: 'Reduces incoming damage by 1 per rank.',
+        tree: 'orc',
+        maxRanks: 2,
+        apply: (player) => {
+            player.baseReduction = (player.baseReduction || 0) + 1;
+        }
+    },
+    'orc_ferocity': {
+        name: 'Ferocity',
+        description: 'Deals +4 damage while at or below half HP — an orc fights hardest when it hurts.',
+        tree: 'orc',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+    'orc_momentum': {
+        name: 'Momentum',
+        description: 'Deals +3 damage per rank on an attack made after covering real ground (2+ hexes) since the start of the turn.',
+        tree: 'orc',
+        maxRanks: 2,
+        apply: (player) => {}
+    },
+    'orc_relentless': {
+        name: 'Relentless',
+        description: 'Increases current and max HP by 8 per rank.',
+        tree: 'orc',
+        maxRanks: 2,
+        apply: (player) => {
+            player.hp += 8;
+            player.maxHp += 8;
+        }
+    },
     'cleric_trigger_damage': {
         name: 'Divine Retribution',
         description: 'Whenever your trigger spells (Divine Silence, Sanctuary) activate, the target takes 1 damage immediately per rank.',

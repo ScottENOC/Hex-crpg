@@ -1370,6 +1370,22 @@ window.npcDialogueTrees = {
         const trollAlive = window.entities.some(e => e.isOrcStrongholdTroll && e.alive);
 
         if (quest && quest.status === 'completed') {
+            const orcRep = window.factions?.orc_raiders?.standing || 0;
+            if (window.party.some(p => p.name === window.campaign2OrcWarlord.name)) {
+                window.showDialogue(npc, "Hold's still standing. What is it?", [{ label: "Nothing, carry on.", action: () => {} }]);
+                return;
+            }
+            // A much higher bar than the trader's (20) — joining the party
+            // outright is a bigger trust ask than just doing business, the
+            // same "deeper trust, deeper unlock" shape chief_skarnub's
+            // stay-permanently offer uses relative to the trader's own gate.
+            if (orcRep >= 40) {
+                window.showDialogue(npc, "Skarnak's Hold remembers who dealt with the troll, and Kesh trades with you properly now — but I've had my fill of sitting behind a stockade counting raids. There's more out there worth breaking than trolls. Room for a warlord at your back?", [
+                    { label: "Come with me.", action: () => window.recruitOrcCompanion() },
+                    { label: "Not yet.", action: () => {} }
+                ]);
+                return;
+            }
             window.showDialogue(npc, "Skarnak's Hold remembers who dealt with the troll. Kesh will trade with you properly now.", [{ label: "Good to know.", action: () => {} }]);
             return;
         }
@@ -1841,15 +1857,18 @@ window.npcDialogueTrees = {
         }
     },
     marta_wynfield: (npc) => {
-        // A goblin player is the very thing Hollowmere's watching the west
-        // road for — Marta won't deal with the tribe's own kin on sight, but
-        // (mirroring how a human player can win the tribe's trust via
-        // diplomacy) offers a way to earn hers: report on your own chief's
-        // plans. See resolveGoblinSpyForHumans below — completing it flips
-        // window.goblinVouchedByMarta, which is what actually opens up
-        // Silverhart (silverhart_queen) and human commerce
-        // (isShunnedByHumanCommerce, factions.js).
-        if (window.isPlayerGoblin && window.isPlayerGoblin()) {
+        // A goblin OR orc player is the very thing Hollowmere's watching the
+        // west road/border for — Marta won't deal with either's own kin on
+        // sight, but (mirroring how a human player can win a greenskin
+        // faction's trust via diplomacy) offers a way to earn hers: report
+        // on your own leader's plans. See resolveGoblinSpyForHumans below —
+        // completing it flips window.goblinVouchedByMarta, which is what
+        // actually opens up Silverhart (silverhart_queen) and human
+        // commerce (isShunnedByHumanCommerce, factions.js).
+        if (window.isPlayerGreenskin && window.isPlayerGreenskin()) {
+            const isOrc = window.isPlayerOrc && window.isPlayerOrc();
+            const leaderNoun = isOrc ? 'warlord' : 'chief';
+            const factionNoun = isOrc ? 'the orc raiders pressing the border' : 'the Skarn-tooth tribe';
             if (window.goblinVouchedByMarta) {
                 window.showDialogue(npc, "I still don't sleep easy seeing you on this street, but you kept your word to us. That's more than most of your lot manage — or most of ours, some days.", [{ label: "...", action: () => {} }]);
                 return;
@@ -1857,7 +1876,7 @@ window.npcDialogueTrees = {
             if (!window.questLog) window.questLog = [];
             const spyQuest = window.questLog.find(q => q.id === 'goblin_spy_for_humans');
             if (spyQuest && spyQuest.status === 'active') {
-                window.showDialogue(npc, "Well? What word do you bring of your chief's true plans?", [
+                window.showDialogue(npc, `Well? What word do you bring of your ${leaderNoun}'s true plans?`, [
                     { label: "They mean Hollowmere no harm, so far as I've seen.", action: () => window.resolveGoblinSpyForHumans() },
                     { label: "Not yet — give me more time.", action: () => {} }
                 ]);
@@ -1865,11 +1884,11 @@ window.npcDialogueTrees = {
             }
             window.showDialogue(npc, "A greenskin, bold as you like, walking Hollowmere's own streets? Give me one reason the Watch shouldn't drag you out right now.", [
                 {
-                    label: "I'll bring you word of my own chief's plans, if that buys me anything.",
+                    label: `I'll bring you word of my own ${leaderNoun}'s plans, if that buys me anything.`,
                     action: () => {
                         window.questLog.push({
                             id: 'goblin_spy_for_humans', title: 'Prove Your Worth', giver: 'Elder Marta Wynfield', status: 'active',
-                            description: "Learn what the Skarn-tooth tribe truly intends and report back to Elder Marta."
+                            description: `Learn what ${factionNoun} truly intends and report back to Elder Marta.`
                         });
                         window.showMessage('Quest added: Prove Your Worth.');
                     }
@@ -2023,13 +2042,13 @@ window.npcDialogueTrees = {
         // once Elder Marta has actually vouched for them (see
         // resolveGoblinSpyForHumans above), the same convergence a human
         // player reaches with the tribe via diplomacy applies in reverse.
-        if (window.isPlayerGoblin && window.isPlayerGoblin() && !window.goblinVouchedByMarta) {
+        if (window.isPlayerGreenskin && window.isPlayerGreenskin() && !window.goblinVouchedByMarta) {
             window.showDialogue(npc, "Guards! Get that thing out of my hall before I have it removed the hard way.", [{ label: "...", action: () => {} }]);
             return;
         }
         const standing = window.factions?.silverhart_kingdom?.standing ?? 0;
         let line;
-        if (window.isPlayerGoblin && window.isPlayerGoblin()) {
+        if (window.isPlayerGreenskin && window.isPlayerGreenskin()) {
             line = "Elder Marta vouches for you, of all things. I still don't trust a greenskin in my hall, but I trust her judgment more than I distrust you. Speak your piece.";
         } else if (standing >= 40) {
             line = "So — you're the one Reddale and Hollowmere keep writing to me about. Good work, whatever you've been doing out there. The crown remembers those who make its work easier.";
@@ -2659,6 +2678,29 @@ window.npcDialogueTrees = {
             options.push({
                 label: "(Say nothing — you don't need it explained.)",
                 action: () => window.showDialogue(npc, "Right. You'd know better than these humans ever will.", [{ label: "...", action: () => {} }])
+            });
+        }
+        options.push({ label: "Never mind.", action: () => {} });
+        window.showDialogue(npc, "Yeah?", options);
+    },
+    companion_orc_warlord: (npc) => {
+        const attitude = window.companionAttitude?.[window.campaign2OrcWarlord.name] ?? 60;
+        const isOrc = window.isPlayerOrc && window.isPlayerOrc();
+        const options = [];
+        options.push({
+            label: "How's Skarnak's Hold holding up without you?",
+            action: () => window.showDialogue(npc, attitude >= 70
+                ? "Standing. Kesh runs the trading, the guards know their posts — a hold doesn't need its warlord standing over every hex of it once it's built right."
+                : "Standing, last I heard. Whether it stays that way without me watching the wall is a different question.", [{ label: "Fair enough.", action: () => {} }])
+        });
+        options.push({
+            label: "Why leave a stronghold you built to follow me?",
+            action: () => window.showDialogue(npc, "A stockade full of scouts and cattle-counting isn't what I bled to build a name doing. You're headed for something worth breaking. I'd rather be swinging than counting raids from behind a wall.", [{ label: "...", action: () => {} }])
+        });
+        if (isOrc) {
+            options.push({
+                label: "(Say nothing — you understand each other.)",
+                action: () => window.showDialogue(npc, "Good. Less explaining, more fighting.", [{ label: "...", action: () => {} }])
             });
         }
         options.push({ label: "Never mind.", action: () => {} });
@@ -3673,7 +3715,12 @@ function resolveGoblinSpyForHumans() {
     quest.status = 'completed';
     window.goblinVouchedByMarta = true;
     window.adjustReputation(window.factions.silverhart_kingdom, 20, 20);
-    window.adjustReputation(window.factions.goblin_tribe, -15, 15);
+    // Betraying your own kind's plans costs standing with whichever
+    // greenskin faction is actually yours — orc for an orc player, goblin
+    // for a goblin player (adjustReputation's own cascade then bleeds a
+    // dampened fraction of a goblin hit onto orc_raiders too either way).
+    const ownFaction = (window.isPlayerOrc && window.isPlayerOrc()) ? window.factions.orc_raiders : window.factions.goblin_tribe;
+    window.adjustReputation(ownFaction, -15, 15);
     if (window.gainExp) window.gainExp(150);
     window.showMessage('Elder Marta nods slowly. "Begrudgingly... you\'ve earned a little trust. Don\'t make me regret it." Quest complete: Prove Your Worth.');
 }
@@ -3776,6 +3823,55 @@ function recruitGoblinCompanion() {
     window.renderEntities();
 }
 window.recruitGoblinCompanion = recruitGoblinCompanion;
+
+// Warlord Grukk Ironhide: the orc mirror of recruitGoblinCompanion — only
+// offered once orc_raiders' standing clears a high bar (see orc_warlord
+// above), built through createCharacterData's 'orc' race path the same way
+// (orc is a real playable race, unlike the plain 'orc' monster template he
+// spawned from).
+function recruitOrcCompanion() {
+    const name = window.campaign2OrcWarlord.name;
+    if (window.party.some(p => p.name === name)) return; // already joined
+    const warlordEnt = window.entities.find(e => e.name === name);
+    if (!warlordEnt) return;
+
+    const companion = window.createCharacterData('orc', 'fighter', name, 'male', window.campaign2OrcWarlord.voice);
+    ['axe_hit', 'axe_dmg', 'heavy_armor_training', 'orc_brute_strength'].forEach(skillKey => {
+        const skill = window.skills[skillKey];
+        if (!skill) return;
+        if (companion.attributes[skill.tree] > 0) companion.attributes[skill.tree]--;
+        else if (companion.attributes.wildcard > 0) companion.attributes.wildcard--;
+        companion.skills[skillKey] = (companion.skills[skillKey] || 0) + 1;
+    });
+    if (companion.skills.health) {
+        const bonus = 10 * companion.skills.health;
+        companion.hp += bonus; companion.maxHp += bonus;
+    }
+    companion.inventory.push('axe', 'heavy_armor');
+    companion.equipped.weapon = 'axe';
+    companion.equipped.armor = 'heavy_armor';
+    companion.factionId = 'orc_raiders';
+    companion.dialogueId = 'companion_orc_warlord';
+
+    window.party.push(companion);
+    const ent = new window.Entity(companion.name, '#7a3a1f', warlordEnt.hex, (companion.attributes.agility || 10) + 10);
+    ent.side = 'player';
+    Object.assign(ent, companion);
+    ent.hex = warlordEnt.hex;
+    ent.visualQ = ent.hex.q; ent.visualR = ent.hex.r;
+    ent.startQ = ent.hex.q; ent.startR = ent.hex.r;
+    ent.destination = null; ent.moveCooldown = 0;
+
+    window.entities = window.entities.filter(e => e !== warlordEnt);
+    window.entities.push(ent);
+
+    window.companionAttitude[name] = 60;
+    if (window.updatePartyTabs) window.updatePartyTabs();
+    window.showMessage(`${name} joins your party, glad to be off garrison duty.`);
+    window.drawMap();
+    window.renderEntities();
+}
+window.recruitOrcCompanion = recruitOrcCompanion;
 
 // --- Star Fort companion reward: whichever side the player ends up on when
 // the Northwatch siege resolves (win or lose — see resolveNorthwatchSiege in

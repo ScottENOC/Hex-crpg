@@ -54,6 +54,13 @@ function seedStanding(race, playerRace) {
         if (race === 'orc') return 15;
         if (race === 'human' || race === 'elf' || race === 'dwarf') return -15;
     }
+    // Mirror of the above: an orc player is kin-adjacent to the goblins
+    // (the tribe scouts for the horde they're now playing a part of), and
+    // distrusted by the "civilized" races on sight, same as a goblin player.
+    if (playerRace === 'orc') {
+        if (race === 'goblin') return 15;
+        if (race === 'human' || race === 'elf' || race === 'dwarf') return -15;
+    }
     return 0;
 }
 
@@ -156,8 +163,18 @@ window.isGoblinAligned = function() {
 window.isPlayerGoblin = function() {
     return !!(window.party && window.party[0] && window.party[0].race === 'goblin');
 };
+// An orc player gets the exact same "outsider on sight, redeemable through
+// Prove Your Worth" treatment as a goblin player (see marta_wynfield/
+// silverhart_queen, campaign2Dialogue.js) — isPlayerGreenskin is the shared
+// predicate those checks use instead of isPlayerGoblin alone.
+window.isPlayerOrc = function() {
+    return !!(window.party && window.party[0] && window.party[0].race === 'orc');
+};
+window.isPlayerGreenskin = function() {
+    return window.isPlayerGoblin() || window.isPlayerOrc();
+};
 window.isShunnedByHumanCommerce = function() {
-    return !!(window.playerIsLich || window.isGoblinAligned() || (window.isPlayerGoblin() && !window.goblinVouchedByMarta));
+    return !!(window.playerIsLich || window.isGoblinAligned() || (window.isPlayerGreenskin() && !window.goblinVouchedByMarta));
 };
 
 window.seedStanding = seedStanding;
