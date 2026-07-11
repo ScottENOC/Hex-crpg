@@ -207,7 +207,47 @@ const ARCHETYPES = {
         skillPicks: ['bow_hit', 'bow_dmg', 'health', 'health', 'stealth_agility'],
         equipment: WEAPON_SETS.ranger,
     },
+    // High-level variant of the same dwarf fighter archetype: 10 class
+    // levels (double) instead of 5, and a much heavier skill investment
+    // (weapon skills only pushed to their real maxRanks cap — sword tops
+    // out at 1 dmg rank — with the rest sunk into health/armor/parry) —
+    // used to see whether a solo character can out-scale being outnumbered
+    // 3:1 by goblins with enough levels/gear, rather than always losing
+    // regardless of build.
+    // Deliberately no reaction skills (sword_parry etc.) — those pause combat
+    // waiting for a UI prompt (window.isPausedForReaction) that a headless
+    // aiControlled entity never answers, permanently freezing every fight
+    // afterward in the same page session. Extra picks instead go to health
+    // and armor progression.
+    dwarf_fighter_lvl10: {
+        name: 'Dwarf Fighter (lvl 10)', race: 'dwarf', classLevels: Array(10).fill('fighter'),
+        skillPicks: [
+            'sword_hit', 'sword_dmg',
+            'light_armor_training', 'medium_armor_training', 'heavy_armor_training',
+            'health', 'health', 'health', 'health', 'health', 'health', 'health', 'health',
+        ],
+        equipment: WEAPON_SETS.fighter,
+    },
 };
+
+// Weapon-scaling matrix: for each weapon, build a level-10 fighter whose
+// weapon-tree picks are pushed to that weapon's real maxRanks cap (not an
+// arbitrary number — axe's generateWeaponSkills call passes maxDmgRanks=3,
+// every other weapon here defaults to 1), with the remaining skill budget
+// sunk into health. This is the "late game investment" comparison: a
+// weapon whose _dmg skill can only ever reach rank 1 cannot out-scale one
+// that goes to rank 3, no matter how many levels you pour in.
+const WEAPON_MAX_DMG_RANKS = { sword: 1, axe: 3, spear: 1, club: 1, dagger: 1, bow: 1 };
+function highLevelWeaponFighter(weapon) {
+    const dmgRanks = WEAPON_MAX_DMG_RANKS[weapon] || 1;
+    // No reaction skills here either (see dwarf_fighter_lvl10's comment) —
+    // parry/feint stall a headless fight forever waiting on a UI prompt.
+    const picks = [`${weapon}_hit`, ...Array(dmgRanks).fill(`${weapon}_dmg`), 'health', 'health', 'health', 'health', 'health', 'health', 'health', 'heavy_armor_training'];
+    return {
+        name: `Fighter (lvl10) w/ ${weapon}`, race: 'dwarf', classLevels: Array(10).fill('fighter'),
+        skillPicks: picks, equipment: [weapon, 'medium_armor'],
+    };
+}
 
 function enemySquad(type, count, healthRank) {
     return Array.from({ length: count }, (_, i) => ({
@@ -253,6 +293,10 @@ async function main() {
             window.entities = [];
             window.isInCombat = true;
             window.currentTurnEntity = null;
+            // Defensive: a reaction skill (parry etc.) left mid-resolution
+            // from an earlier fight would otherwise freeze every fight after
+            // it for the rest of this page session.
+            window.isPausedForReaction = false;
             const party = partySpecs.map(s => window.aiSim.buildCombatant(s, 'player'));
             const enemies = enemyDefs.map((d, i) => {
                 if (d.__monster) {
@@ -351,6 +395,22 @@ async function main() {
         };
         ARCHETYPES[`__tmp_${weapon}`] = spec;
         await run(`fighter w/ ${weapon} vs 1 goblin`, [`__tmp_${weapon}`], 'goblin', 1, 1, 6);
+    }
+
+    console.log('\n=== HIGH-LEVEL SOLO vs 3 GOBLINS (does leveling/investment overcome being outnumbered 3:1?) ===');
+    await run('dwarf_fighter (lvl 5, baseline) solo vs 3 goblins', ['dwarf_fighter'], 'goblin', 3, 1, 6);
+    await run('dwarf_fighter (lvl 10, heavy invest) solo vs 3 goblins', ['dwarf_fighter_lvl10'], 'goblin', 3, 1, 6);
+    await run('dwarf_fighter (lvl 10, heavy invest) solo vs 6 goblins', ['dwarf_fighter_lvl10'], 'goblin', 6, 1, 6);
+    await run('dwarf_fighter (lvl 10, heavy invest) solo vs 3 orcs', ['dwarf_fighter_lvl10'], 'orc', 3, 2, 6);
+
+    console.log('\n=== LATE-GAME WEAPON SCALING (lvl 10 fighter, weapon skills at real maxRanks cap, vs 3 goblins) ===');
+    for (const weapon of ['sword', 'axe', 'spear', 'club', 'dagger', 'bow']) {
+        ARCHETYPES[`__lvl10_${weapon}`] = highLevelWeaponFighter(weapon);
+        await run(`lvl10 fighter w/ ${weapon} (maxRanks dmg=${WEAPON_MAX_DMG_RANKS[weapon]}) vs 3 goblins`, [`__lvl10_${weapon}`], 'goblin', 3, 1, 6);
+    }
+    console.log('\n--- same late-game weapon builds, vs a single tougher orc (healthRank=3) ---');
+    for (const weapon of ['sword', 'axe', 'spear', 'club', 'dagger', 'bow']) {
+        await run(`lvl10 fighter w/ ${weapon} vs 1 tough orc`, [`__lvl10_${weapon}`], 'orc', 1, 3, 6);
     }
 
     console.log('\n=== AI TWEAK: focus-fire lowest-HP target vs baseline targeting ===');
