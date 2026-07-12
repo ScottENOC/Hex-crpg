@@ -1457,6 +1457,7 @@ function resolveRespec(char) {
         toHitMelee: 0, toHitRanged: 0, toHitSpell: 0, passiveDodge: 0,
         parriesRemaining: 3, offhandAttackAvailable: false,
         manaCaps: { arcane: 10, divine: 10, nature: 10 },
+        maxSpellSlots: 8,
         unlockedBaseSpells: [], unlockedCastingOptions: {}, createdSpells: [],
         baseReduction: 0, lifeDrainOnMeleeHit: 0, witheringTouchStacks: 0,
         commandsUndead: false, hasSoulAnchor: false,

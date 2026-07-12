@@ -57,6 +57,11 @@ function buildNPC({ name, title, race, gender, hex, classLevels, skillPicks, equ
     ent.maxHp = 10;
     ent.applySkills(); // runs each skill's apply(this), e.g. 'health' adds +10 hp/rank
     ent.hp = ent.maxHp;
+    // AI-controlled casters build their own spellbook (base/cheapest/
+    // priciest/random variants of everything they've learned, up to
+    // maxSpellSlots) — the player builds theirs by hand via ui.js instead,
+    // so this never runs for window.player. No-ops for a non-caster.
+    if (window.autoBuildSpellsForEntity) window.autoBuildSpellsForEntity(ent);
 
     ent.equipped = { weapon: null, offhand: null, armor: null, helmet: null };
     ent.inventory = [];

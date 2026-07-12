@@ -63,25 +63,9 @@ const IN_PAGE_LIB = () => {
         ent.timePoints = 100;
         ent.aiState = 'combat';
         ent.parriesRemaining = 3;
-        // Manually "build" any requested spells (createSpell()'s job normally —
-        // see the research: unlockedBaseSpells alone does NOT make an entity
-        // cast; createdSpells is the actual castable-spell list AI reads).
-        // Zero metamagic modifiers (default range/magnitude/no extra targets) —
-        // the normal, unmodified path; metamagic is optional in this game, not
-        // required for a spell to function.
-        if (spec.spells && spec.spells.length) {
-            ent.createdSpells = ent.createdSpells || [];
-            spec.spells.forEach(s => {
-                const base = window.baseSpells[s.baseId];
-                if (!base) return;
-                ent.createdSpells.push({
-                    name: base.name, school: base.school, baseId: s.baseId,
-                    manaCost: base.baseMana, coreManaCost: base.baseMana,
-                    tpCost: 10, magnitude: base.baseMagnitude, range: base.baseRange || 6,
-                    radius: 0, extraTargets: 0, type: base.type,
-                });
-            });
-        }
+        // buildNPC (called above) already auto-builds this entity's
+        // spellbook from any learn_<spell> skill in skillPicks — see
+        // spellPlanner.js's autoBuildSpellsForEntity, wired into buildNPC.
         return ent;
     }
 

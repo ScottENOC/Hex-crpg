@@ -602,6 +602,15 @@ function createMonster(type, hex, customSkills = null, customEquipment = null, s
     // the {...template.skills} reset above.
     if (pendingArchetype) spendArchetypePoints(monster, pendingArchetype, 3);
 
+    // Auto-build a spellbook from whatever learn_<spell> skills this
+    // monster ended up with (no-op if it has none). Skipped for anything
+    // with a hand-authored fixed spell list already (dragons' Dragon
+    // Breath, boss configs applied after createMonster returns) so this
+    // never clobbers deliberately-tuned monster abilities.
+    if (window.autoBuildSpellsForEntity && (!monster.createdSpells || monster.createdSpells.length === 0)) {
+        window.autoBuildSpellsForEntity(monster);
+    }
+
     // 3. Special: Rider initialization
     if (template.isRider && template.mountType) {
         const mount = createMonster(template.mountType, hex, null, null, side);

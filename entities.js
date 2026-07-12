@@ -83,6 +83,9 @@ class Enemy extends Entity {
         this.expValue = expValue;
         this.gold = 0;
         this.inventory = [];
+        this.maxSpellSlots = 8;
+        this.manaCaps = { arcane: 10, divine: 10, nature: 10 };
+        this.unlockedCastingOptions = {};
         this.createdSpells = [];
         this.equipped = { weapon: null, offhand: null, armor: null, helmet: null, clothes: null };
         this.lastSeenTargetHex = null;

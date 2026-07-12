@@ -55,19 +55,9 @@ async function bootPage(browser) {
                 equipment: spec.equipment || [], side, factionId: null, color: 'white',
             });
             ent.aiControlled = true; ent.hasBeenSeenByPlayer = true; ent.timePoints = 100; ent.aiState = 'combat'; ent.parriesRemaining = 3;
-            if (spec.spells && spec.spells.length) {
-                ent.createdSpells = ent.createdSpells || [];
-                spec.spells.forEach(s => {
-                    const base = window.baseSpells[s.baseId];
-                    if (!base) return;
-                    ent.createdSpells.push({
-                        name: base.name, school: base.school, baseId: s.baseId,
-                        manaCost: base.baseMana, coreManaCost: base.baseMana,
-                        tpCost: 10, magnitude: base.baseMagnitude, range: base.baseRange || 6,
-                        radius: 0, extraTargets: 0, type: base.type,
-                    });
-                });
-            }
+            // buildNPC (called above) already auto-builds this entity's
+            // spellbook from any learn_<spell> skill in skillPicks — see
+            // spellPlanner.js's autoBuildSpellsForEntity, wired into buildNPC.
             return ent;
         }
         window.aiSim3 = {

@@ -65,6 +65,7 @@ function createCharacterData(race, cls, name, gender = "female", voice = "pc_1")
     unlockedBaseSpells: [],
     unlockedCastingOptions: {}, 
     manaCaps: { arcane: 10, divine: 10, nature: 10 },
+    maxSpellSlots: 8,
     createdSpells: [],
     inventory: [],
     gold: 0,

@@ -1630,6 +1630,20 @@ function generateMagicSkills(school, spellName, spellId) {
         }
     };
 
+    // How many prepared spells a character can have built at once (base 8,
+    // see entities.js/characterCreation.js) — one of these exists per school
+    // and all three stack, so a caster invested across all three trees can
+    // reach 8 + 2 + 2 + 2 = 14.
+    s[`${school}_spell_slots`] = {
+        name: `${capitalized} Spell Mastery`,
+        description: 'Increases the number of spells you can have prepared at once by 2.',
+        tree: school,
+        maxRanks: 1,
+        apply: (player) => {
+            player.maxSpellSlots = (player.maxSpellSlots || 8) + 2;
+        }
+    };
+
     if (school === 'arcane') {
         s[`firebolt_hit`] = {
             name: `Firebolt Proficiency`,

@@ -3704,24 +3704,47 @@ function aiProcess(entity) {
     // "no target because of flying" retreat branch further down, which this
     // directly starves of a target). Once it can no longer afford its only
     // ranged option, ground it for melee instead of leaving it stuck evading.
-    // A caster may have built more than one variant of the same attack spell
-    // (e.g. a full-power Firebolt and a cheaper "Slowed" one from the
-    // casting-speed metamagic options in the spell builder — see ui.js's
-    // quickened/slowed sliders). `.find()` used to only ever look at the
-    // first one ever created, so a caster who'd built a slowed variant
-    // specifically to keep fighting on low mana would never actually use
-    // it — it'd hit the first (usually the full-price) variant, find it
-    // unaffordable, and go straight to melee instead of trying the cheaper
-    // option. Sort priciest-first and take the strongest one currently
-    // affordable, so it only falls back to a weaker/cheaper cast (and,
-    // failing that, melee) as mana actually runs low.
+    // A caster may have built several variants of the same attack spell
+    // (autoBuildSpellsForEntity in spellPlanner.js gives every AI caster a
+    // base/cheapest/priciest/random spread, up to maxSpellSlots — at most
+    // 14). Rather than always grabbing the single strongest affordable
+    // variant — which can burn most of this turn's TP budget on one cast
+    // and strand the rest, when two cheaper casts would have landed more
+    // total damage — this runs a small unbounded-knapsack search over
+    // every variant currently affordable (by mana), maximizing total
+    // magnitude within the TP actually available this turn (timePoints
+    // down to the `threshold` stop-point). With ≤14 items and a budget of
+    // a few dozen TP at most, this is cheap to recompute every call — and
+    // it IS recomputed fresh each time (via the setTimeout(...,20) chain
+    // after every cast), so "planning multiple spells per turn" falls out
+    // naturally: cast the DP's top pick now, mana/TP drop, re-plan, repeat.
     const attackSpellVariants = (entity.createdSpells || [])
-        .filter(s => s.baseId === 'firebolt' || s.baseId === 'dragon_breath')
-        .sort((a, b) => b.manaCost - a.manaCost);
-    const attackSpell = attackSpellVariants.find(s => entity.currentMana >= s.manaCost && entity.timePoints >= s.tpCost)
-        || attackSpellVariants[0];
+        .filter(s => s.baseId === 'firebolt' || s.baseId === 'dragon_breath');
+    const spellTpBudget = Math.max(0, Math.floor(entity.timePoints) - threshold);
+    const affordableAttackVariants = attackSpellVariants.filter(s =>
+        entity.currentMana >= s.manaCost && s.tpCost <= spellTpBudget);
+    let attackSpell = null;
+    if (affordableAttackVariants.length > 0) {
+        const dpValue = new Array(spellTpBudget + 1).fill(0);
+        const dpChoice = new Array(spellTpBudget + 1).fill(-1);
+        for (let w = 1; w <= spellTpBudget; w++) {
+            for (let i = 0; i < affordableAttackVariants.length; i++) {
+                const cost = Math.ceil(affordableAttackVariants[i].tpCost);
+                if (cost <= w) {
+                    const val = dpValue[w - cost] + affordableAttackVariants[i].magnitude;
+                    if (val > dpValue[w]) { dpValue[w] = val; dpChoice[w] = i; }
+                }
+            }
+        }
+        if (dpChoice[spellTpBudget] >= 0) attackSpell = affordableAttackVariants[dpChoice[spellTpBudget]];
+    }
+    // Fall back to a (possibly currently-unaffordable) known variant just so
+    // reliesOnSpellForRange/grounding below still recognizes "this entity is
+    // fundamentally a spell-reliant flyer" even mid-turn when nothing fits
+    // the remaining budget.
+    if (!attackSpell) attackSpell = attackSpellVariants[0] || null;
     const reliesOnSpellForRange = !!attackSpell && !isRanged;
-    const canAffordAttackSpell = !!attackSpell && entity.currentMana >= attackSpell.manaCost && entity.timePoints >= attackSpell.tpCost;
+    const canAffordAttackSpell = !!attackSpell && affordableAttackVariants.includes(attackSpell);
     const attackableOpponents = visibleOpponents.filter(o => {
         const bothFlying = entity.isFlying && o.isFlying;
         const eitherFlying = entity.isFlying || o.isFlying;
