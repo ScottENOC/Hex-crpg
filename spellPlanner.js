@@ -31,6 +31,10 @@ function getSpellDialLimits(entity, base) {
     // schools, unlike burst, since it's a rogue skill about HOW you cast.
     // Never available for damage (a Firebolt can't be subtle).
     const subtleCapable = !!skills.subtle_spell && base.type !== 'damage';
+    // TOUCH (skills.js's <school>_touch) — the inverse of the range dial:
+    // caps range at 1 for a mana discount instead of paying more to reach
+    // further. Only meaningful when the base spell's range is already > 1.
+    const touchCapable = !!options.touch && (base.baseRange || 1) > 1;
     return {
         school,
         quickened: !!options.quickened,
@@ -42,13 +46,14 @@ function getSpellDialLimits(entity, base) {
         cap: (entity.manaCaps && entity.manaCaps[school]) || 10,
         burstCapable,
         subtleCapable,
+        touchCapable,
     };
 }
 
 // Exact port of ui.js's renderSpellStats cost formula (arcane-only
 // efficiency skills are a real, existing asymmetry there — not a bug this
 // planner should paper over).
-function computeSpellVariant(entity, baseId, base, speed, magBonus, rangeBonus, radBonus, targetBonus, burst = false, subtle = false) {
+function computeSpellVariant(entity, baseId, base, speed, magBonus, rangeBonus, radBonus, targetBonus, burst = false, subtle = false, touch = false) {
     const school = base.school;
     let manaCost = base.baseMana;
     let tpCost = 10;
@@ -61,7 +66,9 @@ function computeSpellVariant(entity, baseId, base, speed, magBonus, rangeBonus, 
     }
     if (speed === 'quickened') { tpCost = 5; manaCost += Math.max(0, 5 - effSpeed); }
     if (speed === 'slowed') { tpCost = 20; manaCost -= 4; }
-    manaCost += Math.max(0, rangeBonus - effRange);
+    // TOUCH (skills.js's <school>_touch): caps range at 1 for a discount,
+    // mutually exclusive with the range-bonus dial by construction.
+    if (touch) manaCost -= 3; else manaCost += Math.max(0, rangeBonus - effRange);
     manaCost += (magBonus * Math.max(0, 5 - effMag));
     manaCost += (radBonus * 10);
     manaCost += (targetBonus * 15);
@@ -73,14 +80,14 @@ function computeSpellVariant(entity, baseId, base, speed, magBonus, rangeBonus, 
     // SUBTLE (skills.js's subtle_spell): doesn't break stealth when cast.
     if (subtle) { manaCost += 6; tpCost += 5; }
     manaCost = Math.max(1, manaCost);
-    const coreManaCost = base.baseMana + (magBonus * Math.max(0, 5 - effMag)) + (radBonus * 10) + (targetBonus * 15) + (burst ? 8 : 0) + (subtle ? 6 : 0);
+    const coreManaCost = base.baseMana + (touch ? -3 : Math.max(0, rangeBonus - effRange)) + (magBonus * Math.max(0, 5 - effMag)) + (radBonus * 10) + (targetBonus * 15) + (burst ? 8 : 0) + (subtle ? 6 : 0);
     const magnitude = base.baseMagnitude * (1 + magBonus);
-    const range = (base.baseRange || 1) + rangeBonus;
+    const range = touch ? 1 : ((base.baseRange || 1) + rangeBonus);
     const radius = burst ? (1 + radBonus) : ((base.baseRadius || 0) + radBonus);
     const type = burst ? (base.type === 'heal' ? 'aoe_heal' : 'aoe_damage') : base.type;
     return {
         name: base.name, school, baseId, type,
-        manaCost, coreManaCost, tpCost, magnitude, range, radius, extraTargets: targetBonus, subtle,
+        manaCost, coreManaCost, tpCost, magnitude, range, radius, extraTargets: targetBonus, subtle, touch,
     };
 }
 
@@ -201,6 +208,14 @@ function autoBuildSpellsForEntity(entity) {
         if (entity.createdSpells.length >= maxSlots) break;
         if (!limitsByBaseId[baseId].subtleCapable) continue;
         tryAdd(computeSpellVariant(entity, baseId, base, 'default', 0, 0, 0, 0, false, true));
+    }
+    // Phase 3d: a Touch (skills.js's <school>_touch) build of every
+    // touch-capable known spell — an NPC caster with the skill gets a
+    // cheaper adjacent-only version alongside its normal-range build.
+    for (const { baseId, base } of known) {
+        if (entity.createdSpells.length >= maxSlots) break;
+        if (!limitsByBaseId[baseId].touchCapable) continue;
+        tryAdd(computeSpellVariant(entity, baseId, base, 'default', 0, 0, 0, 0, false, false, true));
     }
     // Phase 4: random combinations filling any remaining slots. Bounded
     // attempt count — with no metamagic skills at all there's only ever

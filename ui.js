@@ -1063,6 +1063,18 @@ function updateSpellPreview() {
             </div>
         `;
     }
+    // TOUCH (skills.js's <school>_touch): the opposite of the Range Bonus
+    // dial above — caps range at 1 (adjacent) for a discount instead of
+    // paying more to reach further. Only offered when there's actually
+    // range to give up (a spell already at range 1 has nothing to trade).
+    const touchCapable = !!options.touch && (base.baseRange || 1) > 1;
+    if (touchCapable) {
+        html += `
+            <div class="form-group">
+                <label><input type="checkbox" id="spell-touch-toggle" onchange="window.renderSpellStats()"> Touch (range 1, adjacent only) — -3 Mana</label>
+            </div>
+        `;
+    }
     if ((expandRanks > 0 && base.baseRadius !== undefined) || burstCapable) {
         html += `
             <div class="form-group">
@@ -1111,13 +1123,18 @@ function renderSpellStats() {
     const burst = burstToggle ? burstToggle.checked : false;
     const subtleToggle = document.getElementById("spell-subtle-toggle");
     const subtle = subtleToggle ? subtleToggle.checked : false;
+    const touchToggle = document.getElementById("spell-touch-toggle");
+    const touch = touchToggle ? touchToggle.checked : false;
     const calmModeSelect = document.getElementById("spell-calm-mode-select");
     const calmMode = calmModeSelect ? calmModeSelect.value : undefined;
 
     let manaCost = base.baseMana;
     let tpCost = 10;
     let magnitude = base.baseMagnitude * (1 + magBonus);
-    let range = (base.baseRange || 1) + rangeBonus;
+    // TOUCH (skills.js's <school>_touch): caps range at 1 regardless of
+    // any Range Bonus dialed in above — the two are mutually exclusive by
+    // construction (Touch always wins when checked).
+    let range = touch ? 1 : ((base.baseRange || 1) + rangeBonus);
     // BURST (skills.js's <school>_burst): converts a single-target
     // damage/heal spell into an area burst centered on a clicked point,
     // radius 1 baseline + the same radius dial other AOE spells use.
@@ -1141,14 +1158,15 @@ function renderSpellStats() {
     if (speed === 'quickened') { tpCost = 5; manaCost += Math.max(0, 5 - effSpeed); }
     if (speed === 'slowed') { tpCost = 20; manaCost -= 4; }
     
-    manaCost += Math.max(0, rangeBonus - effRange);
+    if (touch) manaCost -= 3; else manaCost += Math.max(0, rangeBonus - effRange);
     manaCost += (magBonus * Math.max(0, 5 - effMag));
     manaCost += (radBonus * 10);
     manaCost += (targetBonus * 15);
     if (burst) manaCost += 8;
     if (subtle) { manaCost += 6; tpCost += 5; }
+    manaCost = Math.max(1, manaCost);
 
-    const coreManaCost = base.baseMana + (magBonus * Math.max(0, 5 - effMag)) + (radBonus * 10) + (targetBonus * 15) + (burst ? 8 : 0) + (subtle ? 6 : 0);
+    const coreManaCost = base.baseMana + (touch ? -3 : Math.max(0, rangeBonus - effRange)) + (magBonus * Math.max(0, 5 - effMag)) + (radBonus * 10) + (targetBonus * 15) + (burst ? 8 : 0) + (subtle ? 6 : 0);
 
     const cap = player.manaCaps[base.school] || 10;
     const overCap = manaCost > cap;
@@ -1162,6 +1180,7 @@ function renderSpellStats() {
         ${extraTargets > 0 ? `<p><strong>Extra Targets:</strong> ${extraTargets}</p>` : ''}
         ${burst ? `<p><strong>Burst:</strong> centered on a clicked point, not a single target</p>` : ''}
         ${subtle ? `<p><strong>Subtle:</strong> won't break stealth when cast</p>` : ''}
+        ${touch ? `<p><strong>Touch:</strong> adjacent only</p>` : ''}
     `;
     const display = document.getElementById("spell-stats-display");
     if (display) display.innerHTML = statsHtml;
@@ -1189,7 +1208,7 @@ function renderSpellStats() {
         if (display) display.innerHTML = statsHtml;
     }
 
-    window.currentSpellCalc = { name: defaultName, school: base.school, manaCost, coreManaCost, tpCost, magnitude, range, radius, extraTargets, type: effectiveType, baseId, animalId, calmMode, debuffType: base.debuffType, subtle };
+    window.currentSpellCalc = { name: defaultName, school: base.school, manaCost, coreManaCost, tpCost, magnitude, range, radius, extraTargets, type: effectiveType, baseId, animalId, calmMode, debuffType: base.debuffType, subtle, touch };
 }
 
 function createSpell() {

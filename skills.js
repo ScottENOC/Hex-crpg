@@ -280,6 +280,20 @@ const skills = {
         reaction: true,
         apply: (player) => {}
     },
+    // A landed unarmed hit siphons mana straight from the opponent into the
+    // monk — read directly in resolveAttack (gameEngine.js), same
+    // live-read pattern as unarmed_hit/unarmed_dmg above, since it only
+    // matters at the moment of the hit rather than being a stat to mutate.
+    // Caps at 3 so it stays a real-but-bounded siphon, not a way to fully
+    // drain a caster in one hit.
+    'siphoning_palm': {
+        name: 'Siphoning Palm',
+        description: 'An unarmed hit drains 1 mana per rank (max 3) from the target into you.',
+        tree: 'Way of the open palm',
+        maxRanks: 3,
+        prereq: 'unarmed_reaction_block',
+        apply: (player) => {}
+    },
 
     // MONK
     'swift_step': {
@@ -387,6 +401,47 @@ const skills = {
             if (!player.unlockedCastingOptions) player.unlockedCastingOptions = {};
             if (!player.unlockedCastingOptions.nature) player.unlockedCastingOptions.nature = {};
             player.unlockedCastingOptions.nature.burst = true;
+        }
+    },
+    // TOUCH: the opposite lever from <school>_range — instead of paying
+    // more mana to reach further, cap the spell at range 1 (adjacent only)
+    // for a mana discount. The point is tactical, not just economical: it
+    // gives a spellcaster a real reason to walk into melee range rather
+    // than always kiting at max range, which is what a spellsword/monk
+    // caster multiclass actually wants. Available for any spell whose
+    // normal range is already more than 1 (a spell that's already
+    // touch-range, e.g. Divine Protection, has nothing to discount).
+    'arcane_touch': {
+        name: 'Arcane Touch',
+        description: 'Lets you cast an Arcane spell at range 1 (adjacent only) for -3 mana instead of its normal range.',
+        tree: 'arcane',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedCastingOptions) player.unlockedCastingOptions = {};
+            if (!player.unlockedCastingOptions.arcane) player.unlockedCastingOptions.arcane = {};
+            player.unlockedCastingOptions.arcane.touch = true;
+        }
+    },
+    'divine_touch': {
+        name: 'Divine Touch',
+        description: 'Lets you cast a Divine spell at range 1 (adjacent only) for -3 mana instead of its normal range.',
+        tree: 'divine',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedCastingOptions) player.unlockedCastingOptions = {};
+            if (!player.unlockedCastingOptions.divine) player.unlockedCastingOptions.divine = {};
+            player.unlockedCastingOptions.divine.touch = true;
+        }
+    },
+    'nature_touch': {
+        name: 'Nature Touch',
+        description: 'Lets you cast a Nature spell at range 1 (adjacent only) for -3 mana instead of its normal range.',
+        tree: 'nature',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedCastingOptions) player.unlockedCastingOptions = {};
+            if (!player.unlockedCastingOptions.nature) player.unlockedCastingOptions.nature = {};
+            player.unlockedCastingOptions.nature.touch = true;
         }
     },
     // Multi-target

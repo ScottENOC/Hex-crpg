@@ -5374,6 +5374,18 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
       target.witherDamage = attacker.witheringTouchStacks;
   }
 
+  // SIPHONING PALM (Way of the Open Palm): an unarmed hit drains mana
+  // straight from the target into the attacker, 1 per rank (max 3).
+  if (!weapon && attacker.skills?.siphoning_palm) {
+      const drained = Math.min(attacker.skills.siphoning_palm, target.currentMana || 0);
+      if (drained > 0) {
+          target.currentMana -= drained;
+          attacker.currentMana = Math.min(attacker.maxMana || 0, (attacker.currentMana || 0) + drained);
+          syncBackToPlayer(target);
+          sharedMessage(`${attacker.name} siphons ${drained} mana from ${target.name}!`);
+      }
+  }
+
   // Set last seen hex so they can search if stealthed
   target.lastSeenTargetHex = { q: attacker.hex.q, r: attacker.hex.r };
   
