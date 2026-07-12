@@ -3102,6 +3102,19 @@ function buildNorthwatchFort(turnHex) {
     if (window.campaign2NorthwatchCommander) {
         const commander = window.buildNPC({ ...window.campaign2NorthwatchCommander, hex: { q: center.q, r: center.r - 1 } });
         commander.factionTag = 'northwatch_human';
+        // Joins the fight but hangs back in the keep by default — she's a
+        // commander, not a front-line soldier. Actually engages the moment
+        // she's directly attacked or an enemy closes to within 3 hexes of
+        // her (passiveUnlessThreatened, aiProcess), rather than either
+        // never fighting at all (the old behavior — no combatDirective) or
+        // wading into the walls uninvited like the rest of the garrison.
+        commander.combatDirective = {
+            hostileTo: 'enemy',
+            constraints: { stayWithinHexes: fortInterior },
+            passiveUnlessThreatened: true,
+            threatRadius: 3,
+            priorities: [{ type: 'insideRegion', hexes: fortInterior }],
+        };
         window.entities.push(commander);
     }
 

@@ -3443,6 +3443,30 @@ function aiProcess(entity) {
             window.gamePhase = 'WAITING';
             return;
         }
+
+        // PASSIVE UNLESS THREATENED: a commander/officer joins the fight in
+        // spirit but hangs back rather than wading in — until someone's
+        // actually come after them. Two triggers pull them in: taking a hit
+        // directly (wasDirectlyAttacked, set by resolveAttack regardless of
+        // hit/miss) or an opponent closing to within threatRadius. Neither
+        // has fired yet, so hold position — a no-op turn, same shape as the
+        // plain-neutral no-op above, not the normal chase/attack logic below.
+        if (directive.passiveUnlessThreatened && !entity.wasDirectlyAttacked) {
+            const opponentSideForThreat = directive.hostileTo || (entity.side === 'player' ? 'enemy' : 'player');
+            const threatRadius = directive.threatRadius || 3;
+            const threatened = window.entities.some(e => e.alive && e.side === opponentSideForThreat &&
+                window.distance(entity.hex, e.hex) <= threatRadius);
+            if (!threatened) {
+                // `threshold` (with the quickRecovery adjustment) isn't
+                // computed until later in this function — this check runs
+                // ahead of that, so it applies the same reduction inline
+                // rather than referencing a not-yet-declared variable.
+                entity.timePoints = 80 - (entity.skills?.quickRecovery || 0);
+                window.currentTurnEntity = null;
+                window.gamePhase = 'WAITING';
+                return;
+            }
+        }
     }
 
     // SIEGE ENGINE: never targets/engages the player like a normal 'enemy'
@@ -4134,6 +4158,21 @@ function wakeUp(entity) {
             wakeUp(a); // Recursive chain
         }
     });
+
+    // GARRISON ALARM: a faction-tagged defender (Northwatch/Ridgehold's
+    // soldiers, or any future garrisoned faction) sounds the alarm for the
+    // whole garrison instantly, regardless of distance — a fort under
+    // attack shouldn't depend on soldiers happening to patrol within the
+    // ordinary 10-hex earshot of whoever's actually engaged; that's what
+    // the alarm bell is for. Deliberately separate from the distance-based
+    // chain above (which still applies to everyone, faction-tagged or not).
+    if (entity.factionTag) {
+        const garrison = window.entities.filter(e => e.alive && e.factionTag === entity.factionTag && e !== entity && e.aiState !== 'combat');
+        garrison.forEach(g => {
+            sharedMessage(`${g.name} hears the alarm bell and rushes to respond!`);
+            wakeUp(g);
+        });
+    }
 }
 
 function spendTP(entity, amount) {
@@ -4930,6 +4969,13 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   const weaponSlot = isOffhand ? 'offhand' : 'weapon';
   const weapon = window.items[attacker.equipped?.[weaponSlot]] || null;
   const isRanged = weapon?.subType === 'ranged';
+
+  // Marks this target as under direct attack this combat regardless of
+  // hit/miss — read by combatDirective.passiveUnlessThreatened (aiProcess)
+  // so a normally hang-back defender (e.g. a commander) still fights back
+  // once someone actually comes after them, rather than only reacting to
+  // proximity.
+  if (attacker.side !== target.side) target.wasDirectlyAttacked = true;
 
   const baseHit = isRanged ? attacker.toHitRanged : attacker.toHitMelee;
   const attackerTerrain = window.getTerrainAt(attacker.hex.q, attacker.hex.r);
