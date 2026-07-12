@@ -94,6 +94,26 @@ const baseSpells = {
         baseRadius: 1,
         debuffType: 'entangled'
     },
+    // WILD FURY: only targetable at the caster or their own animal
+    // companion (resolveSpell enforces this, gameEngine.js) — never another
+    // ally. Buffs unarmed damage for a real duration (ticksRemaining, set
+    // from durationTicks at cast time and counted down once per world tick
+    // — see runTickInternal's timed buff/debuff expiry pass) rather than
+    // persisting until some specific trigger the way Sanctuary/Divine
+    // Protection do. The druid/monk multiclass payoff: a druid who also
+    // trained unarmed combat gets a real reason to buff themselves instead
+    // of only ever buffing an ally.
+    'wild_fury': {
+        name: 'Wild Fury',
+        school: 'nature',
+        baseMana: 10,
+        baseMagnitude: 3,
+        baseRange: 1,
+        type: 'buff',
+        debuffType: 'wild_fury_unarmed',
+        durationTicks: 200,
+        ongoing: true
+    },
     // CALM ANIMAL: only affects a genuine wild-animal-type creature (tags
     // includes 'animal') or a rider mounted on one — resolveSpell (below)
     // redirects the debuff onto the mount itself when cast at a rider, and

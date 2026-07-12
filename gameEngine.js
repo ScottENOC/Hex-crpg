@@ -2742,6 +2742,24 @@ function runTickInternal(isSleepCycle = false, skipUI = false, tickMultiplier = 
     }
     if (window.currentTurnEntity && !isSleepCycle) return;
 
+    // TIMED BUFF/DEBUFF EXPIRY: any activeSpells entry carrying
+    // ticksRemaining (e.g. Wild Fury, spells.js) counts down once per call,
+    // scaled by tickMultiplier the same way poison/wither ticks already
+    // are, and is cancelled the instant it reaches 0. Deliberately hoisted
+    // above the takeTurn/regen branch split below — that split is mutually
+    // exclusive per call (one entity's turn OR the passive regen sweep,
+    // never both), so a duration tied to only one branch could stall for
+    // an entire fast-paced combat where entities are ready every tick.
+    // Entries with no ticksRemaining field (Sanctuary, Divine Protection,
+    // the silence penalty) are untouched — those still only end via their
+    // own specific trigger, not a timer.
+    if (window.activeSpells && window.activeSpells.length) {
+        window.activeSpells.filter(s => s.ticksRemaining !== undefined).forEach(s => {
+            s.ticksRemaining -= tickMultiplier;
+            if (s.ticksRemaining <= 0) cancelSpell(s.spellInstanceId);
+        });
+    }
+
     const _partyHexesForTurnOrder = collectPartyHexes();
 
     // Only scan for whose turn it is when actually in combat — out of combat
@@ -2906,6 +2924,7 @@ function runTickInternal(isSleepCycle = false, skipUI = false, tickMultiplier = 
                 }
             }
         });
+
         if (window.updateTime && !window.isInCombat) {
             // Already handled in main tick loop for real-time
         } else if (window.updateTime) {
@@ -5204,6 +5223,10 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   if (attacker.equipped?.weapon && attacker.equipped?.offhand && window.items[attacker.equipped.offhand].type === 'weapon') hitChance -= 5;
   if (isOffhand) hitChance -= 5;
   if (weapon && attacker.skills[`${weapon.id}_hit`]) hitChance += 5;
+  // Fists have no weapon.id to key off of — unarmed_hit was previously dead
+  // code because of that (this `if (weapon && ...)` check above always
+  // failed when unarmed).
+  if (!weapon && attacker.skills?.unarmed_hit) hitChance += 5;
 
   const roll = Math.floor(Math.random() * 100);
       // If it's a miss, check for reactions
@@ -5250,7 +5273,12 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
           missCallbackFinal();
           return;
       }
-  let dmg = (attacker.baseDamage || 1) + (weapon?.damage || 0) + ((attacker.skills[`${weapon?.id}_dmg`] || 0) * 2) + (attacker.skills['meleeDamage'] || 0) + bonusDamage;
+  // Fists have no weapon.id, so `${weapon?.id}_dmg` never matched
+  // 'unarmed_dmg' — that skill was dead code until this unarmed-specific
+  // read (WILD FURY, spells.js, applies the same way: only while unarmed).
+  const unarmedDmg = !weapon ? (attacker.skills?.unarmed_dmg || 0) : 0;
+  const wildFury = !weapon ? (window.activeSpells || []).find(s => s.debuffType === 'wild_fury_unarmed' && s.targetEntityId === attacker.id) : null;
+  let dmg = (attacker.baseDamage || 1) + (weapon?.damage || 0) + ((attacker.skills[`${weapon?.id}_dmg`] || 0) * 2) + unarmedDmg + (wildFury?.magnitude || 0) + (attacker.skills['meleeDamage'] || 0) + bonusDamage;
   if (isOffhand) dmg -= 2;
 
   // DWARF AXE MASTERY
@@ -7532,6 +7560,22 @@ function resolveSpell(caster, spell, target, clickedHex) {
                     debuffType: spell.debuffType, calmMode: spell.calmMode || 'stay',
                 });
                 window.showMessage(`${caster.name} calms ${calmed.name} (${spell.calmMode || 'stay'}).`);
+            }
+            actionHandled = true;
+        } else if (spell.baseId === 'wild_fury' && target) {
+            // Only the caster or their own animal companion — never another
+            // ally, even one standing right next to you.
+            if (target !== caster && target !== caster.animalCompanion) {
+                window.showMessage(`${spell.name} can only target yourself or your own animal companion!`);
+            } else {
+                const instanceId = Date.now() + Math.random();
+                window.activeSpells.push({
+                    spellInstanceId: instanceId, baseId: spell.baseId, name: spell.name, casterName: caster.name,
+                    coreManaCost: spell.coreManaCost || spell.manaCost, targetEntityId: target.id,
+                    magnitude: spell.magnitude, debuffType: spell.debuffType,
+                    ticksRemaining: spell.durationTicks || 200,
+                });
+                window.showMessage(`${target.name}'s unarmed strikes are charged with wild fury!`);
             }
             actionHandled = true;
         } else if ((spell.type === 'buff' || spell.type === 'debuff') && target) {

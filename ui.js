@@ -2558,6 +2558,7 @@ function highlightValidTargets(caster, spell) {
                 if (dist <= range) {
                     let valid = false;
                     if (type === 'damage') valid = (e.side !== caster.side && e.side !== 'neutral');
+                    else if (type === 'buff' && spell.baseId === 'wild_fury') valid = (e === caster || e === caster.animalCompanion);
                     else if (type === 'heal' || type === 'buff') valid = (e.side === caster.side);
                     else if (type === 'dispel') valid = true;
                     else if (type === 'debuff' && spell.baseId === 'calm_animal') valid = !!window.resolveCalmAnimalTarget(e);

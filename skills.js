@@ -324,6 +324,7 @@ const skills = {
     ...generateMagicSkills('nature', 'Summon Animal', 'summon_animal'),
     ...generateMagicSkills('nature', 'Entangle', 'entangle'),
     ...generateMagicSkills('nature', 'Calm Animal', 'calm_animal'),
+    ...generateMagicSkills('nature', 'Wild Fury', 'wild_fury'),
     'arcane_expand': {
         name: 'Arcane Expansion',
         description: 'Increase the radius of Arcane AOE spells by 1 per rank. (+10 mana per increase)',
