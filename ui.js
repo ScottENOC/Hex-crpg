@@ -1009,6 +1009,19 @@ function updateSpellPreview() {
             </div>
         `;
     }
+    if (baseId === 'calm_animal') {
+        html += `
+            <div class="form-group">
+                <label>Calm Mode:</label>
+                <select id="spell-calm-mode-select" onchange="window.renderSpellStats()">
+                    <option value="stay">Stay (holds position, can't move)</option>
+                    <option value="come">Come (moves toward you)</option>
+                    <option value="chase">Chase (moves away from you)</option>
+                </select>
+                <span style="font-size: 0.8em; color: #aaa;">Only affects animals (wolf, horse, bear, etc.) or a rider mounted on one — not Unicorns or dragons.</span>
+            </div>
+        `;
+    }
     html += `
         <div class="form-group">
             <label>Casting Speed:</label>
@@ -1084,6 +1097,8 @@ function renderSpellStats() {
     const targetBonus = targetBonusInput ? (parseInt(targetBonusInput.value) || 0) : 0;
     const burstToggle = document.getElementById("spell-burst-toggle");
     const burst = burstToggle ? burstToggle.checked : false;
+    const calmModeSelect = document.getElementById("spell-calm-mode-select");
+    const calmMode = calmModeSelect ? calmModeSelect.value : undefined;
 
     let manaCost = base.baseMana;
     let tpCost = 10;
@@ -1158,7 +1173,7 @@ function renderSpellStats() {
         if (display) display.innerHTML = statsHtml;
     }
 
-    window.currentSpellCalc = { name: defaultName, school: base.school, manaCost, coreManaCost, tpCost, magnitude, range, radius, extraTargets, type: effectiveType, baseId, animalId };
+    window.currentSpellCalc = { name: defaultName, school: base.school, manaCost, coreManaCost, tpCost, magnitude, range, radius, extraTargets, type: effectiveType, baseId, animalId, calmMode, debuffType: base.debuffType };
 }
 
 function createSpell() {
@@ -2529,6 +2544,7 @@ function highlightValidTargets(caster, spell) {
                     if (type === 'damage') valid = (e.side !== caster.side && e.side !== 'neutral');
                     else if (type === 'heal' || type === 'buff') valid = (e.side === caster.side);
                     else if (type === 'dispel') valid = true;
+                    else if (type === 'debuff' && spell.baseId === 'calm_animal') valid = !!window.resolveCalmAnimalTarget(e);
                     
                     if (valid) {
                         window.highlightedHexes.push({ q: e.hex.q, r: e.hex.r, type: 'attack' });

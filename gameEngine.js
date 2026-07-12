@@ -3515,6 +3515,36 @@ function aiProcess(entity) {
         }
     }
 
+    // CALMED (Calm Animal, spells.js): pacified — doesn't fight at all,
+    // just repositions per whichever mode the caster chose when they cast
+    // it (stay/come/chase). Breaks the instant it's actually attacked (see
+    // resolveAttack) rather than expiring on a timer.
+    const calmEffect = (window.activeSpells || []).find(s => s.debuffType === 'calmed' && s.targetEntityId === entity.id);
+    if (calmEffect) {
+        if (entity.timePoints < 10) {
+            entity.timePoints = 0;
+        } else {
+            const calmCaster = window.entities.find(e => e.alive && e.name === calmEffect.casterName);
+            if (calmCaster) {
+                if (calmEffect.calmMode === 'come') {
+                    const next = stepToward(entity.hex, calmCaster.hex);
+                    if (next && isOpenHex(next)) { entity.hex = next; if (entity.rider) entity.rider.hex = { ...next }; }
+                } else if (calmEffect.calmMode === 'chase') {
+                    const neighbors = window.getNeighbors(entity.hex.q, entity.hex.r).filter(isOpenHex);
+                    if (neighbors.length > 0) {
+                        const best = neighbors.sort((a, b) => window.distance(b, calmCaster.hex) - window.distance(a, calmCaster.hex))[0];
+                        entity.hex = best; if (entity.rider) entity.rider.hex = { ...best };
+                    }
+                }
+                // 'stay' (default): holds position, no movement at all.
+            }
+            spendTP(entity, 10);
+        }
+        window.currentTurnEntity = null;
+        window.gamePhase = 'WAITING';
+        return;
+    }
+
     // SIEGE ENGINE: never targets/engages the player like a normal 'enemy'
     // (it's an objective, not a combatant — see monsters.js's siege_engine
     // template) — its only action is chipping away at the nearest
@@ -5032,6 +5062,19 @@ function canSee(viewer, target) {
     return true;
 }
 
+// CALM ANIMAL (spells.js): a valid target is a genuine wild-animal-type
+// creature — tags includes 'animal' but NOT 'fey' (Unicorn) or 'dragon',
+// even though Unicorn also happens to carry the 'animal' tag — or a rider
+// mounted on one, in which case the debuff applies to the mount itself
+// (returned here), not the rider.
+function resolveCalmAnimalTarget(target) {
+    const qualifies = (e) => !!e && !!e.tags && e.tags.includes('animal') && !e.tags.includes('fey') && !e.tags.includes('dragon');
+    if (qualifies(target)) return target;
+    if (target?.riding && qualifies(target.riding)) return target.riding;
+    return null;
+}
+window.resolveCalmAnimalTarget = resolveCalmAnimalTarget;
+
 // Finds the best hex to center an area spell on: among opponents currently
 // in range, picks whichever one's hex catches the most other opponents
 // within radius of it (a real "aim for the cluster" choice, not just
@@ -5132,6 +5175,12 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   // once someone actually comes after them, rather than only reacting to
   // proximity.
   if (attacker.side !== target.side) target.wasDirectlyAttacked = true;
+
+  // Being attacked snaps a calmed animal (Calm Animal, spells.js) out of it
+  // regardless of hit/miss — the pacification only holds while nobody's
+  // actually come after it.
+  const calmed = (window.activeSpells || []).find(s => s.debuffType === 'calmed' && s.targetEntityId === target.id);
+  if (calmed) window.cancelSpell(calmed.spellInstanceId);
 
   const baseHit = isRanged ? attacker.toHitRanged : attacker.toHitMelee;
   const attackerTerrain = window.getTerrainAt(attacker.hex.q, attacker.hex.r);
@@ -7466,11 +7515,30 @@ function resolveSpell(caster, spell, target, clickedHex) {
             target.timePoints = 0;
             window.showMessage(`${caster.name}'s ${spell.name} drains ${target.name}'s Time Points to 0 — their next turn is pushed well back.`);
             actionHandled = true;
+        } else if (spell.baseId === 'calm_animal' && target) {
+            // Redirects onto the mount itself when cast at a rider — the
+            // mount is what's actually being calmed, not the person riding
+            // it. resolveCalmAnimalTarget also enforces the tag gate
+            // (genuine 'animal'-tagged creatures only, excluding
+            // Unicorn/dragon even though Unicorn also carries 'animal').
+            const calmed = window.resolveCalmAnimalTarget(target);
+            if (!calmed) {
+                window.showMessage(`${spell.name} has no effect on ${target.name}!`);
+            } else {
+                const instanceId = Date.now() + Math.random();
+                window.activeSpells.push({
+                    spellInstanceId: instanceId, baseId: spell.baseId, name: spell.name, casterName: caster.name,
+                    coreManaCost: spell.coreManaCost || spell.manaCost, targetEntityId: calmed.id,
+                    debuffType: spell.debuffType, calmMode: spell.calmMode || 'stay',
+                });
+                window.showMessage(`${caster.name} calms ${calmed.name} (${spell.calmMode || 'stay'}).`);
+            }
+            actionHandled = true;
         } else if ((spell.type === 'buff' || spell.type === 'debuff') && target) {
             const instanceId = Date.now() + Math.random();
             window.activeSpells.push({
                 spellInstanceId: instanceId, baseId: spell.baseId, name: spell.name, casterName: caster.name,
-                coreManaCost: spell.coreManaCost || spell.manaCost, targetEntityId: target.id, 
+                coreManaCost: spell.coreManaCost || spell.manaCost, targetEntityId: target.id,
                 magnitude: spell.magnitude, debuffType: spell.debuffType
             });
             window.showMessage(`${caster.name} cast ${spell.name} on ${target.name}.`);

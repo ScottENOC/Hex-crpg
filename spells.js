@@ -94,6 +94,26 @@ const baseSpells = {
         baseRadius: 1,
         debuffType: 'entangled'
     },
+    // CALM ANIMAL: only affects a genuine wild-animal-type creature (tags
+    // includes 'animal') or a rider mounted on one — resolveSpell (below)
+    // redirects the debuff onto the mount itself when cast at a rider, and
+    // explicitly excludes 'fey' (Unicorn) and 'dragon' despite either
+    // possibly also carrying the 'animal' tag, per design: this is a
+    // mundane-beast spell, not a charm for legendary creatures. The caster
+    // picks a mode at cast time (calmMode: 'stay'/'come'/'chase' — see
+    // ui.js's Calm Mode selector and aiProcess's CALMED check,
+    // gameEngine.js) rather than the mode being baked into the base spell.
+    'calm_animal': {
+        name: 'Calm Animal',
+        school: 'nature',
+        baseMana: 8,
+        baseRange: 6,
+        type: 'debuff',
+        debuffType: 'calmed',
+        validTags: ['animal'],
+        excludeTags: ['fey', 'dragon'],
+        ongoing: true
+    },
     'temporal_rift': {
         name: 'Temporal Rift',
         school: 'arcane',
