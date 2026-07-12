@@ -3088,6 +3088,12 @@ function buildNorthwatchFort(turnHex) {
                 { type: 'nearHex', hex: gateHex, radius: 3 },
                 { type: 'insideRegion', hexes: fortInterior },
             ],
+            // SURGE REINFORCEMENT (aiProcess): with nothing threatening its
+            // own post, a soldier marches toward whichever faction-mate is
+            // most outnumbered instead of just holding a quiet stretch of
+            // wall — lets the garrison actually respond to a concentrated
+            // or multi-point assault rather than fighting it piecemeal.
+            canReinforce: true,
             retreatTo: { q: center.q, r: center.r },
             contingencies: [{
                 id: 'retreat_if_walls_overrun',
@@ -3139,6 +3145,7 @@ function buildNorthwatchFort(turnHex) {
             hostileTo: 'enemy',
             constraints: { stayWithinHexes: fortInterior },
             priorities: [{ type: 'nearHex', hex: gateHex, radius: 3 }, { type: 'insideRegion', hexes: fortInterior }],
+            canReinforce: true,
             retreatTo: { q: center.q, r: center.r },
             contingencies: [{
                 id: 'retreat_if_walls_overrun',

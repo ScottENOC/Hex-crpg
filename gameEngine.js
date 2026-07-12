@@ -3476,6 +3476,43 @@ function aiProcess(entity) {
                 return;
             }
         }
+
+        // SURGE REINFORCEMENT: a defender with nothing threatening its own
+        // post diverts toward whichever faction-mate is most heavily
+        // outnumbered locally, instead of holding a quiet stretch of wall
+        // while another point gets overrun — the thing a rigid per-point
+        // patrol assignment can't do on its own. Opt-in via
+        // combatDirective.canReinforce; only kicks in once the entity has
+        // genuinely nothing nearby to fight (an outnumbered defender still
+        // fights where it stands, it doesn't abandon its post mid-fight).
+        if (directive.canReinforce && entity.factionTag) {
+            const opponentSideForReinforce = directive.hostileTo || (entity.side === 'player' ? 'enemy' : 'player');
+            const scanRadius = 4;
+            const localOpponents = window.entities.filter(e => e.alive && e.side === opponentSideForReinforce &&
+                window.distance(entity.hex, e.hex) <= scanRadius).length;
+            if (localOpponents === 0) {
+                let worstAlly = null, worstScore = 0;
+                window.entities.forEach(ally => {
+                    if (!ally.alive || ally === entity || ally.factionTag !== entity.factionTag) return;
+                    const nearOpponents = window.entities.filter(e => e.alive && e.side === opponentSideForReinforce &&
+                        window.distance(ally.hex, e.hex) <= scanRadius).length;
+                    if (nearOpponents === 0) return;
+                    const nearAllies = window.entities.filter(e => e.alive && e.factionTag === entity.factionTag &&
+                        window.distance(ally.hex, e.hex) <= scanRadius).length;
+                    const score = nearOpponents - nearAllies;
+                    if (score > worstScore) { worstScore = score; worstAlly = ally; }
+                });
+                if (worstAlly) {
+                    const stayWithin = directive.constraints?.stayWithinHexes;
+                    const next = window.stepToward(entity.hex, worstAlly.hex);
+                    if (next && isOpenHex(next) && (!stayWithin || stayWithin.has(`${next.q},${next.r}`))) entity.hex = next;
+                    spendTP(entity, 10);
+                    window.currentTurnEntity = null;
+                    window.gamePhase = 'WAITING';
+                    return;
+                }
+            }
+        }
     }
 
     // SIEGE ENGINE: never targets/engages the player like a normal 'enemy'

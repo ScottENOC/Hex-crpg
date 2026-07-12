@@ -79,7 +79,7 @@ async function bootPage(browser) {
         }
 
         window.aiSiegeSim = {
-            async runAssault(attackerCount, maxTicks) {
+            async runAssault(attackerCount, maxTicks, numDirections = 6) {
                 const gateHex = window.campaign2NorthwatchGateHex;
                 const center = window.campaign2NorthwatchCenter;
 
@@ -119,9 +119,10 @@ async function bootPage(browser) {
                     { q: -1, r: 0 }, { q: -1, r: 1 }, { q: 0, r: 1 },
                 ];
                 const spawnRadius = 9;
-                const groupSize = Math.ceil(attackerCount / SIX_DIRECTIONS.length);
+                const activeDirections = SIX_DIRECTIONS.slice(0, numDirections);
+                const groupSize = Math.ceil(attackerCount / activeDirections.length);
                 const attackers = attackerRoster.map((spec, i) => {
-                    const dir = SIX_DIRECTIONS[Math.floor(i / groupSize) % SIX_DIRECTIONS.length];
+                    const dir = activeDirections[Math.floor(i / groupSize) % activeDirections.length];
                     const withinGroup = i % groupSize;
                     const hex = {
                         q: center.q + dir.q * spawnRadius + (withinGroup % 4) - 1,
@@ -226,7 +227,7 @@ async function main() {
     // fixed by content, not scaled). Attackers = garrison * multiplier,
     // split across all 6 of the star fort's points instead of funneling
     // through the gate — usage: node star-fort-assault-test.js [trials] [attackerMultiplier]
-    const attackerMultiplier = Number(process.argv[3] || 2);
+    const attackerMultiplier = Number(process.argv[3] || 3.5);
     const attackerCount = await page.evaluate((mult) =>
         window.entities.filter(e => e.factionTag === 'northwatch_human').length * mult, attackerMultiplier);
     console.log(`Garrison size: ${Math.round(attackerCount / attackerMultiplier)}. Attacking force: ${attackerCount} (${attackerMultiplier}x, ~60% bows, rest sword/spear, spawned around all 6 points).\n`);
@@ -234,7 +235,8 @@ async function main() {
     const trials = Number(process.argv[2] || 3);
     const outcomes = [];
     for (let t = 0; t < trials; t++) {
-        const r = await evalWithRecovery(({ attackerCount, maxTicks }) => window.aiSiegeSim.runAssault(attackerCount, maxTicks), { attackerCount, maxTicks: 3000 });
+        const numDirections = Number(process.argv[4] || 6);
+        const r = await evalWithRecovery(({ attackerCount, maxTicks, numDirections }) => window.aiSiegeSim.runAssault(attackerCount, maxTicks, numDirections), { attackerCount, maxTicks: 3000, numDirections });
         outcomes.push(r);
         console.log(`trial ${t + 1}: winner=${r.winner.padEnd(10)} defenders ${r.defendersAlive}/${r.defendersTotal} (${(r.defenderHpFractionRemaining * 100).toFixed(0)}% hp)  attackers ${r.attackersAlive}/${r.attackersTotal} (${(r.attackerHpFractionRemaining * 100).toFixed(0)}% hp)  ticks=${r.ticks}`);
         r.formationLog.forEach(f => {
