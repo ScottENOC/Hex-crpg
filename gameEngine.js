@@ -2743,8 +2743,18 @@ function runTickInternal(isSleepCycle = false, skipUI = false, tickMultiplier = 
 
     // Only trigger turn-based logic if in combat
     if (window.isInCombat && readyEntities.length > 0 && !isSleepCycle) {
-        readyEntities.sort((a, b) => (b.timePoints !== a.timePoints) ? (b.timePoints - a.timePoints) : (Math.random() - 0.5));
-        window.currentTurnEntity = readyEntities[0];
+        // `Array.sort` with a `Math.random()-0.5` tie-break is a known JS
+        // anti-pattern — an inconsistent comparator, which different sort
+        // implementations can handle very unevenly (observed in practice:
+        // with many entities tied at exactly 100 TP — e.g. two full-strength
+        // sides spotting each other simultaneously — it could end up never
+        // selecting one entity's turn at all, rather than picking fairly at
+        // random among the ties). Sort purely by TP, then explicitly roll a
+        // fair random pick among whoever's actually tied for the top slot.
+        readyEntities.sort((a, b) => b.timePoints - a.timePoints);
+        const topTP = readyEntities[0].timePoints;
+        const tiedForTop = readyEntities.filter(e => e.timePoints === topTP);
+        window.currentTurnEntity = tiedForTop[Math.floor(Math.random() * tiedForTop.length)];
         window.currentTurnEntity.parriesRemaining = 3;
         // Snapshot for orc_momentum (resolveAttack) — bonus damage on an
         // attack made after covering real ground this turn, compared
@@ -4079,20 +4089,30 @@ function wakeUp(entity) {
 
     entity.aiState = 'combat';
 
-    // Reset players initiative and cancel movement if this is the start of combat
+    // Reset initiative and cancel movement if this is the start of combat
     if (firstAlert) {
         // Mark all currently-visible enemies as seen so they appear in the initiative tracker.
         // updateExploration only runs in the out-of-combat tick; calling it here ensures the
         // first combat broadcast already carries hasBeenSeenByPlayer=true for visible enemies.
         if (window.updateExploration) window.updateExploration();
 
-        window.entities.forEach(e => {
-            if (e.side === 'player') {
-                e.timePoints = 0;
-                e.destination = null;
-                e.moveCooldown = 0;
-            }
-        });
+        // Ambush vs. mutual-spot initiative: `entity` is whoever's wakeUp()
+        // call actually triggered this fight starting, so its side spotted
+        // first and gets full initiative. The opposing side only keeps that
+        // full 100 too if they'd already spotted someone on entity's side
+        // back (a genuinely simultaneous encounter, e.g. two aware parties
+        // rounding a corner into each other) — otherwise they were the ones
+        // caught by surprise (e.g. an elf archer with better vision engaging
+        // a normal-sighted target from range) and start behind at 80, not
+        // fully zeroed: still surprised, not helpless.
+        const opponentSide = entity.combatDirective?.hostileTo || (entity.side === 'player' ? 'enemy' : 'player');
+        const awareSide = window.entities.filter(e => e.alive && e.side === entity.side);
+        const surprisedSide = window.entities.filter(e => e.alive && e.side === opponentSide);
+        const mutualSpot = surprisedSide.some(s => awareSide.some(a => canSee(s, a)));
+        const surprisedStartTP = mutualSpot ? 100 : 80;
+
+        awareSide.forEach(e => { e.timePoints = 100; e.destination = null; e.moveCooldown = 0; });
+        surprisedSide.forEach(e => { e.timePoints = surprisedStartTP; e.destination = null; e.moveCooldown = 0; });
 
         deconflictPartyStacking();
 
