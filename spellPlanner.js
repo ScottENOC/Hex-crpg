@@ -27,6 +27,10 @@ function getSpellDialLimits(entity, base) {
     const options = (entity.unlockedCastingOptions && entity.unlockedCastingOptions[school]) || {};
     const skills = entity.skills || {};
     const burstCapable = isBurstCapable(base, options);
+    // SUBTLE (skills.js's subtle_spell, rogue tree) — universal across
+    // schools, unlike burst, since it's a rogue skill about HOW you cast.
+    // Never available for damage (a Firebolt can't be subtle).
+    const subtleCapable = !!skills.subtle_spell && base.type !== 'damage';
     return {
         school,
         quickened: !!options.quickened,
@@ -37,13 +41,14 @@ function getSpellDialLimits(entity, base) {
         maxTargets: (base.type !== 'aoe_debuff' && base.type !== 'summon') ? (skills[`${school}_targets`] || 0) : 0,
         cap: (entity.manaCaps && entity.manaCaps[school]) || 10,
         burstCapable,
+        subtleCapable,
     };
 }
 
 // Exact port of ui.js's renderSpellStats cost formula (arcane-only
 // efficiency skills are a real, existing asymmetry there — not a bug this
 // planner should paper over).
-function computeSpellVariant(entity, baseId, base, speed, magBonus, rangeBonus, radBonus, targetBonus, burst = false) {
+function computeSpellVariant(entity, baseId, base, speed, magBonus, rangeBonus, radBonus, targetBonus, burst = false, subtle = false) {
     const school = base.school;
     let manaCost = base.baseMana;
     let tpCost = 10;
@@ -65,15 +70,17 @@ function computeSpellVariant(entity, baseId, base, speed, magBonus, rangeBonus, 
     // surcharge for the conversion itself, on top of the existing radius
     // dial cost (radBonus*10 above) for scaling it further.
     if (burst) manaCost += 8;
+    // SUBTLE (skills.js's subtle_spell): doesn't break stealth when cast.
+    if (subtle) { manaCost += 6; tpCost += 5; }
     manaCost = Math.max(1, manaCost);
-    const coreManaCost = base.baseMana + (magBonus * Math.max(0, 5 - effMag)) + (radBonus * 10) + (targetBonus * 15) + (burst ? 8 : 0);
+    const coreManaCost = base.baseMana + (magBonus * Math.max(0, 5 - effMag)) + (radBonus * 10) + (targetBonus * 15) + (burst ? 8 : 0) + (subtle ? 6 : 0);
     const magnitude = base.baseMagnitude * (1 + magBonus);
     const range = (base.baseRange || 1) + rangeBonus;
     const radius = burst ? (1 + radBonus) : ((base.baseRadius || 0) + radBonus);
     const type = burst ? (base.type === 'heal' ? 'aoe_heal' : 'aoe_damage') : base.type;
     return {
         name: base.name, school, baseId, type,
-        manaCost, coreManaCost, tpCost, magnitude, range, radius, extraTargets: targetBonus,
+        manaCost, coreManaCost, tpCost, magnitude, range, radius, extraTargets: targetBonus, subtle,
     };
 }
 
@@ -85,7 +92,7 @@ function variantKey(v) {
 // radius=10/pt, targets=15/pt) to spend as much of the mana cap as
 // possible without exceeding it — a simple, good-enough greedy for
 // "the most expensive version this entity could build".
-function buildMostExpensiveVariant(entity, baseId, base, limits, burst = false) {
+function buildMostExpensiveVariant(entity, baseId, base, limits, burst = false, subtle = false) {
     const speed = limits.quickened ? 'quickened' : 'default';
     let rangeB = 0, magB = 0, radB = 0, targB = 0;
     const dialOrder = [
@@ -98,11 +105,11 @@ function buildMostExpensiveVariant(entity, baseId, base, limits, burst = false) 
         for (let i = 0; i < dial.max; i++) {
             const trial = dial.get() + 1;
             dial.set(trial);
-            const v = computeSpellVariant(entity, baseId, base, speed, magB, rangeB, radB, targB, burst);
+            const v = computeSpellVariant(entity, baseId, base, speed, magB, rangeB, radB, targB, burst, subtle);
             if (v.manaCost > limits.cap) { dial.set(trial - 1); break; }
         }
     }
-    return computeSpellVariant(entity, baseId, base, speed, magB, rangeB, radB, targB, burst);
+    return computeSpellVariant(entity, baseId, base, speed, magB, rangeB, radB, targB, burst, subtle);
 }
 
 function buildCheapestVariant(entity, baseId, base, limits, burst = false) {
@@ -186,6 +193,14 @@ function autoBuildSpellsForEntity(entity) {
         tryAdd(computeSpellVariant(entity, baseId, base, 'default', 0, 0, 0, 0, true));
         if (entity.createdSpells.length >= maxSlots) break;
         tryAdd(buildMostExpensiveVariant(entity, baseId, base, limits, true));
+    }
+    // Phase 3c: a Subtle (skills.js's subtle_spell, rogue tree) build of
+    // every subtle-capable known spell — a rogue/caster multiclass NPC
+    // gets a stealth-preserving version of its non-damaging spells too.
+    for (const { baseId, base } of known) {
+        if (entity.createdSpells.length >= maxSlots) break;
+        if (!limitsByBaseId[baseId].subtleCapable) continue;
+        tryAdd(computeSpellVariant(entity, baseId, base, 'default', 0, 0, 0, 0, false, true));
     }
     // Phase 4: random combinations filling any remaining slots. Bounded
     // attempt count — with no metamagic skills at all there's only ever

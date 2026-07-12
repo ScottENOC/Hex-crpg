@@ -205,6 +205,23 @@ const skills = {
         maxRanks: 1,
         apply: (player) => {}
     },
+    // SUBTLE SPELL: the rogue-side half of a rogue/caster multiclass — a
+    // metamagic option any known non-damaging spell (Heal, Calm Animal,
+    // Sanctuary, etc. — never Firebolt/Smite/burst-damage variants) can be
+    // built with, at +6 mana and +5 TP, that doesn't break stealth when
+    // cast. Deliberately universal across schools rather than arcane-only:
+    // this is a rogue skill about HOW you cast, not a caster skill about
+    // WHAT you cast, so a rogue/cleric or rogue/druid gets the same option
+    // as a rogue/wizard. See the Subtle checkbox (ui.js's spell builder)
+    // and the stealth-preserving check in tryCastSpell (gameEngine.js).
+    'subtle_spell': {
+        name: 'Subtle Spell',
+        description: 'Lets you build any known non-damaging spell as Subtle (+6 mana, +5 TP): casting it no longer breaks your stealth.',
+        tree: 'rogue',
+        maxRanks: 1,
+        prereq: 'stealth_rogue',
+        apply: (player) => {}
+    },
     'speedy_stealth': {
         name: 'Speedy Stealth',
         description: 'Passive: Reduces the Time Point penalty of moving while stealthed by 2.',

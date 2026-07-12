@@ -1051,6 +1051,18 @@ function updateSpellPreview() {
             </div>
         `;
     }
+    // SUBTLE SPELL (skills.js's subtle_spell, rogue tree): the rogue-side
+    // half of a rogue/caster multiclass — never available for damage
+    // spells (a Firebolt is not subtle), universal across schools since
+    // it's about HOW you cast, not WHAT.
+    const subtleCapable = !!player.skills?.subtle_spell && base.type !== 'damage';
+    if (subtleCapable) {
+        html += `
+            <div class="form-group">
+                <label><input type="checkbox" id="spell-subtle-toggle" onchange="window.renderSpellStats()"> Subtle (doesn't break stealth when cast) — +6 Mana, +5 TP</label>
+            </div>
+        `;
+    }
     if ((expandRanks > 0 && base.baseRadius !== undefined) || burstCapable) {
         html += `
             <div class="form-group">
@@ -1097,6 +1109,8 @@ function renderSpellStats() {
     const targetBonus = targetBonusInput ? (parseInt(targetBonusInput.value) || 0) : 0;
     const burstToggle = document.getElementById("spell-burst-toggle");
     const burst = burstToggle ? burstToggle.checked : false;
+    const subtleToggle = document.getElementById("spell-subtle-toggle");
+    const subtle = subtleToggle ? subtleToggle.checked : false;
     const calmModeSelect = document.getElementById("spell-calm-mode-select");
     const calmMode = calmModeSelect ? calmModeSelect.value : undefined;
 
@@ -1132,8 +1146,9 @@ function renderSpellStats() {
     manaCost += (radBonus * 10);
     manaCost += (targetBonus * 15);
     if (burst) manaCost += 8;
+    if (subtle) { manaCost += 6; tpCost += 5; }
 
-    const coreManaCost = base.baseMana + (magBonus * Math.max(0, 5 - effMag)) + (radBonus * 10) + (targetBonus * 15) + (burst ? 8 : 0);
+    const coreManaCost = base.baseMana + (magBonus * Math.max(0, 5 - effMag)) + (radBonus * 10) + (targetBonus * 15) + (burst ? 8 : 0) + (subtle ? 6 : 0);
 
     const cap = player.manaCaps[base.school] || 10;
     const overCap = manaCost > cap;
@@ -1146,6 +1161,7 @@ function renderSpellStats() {
         ${(base.baseRadius !== undefined || burst) ? `<p><strong>Radius:</strong> ${radius}</p>` : ''}
         ${extraTargets > 0 ? `<p><strong>Extra Targets:</strong> ${extraTargets}</p>` : ''}
         ${burst ? `<p><strong>Burst:</strong> centered on a clicked point, not a single target</p>` : ''}
+        ${subtle ? `<p><strong>Subtle:</strong> won't break stealth when cast</p>` : ''}
     `;
     const display = document.getElementById("spell-stats-display");
     if (display) display.innerHTML = statsHtml;
@@ -1173,7 +1189,7 @@ function renderSpellStats() {
         if (display) display.innerHTML = statsHtml;
     }
 
-    window.currentSpellCalc = { name: defaultName, school: base.school, manaCost, coreManaCost, tpCost, magnitude, range, radius, extraTargets, type: effectiveType, baseId, animalId, calmMode, debuffType: base.debuffType };
+    window.currentSpellCalc = { name: defaultName, school: base.school, manaCost, coreManaCost, tpCost, magnitude, range, radius, extraTargets, type: effectiveType, baseId, animalId, calmMode, debuffType: base.debuffType, subtle };
 }
 
 function createSpell() {

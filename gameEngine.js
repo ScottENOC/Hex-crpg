@@ -7664,7 +7664,11 @@ function tryCastSpell(caster, spell, target, clickedHex, bypassCooldown = false)
 
     // 2. Resolve Spell (Normal path if no reaction or AI missed)
     caster.currentMana -= spell.manaCost + getArmorSpellPenalty(caster, spell);
-    if (caster.isStealthed) breakStealth(caster);
+    // SUBTLE SPELL (skills.js's subtle_spell, rogue tree): a spell built
+    // Subtle doesn't break stealth — never available for damage/aoe_damage
+    // in the first place (ui.js's spell builder gates it), so this can't
+    // be used to land an unseen hit.
+    if (caster.isStealthed && !spell.subtle) breakStealth(caster);
     return resolveSpell(caster, spell, target, clickedHex);
 }
 
