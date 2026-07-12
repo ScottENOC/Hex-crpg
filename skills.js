@@ -411,6 +411,24 @@ const skills = {
     // caster multiclass actually wants. Available for any spell whose
     // normal range is already more than 1 (a spell that's already
     // touch-range, e.g. Divine Protection, has nothing to discount).
+    // WARLOCK'S PACT: unlocks a toggleable ability (window.toggleBloodMagic,
+    // gameEngine.js) — once mana runs out, casting draws the shortfall from
+    // HP instead, at 2 HP per missing mana point. Deliberately worse than
+    // buying that HP back the honest way: Heal (baseMana 6, baseMagnitude
+    // 5) converts mana to HP at ~1.2 mana per HP, so recovering the 2 HP
+    // spent per mana here would cost ~2.4 mana — a strict net loss, so this
+    // can never be looped into free mana via a healer. Applies to whatever
+    // a spell's FINAL mana cost is after every other metamagic discount
+    // (Touch, Subtle, etc.) — it reads the same already-computed manaCost
+    // resolveSpell's caller pays, not a separate calculation.
+    'blood_magic': {
+        name: "Warlock's Pact",
+        description: "Toggle Blood Magic: once you're out of mana, casting draws the shortfall from your own HP instead, at 2 HP per missing mana — a worse rate than Heal converts mana back into HP.",
+        tree: 'arcane',
+        maxRanks: 1,
+        active: true,
+        apply: (player) => {}
+    },
     'arcane_touch': {
         name: 'Arcane Touch',
         description: 'Lets you cast an Arcane spell at range 1 (adjacent only) for -3 mana instead of its normal range.',

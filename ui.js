@@ -955,7 +955,19 @@ function showSpellScreen() {
         return;
     }
     if (window.showTutorialTip) window.showTutorialTip('spell_builder', "Pick a base spell, then adjust range/magnitude/targets with the sliders — mana and TP cost update live. Once it looks right, hit Save to add it to your action bar.");
+    let bloodMagicHtml = '';
+    if (player.skills?.blood_magic) {
+        bloodMagicHtml = `
+            <div class="form-group" style="margin-bottom: 15px;">
+                <button onclick="window.toggleBloodMagic(window.player); window.showSpellScreen();">
+                    Blood Magic: ${player.bloodMagicActive ? 'ON' : 'OFF'}
+                </button>
+                <span style="font-size: 0.8em; color: #aaa;"> While on, casting past empty mana draws the rest from your own HP (2 HP per missing mana).</span>
+            </div>
+        `;
+    }
     let html = `
+        ${bloodMagicHtml}
         <div class="spell-form">
             <div class="form-group">
                 <label>Base Spell:</label>

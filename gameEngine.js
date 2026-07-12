@@ -4709,7 +4709,7 @@ function handleClick(e){
         } else if (act.type === 'spell') {
             const spell = window.player.createdSpells[act.index];
             const dist = target ? getMinDistance(player, target) : window.distance(player.hex, clickedHex);
-            if (dist <= spell.range && player.currentMana >= spell.manaCost + getArmorSpellPenalty(player, spell) && player.timePoints >= spell.tpCost) {
+            if (dist <= spell.range && getSpellCastAffordability(player, spell.manaCost + getArmorSpellPenalty(player, spell)).affordable && player.timePoints >= spell.tpCost) {
                 const maxTargets = 1 + (spell.extraTargets || 0);
                 
                 // Add target if not already added
@@ -7618,6 +7618,41 @@ function getArmorSpellPenalty(caster, spell) {
 }
 window.getArmorSpellPenalty = getArmorSpellPenalty;
 
+// WARLOCK'S PACT (skills.js's blood_magic): toggled per-entity, not a
+// permanent stance — off by default even once the skill is bought, so a
+// player has to deliberately opt in each time they want to burn HP for
+// mana rather than it silently kicking in the first time they're short.
+function toggleBloodMagic(entity) {
+    if (!entity.skills?.blood_magic) return;
+    entity.bloodMagicActive = !entity.bloodMagicActive;
+    window.showMessage(`${entity.name} ${entity.bloodMagicActive ? 'embraces' : 'sets aside'} the blood pact.`);
+}
+window.toggleBloodMagic = toggleBloodMagic;
+
+// Whether `caster` can pay `totalCost` mana for a cast, and how much HP
+// that would take if the shortfall has to come out of Blood Magic. Kept
+// as a query (no mutation) so both the click-handler's affordability gate
+// and the actual payment below read the exact same numbers.
+function getSpellCastAffordability(caster, totalCost) {
+    const manaShort = Math.max(0, totalCost - (caster.currentMana || 0));
+    if (manaShort === 0) return { affordable: true, hpCost: 0 };
+    if (!caster.bloodMagicActive) return { affordable: false, hpCost: 0 };
+    const hpCost = manaShort * 2;
+    return { affordable: (caster.hp - hpCost) >= 1, hpCost };
+}
+window.getSpellCastAffordability = getSpellCastAffordability;
+
+function paySpellCost(caster, totalCost) {
+    const { hpCost } = getSpellCastAffordability(caster, totalCost);
+    caster.currentMana -= Math.min(caster.currentMana || 0, totalCost);
+    if (hpCost > 0) {
+        caster.hp -= hpCost;
+        syncBackToPlayer(caster);
+        sharedMessage(`${caster.name} pays the blood price! (-${hpCost} HP)`);
+    }
+}
+window.paySpellCost = paySpellCost;
+
 function tryCastSpell(caster, spell, target, clickedHex, bypassCooldown = false) {
     // REAL-TIME CASTING DELAY
     if (!window.isInCombat && !bypassCooldown) {
@@ -7719,7 +7754,7 @@ function tryCastSpell(caster, spell, target, clickedHex, bypassCooldown = false)
     }
 
     // 2. Resolve Spell (Normal path if no reaction or AI missed)
-    caster.currentMana -= spell.manaCost + getArmorSpellPenalty(caster, spell);
+    paySpellCost(caster, spell.manaCost + getArmorSpellPenalty(caster, spell));
     // SUBTLE SPELL (skills.js's subtle_spell, rogue tree): a spell built
     // Subtle doesn't break stealth — never available for damage/aoe_damage
     // in the first place (ui.js's spell builder gates it), so this can't
