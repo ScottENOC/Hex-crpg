@@ -848,9 +848,16 @@ function checkMovementReactions(movingEntity, nextHex, callback) {
                         window.showMessage(`${reactor.name} Sidesteps! Select an adjacent free hex.`);
                         // Highlight adjacent free hexes
                         window.clearHighlights();
+                        // Sidestep is a free reposition, not a real move action —
+                        // it must not let a defender scale (or drop off) a
+                        // climbable wall for free, so only same-elevation
+                        // neighbors are offered (see shove's matching check below).
+                        const reactorElevated = !!window.getTerrainAt(reactor.hex.q, reactor.hex.r).elevated;
                         const neighbors = window.getNeighbors(reactor.hex.q, reactor.hex.r);
                         neighbors.forEach(nh => {
-                            if (!getEntityAtHex(nh.q, nh.r) && window.getTerrainAt(nh.q, nh.r).name !== 'Water' && window.getTerrainAt(nh.q, nh.r).name !== 'Wall') {
+                            const nhTerrain = window.getTerrainAt(nh.q, nh.r);
+                            if (!getEntityAtHex(nh.q, nh.r) && !nhTerrain.impassable && nhTerrain.name !== 'Water' &&
+                                !!nhTerrain.elevated === reactorElevated) {
                                 window.highlightedHexes.push({ q: nh.q, r: nh.r, type: 'move' });
                             }
                         });
@@ -978,6 +985,8 @@ function updatePlayerUI() {
         if (weapon?.id === 'bow' && player.skills?.elf_bow_range) rangeBonus += (player.skills.elf_bow_range * 4);
         attackRange += rangeBonus;
         isRanged = (weapon?.subType === 'ranged');
+        // HIGH GROUND RANGE (see the matching aiProcess block, gameEngine.js)
+        if (isRanged && window.getTerrainAt(player.hex.q, player.hex.r).elevated) attackRange += 2;
     }
     const attackHexes = getHexesInRange(player.hex, attackRange);
     attackHexes.forEach(h => {
@@ -3965,11 +3974,20 @@ function aiProcess(entity) {
     }
 
     let attackRange = 1;
+    let rangeWeapon = null;
     if (entity.equipped?.weapon) {
-        const weapon = window.items[entity.equipped.weapon];
-        let rb = (weapon?.range || 0);
-        if (weapon?.id === 'bow' && entity.skills?.elf_bow_range) rb += (entity.skills.elf_bow_range * 4);
+        rangeWeapon = window.items[entity.equipped.weapon];
+        let rb = (rangeWeapon?.range || 0);
+        if (rangeWeapon?.id === 'bow' && entity.skills?.elf_bow_range) rb += (entity.skills.elf_bow_range * 4);
         attackRange += rb;
+    }
+    // HIGH GROUND RANGE: firing down from a wall/rampart reaches further;
+    // firing up at one from the ground falls short sooner — pushes ranged
+    // attackers to actually climb rather than plink from a safe distance,
+    // and rewards defenders who stay up on the wall.
+    if (rangeWeapon?.subType === 'ranged') {
+        if (window.getTerrainAt(entity.hex.q, entity.hex.r).elevated) attackRange += 2;
+        else if (target && window.getTerrainAt(target.hex.q, target.hex.r).elevated) attackRange = Math.max(1, attackRange - 2);
     }
     const dist = getMinDistance(entity, target || { getAllHexes: () => [huntTargetHex], hex: huntTargetHex });
 
@@ -4992,8 +5010,8 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
 
   // COVER: behind any elevated terrain (pedestals, fort ramparts)
   if (window.isCoveredFromRangedAttack(target)) {
-      window.showMessage(`${target.name} has cover (Cover bonus: -5 hit)`);
-      hitChance -= 5;
+      window.showMessage(`${target.name} has cover (Cover bonus: -15 hit)`);
+      hitChance -= 15;
   }
 
   if (attacker.equipped?.weapon && attacker.equipped?.offhand && window.items[attacker.equipped.offhand].type === 'weapon') hitChance -= 5;
@@ -6068,7 +6086,17 @@ function tryShove(shover, target) {
         window.showMessage("Cannot shove target off the map.");
         return false;
     }
-    
+
+    // A shove is a forced reposition, not a real climb — it must not let a
+    // target be knocked up onto (or down off) a climbable wall for free.
+    const newTerrain = window.getTerrainAt(newHex.q, newHex.r);
+    if (newTerrain.impassable || !!newTerrain.elevated !== !!targetTerrain.elevated) {
+        window.showMessage(`${target.name} braces against the wall — the shove can't force them up or down it.`);
+        spendTP(shover, 5);
+        window.playerAction = null;
+        return true;
+    }
+
     window.showMessage(`${shover.name} shoves ${target.name}.`);
     target.hex = newHex;
     spendTP(shover, 5);
@@ -7223,8 +7251,8 @@ function resolveSpell(caster, spell, target, clickedHex) {
         
         // COVER: behind any elevated terrain (pedestals, fort ramparts)
         if (target && spell.baseId === 'firebolt' && window.isCoveredFromRangedAttack(target)) {
-            window.showMessage(`${target.name} has cover (Cover bonus: -5 hit)`);
-            hitChance -= 5;
+            window.showMessage(`${target.name} has cover (Cover bonus: -15 hit)`);
+            hitChance -= 15;
         }
 
         const roll = Math.floor(Math.random() * 100);

@@ -24,11 +24,11 @@ test.describe('climbing skills: TP cost + combat fall chance stacking', () => {
             const three = window.getMoveCostMult(900, 900, p);
             return { none, one, two, three };
         });
-        // Baseline Climbable Wall moveCostMult is 3; formula is 1 + (3-1)*climbCostMult.
-        expect(result.none).toBeCloseTo(3.0, 5);
-        expect(result.one).toBeCloseTo(1 + 2 * 0.8, 5);
-        expect(result.two).toBeCloseTo(1 + 2 * 0.6, 5);
-        expect(result.three).toBeCloseTo(1 + 2 * 0.4, 5); // floor: 40% of the surcharge remains
+        // Baseline Climbable Wall moveCostMult is 5; formula is 1 + (5-1)*climbCostMult.
+        expect(result.none).toBeCloseTo(5.0, 5);
+        expect(result.one).toBeCloseTo(1 + 4 * 0.8, 5);
+        expect(result.two).toBeCloseTo(1 + 4 * 0.6, 5);
+        expect(result.three).toBeCloseTo(1 + 4 * 0.4, 5); // floor: 40% of the surcharge remains
         expect(result.one).toBeLessThan(result.none);
         expect(result.two).toBeLessThan(result.one);
         expect(result.three).toBeLessThan(result.two);

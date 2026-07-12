@@ -132,6 +132,26 @@ async function bootPage(browser) {
                 const defenderStartHp = defenders.reduce((a, e) => a + e.hp, 0);
                 const attackerStartHp = attackers.reduce((a, e) => a + e.hp, 0);
                 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+                // FORMATION SNAPSHOT: describes clustering ("balling up" vs
+                // spread out) at a moment in time — centroid, mean distance
+                // from centroid, and unique-hex-count vs headcount (a low
+                // ratio means multiple entities are stacked on the same hex).
+                function snapshotFormation(list) {
+                    const alive = list.filter(e => e.alive);
+                    if (alive.length === 0) return null;
+                    const cq = alive.reduce((a, e) => a + e.hex.q, 0) / alive.length;
+                    const cr = alive.reduce((a, e) => a + e.hex.r, 0) / alive.length;
+                    const dists = alive.map(e => window.distance(e.hex, { q: Math.round(cq), r: Math.round(cr) }));
+                    const meanDist = dists.reduce((a, b) => a + b, 0) / dists.length;
+                    const maxDist = Math.max(...dists);
+                    const uniqueHexes = new Set(alive.map(e => `${e.hex.q},${e.hex.r}`)).size;
+                    return { count: alive.length, meanDist: +meanDist.toFixed(1), maxDist, uniqueHexes };
+                }
+
+                const snapshotTicks = new Set([25, 100, 300, 800]);
+                const formationLog = [];
+
                 let ticks = 0;
                 while (ticks < maxTicks) {
                     window.runTickInternal();
@@ -139,6 +159,9 @@ async function bootPage(browser) {
                     await sleep(12);
                     const defAlive = defenders.filter(e => e.alive).length;
                     const atkAlive = attackers.filter(e => e.alive).length;
+                    if (snapshotTicks.has(ticks)) {
+                        formationLog.push({ tick: ticks, defenders: snapshotFormation(defenders), attackers: snapshotFormation(attackers) });
+                    }
                     if (defAlive === 0 || atkAlive === 0) break;
                 }
                 window.isInCombat = false;
@@ -157,6 +180,7 @@ async function bootPage(browser) {
                     attackersAlive, attackersTotal: attackers.length,
                     defenderHpFractionRemaining: defenderStartHp ? defenderEndHp / defenderStartHp : 0,
                     attackerHpFractionRemaining: attackerStartHp ? attackerEndHp / attackerStartHp : 0,
+                    formationLog,
                 };
             },
         };
@@ -189,12 +213,16 @@ async function main() {
         window.entities.filter(e => e.factionTag === 'northwatch_human').length * 2);
     console.log(`Garrison size: ${attackerCount / 2}. Attacking force: ${attackerCount} (2x, ~60% bows, rest sword/spear).\n`);
 
-    const trials = 8;
+    const trials = Number(process.argv[2] || 3);
     const outcomes = [];
     for (let t = 0; t < trials; t++) {
         const r = await evalWithRecovery(({ attackerCount, maxTicks }) => window.aiSiegeSim.runAssault(attackerCount, maxTicks), { attackerCount, maxTicks: 3000 });
         outcomes.push(r);
         console.log(`trial ${t + 1}: winner=${r.winner.padEnd(10)} defenders ${r.defendersAlive}/${r.defendersTotal} (${(r.defenderHpFractionRemaining * 100).toFixed(0)}% hp)  attackers ${r.attackersAlive}/${r.attackersTotal} (${(r.attackerHpFractionRemaining * 100).toFixed(0)}% hp)  ticks=${r.ticks}`);
+        r.formationLog.forEach(f => {
+            const d = f.defenders, a = f.attackers;
+            console.log(`    tick ${f.tick}: defenders n=${d?.count ?? 0} meanDist=${d?.meanDist ?? '-'} uniqueHexes=${d?.uniqueHexes ?? '-'}  |  attackers n=${a?.count ?? 0} meanDist=${a?.meanDist ?? '-'} uniqueHexes=${a?.uniqueHexes ?? '-'}`);
+        });
     }
 
     const attackerWinRate = outcomes.filter(o => o.winner === 'attackers').length / outcomes.length;

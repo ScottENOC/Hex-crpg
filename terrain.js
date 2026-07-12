@@ -42,7 +42,7 @@ const terrainTypes = {
     // and the in-combat fall chance (playerMove) both key off this flag,
     // rather than hardcoding 'Climbable Wall' by name — a future wall tier
     // could opt into the same skill interaction just by setting it too.
-    'climbable_wall': { name: 'Climbable Wall', color: '#7a6a52', moveCostMult: 3, hitBonus: 15, dodgeBonus: 10, stealthBonus: 0, elevated: true, climbRisk: true },
+    'climbable_wall': { name: 'Climbable Wall', color: '#7a6a52', moveCostMult: 5, hitBonus: 15, dodgeBonus: 10, stealthBonus: 0, elevated: true, climbRisk: true },
     // The inner keep's wall: genuinely impassable (can't be climbed at all)
     // and roofed (blocks LOS, see isOpaqueWallName in hexMap.js) — the one
     // wall type in the fort that a siege engine can actually break down
