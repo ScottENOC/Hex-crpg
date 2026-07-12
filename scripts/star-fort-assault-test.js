@@ -192,7 +192,7 @@ async function main() {
     const trials = 8;
     const outcomes = [];
     for (let t = 0; t < trials; t++) {
-        const r = await evalWithRecovery(({ attackerCount, maxTicks }) => window.aiSiegeSim.runAssault(attackerCount, maxTicks), { attackerCount, maxTicks: 1500 });
+        const r = await evalWithRecovery(({ attackerCount, maxTicks }) => window.aiSiegeSim.runAssault(attackerCount, maxTicks), { attackerCount, maxTicks: 3000 });
         outcomes.push(r);
         console.log(`trial ${t + 1}: winner=${r.winner.padEnd(10)} defenders ${r.defendersAlive}/${r.defendersTotal} (${(r.defenderHpFractionRemaining * 100).toFixed(0)}% hp)  attackers ${r.attackersAlive}/${r.attackersTotal} (${(r.attackerHpFractionRemaining * 100).toFixed(0)}% hp)  ticks=${r.ticks}`);
     }

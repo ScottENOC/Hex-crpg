@@ -3958,7 +3958,17 @@ function aiProcess(entity) {
             }
             spendTP(entity, 5);
         } else {
-            tryAttack(entity, target);
+            // tryAttack silently no-ops against a neutral-side target unless
+            // ignoreNeutralCheck is passed (gameEngine.js's tryAttack) — a
+            // rail against the *player* misclicking a shopkeeper, not meant
+            // to apply here. `target` only ever reached this far because
+            // `opponents` already decided it's hostile via this entity's own
+            // combatDirective.hostileTo (e.g. an attacker explicitly sieging
+            // a neutral-side garrison) — so if that's what named this target
+            // hostile, the attack should actually land instead of being a
+            // silent no-op that makes neutral-side defenders unkillable.
+            const bypassNeutralCheck = target.side === 'neutral' && entity.combatDirective?.hostileTo === 'neutral';
+            tryAttack(entity, target, false, false, 0, bypassNeutralCheck);
             spendTP(entity, 10);
         }
         setTimeout(() => aiProcess(entity), 20);
