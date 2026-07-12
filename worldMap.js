@@ -53,14 +53,17 @@ function loadWorldMap() {
             // row6/col4, row6/col7).
             window.worldMapWidth = 16;
             window.worldMapHeight = 16;
-            // A real mountain range in the north-west, big enough to eventually
-            // hold a dwarven kingdom (not built yet — this just reserves the
-            // ground so it lands somewhere sensible whenever that content
-            // exists), and a strip of open ocean along the east edge, past the
-            // orc-held lands — "a wall a few tiles deep," not a wasted expanse
-            // of empty sea tiles.
-            const MOUNTAIN_COLS = 4, MOUNTAIN_ROWS = 5; // NW corner block, clear of Silverhart (row2,col6)/Millbrook (row3,col6)
-            const OCEAN_COLS = 2; // eastmost columns
+            // Dwarven Kragmoor's mountain range sits in the NE corner now,
+            // bordering the orc-held east rather than tucked away alone in
+            // the NW — the two "greenskin-adjacent" territories (orc lands
+            // and the dwarven mountains) deliberately overlap in the
+            // north-east so Kragmoor reads as genuinely near the orcs, not
+            // just on the same landmass. Ocean now runs along the WEST edge
+            // instead of the east, so the human/orc/dwarf territories are
+            // all inland and the greenskins (orc lands, east) are the
+            // furthest thing from the coast.
+            const MOUNTAIN_COLS = 4, MOUNTAIN_ROWS = 5; // NE corner block
+            const OCEAN_COLS = 2; // westmost columns
             window.worldMapData = [];
             for (let y = 0; y < 16; y++) {
                 const row = [];
@@ -70,17 +73,19 @@ function loadWorldMap() {
                     // hills/mountains for flavor, using the same pseudoRandom
                     // hash the local terrain generators already use.
                     const isOrcLands = x >= 10;
-                    const isOcean = x >= 16 - OCEAN_COLS;
-                    const isMountainRange = !isOrcLands && x < MOUNTAIN_COLS && y < MOUNTAIN_ROWS;
+                    const isOcean = x < OCEAN_COLS;
+                    const isMountainRange = x >= 16 - MOUNTAIN_COLS && y < MOUNTAIN_ROWS;
                     let t = 'G';
                     const rough = window.pseudoRandom(x * 2.3 + 5, y * 1.7 + 3);
                     if (isOcean) t = 'W';
                     else if (isMountainRange) t = 'M';
                     else if (isOrcLands && rough > 0.8) t = 'M';
                     else if (isOrcLands && rough > 0.6) t = 'H';
-                    // Unclaimed geography (ocean/mountains) carries no faction
-                    // color — it isn't anyone's territory yet.
-                    const o = (isOcean || isMountainRange) ? '' : (isOrcLands ? 'o' : 'h');
+                    // Ocean carries no faction color (unclaimed sea); the NE
+                    // mountain block is Kragmoor's own territory ('d') even
+                    // where it overlaps the orc-lands column range — that
+                    // overlap is deliberate, see above.
+                    const o = isOcean ? '' : (isMountainRange ? 'd' : (isOrcLands ? 'o' : 'h'));
                     row.push({ t, f: '', o, p: 0, n: '' });
                 }
                 window.worldMapData.push(row);
@@ -109,16 +114,16 @@ function loadWorldMap() {
             // straight through every settlement icon — still the correct
             // side (north) of the crossroads, just nudged off the settlement
             // row for legibility. Bends south toward row 6 for two columns
-            // at the human/orc border crossing, mirroring the local river's
-            // own bend before it levels back out. The west end bends up into
-            // the new NW mountain range (its real source) and the east end
-            // now runs straight into the new ocean strip (its mouth) — a
-            // river that actually flows from mountain to sea, not just an
-            // artistic embellishment beyond the mapped local area.
+            // at the human/orc border crossing (unchanged — that border is
+            // still at the same columns), then bends NORTH into the new NE
+            // mountain range (its real source now that Kragmoor moved
+            // there) instead of running flat into where the ocean used to
+            // be. The west end already terminates right at x=0-1, which is
+            // now the ocean strip — its mouth, unchanged.
             window.worldRiverPath = [
                 { x: 0, y: 4 }, { x: 1, y: 5 }, { x: 2, y: 5 }, { x: 3, y: 5 }, { x: 4, y: 5 },
                 { x: 5, y: 5 }, { x: 6, y: 5 }, { x: 7, y: 5 }, { x: 8, y: 5 }, { x: 9, y: 5 },
-                { x: 10, y: 5 }, { x: 11, y: 6 }, { x: 12, y: 6 }, { x: 13, y: 5 }, { x: 14, y: 5 }, { x: 15, y: 5 }
+                { x: 10, y: 5 }, { x: 11, y: 6 }, { x: 12, y: 6 }, { x: 13, y: 5 }, { x: 14, y: 5 }, { x: 15, y: 4 }
             ];
 
             window.playerWorldPos = { x: 6, y: 6 };

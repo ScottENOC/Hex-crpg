@@ -71,9 +71,12 @@ test.describe('world map overhaul: river, capital, forts, orc lands, borders', (
         const result = await page.evaluate(() => {
             // Reach into the module scope indirectly via a border-cell check
             // instead — confirms the neighbor table is wired into rendering
-            // by checking a cell we know sits on the human/orc border.
-            const borderCellHuman = window.worldMapData[6][9]; // just west of orc lands (col 10)
-            const borderCellOrc = window.worldMapData[6][10]; // just east of the border
+            // by checking a cell we know sits on the human/orc border. Uses
+            // row 8/9 rather than row 6 — row 6 is the settlement row, and a
+            // human-faction fort/camp marker sitting right on the border can
+            // overwrite a cell's terrain-derived faction color with its own.
+            const borderCellHuman = window.worldMapData[8][9]; // just west of orc lands (col 10)
+            const borderCellOrc = window.worldMapData[8][11]; // well east of the border, no marker
             return { human: borderCellHuman.o, orc: borderCellOrc.o };
         });
         expect(result.human).toBe('h');

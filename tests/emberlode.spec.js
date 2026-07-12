@@ -1,6 +1,7 @@
 // tests/emberlode.spec.js
-// Emberlode: a mining village two world-hexes west of Hollowmere, past the
-// goblin camp on the same road (see buildEmberlode in campaign2World.js).
+// Emberlode: a mining village two world-hexes west of Hollowmere (see
+// buildEmberlode in campaign2World.js) — the goblin camp used to share
+// this road but now sits east instead, near the orcs and Kragmoor.
 // Dialogue/quests branch on the goblin_threat quest's resolution state.
 const { test, expect } = require('@playwright/test');
 const { createCharacter } = require('./helpers');
@@ -28,13 +29,17 @@ test.describe('Emberlode village', () => {
         expect(info.region).toMatchObject({ id: 'emberlode', parentId: 'aldervale' });
     });
 
-    test('the goblin camp keeps its original position now that the west road is extended further', async ({ page }) => {
-        const center = await page.evaluate(() => window.campaign2GoblinCampCenter);
-        // Originally { q: -122, r: 24 } before the extension; the wiggle can
-        // shift r by at most a hex or two, but q must land at the same
-        // one-world-hex-out waypoint, not drift with the extended road.
-        expect(center.q).toBe(-122);
-        expect(Math.abs(center.r - 24)).toBeLessThanOrEqual(2);
+    test('the goblin camp sits east of Hollowmere now, alongside the orcs and Kragmoor', async ({ page }) => {
+        const { center, cp } = await page.evaluate(() => ({
+            center: window.campaign2GoblinCampCenter,
+            cp: window.campaign2Landmarks.crossroads,
+        }));
+        // Moved off the west road onto the east (border) road, 1.5
+        // world-hexes out — between Reddale (1x) and Northwatch (2x) — so
+        // the greenskins (goblins + orcs) and the dwarves all cluster on
+        // the same side of the map, away from the (now-western) ocean.
+        expect(center.q - cp.q).toBe(195);
+        expect(Math.abs(center.r - cp.r)).toBeLessThanOrEqual(2);
     });
 
     test('Corran Vale describes the danger and offers "The Buried Road" before goblin_threat is resolved', async ({ page }) => {

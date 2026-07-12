@@ -11,7 +11,7 @@ test.describe('the Skarn-tooth goblin camp', () => {
         await createCharacter(page);
     });
 
-    test('the camp exists a long way west, with huts, a dirt clearing, and all named goblins + the captive Paladin', async ({ page }) => {
+    test('the camp exists a long way from the crossroads, with huts, a dirt clearing, and all named goblins + the captive Paladin', async ({ page }) => {
         const result = await page.evaluate(() => {
             const cp = window.campaign2Landmarks.crossroads;
             const center = window.campaign2GoblinCampCenter;
@@ -29,7 +29,7 @@ test.describe('the Skarn-tooth goblin camp', () => {
                 allNeutralByDefault: window.entities.filter(e => ['Chief Skarnub', 'Nix Sharpear', 'Gralk the Bonecaster'].includes(e.name)).every(e => e.side === 'neutral'),
             };
         });
-        expect(result.distanceFromCrossroads).toBeGreaterThan(120); // "a long way" — the full length of the west road
+        expect(result.distanceFromCrossroads).toBeGreaterThan(120); // "a long way" — 1.5 world-hexes out on the east road
         expect(result.found).toEqual({ 'Chief Skarnub': true, 'Nix Sharpear': true, 'Gralk the Bonecaster': true, 'Ser Aldric Thorne': true });
         expect(result.guardCount).toBeGreaterThanOrEqual(3);
         expect(result.dirtAtCenter).toBe('Dirt');

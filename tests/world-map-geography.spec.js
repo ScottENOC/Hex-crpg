@@ -1,9 +1,12 @@
 // tests/world-map-geography.spec.js
 // World map tile colors now mean something real: mountain terrain ('M')
-// renders grey and marks out a real range (big enough for a future dwarven
-// kingdom), and a strip of open ocean ('W', using the new Deep Water local
-// terrain type) borders the far east edge. The river flows from the
-// mountain range to that ocean, not just an arbitrary west-to-east line.
+// renders grey and marks out a real range (Kragmoor, the dwarven kingdom,
+// in the NE corner — deliberately bordering orc territory so the
+// greenskins and the dwarves read as neighbors), and a strip of open ocean
+// ('W', using the new Deep Water local terrain type) borders the far WEST
+// edge, keeping human/orc/dwarf lands all inland and the greenskins
+// furthest from the coast. The river flows from the mountain range to that
+// ocean, not just an arbitrary west-to-east line.
 
 const { test, expect } = require('@playwright/test');
 const { createCharacter } = require('./helpers.js');
@@ -23,22 +26,22 @@ test.describe('Deep Water terrain type', () => {
 });
 
 test.describe('World map: mountain range and ocean strip', () => {
-    test('a real mountain range sits in the NW corner, unclaimed by any faction, colored grey', async ({ page }) => {
+    test('a real mountain range sits in the NE corner, claimed by the dwarves, colored grey', async ({ page }) => {
         await createCharacter(page, { campaign: '2' });
         const result = await page.evaluate(() => {
-            const cell = window.worldMapData[2][1]; // inside the reserved NW block
+            const cell = window.worldMapData[2][14]; // inside the reserved NE block
             return { t: cell.t, o: cell.o };
         });
         expect(result.t).toBe('M');
-        expect(result.o).toBe('');
+        expect(result.o).toBe('d');
     });
 
-    test('the mountain range is a real block, not a scattering of single hexes — big enough for a future kingdom', async ({ page }) => {
+    test('the mountain range is a real block, not a scattering of single hexes — big enough for Kragmoor', async ({ page }) => {
         await createCharacter(page, { campaign: '2' });
         const count = await page.evaluate(() => {
             let n = 0;
             for (let y = 0; y < 5; y++) {
-                for (let x = 0; x < 4; x++) {
+                for (let x = 12; x < 16; x++) {
                     if (window.worldMapData[y][x].t === 'M') n++;
                 }
             }
@@ -47,26 +50,26 @@ test.describe('World map: mountain range and ocean strip', () => {
         expect(count).toBeGreaterThanOrEqual(15); // most of the reserved 4x5 block
     });
 
-    test('the far east edge is a strip of open ocean, unclaimed by any faction', async ({ page }) => {
+    test('the far west edge is a strip of open ocean, unclaimed by any faction', async ({ page }) => {
         await createCharacter(page, { campaign: '2' });
         const result = await page.evaluate(() => {
-            const col14 = window.worldMapData.map(row => row[14]);
-            const col15 = window.worldMapData.map(row => row[15]);
+            const col0 = window.worldMapData.map(row => row[0]);
+            const col1 = window.worldMapData.map(row => row[1]);
             return {
-                col14AllOcean: col14.every(c => c.t === 'W'),
-                col15AllOcean: col15.every(c => c.t === 'W'),
-                unclaimed: col14.every(c => c.o === '') && col15.every(c => c.o === ''),
+                col0AllOcean: col0.every(c => c.t === 'W'),
+                col1AllOcean: col1.every(c => c.t === 'W'),
+                unclaimed: col0.every(c => c.o === '') && col1.every(c => c.o === ''),
             };
         });
-        expect(result.col14AllOcean).toBe(true);
-        expect(result.col15AllOcean).toBe(true);
+        expect(result.col0AllOcean).toBe(true);
+        expect(result.col1AllOcean).toBe(true);
         expect(result.unclaimed).toBe(true);
     });
 
     test('the ocean strip is genuinely just a few tiles deep, not a wide wasted expanse', async ({ page }) => {
         await createCharacter(page, { campaign: '2' });
-        const oceanCol13IsLand = await page.evaluate(() => window.worldMapData[5][13].t !== 'W');
-        expect(oceanCol13IsLand).toBe(true);
+        const oceanCol2IsLand = await page.evaluate(() => window.worldMapData[5][2].t !== 'W');
+        expect(oceanCol2IsLand).toBe(true);
     });
 
     test('existing settlement markers are untouched by the new geography', async ({ page }) => {
@@ -153,20 +156,19 @@ test.describe('World map faction borders: only the actual border edge, not the w
 });
 
 test.describe('World map river: mountain to ocean', () => {
-    test('the river\'s west end touches the mountain range and its east end runs into the ocean strip', async ({ page }) => {
+    test('the river\'s west end runs into the ocean strip and its east end touches the mountain range', async ({ page }) => {
         await createCharacter(page, { campaign: '2' });
         const result = await page.evaluate(() => {
             const path = window.worldRiverPath || [];
             const first = path[0];
             const last = path[path.length - 1];
             return {
-                firstX: first.x, firstY: first.y,
+                firstCellIsOcean: window.worldMapData[first.y][first.x].t === 'W',
                 lastX: last.x, lastY: last.y,
-                lastCellIsOcean: window.worldMapData[last.y][last.x].t === 'W',
             };
         });
-        expect(result.firstX).toBeLessThanOrEqual(1);
-        expect(result.firstY).toBeLessThanOrEqual(4); // touches the mountain block's southern edge
-        expect(result.lastCellIsOcean).toBe(true);
+        expect(result.firstCellIsOcean).toBe(true);
+        expect(result.lastX).toBeGreaterThanOrEqual(14);
+        expect(result.lastY).toBeLessThanOrEqual(4); // touches the mountain block's southern edge
     });
 });

@@ -2569,20 +2569,21 @@ function setupVillageScene(forLoadOnly = false) {
     // (see worldMap.js's isOrcLands cutoff and checkOrcRaiderEncounter's
     // headingEast threshold, both already east-of-Reddale-flavored).
     // Northwatch turns off north at the 2nd world-hex; Ridgehold sits at the
-    // 3rd (the road's actual end).
+    // 3rd (the road's actual end). The goblin camp now sits between Reddale
+    // (1st world-hex) and Northwatch (2nd) on this same east road, alongside
+    // the orcs and toward Kragmoor's NE mountain range — moved off the west
+    // road so the greenskins (goblins + orcs) cluster together on the same
+    // side as the dwarves, per worldMap.js's NE mountain block.
     let northwatchTurnHex = null;
+    let goblinCampWaypoint = null;
     const borderRoadEnd = paintRoad({ q: 1, r: 0 }, WORLD_HEX_SIZE * 3, 18, 0.35, (i, hex) => {
+        if (i === Math.round(WORLD_HEX_SIZE * 1.5)) goblinCampWaypoint = hex;
         if (i === WORLD_HEX_SIZE * 2) northwatchTurnHex = hex;
     });
-    // West: runs a full two world hexes now — the goblin camp sits at the
-    // original one-hex border (captured via onStep so its position is
-    // unchanged from before), and Emberlode (village + gold mine) sits a
-    // second hex further out, the same "extend the road, add a stub
+    // West: runs a full two world hexes — Emberlode (village + gold mine)
+    // sits at the far end, the same "extend the road, add a stub
     // settlement at the new end" pattern used for Millbrook up north.
-    let goblinCampWaypoint = null;
-    const westRoadEnd = paintRoad({ q: -1, r: 0 }, WORLD_HEX_SIZE * 2, 18, 0.35, (i, hex) => {
-        if (i === WORLD_HEX_SIZE) goblinCampWaypoint = hex;
-    });
+    const westRoadEnd = paintRoad({ q: -1, r: 0 }, WORLD_HEX_SIZE * 2, 18, 0.35, () => {});
 
     buildFarmstead(farmRoadEnd);
     buildGoblinCamp(goblinCampWaypoint);
@@ -2604,13 +2605,15 @@ function setupVillageScene(forLoadOnly = false) {
     buildOrcStronghold(borderRoadEnd);
     // Kragmoor, the Deepholds' one city-and-mine: independent of the road
     // network above (a mountain kingdom isn't reached by the same roads
-    // everyone else uses) — a large NW displacement from the crossroads,
-    // landing squarely inside worldMap.js's reserved NW mountain block.
-    // Its own short surface approach (painted inside buildDwarvenKingdom)
-    // is bridged into the rest of the road network by
+    // everyone else uses) — a large NE displacement from the crossroads,
+    // landing squarely inside worldMap.js's reserved NE mountain block,
+    // bordering (and slightly overlapping) orc territory — the dwarves and
+    // the greenskins are meant to be neighbors here, not on opposite sides
+    // of the map. Its own short surface approach (painted inside
+    // buildDwarvenKingdom) is bridged into the rest of the road network by
     // connectAllRoadNetworks below, same as any other settlement's road.
     {
-        const dwarfAnchor = { q: CP.q - 500, r: CP.r - 650 };
+        const dwarfAnchor = { q: CP.q + 900, r: CP.r - 650 };
         buildDwarvenKingdom(dwarfAnchor);
         // A direct hand-painted connector, rather than relying on
         // connectAllRoadNetworks' nearest-pair heuristic below — Kragmoor
