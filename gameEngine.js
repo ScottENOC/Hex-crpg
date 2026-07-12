@@ -4001,7 +4001,13 @@ function aiProcess(entity) {
     // only while actually adjacent, so it can't chain-kite indefinitely.
     const isSkirmishRetreat = entity.isSkirmisher && target && dist <= 1 && attackRange > 1;
 
-    if (target && dist <= attackRange && hasLOE && !isSkirmishRetreat) {
+    // BLOB PENALTY: a ranged attacker with an ally standing in its firing
+    // line can't loose a shot from here — falls through to the movement
+    // branch below and tries to find its own lane instead, same as being
+    // out of range. Melee (dist<=1, no intervening hex) is never affected.
+    const blockedByAlly = target && rangeWeapon?.subType === 'ranged' && dist > 1 && window.isShotBlockedByAlly(entity, target);
+
+    if (target && dist <= attackRange && hasLOE && !isSkirmishRetreat && !blockedByAlly) {
         if (entity.skills['quarterstaff_trip'] && entity.timePoints >= 5 && Math.random() > 0.5) {
             const hitChance = 50 + entity.toHitMelee - target.passiveDodge;
             if (Math.random() * 100 < hitChance) {
@@ -4938,6 +4944,32 @@ function canSee(viewer, target) {
 
     return true;
 }
+
+// A ranged shot's line can be blocked by a friendly body standing in the
+// way, the same as it's blocked by a wall — hasLineOfSight/hasLineOfEffect
+// deliberately never check this (they also govern spotting and general
+// reachability, where a crowd of allies shouldn't suddenly make you blind),
+// so this is a separate, narrower check consulted only right before a
+// ranged attack actually fires. This is what makes "blob everyone onto one
+// hex and volley" a bad tactic instead of a free lunch: pile twenty archers
+// onto the gate and only the front rank or two has daylight between them
+// and the target — the rest are loosing arrows into their own side's backs.
+function isShotBlockedByAlly(attacker, target) {
+    const d = window.distance(attacker.hex, target.hex);
+    if (d <= 1) return false;
+    for (let i = 1; i < d; i++) {
+        const t = i / d;
+        const hex = window.hexRound(
+            attacker.hex.q + (target.hex.q - attacker.hex.q) * t,
+            attacker.hex.r + (target.hex.r - attacker.hex.r) * t
+        );
+        if ((hex.q === attacker.hex.q && hex.r === attacker.hex.r) || (hex.q === target.hex.q && hex.r === target.hex.r)) continue;
+        const blocker = getEntityAtHex(hex.q, hex.r);
+        if (blocker && blocker.alive && blocker.side === attacker.side) return true;
+    }
+    return false;
+}
+window.isShotBlockedByAlly = isShotBlockedByAlly;
 
 // Shared by both the physical ranged path (below) and the Firebolt spell
 // path (tryCastSpell) — previously duplicated as two separate Pedestal-only

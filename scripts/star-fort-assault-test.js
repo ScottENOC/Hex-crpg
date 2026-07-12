@@ -109,10 +109,24 @@ async function bootPage(browser) {
                 });
 
                 const attackerRoster = buildAttackerRoster(attackerCount);
-                // Spawn along the road spur south of the gate, spread out
-                // so they don't all stack on one hex.
+                // Six axial directions out from the keep, matching the star
+                // fort's own 6 points (STAR_FORT_DIRECTIONS, campaign2World.js)
+                // — splits the attacking force into one group per point
+                // instead of everyone funneling through the single gate, so
+                // the garrison can't just mass at one breach.
+                const SIX_DIRECTIONS = [
+                    { q: 1, r: 0 }, { q: 1, r: -1 }, { q: 0, r: -1 },
+                    { q: -1, r: 0 }, { q: -1, r: 1 }, { q: 0, r: 1 },
+                ];
+                const spawnRadius = 9;
+                const groupSize = Math.ceil(attackerCount / SIX_DIRECTIONS.length);
                 const attackers = attackerRoster.map((spec, i) => {
-                    const hex = { q: gateHex.q + (i % 6) - 3, r: gateHex.r + 2 + Math.floor(i / 6) * 2 };
+                    const dir = SIX_DIRECTIONS[Math.floor(i / groupSize) % SIX_DIRECTIONS.length];
+                    const withinGroup = i % groupSize;
+                    const hex = {
+                        q: center.q + dir.q * spawnRadius + (withinGroup % 4) - 1,
+                        r: center.r + dir.r * spawnRadius + Math.floor(withinGroup / 4),
+                    };
                     const ent = window.buildNPC({ ...spec, hex, side: 'enemy', factionId: null, color: '#8a2a2a' });
                     ent.combatDirective = { hostileTo: 'neutral' }; // fight the fort's neutral-side garrison
                     ent.aiControlled = true;
@@ -208,10 +222,14 @@ async function main() {
         }
     }
 
-    // Garrison is 6 soldiers + 1 commander = 7; attackers at 2x = 14.
-    const attackerCount = await page.evaluate(() =>
-        window.entities.filter(e => e.factionTag === 'northwatch_human').length * 2);
-    console.log(`Garrison size: ${attackerCount / 2}. Attacking force: ${attackerCount} (2x, ~60% bows, rest sword/spear).\n`);
+    // Garrison is 6 soldiers + 1 commander = 7 (real garrison headcount is
+    // fixed by content, not scaled). Attackers = garrison * multiplier,
+    // split across all 6 of the star fort's points instead of funneling
+    // through the gate — usage: node star-fort-assault-test.js [trials] [attackerMultiplier]
+    const attackerMultiplier = Number(process.argv[3] || 2);
+    const attackerCount = await page.evaluate((mult) =>
+        window.entities.filter(e => e.factionTag === 'northwatch_human').length * mult, attackerMultiplier);
+    console.log(`Garrison size: ${Math.round(attackerCount / attackerMultiplier)}. Attacking force: ${attackerCount} (${attackerMultiplier}x, ~60% bows, rest sword/spear, spawned around all 6 points).\n`);
 
     const trials = Number(process.argv[2] || 3);
     const outcomes = [];
