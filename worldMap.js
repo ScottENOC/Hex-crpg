@@ -64,6 +64,13 @@ function loadWorldMap() {
             // furthest thing from the coast.
             const MOUNTAIN_COLS = 4, MOUNTAIN_ROWS = 5; // NE corner block
             const OCEAN_COLS = 2; // westmost columns
+            // Forest realm (the elves) along the SOUTH edge, spreading west
+            // all the way to the ocean strip so the coastline is shared by
+            // humans (west-center) and elves (south-west) rather than humans
+            // alone. Kept clear of the human/orc border column (10+) so it
+            // doesn't touch orc lands.
+            const FOREST_ROWS = 4; // southmost rows
+            const FOREST_MAX_COL = 9; // stops at the human/orc border column
             window.worldMapData = [];
             for (let y = 0; y < 16; y++) {
                 const row = [];
@@ -75,21 +82,38 @@ function loadWorldMap() {
                     const isOrcLands = x >= 10;
                     const isOcean = x < OCEAN_COLS;
                     const isMountainRange = x >= 16 - MOUNTAIN_COLS && y < MOUNTAIN_ROWS;
+                    const isForest = !isOcean && x <= FOREST_MAX_COL && y >= 16 - FOREST_ROWS;
                     let t = 'G';
                     const rough = window.pseudoRandom(x * 2.3 + 5, y * 1.7 + 3);
                     if (isOcean) t = 'W';
                     else if (isMountainRange) t = 'M';
+                    else if (isForest) t = 'F';
                     else if (isOrcLands && rough > 0.8) t = 'M';
                     else if (isOrcLands && rough > 0.6) t = 'H';
                     // Ocean carries no faction color (unclaimed sea); the NE
                     // mountain block is Kragmoor's own territory ('d') even
                     // where it overlaps the orc-lands column range — that
-                    // overlap is deliberate, see above.
-                    const o = isOcean ? '' : (isMountainRange ? 'd' : (isOrcLands ? 'o' : 'h'));
+                    // overlap is deliberate, see above. The southern forest
+                    // belt is elven ('e') territory.
+                    let o = isOcean ? '' : (isMountainRange ? 'd' : (isForest ? 'e' : (isOrcLands ? 'o' : 'h')));
+                    // Trade 4 tiles each way along the dwarf/orc line so the
+                    // border isn't one flat rectangle edge: the 4 northmost
+                    // orc tiles (just east of the human border) flip to
+                    // dwarven, which pulls Kragmoor's territory down to
+                    // directly border the human lands too; the 4 southmost
+                    // tiles of the mountain block trade back to the orcs to
+                    // keep the overall split even.
+                    if (x >= 10 && x <= 11 && y <= 1) o = 'd';
+                    if (x >= 12 && x <= 15 && y === 4) o = 'o';
                     row.push({ t, f: '', o, p: 0, n: '' });
                 }
                 window.worldMapData.push(row);
             }
+            // The elven capital, tucked into the forest belt near the coast —
+            // this realm has no local-map content yet (unlike Kragmoor), so
+            // it's placed directly here the same way Hollowmere is, rather
+            // than derived from a local hex that doesn't exist.
+            window.worldMapData[14][4] = { t: 'F', f: 'K', o: 'e', p: 2, n: "Sil'thandriel" };
             // Note: cell.f is the marker SHAPE ('K' capital/'C' city/'T' town/
             // 'V' village/'F' fort), cell.o is the faction-color code — see
             // drawWorldHex, which reads them this way.
@@ -322,31 +346,49 @@ function drawWorldHex(ctx, x, y, size, cell, q, r) {
     ctx.stroke();
 
     // Country border: stroke only the specific edge(s) that actually face a
-    // different, non-empty faction — not the hex's whole outline, which
+    // different (or off-map) faction — not the hex's whole outline, which
     // would paint a solid colored ring around every border hex regardless
-    // of which side(s) the border was actually on.
+    // of which side(s) the border was actually on. Each side draws its own
+    // line pulled slightly in from the shared edge toward its own hex
+    // center, so a human/orc border shows as two parallel lines (white
+    // just inside human territory, red just inside orc territory) instead
+    // of one line that only one side's color can win. Map edges count as a
+    // border too (there's no neighbor to compare against out there), so a
+    // territory's outline stays contiguous all the way around instead of
+    // stopping dead at the edge of the grid.
     if (cell.o) {
         const corners = [];
         for (let i = 0; i < 6; i++) {
             const angle = Math.PI / 180 * (60 * i);
             corners.push({ x: x + size * Math.cos(angle), y: y + size * Math.sin(angle) });
         }
-        const borderNeighbors = getWorldNeighbors(q, r).filter(n => {
+        const INSET = 0.12; // fraction of the way from the edge toward this hex's center
+        const neighbors = getWorldNeighbors(q, r);
+        const borderEdges = []; // { neighborX, neighborY } per bordering edge, or null neighbor for a map-edge border
+        neighbors.forEach(n => {
             const row = window.worldMapData[n.y];
             const neighborCell = row && row[n.x];
-            return neighborCell && neighborCell.o && neighborCell.o !== cell.o;
+            if (!neighborCell) {
+                // Off the grid entirely — still a real border for this
+                // territory, just with nothing on the other side to color.
+                borderEdges.push({ n, offGrid: true });
+            } else if (neighborCell.o && neighborCell.o !== cell.o) {
+                borderEdges.push({ n, offGrid: false });
+            }
         });
-        if (borderNeighbors.length) {
-            ctx.lineWidth = Math.max(1, 2.5 * window.worldCameraZoom);
+        if (borderEdges.length) {
+            ctx.lineWidth = Math.max(1, 2 * window.worldCameraZoom);
             ctx.strokeStyle = factionColors[cell.o] || 'white';
-            borderNeighbors.forEach(n => {
+            borderEdges.forEach(({ n, offGrid }) => {
                 // Match each bordering neighbor to whichever hex edge (pair
                 // of adjacent corners) actually faces it, by comparing the
                 // neighbor's real screen-space direction against each edge
                 // midpoint's direction from this hex's center — robust
                 // against the offset-direction table's exact ordering,
                 // since it's driven by real pixel geometry, not assumed
-                // index alignment.
+                // index alignment. Off-grid neighbors still have real (x,y)
+                // coordinates one step past the border, so the same lookup
+                // works for map-edge borders too.
                 const { x: nx, y: ny } = worldHexToPixel(n.x, n.y);
                 const toNeighborAngle = Math.atan2(ny - y, nx - x);
                 let bestEdge = 0, bestDiff = Infinity;
@@ -357,26 +399,52 @@ function drawWorldHex(ctx, x, y, size, cell, q, r) {
                     if (diff > Math.PI) diff = 2 * Math.PI - diff;
                     if (diff < bestDiff) { bestDiff = diff; bestEdge = i; }
                 }
+                const c1 = corners[bestEdge], c2 = corners[(bestEdge + 1) % 6];
+                // Pull both endpoints slightly toward this hex's own center
+                // (x,y) so the stroked line sits just inside this territory
+                // rather than exactly on the shared edge.
+                const p1 = { x: c1.x + (x - c1.x) * INSET, y: c1.y + (y - c1.y) * INSET };
+                const p2 = { x: c2.x + (x - c2.x) * INSET, y: c2.y + (y - c2.y) * INSET };
                 ctx.beginPath();
-                ctx.moveTo(corners[bestEdge].x, corners[bestEdge].y);
-                ctx.lineTo(corners[(bestEdge + 1) % 6].x, corners[(bestEdge + 1) % 6].y);
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
                 ctx.stroke();
             });
         }
     }
 
     if (cell.f) {
-        const markerColor = cell.f === 'F' ? '#8d6e63' : (factionColors[cell.o] || 'white');
+        // 'S' (scout camp, e.g. Skarn-tooth): the tile's own faction color
+        // (cell.o) reflects whose LAND it is, not who's camped on it — an
+        // orc scouting party pitched on land that's still human territory —
+        // so its marker is colored for the camp's actual occupants (orc
+        // red) regardless of cell.o.
+        const markerColor = cell.f === 'F' ? '#8d6e63' : (cell.f === 'S' ? (factionColors['o'] || 'white') : (factionColors[cell.o] || 'white'));
         let markerRadius;
         switch (cell.f) {
             case 'K': markerRadius = size * 0.45; break; // capital
             case 'C': markerRadius = size * 0.38; break; // city
             case 'T': markerRadius = size * 0.28; break; // town
             case 'F': markerRadius = size * 0.22; break; // fort
+            case 'S': markerRadius = size * 0.16; break; // scout camp — smaller than even a village
             default:  markerRadius = size * 0.18; break; // village
         }
 
-        if (cell.f === 'F') {
+        if (cell.f === 'S') {
+            // A small diamond, not a settlement dot or a fort square — reads
+            // as a temporary contested outpost, not a real place.
+            ctx.fillStyle = markerColor;
+            ctx.beginPath();
+            ctx.moveTo(x, y - markerRadius);
+            ctx.lineTo(x + markerRadius, y);
+            ctx.lineTo(x, y + markerRadius);
+            ctx.lineTo(x - markerRadius, y);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        } else if (cell.f === 'F') {
             // Fort: a small square, not a settlement dot, so it reads as a
             // military waypoint rather than a place people actually live.
             ctx.fillStyle = markerColor;
@@ -472,7 +540,7 @@ function selectWorldMapCell(x, y) {
     if (!panel) return;
 
     const factionNames = { h: 'Human', e: 'Elven', d: 'Dwarven', o: 'Orc', g: 'Goblin', n: 'Neutral' };
-    const settlementNames = { K: 'Capital', C: 'City', T: 'Town', V: 'Village', F: 'Fort' };
+    const settlementNames = { K: 'Capital', C: 'City', T: 'Town', V: 'Village', F: 'Fort', S: 'Scout Camp' };
 
     nameEl.innerText = cell.n || `Unnamed hex (${x}, ${y})`;
     const parts = [];

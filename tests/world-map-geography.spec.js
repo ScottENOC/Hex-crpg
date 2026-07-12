@@ -153,6 +153,79 @@ test.describe('World map faction borders: only the actual border edge, not the w
         expect(result.totalStrokes).toBe(1 + result.expectedBorderCount);
         expect(result.borderStrokesAllTwoPoints).toBe(true);
     });
+
+    test('a claimed hex right on the map edge still draws a border stroke, so the outline is contiguous', async ({ page }) => {
+        await createCharacter(page, { campaign: '2' });
+        const strokeCount = await page.evaluate((makeStubCtxSrc) => {
+            eval(makeStubCtxSrc);
+            // Row 0 is the top map edge; col 5 is deep human territory, away
+            // from any faction-differing neighbor — the only reason this
+            // hex should stroke at all is the new map-edge border.
+            const { x, y } = window.worldHexToPixel(5, 0);
+            const strokes = [];
+            const ctx = makeStubCtx((points) => strokes.push(points));
+            window.drawWorldHex(ctx, x, y, 15, window.worldMapData[0][5], 5, 0);
+            return strokes.length;
+        }, makeStubCtx.toString());
+        expect(strokeCount).toBeGreaterThan(1); // generic outline + at least one map-edge border stroke
+    });
+
+    test('border strokes on each side of a human/orc edge are pulled inward, not drawn on the exact same shared line', async ({ page }) => {
+        await createCharacter(page, { campaign: '2' });
+        const result = await page.evaluate((makeStubCtxSrc) => {
+            eval(makeStubCtxSrc);
+            const humanHex = window.worldMapData[5][9];
+            const orcHex = window.worldMapData[5][10];
+            const { x: hx, y: hy } = window.worldHexToPixel(9, 5);
+            const { x: ox, y: oy } = window.worldHexToPixel(10, 5);
+            const humanStrokes = [];
+            window.drawWorldHex(makeStubCtx((pts) => humanStrokes.push(pts)), hx, hy, 15, humanHex, 9, 5);
+            const orcStrokes = [];
+            window.drawWorldHex(makeStubCtx((pts) => orcStrokes.push(pts)), ox, oy, 15, orcHex, 10, 5);
+            // Compare the border-facing stroke each side drew (skip index 0,
+            // the generic outline) — they should not be the same segment.
+            const humanBorder = humanStrokes[1];
+            const orcBorder = orcStrokes.find(pts => pts.length === 2);
+            return { humanBorder, orcBorder };
+        }, makeStubCtx.toString());
+        expect(result.humanBorder).toBeTruthy();
+        expect(result.orcBorder).toBeTruthy();
+        expect(result.humanBorder).not.toEqual(result.orcBorder);
+    });
+});
+
+test.describe('World map: dwarf/orc border trade and southern elf forest', () => {
+    test('4 northmost orc tiles flip to dwarven, pulling Kragmoor down to border the humans directly', async ({ page }) => {
+        await createCharacter(page, { campaign: '2' });
+        const result = await page.evaluate(() => ({
+            row0: [window.worldMapData[0][10].o, window.worldMapData[0][11].o],
+            row1: [window.worldMapData[1][10].o, window.worldMapData[1][11].o],
+        }));
+        expect(result.row0).toEqual(['d', 'd']);
+        expect(result.row1).toEqual(['d', 'd']);
+    });
+
+    test('4 southmost mountain tiles trade back to the orcs, keeping the swap even', async ({ page }) => {
+        await createCharacter(page, { campaign: '2' });
+        const result = await page.evaluate(() => window.worldMapData[4].slice(12, 16).map(c => c.o));
+        expect(result).toEqual(['o', 'o', 'o', 'o']);
+    });
+
+    test('a forested elven realm spans the southern edge, reaching the ocean in the west', async ({ page }) => {
+        await createCharacter(page, { campaign: '2' });
+        const result = await page.evaluate(() => {
+            const southRow = window.worldMapData[15];
+            return {
+                nearOcean: southRow[2].t, nearOceanFaction: southRow[2].o,
+                capital: (() => { for (const row of window.worldMapData) { const f = row.find(c => c.n === "Sil'thandriel"); if (f) return f; } return null; })(),
+            };
+        });
+        expect(result.nearOcean).toBe('F');
+        expect(result.nearOceanFaction).toBe('e');
+        expect(result.capital).not.toBeNull();
+        expect(result.capital.f).toBe('K');
+        expect(result.capital.o).toBe('e');
+    });
 });
 
 test.describe('World map river: mountain to ocean', () => {

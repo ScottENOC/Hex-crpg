@@ -74,7 +74,12 @@ test.describe('World map scale', () => {
             return null;
         });
         expect(cell).not.toBeNull();
-        expect(cell.o).toBe('g');
+        // The camp is an orc scouting party pitched on land that's still
+        // human territory, not its own nation's turf — the tile stays
+        // human ('h'); the camp's own marker (cell.f === 'S') is what
+        // reads as contested, see worldMap.js's drawWorldHex.
+        expect(cell.o).toBe('h');
+        expect(cell.f).toBe('S');
     });
 
     test('Ridgehold Fort and Skarnak\'s Hold both stay visible even though their real local coordinates round to the same grid cell', async ({ page }) => {

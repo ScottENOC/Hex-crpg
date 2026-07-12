@@ -558,7 +558,12 @@ function buildGoblinCamp(roadEnd) {
         window.entities.push(captive);
     }
 
-    setWorldMapMarker(center, { t: 'G', f: 'V', o: 'g', p: 1, n: 'Skarn-tooth Camp' });
+    // This is a scouting camp of orc-tribe greenskins pitched on land that's
+    // been human territory for centuries — not a goblin nation's own turf —
+    // so the underlying tile stays human ('h') rather than recoloring the
+    // map, and it gets its own small 'S' (scout camp) marker rather than a
+    // real settlement dot, colored to read as a contested outpost.
+    setWorldMapMarker(center, { t: 'G', f: 'S', o: 'h', p: 0, n: 'Skarn-tooth Camp' });
 }
 
 // Same shape as buildGoblinNPC above, but for the orc_raiders faction —

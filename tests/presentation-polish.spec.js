@@ -25,13 +25,14 @@ test.describe('first-five-minutes presentation polish', () => {
         });
         expect(legendHtml).toContain('Human Lands');
         // Orc-held territory is now actually painted on the map (east of the
-        // border forts), the goblin camp gets a real marker (scaled down
-        // from its true local coordinates), and Kragmoor (the Deepholds'
-        // one city-and-mine) now gets a real marker too — elves still
-        // aren't represented anywhere in this part of the world.
+        // border forts), Kragmoor (the Deepholds' one city-and-mine) gets a
+        // real marker, and a forested elven realm now spans the southern
+        // edge. The Skarn-tooth camp is a scouting party on human land, not
+        // its own nation's territory, so no cell is ever colored for the
+        // goblin faction — it never appears in the legend.
         expect(legendHtml).toContain('Orc Tribes');
-        expect(legendHtml).toContain('Goblin Hordes');
         expect(legendHtml).toContain('Dwarven Kingdom');
-        expect(legendHtml).not.toContain('Elven Realm');
+        expect(legendHtml).toContain('Elven Realm');
+        expect(legendHtml).not.toContain('Goblin Hordes');
     });
 });
