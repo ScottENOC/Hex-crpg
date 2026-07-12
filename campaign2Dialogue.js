@@ -2307,7 +2307,43 @@ window.npcDialogueTrees = {
             return;
         }
         if (quest && quest.status === 'completed') {
-            window.showDialogue(npc, "The Sylvan Court remembers a kindness. Small as it was.", [{ label: "Glad to help.", action: () => {} }]);
+            // A Gift of Green opens the door; the Silver Accord is the real
+            // errand — send the player to Sil'thandriel itself and back
+            // (see elf_queen, below, and buildElvenCapital, campaign2World.js).
+            const accord = window.questLog.find(q => q.id === 'silver_accord');
+            if (accord && accord.status === 'active') {
+                if ((player.inventory || []).includes('queens_seal')) {
+                    window.showDialogue(npc, "The Queen's own seal — she saw you, then. Silverhart will remember this.", [
+                        { label: "Here.", action: () => {
+                            player.inventory = player.inventory.filter(i => i !== 'queens_seal');
+                            accord.status = 'completed';
+                            window.adjustReputation(npc.reputation, 15, 20);
+                            window.adjustReputation(window.factions.elven_realm, 10, 15);
+                            if (window.factions.silverhart_kingdom) window.adjustReputation(window.factions.silverhart_kingdom, 5, 10);
+                            player.gold = (player.gold || 0) + 40;
+                            if (window.gainExp) window.gainExp(120);
+                            window.showMessage('Quest complete: The Silver Accord. (+40 gold)');
+                        }}
+                    ]);
+                    return;
+                }
+                window.showDialogue(npc, "South, past the forest edge — the Sylvan Court doesn't grant an audience lightly, but you've earned enough goodwill to ask.", [{ label: "I'll find her.", action: () => {} }]);
+                return;
+            }
+            if (accord && accord.status === 'completed') {
+                window.showDialogue(npc, "The Accord holds. Small thanks to you, it holds.", [{ label: "Glad to help.", action: () => {} }]);
+                return;
+            }
+            window.showDialogue(npc, "The Sylvan Court remembers a kindness. Small as it was — but if you're the sort who carries things carefully, there's a bigger errand I'd trust you with. Queen Aelwen herself, in Sil'thandriel, south past the forest edge. Bring back her seal, and Silverhart will have something more than an ambassador's word to show for this friendship.", [
+                {
+                    label: "I'll seek an audience with the Queen.",
+                    action: () => {
+                        window.questLog.push({ id: 'silver_accord', title: 'The Silver Accord', giver: 'Ambassador Elarion', status: 'active', description: "Travel to Sil'thandriel and gain an audience with Queen Aelwen. Bring her seal back to Ambassador Elarion." });
+                        window.showMessage('Quest added: The Silver Accord.');
+                    }
+                },
+                { label: "Not yet.", action: () => {} }
+            ]);
             return;
         }
         const opening = kin
@@ -2330,6 +2366,79 @@ window.npcDialogueTrees = {
         }
         options.push({ label: "I'll keep that in mind.", action: () => {} });
         window.showDialogue(npc, opening, options);
+    },
+    // Sil'thandriel, the Sylvan Court's capital (see buildElvenCapital,
+    // campaign2World.js). Queen Aelwen only actually opens up once the
+    // Silver Accord errand (elven_ambassador above) sends the player here —
+    // an unannounced visit gets flavor only, same "entry-point errand"
+    // gating every foreign court in this game uses.
+    elf_queen: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const accord = window.questLog.find(q => q.id === 'silver_accord');
+        const player = window.party[0];
+        if (accord && accord.status === 'active') {
+            if ((player.inventory || []).includes('queens_seal')) {
+                window.showDialogue(npc, "Carry that back to Elarion safely — the Accord is only as good as the hands that carry it.", [{ label: "I will.", action: () => {} }]);
+                return;
+            }
+            window.showDialogue(npc, "Elarion's envoy, at last. Silverhart remembers its neighbors after all — tell him the Court remembers too.", [
+                { label: "He asked for a token of the Accord.", action: () => {
+                    player.inventory = player.inventory || [];
+                    player.inventory.push('queens_seal');
+                    window.showMessage("Queen Aelwen presses her seal into your hand.");
+                }}
+            ]);
+            return;
+        }
+        if (accord && accord.status === 'completed') {
+            window.showDialogue(npc, "Silverhart and the Silver Leaf, at peace a while longer. Good.", [{ label: "Glad to help.", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "You come unannounced — Sylvan halls aren't warm to strangers. But you're welcome to rest before you go.", [{ label: "Thank you, Your Majesty.", action: () => {} }]);
+    },
+    elf_archivist: (npc) => {
+        window.showDialogue(npc, "The Silverleaf Archive holds what the Court remembers and the rest of the world forgot — the old wars with the Deepholds, the long peace after, and why the woodcutters at Silverhart's border still test the Queen's patience. Ask, if you like; I've time enough.", [
+            { label: "Tell me of the Deepholds.", action: () => window.showDialogue(npc, "Old rivals turned older friends. The mountain and the wood share more border than either likes to admit — but the King and the Queen have kept peace longer than either of their thrones stood alone.", [{ label: "Good to know.", action: () => {} }]) },
+            { label: "I should go.", action: () => {} }
+        ]);
+    },
+    elf_healer: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'silverleaf_tonic');
+        const player = window.party[0];
+        const have = () => (player.inventory || []).filter(i => i === 'herbs').length;
+        const HERBS_NEEDED = 3;
+
+        if (quest && quest.status === 'active') {
+            if (have() >= HERBS_NEEDED) {
+                window.showDialogue(npc, "These will do nicely — the sickbed's been full since the frost came early this year.", [
+                    { label: "Here you go.", action: () => {
+                        let removed = 0;
+                        player.inventory = player.inventory.filter(i => { if (i === 'herbs' && removed < HERBS_NEEDED) { removed++; return false; } return true; });
+                        quest.status = 'completed';
+                        window.adjustReputation(npc.reputation, 10, 15);
+                        window.adjustReputation(window.factions.elven_realm, 5, 5);
+                        player.gold = (player.gold || 0) + 20;
+                        if (window.gainExp) window.gainExp(50);
+                        window.showMessage('Quest complete: A Tonic for the Sickbed. (+20 gold)');
+                    }}
+                ]);
+                return;
+            }
+            window.showDialogue(npc, `Still ${HERBS_NEEDED} herbs short, by my count. Take your time — the sick aren't going anywhere, thank the Leaf.`, [{ label: "Still looking.", action: () => {} }]);
+            return;
+        }
+        if (quest && quest.status === 'completed') {
+            window.showDialogue(npc, "The sickbed's quieter for it. My thanks, still.", [{ label: "Glad to help.", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, `Frost came early this year, and the sickbed's fuller for it. ${HERBS_NEEDED} herbs would let me brew what I need — more than gold, out here.`, [
+            { label: "I'll bring you some herbs.", action: () => {
+                window.questLog.push({ id: 'silverleaf_tonic', title: 'A Tonic for the Sickbed', giver: 'Healer Sylwen', status: 'active', description: `Bring ${HERBS_NEEDED} herbs to Healer Sylwen in Sil'thandriel.` });
+                window.showMessage('Quest added: A Tonic for the Sickbed.');
+            }},
+            { label: "I'll keep that in mind.", action: () => {} }
+        ]);
     },
     dwarven_ambassador: (npc) => {
         if (!window.questLog) window.questLog = [];

@@ -50,7 +50,14 @@ window.factions = {
     // ambassador already sat at Silverhart's court (dwarven_ambassador,
     // campaign2Dialogue.js) well before this kingdom existed in the world —
     // that quest thread now actually leads somewhere.
-    dwarven_kingdom:    { id: 'dwarven_kingdom',    name: 'The Deepholds',          race: 'dwarf', knowledge: 0, standing: 0 }
+    dwarven_kingdom:    { id: 'dwarven_kingdom',    name: 'The Deepholds',          race: 'dwarf', knowledge: 0, standing: 0 },
+    // The Sylvan Court: the elven realm, one capital (Sil'thandriel, see
+    // buildElvenCapital, campaign2World.js) tucked in the southern forest
+    // belt (worldMap.js). Its ambassador already sat at Silverhart's court
+    // (elven_ambassador, campaign2Dialogue.js) well before this capital
+    // existed in the world — same "that quest thread now actually leads
+    // somewhere" shape as dwarven_kingdom/Kragmoor above.
+    elven_realm:        { id: 'elven_realm',        name: 'The Sylvan Court',       race: 'elf', knowledge: 0, standing: 0 }
 };
 
 function seedStanding(race, playerRace) {

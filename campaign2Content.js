@@ -787,3 +787,35 @@ window.campaign2DeepholdsVermin = [
     { name: 'Cave Spider', monsterType: 'spider', customSkills: { health: 2 } },
     { name: 'Broodmother', monsterType: 'spider', customSkills: { health: 6, meleeDamage: 4 } },
 ];
+
+// --- Sil'thandriel, the Sylvan Court's capital (see buildElvenCapital,
+// campaign2World.js, and worldMap.js's southern forest belt). The Sylvan
+// Court is the same Court Ambassador Elarion has spoken for at Silverhart
+// (elven_ambassador, campaign2Dialogue.js) since before this capital
+// existed in the world — Queen Aelwen is the "the Queen" his own dialogue
+// already references.
+window.campaign2ElfQueen = {
+    name: "Queen Aelwen Sil'thandriel", title: 'Queen of the Silver Leaf',
+    race: 'elf', gender: 'female',
+    classLevels: ['wizard', 'wizard'], skillPicks: [], equipment: [],
+    side: 'neutral', factionId: 'elven_realm', color: '#2e7d4f',
+    dialogueId: 'elf_queen'
+};
+window.campaign2ElfGuards = [
+    { name: 'Sentinel Ilyndra', title: 'Silverleaf Sentinel', race: 'elf', gender: 'female', classLevels: ['fighter', 'fighter'], skillPicks: ['health'], equipment: ['sword', 'medium_armor'], side: 'neutral', factionId: 'elven_realm', color: '#3a7a4a' },
+    { name: 'Sentinel Thaeril', title: 'Silverleaf Sentinel', race: 'elf', gender: 'male', classLevels: ['fighter', 'fighter'], skillPicks: ['health'], equipment: ['sword', 'medium_armor'], side: 'neutral', factionId: 'elven_realm', color: '#3a7a4a' },
+];
+window.campaign2ElfArchivist = {
+    name: 'Loremaster Faelan', title: 'Keeper of the Silverleaf Archive',
+    race: 'elf', gender: 'male',
+    classLevels: ['wizard'], skillPicks: [], equipment: [],
+    side: 'neutral', factionId: 'elven_realm', color: '#3a7a4a',
+    dialogueId: 'elf_archivist'
+};
+window.campaign2ElfHealer = {
+    name: 'Healer Sylwen', title: 'Warden of the Sickbed',
+    race: 'elf', gender: 'female',
+    classLevels: ['druid'], skillPicks: [], equipment: [],
+    side: 'neutral', factionId: 'elven_realm', color: '#3a7a4a',
+    dialogueId: 'elf_healer'
+};

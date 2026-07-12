@@ -109,11 +109,6 @@ function loadWorldMap() {
                 }
                 window.worldMapData.push(row);
             }
-            // The elven capital, tucked into the forest belt near the coast —
-            // this realm has no local-map content yet (unlike Kragmoor), so
-            // it's placed directly here the same way Hollowmere is, rather
-            // than derived from a local hex that doesn't exist.
-            window.worldMapData[14][4] = { t: 'F', f: 'K', o: 'e', p: 2, n: "Sil'thandriel" };
             // Note: cell.f is the marker SHAPE ('K' capital/'C' city/'T' town/
             // 'V' village/'F' fort), cell.o is the faction-color code — see
             // drawWorldHex, which reads them this way.
@@ -142,10 +137,11 @@ function loadWorldMap() {
             // still at the same columns), then bends NORTH into the new NE
             // mountain range (its real source now that Kragmoor moved
             // there) instead of running flat into where the ocean used to
-            // be. The west end already terminates right at x=0-1, which is
-            // now the ocean strip — its mouth, unchanged.
+            // be. The west end now touches only ONE ocean-column hex (x=1)
+            // as its mouth, rather than continuing across both ocean
+            // columns and visually running through open water.
             window.worldRiverPath = [
-                { x: 0, y: 4 }, { x: 1, y: 5 }, { x: 2, y: 5 }, { x: 3, y: 5 }, { x: 4, y: 5 },
+                { x: 1, y: 5 }, { x: 2, y: 5 }, { x: 3, y: 5 }, { x: 4, y: 5 },
                 { x: 5, y: 5 }, { x: 6, y: 5 }, { x: 7, y: 5 }, { x: 8, y: 5 }, { x: 9, y: 5 },
                 { x: 10, y: 5 }, { x: 11, y: 6 }, { x: 12, y: 6 }, { x: 13, y: 5 }, { x: 14, y: 5 }, { x: 15, y: 4 }
             ];

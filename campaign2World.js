@@ -744,6 +744,94 @@ function buildDwarvenKingdom(anchor) {
     setWorldMapMarker(gateCenter, { t: 'M', f: 'K', o: 'd', p: 2, n: 'Kragmoor' });
 }
 
+// Sil'thandriel, the Sylvan Court's capital (see worldMap.js's southern
+// forest belt). Unlike Kragmoor's solid-Wall massif — dwarves carve INTO
+// the mountain — the elves build WITH the forest: a ring of dense canopy
+// (denser than ordinary wilderness Foliage, per isForestClump above) with
+// open clearings carved out of it, not a walled perimeter. Independent of
+// the road network for the same reason as Kragmoor: it needs to land
+// inside a specific reserved worldMap.js region, not wherever an existing
+// road happens to end.
+function buildElvenCapital(anchor) {
+    const CANOPY_RADIUS = 18;
+    for (let dq = -CANOPY_RADIUS; dq <= CANOPY_RADIUS; dq++) {
+        for (let dr = -CANOPY_RADIUS; dr <= CANOPY_RADIUS; dr++) {
+            const hex = { q: anchor.q + dq, r: anchor.r + dr };
+            const dist = window.distance(anchor, hex);
+            if (dist > CANOPY_RADIUS) continue;
+            if (dist >= CANOPY_RADIUS - 3) {
+                window.setTerrainAt(hex.q, hex.r, 'Foliage'); // a real treeline, not a scattered edge
+            } else if (dist >= 9) {
+                // Thick woods between the treeline and the court's own
+                // clearings — noticeably denser (0.7 vs isForestClump's
+                // 0.55) than ordinary wilderness forest.
+                if (window.pseudoRandom(hex.q * 1.7 + 3, hex.r * 2.1 + 9) < 0.7) window.setTerrainAt(hex.q, hex.r, 'Foliage');
+            }
+            // dist < 9 stays Grass — the court's own open clearings.
+        }
+    }
+
+    // The Court of the Silver Leaf: an open throne pavilion at the heart of
+    // the clearing, not tucked behind a gate — still carved as a real
+    // building (Wood Floor + wall ring) since there's no separate "outdoor
+    // pavilion" terrain concept yet.
+    const courtCenter = { q: anchor.q, r: anchor.r };
+    // The door (and approach path) face NORTH, toward the crossroads — the
+    // capital sits well south of it (see the elfAnchor displacement in
+    // setupVillageScene), so the surface approach needs to head back that
+    // way, not further out into the forest.
+    const courtDoor = { q: courtCenter.q, r: courtCenter.r - 5 };
+    const courtRegion = carveFlatRoom(courtCenter.q, courtCenter.r, 6, 4, courtDoor, 'Wood Floor');
+    window.interiorRegions.push(courtRegion);
+    window.tileObjects[`${courtCenter.q},${courtCenter.r + 2}`] = { type: 'throne' };
+    window.campaign2ElvenCourtCenter = courtCenter;
+
+    if (window.campaign2ElfQueen) {
+        window.entities.push(window.buildNPC({ ...window.campaign2ElfQueen, hex: { q: courtCenter.q, r: courtCenter.r + 1 } }));
+    }
+    (window.campaign2ElfGuards || []).forEach((spec, i) => {
+        const pos = [{ q: courtCenter.q - 3, r: courtCenter.r - 2 }, { q: courtCenter.q + 3, r: courtCenter.r - 2 }][i];
+        if (!pos) return;
+        window.entities.push(window.buildNPC({ ...spec, hex: pos }));
+    });
+
+    // A short approach path north from the court's own door, out past the
+    // treeline toward the crossroads — enough for connectAllRoadNetworks
+    // (hexMap.js) to bridge this into the rest of the road network with
+    // its own connector.
+    for (let i = 1; i <= CANOPY_RADIUS + 4; i++) window.setTerrainAt(courtDoor.q, courtDoor.r - i, 'Path');
+
+    // The Silverleaf Archive: Loremaster Faelan's small study.
+    const archiveCenter = { q: anchor.q - 12, r: anchor.r + 2 };
+    const archiveDoor = { q: archiveCenter.q + 3, r: archiveCenter.r };
+    const archiveRegion = carveFlatRoom(archiveCenter.q, archiveCenter.r, 3, 2, archiveDoor, 'Wood Floor');
+    window.interiorRegions.push(archiveRegion);
+    for (let q = archiveDoor.q + 1; q < courtCenter.q - 6; q++) window.setTerrainAt(q, courtCenter.r + 2, 'Path');
+    if (window.campaign2ElfArchivist) {
+        window.entities.push(window.buildNPC({ ...window.campaign2ElfArchivist, hex: { q: archiveCenter.q, r: archiveCenter.r + 1 } }));
+    }
+
+    // The Sickbed: Healer Sylwen's lodge, with her own herb patches (the
+    // same tileObject the druid grove's quest already uses).
+    const lodgeCenter = { q: anchor.q + 12, r: anchor.r + 2 };
+    const lodgeDoor = { q: lodgeCenter.q - 3, r: lodgeCenter.r };
+    const lodgeRegion = carveFlatRoom(lodgeCenter.q, lodgeCenter.r, 3, 2, lodgeDoor, 'Wood Floor');
+    window.interiorRegions.push(lodgeRegion);
+    for (let q = courtCenter.q + 6; q < lodgeDoor.q; q++) window.setTerrainAt(q, courtCenter.r + 2, 'Path');
+    window.tileObjects[`${lodgeCenter.q},${lodgeCenter.r - 2}`] = { type: 'herb_patch', hasHerbs: true };
+    window.tileObjects[`${lodgeCenter.q + 1},${lodgeCenter.r - 2}`] = { type: 'herb_patch', hasHerbs: true };
+    window.campaign2ElvenLodgeCenter = lodgeCenter;
+    if (window.campaign2ElfHealer) {
+        window.entities.push(window.buildNPC({ ...window.campaign2ElfHealer, hex: { q: lodgeCenter.q, r: lodgeCenter.r + 1 } }));
+    }
+
+    sealRoom(courtRegion);
+    sealRoom(archiveRegion);
+    sealRoom(lodgeRegion);
+
+    setWorldMapMarker(anchor, { t: 'F', f: 'K', o: 'e', p: 2, n: "Sil'thandriel" });
+}
+
 // The Chapterhouse of the Silver Flame: the source of the hunting parties
 // that come for a player who's become a lich (see lichHunt.js). Deliberately
 // independent of Silverhart Palace's geography (which is being redesigned
@@ -2639,6 +2727,33 @@ function setupVillageScene(forLoadOnly = false) {
         // Kragmoor's own spur.
         const x1 = CP.q, z1 = CP.r, y1 = -x1 - z1;
         const x2 = dwarfSpurTip.q, z2 = dwarfSpurTip.r, y2 = -x2 - z2;
+        const steps = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1), Math.abs(z2 - z1));
+        for (let i = 0; i <= steps; i++) {
+            const t = i / steps;
+            let x = x1 + (x2 - x1) * t, y = y1 + (y2 - y1) * t, z = z1 + (z2 - z1) * t;
+            let rx = Math.round(x), ry = Math.round(y), rz = Math.round(z);
+            const dx = Math.abs(rx - x), dy = Math.abs(ry - y), dz = Math.abs(rz - z);
+            if (dx > dy && dx > dz) rx = -ry - rz;
+            else if (dy > dz) ry = -rx - rz;
+            else rz = -rx - ry;
+            window.setTerrainAt(rx, rz, 'Path');
+        }
+    }
+    // Sil'thandriel, the Sylvan Court's capital: same "large fixed
+    // displacement + hand-painted cube-line connector" shape as Kragmoor
+    // above, landing inside worldMap.js's reserved southern forest belt
+    // (FOREST_ROWS/FOREST_MAX_COL) rather than tied to any existing road —
+    // south and modestly west of the crossroads, clear of the farmstead
+    // and druid grove already out that way.
+    {
+        const elfAnchor = { q: CP.q - 260, r: CP.r + 910 };
+        buildElvenCapital(elfAnchor);
+        // Matches buildElvenCapital's own courtDoor (anchor.r-5) + approach
+        // path length (CANOPY_RADIUS(18)+4) — the surface end of its own
+        // north-facing approach stub, safely outside the canopy radius.
+        const elfSpurTip = { q: elfAnchor.q, r: elfAnchor.r - 5 - (18 + 4) };
+        const x1 = CP.q, z1 = CP.r, y1 = -x1 - z1;
+        const x2 = elfSpurTip.q, z2 = elfSpurTip.r, y2 = -x2 - z2;
         const steps = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1), Math.abs(z2 - z1));
         for (let i = 0; i <= steps; i++) {
             const t = i / steps;
