@@ -1030,7 +1030,15 @@ function updateSpellPreview() {
         </div>
     `;
     const expandRanks = player.skills[`${base.school}_expand`] || 0;
-    if (expandRanks > 0 && base.baseRadius !== undefined) {
+    const burstCapable = !!options.burst && (base.type === 'damage' || base.type === 'heal');
+    if (burstCapable) {
+        html += `
+            <div class="form-group">
+                <label><input type="checkbox" id="spell-burst-toggle" onchange="window.renderSpellStats()"> Burst (area, centered on a clicked point instead of a single target) — +8 Mana</label>
+            </div>
+        `;
+    }
+    if ((expandRanks > 0 && base.baseRadius !== undefined) || burstCapable) {
         html += `
             <div class="form-group">
                 <label>Radius Bonus (Max: +${expandRanks}):</label>
@@ -1074,12 +1082,18 @@ function renderSpellStats() {
     const radBonus = radBonusInput ? (parseInt(radBonusInput.value) || 0) : 0;
     const targetBonusInput = document.getElementById("spell-targets-bonus");
     const targetBonus = targetBonusInput ? (parseInt(targetBonusInput.value) || 0) : 0;
+    const burstToggle = document.getElementById("spell-burst-toggle");
+    const burst = burstToggle ? burstToggle.checked : false;
 
     let manaCost = base.baseMana;
     let tpCost = 10;
     let magnitude = base.baseMagnitude * (1 + magBonus);
     let range = (base.baseRange || 1) + rangeBonus;
-    let radius = (base.baseRadius || 0) + radBonus;
+    // BURST (skills.js's <school>_burst): converts a single-target
+    // damage/heal spell into an area burst centered on a clicked point,
+    // radius 1 baseline + the same radius dial other AOE spells use.
+    let radius = burst ? (1 + radBonus) : ((base.baseRadius || 0) + radBonus);
+    let effectiveType = burst ? (base.type === 'heal' ? 'aoe_heal' : 'aoe_damage') : base.type;
     let extraTargets = targetBonus;
 
     let defaultName = base.name;
@@ -1102,8 +1116,9 @@ function renderSpellStats() {
     manaCost += (magBonus * Math.max(0, 5 - effMag));
     manaCost += (radBonus * 10);
     manaCost += (targetBonus * 15);
+    if (burst) manaCost += 8;
 
-    const coreManaCost = base.baseMana + (magBonus * Math.max(0, 5 - effMag)) + (radBonus * 10) + (targetBonus * 15);
+    const coreManaCost = base.baseMana + (magBonus * Math.max(0, 5 - effMag)) + (radBonus * 10) + (targetBonus * 15) + (burst ? 8 : 0);
 
     const cap = player.manaCaps[base.school] || 10;
     const overCap = manaCost > cap;
@@ -1113,8 +1128,9 @@ function renderSpellStats() {
         <p><strong>TP Cost:</strong> ${tpCost}</p>
         <p><strong>Magnitude:</strong> ${magnitude}</p>
         <p><strong>Range:</strong> ${range}</p>
-        ${base.baseRadius !== undefined ? `<p><strong>Radius:</strong> ${radius}</p>` : ''}
+        ${(base.baseRadius !== undefined || burst) ? `<p><strong>Radius:</strong> ${radius}</p>` : ''}
         ${extraTargets > 0 ? `<p><strong>Extra Targets:</strong> ${extraTargets}</p>` : ''}
+        ${burst ? `<p><strong>Burst:</strong> centered on a clicked point, not a single target</p>` : ''}
     `;
     const display = document.getElementById("spell-stats-display");
     if (display) display.innerHTML = statsHtml;
@@ -1142,7 +1158,7 @@ function renderSpellStats() {
         if (display) display.innerHTML = statsHtml;
     }
 
-    window.currentSpellCalc = { name: defaultName, school: base.school, manaCost, coreManaCost, tpCost, magnitude, range, radius, extraTargets, type: base.type, baseId, animalId };
+    window.currentSpellCalc = { name: defaultName, school: base.school, manaCost, coreManaCost, tpCost, magnitude, range, radius, extraTargets, type: effectiveType, baseId, animalId };
 }
 
 function createSpell() {
@@ -2520,8 +2536,10 @@ function highlightValidTargets(caster, spell) {
                 }
             }
         });
-        // AOE Debuffs can also target empty hexes
-        if (type === 'aoe_debuff') {
+        // AOE spells (debuffs, and burst-mode damage/heal) can also target
+        // empty hexes — the burst is centered on the clicked point, not
+        // necessarily on an occupant.
+        if (type === 'aoe_debuff' || type === 'aoe_damage' || type === 'aoe_heal') {
             for (let q = -range; q <= range; q++) {
                 for (let r = Math.max(-range, -q - range); r <= Math.min(range, -q + range); r++) {
                     const h = { q: caster.hex.q + q, r: caster.hex.r + r };

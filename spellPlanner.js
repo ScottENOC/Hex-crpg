@@ -14,26 +14,36 @@
 // remaining slots — capped at entity.maxSpellSlots (base 8, +2 per
 // <school>_spell_slots skill, stacking across arcane/divine/nature up to 14).
 
+// BURST-capable: a single-target damage/heal spell whose school has the
+// <school>_burst skill can be built as an area burst instead (see skills.js's
+// arcane_burst/divine_burst/nature_burst) — centered on a clicked hex, not
+// the caster, same as the game's other AOE types (dragon breath, entangle).
+function isBurstCapable(base, options) {
+    return !!options.burst && (base.type === 'damage' || base.type === 'heal');
+}
+
 function getSpellDialLimits(entity, base) {
     const school = base.school;
     const options = (entity.unlockedCastingOptions && entity.unlockedCastingOptions[school]) || {};
     const skills = entity.skills || {};
+    const burstCapable = isBurstCapable(base, options);
     return {
         school,
         quickened: !!options.quickened,
         slowed: !!options.slowed,
         maxRange: options.extraRange || 0,
         maxMagnitude: options.extraMagnitude || 0,
-        maxRadius: (base.baseRadius !== undefined) ? (skills[`${school}_expand`] || 0) : 0,
+        maxRadius: (base.baseRadius !== undefined || burstCapable) ? (skills[`${school}_expand`] || 0) : 0,
         maxTargets: (base.type !== 'aoe_debuff' && base.type !== 'summon') ? (skills[`${school}_targets`] || 0) : 0,
         cap: (entity.manaCaps && entity.manaCaps[school]) || 10,
+        burstCapable,
     };
 }
 
 // Exact port of ui.js's renderSpellStats cost formula (arcane-only
 // efficiency skills are a real, existing asymmetry there — not a bug this
 // planner should paper over).
-function computeSpellVariant(entity, baseId, base, speed, magBonus, rangeBonus, radBonus, targetBonus) {
+function computeSpellVariant(entity, baseId, base, speed, magBonus, rangeBonus, radBonus, targetBonus, burst = false) {
     const school = base.school;
     let manaCost = base.baseMana;
     let tpCost = 10;
@@ -50,26 +60,32 @@ function computeSpellVariant(entity, baseId, base, speed, magBonus, rangeBonus, 
     manaCost += (magBonus * Math.max(0, 5 - effMag));
     manaCost += (radBonus * 10);
     manaCost += (targetBonus * 15);
+    // BURST: converts a single-target damage/heal spell into an area burst
+    // centered on a clicked hex (see skills.js's <school>_burst) — a flat
+    // surcharge for the conversion itself, on top of the existing radius
+    // dial cost (radBonus*10 above) for scaling it further.
+    if (burst) manaCost += 8;
     manaCost = Math.max(1, manaCost);
-    const coreManaCost = base.baseMana + (magBonus * Math.max(0, 5 - effMag)) + (radBonus * 10) + (targetBonus * 15);
+    const coreManaCost = base.baseMana + (magBonus * Math.max(0, 5 - effMag)) + (radBonus * 10) + (targetBonus * 15) + (burst ? 8 : 0);
     const magnitude = base.baseMagnitude * (1 + magBonus);
     const range = (base.baseRange || 1) + rangeBonus;
-    const radius = (base.baseRadius || 0) + radBonus;
+    const radius = burst ? (1 + radBonus) : ((base.baseRadius || 0) + radBonus);
+    const type = burst ? (base.type === 'heal' ? 'aoe_heal' : 'aoe_damage') : base.type;
     return {
-        name: base.name, school, baseId, type: base.type,
+        name: base.name, school, baseId, type,
         manaCost, coreManaCost, tpCost, magnitude, range, radius, extraTargets: targetBonus,
     };
 }
 
 function variantKey(v) {
-    return `${v.baseId}|${v.tpCost}|${v.manaCost}|${v.range}|${v.radius}|${v.extraTargets}`;
+    return `${v.baseId}|${v.type}|${v.tpCost}|${v.manaCost}|${v.range}|${v.radius}|${v.extraTargets}`;
 }
 
 // Fills dials in cheapest-per-unit order (range=1/pt, magnitude≈5/pt,
 // radius=10/pt, targets=15/pt) to spend as much of the mana cap as
 // possible without exceeding it — a simple, good-enough greedy for
 // "the most expensive version this entity could build".
-function buildMostExpensiveVariant(entity, baseId, base, limits) {
+function buildMostExpensiveVariant(entity, baseId, base, limits, burst = false) {
     const speed = limits.quickened ? 'quickened' : 'default';
     let rangeB = 0, magB = 0, radB = 0, targB = 0;
     const dialOrder = [
@@ -82,16 +98,16 @@ function buildMostExpensiveVariant(entity, baseId, base, limits) {
         for (let i = 0; i < dial.max; i++) {
             const trial = dial.get() + 1;
             dial.set(trial);
-            const v = computeSpellVariant(entity, baseId, base, speed, magB, rangeB, radB, targB);
+            const v = computeSpellVariant(entity, baseId, base, speed, magB, rangeB, radB, targB, burst);
             if (v.manaCost > limits.cap) { dial.set(trial - 1); break; }
         }
     }
-    return computeSpellVariant(entity, baseId, base, speed, magB, rangeB, radB, targB);
+    return computeSpellVariant(entity, baseId, base, speed, magB, rangeB, radB, targB, burst);
 }
 
-function buildCheapestVariant(entity, baseId, base, limits) {
+function buildCheapestVariant(entity, baseId, base, limits, burst = false) {
     const speed = limits.slowed ? 'slowed' : 'default';
-    return computeSpellVariant(entity, baseId, base, speed, 0, 0, 0, 0);
+    return computeSpellVariant(entity, baseId, base, speed, 0, 0, 0, 0, burst);
 }
 
 function buildRandomVariant(entity, baseId, base, limits) {
@@ -103,7 +119,8 @@ function buildRandomVariant(entity, baseId, base, limits) {
     const magB = Math.floor(Math.random() * (limits.maxMagnitude + 1));
     const radB = Math.floor(Math.random() * (limits.maxRadius + 1));
     const targB = Math.floor(Math.random() * (limits.maxTargets + 1));
-    return computeSpellVariant(entity, baseId, base, speed, magB, rangeB, radB, targB);
+    const burst = limits.burstCapable && Math.random() < 0.5;
+    return computeSpellVariant(entity, baseId, base, speed, magB, rangeB, radB, targB, burst);
 }
 
 // Known spells = base spells with a real learn_<id> skill the entity has
@@ -155,6 +172,20 @@ function autoBuildSpellsForEntity(entity) {
     for (const { baseId, base } of known) {
         if (entity.createdSpells.length >= maxSlots) break;
         tryAdd(buildMostExpensiveVariant(entity, baseId, base, limitsByBaseId[baseId]));
+    }
+    // Phase 3b: burst-mode versions (base and most-expensive) of every
+    // burst-capable known spell — an AI caster with the <school>_burst
+    // skill gets both the plain single-target build and an area-burst
+    // build in its prepared spellbook, so the attack-spell selector
+    // (aiProcess) actually has an AOE option to weigh against clustered
+    // opponents rather than only ever building single-target versions.
+    for (const { baseId, base } of known) {
+        if (entity.createdSpells.length >= maxSlots) break;
+        const limits = limitsByBaseId[baseId];
+        if (!limits.burstCapable) continue;
+        tryAdd(computeSpellVariant(entity, baseId, base, 'default', 0, 0, 0, 0, true));
+        if (entity.createdSpells.length >= maxSlots) break;
+        tryAdd(buildMostExpensiveVariant(entity, baseId, base, limits, true));
     }
     // Phase 4: random combinations filling any remaining slots. Bounded
     // attempt count — with no metamagic skills at all there's only ever

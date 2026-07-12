@@ -327,6 +327,49 @@ const skills = {
         maxRanks: 3,
         apply: (player) => {}
     },
+    // BURST: lets any single-target damage or heal spell of this school be
+    // built instead as an area burst centered on a clicked hex (a distant
+    // point, not the caster — the d&d-fireball shape), at radius 1 for a
+    // flat mana surcharge. The existing <school>_expand skill (above)
+    // scales that radius further, +10 mana/rank, exactly like it already
+    // does for the game's other AOE spell types — burst just unlocks a
+    // normally single-target spell into that same system rather than
+    // needing its own separate radius dial. See computeSpellVariant
+    // (spellPlanner.js) / renderSpellStats (ui.js) for where the type
+    // actually flips to aoe_damage/aoe_heal.
+    'arcane_burst': {
+        name: 'Arcane Burst',
+        description: 'Lets you cast single-target Arcane damage spells (e.g. Firebolt) as an area burst centered on a point instead, at radius 1 for +8 mana. Arcane Expansion increases the radius further.',
+        tree: 'arcane',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedCastingOptions) player.unlockedCastingOptions = {};
+            if (!player.unlockedCastingOptions.arcane) player.unlockedCastingOptions.arcane = {};
+            player.unlockedCastingOptions.arcane.burst = true;
+        }
+    },
+    'divine_burst': {
+        name: 'Divine Burst',
+        description: 'Lets you cast single-target Divine damage or heal spells (e.g. Smite Evil, Heal) as an area burst centered on a point instead, at radius 1 for +8 mana. Divine Expansion increases the radius further.',
+        tree: 'divine',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedCastingOptions) player.unlockedCastingOptions = {};
+            if (!player.unlockedCastingOptions.divine) player.unlockedCastingOptions.divine = {};
+            player.unlockedCastingOptions.divine.burst = true;
+        }
+    },
+    'nature_burst': {
+        name: 'Nature Burst',
+        description: 'Lets you cast single-target Nature damage or heal spells as an area burst centered on a point instead, at radius 1 for +8 mana. Nature Expansion increases the radius further.',
+        tree: 'nature',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedCastingOptions) player.unlockedCastingOptions = {};
+            if (!player.unlockedCastingOptions.nature) player.unlockedCastingOptions.nature = {};
+            player.unlockedCastingOptions.nature.burst = true;
+        }
+    },
     // Multi-target
     'arcane_targets': {
         name: 'Arcane Fork',

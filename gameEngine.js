@@ -3803,6 +3803,23 @@ function aiProcess(entity) {
     const spellTpBudget = Math.max(0, Math.floor(entity.timePoints) - threshold);
     const affordableAttackVariants = attackSpellVariants.filter(s =>
         entity.currentMana >= s.manaCost && s.tpCost <= spellTpBudget);
+    // For an area (aoe_damage) variant, "value" isn't its raw magnitude —
+    // it's magnitude times how many opponents can actually be caught in one
+    // burst right now, so the DP planner correctly rates a burst spell far
+    // higher when opponents are clustered than when they're spread out (and
+    // no higher than a single-target cast when only one target is in
+    // range). bestAoeCastHex (below) does the same "best cluster center"
+    // search the actual cast then reuses to aim.
+    const aoeClusterCountCache = new Map();
+    const aoeClusterCount = (range, radius) => {
+        if (!radius) return 1;
+        const key = `${range}|${radius}`;
+        if (aoeClusterCountCache.has(key)) return aoeClusterCountCache.get(key);
+        const best = bestAoeCastHex(entity, visibleOpponents, range, radius);
+        const count = best ? best.count : 1;
+        aoeClusterCountCache.set(key, count);
+        return count;
+    };
     let attackSpell = null;
     if (affordableAttackVariants.length > 0) {
         const dpValue = new Array(spellTpBudget + 1).fill(0);
@@ -3811,7 +3828,9 @@ function aiProcess(entity) {
             for (let i = 0; i < affordableAttackVariants.length; i++) {
                 const cost = Math.ceil(affordableAttackVariants[i].tpCost);
                 if (cost <= w) {
-                    const val = dpValue[w - cost] + affordableAttackVariants[i].magnitude;
+                    const variant = affordableAttackVariants[i];
+                    const effectiveMagnitude = variant.magnitude * aoeClusterCount(variant.range, variant.radius || 0);
+                    const val = dpValue[w - cost] + effectiveMagnitude;
                     if (val > dpValue[w]) { dpValue[w] = val; dpChoice[w] = i; }
                 }
             }
@@ -3874,6 +3893,21 @@ function aiProcess(entity) {
                 // A floor so a healer at low mana / everyone near-full HP
                 // doesn't burn its turn topping off a one-point scratch.
                 if (best.score > 0.5) {
+                    // BURST HEAL: if 2+ wounded allies are clustered and this
+                    // healer also has an aoe_heal build of the same spell
+                    // (skills.js's <school>_burst), mending several people
+                    // at once beats topping off just the neediest one.
+                    const burstHeal = entity.createdSpells?.find(s => s.baseId === healSpell.baseId && s.type === 'aoe_heal' &&
+                        entity.currentMana >= s.manaCost && entity.timePoints >= s.tpCost);
+                    const woundedAllies = candidates.filter(t => t.hp < t.maxHp);
+                    const cluster = burstHeal ? bestAoeCastHex(entity, woundedAllies, burstHeal.range, burstHeal.radius || 0) : null;
+                    if (burstHeal && cluster && cluster.count >= 2) {
+                        window.showMessage(`${entity.name} channels a burst of healing!`);
+                        tryCastSpell(entity, burstHeal, null, cluster.hex);
+                        spendTP(entity, burstHeal.tpCost);
+                        setTimeout(() => aiProcess(entity), 20);
+                        return;
+                    }
                     window.showMessage(best.t === entity ? `${entity.name} prays for healing!` : `${entity.name} channels healing toward ${best.t.name}!`);
                     tryCastSpell(entity, healSpell, best.t, best.t.hex);
                     spendTP(entity, healSpell.tpCost);
@@ -3912,9 +3946,11 @@ function aiProcess(entity) {
         // attackableOpponents filter that grounds this entity for melee
         // once it can't afford the cast.
         if (attackSpell && canAffordAttackSpell) {
-            const inRange = visibleOpponents.find(o => window.distance(entity.hex, o.hex) <= attackSpell.range);
-            if (inRange) {
-                tryCastSpell(entity, attackSpell, inRange, inRange.hex);
+            const cluster = bestAoeCastHex(entity, visibleOpponents, attackSpell.range, attackSpell.radius || 0);
+            if (cluster) {
+                const inRange = getEntityAtHex(cluster.hex.q, cluster.hex.r) ||
+                    visibleOpponents.find(o => window.distance(entity.hex, o.hex) <= attackSpell.range);
+                tryCastSpell(entity, attackSpell, inRange, cluster.hex);
                 spendTP(entity, attackSpell.tpCost);
                 setTimeout(() => aiProcess(entity), 20);
                 return;
@@ -4068,6 +4104,15 @@ function aiProcess(entity) {
         }
         setTimeout(() => aiProcess(entity), 20);
     } else {
+        // SPACING AWARENESS: once the opposing side is known to have an
+        // area-burst spell (aoe_damage in their createdSpells — the same
+        // thing Burst mode produces, see skills.js's <school>_burst), a
+        // unit avoids stacking next to its own allies — standing shoulder
+        // to shoulder is exactly what makes one cheap cast worth several
+        // kills. Computed once per call, not per candidate hex.
+        const opponentSideForSpacing = entity.combatDirective?.hostileTo || (entity.side === 'player' ? 'enemy' : 'player');
+        const opponentsHaveBurst = window.entities.some(e => e.alive && e.side === opponentSideForSpacing &&
+            (e.createdSpells || []).some(s => s.type === 'aoe_damage'));
         const neighbors = window.getNeighbors(entity.hex.q, entity.hex.r);
         const bestHex = neighbors.map(h => {
             let s = isSkirmishRetreat ? window.distance(h, huntTargetHex) : -window.distance(h, huntTargetHex);
@@ -4080,6 +4125,11 @@ function aiProcess(entity) {
             if (t.name === 'Wall') s -= 20;
             if (t.name === 'Water') s -= 10;
             if (getEntityAtHex(h.q, h.r)) s -= 5;
+            if (opponentsHaveBurst) {
+                const alliesNearby = window.entities.filter(e => e.alive && e !== entity && e.side === entity.side &&
+                    window.distance(h, e.hex) <= 1).length;
+                s -= alliesNearby * 6;
+            }
             // CONSTRAINT: a hex outside the directive's allowed area is
             // effectively unpickable while any legal alternative exists —
             // this is what stops a defender leaping over their own wall to
@@ -4981,6 +5031,25 @@ function canSee(viewer, target) {
 
     return true;
 }
+
+// Finds the best hex to center an area spell on: among opponents currently
+// in range, picks whichever one's hex catches the most other opponents
+// within radius of it (a real "aim for the cluster" choice, not just
+// whichever target happened to be found first) — shared by the DP
+// attack-spell value estimate and the actual cast, so what gets valued is
+// exactly what gets cast at.
+function bestAoeCastHex(entity, opponents, range, radius) {
+    const inRange = opponents.filter(o => window.distance(entity.hex, o.hex) <= range);
+    if (inRange.length === 0) return null;
+    if (!radius) return { hex: inRange[0].hex, count: 1 };
+    let best = { hex: inRange[0].hex, count: 0 };
+    inRange.forEach(candidate => {
+        const count = inRange.filter(o => window.distance(candidate.hex, o.hex) <= radius).length;
+        if (count > best.count) best = { hex: candidate.hex, count };
+    });
+    return best;
+}
+window.bestAoeCastHex = bestAoeCastHex;
 
 // A ranged shot's line can be blocked by a friendly body standing in the
 // way, the same as it's blocked by a wall — hasLineOfSight/hasLineOfEffect
@@ -7251,6 +7320,37 @@ function resolveSpell(caster, spell, target, clickedHex) {
                 actionHandled = true;
             }
         }
+    } else if (spell.type === 'aoe_heal') {
+        // BURST heal (skills.js's <school>_burst): the same hex-burst shape
+        // as aoe_damage below, but restores every ally caught in it instead
+        // of damaging opponents — a caster's own single-target Heal (or any
+        // other school's heal spell) converted into an area effect.
+        const center = clickedHex;
+        const radius = spell.radius || 0;
+        const affected = [center];
+        if (radius > 0) {
+            for (let q = -radius; q <= radius; q++) {
+                for (let r = Math.max(-radius, -q - radius); r <= Math.min(radius, -q + radius); r++) {
+                    if (q === 0 && r === 0) continue;
+                    const h = { q: center.q + q, r: center.r + r };
+                    if (window.isHexInBounds(h)) affected.push(h);
+                }
+            }
+        }
+        affected.forEach(h => {
+            const t = getEntityAtHex(h.q, h.r);
+            if (t && t.alive && t.side === caster.side) {
+                t.hp = Math.min(t.maxHp, t.hp + spell.magnitude);
+                if (window.spawnFloatingText) window.spawnFloatingText(t.hex, `+${spell.magnitude}`, '#5cff5c');
+                if (t.unconscious && t.hp > 0) {
+                    t.unconscious = false;
+                    window.showMessage(`${t.name} regains consciousness!`);
+                }
+                syncBackToPlayer(t);
+            }
+        });
+        window.showMessage(`${caster.name} unleashes ${spell.name}!`);
+        actionHandled = true;
     } else if (spell.type === 'aoe_debuff' || spell.type === 'aoe_damage') {
         const center = clickedHex;
         const radius = spell.radius || 0;
