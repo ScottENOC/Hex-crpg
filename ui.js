@@ -1736,6 +1736,13 @@ function updateTurnIndicator() {
                                 } else if (entity.race === 'dwarf') {
                                     baseImg.src = entity.gender === 'male' ? 'images/dwarfmale.png' : 'images/dwarffemale.png';
                                     scalingFactor = 0.8;
+                                } else if (entity.race === 'orc') {
+                                    // No dedicated layered orc body art — reuse the
+                                    // same flat orc.png the monster template uses
+                                    // (gameEngine.js's drawPlayerCharacter does the
+                                    // same for the main map) rather than falling
+                                    // through to the elf portrait below.
+                                    baseImg.src = 'images/orc.png';
                                 } else {
                                     baseImg.src = 'images/elf.png';
                                 }
@@ -1809,21 +1816,21 @@ function updateTurnIndicator() {
                 const shieldImg = document.createElement('img');
                 shieldImg.src = 'images/shield.png';
                 shieldImg.classList.add('portrait-layer');
-                if (entity.race === 'human') {
-                    const bodySizePct = entity.gender === 'male' ? 90 : 80;
-                    const bodyOffsetPct = (100 - bodySizePct) / 2;
-                    // The shield is a hand-held item, not another full-body
-                    // layer — sizing it like the body/armor layers made it
-                    // balloon to cover almost the whole portrait. Scale it
-                    // down the same way drawPlayerCharacter's shieldSizeMult
-                    // does relative to the body, and nudge it toward the
-                    // off-hand instead of dead-center.
-                    const shieldPct = bodySizePct * 0.42;
-                    shieldImg.style.width = `${shieldPct}%`;
-                    shieldImg.style.height = `${shieldPct}%`;
-                    shieldImg.style.left = `${bodyOffsetPct + bodySizePct * 0.08}%`;
-                    shieldImg.style.top = `${bodyOffsetPct + bodySizePct * 0.20}%`;
-                }
+                // The shield is a hand-held item, not another full-body
+                // layer — sizing it like the body/armor layers made it
+                // balloon to cover almost the whole portrait (previously
+                // only guarded for race === 'human', so every other race —
+                // elf, dwarf, orc — kept the un-scaled, portrait-filling
+                // default). Scale it down the same way drawPlayerCharacter's
+                // shieldSizeMult does relative to the body, and nudge it
+                // toward the off-hand instead of dead-center, for every race.
+                const bodySizePct = entity.race === 'dwarf' ? 80 : (entity.gender === 'male' ? 90 : 80);
+                const bodyOffsetPct = (100 - bodySizePct) / 2;
+                const shieldPct = bodySizePct * 0.42;
+                shieldImg.style.width = `${shieldPct}%`;
+                shieldImg.style.height = `${shieldPct}%`;
+                shieldImg.style.left = `${bodyOffsetPct + bodySizePct * 0.08}%`;
+                shieldImg.style.top = `${bodyOffsetPct + bodySizePct * 0.20}%`;
                 portraitDiv.appendChild(shieldImg);
             }
         } else {

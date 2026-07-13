@@ -366,22 +366,38 @@ function carvePolygonRoom(corners, doorHexes, floorType, wallType = 'Wall') {
         });
     }
     const doorKeys = new Set((doorHexes || []).map(h => `${h.q},${h.r}`));
-    wallHexes.forEach(h => {
-        const key = `${h.q},${h.r}`;
-        window.setTerrainAt(h.q, h.r, doorKeys.has(key) ? floorType : wallType);
-    });
-    (doorHexes || []).forEach(h => {
-        window.setTerrainAt(h.q, h.r, floorType);
-        window.tileObjects[`${h.q},${h.r}`] = { type: 'door_open', lightRadius: 0 };
-    });
 
-    // Flood-fill the interior: BFS out from the centroid, blocked by any
-    // wall hex that isn't also a door hex.
+    // Flood-fill the interior BEFORE painting anything: BFS out from the
+    // centroid, blocked by any hexLine wall hex that isn't also a door.
+    // hexLine (like the compound gate's old flat-row assumption, see
+    // buildSilverhartPalace above) draws a straight line in pure cube
+    // coordinates, which does NOT always match this engine's true hex
+    // adjacency (getNeighbors, subject to the same row-shift stagger) — a
+    // wall meant to be solid can have a gap the BFS slips through. A hard
+    // bounding-box clamp (with a small margin) means that even if the wall
+    // isn't perfectly sealed, the flood-fill can never leak out and repaint
+    // the rest of the map — confirmed necessary the hard way: an earlier
+    // version of this function, given a wall with exactly this kind of gap,
+    // flooded thousands of hexes with floorType clear across the map before
+    // hitting its old node-count safety valve.
     const centroid = {
         q: Math.round(corners.reduce((s, c) => s + c.q, 0) / corners.length),
         r: Math.round(corners.reduce((s, c) => s + c.r, 0) / corners.length),
     };
-    const isBlocking = (h) => { const key = `${h.q},${h.r}`; return wallKeys.has(key) && !doorKeys.has(key); };
+    // No margin: the corners themselves ARE the outer wall/perimeter, so the
+    // interior must stay strictly within their own bounding box. A margin
+    // here previously let the flood-fill swallow a door's exterior
+    // neighbor too, since that neighbor could fall just outside the
+    // corners but still inside a padded box — which silently absorbed the
+    // door into the interior (no longer a real boundary hex at all) and
+    // left the room with no actual opening for the connector to path
+    // through.
+    const minQ = Math.min(...corners.map(c => c.q));
+    const maxQ = Math.max(...corners.map(c => c.q));
+    const minR = Math.min(...corners.map(c => c.r));
+    const maxR = Math.max(...corners.map(c => c.r));
+    const outsideBounds = (h) => h.q < minQ || h.q > maxQ || h.r < minR || h.r > maxR;
+    const isBlocking = (h) => { const key = `${h.q},${h.r}`; return outsideBounds(h) || (wallKeys.has(key) && !doorKeys.has(key)); };
     const floorHexes = [];
     const seen = new Set([`${centroid.q},${centroid.r}`]);
     if (!isBlocking(centroid)) floorHexes.push(centroid);
@@ -399,9 +415,44 @@ function carvePolygonRoom(corners, doorHexes, floorType, wallType = 'Wall') {
             });
         });
         frontier = next;
-        if (seen.size > 5000) break; // safety valve if the corners don't actually enclose anything
     }
+
+    // Reinforce the perimeter with the interior's own TRUE hex-adjacency
+    // wall ring (wallRingAroundFloor, the same helper carveFlatRoom uses
+    // everywhere else in this file) unioned with the original hexLine wall
+    // — guarantees an airtight, walkable-consistent boundary even where
+    // hexLine's cube-coordinate line doesn't land on a true neighbor of the
+    // interior, instead of trusting the straight-line math alone.
+    //
+    // A door hex is itself part of floorHexes (see isBlocking above), so
+    // wallRingAroundFloor's TRUE-adjacency ring naturally includes the
+    // door's own true exterior neighbor — which, due to the very same
+    // row-shift/parity mismatch hexLine can have, doesn't necessarily sit
+    // at the door's hexLine-assumed position. Sealing that hex as wall too
+    // would close the door from the outside entirely. Exempt every true
+    // neighbor of every door hex from this reinforcement pass so each door
+    // keeps a real exterior opening.
+    const doorExteriorExempt = new Set();
+    doorKeys.forEach(dk => {
+        const [dq, dr] = dk.split(',').map(Number);
+        window.getNeighbors(dq, dr).forEach(n => doorExteriorExempt.add(`${n.q},${n.r}`));
+    });
+    wallRingAroundFloor(floorHexes).forEach(h => {
+        const key = `${h.q},${h.r}`;
+        if (doorExteriorExempt.has(key)) return;
+        if (!wallKeys.has(key)) { wallKeys.add(key); wallHexes.push(h); }
+    });
+
     floorHexes.forEach(h => window.setTerrainAt(h.q, h.r, floorType));
+    wallHexes.forEach(h => {
+        const key = `${h.q},${h.r}`;
+        if (doorKeys.has(key)) return; // doors are punched open below, not sealed as wall
+        window.setTerrainAt(h.q, h.r, wallType);
+    });
+    (doorHexes || []).forEach(h => {
+        window.setTerrainAt(h.q, h.r, floorType);
+        window.tileObjects[`${h.q},${h.r}`] = { type: 'door_open', lightRadius: 0 };
+    });
 
     // Connect each door to the nearest already-existing Path tile via BFS,
     // not a straight line — impassable terrain (walls, water, this room's
@@ -413,6 +464,12 @@ function carvePolygonRoom(corners, doorHexes, floorType, wallType = 'Wall') {
         const visited = new Set([startKey]);
         let queue = [door];
         let target = null;
+        // Bounded by real hex distance from the door, not just a node-count
+        // cap — a node-count-only bound (the original version of this
+        // function used 5000) can still wander hundreds of hexes across the
+        // map before giving up, painting stray Path far from the room. A
+        // real door should only ever need to reach a NEARBY road/plot.
+        const MAX_CONNECT_DISTANCE = 80;
         while (queue.length && !target) {
             const next = [];
             for (const h of queue) {
@@ -420,6 +477,7 @@ function carvePolygonRoom(corners, doorHexes, floorType, wallType = 'Wall') {
                 const terrain = window.getTerrainAt(h.q, h.r);
                 if (key !== startKey && terrain.name === 'Path') { target = h; break; }
                 if (key !== startKey && terrain.impassable) continue;
+                if (window.distance(door, h) >= MAX_CONNECT_DISTANCE) continue;
                 window.getNeighbors(h.q, h.r).forEach(n => {
                     const nKey = `${n.q},${n.r}`;
                     if (visited.has(nKey)) return;
@@ -429,7 +487,7 @@ function carvePolygonRoom(corners, doorHexes, floorType, wallType = 'Wall') {
                 });
             }
             queue = next;
-            if (visited.size > 5000) break; // safety valve — no reachable Path within a sane radius
+            if (visited.size > 20000) break; // absolute safety valve
         }
         if (!target) return; // nothing nearby to connect to — leave the door as-is
         let cur = target;

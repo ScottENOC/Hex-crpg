@@ -1473,6 +1473,16 @@ const CHAR_CONFIG = {
     elf_female:   { bodyW:2.00, bodyH:2.40, yOff:-0.20, baseKey:'elfFemaleBase',   hair:{ key:'elfFemaleHair',   type:'full'                                        }, armour:{ wMult:1.0, topShift:0.3 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.37, y:0.63 }, offHand:{ x:0.58, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
     dwarf_male:   { bodyW:1.60, bodyH:1.92, yOff:-0.07, baseKey:'dwarfMaleBase',   hair:{ key:'dwarfMaleHair',   type:'full'                                        }, armour:{ wMult:1.4, topShift:0.1 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.33, y:0.61 }, offHand:{ x:0.52, y:0.45 }, weaponSizeMult:1.0, shieldSizeMult:0.36 },
     dwarf_female: { bodyW:1.60, bodyH:1.92, yOff:-0.07, baseKey:'dwarfFemaleBase', hair:{ key:'dwarfFemaleHair', type:'full' }, armour:{ wMult:1.4, topShift:0.1 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.33, y:0.61 }, offHand:{ x:0.52, y:0.45 }, weaponSizeMult:1.0, shieldSizeMult:0.36 },
+    // No dedicated layered orc body art exists (no orcMaleBase/orcFemaleBase
+    // images) — reuses the flat orc.png monster sprite (window.gameVisuals.
+    // orcBase) as the body layer itself, same "no hair" treatment as
+    // revenant/skeleton below. This routes orc players/companions through
+    // the SAME equipment-layering pipeline as every other race (armour/
+    // weapon/shield images are already race-agnostic, see the ARMOUR/SHIELD/
+    // WEAPON blocks below) instead of the old early-return that drew only
+    // the flat sprite with no equipment at all.
+    orc_male:     { bodyW:1.90, bodyH:2.10, yOff:-0.15, baseKey:'orcBase', hair:{ key:null }, armour:{ wMult:1.1, topShift:0.1 }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.35, y:0.64 }, offHand:{ x:0.59, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
+    orc_female:   { bodyW:1.85, bodyH:2.05, yOff:-0.15, baseKey:'orcBase', hair:{ key:null }, armour:{ wMult:1.1, topShift:0.1 }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.40, y:0.66 }, offHand:{ x:0.60, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
 
     // ENEMY HUMANOIDS — sprite keys need matching images (e.g. gameVisuals.revenantBase)
     // Use backtick debug overlay to tune anchor dots once sprites are loaded.
@@ -1510,15 +1520,11 @@ function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
             ctx.drawImage(window.gameVisuals.monsterDefault, x - size / 2, y - size / 2 + flyOff, size, size);
             return;
         }
-        // Same reasoning as goblin above — orc players/companions have no
-        // layered CHAR_CONFIG rig either, so reuse the orc monster's own
-        // flat sprite (window.gameVisuals.orcBase, already loaded for orc
-        // monster rendering) instead of the generic circle.
-        if (e.race === 'orc' && window.gameVisuals?.orcBase?.complete) {
-            const size = window.hexSize * 1.5 * z;
-            ctx.drawImage(window.gameVisuals.orcBase, x - size / 2, y - size / 2 + flyOff, size, size);
-            return;
-        }
+        // Note: orc now has a real CHAR_CONFIG entry (orc_male/orc_female,
+        // above) reusing orcBase as its body layer, so it goes through the
+        // full equipment-layering path below instead of hitting this
+        // fallback block at all (this branch only fires if gameVisuals
+        // itself isn't loaded yet, same as every other race).
         // Fallback: draw a colored circle so the entity is always visible
         const r = window.hexSize * 0.45 * z;
         ctx.beginPath();
@@ -1902,6 +1908,21 @@ function renderEntities() {
               window.mapCtx.beginPath();
               window.mapCtx.ellipse(x, y, size * 0.35, size * 0.2, 0, 0, Math.PI * 2);
               window.mapCtx.fill();
+              window.mapCtx.globalAlpha = 1.0;
+          } else if (obj.type === 'body_marker') {
+              // A fallen body: a dark, flattened silhouette (not the brown
+              // "harvestable animal corpse" ellipse above) — reads clearly
+              // as "something died here", never mistaken for a still-living
+              // enemy the way the old "just vanish" behavior could at a
+              // glance mid-fight.
+              window.mapCtx.globalAlpha = 0.75;
+              window.mapCtx.fillStyle = '#2b2b2b';
+              window.mapCtx.beginPath();
+              window.mapCtx.ellipse(x, y, size * 0.4, size * 0.18, Math.PI / 5, 0, Math.PI * 2);
+              window.mapCtx.fill();
+              window.mapCtx.strokeStyle = 'rgba(120,0,0,0.6)';
+              window.mapCtx.lineWidth = 1.5;
+              window.mapCtx.stroke();
               window.mapCtx.globalAlpha = 1.0;
           } else if (obj.type === 'unicorn_track') {
               // Only drawn at all if this hex's track happens to fall within
@@ -5527,6 +5548,17 @@ function handleLethalDamage(target, attacker) {
     // leaveCorpse/harvestCorpse in resources.js) — gated on Knowledge:
     // Nature's nature_butchery sub-skill, not the base skill itself.
     if (target.tags?.includes('animal') && window.leaveCorpse) window.leaveCorpse(target);
+    // Every OTHER kill previously just vanished the instant alive=false hit
+    // the render filter (renderEntities only draws e.alive entities) — no
+    // grayscale, no lying-down sprite, nothing marking where they fell.
+    // Rather than keep the dead entity itself rendered (which would need
+    // every alive-gated system — pathfinding, targeting, the initiative
+    // tracker — re-audited to ignore it), drop a plain non-interactive
+    // ground marker at the death hex instead, purely visual, distinct from
+    // the harvestable animal 'corpse' type above.
+    else if (!window.tileObjects[`${target.hex.q},${target.hex.r}`]) {
+        window.tileObjects[`${target.hex.q},${target.hex.r}`] = { type: 'body_marker', name: target.name };
+    }
 
     // ROGUELIKE: Remove from graveyard if a graveyard merc dies
     if (target.isGraveyardMerc) {
@@ -6096,7 +6128,8 @@ function checkCombatEnd() {
             window.isInArena = false;
             window.arenaScenario = null;
             window.triggerAmbientDialogue('arena_victory');
-            
+            grantArenaVictoryReward();
+
             // AUDIO: Victory fade out
             if (window.stopAllMusic) window.stopAllMusic(0.8);
 
@@ -6590,6 +6623,24 @@ function setupArenaLobby() {
 // (flag captured/held) or without (flag rushed past) every enemy dying.
 // `won` controls flavor only; loot/XP for a clean kill still comes through
 // checkCombatEnd as before for scenarios that don't call this early.
+// A flat completion bonus for winning an arena fight as a whole, on top of
+// whatever per-kill XP/gold was earned along the way (handleLethalDamage) —
+// previously there was no reward at all for the win itself, so a scenario
+// like flag defense (which can be won without killing everyone, or even
+// without landing a single kill) could pay out nothing. Scales gently with
+// roguelikeData.fightsCompleted, the same progress counter arena spawn
+// difficulty already scales off of (see getAllValidSpawnHexes/startArenaFight).
+function grantArenaVictoryReward() {
+    const fightsCompleted = window.roguelikeData?.fightsCompleted || 1;
+    const gold = 25 + fightsCompleted * 5;
+    const exp = 40 + fightsCompleted * 10;
+    const player = window.party?.[0];
+    if (player) player.gold = (player.gold || 0) + gold;
+    if (window.gainExp) window.gainExp(exp);
+    window.showMessage(`Arena victory! (+${gold} gold, +${exp} exp)`);
+}
+window.grantArenaVictoryReward = grantArenaVictoryReward;
+
 function endArenaScenario(won, message) {
     if (!window.isInArena) return;
     window.isInArena = false;
@@ -6598,6 +6649,7 @@ function endArenaScenario(won, message) {
     window.gamePhase = 'WAITING';
     window.currentTurnEntity = null;
     if (message) window.showMessage(message);
+    if (won) grantArenaVictoryReward();
     window.triggerAmbientDialogue(won ? 'arena_victory' : 'arena_fight_start');
     if (window.stopAllMusic) window.stopAllMusic(0.8);
     if (window.updateActionButtons) window.updateActionButtons();
@@ -6961,7 +7013,19 @@ function startArenaFight() {
                 if (terrain.name !== 'Wall' && terrain.name !== 'Water' &&
                     terrain.name !== 'Pedestal' && !getEntityAtHex(q, r)) {
                     const nearPlayer = window.entities.some(e => e.side === 'player' && window.distance(e.hex, hex) < 3);
-                    if (!nearPlayer) {
+                    // flag_defend's flag sits only 2 hexes from the party's own
+                    // base (see below) — without this exclusion, an enemy could
+                    // spawn directly on (or immediately adjacent to) the flag,
+                    // idle and never-seen, and satisfy the loss condition
+                    // (tickArenaScenario) before the player ever spots it or it
+                    // takes a single turn. Excluding a small radius around the
+                    // flag the same way spawns already avoid the player forces
+                    // every attacker to actually approach and be seen first.
+                    // Only applies to flag_defend — flag_attack deliberately
+                    // posts guards near its own flag, defending it.
+                    const flagHex = window.arenaScenario?.type === 'flag_defend' ? window.arenaScenario.flagHex : null;
+                    const nearFlag = flagHex && window.distance(flagHex, hex) < 4;
+                    if (!nearPlayer && !nearFlag) {
                         valid.push(hex);
                     }
                 }
