@@ -95,3 +95,21 @@ test.describe('carvePolygonRoom', () => {
         expect(result).toBe(true);
     });
 });
+
+test.describe('the verification room built with carvePolygonRoom', () => {
+    test('the sheared-rectangle test room is carved with its door on the south wall, interior open, corners solid', async ({ page }) => {
+        await createCharacter(page, { campaign: '2' });
+        const result = await page.evaluate(() => ({
+            door: window.getTerrainAt(24, -483).name,
+            doorType: window.tileObjects['24,-483']?.type,
+            interior: window.getTerrainAt(22, -483).name,
+            topLeft: window.getTerrainAt(19, -482).name,
+            topRight: window.getTerrainAt(26, -489).name,
+        }));
+        expect(result.door).toBe('Wood Floor');
+        expect(result.doorType).toBe('door_open');
+        expect(result.interior).toBe('Wood Floor');
+        expect(result.topLeft).toBe('Wall');
+        expect(result.topRight).toBe('Wall');
+    });
+});

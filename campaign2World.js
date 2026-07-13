@@ -2926,6 +2926,25 @@ function setupVillageScene(forLoadOnly = false) {
             window.setTerrainAt(rx, rz, 'Path');
         }
     }
+    // Verification build for carvePolygonRoom (the new arbitrary-corner room
+    // builder, above) — a plain sheared-rectangle room at fixed absolute
+    // coordinates (not offset from CP, per the exact corners given), with
+    // one door on its south wall. No NPCs/purpose yet — just confirming the
+    // shape/door/flood-fill/auto-connect all work before building more with
+    // it.
+    {
+        const corners = [
+            { q: 19, r: -482 }, // top-left
+            { q: 26, r: -489 }, // top-right
+            { q: 26, r: -485 }, // bottom-right
+            { q: 19, r: -478 }, // bottom-left
+        ];
+        const doorHex = { q: 24, r: -483 };
+        const region = window.carvePolygonRoom(corners, [doorHex], 'Wood Floor');
+        window.interiorRegions.push(region);
+        window.campaign2TestPolygonRoomCenter = { q: 22, r: -483 };
+        window.tileObjects['22,-483'] = { type: 'table' };
+    }
     buildSideQuestContent();
 
     // Road-network connectivity (hexMap.js): every road painted above should

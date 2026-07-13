@@ -258,7 +258,7 @@ const skills = {
     },
     'unarmed_dmg': {
         name: 'Unarmed Mastery',
-        description: 'Grants +1 damage when fighting unarmed.',
+        description: 'Grants +2 damage when fighting unarmed.',
         tree: 'Way of the open palm',
         maxRanks: 1,
         prereq: 'unarmed_hit',

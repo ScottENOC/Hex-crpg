@@ -5276,7 +5276,7 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   // Fists have no weapon.id, so `${weapon?.id}_dmg` never matched
   // 'unarmed_dmg' — that skill was dead code until this unarmed-specific
   // read (WILD FURY, spells.js, applies the same way: only while unarmed).
-  const unarmedDmg = !weapon ? (attacker.skills?.unarmed_dmg || 0) : 0;
+  const unarmedDmg = !weapon ? (attacker.skills?.unarmed_dmg || 0) * 2 : 0;
   const wildFury = !weapon ? (window.activeSpells || []).find(s => s.debuffType === 'wild_fury_unarmed' && s.targetEntityId === attacker.id) : null;
   let dmg = (attacker.baseDamage || 1) + (weapon?.damage || 0) + ((attacker.skills[`${weapon?.id}_dmg`] || 0) * 2) + unarmedDmg + (wildFury?.magnitude || 0) + (attacker.skills['meleeDamage'] || 0) + bonusDamage;
   if (isOffhand) dmg -= 2;
