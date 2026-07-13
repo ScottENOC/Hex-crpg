@@ -2085,7 +2085,12 @@ function buildSilverhartPalace(roadEnd) {
             { q: 34, r: -495 },
         ];
         const builderHouseDoor = { q: 34, r: -493 };
-        const builderHouseRegion = window.carvePolygonRoom(builderHouseCorners, [builderHouseDoor], 'Wood Floor');
+        // A second door on the south wall (39,-487) — the hexagon's only
+        // other entrance sat clear across the building on the west corner,
+        // reading as a solid, doorless wall to anyone approaching from
+        // this side.
+        const builderHouseSouthDoor = { q: 39, r: -487 };
+        const builderHouseRegion = window.carvePolygonRoom(builderHouseCorners, [builderHouseDoor, builderHouseSouthDoor], 'Wood Floor');
         window.interiorRegions.push(builderHouseRegion);
         if (window.campaign2SilverhartBuilder) {
             window.entities.push(window.buildNPC({ ...window.campaign2SilverhartBuilder, hex: { q: 38, r: -492 } }));
@@ -2319,7 +2324,19 @@ function buildSilverhartPalace(roadEnd) {
     // the wall with nothing behind it — the door graphic didn't actually
     // open anything).
     const ironbondOfficeDoor = { q: ironbondOfficeCenter.q + 3, r: ironbondOfficeCenter.r };
-    window.interiorRegions.push(carveFlatRoom(ironbondOfficeCenter.q, ironbondOfficeCenter.r, 3, 2, ironbondOfficeDoor, 'Wood Floor'));
+    // Custom quadrilateral (carvePolygonRoom) instead of the plain
+    // carveFlatRoom rectangle — per the player's request, the top-right
+    // corner (originally ironbondOfficeCenter.q+3, .r-3) is pulled one
+    // further step out along the same diagonal the top wall already runs
+    // on, from (4,-457) to (5,-458). The other three corners (and the
+    // door, sitting at the old bottom-right corner) are unchanged.
+    const ironbondOfficeCorners = [
+        { q: ironbondOfficeCenter.q - 3, r: ironbondOfficeCenter.r },     // top-left
+        { q: ironbondOfficeCenter.q + 4, r: ironbondOfficeCenter.r - 4 }, // top-right (moved)
+        { q: ironbondOfficeCenter.q + 3, r: ironbondOfficeCenter.r },     // bottom-right (= door)
+        { q: ironbondOfficeCenter.q - 3, r: ironbondOfficeCenter.r + 3 }, // bottom-left
+    ];
+    window.interiorRegions.push(window.carvePolygonRoom(ironbondOfficeCorners, [ironbondOfficeDoor], 'Wood Floor'));
     // Corridor runs along the door's own row (not officeRowL, the
     // building's SOUTH wall row) — officeRowL only equals
     // ironbondOfficeCenter.r+2, which is the wall directly south of the
@@ -2329,6 +2346,15 @@ function buildSilverhartPalace(roadEnd) {
     window.tileObjects[`${ironbondOfficeCenter.q},${ironbondOfficeCenter.r}`] = { type: 'table' };
     window.tileObjects[`${ironbondOfficeCenter.q + 1},${ironbondOfficeCenter.r}`] = { type: 'bench' };
     window.campaign2IronbondOfficeCenter = ironbondOfficeCenter;
+    // A leftover wall stub between the Ironbond office and its eastern
+    // neighbor, spanning (6,-452) to (10,-454) — never part of either
+    // building's own floor, just a stray seam left standing where the two
+    // wall rings met. Cleared to open ground per the player's request.
+    for (let q = 6; q <= 10; q++) {
+        for (let r = -454; r <= -452; r++) {
+            if (window.getTerrainAt(q, r).name === 'Wall') window.setTerrainAt(q, r, 'Grass');
+        }
+    }
 
     // Shifted (-2,-5) from its original {q: dqCenter+8, r: officeRowR} per
     // the player's request — the hex that used to be at (14,-449) now
