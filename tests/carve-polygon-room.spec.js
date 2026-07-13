@@ -96,20 +96,28 @@ test.describe('carvePolygonRoom', () => {
     });
 });
 
-test.describe('the verification room built with carvePolygonRoom', () => {
-    test('the sheared-rectangle test room is carved with its door on the south wall, interior open, corners solid', async ({ page }) => {
+test.describe("Master Builder Hallis's hexagonal building (carvePolygonRoom, replacing the old plain rectangle)", () => {
+    test('the 6-corner shape is carved with a walkable interior, a working door, and Hallis inside it', async ({ page }) => {
         await createCharacter(page, { campaign: '2' });
-        const result = await page.evaluate(() => ({
-            door: window.getTerrainAt(24, -483).name,
-            doorType: window.tileObjects['24,-483']?.type,
-            interior: window.getTerrainAt(22, -483).name,
-            topLeft: window.getTerrainAt(19, -482).name,
-            topRight: window.getTerrainAt(26, -489).name,
-        }));
+        const result = await page.evaluate(() => {
+            const hallis = window.entities.find(e => e.name === 'Master Builder Hallis');
+            return {
+                interior: window.getTerrainAt(38, -492).name,
+                door: window.getTerrainAt(34, -493).name,
+                doorType: window.tileObjects['34,-493']?.type,
+                corner: window.getTerrainAt(42, -495).name,
+                hallisHex: hallis?.hex,
+            };
+        });
+        expect(result.interior).toBe('Wood Floor');
         expect(result.door).toBe('Wood Floor');
         expect(result.doorType).toBe('door_open');
-        expect(result.interior).toBe('Wood Floor');
-        expect(result.topLeft).toBe('Wall');
-        expect(result.topRight).toBe('Wall');
+        expect(result.corner).toBe('Wall');
+        // Inside the hexagon's bounding box (q 34-42, r -495..-486) — a
+        // loose but real sanity check that she wasn't left outside it.
+        expect(result.hallisHex.q).toBeGreaterThanOrEqual(34);
+        expect(result.hallisHex.q).toBeLessThanOrEqual(42);
+        expect(result.hallisHex.r).toBeGreaterThanOrEqual(-495);
+        expect(result.hallisHex.r).toBeLessThanOrEqual(-486);
     });
 });

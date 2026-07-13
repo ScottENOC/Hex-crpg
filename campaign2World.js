@@ -2065,12 +2065,35 @@ function buildSilverhartPalace(roadEnd) {
         window.entities.push(window.buildNPC({ ...window.campaign2NobleCorstane, hex: { q: manorCenter.q, r: manorCenter.r + 1 } }));
     }
 
-    const builderHouseCenter = { q: nobleNearQ + 3, r: throneCenter.r + 6 };
-    const builderHouseDoor = { q: builderHouseCenter.q - 3, r: builderHouseCenter.r };
-    window.interiorRegions.push(carveFlatRoom(builderHouseCenter.q, builderHouseCenter.r, 3, 2, builderHouseDoor, 'Wood Floor'));
-    if (window.campaign2SilverhartBuilder) {
-        window.entities.push(window.buildNPC({ ...window.campaign2SilverhartBuilder, hex: { q: builderHouseCenter.q, r: builderHouseCenter.r + 1 } }));
+    // A manually-carved 6-corner building (carvePolygonRoom) at fixed
+    // absolute coordinates, replacing the old plain rectangle — per the
+    // player's own corner list, with a door on the west edge (facing back
+    // toward the rest of the Noble Quarter street network) and Master
+    // Builder Hallis placed well inside the footprint.
+    {
+        const builderHouseCorners = [
+            { q: 34, r: -491 },
+            { q: 38, r: -495 },
+            { q: 42, r: -495 },
+            { q: 42, r: -491 },
+            { q: 38, r: -486 },
+            { q: 34, r: -495 },
+        ];
+        const builderHouseDoor = { q: 34, r: -493 };
+        const builderHouseRegion = window.carvePolygonRoom(builderHouseCorners, [builderHouseDoor], 'Wood Floor');
+        window.interiorRegions.push(builderHouseRegion);
+        if (window.campaign2SilverhartBuilder) {
+            window.entities.push(window.buildNPC({ ...window.campaign2SilverhartBuilder, hex: { q: 38, r: -492 } }));
+        }
     }
+    // Master Builder Hallis's new (larger) hexagonal footprint sits directly
+    // across the short connector strip that used to link the ring road
+    // (Merchant/Noble Quarter loop) to the palace-side entrance road here —
+    // the old, smaller rectangle left that strip clear. Re-route the
+    // connector one column east of the hexagon (q=44, entirely clear Grass
+    // between the ring's r=-496 Path and the entrance road's r=-487 Path at
+    // that column) so the two networks stay merged.
+    for (let r = -495; r <= -488; r++) window.setTerrainAt(44, r, 'Path');
 
     const neighborHouseCenter = { q: nobleFarQ - 3, r: throneCenter.r - 6 };
     const neighborHouseDoor = { q: neighborHouseCenter.q + 3, r: neighborHouseCenter.r };
@@ -2302,10 +2325,13 @@ function buildSilverhartPalace(roadEnd) {
     window.tileObjects[`${ironbondOfficeCenter.q + 1},${ironbondOfficeCenter.r}`] = { type: 'bench' };
     window.campaign2IronbondOfficeCenter = ironbondOfficeCenter;
 
-    const cathedralCenter = { q: dqCenter + 8, r: officeRowR };
+    // Shifted (-2,-5) from its original {q: dqCenter+8, r: officeRowR} per
+    // the player's request — the hex that used to be at (14,-449) now
+    // lands at (12,-454).
+    const cathedralCenter = { q: dqCenter + 6, r: officeRowR - 5 };
     const cathedralDoor = { q: cathedralCenter.q - 4, r: cathedralCenter.r };
     window.interiorRegions.push(carveFlatRoom(cathedralCenter.q, cathedralCenter.r, 4, 4, cathedralDoor, 'Wood Floor'));
-    for (let q = dqCenter + 1; q < cathedralDoor.q; q++) window.setTerrainAt(q, officeRowR, 'Path');
+    for (let q = dqCenter + 1; q < cathedralDoor.q; q++) window.setTerrainAt(q, cathedralDoor.r, 'Path');
     window.tileObjects[`${cathedralCenter.q},${cathedralCenter.r - 2}`] = { type: 'throne' }; // stands in for an altar — same "focal furniture at the head of the room" reuse as the throne room
     window.tileObjects[`${cathedralCenter.q - 2},${cathedralCenter.r}`] = { type: 'bench' };
     window.tileObjects[`${cathedralCenter.q + 2},${cathedralCenter.r}`] = { type: 'bench' };
@@ -2345,7 +2371,9 @@ function buildSilverhartPalace(roadEnd) {
     // Not placed at all under Iron Man Mode, per the player's request that
     // Iron Man remove the safety net entirely.
     if (window.campaign2Retrainer && !window.ironmanMode) {
-        const retrainerHex = { q: plazaCenter.q + 3, r: plazaCenter.r + 2 };
+        // Moved off her old spot next to the Mercenary Recruiter to clear
+        // room for the relocated cathedral (see cathedralCenter above).
+        const retrainerHex = { q: 9, r: -459 };
         window.setTerrainAt(retrainerHex.q, retrainerHex.r, 'Path');
         const retrainer = window.buildNPC({ ...window.campaign2Retrainer, hex: retrainerHex });
         retrainer.hairSizeMult = 0.2; // the default dwarf-female hair sprite reads absurdly oversized on her specifically
@@ -2984,25 +3012,14 @@ function setupVillageScene(forLoadOnly = false) {
             window.setTerrainAt(rx, rz, 'Path');
         }
     }
-    // Verification build for carvePolygonRoom (the new arbitrary-corner room
-    // builder, above) — a plain sheared-rectangle room at fixed absolute
-    // coordinates (not offset from CP, per the exact corners given), with
-    // one door on its south wall. No NPCs/purpose yet — just confirming the
-    // shape/door/flood-fill/auto-connect all work before building more with
-    // it.
-    {
-        const corners = [
-            { q: 19, r: -482 }, // top-left
-            { q: 26, r: -489 }, // top-right
-            { q: 26, r: -485 }, // bottom-right
-            { q: 19, r: -478 }, // bottom-left
-        ];
-        const doorHex = { q: 24, r: -483 };
-        const region = window.carvePolygonRoom(corners, [doorHex], 'Wood Floor');
-        window.interiorRegions.push(region);
-        window.campaign2TestPolygonRoomCenter = { q: 22, r: -483 };
-        window.tileObjects['22,-483'] = { type: 'table' };
-    }
+    // The carvePolygonRoom verification build (a sheared-rectangle test
+    // room at fixed absolute coordinates) has served its purpose — it
+    // sliced across a Silverhart ring road and partially overlapped the
+    // curtain wall painted above, since those are computed relative to
+    // throneCenter and happened to sweep through the same coordinates.
+    // Removed outright rather than patched, now that carvePolygonRoom
+    // itself is proven (see tests/carve-polygon-room.spec.js's synthetic
+    // coverage, which doesn't depend on this in-game instance).
     buildSideQuestContent();
 
     // Road-network connectivity (hexMap.js): every road painted above should
