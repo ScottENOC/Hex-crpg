@@ -2076,34 +2076,50 @@ function buildSilverhartPalace(roadEnd) {
     // toward the rest of the Noble Quarter street network) and Master
     // Builder Hallis placed well inside the footprint.
     {
+        // Same 6 points the player gave, reordered into their actual cyclic
+        // (angular) order around the hexagon — the original listing order
+        // zigzagged back and forth instead of tracing the perimeter, which
+        // made carvePolygonRoom draw a self-crossing, pinched shape instead
+        // of a clean hexagon.
         const builderHouseCorners = [
-            { q: 34, r: -491 },
-            { q: 38, r: -495 },
-            { q: 42, r: -495 },
             { q: 42, r: -491 },
             { q: 38, r: -486 },
+            { q: 34, r: -491 },
             { q: 34, r: -495 },
+            { q: 38, r: -495 },
+            { q: 42, r: -495 },
         ];
         const builderHouseDoor = { q: 34, r: -493 };
-        // A second door on the south wall (39,-487) — the hexagon's only
+        // A second door at the south corner (38,-486) — the hexagon's only
         // other entrance sat clear across the building on the west corner,
         // reading as a solid, doorless wall to anyone approaching from
-        // this side.
-        const builderHouseSouthDoor = { q: 39, r: -487 };
+        // this side. Pre-painting its one Grass exterior neighbor as Path
+        // before carving gives carvePolygonRoom's own door-to-path BFS an
+        // instant, distance-1 target — without this, that BFS (which
+        // freely walks through this room's own walkable floor, since floor
+        // isn't impassable) found it shorter to cut straight across the
+        // interior to the west door's own connector than to go around
+        // outside, painting a stray Path trail through the middle of the
+        // room.
+        const builderHouseSouthDoor = { q: 38, r: -486 };
+        window.setTerrainAt(38, -485, 'Path');
         const builderHouseRegion = window.carvePolygonRoom(builderHouseCorners, [builderHouseDoor, builderHouseSouthDoor], 'Wood Floor');
         window.interiorRegions.push(builderHouseRegion);
         if (window.campaign2SilverhartBuilder) {
             window.entities.push(window.buildNPC({ ...window.campaign2SilverhartBuilder, hex: { q: 38, r: -492 } }));
         }
     }
-    // Master Builder Hallis's new (larger) hexagonal footprint sits directly
-    // across the short connector strip that used to link the ring road
-    // (Merchant/Noble Quarter loop) to the palace-side entrance road here —
-    // the old, smaller rectangle left that strip clear. Re-route the
-    // connector one column east of the hexagon (q=44, entirely clear Grass
-    // between the ring's r=-496 Path and the entrance road's r=-487 Path at
-    // that column) so the two networks stay merged.
-    for (let r = -495; r <= -488; r++) window.setTerrainAt(44, r, 'Path');
+    // Master Builder Hallis's hexagonal footprint sits directly across the
+    // short connector strip that used to link the ring road (Merchant/Noble
+    // Quarter loop) to the palace-side entrance road here — the old, smaller
+    // rectangle left that strip clear. Route a short detour around the
+    // building's west wall (a true hex-adjacent BFS path through clear
+    // ground, confirmed by direct pathfinding) so the two networks stay
+    // merged.
+    [
+        { q: 33, r: -491 }, { q: 33, r: -490 }, { q: 33, r: -489 },
+        { q: 34, r: -489 }, { q: 35, r: -490 }, { q: 35, r: -491 },
+    ].forEach(h => window.setTerrainAt(h.q, h.r, 'Path'));
 
     const neighborHouseCenter = { q: nobleFarQ - 3, r: throneCenter.r - 6 };
     const neighborHouseDoor = { q: neighborHouseCenter.q + 3, r: neighborHouseCenter.r };
@@ -2315,6 +2331,11 @@ function buildSilverhartPalace(roadEnd) {
     window.tileObjects[`${plazaCenter.q - 2},${plazaCenter.r}`] = { type: 'bench' };
     window.tileObjects[`${plazaCenter.q + 2},${plazaCenter.r}`] = { type: 'bench' };
     window.campaign2DiplomaticPlazaCenter = plazaCenter;
+    // A stray door tileObject at (8,-453), on the plaza's own south edge —
+    // no walled room actually opens onto it, just an open square. Cleared
+    // to plain Path per the player's report.
+    delete window.tileObjects['8,-453'];
+    window.setTerrainAt(8, -453, 'Path');
 
     const ironbondOfficeCenter = { q: dqCenter - 7, r: officeRowL -2 };
     // halfW=3 below means the floor's own east edge sits at
@@ -2324,19 +2345,30 @@ function buildSilverhartPalace(roadEnd) {
     // the wall with nothing behind it — the door graphic didn't actually
     // open anything).
     const ironbondOfficeDoor = { q: ironbondOfficeCenter.q + 3, r: ironbondOfficeCenter.r };
-    // Custom quadrilateral (carvePolygonRoom) instead of the plain
-    // carveFlatRoom rectangle — per the player's request, the top-right
-    // corner (originally ironbondOfficeCenter.q+3, .r-3) is pulled one
-    // further step out along the same diagonal the top wall already runs
-    // on, from (4,-457) to (5,-458). The other three corners (and the
-    // door, sitting at the old bottom-right corner) are unchanged.
-    const ironbondOfficeCorners = [
-        { q: ironbondOfficeCenter.q - 3, r: ironbondOfficeCenter.r },     // top-left
-        { q: ironbondOfficeCenter.q + 4, r: ironbondOfficeCenter.r - 4 }, // top-right (moved)
-        { q: ironbondOfficeCenter.q + 3, r: ironbondOfficeCenter.r },     // bottom-right (= door)
-        { q: ironbondOfficeCenter.q - 3, r: ironbondOfficeCenter.r + 3 }, // bottom-left
-    ];
-    window.interiorRegions.push(window.carvePolygonRoom(ironbondOfficeCorners, [ironbondOfficeDoor], 'Wood Floor'));
+    const ironbondOfficeRegion = carveFlatRoom(ironbondOfficeCenter.q, ironbondOfficeCenter.r, 3, 2, ironbondOfficeDoor, 'Wood Floor');
+    window.interiorRegions.push(ironbondOfficeRegion);
+    // Bump the top-right corner out one more step along the same diagonal
+    // the top wall already runs on, per the player's request: the old
+    // corner (ironbondOfficeCenter.q+3, .r-3) opens into floor, and a new
+    // wall corner goes up one hex further out (.q+4, .r-4). Building this
+    // as a carvePolygonRoom quad instead (straight lines between just the
+    // 4 corners) cut a straight diagonal across the room instead of
+    // following the true zigzag hex-adjacency edge, shrinking the floor
+    // enough to strand both the door and the envoy NPC outside it — hence
+    // patching the existing carveFlatRoom shape by hand instead.
+    const ironbondOldCorner = { q: ironbondOfficeCenter.q + 3, r: ironbondOfficeCenter.r - 3 };
+    const ironbondNewCorner = { q: ironbondOfficeCenter.q + 4, r: ironbondOfficeCenter.r - 4 };
+    window.setTerrainAt(ironbondOldCorner.q, ironbondOldCorner.r, 'Wood Floor');
+    ironbondOfficeRegion.floorHexes.push(ironbondOldCorner);
+    window.setTerrainAt(ironbondNewCorner.q, ironbondNewCorner.r, 'Wall');
+    // Seal the old corner's two other true neighbors that aren't already
+    // wall or interior floor, so opening it up doesn't leave a gap in the
+    // wall ring anywhere but the new corner.
+    window.getNeighbors(ironbondOldCorner.q, ironbondOldCorner.r).forEach(n => {
+        if (n.q === ironbondNewCorner.q && n.r === ironbondNewCorner.r) return;
+        if (ironbondOfficeRegion.floorHexes.some(h => h.q === n.q && h.r === n.r)) return;
+        window.setTerrainAt(n.q, n.r, 'Wall');
+    });
     // Corridor runs along the door's own row (not officeRowL, the
     // building's SOUTH wall row) — officeRowL only equals
     // ironbondOfficeCenter.r+2, which is the wall directly south of the
