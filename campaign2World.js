@@ -1983,6 +1983,11 @@ function buildSilverhartPalace(roadEnd) {
     // straight through that wall.
     for (let r = throneCenter.r + WALL_RADIUS + 1; r <= throneCenter.r + RING_ROAD_RADIUS; r++) window.setTerrainAt(throneCenter.q, r, 'Path');
     window.campaign2SilverhartRingRoadRadius = RING_ROAD_RADIUS;
+    // Just outside the gate on the entrance road — the right spot to arrive
+    // at Silverhart, since the gate itself is a real reputation-gated door
+    // (see gateDoorHex above): teleporting in should still leave that check
+    // in place, not drop the party straight into the throne room.
+    window.campaign2PalaceGateExteriorHex = { q: throneCenter.q, r: throneCenter.r + WALL_RADIUS + 1 };
 
     // The city, thought of as concentric rings around the palace: the
     // "nice" districts (Merchant, Noble) hug the curtain wall directly on
@@ -3822,8 +3827,8 @@ window.cheatTeleportRidgehold = function() {
     window.showMessage('Teleported to Ridgehold Fort.');
 };
 window.cheatTeleportSilverhart = function() {
-    if (!window.campaign2PalaceThroneCenter) { window.showMessage('Silverhart has not been built yet.'); return; }
-    teleportPartyTo(window.campaign2PalaceThroneCenter);
+    if (!window.campaign2PalaceGateExteriorHex) { window.showMessage('Silverhart has not been built yet.'); return; }
+    teleportPartyTo(window.campaign2PalaceGateExteriorHex);
     window.showMessage('Teleported to Silverhart.');
 };
 

@@ -41,12 +41,12 @@ test.describe('Cheat: teleport to location', () => {
         expect(result).toBeLessThanOrEqual(2);
     });
 
-    test('teleports the player entity to Silverhart (Capital)', async ({ page }) => {
+    test('teleports the player entity to just outside Silverhart\'s palace gate, not into the throne room', async ({ page }) => {
         await createCharacter(page);
         const result = await page.evaluate(() => {
             window.teleportPartyToLocation('Silverhart (Capital)');
             const player = window.entities.find(e => e.side === 'player' && !e.rider && !e.aiControlled);
-            return { hex: player.hex, expected: window.campaign2PalaceThroneCenter };
+            return { hex: player.hex, expected: window.campaign2PalaceGateExteriorHex };
         });
         expect(result.hex.q).toBe(result.expected.q);
         expect(result.hex.r).toBe(result.expected.r);
