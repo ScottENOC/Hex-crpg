@@ -2104,22 +2104,36 @@ function buildSilverhartPalace(roadEnd) {
         const builderHouseSouthDoor = { q: 38, r: -486 };
         window.setTerrainAt(38, -485, 'Path');
         const builderHouseRegion = window.carvePolygonRoom(builderHouseCorners, [builderHouseDoor, builderHouseSouthDoor], 'Wood Floor');
+        // Heal the shape: carvePolygonRoom's per-door connector BFS walks
+        // freely through this room's own walkable floor (floor isn't
+        // impassable), and with the hexagon's true wall/floor boundary
+        // zigzagging into q=35 at some rows (not a clean vertical wall),
+        // the west door's connector wandered along that zigzag and
+        // overwrote several real wall hexes there to Path — a walk-around
+        // bypass of the wall a few rows from the door, undetectable by eye
+        // but found by an interior-audit walk of the capital. Re-stamp the
+        // region's own authoritative floor/wall/door hexes over whatever
+        // the connector passes left behind.
+        builderHouseRegion.floorHexes.forEach(h => window.setTerrainAt(h.q, h.r, 'Wood Floor'));
+        builderHouseRegion.wallHexes.forEach(h => window.setTerrainAt(h.q, h.r, 'Wall'));
+        builderHouseRegion.doorHexes.forEach(h => {
+            window.setTerrainAt(h.q, h.r, 'Wood Floor');
+            window.tileObjects[`${h.q},${h.r}`] = { type: 'door_open', lightRadius: 0 };
+        });
         window.interiorRegions.push(builderHouseRegion);
+        // Exposed so the Noble Quarter's later street re-stamp (below) can
+        // skip this building's own footprint entirely — it's wide enough
+        // that nobleNearQ's column cuts across real interior floor, not
+        // just a front wall, so even the wall hexes here can't be safely
+        // treated as "a wall the street is allowed to overwrite" the way
+        // every other district building's wall is.
+        window.campaign2SilverhartBuilderHouseFootprint = new Set(
+            [...builderHouseRegion.floorHexes, ...builderHouseRegion.wallHexes].map(h => `${h.q},${h.r}`)
+        );
         if (window.campaign2SilverhartBuilder) {
             window.entities.push(window.buildNPC({ ...window.campaign2SilverhartBuilder, hex: { q: 38, r: -492 } }));
         }
     }
-    // Master Builder Hallis's hexagonal footprint sits directly across the
-    // short connector strip that used to link the ring road (Merchant/Noble
-    // Quarter loop) to the palace-side entrance road here — the old, smaller
-    // rectangle left that strip clear. Route a short detour around the
-    // building's west wall (a true hex-adjacent BFS path through clear
-    // ground, confirmed by direct pathfinding) so the two networks stay
-    // merged.
-    [
-        { q: 33, r: -491 }, { q: 33, r: -490 }, { q: 33, r: -489 },
-        { q: 34, r: -489 }, { q: 35, r: -490 }, { q: 35, r: -491 },
-    ].forEach(h => window.setTerrainAt(h.q, h.r, 'Path'));
 
     const neighborHouseCenter = { q: nobleFarQ - 3, r: throneCenter.r - 6 };
     const neighborHouseDoor = { q: neighborHouseCenter.q + 3, r: neighborHouseCenter.r };
@@ -2130,9 +2144,16 @@ function buildSilverhartPalace(roadEnd) {
     }
     fillEnclosedPockets(nobleNearQ - 5, nobleFarQ + 5, throneCenter.r - DISTRICT_SPAN - 2, throneCenter.r + DISTRICT_SPAN + 2);
     // Re-stamp the two streets for the same reason as the Merchant Quarter above.
+    // A building's own front WALL is fine to overwrite here (that's the
+    // whole point — the street always wins over a wall it fronts), but
+    // Master Builder Hallis's hexagon is wide enough that nobleNearQ's
+    // column cuts across its actual interior, not just a front wall —
+    // blindly stamping Path there opened a walk-around gap straight past
+    // both of the building's real doors. Skip its whole footprint here.
+    const builderHouseFootprint = window.campaign2SilverhartBuilderHouseFootprint || new Set();
     for (let r = throneCenter.r - DISTRICT_SPAN; r <= throneCenter.r + DISTRICT_SPAN; r++) {
-        window.setTerrainAt(nobleNearQ, r, 'Path');
-        window.setTerrainAt(nobleFarQ, r, 'Path');
+        if (!builderHouseFootprint.has(`${nobleNearQ},${r}`)) window.setTerrainAt(nobleNearQ, r, 'Path');
+        if (!builderHouseFootprint.has(`${nobleFarQ},${r}`)) window.setTerrainAt(nobleFarQ, r, 'Path');
     }
     for (let q = throneCenter.q + RING_ROAD_RADIUS; q <= nobleFarQ; q++) window.setTerrainAt(q, throneCenter.r, 'Path');
 
@@ -2163,16 +2184,33 @@ function buildSilverhartPalace(roadEnd) {
         const ringHex = { q: throneCenter.q + offset.q, r: throneCenter.r + offset.r };
         const inward = { q: Math.round(offset.q * 0.9), r: Math.round(offset.r * 0.9) };
         const houseCenter = { q: throneCenter.q + inward.q, r: throneCenter.r + inward.r };
+        // The south corner (offset {0, MIDDLE_RING_RADIUS}) computes to
+        // exactly (throneCenter.q, throneCenter.r+41) — the same fixed
+        // point the Diplomatic Quarter's own central plaza uses AND sits
+        // directly on the quarter's own north-south dqCenter street, since
+        // all three were placed independently; a small eastward nudge just
+        // lands on the (also independently placed) cathedral instead.
+        // +14 clears the whole Diplomatic Quarter building cluster,
+        // confirmed empirically against every other district building's
+        // own floor/wall footprint.
+        const isSouthCorner = offset.q === 0 && offset.r === MIDDLE_RING_RADIUS;
+        if (isSouthCorner) { houseCenter.q += 14; houseCenter.r = throneCenter.r + 44; }
         // Door faces toward the ring along whichever axis the ring
         // direction is stronger on, using the house's own real wall row
         // (centerR+/-2 or centerQ+/-2, halfW=halfH=2 below) — NOT ringHex
         // itself (the old bug: doorHex used to BE ringHex, several hexes
         // away from the house's own wall, so the real wall stayed solid
         // with no opening, and the door graphic floated out at the ring,
-        // unconnected to anything).
-        const doorHex = Math.abs(offset.r) >= Math.abs(offset.q)
-            ? { q: houseCenter.q, r: houseCenter.r + (offset.r >= 0 ? 2 : -2) }
-            : { q: houseCenter.q + (offset.q >= 0 ? 2 : -2), r: houseCenter.r };
+        // unconnected to anything). The shifted south corner is a special
+        // case: its ring point sits due WEST now (not south), so its door
+        // faces west instead of the usual south — a south-facing door here
+        // would send the ring-connector cube-lerp diagonally back through
+        // the house's own east-shifted wall to reach it.
+        const doorHex = isSouthCorner
+            ? { q: houseCenter.q - 2, r: houseCenter.r }
+            : Math.abs(offset.r) >= Math.abs(offset.q)
+                ? { q: houseCenter.q, r: houseCenter.r + (offset.r >= 0 ? 2 : -2) }
+                : { q: houseCenter.q + (offset.q >= 0 ? 2 : -2), r: houseCenter.r };
         window.interiorRegions.push(carveFlatRoom(houseCenter.q, houseCenter.r, 2, 2, doorHex, 'Wood Floor'));
         // A real hex line (cube-coordinate lerp + cube rounding, same
         // technique as Kragmoor's road connector) all the way from the
@@ -2331,11 +2369,6 @@ function buildSilverhartPalace(roadEnd) {
     window.tileObjects[`${plazaCenter.q - 2},${plazaCenter.r}`] = { type: 'bench' };
     window.tileObjects[`${plazaCenter.q + 2},${plazaCenter.r}`] = { type: 'bench' };
     window.campaign2DiplomaticPlazaCenter = plazaCenter;
-    // A stray door tileObject at (8,-453), on the plaza's own south edge —
-    // no walled room actually opens onto it, just an open square. Cleared
-    // to plain Path per the player's report.
-    delete window.tileObjects['8,-453'];
-    window.setTerrainAt(8, -453, 'Path');
 
     const ironbondOfficeCenter = { q: dqCenter - 7, r: officeRowL -2 };
     // halfW=3 below means the floor's own east edge sits at
