@@ -83,7 +83,7 @@ test.describe('Silverhart Palace: hexagonal curtain wall, gate, towers, wall gua
         await createCharacter(page);
         const result = await page.evaluate(() => {
             const center = window.campaign2PalaceThroneCenter;
-            const gateHex = { q: center.q - 1, r: center.r + 23 };
+            const gateHex = { q: center.q, r: center.r + 22 };
             const roadHex = { q: center.q, r: center.r + 15 };
             const door = window.tileObjects[`${gateHex.q},${gateHex.r}`];
             return {
@@ -104,7 +104,7 @@ test.describe('Silverhart Palace: hexagonal curtain wall, gate, towers, wall gua
         const result = await page.evaluate(() => {
             window.factions.silverhart_kingdom.standing = 0; // clears the -10 bar
             const center = window.campaign2PalaceThroneCenter;
-            const gateHex = { q: center.q - 1, r: center.r + 23 };
+            const gateHex = { q: center.q, r: center.r + 22 };
             window.toggleDoor(gateHex.q, gateHex.r, window.party[0]);
             return window.getTerrainAt(gateHex.q, gateHex.r).name;
         });
@@ -115,8 +115,8 @@ test.describe('Silverhart Palace: hexagonal curtain wall, gate, towers, wall gua
         await createCharacter(page);
         const thresholds = await page.evaluate(() => {
             const center = window.campaign2PalaceThroneCenter;
-            const gateHex = { q: center.q - 1, r: center.r + 23 };
-            const throneDoorHex = { q: center.q, r: center.r + 4 };
+            const gateHex = { q: center.q, r: center.r + 22 };
+            const throneDoorHex = { q: center.q, r: center.r + 5 };
             const rearDoorHex = { q: center.q, r: center.r - 5 };
             return {
                 gate: window.tileObjects[`${gateHex.q},${gateHex.r}`]?.accessThreshold?.standing,
@@ -133,7 +133,7 @@ test.describe('Silverhart Palace: hexagonal curtain wall, gate, towers, wall gua
         const below = await page.evaluate(() => {
             window.factions.silverhart_kingdom.standing = 5; // typical fresh-human seed, below the 15 bar
             const center = window.campaign2PalaceThroneCenter;
-            const throneDoorHex = { q: center.q, r: center.r + 4 };
+            const throneDoorHex = { q: center.q, r: center.r + 5 };
             window.toggleDoor(throneDoorHex.q, throneDoorHex.r, window.party[0]);
             return window.getTerrainAt(throneDoorHex.q, throneDoorHex.r).name;
         });
@@ -142,7 +142,7 @@ test.describe('Silverhart Palace: hexagonal curtain wall, gate, towers, wall gua
         const after = await page.evaluate(() => {
             window.factions.silverhart_kingdom.standing = 15;
             const center = window.campaign2PalaceThroneCenter;
-            const throneDoorHex = { q: center.q, r: center.r + 4 };
+            const throneDoorHex = { q: center.q, r: center.r + 5 };
             window.toggleDoor(throneDoorHex.q, throneDoorHex.r, window.party[0]);
             return window.getTerrainAt(throneDoorHex.q, throneDoorHex.r).name;
         });

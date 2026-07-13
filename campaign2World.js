@@ -321,6 +321,131 @@ function sealRoom(region, extraDoorHexes = []) {
     });
 }
 
+// A real hex-adjacent straight line between two hexes (cube-coordinate lerp
+// + cube rounding, not independent q/r lerp — that produces a "dotted" line
+// of non-adjacent hexes). Extracted from the connector lines Kragmoor and
+// the elven capital each hand-rolled inline; shared here so any new caller
+// (carvePolygonRoom below, or a future one) doesn't have to reimplement it.
+function hexLine(a, b) {
+    const x1 = a.q, z1 = a.r, y1 = -x1 - z1;
+    const x2 = b.q, z2 = b.r, y2 = -x2 - z2;
+    const steps = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1), Math.abs(z2 - z1));
+    const hexes = [];
+    for (let i = 0; i <= steps; i++) {
+        const t = steps === 0 ? 0 : i / steps;
+        let x = x1 + (x2 - x1) * t, y = y1 + (y2 - y1) * t, z = z1 + (z2 - z1) * t;
+        let rx = Math.round(x), ry = Math.round(y), rz = Math.round(z);
+        const dx = Math.abs(rx - x), dy = Math.abs(ry - y), dz = Math.abs(rz - z);
+        if (dx > dy && dx > dz) rx = -ry - rz;
+        else if (dy > dz) ry = -rx - rz;
+        else rz = -rx - ry;
+        hexes.push({ q: rx, r: rz });
+    }
+    return hexes;
+}
+window.hexLine = hexLine;
+
+// Builds an arbitrary room from a list of corner hexes (NOT necessarily an
+// axis-aligned rectangle, unlike carveFlatRoom/carveBuilding above): walls
+// are real hex-adjacent straight lines (hexLine) joining each corner to the
+// next (wrapping back to the first), doorHexes are punched through those
+// walls as real open doors, the interior is flood-filled with floorType via
+// a wall/door-bounded BFS (so it works for any enclosed shape, not just a
+// rectangle), and each door is connected to the nearest PRE-EXISTING Path
+// tile by its own obstacle-avoiding BFS route (walls/doors block the
+// search, so the connector actually routes around them instead of
+// potentially being drawn straight through one).
+function carvePolygonRoom(corners, doorHexes, floorType, wallType = 'Wall') {
+    const wallHexes = [];
+    const wallKeys = new Set();
+    for (let i = 0; i < corners.length; i++) {
+        const a = corners[i], b = corners[(i + 1) % corners.length];
+        hexLine(a, b).forEach(h => {
+            const key = `${h.q},${h.r}`;
+            if (!wallKeys.has(key)) { wallKeys.add(key); wallHexes.push(h); }
+        });
+    }
+    const doorKeys = new Set((doorHexes || []).map(h => `${h.q},${h.r}`));
+    wallHexes.forEach(h => {
+        const key = `${h.q},${h.r}`;
+        window.setTerrainAt(h.q, h.r, doorKeys.has(key) ? floorType : wallType);
+    });
+    (doorHexes || []).forEach(h => {
+        window.setTerrainAt(h.q, h.r, floorType);
+        window.tileObjects[`${h.q},${h.r}`] = { type: 'door_open', lightRadius: 0 };
+    });
+
+    // Flood-fill the interior: BFS out from the centroid, blocked by any
+    // wall hex that isn't also a door hex.
+    const centroid = {
+        q: Math.round(corners.reduce((s, c) => s + c.q, 0) / corners.length),
+        r: Math.round(corners.reduce((s, c) => s + c.r, 0) / corners.length),
+    };
+    const isBlocking = (h) => { const key = `${h.q},${h.r}`; return wallKeys.has(key) && !doorKeys.has(key); };
+    const floorHexes = [];
+    const seen = new Set([`${centroid.q},${centroid.r}`]);
+    if (!isBlocking(centroid)) floorHexes.push(centroid);
+    let frontier = [centroid];
+    while (frontier.length) {
+        const next = [];
+        frontier.forEach(h => {
+            window.getNeighbors(h.q, h.r).forEach(n => {
+                const key = `${n.q},${n.r}`;
+                if (seen.has(key)) return;
+                seen.add(key);
+                if (isBlocking(n)) return;
+                floorHexes.push(n);
+                next.push(n);
+            });
+        });
+        frontier = next;
+        if (seen.size > 5000) break; // safety valve if the corners don't actually enclose anything
+    }
+    floorHexes.forEach(h => window.setTerrainAt(h.q, h.r, floorType));
+
+    // Connect each door to the nearest already-existing Path tile via BFS,
+    // not a straight line — impassable terrain (walls, water, this room's
+    // own perimeter) blocks the search outright, so the route actually
+    // detours around obstacles instead of potentially cutting through one.
+    (doorHexes || []).forEach(door => {
+        const startKey = `${door.q},${door.r}`;
+        const cameFrom = new Map();
+        const visited = new Set([startKey]);
+        let queue = [door];
+        let target = null;
+        while (queue.length && !target) {
+            const next = [];
+            for (const h of queue) {
+                const key = `${h.q},${h.r}`;
+                const terrain = window.getTerrainAt(h.q, h.r);
+                if (key !== startKey && terrain.name === 'Path') { target = h; break; }
+                if (key !== startKey && terrain.impassable) continue;
+                window.getNeighbors(h.q, h.r).forEach(n => {
+                    const nKey = `${n.q},${n.r}`;
+                    if (visited.has(nKey)) return;
+                    visited.add(nKey);
+                    cameFrom.set(nKey, h);
+                    next.push(n);
+                });
+            }
+            queue = next;
+            if (visited.size > 5000) break; // safety valve — no reachable Path within a sane radius
+        }
+        if (!target) return; // nothing nearby to connect to — leave the door as-is
+        let cur = target;
+        while (cur && `${cur.q},${cur.r}` !== startKey) {
+            const key = `${cur.q},${cur.r}`;
+            if (window.getTerrainAt(cur.q, cur.r).name !== 'Path' && !doorKeys.has(key)) {
+                window.setTerrainAt(cur.q, cur.r, 'Path');
+            }
+            cur = cameFrom.get(key);
+        }
+    });
+
+    return { corners, wallHexes, doorHexes: doorHexes || [], floorHexes, floorType };
+}
+window.carvePolygonRoom = carvePolygonRoom;
+
 // Cleans up a district-sized area of stray single-hex "pockets" — plain
 // unset Grass hexes left fully boxed in by the wall rings of two nearby
 // buildings placed close together (wallRingAroundFloor draws each
@@ -1433,7 +1558,12 @@ function buildSilverhartPalace(roadEnd) {
     // carveFlatRoom (not carveBuilding) so its outer wall actually reads as
     // a level-topped rectangle on screen instead of a slanted diamond.
     const throneCenter = { q: roadEnd.q, r: roadEnd.r };
-    const throneDoor = { q: throneCenter.q, r: throneCenter.r + 4 };
+    // halfH=5 below means the floor's own south edge sits at
+    // throneCenter.r+4 — the real wall-ring row (one hex further out, where
+    // it actually meets the flanking wall hexes) is throneCenter.r+5, same
+    // "door must sit on the wall row, not a floor row short of it" fix
+    // already applied to rearDoor below.
+    const throneDoor = { q: throneCenter.q, r: throneCenter.r + 5 };
     const throneRegion = carveFlatRoom(throneCenter.q, throneCenter.r, 7, 5, throneDoor, 'Wood Floor');
     window.interiorRegions.push(throneRegion);
     window.campaign2PalaceThroneCenter = throneCenter;
@@ -1590,7 +1720,7 @@ function buildSilverhartPalace(roadEnd) {
     // south wall reading as broken/multi-doored, and stray Path bleeding
     // into the room just past its real door). This is the definitive fix,
     // applied last, regardless of the exact shape of the corridors above.
-    sealRoom(throneRegion, [rearDoor, { q: throneCenter.q, r: throneDoor.r + 1 }]);
+    sealRoom(throneRegion, [rearDoor]);
     sealRoom(barracksRegion);
     sealRoom(councilRegion);
     sealRoom(towerRegion, [towerApron]);
@@ -1626,28 +1756,24 @@ function buildSilverhartPalace(roadEnd) {
             }
         }
     }
-    // The southern edge (r = throneCenter.r + WALL_RADIUS, q from
-    // throneCenter.q - WALL_RADIUS to throneCenter.q) is a straight run of
-    // ring hexes lining up with the existing entrance road (which runs
-    // along q = throneCenter.q) — a 3-hex gate carved right where the road
-    // meets the wall, flanked by two watchtowers.
-    const gateHexes = [
-        { q: throneCenter.q, r: throneCenter.r + WALL_RADIUS },
-       { q: throneCenter.q - 1, r: throneCenter.r + WALL_RADIUS },
-      { q: throneCenter.q - 2, r: throneCenter.r + WALL_RADIUS },
-    ];
-    const gateKeys = new Set(gateHexes.map(h => `${h.q},${h.r}`));
-    ringHexes.forEach(h => {
-        const key = `${h.q},${h.r}`;
-        if (gateKeys.has(key)) {
-            window.setTerrainAt(h.q, h.r, 'Path');
-        } else {
-            window.setTerrainAt(h.q, h.r, 'Palisade Wall');
-        }
-    });
+    // throneCenter.q sits right at the ring's own southern CORNER (where the
+    // pure-hex-distance south edge and southeast edge meet), not partway
+    // along a flat straight run — its two real ring-adjacent neighbors are
+    // one hex apart on EACH of those two edges, at different r
+    // (throneCenter.r+WALL_RADIUS for the south edge, throneCenter.r+
+    // WALL_RADIUS-1 for the southeast edge), not the same row 3 hexes wide
+    // the old code assumed. Leaving the whole ring solid here (no
+    // carved-out gap) and placing the actual gated door one hex further IN
+    // (on the approach road, where it visibly meets both real neighbors)
+    // reads correctly instead of a gate graphic sitting on the corner hex
+    // with nothing visibly connecting to either flanking wall.
+    ringHexes.forEach(h => window.setTerrainAt(h.q, h.r, 'Palisade Wall'));
+    const gateDoorHex = { q: throneCenter.q, r: throneCenter.r + WALL_RADIUS - 1 };
     // Connect the gate to the existing entrance road running north from
-    // roadEnd to throneDoor.
-    for (let r = throneDoor.r + 1; r < throneCenter.r + WALL_RADIUS; r++) window.setTerrainAt(throneCenter.q, r, 'Path');
+    // roadEnd to throneDoor — stops one hex short of the solid ring (the
+    // gate door hex itself is the last step, handled by the locking pass
+    // below) so it doesn't repaint over the wall it's supposed to meet.
+    for (let r = throneDoor.r + 1; r < gateDoorHex.r; r++) window.setTerrainAt(throneCenter.q, r, 'Path');
 
     // Reputation-gated checkpoints, deepest room = highest bar: the
     // compound gate, the great hall's own door, and the door to the Queen's
@@ -1658,12 +1784,6 @@ function buildSilverhartPalace(roadEnd) {
     // live every time someone tries the door, so there's no separate
     // "unlock" step to wire up elsewhere — clearing the threshold IS the
     // unlock, the next time it's opened.
-    const gateDoorHex = gateHexes[1]; // the middle of the 3-hex gap carved above
-    // The other two gap hexes were painted Path by the ringHexes loop above
-    // (part of the 3-hex gate gap) — close them back to wall so the only
-    // way through is the single gated door hex.
-    window.setTerrainAt(gateHexes[0].q, gateHexes[0].r, 'Palisade Wall');
-    window.setTerrainAt(gateHexes[2].q, gateHexes[2].r, 'Palisade Wall');
     window.setTerrainAt(gateDoorHex.q, gateDoorHex.r, 'Palisade Wall');
     window.tileObjects[`${gateDoorHex.q},${gateDoorHex.r}`] = {
         type: 'door_closed', lightRadius: 0, locked: true, hp: 40, maxHp: 40,
@@ -1798,8 +1918,12 @@ function buildSilverhartPalace(roadEnd) {
             }
         }
     }
-    // Extend the entrance road from the gate out to meet the ring.
-    for (let r = throneCenter.r + WALL_RADIUS; r <= throneCenter.r + RING_ROAD_RADIUS; r++) window.setTerrainAt(throneCenter.q, r, 'Path');
+    // Extend the entrance road from the gate out to meet the ring. Starts
+    // one hex PAST the wall ring (WALL_RADIUS + 1), not AT it — the ring
+    // hex at WALL_RADIUS is the solid corner the gate door (one hex
+    // further in) closes against; painting Path over it here would repave
+    // straight through that wall.
+    for (let r = throneCenter.r + WALL_RADIUS + 1; r <= throneCenter.r + RING_ROAD_RADIUS; r++) window.setTerrainAt(throneCenter.q, r, 'Path');
     window.campaign2SilverhartRingRoadRadius = RING_ROAD_RADIUS;
 
     // The city, thought of as concentric rings around the palace: the
@@ -1932,12 +2056,34 @@ function buildSilverhartPalace(roadEnd) {
         const ringHex = { q: throneCenter.q + offset.q, r: throneCenter.r + offset.r };
         const inward = { q: Math.round(offset.q * 0.9), r: Math.round(offset.r * 0.9) };
         const houseCenter = { q: throneCenter.q + inward.q, r: throneCenter.r + inward.r };
-        const doorHex = { q: ringHex.q, r: ringHex.r }; // door faces straight back at the ring
-        for (let step = 0; step < 3; step++) { // short spur connecting the house to the ring
-            const t = step / 3;
-            window.setTerrainAt(Math.round(houseCenter.q + (ringHex.q - houseCenter.q) * t), Math.round(houseCenter.r + (ringHex.r - houseCenter.r) * t), 'Path');
-        }
+        // Door faces toward the ring along whichever axis the ring
+        // direction is stronger on, using the house's own real wall row
+        // (centerR+/-2 or centerQ+/-2, halfW=halfH=2 below) — NOT ringHex
+        // itself (the old bug: doorHex used to BE ringHex, several hexes
+        // away from the house's own wall, so the real wall stayed solid
+        // with no opening, and the door graphic floated out at the ring,
+        // unconnected to anything).
+        const doorHex = Math.abs(offset.r) >= Math.abs(offset.q)
+            ? { q: houseCenter.q, r: houseCenter.r + (offset.r >= 0 ? 2 : -2) }
+            : { q: houseCenter.q + (offset.q >= 0 ? 2 : -2), r: houseCenter.r };
         window.interiorRegions.push(carveFlatRoom(houseCenter.q, houseCenter.r, 2, 2, doorHex, 'Wood Floor'));
+        // A real hex line (cube-coordinate lerp + cube rounding, same
+        // technique as Kragmoor's road connector) all the way from the
+        // door to the ring, not 3 partial steps that used to stop short of
+        // both endpoints.
+        const x1 = doorHex.q, z1 = doorHex.r, y1 = -x1 - z1;
+        const x2 = ringHex.q, z2 = ringHex.r, y2 = -x2 - z2;
+        const steps = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1), Math.abs(z2 - z1));
+        for (let step = 0; step <= steps; step++) {
+            const t = step / steps;
+            let x = x1 + (x2 - x1) * t, y = y1 + (y2 - y1) * t, z = z1 + (z2 - z1) * t;
+            let rx = Math.round(x), ry = Math.round(y), rz = Math.round(z);
+            const dx = Math.abs(rx - x), dy = Math.abs(ry - y), dz = Math.abs(rz - z);
+            if (dx > dy && dx > dz) rx = -ry - rz;
+            else if (dy > dz) ry = -rx - rz;
+            else rz = -rx - ry;
+            window.setTerrainAt(rx, rz, 'Path');
+        }
         window.campaign2SilverhartMiddleRingHouses.push(houseCenter);
     });
 
@@ -2080,9 +2226,20 @@ function buildSilverhartPalace(roadEnd) {
     window.campaign2DiplomaticPlazaCenter = plazaCenter;
 
     const ironbondOfficeCenter = { q: dqCenter - 7, r: officeRowL -2 };
-    const ironbondOfficeDoor = { q: ironbondOfficeCenter.q + 4, r: ironbondOfficeCenter.r };
+    // halfW=3 below means the floor's own east edge sits at
+    // ironbondOfficeCenter.q+2 — the real wall-ring column (one hex further
+    // out, where the door actually needs to sit to open into the room) is
+    // ironbondOfficeCenter.q+3, not +4 (a hex of open Path floating past
+    // the wall with nothing behind it — the door graphic didn't actually
+    // open anything).
+    const ironbondOfficeDoor = { q: ironbondOfficeCenter.q + 3, r: ironbondOfficeCenter.r };
     window.interiorRegions.push(carveFlatRoom(ironbondOfficeCenter.q, ironbondOfficeCenter.r, 3, 2, ironbondOfficeDoor, 'Wood Floor'));
-    for (let q = ironbondOfficeDoor.q + 1; q < dqCenter; q++) window.setTerrainAt(q, officeRowL, 'Path');
+    // Corridor runs along the door's own row (not officeRowL, the
+    // building's SOUTH wall row) — officeRowL only equals
+    // ironbondOfficeCenter.r+2, which is the wall directly south of the
+    // building, and painting Path along it cut a second, unintended
+    // opening straight through that wall.
+    for (let q = ironbondOfficeDoor.q + 1; q < dqCenter; q++) window.setTerrainAt(q, ironbondOfficeDoor.r, 'Path');
     window.tileObjects[`${ironbondOfficeCenter.q},${ironbondOfficeCenter.r}`] = { type: 'table' };
     window.tileObjects[`${ironbondOfficeCenter.q + 1},${ironbondOfficeCenter.r}`] = { type: 'bench' };
     window.campaign2IronbondOfficeCenter = ironbondOfficeCenter;
@@ -2112,6 +2269,7 @@ function buildSilverhartPalace(roadEnd) {
     // player's request to reuse that character/art in the capital.
     if (window.campaign2MercenaryRecruiter) {
         const recruiterHex = { q: plazaCenter.q + 3, r: plazaCenter.r };
+        window.setTerrainAt(recruiterHex.q, recruiterHex.r, 'Path');
         const recruiter = new window.Entity(window.campaign2MercenaryRecruiter.name, 'cyan', recruiterHex, 10);
         recruiter.isNPC = true;
         recruiter.side = 'neutral';
@@ -2123,14 +2281,16 @@ function buildSilverhartPalace(roadEnd) {
         window.campaign2MercenaryRecruiterHex = recruiterHex;
     }
 
-    // Retrainer: sits right next to the Mercenary Recruiter (both are
-    // "spend gold to reshape your party" services) and offers a full skill
-    // respec — see resolveRespec (ui.js) and silverhart_retrainer
-    // (campaign2Dialogue.js). Not placed at all under Iron Man Mode, per the
-    // player's request that Iron Man remove the safety net entirely.
+    // Retrainer: sits near the Mercenary Recruiter (both are "spend gold to
+    // reshape your party" services) and offers a full skill respec — see
+    // resolveRespec (ui.js) and silverhart_retrainer (campaign2Dialogue.js).
+    // Not placed at all under Iron Man Mode, per the player's request that
+    // Iron Man remove the safety net entirely.
     if (window.campaign2Retrainer && !window.ironmanMode) {
-        const retrainerHex = { q: plazaCenter.q + 3, r: plazaCenter.r + 1 };
+        const retrainerHex = { q: plazaCenter.q + 3, r: plazaCenter.r + 2 };
+        window.setTerrainAt(retrainerHex.q, retrainerHex.r, 'Path');
         const retrainer = window.buildNPC({ ...window.campaign2Retrainer, hex: retrainerHex });
+        retrainer.hairSizeMult = 0.2; // the default dwarf-female hair sprite reads absurdly oversized on her specifically
         window.entities.push(retrainer);
         window.campaign2RetrainerHex = retrainerHex;
     }
@@ -3606,8 +3766,16 @@ window.cheatExploreEverything = function() {
     if (!window.exploredHexes) window.exploredHexes = new Set();
     const keys = Object.keys(window.overrideTerrain);
     keys.forEach(key => window.exploredHexes.add(key));
+    let unlocked = 0;
+    Object.values(window.tileObjects || {}).forEach(obj => {
+        if (obj && (obj.type === 'door_closed' || obj.type === 'door_open') && (obj.locked || obj.accessThreshold)) {
+            obj.locked = false;
+            delete obj.accessThreshold;
+            unlocked++;
+        }
+    });
     if (window.drawMap) window.drawMap();
-    window.showMessage(`Cheat: marked ${keys.length} hexes as explored.`);
+    window.showMessage(`Cheat: marked ${keys.length} hexes as explored, unlocked ${unlocked} doors.`);
 };
 
 // Reads the journal at the abandoned house — the first breadcrumb toward
