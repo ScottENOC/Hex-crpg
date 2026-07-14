@@ -2188,22 +2188,39 @@ function buildSilverhartPalace(roadEnd) {
     // district, between q=32 and q=37 (kept clear of the curtain wall's
     // own corridor at q=31 and Master Builder Hallis's hexagon to the
     // east) and r=-506 to -519. Deliberately not packed solid — real gaps
-    // between them, same as everywhere else in Silverhart. ---
+    // between them, same as everywhere else in Silverhart. Doors face east
+    // (the road side); the spur steps one hex clear of the building before
+    // turning, so it never overwrites the building's own wall hexes. ---
     const cottageCenters = [
-        { q: 34, r: -508, halfW: 2, halfH: 1 },
-        { q: 35, r: -513, halfW: 2, halfH: 1 },
-        { q: 34, r: -518, halfW: 2, halfH: 1 },
+        { q: 34, r: -507, halfW: 2, halfH: 2 },
+        { q: 35, r: -513, halfW: 2, halfH: 2 },
+        { q: 34, r: -519, halfW: 2, halfH: 2 },
     ];
+    // All 3 doors connect east to one shared clear spine column (well east
+    // of every building's own east wall, so it never runs along or crosses
+    // another cottage's wall/floor footprint), which then turns south past
+    // the southernmost building and west back to the existing road at
+    // q=31 — a single connector, not one per building, so it can't cross
+    // through a neighboring cottage's row band the way per-building
+    // connectors did.
     window.campaign2SilverhartCottageCenters = [];
-    cottageCenters.forEach(({ q, r, halfW, halfH }) => {
+    const cottageRooms = cottageCenters.map(({ q, r, halfW, halfH }) => {
         const center = { q, r };
-        const door = { q: center.q - halfW, r: center.r };
-        window.interiorRegions.push(carveFlatRoom(center.q, center.r, halfW, halfH, door, 'Wood Floor'));
-        // Short spur west to the existing road at q=31.
-        for (let dq = 31; dq < door.q; dq++) window.setTerrainAt(dq, door.r, 'Path');
+        const door = { q: center.q + halfW, r: center.r };
+        const room = carveFlatRoom(center.q, center.r, halfW, halfH, door, 'Wood Floor');
+        window.interiorRegions.push(room);
         window.tileObjects[`${center.q},${center.r}`] = { type: 'table' };
         window.campaign2SilverhartCottageCenters.push(center);
+        return { center, door, room };
     });
+    const SPINE_Q = Math.max(...cottageRooms.map(c => c.door.q)) + 1;
+    const southR = Math.max(...cottageRooms.flatMap(c => c.room.wallHexes.map(h => h.r))) + 1;
+    cottageRooms.forEach(({ door }) => {
+        for (let dq = door.q; dq <= SPINE_Q; dq++) window.setTerrainAt(dq, door.r, 'Path');
+    });
+    const topR = Math.min(...cottageRooms.map(c => c.door.r));
+    for (let dr = topR; dr <= southR; dr++) window.setTerrainAt(SPINE_Q, dr, 'Path');
+    for (let dq = 31; dq <= SPINE_Q; dq++) window.setTerrainAt(dq, southR, 'Path');
 
     // --- Middle-class ring: a handful of plain houses further out, past
     // the inner ring road, cheaper than anything hugging the wall. A
@@ -2254,16 +2271,27 @@ function buildSilverhartPalace(roadEnd) {
         // faces west instead of the usual south — a south-facing door here
         // would send the ring-connector cube-lerp diagonally back through
         // the house's own east-shifted wall to reach it.
+        // The west corner (offset {-45,45}) is a tie on both axes (|q|===|r|)
+        // and used to fall through to the south-facing branch below; per the
+        // player's request its door instead faces west (further left),
+        // toward the same side its own offset leans.
+        const isWestCorner = offset.q === -MIDDLE_RING_RADIUS && offset.r === MIDDLE_RING_RADIUS;
         const doorHex = isSouthCorner
             ? { q: houseCenter.q - 2, r: houseCenter.r }
-            : Math.abs(offset.r) >= Math.abs(offset.q)
-                ? { q: houseCenter.q, r: houseCenter.r + (offset.r >= 0 ? 2 : -2) }
-                : { q: houseCenter.q + (offset.q >= 0 ? 2 : -2), r: houseCenter.r };
-        window.interiorRegions.push(carveFlatRoom(houseCenter.q, houseCenter.r, 2, 2, doorHex, 'Wood Floor'));
+            : isWestCorner
+                ? { q: houseCenter.q - 2, r: houseCenter.r }
+                : Math.abs(offset.r) >= Math.abs(offset.q)
+                    ? { q: houseCenter.q, r: houseCenter.r + (offset.r >= 0 ? 2 : -2) }
+                    : { q: houseCenter.q + (offset.q >= 0 ? 2 : -2), r: houseCenter.r };
+        const room = carveFlatRoom(houseCenter.q, houseCenter.r, 2, 2, doorHex, 'Wood Floor');
+        window.interiorRegions.push(room);
+        const floorKeys = new Set(room.floorHexes.map(h => `${h.q},${h.r}`));
         // A real hex line (cube-coordinate lerp + cube rounding, same
         // technique as Kragmoor's road connector) all the way from the
         // door to the ring, not 3 partial steps that used to stop short of
-        // both endpoints.
+        // both endpoints. Never paints over the house's own interior floor —
+        // a straight line from the door can clip a diagonal-adjacent floor
+        // hex near the start before it's actually clear of the building.
         const x1 = doorHex.q, z1 = doorHex.r, y1 = -x1 - z1;
         const x2 = ringHex.q, z2 = ringHex.r, y2 = -x2 - z2;
         const steps = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1), Math.abs(z2 - z1));
@@ -2275,6 +2303,7 @@ function buildSilverhartPalace(roadEnd) {
             if (dx > dy && dx > dz) rx = -ry - rz;
             else if (dy > dz) ry = -rx - rz;
             else rz = -rx - ry;
+            if (floorKeys.has(`${rx},${rz}`)) continue;
             window.setTerrainAt(rx, rz, 'Path');
         }
         window.campaign2SilverhartMiddleRingHouses.push(houseCenter);
