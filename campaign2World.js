@@ -2196,31 +2196,25 @@ function buildSilverhartPalace(roadEnd) {
         { q: 35, r: -513, halfW: 2, halfH: 2 },
         { q: 35, r: -519, halfW: 2, halfH: 2 },
     ];
-    // All 3 doors connect east to one shared clear spine column (well east
-    // of every building's own east wall, so it never runs along or crosses
-    // another cottage's wall/floor footprint), which then turns south past
-    // the southernmost building and west back to the existing road at
-    // q=31 — a single connector, not one per building, so it can't cross
-    // through a neighboring cottage's row band the way per-building
-    // connectors did.
+    // Each door gets exactly one Path hex immediately outside it — a tiny,
+    // self-contained road island that never has to know where anything
+    // else (the palace's own curtain wall at q=31, a neighboring building's
+    // wall, another cottage) actually is. connectAllRoadNetworks (run once,
+    // near the end of world-build) then bridges every such island into the
+    // rest of the network itself, routing through findPath so it always
+    // detours around impassable terrain instead of drawing a straight line
+    // through it — unlike the old manual spine/spur connectors here, which
+    // repeatedly cut straight through walls they didn't know were in the way.
     window.campaign2SilverhartCottageCenters = [];
-    const cottageRooms = cottageCenters.map(({ q, r, halfW, halfH }) => {
+    cottageCenters.forEach(({ q, r, halfW, halfH }) => {
         const center = { q, r };
         const door = { q: center.q + halfW, r: center.r };
         const room = carveFlatRoom(center.q, center.r, halfW, halfH, door, 'Wood Floor');
         window.interiorRegions.push(room);
+        window.setTerrainAt(door.q + 1, door.r, 'Path');
         window.tileObjects[`${center.q},${center.r}`] = { type: 'table' };
         window.campaign2SilverhartCottageCenters.push(center);
-        return { center, door, room };
     });
-    const SPINE_Q = Math.max(...cottageRooms.map(c => c.door.q)) + 1;
-    const southR = Math.max(...cottageRooms.flatMap(c => c.room.wallHexes.map(h => h.r))) + 1;
-    cottageRooms.forEach(({ door }) => {
-        for (let dq = door.q; dq <= SPINE_Q; dq++) window.setTerrainAt(dq, door.r, 'Path');
-    });
-    const topR = Math.min(...cottageRooms.map(c => c.door.r));
-    for (let dr = topR; dr <= southR; dr++) window.setTerrainAt(SPINE_Q, dr, 'Path');
-    for (let dq = 31; dq <= SPINE_Q; dq++) window.setTerrainAt(dq, southR, 'Path');
 
     // --- Middle-class ring: a handful of plain houses further out, past
     // the inner ring road, cheaper than anything hugging the wall. A
@@ -3625,7 +3619,13 @@ function buildNorthwatchFort(turnHex) {
     const fortRegion = carveStarFort(center.q, center.r, 3, 6, 2, gateHex, 'Wood Floor', 'Climbable Wall');
     window.interiorRegions.push(fortRegion);
 
-    const keepDoor = { q: center.q, r: center.r + 3 };
+    // keepDoor must sit ON the keep's own real wall row, not one hex past
+    // it — halfH=2 below means the keep's floor stretches to center.r+1,
+    // so the wall ring (and therefore the door) is at center.r+2. Placing
+    // it any further out leaves a genuine, uncrossable Keep Wall hex
+    // sitting between the door and the interior (same "door built past its
+    // own wall" bug already fixed elsewhere for the throne room/rear door).
+    const keepDoor = { q: center.q, r: center.r + 2 };
     const keepRegion = carveFlatRoom(center.q, center.r, 3, 2, keepDoor, 'Wood Floor', 'Keep Wall');
     window.interiorRegions.push(keepRegion);
     window.tileObjects[`${center.q},${center.r}`] = { type: 'fireplace', lightRadius: 6 };
@@ -3737,7 +3737,16 @@ function buildNorthwatchFort(turnHex) {
     // the real fight happens right here at the fort, not a separate arena
     // (matches every other Campaign 2 scripted encounter: farm wolves,
     // goblin camp, Ironvein raids all fight in place on the open map).
-    const siegeHex = { q: center.q, r: center.r - 10 };
+    // Distance from center matters here beyond flavor: the wall ring sits
+    // at radius 6, bow-armed wall soldiers (campaign2FortSoldiers) have an
+    // attack range of 20 (equipment.js's bow, +2 more from firing off
+    // elevated wall terrain), and startNorthwatchSally's escorts spread up
+    // to 3 hexes out from this hex. Any closer than ~34 from center and the
+    // wall archers can snipe the whole sally the instant it goes hostile,
+    // before the player's own fight ever really starts — which is exactly
+    // why the sally always resolved as an easy defender win. 34 clears the
+    // wall's max threat radius (6 + 20 + 2 + 3 = 31) with margin to spare.
+    const siegeHex = { q: center.q, r: center.r - 34 };
     const siegeEngine = window.createMonster('siege_engine', siegeHex, null, null, 'neutral');
     if (siegeEngine) {
         siegeEngine.isSiegeEngine = true;
@@ -3776,7 +3785,13 @@ function buildRidgeholdFort(roadEnd) {
     const fortRegion = carveStarFort(center.q, center.r, 3, 6, 2, gateHex, 'Wood Floor', 'Climbable Wall');
     window.interiorRegions.push(fortRegion);
 
-    const keepDoor = { q: center.q, r: center.r + 3 };
+    // keepDoor must sit ON the keep's own real wall row, not one hex past
+    // it — halfH=2 below means the keep's floor stretches to center.r+1,
+    // so the wall ring (and therefore the door) is at center.r+2. Placing
+    // it any further out leaves a genuine, uncrossable Keep Wall hex
+    // sitting between the door and the interior (same "door built past its
+    // own wall" bug already fixed elsewhere for the throne room/rear door).
+    const keepDoor = { q: center.q, r: center.r + 2 };
     const keepRegion = carveFlatRoom(center.q, center.r, 3, 2, keepDoor, 'Wood Floor', 'Keep Wall');
     window.interiorRegions.push(keepRegion);
     window.tileObjects[`${center.q},${center.r}`] = { type: 'fireplace', lightRadius: 6 };
