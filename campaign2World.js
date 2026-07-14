@@ -2064,7 +2064,29 @@ function buildSilverhartPalace(roadEnd) {
     // (built) and the abandoned house on the north road (cleared by force).
     const manorCenter = { q: nobleNearQ + 4, r: throneCenter.r - 6 };
     const manorDoor = { q: manorCenter.q - 4, r: manorCenter.r };
-    window.interiorRegions.push(carveFlatRoom(manorCenter.q, manorCenter.r, 4, 3, manorDoor, 'Wood Floor'));
+    const manorRegion = carveFlatRoom(manorCenter.q, manorCenter.r, 4, 3, manorDoor, 'Wood Floor');
+    // The west wall (manorCenter.q-4, exactly nobleNearQ) sits right on the
+    // Noble Quarter's own street column, which gets fully re-stamped to
+    // Path later — unlike a building merely fronting the street, this
+    // wall's own door lived on that same column, so the whole wall
+    // (not just a front face) was being erased. Shrink the building by one
+    // column on the west side only (the east wall and everything else stay
+    // put): the old floor column becomes the new wall, the old wall column
+    // is abandoned to the street, and the door moves in to match.
+    const manorOldWallQ = manorCenter.q - 4;
+    const manorNewWallQ = manorOldWallQ + 1;
+    const manorNewDoor = { q: manorNewWallQ, r: manorCenter.r };
+    manorRegion.wallHexes = manorRegion.wallHexes.filter(h => h.q !== manorOldWallQ);
+    const manorShiftedFloor = manorRegion.floorHexes.filter(h => h.q === manorNewWallQ && !(h.q === manorNewDoor.q && h.r === manorNewDoor.r));
+    manorRegion.floorHexes = manorRegion.floorHexes.filter(h => h.q !== manorNewWallQ);
+    manorRegion.wallHexes.push(...manorShiftedFloor);
+    manorShiftedFloor.forEach(h => window.setTerrainAt(h.q, h.r, 'Wall'));
+    manorRegion.doorHex = manorNewDoor;
+    manorRegion.floorHexes.push(manorNewDoor);
+    window.setTerrainAt(manorNewDoor.q, manorNewDoor.r, 'Wood Floor');
+    delete window.tileObjects[`${manorDoor.q},${manorDoor.r}`];
+    window.tileObjects[`${manorNewDoor.q},${manorNewDoor.r}`] = { type: 'door_open', lightRadius: 0 };
+    window.interiorRegions.push(manorRegion);
     window.campaign2SilverhartManorCenter = manorCenter;
     if (window.campaign2NobleCorstane) {
         window.entities.push(window.buildNPC({ ...window.campaign2NobleCorstane, hex: { q: manorCenter.q, r: manorCenter.r + 1 } }));
@@ -2156,6 +2178,15 @@ function buildSilverhartPalace(roadEnd) {
         if (!builderHouseFootprint.has(`${nobleFarQ},${r}`)) window.setTerrainAt(nobleFarQ, r, 'Path');
     }
     for (let q = throneCenter.q + RING_ROAD_RADIUS; q <= nobleFarQ; q++) window.setTerrainAt(q, throneCenter.r, 'Path');
+    // Petra Ashfield's neighbor house has its own door on this same
+    // nobleFarQ column, so the street re-stamp above erased its entire
+    // east wall, not just the front face it was fronting. Restore the
+    // 3 real wall hexes (everything but the door itself) that sit on it.
+    [
+        { q: nobleFarQ, r: neighborHouseCenter.r - 3 },
+        { q: nobleFarQ, r: neighborHouseCenter.r - 2 },
+        { q: nobleFarQ, r: neighborHouseCenter.r - 1 },
+    ].forEach(h => window.setTerrainAt(h.q, h.r, 'Wall'));
 
     // --- Middle-class ring: a handful of plain houses further out, past
     // the inner ring road, cheaper than anything hugging the wall. A
