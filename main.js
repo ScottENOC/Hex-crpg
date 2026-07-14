@@ -422,6 +422,10 @@ document.addEventListener("DOMContentLoaded", () => {
             window.toggleFlyCheat();
         } else if (btnId === "cheat-max-skills-btn") {
             window.cheatMaxSkills();
+        } else if (btnId === "cheat-max-all-skills-btn") {
+            if (window.cheatMaxAllSkills) window.cheatMaxAllSkills();
+        } else if (btnId === "cheat-explore-everything-btn") {
+            if (window.cheatExploreEverything) window.cheatExploreEverything();
         } else if (e.target.classList && e.target.classList.contains('cheat-teleport-dest-btn')) {
             const dest = e.target.dataset.teleportDest;
             if (dest && window.teleportPartyToLocation) window.teleportPartyToLocation(dest);
@@ -771,6 +775,8 @@ window.campaign2TeleportLocations = {
     "Old Mac's Farmstead": () => window.campaign2FarmHouseCenter,
     'Goblin Stronghold': () => window.campaign2GoblinCampCenter,
     'Abandoned House': () => window.campaign2AbandonedHouseCenter,
+    'Northwatch Fort': () => window.campaign2NorthwatchGateHex,
+    'Ridgehold Fort': () => window.campaign2RidgeholdFortRegion?.doorHex,
 };
 
 window.teleportPartyToLocation = function(locationName) {

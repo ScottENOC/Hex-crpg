@@ -2192,9 +2192,9 @@ function buildSilverhartPalace(roadEnd) {
     // (the road side); the spur steps one hex clear of the building before
     // turning, so it never overwrites the building's own wall hexes. ---
     const cottageCenters = [
-        { q: 34, r: -507, halfW: 2, halfH: 2 },
+        { q: 35, r: -507, halfW: 2, halfH: 2 },
         { q: 35, r: -513, halfW: 2, halfH: 2 },
-        { q: 34, r: -519, halfW: 2, halfH: 2 },
+        { q: 35, r: -519, halfW: 2, halfH: 2 },
     ];
     // All 3 doors connect east to one shared clear spine column (well east
     // of every building's own east wall, so it never runs along or crosses
@@ -2284,6 +2284,17 @@ function buildSilverhartPalace(roadEnd) {
                     ? { q: houseCenter.q, r: houseCenter.r + (offset.r >= 0 ? 2 : -2) }
                     : { q: houseCenter.q + (offset.q >= 0 ? 2 : -2), r: houseCenter.r };
         const room = carveFlatRoom(houseCenter.q, houseCenter.r, 2, 2, doorHex, 'Wood Floor');
+        if (isWestCorner) {
+            // wallRingAroundFloor's own hex-adjacency math leaves a lone
+            // wall hex jutting into this row (exactly where the old
+            // south-facing door used to sit) even though the row on either
+            // side of it is open floor — a stray notch, not a real wall.
+            // Fold it into the interior instead.
+            const strayWallHex = { q: houseCenter.q, r: houseCenter.r + 2 };
+            window.setTerrainAt(strayWallHex.q, strayWallHex.r, 'Wood Floor');
+            room.wallHexes = room.wallHexes.filter(h => !(h.q === strayWallHex.q && h.r === strayWallHex.r));
+            room.floorHexes.push(strayWallHex);
+        }
         window.interiorRegions.push(room);
         const floorKeys = new Set(room.floorHexes.map(h => `${h.q},${h.r}`));
         // A real hex line (cube-coordinate lerp + cube rounding, same
