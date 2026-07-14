@@ -7,37 +7,34 @@
 // addition creates a genuinely-intentional isolated network, this test
 // needs an explicit update, not a silent pass.
 //
-// Silverhart's own curtain-wall gate is exactly that exception: it's a real
-// locked checkpoint (Palisade Wall terrain, not Path — see
-// buildSilverhartPalace, campaign2World.js), so the interior road network
-// (great hall onward) is genuinely NOT reachable via the Path graph without
-// going through that gate — connectAllRoadNetworks correctly refuses to
-// paint a connector straight through a wall to "fix" that. A second
-// component whose hexes sit inside the curtain wall is that intentional
-// gate, not a regression.
+// Silverhart's curtain-wall gate used to be a real locked checkpoint
+// (Palisade Wall terrain with a reputation-gated door, not Path), which
+// made the interior road network its own separate, intentional component.
+// Per the player's request that door is gone — the gate is now a plain,
+// permanently open Path approach — so the whole map genuinely is one
+// single connected network now, no carve-out needed.
 
 const { test, expect } = require('@playwright/test');
 const { createCharacter } = require('./helpers.js');
 
 test.describe('road graph', () => {
-    test('all road terrain forms a single connected network, except Silverhart\'s own gated interior', async ({ page }) => {
+    test('all road terrain forms a single connected network', async ({ page }) => {
         await createCharacter(page);
         const result = await page.evaluate(() => {
             const graph = window._roadGraph;
             const throneCenter = window.campaign2PalaceThroneCenter;
-            // A Path hex in the courtyard, between the throne room's own
-            // door and the (locked) compound gate — genuinely inside the
-            // curtain wall.
+            // A Path hex in the courtyard, just inside the curtain wall —
+            // now reachable through the (no longer gated) entrance.
             const throneComponent = graph.componentOf.get(`${throneCenter.q},${throneCenter.r + 10}`);
             return {
                 hexCount: graph.hexCount,
                 componentCount: graph.componentCount,
-                throneComponentDiffersFromCrossroads: throneComponent !== undefined && throneComponent !== graph.componentOf.get(`${window.campaign2Landmarks.crossroads.q},${window.campaign2Landmarks.crossroads.r}`),
+                throneComponentMatchesCrossroads: throneComponent !== undefined && throneComponent === graph.componentOf.get(`${window.campaign2Landmarks.crossroads.q},${window.campaign2Landmarks.crossroads.r}`),
             };
         });
         expect(result.hexCount).toBeGreaterThan(0);
-        expect(result.componentCount).toBe(2);
-        expect(result.throneComponentDiffersFromCrossroads).toBe(true);
+        expect(result.componentCount).toBe(1);
+        expect(result.throneComponentMatchesCrossroads).toBe(true);
     });
 
     test('painting a fresh isolated road spur is reflected as a new component on rebuild', async ({ page }) => {

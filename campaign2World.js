@@ -1842,13 +1842,9 @@ function buildSilverhartPalace(roadEnd) {
     // live every time someone tries the door, so there's no separate
     // "unlock" step to wire up elsewhere — clearing the threshold IS the
     // unlock, the next time it's opened.
-    window.setTerrainAt(gateDoorHex.q, gateDoorHex.r, 'Palisade Wall');
-    window.tileObjects[`${gateDoorHex.q},${gateDoorHex.r}`] = {
-        type: 'door_closed', lightRadius: 0, locked: true, hp: 40, maxHp: 40,
-        closedTerrain: 'Palisade Wall', openTerrain: 'Path',
-        accessThreshold: { faction: 'silverhart_kingdom', standing: -10 },
-        accessDeniedMessage: 'The gate guards bar your way. "Kingdom business only. Move along."'
-    };
+    // Per the player's request, the compound gate's own reputation-gated
+    // door is gone — this is now a plain, permanently open approach.
+    window.setTerrainAt(gateDoorHex.q, gateDoorHex.r, 'Path');
     window.setTerrainAt(throneDoor.q, throneDoor.r, 'Wall');
     window.tileObjects[`${throneDoor.q},${throneDoor.r}`] = {
         type: 'door_closed', lightRadius: 0, locked: true, hp: 30, maxHp: 30,
@@ -2188,6 +2184,27 @@ function buildSilverhartPalace(roadEnd) {
         { q: nobleFarQ, r: neighborHouseCenter.r - 1 },
     ].forEach(h => window.setTerrainAt(h.q, h.r, 'Wall'));
 
+    // --- A small cluster of plain cottages tucked north of the manor
+    // district, between q=32 and q=37 (kept clear of the curtain wall's
+    // own corridor at q=31 and Master Builder Hallis's hexagon to the
+    // east) and r=-506 to -519. Deliberately not packed solid — real gaps
+    // between them, same as everywhere else in Silverhart. ---
+    const cottageCenters = [
+        { q: 34, r: -508, halfW: 2, halfH: 1 },
+        { q: 35, r: -513, halfW: 2, halfH: 1 },
+        { q: 34, r: -518, halfW: 2, halfH: 1 },
+    ];
+    window.campaign2SilverhartCottageCenters = [];
+    cottageCenters.forEach(({ q, r, halfW, halfH }) => {
+        const center = { q, r };
+        const door = { q: center.q - halfW, r: center.r };
+        window.interiorRegions.push(carveFlatRoom(center.q, center.r, halfW, halfH, door, 'Wood Floor'));
+        // Short spur west to the existing road at q=31.
+        for (let dq = 31; dq < door.q; dq++) window.setTerrainAt(dq, door.r, 'Path');
+        window.tileObjects[`${center.q},${center.r}`] = { type: 'table' };
+        window.campaign2SilverhartCottageCenters.push(center);
+    });
+
     // --- Middle-class ring: a handful of plain houses further out, past
     // the inner ring road, cheaper than anything hugging the wall. A
     // second ring road (same hex-distance-circle technique) at radius 45,
@@ -2262,6 +2279,10 @@ function buildSilverhartPalace(roadEnd) {
         }
         window.campaign2SilverhartMiddleRingHouses.push(houseCenter);
     });
+    // The SW middle-ring house's own wallRingAroundFloor computation
+    // leaves a single true-adjacency gap right next to its door — a real
+    // hole in the wall, not the abandoned/ruined look it might suggest.
+    window.setTerrainAt(-32, -452, 'Wall');
 
     // --- City wall: a much bigger version of the palace's own curtain
     // wall (same Palisade Wall terrain — climbable with a ladder/skill,
@@ -2327,9 +2348,14 @@ function buildSilverhartPalace(roadEnd) {
     const dqCenter = throneCenter.q;
 
     // Gate entry: a formal arch marking where the road out of the palace
-    // gate becomes the Diplomatic Quarter proper.
-    window.tileObjects[`${dqCenter},${throneCenter.r + 24}`] = { type: 'gate_arch' };
-    window.campaign2DiplomaticGateCenter = { q: dqCenter, r: throneCenter.r + 24 };
+    // gate becomes the Diplomatic Quarter proper — one row further in
+    // (throneCenter.r+23, the palace curtain wall's own ring row) than the
+    // original placement, per the player's request. That row sits on the
+    // wall ring itself, painted solid Palisade Wall by the curtain-wall
+    // loop earlier, so it needs opening to Path to host the arch.
+    window.setTerrainAt(dqCenter, throneCenter.r + 23, 'Path');
+    window.tileObjects[`${dqCenter},${throneCenter.r + 23}`] = { type: 'gate_arch' };
+    window.campaign2DiplomaticGateCenter = { q: dqCenter, r: throneCenter.r + 23 };
 
     // Left column (elven/aldenreach/ironbond) is pushed further south than
     // its original spacing — the elven embassy's own carveFlatRoom wall

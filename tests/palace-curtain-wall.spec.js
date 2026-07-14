@@ -79,52 +79,34 @@ test.describe('Silverhart Palace: hexagonal curtain wall, gate, towers, wall gua
         result.forEach(name => expect(['Palisade Wall', 'Path']).toContain(name));
     });
 
-    test('the gate is a real checkpoint (closed Palisade Wall + a locked, threshold-gated door), not an open gap', async ({ page }) => {
+    test('the compound gate is a plain, permanently open approach, not a checkpoint', async ({ page }) => {
         await createCharacter(page);
         const result = await page.evaluate(() => {
             const center = window.campaign2PalaceThroneCenter;
             const gateHex = { q: center.q, r: center.r + 22 };
             const roadHex = { q: center.q, r: center.r + 15 };
-            const door = window.tileObjects[`${gateHex.q},${gateHex.r}`];
             return {
                 gateTerrain: window.getTerrainAt(gateHex.q, gateHex.r).name,
                 roadTerrain: window.getTerrainAt(roadHex.q, roadHex.r).name,
-                doorType: door?.type,
-                accessThreshold: door?.accessThreshold,
+                door: window.tileObjects[`${gateHex.q},${gateHex.r}`],
             };
         });
-        expect(result.gateTerrain).toBe('Palisade Wall');
+        expect(result.gateTerrain).toBe('Path');
         expect(result.roadTerrain).toBe('Path');
-        expect(result.doorType).toBe('door_closed');
-        expect(result.accessThreshold).toEqual({ faction: 'silverhart_kingdom', standing: -10 });
+        expect(result.door).toBeUndefined();
     });
 
-    test('the gate opens for a player who clears its (low) standing bar', async ({ page }) => {
-        await createCharacter(page);
-        const result = await page.evaluate(() => {
-            window.factions.silverhart_kingdom.standing = 0; // clears the -10 bar
-            const center = window.campaign2PalaceThroneCenter;
-            const gateHex = { q: center.q, r: center.r + 22 };
-            window.toggleDoor(gateHex.q, gateHex.r, window.party[0]);
-            return window.getTerrainAt(gateHex.q, gateHex.r).name;
-        });
-        expect(result).toBe('Path');
-    });
-
-    test('the three checkpoints require rising thresholds: gate < great hall < private chambers', async ({ page }) => {
+    test('the two remaining checkpoints require rising thresholds: great hall < private chambers', async ({ page }) => {
         await createCharacter(page);
         const thresholds = await page.evaluate(() => {
             const center = window.campaign2PalaceThroneCenter;
-            const gateHex = { q: center.q, r: center.r + 22 };
             const throneDoorHex = { q: center.q, r: center.r + 5 };
             const rearDoorHex = { q: center.q, r: center.r - 5 };
             return {
-                gate: window.tileObjects[`${gateHex.q},${gateHex.r}`]?.accessThreshold?.standing,
                 throne: window.tileObjects[`${throneDoorHex.q},${throneDoorHex.r}`]?.accessThreshold?.standing,
                 bedroom: window.tileObjects[`${rearDoorHex.q},${rearDoorHex.r}`]?.accessThreshold?.standing,
             };
         });
-        expect(thresholds.gate).toBeLessThan(thresholds.throne);
         expect(thresholds.throne).toBeLessThan(thresholds.bedroom);
     });
 
