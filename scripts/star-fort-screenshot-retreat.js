@@ -97,9 +97,33 @@ async function main() {
         window.isInCombat = true;
         window.currentTurnEntity = null;
         window.isPausedForReaction = false;
+        // Rendering only draws hexes that are currently visible or already
+        // in window.exploredHexes (fog of war) — the real player's vision
+        // never reached this sim's fake fight, so nothing would render at
+        // all without this. Force-explore a wide area around the fort so
+        // screenshots actually show the battle instead of a black canvas.
+        const region = window.campaign2NorthwatchFortRegion;
+        const keepRegion = window.campaign2NorthwatchKeepRegion;
+        if (!window.exploredHexes) window.exploredHexes = new Set();
+        [...region.floorHexes, ...region.wallHexes, ...keepRegion.floorHexes, ...keepRegion.wallHexes]
+            .forEach(h => window.exploredHexes.add(`${h.q},${h.r}`));
+        for (let dq = -40; dq <= 40; dq += 2) {
+            for (let dr = -40; dr <= 40; dr += 2) {
+                if (Math.abs(dq) + Math.abs(dr) <= 44) window.exploredHexes.add(`${center.q + dq},${center.r + dr}`);
+            }
+        }
         window.player = attackers[0];
         window.__simDefenders = defenders;
         window.__simAttackers = attackers;
+
+        // Entity/tileObject rendering (renderEntities, gameEngine.js) is
+        // separately gated on isVisibleToPlayer, which computes vision from
+        // window.entities filtered to side==='player' — none exist in this
+        // sim (defenders are 'neutral', attackers 'enemy'), so it always
+        // returned false and nothing but bare terrain would ever draw.
+        // Screenshot-only override: show everything, fog of war isn't the
+        // point of these captures.
+        window.isVisibleToPlayer = () => true;
     });
 
     console.log('Running sim, watching for first retreat trigger...');
