@@ -3983,6 +3983,34 @@ function aiProcess(entity) {
         }
     });
 
+    // CHASE TIMEOUT: answers a real edge case — a hunter that keeps LOS on
+    // a fleeing target moving at the exact same speed never actually closes
+    // the distance, so the pure "flee until 10x threatRadius away" rule
+    // (resolveNoVisibleTargetAI) never fires either, since it only ever
+    // runs once nobody's visible. Track how many consecutive turns this
+    // entity has been both severely outnumbered AND not actually adjacent
+    // to anyone (i.e. "still just being chased/chasing, not fighting");
+    // once that drags on too long regardless of visibility, resolve it the
+    // same way as a successful escape — nobody, hunter or hunted, keeps a
+    // dogged chase up forever.
+    {
+        const { mine, theirs } = computeForceBalance(entity);
+        const fleeThreshold = (entity.combatDirective?.outnumberWeight || 1) > 1 ? 4 : 2.5;
+        const adjacent = opponents.some(o => window.distance(entity.hex, o.hex) <= 1);
+        if (!adjacent && theirs >= mine * fleeThreshold) {
+            entity._chaseStuckTurns = (entity._chaseStuckTurns || 0) + 1;
+            if (entity._chaseStuckTurns >= 200) {
+                markFled(entity);
+                entity._chaseStuckTurns = 0;
+                window.currentTurnEntity = null;
+                window.gamePhase = 'WAITING';
+                return;
+            }
+        } else {
+            entity._chaseStuckTurns = 0;
+        }
+    }
+
     // Filter attackable targets based on flying
     const weaponSlot = 'weapon';
     const weapon = entity.equipped?.[weaponSlot] ? window.items[entity.equipped[weaponSlot]] : null;
@@ -5595,6 +5623,37 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   }
 }
 
+// FLED: a fleeing combatant is treated as functionally defeated — the
+// player still gets the XP they'd have gotten from a kill, checkCombatEnd
+// (below) stops waiting on them the same way it stops waiting on a corpse,
+// and (for Northwatch specifically) the siege leans the same direction a
+// kill would have leaned it. This is the single place that ever sets
+// entity.fled, called from both the distance-based and stuck-turn
+// disengage paths, and from the chase-timeout stalemate breaker.
+function markFled(entity) {
+    if (entity.fled) return; // one-shot
+    entity.fled = true;
+    entity.disengaged = true;
+    if (entity.combatDirective) entity.combatDirective.mode = null;
+
+    if (window.player && window.player.side !== entity.side && entity.expValue) {
+        window.gainExp(entity.expValue);
+    }
+
+    // Northwatch siege: a fled defender tips the fort toward falling, a
+    // fled attacker tips it back toward holding — same bounded, one-time
+    // nudge shape as the existing siege-engine-destroyed pressure change
+    // (applySiegePressure), not a per-tick drift source.
+    if (window.siegeState?.active) {
+        if (entity.factionTag === 'northwatch_human') {
+            window.applySiegePressure?.(6, `${entity.name} breaks and flees — one less defender on the wall.`);
+        } else if (entity.combatDirective?.hostileTo === 'neutral') {
+            window.applySiegePressure?.(-6, `${entity.name} breaks and flees the assault!`);
+        }
+    }
+}
+window.markFled = markFled;
+
 // HUNTER/PREY FORCE BALANCE: cheap, called only from the no-visible-target
 // branch of aiProcess (once per idle entity per turn, not a global per-tick
 // pass) — "mine" is live same-side combatants weighted by
@@ -5695,8 +5754,8 @@ function resolveNoVisibleTargetAI(entity, opponentSide) {
         // function returns null (no more searching/fleeing), but the
         // entity's normal targeting/attack logic stays fully live — if
         // someone walks back into view, it fights.
-        entity.disengaged = true;
-        if (entity.combatDirective) entity.combatDirective.mode = null;
+        if (isPrey) markFled(entity); // outnumbered and stuck: that's a flight that succeeded, not a search that stalled
+        else { entity.disengaged = true; if (entity.combatDirective) entity.combatDirective.mode = null; }
         entity._parkedTurns = 0;
         return null;
     }
@@ -5711,12 +5770,10 @@ function resolveNoVisibleTargetAI(entity, opponentSide) {
         if (theirs >= mine * fleeThreshold) {
             const threatRadius = entity.combatDirective?.threatRadius || 3;
             if (nearestDist >= threatRadius * 10) {
-                // Far enough from every known-alive hostile to call it: drop
-                // out of the fight entirely rather than running forever. See
-                // the _parkedTurns branch above for why this is `disengaged`
-                // rather than aiState='idle'.
-                entity.disengaged = true;
-                if (entity.combatDirective) entity.combatDirective.mode = null;
+                // Far enough from every known-alive hostile to call it: a
+                // successful escape, functionally the same as a defeat (see
+                // markFled) rather than merely a paused fight.
+                markFled(entity);
                 return null;
             }
             const neighbors = window.getNeighbors(entity.hex.q, entity.hex.r).filter(isOpenHex);
@@ -6291,11 +6348,13 @@ function checkCombatEnd() {
         }
     });
 
-    // Only check for ACTIVE enemies
-    const aliveEnemies = window.entities.filter(e => e.side === 'enemy' && e.alive);
+    // Only check for ACTIVE enemies — a fled enemy (markFled, above) counts
+    // the same as a dead one here: it's not coming back to this fight, so
+    // it shouldn't be able to permanently block resolution.
+    const aliveEnemies = window.entities.filter(e => e.side === 'enemy' && e.alive && !e.fled);
     console.log(`[ARENA] checkCombatEnd â€” isInArena=${window.isInArena} aliveEnemies=${aliveEnemies.length} totalEntities=${window.entities.length}`);
     if (aliveEnemies.length > 0) console.log('[ARENA] checkCombatEnd: enemies still alive, no transition');
-    if (!window.entities.some(e => e.side === 'enemy' && e.alive)) {
+    if (!window.entities.some(e => e.side === 'enemy' && e.alive && !e.fled)) {
         // Ambush is over — armor protection applies again.
         window.entities.forEach(e => { if (e.caughtOffGuard) e.caughtOffGuard = false; });
 

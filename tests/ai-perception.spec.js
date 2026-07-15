@@ -146,4 +146,59 @@ test.describe('AI perception memory + hunter/prey behavior', () => {
         });
         expect(result.cacheTouched).toBe(false);
     });
+
+    test('markFled treats a fled entity as defeated: grants XP, excludes it from checkCombatEnd, and is one-shot', async ({ page }) => {
+        await createCharacter(page);
+        const result = await page.evaluate(() => {
+            const before = window.gainExp ? (window.player.exp || 0) : 0;
+            const runner = window.createMonster('goblin', { q: 5, r: 5 }, null, null, 'enemy');
+            runner.expValue = 42;
+            window.entities = [runner];
+            window.markFled(runner);
+            const afterFirst = window.player.exp || 0;
+            window.markFled(runner); // one-shot: calling again must not double-grant XP
+            const afterSecond = window.player.exp || 0;
+            const excludedFromCombatEnd = window.entities.filter(e => e.side === 'enemy' && e.alive && !e.fled).length;
+            return { before, afterFirst, afterSecond, fled: runner.fled, disengaged: runner.disengaged, excludedFromCombatEnd };
+        });
+        expect(result.afterFirst).toBe(result.before + 42);
+        expect(result.afterSecond).toBe(result.afterFirst); // no double grant
+        expect(result.fled).toBe(true);
+        expect(result.disengaged).toBe(true);
+        expect(result.excludedFromCombatEnd).toBe(0);
+    });
+
+    test('a chase that never closes (hunter matches fleeing prey\'s speed) times out into markFled rather than running forever', async ({ page }) => {
+        await createCharacter(page);
+        const result = await page.evaluate(async () => {
+            // Simulate the timeout directly rather than actually running 200
+            // turns through takeTurn (slow) — pre-set the stuck counter one
+            // short of the threshold and confirm the next aiProcess call
+            // (with the same severe-outnumbered, non-adjacent conditions)
+            // crosses it and resolves via markFled.
+            const runner = window.createMonster('goblin', { q: 0, r: 0 }, null, null, 'enemy');
+            runner.combatDirective = { hostileTo: 'neutral' };
+            runner.aiState = 'combat';
+            runner.timePoints = 100;
+            runner._chaseStuckTurns = 199;
+            const hunters = [];
+            for (let i = 0; i < 6; i++) {
+                const h = window.createMonster('goblin', { q: 20 + i, r: 0 }, null, null, 'neutral');
+                h.aiState = 'combat';
+                hunters.push(h);
+            }
+            // knownOpponents populated directly (rather than relying on a
+            // real canSee this turn) — computeForceBalance reads memory,
+            // not raw visibility, and the point of this test is the
+            // stuck-counter/timeout mechanism, not perception itself.
+            runner.knownOpponents = new Map(hunters.map(h => [h.id, { hex: { ...h.hex }, tick: 0, alive: true }]));
+            window.entities = [runner, ...hunters];
+            window.currentTurnEntity = runner;
+            window.isInCombat = true;
+            window.takeTurn(runner);
+            await new Promise(r => setTimeout(r, 600));
+            return { fled: runner.fled };
+        });
+        expect(result.fled).toBe(true);
+    });
 });
