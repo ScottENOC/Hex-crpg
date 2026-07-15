@@ -2906,12 +2906,16 @@ function runTickInternal(isSleepCycle = false, skipUI = false, tickMultiplier = 
                     
                     e.currentMana = Math.min(e.maxMana || 0, (e.currentMana || 0) + (regen * tpGained));
 
-                    // Health Regeneration
+                    // Health Regeneration — every side, not just the player's,
+                    // so NPCs (garrisons, monsters, anyone) heal passively too
+                    // instead of every point of damage being permanent for
+                    // the rest of a fight. Already scoped by the surrounding
+                    // workingSet/dormancy filtering, so this doesn't cost
+                    // anything for the countless full-health, out-of-combat
+                    // NPCs across the world.
                     let hRegen = 0.1;
                     if (e.skills?.health_regen) hRegen += e.skills.health_regen * 0.1;
-                    if (e.side === 'player') {
-                        e.hp = Math.min(e.maxHp, e.hp + (hRegen * tpGained));
-                    }
+                    e.hp = Math.min(e.maxHp, e.hp + (hRegen * tpGained));
 
                     // Ongoing Spell Costs (2.5% of core mana cost per TP gained)
                     const mySpells = hasActiveSpells ? window.activeSpells.filter(s => s.casterName === e.name) : [];
@@ -3626,6 +3630,64 @@ function aiProcess(entity) {
         window.currentTurnEntity = null;
         window.gamePhase = 'WAITING';
         return;
+    }
+
+    // HEALTH POTION: an AI-controlled entity carrying one drinks it either
+    // whenever it wouldn't waste any of the heal to overhealing, or
+    // unconditionally once badly hurt (<=30% HP) even if some would be
+    // wasted — same item/amount/TP-cost the player's own potion_health use
+    // does (ui.js), just decided automatically instead of by hand.
+    if (entity.alive && entity.inventory?.includes('potion_health') && entity.timePoints >= 1) {
+        const healAmt = 5;
+        const missingHp = entity.maxHp - entity.hp;
+        const lowHp = entity.hp <= entity.maxHp * 0.3;
+        if (missingHp > 0 && (missingHp >= healAmt || lowHp)) {
+            entity.hp = Math.min(entity.maxHp, entity.hp + healAmt);
+            const potionIdx = entity.inventory.indexOf('potion_health');
+            if (potionIdx > -1) entity.inventory.splice(potionIdx, 1);
+            spendTP(entity, 1);
+            sharedMessage(`${entity.name} drinks a Potion of Health.`);
+            setTimeout(() => aiProcess(entity), 20);
+            return;
+        }
+    }
+
+    // WEAPON SWITCHING: an entity carrying both a ranged option and a melee
+    // backup (bow soldiers with a sword/dagger in reserve, an archer
+    // commander who also owns a sword+shield) switches to whichever fits
+    // the moment — melee once an opponent is adjacent, back to ranged once
+    // nothing is. Free (no TP cost), same convention as picking a target —
+    // a no-op for anyone with only one weapon, nothing to switch to.
+    if (entity.alive && entity.inventory && entity.inventory.length > 1) {
+        const opponentSideForWeapon = entity.combatDirective?.hostileTo || (entity.side === 'player' ? 'enemy' : 'player');
+        let nearestOpponentDist = Infinity;
+        window.entities.forEach(e => {
+            if (!e.alive || e.side !== opponentSideForWeapon) return;
+            const d = window.distance(entity.hex, e.hex);
+            if (d < nearestOpponentDist) nearestOpponentDist = d;
+        });
+        if (nearestOpponentDist <= 40) {
+            const currentWeapon = entity.equipped?.weapon ? window.items[entity.equipped.weapon] : null;
+            const isCurrentRanged = currentWeapon?.subType === 'ranged';
+            if (nearestOpponentDist <= 1 && (isCurrentRanged || !currentWeapon)) {
+                const meleeId = entity.inventory.find(id => { const it = window.items[id]; return it?.type === 'weapon' && it.subType !== 'ranged'; });
+                if (meleeId) {
+                    const meleeItem = window.items[meleeId];
+                    entity.equipped.weapon = meleeId;
+                    if (meleeItem.hands === 2) entity.equipped.offhand = null;
+                    else {
+                        const shieldId = entity.inventory.find(id => window.items[id]?.type === 'shield');
+                        if (shieldId) entity.equipped.offhand = shieldId;
+                    }
+                }
+            } else if (nearestOpponentDist > 1 && currentWeapon && currentWeapon.subType !== 'ranged') {
+                const rangedId = entity.inventory.find(id => window.items[id]?.subType === 'ranged');
+                if (rangedId) {
+                    entity.equipped.weapon = rangedId;
+                    if (window.items[rangedId].hands === 2) entity.equipped.offhand = null;
+                }
+            }
+        }
     }
 
     // SIEGE ENGINE: never targets/engages the player like a normal 'enemy'

@@ -55,28 +55,12 @@ async function bootPage(browser) {
     await page.waitForFunction(() => window.campaign2NorthwatchFortRegion && window.campaign2NorthwatchGateHex);
 
     await page.evaluate(() => {
-        const BOW_SOLDIER = { race: 'human', classLevels: ['fighter'], skillPicks: ['health', 'bow_hit', 'bow_dmg', 'light_armor_training'], equipment: ['bow', 'light_armor'] };
-        const SWORD_SOLDIER = { race: 'human', classLevels: ['fighter'], skillPicks: ['health', 'sword_hit', 'sword_dmg', 'light_armor_training'], equipment: ['sword', 'light_armor'] };
-        const SPEAR_SOLDIER = { race: 'human', classLevels: ['fighter'], skillPicks: ['health', 'spear_hit', 'spear_dmg', 'light_armor_training'], equipment: ['spear', 'light_armor'] };
-
         // The real garrison (buildNorthwatchFort already placed these into
         // window.entities during world-gen, with their real hexes/combatDirective).
         function getDefenders() {
             return window.entities.filter(e => e.factionTag === 'northwatch_human' && e.alive !== undefined);
         }
         const defenderBaseline = getDefenders().map(d => ({ ref: d, hex: { ...d.hex }, maxHp: d.maxHp }));
-
-        // Attacker composition: 2x the garrison's headcount (defenders +
-        // commander), weighted toward bows per the ask ("lots of bows").
-        function buildAttackerRoster(count) {
-            const roster = [];
-            const bowCount = Math.round(count * 0.6);
-            for (let i = 0; i < count; i++) {
-                const archetype = i < bowCount ? BOW_SOLDIER : (i % 2 === 0 ? SWORD_SOLDIER : SPEAR_SOLDIER);
-                roster.push({ ...archetype, name: `Attacker ${i + 1}` });
-            }
-            return roster;
-        }
 
         // Kill attribution, test-only: wrap the real handleLethalDamage
         // (gameEngine.js) so each entity accrues a simKills count on its own
@@ -134,7 +118,16 @@ async function bootPage(browser) {
                     return e;
                 });
 
-                const attackerRoster = buildAttackerRoster(attackerCount);
+                // Real orc/goblin templates (monsters.js), same 1:1 mix
+                // startNorthwatchSally actually spawns (campaign2SiegeEscortTypes
+                // = ['orc','orc','goblin','goblin']) — orcs roll 'savage'
+                // equipment (axe-heavy, cheap, dual-wield-capable), goblins
+                // roll 'random' (the general 7-archetype pool). Previously
+                // this sim built its own hand-authored human soldier roster,
+                // which didn't match the real siege's actual composition at
+                // all.
+                const attackerTypes = [];
+                for (let i = 0; i < attackerCount; i++) attackerTypes.push(i % 2 === 0 ? 'orc' : 'goblin');
                 // Six axial directions out from the keep, matching the star
                 // fort's own 6 points (STAR_FORT_DIRECTIONS, campaign2World.js)
                 // — splits the attacking force into one group per point
@@ -147,14 +140,15 @@ async function bootPage(browser) {
                 const spawnRadius = spawnRadiusOverride || 9;
                 const activeDirections = SIX_DIRECTIONS.slice(0, numDirections);
                 const groupSize = Math.ceil(attackerCount / activeDirections.length);
-                const attackers = attackerRoster.map((spec, i) => {
+                const attackers = attackerTypes.map((type, i) => {
                     const dir = activeDirections[Math.floor(i / groupSize) % activeDirections.length];
                     const withinGroup = i % groupSize;
                     const hex = {
                         q: center.q + dir.q * spawnRadius + (withinGroup % 4) - 1,
                         r: center.r + dir.r * spawnRadius + Math.floor(withinGroup / 4),
                     };
-                    const ent = window.buildNPC({ ...spec, hex, side: 'enemy', factionId: null, color: '#8a2a2a' });
+                    const ent = window.createMonster(type, hex, null, null, 'enemy');
+                    ent.name = `${ent.name} ${i + 1}`;
                     ent.combatDirective = { hostileTo: 'neutral' }; // fight the fort's neutral-side garrison
                     ent.aiControlled = true;
                     ent.hasBeenSeenByPlayer = true;
@@ -190,7 +184,7 @@ async function bootPage(browser) {
                     return { count: alive.length, meanDist: +meanDist.toFixed(1), maxDist, uniqueHexes };
                 }
 
-                const snapshotTicks = new Set([25, 100, 300, 800]);
+                const snapshotTicks = new Set([25, 100, 300, 800, 1500, 3000, 6000, 10000, 15000]);
                 const formationLog = [];
 
                 // Retreat tracking, test-only (per the "who actually starts
@@ -287,21 +281,22 @@ async function main() {
     // Garrison is 6 soldiers + 1 commander = 7 (real garrison headcount is
     // fixed by content, not scaled). Attackers = garrison * multiplier,
     // split across all 6 of the star fort's points instead of funneling
-    // through the gate — usage: node star-fort-assault-test.js [trials] [attackerMultiplier] [numDirections] [spawnRadius] [commanderThreatRadius]
+    // through the gate — usage: node star-fort-assault-test.js [trials] [attackerMultiplier] [numDirections] [spawnRadius] [commanderThreatRadius] [maxTicks]
     const attackerMultiplier = Number(process.argv[3] || 3.5);
     const attackerCount = await page.evaluate((mult) =>
         window.entities.filter(e => e.factionTag === 'northwatch_human').length * mult, attackerMultiplier);
     const spawnRadius = process.argv[5] ? Number(process.argv[5]) : null;
     const commanderThreatRadius = process.argv[6] ? Number(process.argv[6]) : null;
-    console.log(`Garrison size: ${Math.round(attackerCount / attackerMultiplier)}. Attacking force: ${attackerCount} (${attackerMultiplier}x, ~60% bows, rest sword/spear, spawned around all 6 points at radius ${spawnRadius || 9}${commanderThreatRadius !== null ? `, commander threatRadius=${commanderThreatRadius}` : ''}).\n`);
+    console.log(`Garrison size: ${Math.round(attackerCount / attackerMultiplier)}. Attacking force: ${attackerCount} (${attackerMultiplier}x, 1:1 orc/goblin mix matching campaign2SiegeEscortTypes, spawned around all 6 points at radius ${spawnRadius || 9}${(commanderThreatRadius !== null && !Number.isNaN(commanderThreatRadius)) ? `, commander threatRadius=${commanderThreatRadius}` : ''}).\n`);
 
     const trials = Number(process.argv[2] || 3);
     const outcomes = [];
     for (let t = 0; t < trials; t++) {
         const numDirections = Number(process.argv[4] || 6);
+        const maxTicks = Number(process.argv[7] || 3000);
         const r = await evalWithRecovery(({ attackerCount, maxTicks, numDirections, spawnRadius, commanderThreatRadius }) =>
             window.aiSiegeSim.runAssault(attackerCount, maxTicks, numDirections, spawnRadius, commanderThreatRadius),
-            { attackerCount, maxTicks: 3000, numDirections, spawnRadius, commanderThreatRadius });
+            { attackerCount, maxTicks, numDirections, spawnRadius, commanderThreatRadius });
         outcomes.push(r);
         console.log(`trial ${t + 1}: winner=${r.winner.padEnd(10)} defenders ${r.defendersAlive}/${r.defendersTotal} (${(r.defenderHpFractionRemaining * 100).toFixed(0)}% hp)  attackers ${r.attackersAlive}/${r.attackersTotal} (${(r.attackerHpFractionRemaining * 100).toFixed(0)}% hp)  ticks=${r.ticks}  defenderKills=${r.defenderKills}  commanderKills=${r.commanderKills}${r.commanderSurvived === false ? ' (commander died)' : ''}`);
         const retreated = r.retreatSummary.filter(s => s.retreated);

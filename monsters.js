@@ -46,7 +46,7 @@ const monsterTemplates = {
         skills: {
             'health': 3
         },
-        defaultEquipment: 'random'
+        defaultEquipment: 'savage'
     },
     // A real objective, not a combatant in the usual sense — high HP (the
     // point of the sally-out fight), no weapon, no loot. Its only "attack"
@@ -584,10 +584,12 @@ function createMonster(type, hex, customSkills = null, customEquipment = null, s
     // weapon roll with no skills to back it up; see assignCombatBuild below.
     const equipment = customEquipment || template.defaultEquipment;
     let pendingArchetype = null;
-    if (equipment === 'random') {
-        pendingArchetype = COMBAT_ARCHETYPES[Math.floor(Math.random() * COMBAT_ARCHETYPES.length)];
+    if (equipment === 'random' || equipment === 'savage') {
+        const pool = equipment === 'savage' ? SAVAGE_ARCHETYPES : COMBAT_ARCHETYPES;
+        pendingArchetype = pool[Math.floor(Math.random() * pool.length)];
         equipToMonster(monster, pendingArchetype.weapon);
-        if (pendingArchetype.offhand) equipToMonster(monster, pendingArchetype.offhand);
+        if (pendingArchetype.offhand) equipToMonster(monster, pendingArchetype.offhand, !!pendingArchetype.offhandIsWeapon);
+        if (pendingArchetype.helmet) equipToMonster(monster, pendingArchetype.helmet);
     } else if (Array.isArray(equipment)) {
         equipment.forEach(itemId => equipToMonster(monster, itemId));
     }
@@ -658,13 +660,22 @@ function applyClassLevelScaling(monster, bonusLevels) {
 }
 window.applyClassLevelScaling = applyClassLevelScaling;
 
-function equipToMonster(monster, itemId) {
+function equipToMonster(monster, itemId, asOffhand = false) {
     const item = window.items[itemId];
     if (!item) return;
     monster.inventory.push(itemId);
     if (item.type === 'weapon') {
-        monster.equipped.weapon = itemId;
-        if (item.hands === 2) monster.equipped.offhand = null;
+        // Dual-wielding: a canOffhand weapon (dagger, club, sword...) can go
+        // in the offhand slot alongside a main-hand weapon instead of the
+        // usual "last weapon call wins the main slot" behavior — used by
+        // the savage archetype pool below, never by the ordinary/civilized
+        // one (city guards don't dual-wield).
+        if (asOffhand && item.canOffhand) {
+            monster.equipped.offhand = itemId;
+        } else {
+            monster.equipped.weapon = itemId;
+            if (item.hands === 2) monster.equipped.offhand = null;
+        }
     } else if (item.type === 'shield') {
         monster.equipped.offhand = itemId;
     } else if (item.type === 'armor') {
@@ -752,6 +763,26 @@ const COMBAT_ARCHETYPES = [
     { id: 'dagger_rogue', weapon: 'dagger', skills: ['dagger_hit', 'stealth_rogue', 'dagger_dmg', 'fastMovement', 'sneak_attack_dmg'] },
 ];
 window.COMBAT_ARCHETYPES = COMBAT_ARCHETYPES;
+
+// A rougher, cheaper-average alternative to COMBAT_ARCHETYPES — axe-heavy,
+// shields rare (city-guard "sword+shield" discipline isn't a raider's
+// style), a couple of genuine dual-wield builds (a real offhand weapon, not
+// just a shield), one rare helmet. Deliberately not armor-heavy either, so
+// the average total gear value comes out lower than the 'random' pool
+// (~28 buyPrice-equivalent) despite the variety — every entry here is a
+// single weapon, a cheap dual-wield pair, or one cheap weapon+helmet combo.
+const SAVAGE_ARCHETYPES = [
+    { id: 'savage_axe', weapon: 'axe', skills: ['axe_hit', 'meleeDamage', 'axe_dmg', 'health'] },
+    { id: 'savage_axe_berserker', weapon: 'axe', skills: ['axe_hit', 'meleeDamage', 'health', 'axe_dmg'] },
+    { id: 'savage_axe_dualwield', weapon: 'axe', offhand: 'dagger', offhandIsWeapon: true, skills: ['axe_hit', 'meleeDamage', 'health'] },
+    { id: 'savage_spear', weapon: 'spear', skills: ['spear_hit', 'spear_dmg', 'health', 'meleeDamage'] },
+    { id: 'savage_club', weapon: 'club', skills: ['meleeDamage', 'health'] },
+    { id: 'savage_bow', weapon: 'bow', skills: ['bow_hit', 'health', 'fastMovement'] },
+    { id: 'savage_dagger_dualwield', weapon: 'dagger', offhand: 'dagger', offhandIsWeapon: true, skills: ['dagger_hit', 'stealth_rogue', 'health'] },
+    { id: 'savage_sword', weapon: 'sword', skills: ['sword_hit', 'sword_dmg', 'health'] },
+    { id: 'savage_club_helmed', weapon: 'club', helmet: 'nasal_helm', skills: ['meleeDamage', 'health'] },
+];
+window.SAVAGE_ARCHETYPES = SAVAGE_ARCHETYPES;
 
 // Spends `points` skill ranks down an archetype's ordered priority list —
 // mostly in sequence (an agile swordsman keeps investing in swordplay/speed

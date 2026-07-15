@@ -689,23 +689,39 @@ window.campaign2Retrainer = { name: 'Old Hessa', title: 'Retrainer', race: 'dwar
 // campaign2World.js's buildNorthwatchFort/buildRidgeholdFort. `side: 'neutral'`
 // like every other garrison NPC — these defend the fort, they don't fight
 // the player.
+// Every soldier fills both hands from the start (a 2-handed weapon alone,
+// or a 1-handed weapon + shield) — no free-floating empty offhand. Archers
+// carry a melee backup (a mix of sword and dagger) in reserve for when
+// something closes to melee range — unequipped until the weapon-switching
+// AI (aiProcess, gameEngine.js) actually needs it, which is why the bow is
+// listed last in their equipment array: equipToMonster's "last weapon
+// equipped wins the weapon slot" behavior is what leaves the bow equipped
+// and the backup sitting in inventory as a reserve, not a duplicate.
 window.campaign2FortSoldiers = [
     { name: 'Fort Soldier Halric', title: 'Border Soldier', race: 'human', gender: 'male', classLevels: ['fighter'], skillPicks: ['health', 'spear_hit', 'spear_dmg', 'light_armor_training'], equipment: ['spear', 'light_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#5a5a6a' },
-    { name: 'Fort Soldier Wenna', title: 'Border Soldier', race: 'human', gender: 'female', classLevels: ['fighter'], skillPicks: ['health', 'bow_hit', 'bow_dmg', 'light_armor_training'], equipment: ['bow', 'light_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#5a5a6a' },
-    { name: 'Fort Soldier Dunstan', title: 'Border Soldier', race: 'human', gender: 'male', classLevels: ['fighter'], skillPicks: ['health', 'sword_hit', 'sword_dmg', 'light_armor_training'], equipment: ['sword', 'light_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#5a5a6a' },
-    { name: 'Fort Soldier Ysolt', title: 'Border Soldier', race: 'human', gender: 'female', classLevels: ['fighter'], skillPicks: ['health', 'bow_hit', 'bow_dmg', 'light_armor_training'], equipment: ['bow', 'light_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#5a5a6a' },
+    { name: 'Fort Soldier Wenna', title: 'Border Soldier', race: 'human', gender: 'female', classLevels: ['fighter'], skillPicks: ['health', 'bow_hit', 'bow_dmg', 'light_armor_training'], equipment: ['dagger', 'bow', 'light_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#5a5a6a' },
+    { name: 'Fort Soldier Dunstan', title: 'Border Soldier', race: 'human', gender: 'male', classLevels: ['fighter'], skillPicks: ['health', 'sword_hit', 'sword_dmg', 'shield_proficiency'], equipment: ['sword', 'wooden_shield', 'light_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#5a5a6a' },
+    { name: 'Fort Soldier Ysolt', title: 'Border Soldier', race: 'human', gender: 'female', classLevels: ['fighter'], skillPicks: ['health', 'bow_hit', 'bow_dmg', 'light_armor_training'], equipment: ['sword', 'bow', 'light_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#5a5a6a' },
     { name: 'Fort Soldier Bram', title: 'Border Soldier', race: 'human', gender: 'male', classLevels: ['fighter'], skillPicks: ['health', 'spear_hit', 'spear_dmg', 'light_armor_training'], equipment: ['spear', 'light_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#5a5a6a' },
-    { name: 'Fort Soldier Cadha', title: 'Border Soldier', race: 'human', gender: 'female', classLevels: ['fighter'], skillPicks: ['health', 'sword_hit', 'sword_dmg', 'light_armor_training'], equipment: ['sword', 'light_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#5a5a6a' }
+    { name: 'Fort Soldier Cadha', title: 'Border Soldier', race: 'human', gender: 'female', classLevels: ['fighter'], skillPicks: ['health', 'sword_hit', 'sword_dmg', 'shield_proficiency'], equipment: ['sword', 'wooden_shield', 'light_armor'], side: 'neutral', factionId: 'silverhart_kingdom', color: '#5a5a6a' }
 ];
 
 // The commander stationed in Northwatch's keep — quest-giver 2. Assigns the
 // actual sally-out objective (destroy the siege engine), explicitly framing
 // the player as an outside strike team because the garrison can't be spared.
+// Starts with a bow equipped (her real combat option, matching a commander
+// who directs the wall fight from range rather than wading straight in),
+// but still owns a sword+shield in reserve for when it's actually her turn
+// to fight up close — the weapon-switching AI (aiProcess, gameEngine.js)
+// picks between them automatically. equipment lists the sword/shield
+// before the bow for the same "last weapon equipped wins the main hand"
+// reason the archer soldiers above do. Carries a health potion too, used
+// automatically via the same AI.
 window.campaign2NorthwatchCommander = {
     name: 'Commander Ysolde Hart', title: 'Garrison Commander of Northwatch',
     race: 'human', gender: 'female', classLevels: ['fighter', 'fighter'],
-    skillPicks: ['health', 'health', 'sword_hit', 'sword_dmg', 'heavy_armor_training', 'shield_proficiency'],
-    equipment: ['sword', 'wooden_shield', 'heavy_armor'],
+    skillPicks: ['health', 'health', 'bow_hit', 'bow_dmg', 'sword_hit', 'shield_proficiency', 'heavy_armor_training'],
+    equipment: ['sword', 'wooden_shield', 'bow', 'heavy_armor', 'potion_health'],
     side: 'neutral', factionId: 'silverhart_kingdom', color: '#2a3a6a',
     dialogueId: 'northwatch_commander'
 };
