@@ -3533,7 +3533,7 @@ function aiProcess(entity) {
             window.distance(entity.hex, e.hex) <= 1);
         if (directive.mode === 'retreat' && directive.retreatTo && !atRetreatPoint && !opponentAdjacent) {
             const next = window.stepToward(entity.hex, directive.retreatTo);
-            if (next && isOpenHex(next)) entity.hex = next;
+            if (next && isOpenHex(next)) { entity.hex = next; entity._lastMoveTick = window.worldSeconds || 0; }
             spendTP(entity, 10);
             window.currentTurnEntity = null;
             window.gamePhase = 'WAITING';
@@ -3963,6 +3963,25 @@ function aiProcess(entity) {
         });
     }
 
+    // HEARING: a moving opponent can be noticed without line of sight —
+    // closer and louder the nearer they are, stamped via _lastMoveTick
+    // (set wherever AI movement actually executes, above). This only ever
+    // feeds knownOpponents (perception memory for search/flee decisions),
+    // never attackableOpponents — hearing footsteps through a wall tells you
+    // roughly where someone is, not a clean shot at them.
+    const HEARING_RADIUS = 4;
+    opponents.forEach(o => {
+        if (visibleOpponents.includes(o)) return;
+        if (!o._lastMoveTick || (window.worldSeconds || 0) - o._lastMoveTick > 2) return;
+        const d = window.distance(entity.hex, o.hex);
+        if (d > HEARING_RADIUS) return;
+        const hearChance = Math.max(10, 80 - d * 18);
+        if (Math.random() * 100 < hearChance) {
+            if (!entity.knownOpponents) entity.knownOpponents = new Map();
+            entity.knownOpponents.set(o.id, { hex: { q: o.hex.q, r: o.hex.r }, tick: window.worldSeconds || 0, alive: true });
+        }
+    });
+
     // Filter attackable targets based on flying
     const weaponSlot = 'weapon';
     const weapon = entity.equipped?.[weaponSlot] ? window.items[entity.equipped[weaponSlot]] : null;
@@ -4353,6 +4372,7 @@ function aiProcess(entity) {
                     entity.hex = previousHex;
                 } else {
                     entity.hex = nextHex;
+                    entity._lastMoveTick = window.worldSeconds || 0; // HEARING: stamped so nearby opponents can notice movement without LOS
                     if (entity.riding) entity.riding.hex = { q: nextHex.q, r: nextHex.r };
                 }
                 const terrain = window.getTerrainAt(entity.hex.q, entity.hex.r);
@@ -5645,6 +5665,28 @@ function resolveNoVisibleTargetAI(entity, opponentSide) {
 
     const { mine, theirs } = computeForceBalance(entity);
     const isPrey = theirs >= mine * 2;
+
+    // NO PERMANENT HIDE: nobody's plan is allowed to be "stand still
+    // forever" — a defender in an overrun fort has to eventually decide to
+    // flee or fight, not camp indefinitely. If this entity hasn't actually
+    // changed hex for many consecutive no-visible-target turns (boxed in by
+    // its own allies, or stuck circling a stale search anchor), force it
+    // into a real decision: outnumbered -> disengage from the fight for
+    // good; otherwise -> break off toward its own last-known-safe(ish)
+    // ground rather than re-running the same stuck logic forever.
+    if (!entity._parkedTurns) entity._parkedTurns = 0;
+    if (!entity._parkedAtHex || entity._parkedAtHex.q !== entity.hex.q || entity._parkedAtHex.r !== entity.hex.r) {
+        entity._parkedAtHex = { q: entity.hex.q, r: entity.hex.r };
+        entity._parkedTurns = 0;
+    } else {
+        entity._parkedTurns++;
+    }
+    if (entity._parkedTurns >= 8) {
+        entity.aiState = 'idle';
+        if (entity.combatDirective) entity.combatDirective.mode = null;
+        entity._parkedTurns = 0;
+        return null;
+    }
 
     if (isPrey) {
         // Reluctant to flee: a defender-weighted entity (outnumberWeight>1)
