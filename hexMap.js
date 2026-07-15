@@ -1013,8 +1013,11 @@ function hasLineOfSightUncached(start, end) {
     // avoid changing established behavior; the keep's roofed wall is added
     // as a second explicit name here rather than switching this whole check
     // over to blocksLOS (which would also newly block LOS through every
-    // existing Pedestal/Palisade Wall hex on the map).
-    const isOpaqueWallName = (name) => name === 'Wall' || name === 'Keep Wall';
+    // existing Pedestal/Palisade Wall hex on the map). 'Climbable Wall' (the
+    // star fort's actual curtain wall, carveStarFort/campaign2World.js) is a
+    // third, separate terrain name that was never added here — meaning an
+    // archer outside a fort could always shoot straight through its walls.
+    const isOpaqueWallName = (name) => name === 'Wall' || name === 'Keep Wall' || name === 'Climbable Wall';
     const startOnWall = isOpaqueWallName(window.getTerrainAt(start.q, start.r).name);
     const endOnWall = isOpaqueWallName(window.getTerrainAt(end.q, end.r).name);
 
