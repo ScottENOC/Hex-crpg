@@ -115,8 +115,25 @@ async function bootPage(browser) {
                     e.timePoints = 100 + Math.random() * 0.9;
                     e.hex = { ...d.hex };
                     e.visualQ = e.hex.q; e.visualR = e.hex.r; e.destination = null;
+                    // Clear AI/directive state that persists on the entity
+                    // object itself (not reset by hp/hex/alive above) —
+                    // without this, a later trial reusing the same real
+                    // defender objects inherits the PREVIOUS trial's ending
+                    // state (e.g. mode:'retreat', which is sticky by design
+                    // per campaign2World.js's combatDirective comment), so
+                    // "walls overrun" reads as triggering at tick 1 in every
+                    // trial after the first even though it's really stale
+                    // state from a fight that already ended.
+                    if (e.combatDirective) e.combatDirective.mode = null;
+                    e.fled = false; e.disengaged = false;
+                    e.knownOpponents = new Map();
+                    e._chaseStuckTurns = 0; e._parkedTurns = 0; e._parkedAtHex = null;
+                    e.climbing = null;
                     return e;
                 });
+                // The commander's one-shot "take the fallen archer's post"
+                // flag needs resetting too, same reason as above.
+                defenders.forEach(e => { if (e.name === 'Commander Ysolde Hart') e.takeFallenArcherPostOnce = true; });
 
                 // Real orc/goblin templates (monsters.js), same 1:1 mix
                 // startNorthwatchSally actually spawns (campaign2SiegeEscortTypes
