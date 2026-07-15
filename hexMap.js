@@ -908,6 +908,17 @@ function getLightSourcesCache() {
 function invalidateLightSourcesCache() { _lightSourcesCache = null; }
 window.invalidateLightSourcesCache = invalidateLightSourcesCache;
 
+// Standalone "is this hex lit right now" check, factored out of the
+// targetIsIlluminated logic inside hasLineOfSightUncached below so AI search
+// behavior (gameEngine.js) can score candidate hexes by illumination without
+// duplicating the light-source math or paying for a full LOS raycast.
+function isHexIlluminated(hex) {
+    const { entityLights, tileLights } = getLightSourcesCache();
+    return entityLights.some(l => distance(l.hex, hex) <= l.radius) ||
+        tileLights.some(l => distance({ q: l.q, r: l.r }, hex) <= l.radius);
+}
+window.isHexIlluminated = isHexIlluminated;
+
 // VISIBILITY CACHE (memoizes hasLineOfSight's boolean result per start/end
 // pair). Even with the light-source fix above, a stationary camera still
 // re-raycasts the same ~700 candidate hexes from scratch every single 10ms

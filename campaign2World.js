@@ -3653,6 +3653,11 @@ function buildNorthwatchFort(turnHex) {
         soldier.factionTag = 'northwatch_human'; // the "unforgivable act" hostility flip (gameEngine.js) keys off this
         soldier.combatDirective = {
             hostileTo: 'enemy', // these soldiers are side:'neutral' toward the player — this is who they actually fight
+            // Trained garrison holding prepared ground counts double toward
+            // the hunter/prey force-balance check (aiProcess) — a lone
+            // raider facing 9 of these should read as heavily outmatched,
+            // not 1-vs-9 on paper only.
+            outnumberWeight: 2,
             constraints: { stayWithinHexes: fortInterior },
             priorities: [
                 { type: 'nearHex', hex: gateHex, radius: 3 },
@@ -3686,6 +3691,7 @@ function buildNorthwatchFort(turnHex) {
         // wading into the walls uninvited like the rest of the garrison.
         commander.combatDirective = {
             hostileTo: 'enemy',
+            outnumberWeight: 2,
             constraints: { stayWithinHexes: fortInterior },
             passiveUnlessThreatened: true,
             threatRadius: 3,
@@ -3713,6 +3719,7 @@ function buildNorthwatchFort(turnHex) {
         guard.factionTag = 'northwatch_human';
         guard.combatDirective = {
             hostileTo: 'enemy',
+            outnumberWeight: 2,
             constraints: { stayWithinHexes: fortInterior },
             priorities: [{ type: 'nearHex', hex: gateHex, radius: 3 }, { type: 'insideRegion', hexes: fortInterior }],
             canReinforce: true,

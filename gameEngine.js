@@ -3947,6 +3947,22 @@ function aiProcess(entity) {
         !(entity.tags?.includes('undead') && e.commandsUndead));
     const visibleOpponents = opponents.filter(t => canSee(entity, t));
 
+    // PERCEPTION MEMORY: remember every hostile actually seen this turn —
+    // hex + "confirmed alive" — independent of whichever single target ends
+    // up picked below. A target breaking line of sight or slipping into
+    // stealth just stops refreshing its entry (it ages in place); it never
+    // gets deleted, so "ducked around a corner" isn't "forgot they exist."
+    // Deliberately NOT populated for entities that never actually spot a
+    // hostile — an entity with an empty/absent map falls through to the old
+    // idle behavior further down, so this can't change anything for fights
+    // that never reach it.
+    if (visibleOpponents.length > 0) {
+        if (!entity.knownOpponents) entity.knownOpponents = new Map();
+        visibleOpponents.forEach(o => {
+            entity.knownOpponents.set(o.id, { hex: { q: o.hex.q, r: o.hex.r }, tick: window.worldSeconds || 0, alive: true });
+        });
+    }
+
     // Filter attackable targets based on flying
     const weaponSlot = 'weapon';
     const weapon = entity.equipped?.[weaponSlot] ? window.items[entity.equipped[weaponSlot]] : null;
@@ -4173,6 +4189,15 @@ function aiProcess(entity) {
     // reaching the flag hex, not necessarily finding the player first.
     if (!huntTargetHex && entity.side === 'enemy' && window.arenaScenario?.type === 'flag_defend' && window.arenaScenario.flagHex) {
         huntTargetHex = window.arenaScenario.flagHex;
+    }
+
+    if (!huntTargetHex) {
+        // HUNTER/PREY: no target currently visible, but this entity may
+        // still remember hostiles it's seen before (knownOpponents) — flee,
+        // group up, or search toward their last-known position instead of
+        // idling forever. Returns null (falls through to the old idle
+        // behavior below) for anything that's never actually engaged.
+        huntTargetHex = resolveNoVisibleTargetAI(entity, opponentSide);
     }
 
     if (!huntTargetHex) {
@@ -5549,6 +5574,122 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   }
 }
 
+// HUNTER/PREY FORCE BALANCE: cheap, called only from the no-visible-target
+// branch of aiProcess (once per idle entity per turn, not a global per-tick
+// pass) — "mine" is live same-side combatants weighted by
+// combatDirective.outnumberWeight (Northwatch defenders: 2, everyone else
+// defaults to 1); "theirs" is drawn from this entity's OWN knownOpponents
+// memory (alive entries only) rather than a fresh omniscient scan, so the
+// role assessment is "roughly what I know," matching what a real combatant
+// could plausibly judge.
+function computeForceBalance(entity) {
+    const weight = e => e.combatDirective?.outnumberWeight || 1;
+    const mine = window.entities.filter(e => e.alive && e.side === entity.side && e.aiState === 'combat')
+        .reduce((s, e) => s + weight(e), 0) || weight(entity);
+    const theirs = entity.knownOpponents ?
+        [...entity.knownOpponents.values()].filter(k => k.alive).length : 0;
+    return { mine, theirs };
+}
+window.computeForceBalance = computeForceBalance;
+
+// Shared movement-scoring helper used by both hunter search and prey
+// group-up repositioning: picks the open neighbor hex that best balances
+// "closer to anchor" against "better lit, more open ground" — reusing
+// window.isHexIlluminated (hexMap.js) rather than duplicating light-source
+// math, and the same Wall/occupied penalties the normal chase-movement
+// scoring loop already applies.
+function scoreSearchNeighbor(entity, h, anchorHex, illumWeight) {
+    let s = anchorHex ? -window.distance(h, anchorHex) * 3 : 0;
+    const t = window.getTerrainAt(h.q, h.r);
+    if (t.name === 'Wall') return -1000;
+    if (t.name === 'Water') s -= 10;
+    if (getEntityAtHex(h.q, h.r)) s -= 5;
+    if (window.isHexIlluminated(h)) s += illumWeight;
+    // ANTI-OSCILLATION: a hex this entity's own search lit up moments ago
+    // scores worse, so it doesn't ping-pong between two nearby bright spots
+    // (e.g. in and out of the same doorway). Perf-gated: __searchIllumCache
+    // is only ever created/written here, inside the hunter-search path — a
+    // fight that never reaches hunter/prey mode never touches it.
+    const key = `${h.q},${h.r}`;
+    const stamped = window.__searchIllumCache?.get(key);
+    if (stamped !== undefined && (window.worldSeconds || 0) - stamped < 40) s -= illumWeight * 1.5;
+    return s;
+}
+
+function bestSearchHex(entity, anchorHex, illumWeight) {
+    const neighbors = window.getNeighbors(entity.hex.q, entity.hex.r).filter(isOpenHex);
+    if (neighbors.length === 0) return null;
+    const best = neighbors.map(h => ({ h, s: scoreSearchNeighbor(entity, h, anchorHex, illumWeight) }))
+        .sort((a, b) => b.s - a.s)[0].h;
+    if (!window.__searchIllumCache) window.__searchIllumCache = new Map();
+    window.__searchIllumCache.set(`${best.q},${best.r}`, window.worldSeconds || 0);
+    return best;
+}
+
+// Called from aiProcess only once a turn already has no visible target
+// (huntTargetHex would otherwise be null) — decides what an entity with
+// SOME memory of the fight (knownOpponents non-empty) should do instead of
+// idling forever. Returns a hex to move toward, or null to fall back to the
+// original idle behavior (entities that never actually saw a hostile this
+// fight are untouched by any of this).
+function resolveNoVisibleTargetAI(entity, opponentSide) {
+    if (!entity.knownOpponents || entity.knownOpponents.size === 0) return null;
+    const aliveKnown = [...entity.knownOpponents.values()].filter(k => k.alive);
+    if (aliveKnown.length === 0) return null; // everyone it ever saw is confirmed dead — nothing left to hunt or flee
+
+    let nearest = aliveKnown[0], nearestDist = window.distance(entity.hex, nearest.hex);
+    aliveKnown.forEach(k => {
+        const d = window.distance(entity.hex, k.hex);
+        if (d < nearestDist) { nearestDist = d; nearest = k; }
+    });
+
+    const { mine, theirs } = computeForceBalance(entity);
+    const isPrey = theirs >= mine * 2;
+
+    if (isPrey) {
+        // Reluctant to flee: a defender-weighted entity (outnumberWeight>1)
+        // needs a much starker mismatch before it runs; everyone else flees
+        // once genuinely swamped. Either way this branch only runs with NO
+        // visible enemy this turn — "out of immediate fighting" is already
+        // guaranteed by how aiProcess reaches this function.
+        const fleeThreshold = (entity.combatDirective?.outnumberWeight || 1) > 1 ? 4 : 2.5;
+        if (theirs >= mine * fleeThreshold) {
+            const threatRadius = entity.combatDirective?.threatRadius || 3;
+            if (nearestDist >= threatRadius * 10) {
+                // Far enough from every known-alive hostile to call it: drop
+                // out of the fight entirely rather than running forever.
+                entity.aiState = 'idle';
+                if (entity.combatDirective) entity.combatDirective.mode = null;
+                return null;
+            }
+            const neighbors = window.getNeighbors(entity.hex.q, entity.hex.r).filter(isOpenHex);
+            if (neighbors.length === 0) return null;
+            return neighbors.sort((a, b) => window.distance(b, nearest.hex) - window.distance(a, nearest.hex))[0];
+        }
+        // GROUP UP: head for the nearest living ally, then once close,
+        // nudge toward better (lit, open) ground. Directive-level fallbacks
+        // like Northwatch's retreatTo already short-circuit earlier in
+        // aiProcess, so this only covers entities with no such order.
+        const allies = window.entities.filter(e => e.alive && e !== entity && e.side === entity.side && e.aiState === 'combat');
+        if (allies.length > 0) {
+            allies.sort((a, b) => window.distance(entity.hex, a.hex) - window.distance(entity.hex, b.hex));
+            if (window.distance(entity.hex, allies[0].hex) > 2) return allies[0].hex;
+        }
+        return bestSearchHex(entity, nearest.hex, 8);
+    }
+
+    // HUNTER: search near the last place this opponent was actually seen.
+    // Group vs. spread both reuse the same anchor-approach scoring — group
+    // biases toward staying close to the nearest ally (a small pull baked
+    // into a lower illumination weight so distance-to-anchor still
+    // dominates), spread just leans harder on illumination/ground since it
+    // isn't trying to stay bunched.
+    const borderlineStronger = mine < theirs * 1.5;
+    const illumWeight = borderlineStronger ? 6 : 10;
+    return bestSearchHex(entity, nearest.hex, illumWeight);
+}
+window.resolveNoVisibleTargetAI = resolveNoVisibleTargetAI;
+
 // Does any (conscious, alive) entity in this opponent list have heal
 // capability? Reuses the exact same skill key the AI's own self-heal check
 // already keys off (learn_heal). Extracted as a named function so it can be
@@ -5648,6 +5789,15 @@ function handleLethalDamage(target, attacker) {
     target.alive = false; window.showMessage(`${target.name} defeated!`);
     if (window.triggerScreenShake) window.triggerScreenShake();
     const side = target.side;
+
+    // PERCEPTION MEMORY: only touches entities that actually remembered this
+    // target (most won't), not a global sweep — tells anyone who once saw
+    // this target that it's dead now, even if they haven't laid eyes on the
+    // corpse themselves.
+    window.entities.forEach(e => {
+        const known = e.knownOpponents?.get(target.id);
+        if (known) known.alive = false;
+    });
 
     // Leave a harvestable corpse behind for animal-tagged kills (see
     // leaveCorpse/harvestCorpse in resources.js) — gated on Knowledge:
