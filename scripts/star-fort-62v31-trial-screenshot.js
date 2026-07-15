@@ -1,15 +1,13 @@
 #!/usr/bin/env node
-// A single trial: the real, fixed 31-defender Northwatch roster (built by
-// buildNorthwatchFort — no test-side equipment overrides, no randomization)
-// against 62 attackers, no player. Doesn't stop at the first apparent
-// resolution if HP is still actively changing — only ends when either side
-// is wiped, or total HP across both sides has been completely flat for a
-// long stretch (a genuine stalemate/standoff), so a fight that's still
-// actually being fought never gets cut off early.
+// Same 62-attacker vs the real 31-defender roster trial, but watches for
+// the moment total HP goes flat (the stalemate found last run) and
+// captures screenshots right around it, so we can actually see what the
+// two sides are doing (or not doing) when the fight stops.
 const path = require('path');
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
 const http = require('http');
+const fs = require('fs');
 const BASE_URL = 'http://localhost:3000';
 
 function waitForServer(url, timeoutMs = 15000) {
@@ -35,10 +33,23 @@ async function ensureServer() {
     }
 }
 
+async function takeScreenshot(page, label, outDir) {
+    await page.evaluate(() => {
+        window.cameraZoom = 0.5;
+        window.cameraFollowEnabled = false;
+        window.centerCameraOn(window.campaign2NorthwatchCenter);
+    });
+    await page.waitForTimeout(200);
+    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+    const shotPath = path.join(outDir, `${label}.png`);
+    await page.screenshot({ path: shotPath });
+    console.log(`  Screenshot saved: ${shotPath}`);
+}
+
 async function main() {
     const serverProc = await ensureServer();
     const browser = await chromium.launch({ headless: true });
-    const page = await browser.newPage();
+    const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
     await page.addInitScript(() => { window.console.log = () => {}; });
     await page.goto(BASE_URL + '/');
     await page.waitForSelector('#race-select', { state: 'visible' });
@@ -51,11 +62,11 @@ async function main() {
     await page.click('#character-screen-modal .close-btn');
     await page.waitForFunction(() => window.campaign2NorthwatchFortRegion && window.campaign2NorthwatchGateHex);
 
+    const outDir = path.join(__dirname, '..', 'scratchpad-screens');
+
     console.log('Setting up 62 attackers vs the real 31-defender roster (no player)...');
     const setup = await page.evaluate(() => {
         const center = window.campaign2NorthwatchCenter;
-        // The REAL garrison, exactly as buildNorthwatchFort left it — no
-        // equipment overrides, no re-rolling. Just reset to full HP/alive.
         const defenders = window.entities.filter(e => e.factionTag === 'northwatch_human' && e.alive !== undefined);
         defenders.forEach(e => {
             e.hp = e.maxHp; e.alive = true; e.unconscious = false;
@@ -102,13 +113,24 @@ async function main() {
         window.isInCombat = true;
         window.currentTurnEntity = null;
         window.isPausedForReaction = false;
-        // "No player" means no human controlling anything — window.player
-        // just needs to point at a harmless anchor entity so any code that
-        // reads it (rendering, isVisibleToPlayer) doesn't crash on null;
-        // it's never actually driven or given special treatment here.
         window.player = attackers[0];
         window.__simDefenders = defenders;
         window.__simAttackers = attackers;
+
+        // Force-explore the fort area + always-visible entities, same fix
+        // used for the retreat-trigger screenshots — otherwise fog of war
+        // (no real 'player'-side entity exists in this sim) blanks the shot.
+        const region = window.campaign2NorthwatchFortRegion;
+        const keepRegion = window.campaign2NorthwatchKeepRegion;
+        if (!window.exploredHexes) window.exploredHexes = new Set();
+        [...region.floorHexes, ...region.wallHexes, ...keepRegion.floorHexes, ...keepRegion.wallHexes]
+            .forEach(h => window.exploredHexes.add(`${h.q},${h.r}`));
+        for (let dq = -40; dq <= 40; dq += 2) {
+            for (let dr = -40; dr <= 40; dr += 2) {
+                if (Math.abs(dq) + Math.abs(dr) <= 44) window.exploredHexes.add(`${center.q + dq},${center.r + dr}`);
+            }
+        }
+        window.isVisibleToPlayer = () => true;
 
         return {
             defenderCount: defenders.length,
@@ -117,15 +139,17 @@ async function main() {
             attackerStartHp: attackers.reduce((a, e) => a + e.hp, 0),
         };
     });
-    console.log(`  Defenders: ${setup.defenderCount} (expect 31). Attackers: ${setup.attackerCount}.`);
+    console.log(`  Defenders: ${setup.defenderCount}. Attackers: ${setup.attackerCount}.`);
     console.log(`  Starting HP: defenders=${setup.defenderStartHp}, attackers=${setup.attackerStartHp}.\n`);
 
     const MAX_TICKS = 60000;
-    const STABLE_TICKS_TO_STOP = 3000; // total HP unchanged this many ticks in a row = real standoff
+    const STABLE_TICKS_TO_STOP = 3000;
     let ticks = 0;
     let lastTotalHp = null;
     let flatSince = 0;
     let winner = null;
+    let flatlineOnsetTick = null;
+    const shotsToken = { before: false, onset: false, after: false };
 
     console.log('Running (checking every 500 ticks)...');
     while (ticks < MAX_TICKS) {
@@ -153,10 +177,30 @@ async function main() {
             if (snap.defAliveCount === 0 && snap.atkAliveCount === 0) { winner = 'mutual wipe'; break; }
 
             if (lastTotalHp !== null && snap.totalHp === lastTotalHp) {
+                if (!shotsToken.onset) {
+                    flatlineOnsetTick = ticks;
+                    console.log(`  >>> HP just went flat at tick ${ticks} — capturing screenshot`);
+                    await takeScreenshot(page, `flatline-onset-tick${ticks}`, outDir);
+                    shotsToken.onset = true;
+                }
                 flatSince += 500;
+                if (flatSince === 1500 && !shotsToken.after) {
+                    console.log(`  >>> Still flat 1000 ticks later (tick ${ticks}) — capturing confirmation screenshot`);
+                    await takeScreenshot(page, `flatline-confirmed-tick${ticks}`, outDir);
+                    shotsToken.after = true;
+                }
                 if (flatSince >= STABLE_TICKS_TO_STOP) { winner = 'stalemate (HP stable, stopping)'; break; }
             } else {
+                if (!shotsToken.before) {
+                    // Take one "still actively fighting" reference shot the
+                    // first time we see real change, so there's a clear
+                    // before/after contrast.
+                    console.log(`  (still active at tick ${ticks} — capturing reference screenshot)`);
+                    await takeScreenshot(page, `still-active-tick${ticks}`, outDir);
+                    shotsToken.before = true;
+                }
                 flatSince = 0;
+                shotsToken.onset = false; // HP moved again — any future flatline needs a fresh onset shot
             }
             lastTotalHp = snap.totalHp;
         }
@@ -169,7 +213,7 @@ async function main() {
         const defAlive = defenders.filter(e => e.alive && !e.fled && !e.disengaged);
         const atkAlive = attackers.filter(e => e.alive && !e.fled && !e.disengaged);
         return {
-            defAliveCount: defAlive.length, defAliveNames: defAlive.map(e => e.name),
+            defAliveCount: defAlive.length,
             atkAliveCount: atkAlive.length,
             defDead: defenders.filter(e => !e.alive).length,
             defFled: defenders.filter(e => e.fled).length,
@@ -179,10 +223,9 @@ async function main() {
         };
     });
 
-    console.log(`\n=== RESULT: ${winner} at tick ${ticks} ===`);
+    console.log(`\n=== RESULT: ${winner} at tick ${ticks} (flatline onset: ${flatlineOnsetTick ?? 'n/a'}) ===`);
     console.log(`Defenders: ${final.defAliveCount}/31 alive, ${final.defDead} dead, ${final.defFled} fled. Commander alive: ${final.commanderAlive}`);
     console.log(`Attackers: ${final.atkAliveCount}/62 alive, ${final.atkDead} dead, ${final.atkFled} fled.`);
-    if (final.defAliveCount > 0 && final.defAliveCount <= 15) console.log(`Surviving defenders: ${final.defAliveNames.join(', ')}`);
 
     await browser.close();
     if (serverProc) serverProc.kill();
