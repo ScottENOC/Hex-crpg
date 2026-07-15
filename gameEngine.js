@@ -3846,7 +3846,16 @@ function aiProcess(entity) {
                         if (shieldId) entity.equipped.offhand = shieldId;
                     }
                 }
-            } else if (nearestOpponentDist > 1 && currentWeapon && currentWeapon.subType !== 'ranged') {
+            // meleeTriggerHexes guards this branch too now — otherwise an
+            // entity that just drew melee because an opponent reached a
+            // trigger hex (e.g. the commander, an archer post) would flip
+            // straight back to ranged the very next aiProcess pass, since
+            // nearestOpponentDist alone doesn't know she's still needed in
+            // melee at a hex that isn't her own. Found via a real test
+            // failure, not assumed: two logged aiProcess passes for the
+            // same turn, first correctly drew the sword, second immediately
+            // undid it with no re-check of opponentInTriggerHexes at all.
+            } else if (nearestOpponentDist > 1 && !opponentInTriggerHexes && currentWeapon && currentWeapon.subType !== 'ranged') {
                 const rangedId = entity.inventory.find(id => window.items[id]?.subType === 'ranged');
                 if (rangedId) {
                     entity.equipped.weapon = rangedId;

@@ -3703,147 +3703,129 @@ function buildNorthwatchFort(turnHex) {
     // breached" feel at any fort size.
     const RETREAT_TRIGGER_COUNT = Math.max(5, Math.round(fortInterior.size * 0.015));
     window.campaign2NorthwatchRetreatTriggerCount = RETREAT_TRIGGER_COUNT; // exposed for testability
-    const wallPatrolPath = fortRegion.wallHexes.filter((h, i) => i % 3 === 0); // a sparse loop, not every single wall hex
-    // Collected so the melee-triangle formation (below, once the hexagon
-    // archer posts exist) can reassign each of these individually, instead
-    // of every retreating soldier heading for one shared point.
-    const wallDefenders = [];
-    (window.campaign2FortSoldiers || []).forEach((spec, i) => {
-        const postHex = wallPatrolPath[i % wallPatrolPath.length] || fortRegion.wallHexes[0];
-        const soldier = window.buildNPC({ ...spec, hex: { q: postHex.q, r: postHex.r } });
-        soldier.behaviorType = 'patrol';
-        soldier.patrolPath = wallPatrolPath;
-        soldier.homeHex = { ...postHex };
-        soldier.factionTag = 'northwatch_human'; // the "unforgivable act" hostility flip (gameEngine.js) keys off this
-        soldier.combatDirective = {
-            hostileTo: 'enemy', // these soldiers are side:'neutral' toward the player — this is who they actually fight
-            // Trained garrison holding prepared ground counts double toward
-            // the hunter/prey force-balance check (aiProcess) — a lone
-            // raider facing 9 of these should read as heavily outmatched,
-            // not 1-vs-9 on paper only.
-            outnumberWeight: 2,
-            constraints: { stayWithinHexes: fortInterior },
-            priorities: [
-                { type: 'nearHex', hex: gateHex, radius: 3 },
-                { type: 'insideRegion', hexes: fortInterior },
-            ],
-            // SURGE REINFORCEMENT (aiProcess): with nothing threatening its
-            // own post, a soldier marches toward whichever faction-mate is
-            // most outnumbered instead of just holding a quiet stretch of
-            // wall — lets the garrison actually respond to a concentrated
-            // or multi-point assault rather than fighting it piecemeal.
-            canReinforce: true,
-            retreatTo: { q: center.q, r: center.r },
-            contingencies: [{
-                id: 'retreat_if_walls_overrun',
-                when: () => window.entities.filter(e =>
-                    e.alive && e.side === 'enemy' && fortInterior.has(`${e.hex.q},${e.hex.r}`)
-                ).length >= RETREAT_TRIGGER_COUNT,
-            }],
-        };
-        window.entities.push(soldier);
-        wallDefenders.push(soldier);
-    });
-
-    // CORNER DEFENDERS: one extra soldier posted at each of the star's 6
-    // convex tips (the outermost hex of each wedge) and 6 concave notches
-    // (where the wall dips back in between two adjacent wedges) — a corner,
-    // by definition, is wherever the wall's local direction changes, and
-    // those are exactly the 12 points this identifies. Snapped to the
-    // nearest real wall hex rather than assumed to land on one exactly,
-    // since the notch position is only an approximation (the true
-    // wall ring's shape near two adjacent wedges isn't a clean formula).
+    // A FIXED, NON-RANDOM 31-DEFENDER ROSTER — replaces the old cycling-
+    // named-spec assignment (which left equipment effectively randomized
+    // per post depending on which of the 6 named specs' own gear a given
+    // tactical slot happened to land on). Every post in a given ROLE now
+    // gets the exact same, deterministic loadout; only the name (cycled
+    // through the same 6 named characters, in the same fixed order every
+    // time) varies for flavor. Roles, by post:
+    //   1  commander            — center, bow + sword/shield (unchanged)
+    //   6  hexagon-point archers  — standing right in the keep's own 6 gap
+    //      hexes (not one hex back), bow + dagger backup
+    //  12  wide-tip archers      — 2 per wedge tip, flanking its center
+    //      line, bow + dagger backup
+    //   6  true-corner archers   — one per wedge-to-wedge outer boundary,
+    //      bow + sword/shield backup
+    //   6  notch swordsmen       — the 6 concave notches (closest the wall
+    //      gets to the keep), sword/shield, no bow
+    // 1+6+12+6+6 = 31.
     const nearestWallHex = (target) => fortRegion.wallHexes.reduce(
         (best, h) => window.distance(h, target) < window.distance(best, target) ? h : best, fortRegion.wallHexes[0]);
-    const cornerPosts = [];
-    const notchWallHexes = []; // the 6 concave notches — closest the outer wall ever gets to the keep
-    STAR_FORT_DIRECTIONS.forEach((dir, i) => {
-        const tip = { q: center.q + dir.q * (CORE_RADIUS + POINT_LENGTH), r: center.r + dir.r * (CORE_RADIUS + POINT_LENGTH) };
-        cornerPosts.push(nearestWallHex(tip));
-        const nextDir = STAR_FORT_DIRECTIONS[(i + 1) % 6];
-        const notchTarget = {
-            q: center.q + Math.round((dir.q + nextDir.q) / 2 * (CORE_RADIUS + 1)),
-            r: center.r + Math.round((dir.r + nextDir.r) / 2 * (CORE_RADIUS + 1)),
-        };
-        const notchWallHex = nearestWallHex(notchTarget);
-        cornerPosts.push(notchWallHex);
-        notchWallHexes.push(notchWallHex);
-    });
+    const NAME_POOL = [
+        { name: 'Halric', gender: 'male' }, { name: 'Wenna', gender: 'female' }, { name: 'Dunstan', gender: 'male' },
+        { name: 'Ysolt', gender: 'female' }, { name: 'Bram', gender: 'male' }, { name: 'Cadha', gender: 'female' },
+    ];
+    const ARCHER_DAGGER_LOADOUT = {
+        classLevels: ['fighter'], skillPicks: ['health', 'bow_hit', 'bow_dmg', 'light_armor_training'],
+        equipment: ['dagger', 'bow', 'light_armor'],
+    };
+    const ARCHER_SWORDSHIELD_LOADOUT = {
+        classLevels: ['fighter'], skillPicks: ['health', 'bow_hit', 'bow_dmg', 'sword_hit', 'shield_proficiency', 'light_armor_training'],
+        equipment: ['sword', 'wooden_shield', 'bow', 'light_armor'],
+    };
+    const SWORDSMAN_LOADOUT = {
+        classLevels: ['fighter'], skillPicks: ['health', 'sword_hit', 'sword_dmg', 'shield_proficiency', 'light_armor_training'],
+        equipment: ['sword', 'wooden_shield', 'light_armor'],
+    };
+    let nameIdx = 0;
+    function nextDefender(roleLabel, roleIdx, loadout, postHex) {
+        const person = NAME_POOL[nameIdx % NAME_POOL.length]; nameIdx++;
+        const defender = window.buildNPC({
+            name: person.name, title: 'Border Soldier', race: 'human', gender: person.gender,
+            side: 'neutral', factionId: 'silverhart_kingdom', color: '#5a5a6a',
+            hex: { q: postHex.q, r: postHex.r }, ...loadout,
+        });
+        defender.name = `${person.name} (${roleLabel} ${roleIdx + 1})`;
+        defender.behaviorType = 'guard';
+        defender.homeHex = { ...postHex };
+        defender.factionTag = 'northwatch_human';
+        return defender;
+    }
 
-    // LADDERS: one at each of the 6 notches above — a wall defender ordered
-    // to fall back (retreat_if_walls_overrun, below) has to get down off
+    // LADDERS: one at each of the 6 notches — a wall defender ordered to
+    // fall back (retreat_if_walls_overrun, below) has to get down off
     // Climbable Wall terrain first, and without a ladder that's real
     // climbing-down friction (see the extra TP cost on the retreat step,
     // gameEngine.js), same as climbing up already costs. A ladder at the
     // point closest to the keep gives the wall garrison a fast way down
     // right where they're already falling back toward, instead of forcing
     // every retreat through a slow climb.
+    const notchWallHexes = [];
+    STAR_FORT_DIRECTIONS.forEach((dir, i) => {
+        const nextDir = STAR_FORT_DIRECTIONS[(i + 1) % 6];
+        const notchTarget = {
+            q: center.q + Math.round((dir.q + nextDir.q) / 2 * (CORE_RADIUS + 1)),
+            r: center.r + Math.round((dir.r + nextDir.r) / 2 * (CORE_RADIUS + 1)),
+        };
+        notchWallHexes.push(nearestWallHex(notchTarget));
+    });
     notchWallHexes.forEach(wallHex => {
         const interiorHex = fortRegion.floorHexes.reduce(
             (best, h) => window.distance(h, wallHex) < window.distance(best, wallHex) ? h : best, fortRegion.floorHexes[0]);
         window.tileObjects[`${wallHex.q},${wallHex.r}`] = { type: 'ladder', interiorHex: { ...interiorHex } };
     });
     window.campaign2NorthwatchLadderHexes = notchWallHexes.map(h => ({ ...h }));
-    cornerPosts.forEach((postHex, i) => {
-        const spec = (window.campaign2FortSoldiers || [])[i % (window.campaign2FortSoldiers || []).length];
-        if (!spec) return;
-        const defender = window.buildNPC({ ...spec, name: `${spec.name} (Wall Corner ${i + 1})`, hex: { q: postHex.q, r: postHex.r } });
-        defender.behaviorType = 'guard';
-        defender.homeHex = { ...postHex };
-        defender.factionTag = 'northwatch_human';
-        defender.combatDirective = {
-            hostileTo: 'enemy',
-            outnumberWeight: 2,
-            constraints: { stayWithinHexes: fortInterior },
-            priorities: [{ type: 'nearHex', hex: gateHex, radius: 3 }, { type: 'insideRegion', hexes: fortInterior }],
-            canReinforce: true,
-            retreatTo: { q: center.q, r: center.r },
-            contingencies: [{
-                id: 'retreat_if_walls_overrun',
-                when: () => window.entities.filter(e => e.alive && e.side === 'enemy' && fortInterior.has(`${e.hex.q},${e.hex.r}`)).length >= RETREAT_TRIGGER_COUNT,
-            }],
+
+    // WEDGE-TIP posts: 2 wide-tip archers flanking each tip's own center
+    // line, plus 1 true-corner archer where this wedge's outer flank meets
+    // the next wedge's (the outer-radius mirror of the notch calculation
+    // above, which is the inner-radius version of the same "where the wall's
+    // direction changes" idea).
+    const wideTipPosts = [];
+    const trueCornerPosts = [];
+    STAR_FORT_DIRECTIONS.forEach((dir, i) => {
+        const tipCenter = { q: center.q + dir.q * (CORE_RADIUS + POINT_LENGTH), r: center.r + dir.r * (CORE_RADIUS + POINT_LENGTH) };
+        const lateralA = STAR_FORT_DIRECTIONS[(i + 2) % 6];
+        const lateralB = STAR_FORT_DIRECTIONS[(i + 4) % 6];
+        wideTipPosts.push(nearestWallHex({ q: tipCenter.q + lateralA.q * 2, r: tipCenter.r + lateralA.r * 2 }));
+        wideTipPosts.push(nearestWallHex({ q: tipCenter.q + lateralB.q * 2, r: tipCenter.r + lateralB.r * 2 }));
+
+        const nextDir = STAR_FORT_DIRECTIONS[(i + 1) % 6];
+        const outerCornerTarget = {
+            q: center.q + Math.round((dir.q + nextDir.q) / 2 * (CORE_RADIUS + POINT_LENGTH)),
+            r: center.r + Math.round((dir.r + nextDir.r) / 2 * (CORE_RADIUS + POINT_LENGTH)),
         };
-        window.entities.push(defender);
-        wallDefenders.push(defender);
+        trueCornerPosts.push(nearestWallHex(outerCornerTarget));
     });
 
-    // HEXAGON-POINT ARCHERS: one at each of the keep's 6 corners, posted
-    // one hex inward from the gap they cover (a real floor hex on the
-    // keep's own boundary, per carveHexKeep — the gap sits at radius+1,
-    // this post at radius). Ordered "don't move unless an enemy is
-    // adjacent" over the usual gate/interior priorities: they hold their
-    // post covering the gap, and only fall back to the hexagon's center
-    // once melee is actually on top of them.
-    const keepFloorInterior = new Set(keepRegion.floorHexes.map(h => `${h.q},${h.r}`));
-
+    // HEXAGON-POINT ARCHERS: standing right in the keep's own 6 gap hexes
+    // (carveHexKeep's gapHexes, radius+1 — the opening itself, not one hex
+    // back from it). Ordered "don't move unless an enemy is adjacent" over
+    // the usual gate/interior priorities: they hold the gap, and only fall
+    // back to the hexagon's center once melee is actually on top of them.
+    //
     // Verified directly (a Playwright-driven audit, not assumed): with
-    // lightLevel forced to full daylight, every one of the 6 archer posts
-    // below has a clear, unbroken sightline 10+ hexes straight down its own
-    // point — comfortably past the keep's own gap and well into the star's
-    // open core, more than enough to cover anyone approaching the keep. The
-    // only thing a post *can't* see past is its own wedge's own outer wall,
-    // which is correct — that's the wall doing its job, not a placement
-    // bug. A live-game report of one post "seeing out" and another not is
-    // therefore much more likely night-time vision-range falloff (light
-    // strongly caps LIVE_VISION_RANGE, hexMap.js) than a geometry problem —
-    // not something a different hex to stand on would fix.
+    // lightLevel forced to full daylight, every one of these posts has a
+    // clear, unbroken sightline 10+ hexes straight down its own point —
+    // comfortably past the gap and well into the star's open core, more
+    // than enough to cover anyone approaching the keep. The only thing a
+    // post can't see past is its own wedge's own outer wall, which is
+    // correct — that's the wall doing its job, not a placement bug.
+    const keepFloorInterior = new Set(keepRegion.floorHexes.map(h => `${h.q},${h.r}`));
+    const keepFloorAndGaps = new Set([...keepRegion.floorHexes, ...keepRegion.gapHexes].map(h => `${h.q},${h.r}`));
     const hexagonArchers = [];
     STAR_FORT_DIRECTIONS.forEach((dir, i) => {
-        const postHex = { q: center.q + dir.q * 4, r: center.r + dir.r * 4 };
-        const spec = (window.campaign2FortSoldiers || [])[i % (window.campaign2FortSoldiers || []).length];
-        if (!spec) return;
-        const archer = window.buildNPC({ ...spec, name: `${spec.name} (Keep Archer ${i + 1})`, hex: { q: postHex.q, r: postHex.r } });
-        archer.behaviorType = 'guard';
-        archer.homeHex = { ...postHex };
-        archer.factionTag = 'northwatch_human';
+        const postHex = keepRegion.gapHexes[i];
+        const archer = nextDefender('Point Archer', i, ARCHER_DAGGER_LOADOUT, postHex);
         archer.isHexagonArcher = true; // commander's fallen-archer reposition trigger (below) keys off this
         archer.skills = archer.skills || {};
         archer.skills.bow_cover = 1; // cover_fire (gameEngine.js) — free use the instant the wall garrison falls back
         archer.combatDirective = {
             hostileTo: 'enemy',
             outnumberWeight: 2,
-            constraints: { stayWithinHexes: keepFloorInterior },
-            priorities: [{ type: 'nearHex', hex: postHex, radius: 0 }, { type: 'insideRegion', hexes: keepFloorInterior }],
+            constraints: { stayWithinHexes: keepFloorAndGaps },
+            priorities: [{ type: 'nearHex', hex: postHex, radius: 0 }, { type: 'insideRegion', hexes: keepFloorAndGaps }],
             retreatTo: { q: center.q, r: center.r },
             contingencies: [{
                 id: 'fall_back_to_hexagon_center',
@@ -3854,6 +3836,33 @@ function buildNorthwatchFort(turnHex) {
         hexagonArchers.push(archer);
     });
 
+    // The remaining 24 wall-ring defenders (12 wide-tip archers + 6 true-
+    // corner archers + 6 notch swordsmen) all share the same standing
+    // orders: hold post, prioritize the gate, and fall back once the walls
+    // are overrun — collected here so the melee-triangle formation below
+    // can reassign each of their retreat points individually.
+    const wallDefenders = [];
+    function addWallRingDefender(roleLabel, roleIdx, loadout, postHex) {
+        const defender = nextDefender(roleLabel, roleIdx, loadout, postHex);
+        defender.combatDirective = {
+            hostileTo: 'enemy',
+            outnumberWeight: 2,
+            constraints: { stayWithinHexes: fortInterior },
+            priorities: [{ type: 'nearHex', hex: gateHex, radius: 3 }, { type: 'insideRegion', hexes: fortInterior }],
+            canReinforce: true,
+            retreatTo: { q: center.q, r: center.r }, // reassigned below, once the melee-triangle slots exist
+            contingencies: [{
+                id: 'retreat_if_walls_overrun',
+                when: () => window.entities.filter(e => e.alive && e.side === 'enemy' && fortInterior.has(`${e.hex.q},${e.hex.r}`)).length >= RETREAT_TRIGGER_COUNT,
+            }],
+        };
+        window.entities.push(defender);
+        wallDefenders.push(defender);
+    }
+    wideTipPosts.forEach((postHex, i) => addWallRingDefender('Tip Archer', i, ARCHER_DAGGER_LOADOUT, postHex));
+    trueCornerPosts.forEach((postHex, i) => addWallRingDefender('Flank Archer', i, ARCHER_SWORDSHIELD_LOADOUT, postHex));
+    notchWallHexes.forEach((postHex, i) => addWallRingDefender('Notch Guard', i, SWORDSMAN_LOADOUT, postHex));
+
     // MELEE TRIANGLE FORMATION: each hexagon-point archer gets 3 melee
     // posts 2 hexes away (inward, and inward-rotated ±60° — the same
     // lateral-direction convention the corner-notch math above already
@@ -3862,11 +3871,9 @@ function buildNorthwatchFort(turnHex) {
     // the archer now has 3 melee defenders within a single move of them —
     // a real 3-on-1 pincer at the point of breach, not the 1-on-1 a flat
     // "everyone retreats to the same hex" produces. 6 points * 3 = 18
-    // slots, assigned round-robin across the 18 existing wall-ring
-    // defenders (6 patrol + 12 corner) collected above.
+    // slots, assigned round-robin across the 24 wall-ring defenders above.
     const meleeTriangleSlots = [];
     hexagonArchers.forEach((archer, i) => {
-        const dir = STAR_FORT_DIRECTIONS[i];
         const inward = STAR_FORT_DIRECTIONS[(i + 3) % 6];
         const lateralA = STAR_FORT_DIRECTIONS[(i + 2) % 6];
         const lateralB = STAR_FORT_DIRECTIONS[(i + 4) % 6];
@@ -3925,32 +3932,13 @@ function buildNorthwatchFort(turnHex) {
     // stops you); a second pull actually opens it AND is, on its own, one
     // of the "unforgivable acts" (see gameEngine.js's pullNorthwatchGateLever/
     // setFactionHostileToPlayer) that turns the whole garrison hostile —
-    // there's no partial-suspicion state in between.
+    // there's no partial-suspicion state in between. No separate gate-guard
+    // NPCs anymore — the fixed 31-defender roster above already covers the
+    // approach to the gate (the nearest notch/flank posts), so the lever
+    // itself just needs a marker, not its own guards.
     const leverHex = { q: gateHex.q, r: gateHex.r - 1 };
     window.tileObjects[`${leverHex.q},${leverHex.r}`] = { type: 'gate_lever' };
     window.campaign2NorthwatchGateLeverHex = leverHex;
-    const leverGuardSpots = [{ q: gateHex.q - 1, r: gateHex.r - 1 }, { q: gateHex.q + 1, r: gateHex.r - 1 }];
-    leverGuardSpots.forEach((spot, i) => {
-        const spec = (window.campaign2FortSoldiers || [])[i];
-        if (!spec) return;
-        const guard = window.buildNPC({ ...spec, name: `${spec.name} (Gate Guard)`, title: 'Gate Guard', hex: spot });
-        guard.behaviorType = 'guard';
-        guard.homeHex = { ...spot };
-        guard.factionTag = 'northwatch_human';
-        guard.combatDirective = {
-            hostileTo: 'enemy',
-            outnumberWeight: 2,
-            constraints: { stayWithinHexes: fortInterior },
-            priorities: [{ type: 'nearHex', hex: gateHex, radius: 3 }, { type: 'insideRegion', hexes: fortInterior }],
-            canReinforce: true,
-            retreatTo: { q: center.q, r: center.r },
-            contingencies: [{
-                id: 'retreat_if_walls_overrun',
-                when: () => window.entities.filter(e => e.alive && e.side === 'enemy' && fortInterior.has(`${e.hex.q},${e.hex.r}`)).length >= RETREAT_TRIGGER_COUNT,
-            }],
-        };
-        window.entities.push(guard);
-    });
 
     // The siege engine already battering the north wall — visible from a
     // distance the moment the fort exists, reinforcing "under siege" before

@@ -15,7 +15,7 @@ test.describe('Northwatch fort soldiers: combat directive', () => {
     test('a soldier is built with a directive constrained to the fort interior, gate-first priorities, and a nearby keep-side retreat point', async ({ page }) => {
         await createCharacter(page);
         const result = await page.evaluate(() => {
-            const soldier = window.entities.find(e => (window.campaign2FortSoldiers || []).some(s => s.name === e.name));
+            const soldier = window.entities.find(e => e.factionTag === 'northwatch_human' && e.combatDirective?.contingencies?.some(c => c.id === 'retreat_if_walls_overrun'));
             const region = window.campaign2NorthwatchFortRegion;
             const gate = window.campaign2NorthwatchGateHex;
             const center = window.campaign2NorthwatchCenter;
@@ -40,7 +40,7 @@ test.describe('Northwatch fort soldiers: combat directive', () => {
     test('a soldier never steps outside the fort chasing an attacker beyond the wall', async ({ page }) => {
         await createCharacter(page);
         const result = await page.evaluate(async () => {
-            const soldier = window.entities.find(e => (window.campaign2FortSoldiers || []).some(s => s.name === e.name));
+            const soldier = window.entities.find(e => e.factionTag === 'northwatch_human' && e.combatDirective?.contingencies?.some(c => c.id === 'retreat_if_walls_overrun'));
             const region = window.campaign2NorthwatchFortRegion;
             soldier.aiState = 'combat';
             soldier.timePoints = 100;
@@ -62,7 +62,7 @@ test.describe('Northwatch fort soldiers: combat directive', () => {
     test('enough hostiles inside the walls triggers the retreat contingency toward the keep', async ({ page }) => {
         await createCharacter(page);
         const result = await page.evaluate(async () => {
-            const soldier = window.entities.find(e => (window.campaign2FortSoldiers || []).some(s => s.name === e.name));
+            const soldier = window.entities.find(e => e.factionTag === 'northwatch_human' && e.combatDirective?.contingencies?.some(c => c.id === 'retreat_if_walls_overrun'));
             const region = window.campaign2NorthwatchFortRegion;
             soldier.aiState = 'combat';
             soldier.timePoints = 100;
