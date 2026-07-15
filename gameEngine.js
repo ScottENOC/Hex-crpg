@@ -3587,7 +3587,20 @@ function aiProcess(entity) {
         if (directive.passiveUnlessThreatened && !entity.wasDirectlyAttacked) {
             const opponentSideForThreat = directive.hostileTo || (entity.side === 'player' ? 'enemy' : 'player');
             const threatRadius = directive.threatRadius || 3;
-            const threatened = window.entities.some(e => e.alive && e.side === opponentSideForThreat &&
+            // meleeTriggerHexes (Northwatch's commander): "threatened" also
+            // covers an opponent closing on the hexagon/archer posts, not
+            // just her own personal radius — otherwise she'd stay passive
+            // (never even reach the WEAPON SWITCHING check below) while an
+            // archer post several hexes from her own position is overrun.
+            const threatenedNearTriggerHexes = directive.meleeTriggerHexes && window.entities.some(e => {
+                if (!e.alive || e.side !== opponentSideForThreat) return false;
+                for (const key of directive.meleeTriggerHexes) {
+                    const [q, r] = key.split(',').map(Number);
+                    if (window.distance(e.hex, { q, r }) <= 1) return true;
+                }
+                return false;
+            });
+            const threatened = threatenedNearTriggerHexes || window.entities.some(e => e.alive && e.side === opponentSideForThreat &&
                 window.distance(entity.hex, e.hex) <= threatRadius);
             if (!threatened) {
                 // `threshold` (with the quickRecovery adjustment) isn't
