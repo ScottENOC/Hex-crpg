@@ -5871,7 +5871,25 @@ function resolveNoVisibleTargetAI(entity, opponentSide) {
     // isn't trying to stay bunched.
     const borderlineStronger = mine < theirs * 1.5;
     const illumWeight = borderlineStronger ? 6 : 10;
-    return bestSearchHex(entity, nearest.hex, illumWeight);
+
+    // STALE ANCHOR: a matched-forces fight (the case this generalized chase
+    // timeout exists for) shouldn't take a beeline toward the same
+    // last-known hex for dozens of turns and then just quietly give up —
+    // real searchers widen out once a spot doesn't pan out. Past a stuck
+    // streak, nudge the search anchor outward from the last-known position
+    // by a pseudo-random (but not per-tick-jittery — same offset for a
+    // ~10-turn stretch) amount, so it actually starts checking a
+    // different part of the area instead of orbiting one stale point.
+    const stuckTurns = entity._chaseStuckTurns || 0;
+    let anchor = nearest.hex;
+    if (stuckTurns >= 15) {
+        const bucket = Math.floor(stuckTurns / 10);
+        const seed = ((entity.id * 2654435761 + bucket * 40503) % 1000) / 1000;
+        const angle = seed * Math.PI * 2;
+        const dist = 6 + Math.floor(seed * 8);
+        anchor = { q: nearest.hex.q + Math.round(Math.cos(angle) * dist), r: nearest.hex.r + Math.round(Math.sin(angle) * dist) };
+    }
+    return bestSearchHex(entity, anchor, illumWeight);
 }
 window.resolveNoVisibleTargetAI = resolveNoVisibleTargetAI;
 
