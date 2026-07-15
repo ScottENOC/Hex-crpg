@@ -566,7 +566,13 @@ function playerMoveProcess(player, path) {
         return;
     }
 
-    if (occupant && occupant.alive && occupant.side !== player.side && isVisible) {
+    // A neutral NPC (a shopkeeper, a garrison soldier posted in a single-
+    // tile gate...) isn't a threat and shouldn't be able to physically wall
+    // off a doorway just by standing in it — only a genuine 'enemy' blocks
+    // the player's own step-by-step movement. Neutral entities still block
+    // AI pathing/targeting/attacks exactly as before; this only loosens the
+    // player's own walk-through-a-friendly-crowd case.
+    if (occupant && occupant.alive && occupant.side === 'enemy' && isVisible) {
         window.showMessage(`Path is blocked by ${occupant.name}.`);
         player.destination = null;
         finalizePlayerAction(player, true);
@@ -743,6 +749,7 @@ function playerMoveProcess(player, path) {
         }
     });
 }
+window.playerMoveProcess = playerMoveProcess;
 
 function finalizePlayerAction(player, actionHandled) {
     if (!player) return;
@@ -3354,6 +3361,75 @@ function getClimbCostMult(entity) {
 }
 window.getClimbCostMult = getClimbCostMult;
 
+// COVER FIRE (bow_cover skill, skills.js): previously a purchasable skill
+// with zero actual game effect (apply/prereq only — no mechanic anywhere
+// in the engine). Declaring a hex marks it plus its 6 neighbors (7 hexes
+// total) as a zone that costs the declared-hostile side extra TP to move
+// through, until it expires. Deliberately a flat list rather than per-side
+// bookkeeping elsewhere: nothing else needs to know about a zone except
+// getMoveCostMult (below), which is the one place every movement TP cost
+// in the game already funnels through.
+window.coverFireZones = window.coverFireZones || [];
+const COVER_FIRE_TP_COST = 5;
+const COVER_FIRE_EXTRA_MOVE_TP = 4;
+const COVER_FIRE_DURATION_SECONDS = 15; // approximates "until your next turn"
+
+function deployCoverFire(caster, targetHex, opts = {}) {
+    if (!caster || !targetHex) return false;
+    const free = !!opts.free;
+    if (!free) {
+        if ((caster.timePoints || 0) < COVER_FIRE_TP_COST) return false;
+        spendTP(caster, COVER_FIRE_TP_COST);
+    }
+    const hexes = new Set([`${targetHex.q},${targetHex.r}`]);
+    window.getNeighbors(targetHex.q, targetHex.r).forEach(h => hexes.add(`${h.q},${h.r}`));
+    const affectsSide = caster.combatDirective?.hostileTo || (caster.side === 'player' ? 'enemy' : 'player');
+    window.coverFireZones.push({
+        hexes, affectsSide,
+        expiresAt: (window.worldSeconds || 0) + COVER_FIRE_DURATION_SECONDS,
+        casterName: caster.name,
+    });
+    if (window.showMessage) {
+        window.showMessage(`${caster.name} lays down covering fire!`);
+    }
+    return true;
+}
+window.deployCoverFire = deployCoverFire;
+
+// Fired once, the instant Northwatch's wall garrison first falls back
+// (aiProcess's contingency check, above): every inner-fort defender who
+// holds cover_fire (the 6 hexagon-point archers + the commander, granted
+// the skill at spawn in buildNorthwatchFort) gets one free (0 TP) covering
+// shot centered on their own post, plus a commander announcement in the
+// message log — the "orders covering fire" beat, readable without any new
+// UI since showMessage already drives the existing log panel.
+function triggerNorthwatchCoveringFire() {
+    const inner = (window.entities || []).filter(e =>
+        e.alive && e.factionTag === 'northwatch_human' && e.skills?.bow_cover &&
+        (e.isHexagonArcher || e.name === 'Commander Ysolde Hart'));
+    const commander = inner.find(e => e.name === 'Commander Ysolde Hart') ||
+        (window.entities || []).find(e => e.alive && e.name === 'Commander Ysolde Hart');
+    if (commander && window.showMessage) {
+        window.showMessage(`${commander.name} orders: "Covering fire!"`);
+    }
+    inner.forEach(e => deployCoverFire(e, e.homeHex || e.hex, { free: true }));
+}
+window.triggerNorthwatchCoveringFire = triggerNorthwatchCoveringFire;
+
+function activeCoverFirePenalty(q, r, entity) {
+    if (!window.coverFireZones || window.coverFireZones.length === 0) return 0;
+    const now = window.worldSeconds || 0;
+    // Lazily drop expired zones instead of a separate sweep/interval — cheap
+    // since this list is only ever a handful of entries long at once.
+    window.coverFireZones = window.coverFireZones.filter(z => z.expiresAt > now);
+    const key = `${q},${r}`;
+    const entitySide = entity?.side || 'enemy';
+    for (const zone of window.coverFireZones) {
+        if (zone.hexes.has(key) && zone.affectsSide === entitySide) return COVER_FIRE_EXTRA_MOVE_TP;
+    }
+    return 0;
+}
+
 function getMoveCostMult(q, r, entity) {
     const terrain = window.getTerrainAt(q, r);
     let mult = terrain.moveCostMult || 1;
@@ -3364,6 +3440,12 @@ function getMoveCostMult(q, r, entity) {
     if (obj && (obj.type === 'fence_h' || obj.type === 'fence_v')) {
         mult *= 1.6;
     }
+    // Cover fire (above): a flat +4 TP surcharge folded into the multiplier
+    // since every call site already does `baseCost(5) * mult` — +4/5 = 0.8
+    // reproduces the flat surcharge for the standard 5-TP-per-hex step cost
+    // this engine uses everywhere movement is charged.
+    const coverPenalty = activeCoverFirePenalty(q, r, entity);
+    if (coverPenalty > 0) mult += coverPenalty / 5;
     // A palisade wall is meant to actually stop most people — but a ladder
     // propped against it, or real climbing skill, makes it a real (if
     // still slow) way over instead of requiring the fully-impassable 'Wall'
@@ -3538,7 +3620,17 @@ function aiProcess(entity) {
     if (entity.combatDirective) {
         const directive = entity.combatDirective;
         (directive.contingencies || []).forEach(c => {
-            if (c.when(entity)) directive.mode = 'retreat';
+            if (c.when(entity)) {
+                directive.mode = 'retreat';
+                // First time ANY wall defender's walls-overrun contingency
+                // trips, the inner-fort garrison (hexagon archers + the
+                // commander, who all hold cover_fire) get one free covering
+                // shot each — see triggerNorthwatchCoveringFire below.
+                if (c.id === 'retreat_if_walls_overrun' && !window.northwatchRetreatCalled) {
+                    window.northwatchRetreatCalled = true;
+                    if (window.triggerNorthwatchCoveringFire) window.triggerNorthwatchCoveringFire();
+                }
+            }
         });
         // Sticky by design: once the walls are overrun, the whole garrison
         // permanently falls back to make its stand at the chokepoint
@@ -3569,9 +3661,20 @@ function aiProcess(entity) {
         const opponentAdjacent = window.entities.some(e => e.alive && e.side === opponentSideForRetreat &&
             window.distance(entity.hex, e.hex) <= 1);
         if (directive.mode === 'retreat' && directive.retreatTo && !atRetreatPoint && !opponentAdjacent) {
+            // CLIMBING DOWN: a wall defender's retreat step off Climbable
+            // Wall terrain costs real extra TP, same friction climbing UP
+            // already has — unless a ladder (campaign2World.js's notch
+            // placements) is right where they're standing, in which case
+            // it's a normal step. Checked against the CURRENT hex (the one
+            // being left), not the destination — this models "getting down
+            // off the wall," not "walking near one."
+            const leavingTerrain = window.getTerrainAt(entity.hex.q, entity.hex.r);
+            const hasLadderHere = leavingTerrain.climbRisk &&
+                window.tileObjects?.[`${entity.hex.q},${entity.hex.r}`]?.type === 'ladder';
+            const climbDownCost = leavingTerrain.climbRisk && !hasLadderHere ? 25 : 10;
             const next = window.stepToward(entity.hex, directive.retreatTo);
             if (next && isOpenHex(next)) { entity.hex = next; entity._lastMoveTick = window.worldSeconds || 0; }
-            spendTP(entity, 10);
+            spendTP(entity, climbDownCost);
             window.currentTurnEntity = null;
             window.gamePhase = 'WAITING';
             return;

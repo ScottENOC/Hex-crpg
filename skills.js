@@ -1631,7 +1631,7 @@ function generateWeaponSkills(id, label, maxDmgRanks = 1) {
         };
         s[`bow_cover`] = {
             name: 'Cover Fire',
-            description: 'Active (15 TP): Declare a 3-hex zone. Enemies entering pay 4 extra TP to move through it until your next turn.',
+            description: 'Active (5 TP): Declare a hex — it and its 6 neighbors become a 7-hex zone. Enemies entering pay 4 extra TP to move through it until your next turn.',
             tree: 'weapons',
             maxRanks: 1,
             active: true,

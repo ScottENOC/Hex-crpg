@@ -3652,6 +3652,23 @@ function buildNorthwatchFort(turnHex) {
     const fortRegion = carveStarFort(center.q, center.r, CORE_RADIUS, POINT_LENGTH, 4, gateHex, 'Wood Floor', 'Climbable Wall');
     window.interiorRegions.push(fortRegion);
 
+    // A real, closable gate at the south point instead of just an
+    // always-open gap in the wall — reuses the existing door system
+    // (toggleDoor/attackDoor, campaign2World.js) rather than a bespoke
+    // mechanic. Gated by standing with the crown, not a hard lock: any
+    // player who hasn't actively turned the garrison hostile (the gate-
+    // lever "unforgivable act", or the siege's own hostility flip) can
+    // still open it to reach the commander — this represents a guard
+    // waving a recognized, non-hostile visitor through, not a puzzle.
+    window.setTerrainAt(gateHex.q, gateHex.r, 'Climbable Wall');
+    window.tileObjects[`${gateHex.q},${gateHex.r}`] = {
+        type: 'door_closed', lightRadius: 0, locked: false,
+        hp: 40, maxHp: 40,
+        closedTerrain: 'Climbable Wall', openTerrain: 'Wood Floor',
+        accessThreshold: { faction: 'silverhart_kingdom', standing: -20 },
+        accessDeniedMessage: "The gate guards won't open up for you.",
+    };
+
     // Regular hexagon, gapped at each of its 6 corners rather than a single
     // door — an attacker who breaches the outer wall still has to fight
     // through one of 6 chokepoints to reach the keep interior, not walk
@@ -3687,6 +3704,10 @@ function buildNorthwatchFort(turnHex) {
     const RETREAT_TRIGGER_COUNT = Math.max(5, Math.round(fortInterior.size * 0.015));
     window.campaign2NorthwatchRetreatTriggerCount = RETREAT_TRIGGER_COUNT; // exposed for testability
     const wallPatrolPath = fortRegion.wallHexes.filter((h, i) => i % 3 === 0); // a sparse loop, not every single wall hex
+    // Collected so the melee-triangle formation (below, once the hexagon
+    // archer posts exist) can reassign each of these individually, instead
+    // of every retreating soldier heading for one shared point.
+    const wallDefenders = [];
     (window.campaign2FortSoldiers || []).forEach((spec, i) => {
         const postHex = wallPatrolPath[i % wallPatrolPath.length] || fortRegion.wallHexes[0];
         const soldier = window.buildNPC({ ...spec, hex: { q: postHex.q, r: postHex.r } });
@@ -3721,6 +3742,7 @@ function buildNorthwatchFort(turnHex) {
             }],
         };
         window.entities.push(soldier);
+        wallDefenders.push(soldier);
     });
 
     // CORNER DEFENDERS: one extra soldier posted at each of the star's 6
@@ -3734,6 +3756,7 @@ function buildNorthwatchFort(turnHex) {
     const nearestWallHex = (target) => fortRegion.wallHexes.reduce(
         (best, h) => window.distance(h, target) < window.distance(best, target) ? h : best, fortRegion.wallHexes[0]);
     const cornerPosts = [];
+    const notchWallHexes = []; // the 6 concave notches — closest the outer wall ever gets to the keep
     STAR_FORT_DIRECTIONS.forEach((dir, i) => {
         const tip = { q: center.q + dir.q * (CORE_RADIUS + POINT_LENGTH), r: center.r + dir.r * (CORE_RADIUS + POINT_LENGTH) };
         cornerPosts.push(nearestWallHex(tip));
@@ -3742,8 +3765,25 @@ function buildNorthwatchFort(turnHex) {
             q: center.q + Math.round((dir.q + nextDir.q) / 2 * (CORE_RADIUS + 1)),
             r: center.r + Math.round((dir.r + nextDir.r) / 2 * (CORE_RADIUS + 1)),
         };
-        cornerPosts.push(nearestWallHex(notchTarget));
+        const notchWallHex = nearestWallHex(notchTarget);
+        cornerPosts.push(notchWallHex);
+        notchWallHexes.push(notchWallHex);
     });
+
+    // LADDERS: one at each of the 6 notches above — a wall defender ordered
+    // to fall back (retreat_if_walls_overrun, below) has to get down off
+    // Climbable Wall terrain first, and without a ladder that's real
+    // climbing-down friction (see the extra TP cost on the retreat step,
+    // gameEngine.js), same as climbing up already costs. A ladder at the
+    // point closest to the keep gives the wall garrison a fast way down
+    // right where they're already falling back toward, instead of forcing
+    // every retreat through a slow climb.
+    notchWallHexes.forEach(wallHex => {
+        const interiorHex = fortRegion.floorHexes.reduce(
+            (best, h) => window.distance(h, wallHex) < window.distance(best, wallHex) ? h : best, fortRegion.floorHexes[0]);
+        window.tileObjects[`${wallHex.q},${wallHex.r}`] = { type: 'ladder', interiorHex: { ...interiorHex } };
+    });
+    window.campaign2NorthwatchLadderHexes = notchWallHexes.map(h => ({ ...h }));
     cornerPosts.forEach((postHex, i) => {
         const spec = (window.campaign2FortSoldiers || [])[i % (window.campaign2FortSoldiers || []).length];
         if (!spec) return;
@@ -3764,6 +3804,7 @@ function buildNorthwatchFort(turnHex) {
             }],
         };
         window.entities.push(defender);
+        wallDefenders.push(defender);
     });
 
     // HEXAGON-POINT ARCHERS: one at each of the keep's 6 corners, posted
@@ -3774,6 +3815,18 @@ function buildNorthwatchFort(turnHex) {
     // post covering the gap, and only fall back to the hexagon's center
     // once melee is actually on top of them.
     const keepFloorInterior = new Set(keepRegion.floorHexes.map(h => `${h.q},${h.r}`));
+
+    // Verified directly (a Playwright-driven audit, not assumed): with
+    // lightLevel forced to full daylight, every one of the 6 archer posts
+    // below has a clear, unbroken sightline 10+ hexes straight down its own
+    // point — comfortably past the keep's own gap and well into the star's
+    // open core, more than enough to cover anyone approaching the keep. The
+    // only thing a post *can't* see past is its own wedge's own outer wall,
+    // which is correct — that's the wall doing its job, not a placement
+    // bug. A live-game report of one post "seeing out" and another not is
+    // therefore much more likely night-time vision-range falloff (light
+    // strongly caps LIVE_VISION_RANGE, hexMap.js) than a geometry problem —
+    // not something a different hex to stand on would fix.
     const hexagonArchers = [];
     STAR_FORT_DIRECTIONS.forEach((dir, i) => {
         const postHex = { q: center.q + dir.q * 4, r: center.r + dir.r * 4 };
@@ -3784,6 +3837,8 @@ function buildNorthwatchFort(turnHex) {
         archer.homeHex = { ...postHex };
         archer.factionTag = 'northwatch_human';
         archer.isHexagonArcher = true; // commander's fallen-archer reposition trigger (below) keys off this
+        archer.skills = archer.skills || {};
+        archer.skills.bow_cover = 1; // cover_fire (gameEngine.js) — free use the instant the wall garrison falls back
         archer.combatDirective = {
             hostileTo: 'enemy',
             outnumberWeight: 2,
@@ -3799,9 +3854,38 @@ function buildNorthwatchFort(turnHex) {
         hexagonArchers.push(archer);
     });
 
+    // MELEE TRIANGLE FORMATION: each hexagon-point archer gets 3 melee
+    // posts 2 hexes away (inward, and inward-rotated ±60° — the same
+    // lateral-direction convention the corner-notch math above already
+    // uses), instead of every retreating wall soldier converging on one
+    // shared hexagon-center point. Anyone who breaches a gap and reaches
+    // the archer now has 3 melee defenders within a single move of them —
+    // a real 3-on-1 pincer at the point of breach, not the 1-on-1 a flat
+    // "everyone retreats to the same hex" produces. 6 points * 3 = 18
+    // slots, assigned round-robin across the 18 existing wall-ring
+    // defenders (6 patrol + 12 corner) collected above.
+    const meleeTriangleSlots = [];
+    hexagonArchers.forEach((archer, i) => {
+        const dir = STAR_FORT_DIRECTIONS[i];
+        const inward = STAR_FORT_DIRECTIONS[(i + 3) % 6];
+        const lateralA = STAR_FORT_DIRECTIONS[(i + 2) % 6];
+        const lateralB = STAR_FORT_DIRECTIONS[(i + 4) % 6];
+        [inward, lateralA, lateralB].forEach(d => {
+            meleeTriangleSlots.push({ q: archer.homeHex.q + d.q * 2, r: archer.homeHex.r + d.r * 2 });
+        });
+    });
+    if (meleeTriangleSlots.length > 0) {
+        wallDefenders.forEach((defender, i) => {
+            const slot = meleeTriangleSlots[i % meleeTriangleSlots.length];
+            defender.combatDirective.retreatTo = { q: slot.q, r: slot.r };
+        });
+    }
+
     if (window.campaign2NorthwatchCommander) {
         const commander = window.buildNPC({ ...window.campaign2NorthwatchCommander, hex: { q: center.q, r: center.r - 1 } });
         commander.factionTag = 'northwatch_human';
+        commander.skills = commander.skills || {};
+        commander.skills.bow_cover = 1; // cover_fire (gameEngine.js) — free use the instant the wall garrison falls back
         // Joins the fight but hangs back in the keep by default — she's a
         // commander, not a front-line soldier. Actually engages the moment
         // she's directly attacked or an enemy closes to within 3 hexes of

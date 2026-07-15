@@ -183,7 +183,7 @@ async function main() {
     // Q1 needs a per-turn actor log, which requires wrapping takeTurn BEFORE
     // combat starts. Do that as a separate, small page so it doesn't
     // interfere with the Q2/Q3 pages below.
-    {
+    if (process.env.ONLY_Q2 !== '1') {
         const page = await bootPage(browser);
         await page.evaluate(() => {
             window.__actionLog = [];
@@ -224,7 +224,7 @@ async function main() {
     }
 
     // Q3: retreat ON vs retreat OFF, a few trials each.
-    {
+    if (process.env.ONLY_Q2 !== '1') {
         const page = await bootPage(browser);
         console.log('=== Q3: retreat contingency ON vs OFF ===');
         for (const disableRetreat of [false, true]) {
