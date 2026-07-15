@@ -6448,11 +6448,18 @@ function checkCombatEnd() {
 
     // Only check for ACTIVE enemies — a fled enemy (markFled, above) counts
     // the same as a dead one here: it's not coming back to this fight, so
-    // it shouldn't be able to permanently block resolution.
-    const aliveEnemies = window.entities.filter(e => e.side === 'enemy' && e.alive && !e.fled);
+    // it shouldn't be able to permanently block resolution. A merely
+    // `disengaged` one (the no-credit "both sides gave up searching"
+    // timeout, resolveNoVisibleTargetAI) is excluded too, for the same
+    // reason: it's not an active combatant anymore either, even though
+    // nobody "won" against it specifically — without this, a fight could
+    // correctly stop chasing (the AI fix) yet still never be reported as
+    // over, since a disengaged-but-technically-alive entity would go on
+    // blocking this check forever.
+    const aliveEnemies = window.entities.filter(e => e.side === 'enemy' && e.alive && !e.fled && !e.disengaged);
     console.log(`[ARENA] checkCombatEnd â€” isInArena=${window.isInArena} aliveEnemies=${aliveEnemies.length} totalEntities=${window.entities.length}`);
     if (aliveEnemies.length > 0) console.log('[ARENA] checkCombatEnd: enemies still alive, no transition');
-    if (!window.entities.some(e => e.side === 'enemy' && e.alive && !e.fled)) {
+    if (!window.entities.some(e => e.side === 'enemy' && e.alive && !e.fled && !e.disengaged)) {
         // Ambush is over — armor protection applies again.
         window.entities.forEach(e => { if (e.caughtOffGuard) e.caughtOffGuard = false; });
 

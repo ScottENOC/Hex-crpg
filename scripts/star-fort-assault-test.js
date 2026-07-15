@@ -213,8 +213,12 @@ async function bootPage(browser) {
                     // A fled combatant (gameEngine.js's markFled) is done as
                     // far as this fight's outcome goes — same as dead, per
                     // "fleeing should be much the same as being defeated."
-                    const defAlive = defenders.filter(e => e.alive && !e.fled).length;
-                    const atkAlive = attackers.filter(e => e.alive && !e.fled).length;
+                    // A merely `disengaged` one (the no-credit "both sides
+                    // gave up searching" timeout) is excluded from this loop
+                    // condition too — otherwise a fight that correctly
+                    // stopped chasing could still never register as over.
+                    const defAlive = defenders.filter(e => e.alive && !e.fled && !e.disengaged).length;
+                    const atkAlive = attackers.filter(e => e.alive && !e.fled && !e.disengaged).length;
                     if (snapshotTicks.has(ticks)) {
                         formationLog.push({ tick: ticks, defenders: snapshotFormation(defenders), attackers: snapshotFormation(attackers) });
                     }
@@ -235,10 +239,12 @@ async function bootPage(browser) {
                     };
                 });
 
-                const defendersAlive = defenders.filter(e => e.alive && !e.fled).length;
-                const attackersAlive = attackers.filter(e => e.alive && !e.fled).length;
+                const defendersAlive = defenders.filter(e => e.alive && !e.fled && !e.disengaged).length;
+                const attackersAlive = attackers.filter(e => e.alive && !e.fled && !e.disengaged).length;
                 const defendersFled = defenders.filter(e => e.fled).length;
                 const attackersFled = attackers.filter(e => e.fled).length;
+                const defendersDisengaged = defenders.filter(e => e.disengaged && !e.fled).length;
+                const attackersDisengaged = attackers.filter(e => e.disengaged && !e.fled).length;
                 const defenderEndHp = defenders.reduce((a, e) => a + Math.max(0, e.hp), 0);
                 const attackerEndHp = attackers.reduce((a, e) => a + Math.max(0, e.hp), 0);
                 let winner;
@@ -252,7 +258,7 @@ async function bootPage(browser) {
                     defenderHpFractionRemaining: defenderStartHp ? defenderEndHp / defenderStartHp : 0,
                     attackerHpFractionRemaining: attackerStartHp ? attackerEndHp / attackerStartHp : 0,
                     defenderKills: defenders.reduce((a, e) => a + (e.simKills || 0), 0),
-                    defendersFled, attackersFled,
+                    defendersFled, attackersFled, defendersDisengaged, attackersDisengaged,
                     commanderKills: commander ? (commander.simKills || 0) : null,
                     commanderSurvived: commander ? commander.alive : null,
                     formationLog,
@@ -304,7 +310,7 @@ async function main() {
             window.aiSiegeSim.runAssault(attackerCount, maxTicks, numDirections, spawnRadius, commanderThreatRadius),
             { attackerCount, maxTicks, numDirections, spawnRadius, commanderThreatRadius });
         outcomes.push(r);
-        console.log(`trial ${t + 1}: winner=${r.winner.padEnd(10)} defenders ${r.defendersAlive}/${r.defendersTotal} (${(r.defenderHpFractionRemaining * 100).toFixed(0)}% hp, ${r.defendersFled} fled)  attackers ${r.attackersAlive}/${r.attackersTotal} (${(r.attackerHpFractionRemaining * 100).toFixed(0)}% hp, ${r.attackersFled} fled)  ticks=${r.ticks}  defenderKills=${r.defenderKills}  commanderKills=${r.commanderKills}${r.commanderSurvived === false ? ' (commander died)' : ''}`);
+        console.log(`trial ${t + 1}: winner=${r.winner.padEnd(10)} defenders ${r.defendersAlive}/${r.defendersTotal} (${(r.defenderHpFractionRemaining * 100).toFixed(0)}% hp, ${r.defendersFled} fled, ${r.defendersDisengaged} gave up)  attackers ${r.attackersAlive}/${r.attackersTotal} (${(r.attackerHpFractionRemaining * 100).toFixed(0)}% hp, ${r.attackersFled} fled, ${r.attackersDisengaged} gave up)  ticks=${r.ticks}  defenderKills=${r.defenderKills}  commanderKills=${r.commanderKills}${r.commanderSurvived === false ? ' (commander died)' : ''}`);
         const retreated = r.retreatSummary.filter(s => s.retreated);
         const madeIt = r.retreatSummary.filter(s => s.madeIt);
         const diedEnRoute = r.retreatSummary.filter(s => s.diedEnRoute);
