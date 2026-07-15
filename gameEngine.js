@@ -3998,31 +3998,39 @@ function aiProcess(entity) {
     // the distance, so the pure "flee until 10x threatRadius away" rule
     // (resolveNoVisibleTargetAI) never fires either, since it only ever
     // runs once nobody's visible. Track how many consecutive turns this
-    // entity has been both severely outnumbered AND not actually adjacent
-    // to anyone (i.e. "still just being chased/chasing, not fighting");
-    // once that drags on too long regardless of visibility, resolve it the
-    // same way as a successful escape — nobody, hunter or hunted, keeps a
-    // dogged chase up forever.
+    // entity has gone without actually being adjacent-and-in-LOS to a live
+    // opponent (i.e. "still just searching/being chased, not fighting").
+    // Severely outnumbered resolves fast, via markFled (a real escape,
+    // grants XP/siege credit like any other flee). But an evenly-matched
+    // stalemate — neither side finding the other, force balance roughly
+    // even — was still able to freeze forever under the old outnumbered-
+    // only rule, since it never qualifies as "severely outnumbered." That
+    // gets a longer, no-credit timeout instead: both sides just give up
+    // the search, since nobody actually won anything.
     {
         const { mine, theirs } = computeForceBalance(entity);
         const fleeThreshold = (entity.combatDirective?.outnumberWeight || 1) > 1 ? 4 : 2.5;
+        const severelyOutnumbered = theirs >= mine * fleeThreshold;
         // Line-of-sight matters here, not just raw hex distance — an
         // opponent one hex away on the far side of a wall is "adjacent" by
         // distance alone but can never actually be fought, which otherwise
         // perpetually resets this counter for an entity boxed in near a
         // wall/corner and prevents the chase timeout from ever firing.
         const adjacent = opponents.some(o => window.distance(entity.hex, o.hex) <= 1 && canSee(entity, o));
-        if (!adjacent && theirs >= mine * fleeThreshold) {
+        if (!adjacent && theirs > 0) {
             entity._chaseStuckTurns = (entity._chaseStuckTurns || 0) + 1;
             // 200 here previously meant 200 of THIS entity's own turns — for
             // an isolated straggler that only gets a turn once every several
             // hundred ticks (normal TP regen), that's tens of thousands of
             // ticks before it ever fires, well past any real fight's tick
-            // budget. 20 resolves a genuine deadlock in a few thousand ticks
-            // instead, without meaningfully affecting a fight that's still
-            // actively being fought (adjacent resets the counter every turn).
-            if (entity._chaseStuckTurns >= 20) {
-                markFled(entity);
+            // budget. These smaller counts resolve a genuine deadlock in a
+            // few thousand ticks instead, without meaningfully affecting a
+            // fight that's still actively being fought (adjacent resets the
+            // counter every turn).
+            const timeoutTurns = severelyOutnumbered ? 20 : 60;
+            if (entity._chaseStuckTurns >= timeoutTurns) {
+                if (severelyOutnumbered) markFled(entity);
+                else { entity.disengaged = true; if (entity.combatDirective) entity.combatDirective.mode = null; }
                 entity._chaseStuckTurns = 0;
                 window.currentTurnEntity = null;
                 window.gamePhase = 'WAITING';
