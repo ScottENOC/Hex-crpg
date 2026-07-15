@@ -168,7 +168,12 @@ async function runPartA(page, maxTicks) {
                 diedEnRoute: !!rec.diedEnRoute,
                 distFromKeepAtDeath: rec.distFromKeepAtDeath ?? null,
                 hexesWalkedSinceTrigger: rec.hexesWalkedSinceTrigger ?? null,
+                hexesWalkedTotal: e._hexesWalked,
                 stillAlive: e.alive,
+                currentDistToKeep: e.alive ? window.distance(e.hex, center) : null,
+                currentMode: e.combatDirective?.mode ?? null,
+                fled: !!e.fled,
+                disengaged: !!e.disengaged,
             };
         });
         const defendersAlive = defenders.filter(e => e.alive && !e.fled && !e.disengaged).length;
@@ -273,12 +278,17 @@ async function main() {
     const diedEnRoute = retreated.filter(s => s.diedEnRoute);
     console.log(`  ${diedEnRoute.length} died en route (cut down before reaching the keep):`);
     diedEnRoute.forEach(s => console.log(`    ${s.name}: started ${s.startDistToKeep} hexes from keep, walked ~${s.hexesWalkedSinceTrigger} hexes since triggering, died ${s.distFromKeepAtDeath} hexes from keep`));
+    const stillAliveNotArrived = retreated.filter(s => s.stillAlive && !s.madeIt);
+    console.log(`  ${stillAliveNotArrived.length} triggered retreat, still alive, NOT yet arrived at end of run:`);
+    stillAliveNotArrived.forEach(s => console.log(`    ${s.name}: started ${s.startDistToKeep} hexes out, walked ${s.hexesWalkedTotal} hexes total, currently ${s.currentDistToKeep} hexes from keep, mode=${s.currentMode}, fled=${s.fled}, disengaged=${s.disengaged}`));
     console.log();
 
-    console.log('=== Q5 Part B: instant teleport-to-keep + hold (archers to gaps, rest hold interior) ===');
-    for (let t = 0; t < 3; t++) {
-        const b = await runPartB(page, 10000);
-        console.log(`  trial ${t + 1}: winner=${b.winner} ticks=${b.ticks} defAlive=${b.defendersAlive} atkAlive=${b.attackersAlive} teleportTriggered=${b.teleportDone}`);
+    if (process.env.SKIP_PART_B !== '1') {
+        console.log('=== Q5 Part B: instant teleport-to-keep + hold (archers to gaps, rest hold interior) ===');
+        for (let t = 0; t < 3; t++) {
+            const b = await runPartB(page, 10000);
+            console.log(`  trial ${t + 1}: winner=${b.winner} ticks=${b.ticks} defAlive=${b.defendersAlive} atkAlive=${b.attackersAlive} teleportTriggered=${b.teleportDone}`);
+        }
     }
 
     await browser.close();
