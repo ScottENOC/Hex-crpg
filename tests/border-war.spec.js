@@ -53,7 +53,11 @@ test.describe('The Border War: star forts, elevated terrain, destructible walls'
             const engine = window.campaign2NorthwatchSiegeEngine;
             return {
                 soldierCount: soldiers.length,
-                allPatrol: soldiers.every(s => s.behaviorType === 'patrol' && Array.isArray(s.patrolPath) && s.patrolPath.length > 0),
+                // Not every Border Soldier patrols anymore — the wall-corner
+                // and hexagon-keep-archer posts (buildNorthwatchFort) hold a
+                // static guard position instead. At least the original
+                // wall-ring patrollers should still be patrolling.
+                somePatrol: soldiers.some(s => s.behaviorType === 'patrol' && Array.isArray(s.patrolPath) && s.patrolPath.length > 0),
                 hasCommander: !!commander,
                 commanderIsNeutral: commander && commander.side === 'neutral',
                 engineExists: !!engine,
@@ -61,7 +65,7 @@ test.describe('The Border War: star forts, elevated terrain, destructible walls'
             };
         });
         expect(result.soldierCount).toBeGreaterThanOrEqual(12); // 6 soldiers x 2 forts
-        expect(result.allPatrol).toBe(true);
+        expect(result.somePatrol).toBe(true);
         expect(result.hasCommander).toBe(true);
         expect(result.commanderIsNeutral).toBe(true);
         expect(result.engineExists).toBe(true);

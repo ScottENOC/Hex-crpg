@@ -3600,6 +3600,34 @@ function buildReddale(roadEnd) {
     setWorldMapMarker(roadEnd, { t: 'G', f: 'T', o: 'h', p: 1, n: 'Reddale' });
 }
 
+// Builds a regular hexagonal keep with a gap at each of its 6 corners
+// (not mid-edge) rather than a single door — reuses the same
+// hexDisk + wallRingAroundFloor pattern carveStarFort already uses. A hex
+// disk's own corners sit exactly at center + direction*(radius+1), the
+// same 6 native directions carveStarFort already walks, so no new geometry
+// math is needed to find them. Returns the same bbox shape carveFlatRoom/
+// carveStarFort return, plus `gapHexes` (6 entries) since there's no
+// single doorHex here.
+function carveHexKeep(centerQ, centerR, radius, floorType, wallType) {
+    const floorHexes = hexDisk(centerQ, centerR, radius);
+    const wallHexes = wallRingAroundFloor(floorHexes);
+    const gapHexes = STAR_FORT_DIRECTIONS.map(dir => ({ q: centerQ + dir.q * (radius + 1), r: centerR + dir.r * (radius + 1) }));
+    wallHexes.forEach(h => window.setTerrainAt(h.q, h.r, wallType));
+    floorHexes.forEach(h => window.setTerrainAt(h.q, h.r, floorType));
+    gapHexes.forEach(h => window.setTerrainAt(h.q, h.r, floorType)); // knock the corner open
+
+    let minQ = Infinity, maxQ = -Infinity, minR = Infinity, maxR = -Infinity;
+    [...floorHexes, ...gapHexes].forEach(h => {
+        minQ = Math.min(minQ, h.q); maxQ = Math.max(maxQ, h.q);
+        minR = Math.min(minR, h.r); maxR = Math.max(maxR, h.r);
+    });
+    return {
+        minQ, maxQ, minR, maxR, lightMult: 1.0,
+        doorHex: gapHexes[0],
+        gapHexes, floorHexes, wallHexes, floorType, center: { q: centerQ, r: centerR }
+    };
+}
+
 // Northwatch Fort: the Border War's active front. A 6-pointed star fort
 // (see carveStarFort above) — a core plus 6 outward archer-platform wedges,
 // ringed by Climbable Wall (costly-but-possible, see the elevated-terrain
@@ -3620,23 +3648,23 @@ function buildNorthwatchFort(turnHex) {
     // ring) moves out proportionally too.
     const gateHex = { q: center.q, r: center.r + 19 }; // south point, facing the road
 
-    const fortRegion = carveStarFort(center.q, center.r, 6, 12, 4, gateHex, 'Wood Floor', 'Climbable Wall');
+    const CORE_RADIUS = 6, POINT_LENGTH = 12;
+    const fortRegion = carveStarFort(center.q, center.r, CORE_RADIUS, POINT_LENGTH, 4, gateHex, 'Wood Floor', 'Climbable Wall');
     window.interiorRegions.push(fortRegion);
 
-    // keepDoor must sit ON the keep's own real wall row, not one hex past
-    // it — halfH=2 below means the keep's floor stretches to center.r+1,
-    // so the wall ring (and therefore the door) is at center.r+2. Placing
-    // it any further out leaves a genuine, uncrossable Keep Wall hex
-    // sitting between the door and the interior (same "door built past its
-    // own wall" bug already fixed elsewhere for the throne room/rear door).
-    const keepDoor = { q: center.q, r: center.r + 2 };
-    const keepRegion = carveFlatRoom(center.q, center.r, 3, 2, keepDoor, 'Wood Floor', 'Keep Wall');
+    // Regular hexagon, gapped at each of its 6 corners rather than a single
+    // door — an attacker who breaches the outer wall still has to fight
+    // through one of 6 chokepoints to reach the keep interior, not walk
+    // straight through one gate.
+    const keepRegion = carveHexKeep(center.q, center.r, 4, 'Wood Floor', 'Keep Wall');
     window.interiorRegions.push(keepRegion);
     window.tileObjects[`${center.q},${center.r}`] = { type: 'fireplace', lightRadius: 6 };
 
     window.campaign2NorthwatchCenter = center;
     window.campaign2NorthwatchFortRegion = fortRegion;
     window.campaign2NorthwatchGateHex = gateHex;
+    window.campaign2NorthwatchKeepRegion = keepRegion;
+    window.campaign2NorthwatchKeepGaps = keepRegion.gapHexes;
 
     // Garrison: patrol the wall ring out of combat (behaviorType 'patrol'
     // over the fort's own wallHexes, same mechanism as any other patrol
@@ -3684,6 +3712,82 @@ function buildNorthwatchFort(turnHex) {
         window.entities.push(soldier);
     });
 
+    // CORNER DEFENDERS: one extra soldier posted at each of the star's 6
+    // convex tips (the outermost hex of each wedge) and 6 concave notches
+    // (where the wall dips back in between two adjacent wedges) — a corner,
+    // by definition, is wherever the wall's local direction changes, and
+    // those are exactly the 12 points this identifies. Snapped to the
+    // nearest real wall hex rather than assumed to land on one exactly,
+    // since the notch position is only an approximation (the true
+    // wall ring's shape near two adjacent wedges isn't a clean formula).
+    const nearestWallHex = (target) => fortRegion.wallHexes.reduce(
+        (best, h) => window.distance(h, target) < window.distance(best, target) ? h : best, fortRegion.wallHexes[0]);
+    const cornerPosts = [];
+    STAR_FORT_DIRECTIONS.forEach((dir, i) => {
+        const tip = { q: center.q + dir.q * (CORE_RADIUS + POINT_LENGTH), r: center.r + dir.r * (CORE_RADIUS + POINT_LENGTH) };
+        cornerPosts.push(nearestWallHex(tip));
+        const nextDir = STAR_FORT_DIRECTIONS[(i + 1) % 6];
+        const notchTarget = {
+            q: center.q + Math.round((dir.q + nextDir.q) / 2 * (CORE_RADIUS + 1)),
+            r: center.r + Math.round((dir.r + nextDir.r) / 2 * (CORE_RADIUS + 1)),
+        };
+        cornerPosts.push(nearestWallHex(notchTarget));
+    });
+    cornerPosts.forEach((postHex, i) => {
+        const spec = (window.campaign2FortSoldiers || [])[i % (window.campaign2FortSoldiers || []).length];
+        if (!spec) return;
+        const defender = window.buildNPC({ ...spec, name: `${spec.name} (Wall Corner ${i + 1})`, hex: { q: postHex.q, r: postHex.r } });
+        defender.behaviorType = 'guard';
+        defender.homeHex = { ...postHex };
+        defender.factionTag = 'northwatch_human';
+        defender.combatDirective = {
+            hostileTo: 'enemy',
+            outnumberWeight: 2,
+            constraints: { stayWithinHexes: fortInterior },
+            priorities: [{ type: 'nearHex', hex: gateHex, radius: 3 }, { type: 'insideRegion', hexes: fortInterior }],
+            canReinforce: true,
+            retreatTo: { q: center.q, r: center.r },
+            contingencies: [{
+                id: 'retreat_if_walls_overrun',
+                when: () => window.entities.filter(e => e.alive && e.side === 'enemy' && fortInterior.has(`${e.hex.q},${e.hex.r}`)).length >= 5,
+            }],
+        };
+        window.entities.push(defender);
+    });
+
+    // HEXAGON-POINT ARCHERS: one at each of the keep's 6 corners, posted
+    // one hex inward from the gap they cover (a real floor hex on the
+    // keep's own boundary, per carveHexKeep — the gap sits at radius+1,
+    // this post at radius). Ordered "don't move unless an enemy is
+    // adjacent" over the usual gate/interior priorities: they hold their
+    // post covering the gap, and only fall back to the hexagon's center
+    // once melee is actually on top of them.
+    const keepFloorInterior = new Set(keepRegion.floorHexes.map(h => `${h.q},${h.r}`));
+    const hexagonArchers = [];
+    STAR_FORT_DIRECTIONS.forEach((dir, i) => {
+        const postHex = { q: center.q + dir.q * 4, r: center.r + dir.r * 4 };
+        const spec = (window.campaign2FortSoldiers || [])[i % (window.campaign2FortSoldiers || []).length];
+        if (!spec) return;
+        const archer = window.buildNPC({ ...spec, name: `${spec.name} (Keep Archer ${i + 1})`, hex: { q: postHex.q, r: postHex.r } });
+        archer.behaviorType = 'guard';
+        archer.homeHex = { ...postHex };
+        archer.factionTag = 'northwatch_human';
+        archer.isHexagonArcher = true; // commander's fallen-archer reposition trigger (below) keys off this
+        archer.combatDirective = {
+            hostileTo: 'enemy',
+            outnumberWeight: 2,
+            constraints: { stayWithinHexes: keepFloorInterior },
+            priorities: [{ type: 'nearHex', hex: postHex, radius: 0 }, { type: 'insideRegion', hexes: keepFloorInterior }],
+            retreatTo: { q: center.q, r: center.r },
+            contingencies: [{
+                id: 'fall_back_to_hexagon_center',
+                when: (e) => window.entities.some(o => o.alive && o.side === 'enemy' && window.distance(e.hex, o.hex) <= 1),
+            }],
+        };
+        window.entities.push(archer);
+        hexagonArchers.push(archer);
+    });
+
     if (window.campaign2NorthwatchCommander) {
         const commander = window.buildNPC({ ...window.campaign2NorthwatchCommander, hex: { q: center.q, r: center.r - 1 } });
         commander.factionTag = 'northwatch_human';
@@ -3693,6 +3797,12 @@ function buildNorthwatchFort(turnHex) {
         // her (passiveUnlessThreatened, aiProcess), rather than either
         // never fighting at all (the old behavior — no combatDirective) or
         // wading into the walls uninvited like the rest of the garrison.
+        // meleeTriggerHexes: read by the WEAPON SWITCHING block (aiProcess,
+        // gameEngine.js) in addition to its usual "opponent within 1 hex of
+        // me" check — she draws her sword the moment anyone's in melee
+        // reach of the hexagon interior or any of the 6 archer posts, not
+        // only once someone's literally standing next to her personally.
+        const meleeTriggerHexes = new Set([...keepFloorInterior, ...hexagonArchers.map(a => `${a.homeHex.q},${a.homeHex.r}`)]);
         commander.combatDirective = {
             hostileTo: 'enemy',
             outnumberWeight: 2,
@@ -3700,7 +3810,18 @@ function buildNorthwatchFort(turnHex) {
             passiveUnlessThreatened: true,
             threatRadius: 3,
             priorities: [{ type: 'insideRegion', hexes: fortInterior }],
+            meleeTriggerHexes,
         };
+        // FALLEN ARCHER POST: the instant the first of the 6 hexagon
+        // archers dies, the commander abandons the passive keep-center
+        // stance and moves to stand on that archer's own post (the body-
+        // marker hex left behind, gameEngine.js's death-marker system),
+        // firing her bow at anyone she can see from there. One-shot: only
+        // the FIRST archer death triggers this (checked via a flag on the
+        // commander herself so it survives independent of any other
+        // per-entity state), matching "he will go stand on the corpse of
+        // the first of those 6 archers to die."
+        commander.takeFallenArcherPostOnce = true;
         window.entities.push(commander);
     }
 

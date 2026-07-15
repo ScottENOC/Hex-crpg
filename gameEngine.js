@@ -3703,10 +3703,23 @@ function aiProcess(entity) {
             const d = window.distance(entity.hex, e.hex);
             if (d < nearestOpponentDist) nearestOpponentDist = d;
         });
-        if (nearestOpponentDist <= 40) {
+        // meleeTriggerHexes (Northwatch's commander, campaign2World.js): an
+        // extra melee-range check against a whole hex set — "someone's in
+        // reach of the hexagon interior or an archer post" — on top of the
+        // usual "someone's adjacent to me personally" one just above.
+        const meleeTriggerHexes = entity.combatDirective?.meleeTriggerHexes;
+        const opponentInTriggerHexes = meleeTriggerHexes && window.entities.some(e => {
+            if (!e.alive || e.side !== opponentSideForWeapon) return false;
+            for (const key of meleeTriggerHexes) {
+                const [q, r] = key.split(',').map(Number);
+                if (window.distance(e.hex, { q, r }) <= 1) return true;
+            }
+            return false;
+        });
+        if (nearestOpponentDist <= 40 || opponentInTriggerHexes) {
             const currentWeapon = entity.equipped?.weapon ? window.items[entity.equipped.weapon] : null;
             const isCurrentRanged = currentWeapon?.subType === 'ranged';
-            if (nearestOpponentDist <= 1 && (isCurrentRanged || !currentWeapon)) {
+            if ((nearestOpponentDist <= 1 || opponentInTriggerHexes) && (isCurrentRanged || !currentWeapon)) {
                 const meleeId = entity.inventory.find(id => { const it = window.items[id]; return it?.type === 'weapon' && it.subType !== 'ranged'; });
                 if (meleeId) {
                     const meleeItem = window.items[meleeId];
@@ -6080,6 +6093,22 @@ function handleLethalDamage(target, attacker) {
     target.alive = false; window.showMessage(`${target.name} defeated!`);
     if (window.triggerScreenShake) window.triggerScreenShake();
     const side = target.side;
+
+    // FALLEN ARCHER POST (Northwatch hexagon keep): the first of the 6
+    // hexagon-point archers to die sends the commander to take their post,
+    // per buildNorthwatchFort (campaign2World.js). One-shot, flagged on the
+    // commander herself rather than a global — reuses the existing sticky-
+    // retreat movement mechanism (aiProcess) by setting mode/retreatTo
+    // directly instead of going through a contingencies entry, since this
+    // fires from a specific death event, not a per-turn condition check.
+    if (target.isHexagonArcher) {
+        const commander = window.entities.find(e => e.alive && e.takeFallenArcherPostOnce);
+        if (commander) {
+            commander.takeFallenArcherPostOnce = false;
+            commander.combatDirective.retreatTo = { q: target.hex.q, r: target.hex.r };
+            commander.combatDirective.mode = 'retreat';
+        }
+    }
 
     // PERCEPTION MEMORY: only touches entities that actually remembered this
     // target (most won't), not a global sweep — tells anyone who once saw
