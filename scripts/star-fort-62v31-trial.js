@@ -74,19 +74,15 @@ async function main() {
         const attackerCount = 62;
         const attackerTypes = [];
         for (let i = 0; i < attackerCount; i++) attackerTypes.push(i % 2 === 0 ? 'orc' : 'goblin');
-        const SIX_DIRECTIONS = [
-            { q: 1, r: 0 }, { q: 1, r: -1 }, { q: 0, r: -1 },
-            { q: -1, r: 0 }, { q: -1, r: 1 }, { q: 0, r: 1 },
-        ];
+        // Perfectly even ring deployment: one attacker every (360/62) degrees
+        // around the fort at a fixed radius, instead of 6 clumped groups.
         const spawnRadius = 30;
-        const groupSize = Math.ceil(attackerCount / SIX_DIRECTIONS.length);
         const attackers = attackerTypes.map((type, i) => {
-            const dir = SIX_DIRECTIONS[Math.floor(i / groupSize) % SIX_DIRECTIONS.length];
-            const withinGroup = i % groupSize;
-            const hex = {
-                q: center.q + dir.q * spawnRadius + (withinGroup % 5) - 2,
-                r: center.r + dir.r * spawnRadius + Math.floor(withinGroup / 5),
-            };
+            const angle = (i / attackerCount) * Math.PI * 2;
+            const hex = window.hexRound(
+                center.q + Math.cos(angle) * spawnRadius,
+                center.r + Math.sin(angle) * spawnRadius
+            );
             const ent = window.createMonster(type, hex, null, null, 'enemy');
             ent.name = `${ent.name} ${i + 1}`;
             ent.combatDirective = { hostileTo: 'neutral' };

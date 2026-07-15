@@ -3727,15 +3727,18 @@ function buildNorthwatchFort(turnHex) {
         { name: 'Ysolt', gender: 'female' }, { name: 'Bram', gender: 'male' }, { name: 'Cadha', gender: 'female' },
     ];
     const ARCHER_DAGGER_LOADOUT = {
-        classLevels: ['fighter'], skillPicks: ['health', 'bow_hit', 'bow_dmg', 'light_armor_training'],
+        classLevels: ['fighter', 'fighter', 'fighter'],
+        skillPicks: ['health', 'health', 'health', 'bow_hit', 'bow_hit', 'bow_dmg', 'bow_dmg', 'light_armor_training'],
         equipment: ['dagger', 'bow', 'light_armor'],
     };
     const ARCHER_SWORDSHIELD_LOADOUT = {
-        classLevels: ['fighter'], skillPicks: ['health', 'bow_hit', 'bow_dmg', 'sword_hit', 'shield_proficiency', 'light_armor_training'],
+        classLevels: ['fighter', 'fighter', 'fighter'],
+        skillPicks: ['health', 'health', 'health', 'bow_hit', 'bow_dmg', 'sword_hit', 'sword_dmg', 'shield_proficiency', 'light_armor_training'],
         equipment: ['sword', 'wooden_shield', 'bow', 'light_armor'],
     };
     const SWORDSMAN_LOADOUT = {
-        classLevels: ['fighter'], skillPicks: ['health', 'sword_hit', 'sword_dmg', 'shield_proficiency', 'light_armor_training'],
+        classLevels: ['fighter', 'fighter', 'fighter'],
+        skillPicks: ['health', 'health', 'health', 'sword_hit', 'sword_hit', 'sword_dmg', 'sword_dmg', 'shield_proficiency', 'light_armor_training'],
         equipment: ['sword', 'wooden_shield', 'light_armor'],
     };
     let nameIdx = 0;
