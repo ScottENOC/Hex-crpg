@@ -3613,10 +3613,14 @@ function buildNorthwatchFort(turnHex) {
     // Short spur north off the border road to the fort's south gate.
     const SPUR_LENGTH = 24;
     for (let i = 1; i <= SPUR_LENGTH; i++) window.setTerrainAt(turnHex.q, turnHex.r - i, 'Path');
-    const center = { q: turnHex.q, r: turnHex.r - SPUR_LENGTH - 10 };
-    const gateHex = { q: center.q, r: center.r + 10 }; // south point, facing the road
+    const center = { q: turnHex.q, r: turnHex.r - SPUR_LENGTH - 19 };
+    // Roughly double the fort's original footprint (coreRadius 3->6,
+    // pointLength 6->12, pointWidth 2->4) — the tip of a wedge now sits
+    // ~coreRadius+pointLength = 18 hexes out, so gateHex (past the wall
+    // ring) moves out proportionally too.
+    const gateHex = { q: center.q, r: center.r + 19 }; // south point, facing the road
 
-    const fortRegion = carveStarFort(center.q, center.r, 3, 6, 2, gateHex, 'Wood Floor', 'Climbable Wall');
+    const fortRegion = carveStarFort(center.q, center.r, 6, 12, 4, gateHex, 'Wood Floor', 'Climbable Wall');
     window.interiorRegions.push(fortRegion);
 
     // keepDoor must sit ON the keep's own real wall row, not one hex past
@@ -3744,16 +3748,18 @@ function buildNorthwatchFort(turnHex) {
     // the real fight happens right here at the fort, not a separate arena
     // (matches every other Campaign 2 scripted encounter: farm wolves,
     // goblin camp, Ironvein raids all fight in place on the open map).
-    // Distance from center matters here beyond flavor: the wall ring sits
-    // at radius 6, bow-armed wall soldiers (campaign2FortSoldiers) have an
-    // attack range of 20 (equipment.js's bow, +2 more from firing off
-    // elevated wall terrain), and startNorthwatchSally's escorts spread up
-    // to 3 hexes out from this hex. Any closer than ~34 from center and the
-    // wall archers can snipe the whole sally the instant it goes hostile,
-    // before the player's own fight ever really starts — which is exactly
-    // why the sally always resolved as an easy defender win. 34 clears the
-    // wall's max threat radius (6 + 20 + 2 + 3 = 31) with margin to spare.
-    const siegeHex = { q: center.q, r: center.r - 34 };
+    // Distance from center matters here beyond flavor: the wall's farthest
+    // reach (coreRadius+pointLength) is now ~18 hexes, bow-armed wall
+    // soldiers (campaign2FortSoldiers) have an attack range of 20
+    // (equipment.js's bow, +2 more from firing off elevated wall terrain),
+    // and startNorthwatchSally's escorts spread up to 3 hexes out from this
+    // hex. Any closer than ~46 from center and the wall archers can snipe
+    // the whole sally the instant it goes hostile, before the player's own
+    // fight ever really starts — which is exactly why the sally always
+    // resolved as an easy defender win. 46 clears the wall's max threat
+    // radius (18 + 20 + 2 + 3 = 43) with margin to spare. (Scaled up from
+    // the fort's original ~half-size footprint, same reasoning as before.)
+    const siegeHex = { q: center.q, r: center.r - 46 };
     const siegeEngine = window.createMonster('siege_engine', siegeHex, null, null, 'neutral');
     if (siegeEngine) {
         siegeEngine.isSiegeEngine = true;
@@ -3784,12 +3790,15 @@ function buildNorthwatchFort(turnHex) {
 // follow-up, not this pass).
 function buildRidgeholdFort(roadEnd) {
     if (!roadEnd) return;
-    const center = { q: roadEnd.q + 14, r: roadEnd.r + 10 };
-    const gateHex = { q: center.q - 10, r: center.r - 4 }; // west-ish point, facing the road
+    // Scaled up to match Northwatch's roughly-doubled footprint (coreRadius
+    // 3->6, pointLength 6->12, pointWidth 2->4) for visual/tactical
+    // consistency between the two star forts.
+    const center = { q: roadEnd.q + 28, r: roadEnd.r + 20 };
+    const gateHex = { q: center.q - 20, r: center.r - 8 }; // west-ish point, facing the road
 
-    for (let q = roadEnd.q + 1; q < center.q - 8; q++) window.setTerrainAt(q, roadEnd.r + Math.round((q - roadEnd.q) * 10 / 14), 'Path');
+    for (let q = roadEnd.q + 1; q < center.q - 16; q++) window.setTerrainAt(q, roadEnd.r + Math.round((q - roadEnd.q) * 20 / 28), 'Path');
 
-    const fortRegion = carveStarFort(center.q, center.r, 3, 6, 2, gateHex, 'Wood Floor', 'Climbable Wall');
+    const fortRegion = carveStarFort(center.q, center.r, 6, 12, 4, gateHex, 'Wood Floor', 'Climbable Wall');
     window.interiorRegions.push(fortRegion);
 
     // keepDoor must sit ON the keep's own real wall row, not one hex past
