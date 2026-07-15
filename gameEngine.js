@@ -4026,8 +4026,17 @@ function aiProcess(entity) {
             // budget. These smaller counts resolve a genuine deadlock in a
             // few thousand ticks instead, without meaningfully affecting a
             // fight that's still actively being fought (adjacent resets the
-            // counter every turn).
-            const timeoutTurns = severelyOutnumbered ? 20 : 60;
+            // counter every turn). Confirmed via direct diagnostic (not
+            // committed) that a slow-cadence entity — e.g. a
+            // passiveUnlessThreatened commander, who spends most idle turns
+            // parked at reduced TP by design — can still only rack up ~20
+            // of its own turns across an entire 18000-tick fight, so even
+            // the "evenly matched" 60 was too high to reliably resolve
+            // before a fight's tick budget runs out. 30 keeps the same
+            // "give the search room to actually work" intent (still well
+            // above the 15-turn point where the anchor starts widening)
+            // while resolving in a more realistic window.
+            const timeoutTurns = severelyOutnumbered ? 20 : 30;
             if (entity._chaseStuckTurns >= timeoutTurns) {
                 if (severelyOutnumbered) markFled(entity);
                 else { entity.disengaged = true; if (entity.combatDirective) entity.combatDirective.mode = null; }
