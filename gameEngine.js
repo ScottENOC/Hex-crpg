@@ -2798,6 +2798,16 @@ function runTickInternal(isSleepCycle = false, skipUI = false, tickMultiplier = 
 
     const _partyHexesForTurnOrder = collectPartyHexes();
 
+    // PLAYER DISENGAGE: the player's own version of an AI entity fleeing —
+    // if the whole party gets and stays far enough from every hostile, the
+    // fight is over. Deliberately NOT the same as markFled: nobody died or
+    // broke, the player just walked away, so no XP for kills that didn't
+    // happen (a wolf fight abandoned mid-chase shouldn't reward you the
+    // same as one you won). See checkPlayerCombatDisengage below for the
+    // scripted-encounter exclusions (sieges etc. resolve through their own
+    // win conditions, not this generic rule).
+    if (window.isInCombat) checkPlayerCombatDisengage();
+
     // Only scan for whose turn it is when actually in combat — out of combat
     // this full-array filter ran every frame for nothing.
     const readyEntities = (window.isInCombat && !isSleepCycle)
@@ -3996,7 +4006,12 @@ function aiProcess(entity) {
     {
         const { mine, theirs } = computeForceBalance(entity);
         const fleeThreshold = (entity.combatDirective?.outnumberWeight || 1) > 1 ? 4 : 2.5;
-        const adjacent = opponents.some(o => window.distance(entity.hex, o.hex) <= 1);
+        // Line-of-sight matters here, not just raw hex distance — an
+        // opponent one hex away on the far side of a wall is "adjacent" by
+        // distance alone but can never actually be fought, which otherwise
+        // perpetually resets this counter for an entity boxed in near a
+        // wall/corner and prevents the chase timeout from ever firing.
+        const adjacent = opponents.some(o => window.distance(entity.hex, o.hex) <= 1 && canSee(entity, o));
         if (!adjacent && theirs >= mine * fleeThreshold) {
             entity._chaseStuckTurns = (entity._chaseStuckTurns || 0) + 1;
             // 200 here previously meant 200 of THIS entity's own turns — for
@@ -5660,6 +5675,47 @@ function markFled(entity) {
     }
 }
 window.markFled = markFled;
+
+// PLAYER DISENGAGE: the human player's own version of markFled — but
+// deliberately NOT markFled, and deliberately no XP. Extracting yourself
+// from a fight (a wolf you decided wasn't worth it, an ambush you outran)
+// isn't the same as winning it; the enemy is still alive and un-fled, it
+// just isn't worth chasing across the map anymore. Skips any scripted
+// encounter that already has its own real win condition (a siege resolves
+// through siegeState/pressure, not "did the player wander off") — this is
+// only for generic, unscripted combat.
+let _playerDisengageStreak = 0;
+function checkPlayerCombatDisengage() {
+    if (window.isInArena || window.borderWarSallyActive || window.siegeState?.active) {
+        _playerDisengageStreak = 0;
+        return;
+    }
+    const playerSide = window.entities.filter(e => e.alive && e.side === 'player');
+    const hostiles = window.entities.filter(e => e.alive && e.side === 'enemy' && !e.fled && !e.disengaged);
+    if (playerSide.length === 0 || hostiles.length === 0) {
+        _playerDisengageStreak = 0;
+        return;
+    }
+    let minDist = Infinity;
+    playerSide.forEach(p => hostiles.forEach(h => { minDist = Math.min(minDist, window.distance(p.hex, h.hex)); }));
+
+    const DISENGAGE_DISTANCE = 30; // same "very far away" scale as the AI flee rule (10x a typical threatRadius of 3)
+    const SUSTAINED_TICKS = 150;   // a blip crossing the line briefly shouldn't end the fight — has to stay lost
+    if (minDist >= DISENGAGE_DISTANCE) {
+        _playerDisengageStreak++;
+        if (_playerDisengageStreak >= SUSTAINED_TICKS) {
+            hostiles.forEach(h => { h.disengaged = true; }); // no markFled, no XP — nobody was defeated
+            window.isInCombat = false;
+            window.gamePhase = 'WAITING';
+            window.currentTurnEntity = null;
+            window.showMessage('You put enough distance between yourself and your foes to break off the fight.');
+            _playerDisengageStreak = 0;
+        }
+    } else {
+        _playerDisengageStreak = 0;
+    }
+}
+window.checkPlayerCombatDisengage = checkPlayerCombatDisengage;
 
 // HUNTER/PREY FORCE BALANCE: cheap, called only from the no-visible-target
 // branch of aiProcess (once per idle entity per turn, not a global per-tick

@@ -201,4 +201,40 @@ test.describe('AI perception memory + hunter/prey behavior', () => {
         });
         expect(result.fled).toBe(true);
     });
+
+    test('checkPlayerCombatDisengage: sustained distance ends the fight without XP or markFled, but only outside scripted encounters', async ({ page }) => {
+        await createCharacter(page);
+        const result = await page.evaluate(() => {
+            const playerEntity = window.entities.find(e => e.side === 'player' && !e.rider);
+            playerEntity.hex = { q: 0, r: 0 };
+            const wolf = window.createMonster('wolf', { q: 40, r: 40 }, null, null, 'enemy');
+            wolf.expValue = 15;
+            window.entities = [playerEntity, wolf];
+            window.isInCombat = true;
+            const expBefore = window.player.exp || 0;
+
+            // Scripted-encounter exclusion first: even at this distance, an
+            // active siege must NOT auto-resolve via this generic rule.
+            window.siegeState = { active: true };
+            for (let i = 0; i < 200; i++) window.checkPlayerCombatDisengage();
+            const skippedDuringSiege = window.isInCombat === true && !wolf.disengaged;
+            window.siegeState = { active: false };
+
+            for (let i = 0; i < 200; i++) window.checkPlayerCombatDisengage();
+            const expAfter = window.player.exp || 0;
+
+            return {
+                skippedDuringSiege,
+                combatEnded: window.isInCombat === false,
+                wolfDisengaged: wolf.disengaged === true,
+                wolfFled: !!wolf.fled,
+                expBefore, expAfter,
+            };
+        });
+        expect(result.skippedDuringSiege).toBe(true);
+        expect(result.combatEnded).toBe(true);
+        expect(result.wolfDisengaged).toBe(true);
+        expect(result.wolfFled).toBe(false);
+        expect(result.expAfter).toBe(result.expBefore); // no credit for an escape, not a win
+    });
 });
