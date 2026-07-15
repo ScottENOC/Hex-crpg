@@ -587,22 +587,12 @@ function playerMoveProcess(player, path) {
         }
     }
 
-    // CLIMB FAILURE (in combat only — no time pressure out of combat means
-    // guaranteed success there). Rolled once, on the actual transition onto
-    // climbRisk terrain, not on every subsequent step while already walking
-    // along the top of it. Failing costs a chunk of TP for the wasted
-    // attempt but leaves the climber right where they started.
-    if (window.isInCombat && targetTerrain.climbRisk && !window.getTerrainAt(player.hex.q, player.hex.r).climbRisk) {
-        const climbMoveEntity = player.riding || player;
-        const skillCount = countClimbingSkills(climbMoveEntity);
-        const fallChance = Math.max(0, 0.30 - 0.10 * skillCount);
-        if (Math.random() < fallChance) {
-            window.showMessage(`${player.name} loses their grip and fails to climb!`);
-            spendTP(climbMoveEntity, 10);
-            finalizePlayerAction(player, true);
-            return;
-        }
-    }
+    // Falling off a wall is now only a risk while actually being attacked
+    // mid-climb (entity.climbing, resolveAttack's fall-check) rather than a
+    // one-time pre-move roll here — a multi-turn climb (see the
+    // climbTransition branch below) makes "you're exposed for several
+    // turns and can be shot down" the real danger instead of "you might
+    // instantly fail before you even start."
 
     const previousHex = { q: player.hex.q, r: player.hex.r };
 
@@ -659,7 +649,31 @@ function playerMoveProcess(player, path) {
         }
 
         let stepCost = baseMoveCost * (player.isFlying ? 1 : terrainMult);
-        
+
+        // WALL CLIMB: entering climbRisk terrain from non-climbRisk terrain
+        // commits the climber to a multi-turn climb rather than paying the
+        // full (often ~25 TP) cost in one atomic step. They already occupy
+        // the wall hex (matches how every other status effect here works —
+        // a debuff timer on top of a real position, not a partial-position
+        // render) but are `climbing` until `ticksRequired` more TP has been
+        // spent, 1 at a time, each future turn (see takeTurn's scripted-
+        // status handling, mirroring the existing petrifiedTicks/
+        // charmedByHarpy pattern) — no further pathfinding or player
+        // decision needed per tick. `climbing.ticksRequired` banks the same
+        // total cost this single step would otherwise have charged in full.
+        const climbTransition = !player.isFlying && terrain.climbRisk && !previousTerrain.climbRisk;
+        if (climbTransition) {
+            moveEntity.climbing = {
+                fromHex: previousHex,
+                ticksRequired: Math.max(1, Math.round(stepCost)),
+                ticksSpent: 0,
+            };
+            spendTP(moveEntity, 1);
+            window.showMessage(`${player.name} begins climbing the wall.`);
+            finalizePlayerAction(player, true);
+            return;
+        }
+
         // ZONE OF CONTROL
         if (!player.isFlying) {
             const enemies = window.entities.filter(e => e.alive && e.side !== player.side && !e.isFlying);
@@ -3037,6 +3051,19 @@ function takeTurn(entity) {
         return;
     }
 
+    // CLIMBING: committed to a multi-turn wall climb (see the climbTransition
+    // branches in playerMoveProcess/aiProcess) — spend exactly 1 TP toward
+    // it and end the turn immediately, no menu/decision either way, same
+    // shape as the petrified/charmed scripted-turn cases above.
+    if (entity.climbing) {
+        spendTP(entity, 1);
+        window.currentTurnEntity = null;
+        window.gamePhase = 'WAITING';
+        window.updateTurnIndicator();
+        if (window.broadcastFullState) window.broadcastFullState();
+        return;
+    }
+
     const isSentientAlly = entity.side === 'player' && !entity.aiControlled && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(entity.name);
     if (entity.side === 'player') {
         window.gamePhase = isSentientAlly ? 'PLAYER_TURN' : 'AI_TURN';
@@ -4444,6 +4471,24 @@ function aiProcess(entity) {
                     if (entity.riding) entity.riding.hex = { q: nextHex.q, r: nextHex.r };
                 }
                 const terrain = window.getTerrainAt(entity.hex.q, entity.hex.r);
+                const previousTerrain = window.getTerrainAt(previousHex.q, previousHex.r);
+
+                // WALL CLIMB: same committed multi-turn climb as the
+                // player's own movement path (playerMoveProcess, above) —
+                // an AI entity stepping onto climbRisk terrain from
+                // non-climbRisk terrain commits to climbing instead of
+                // paying the full cost in one atomic step.
+                if (!entity.isFlying && terrain.climbRisk && !previousTerrain.climbRisk) {
+                    moveEntity.climbing = {
+                        fromHex: previousHex,
+                        ticksRequired: Math.max(1, Math.round(5 * window.getMoveCostMult(entity.hex.q, entity.hex.r, moveEntity))),
+                        ticksSpent: 0,
+                    };
+                    spendTP(moveEntity, 1);
+                    setTimeout(() => aiProcess(entity), 20);
+                    return;
+                }
+
                 let cost = 5;
                 if (moveEntity.skills['fastMovement']) {
                     const isLightOrNoArmor = !moveEntity.equipped || !moveEntity.equipped.armor || window.items[moveEntity.equipped.armor]?.id === 'light_armor';
@@ -4586,7 +4631,14 @@ function spendTP(entity, amount) {
         entity.petrifiedTicks = Math.max(0, entity.petrifiedTicks - amount);
         if (entity.petrifiedTicks <= 0) window.showMessage(`${entity.name} shatters free from the petrification!`);
     }
-    
+    if (entity.climbing) {
+        entity.climbing.ticksSpent += amount;
+        if (entity.climbing.ticksSpent >= entity.climbing.ticksRequired) {
+            window.showMessage(`${entity.name} reaches the top of the wall.`);
+            entity.climbing = null;
+        }
+    }
+
     // Stealth Penalty for movement/actions
     if (entity.isStealthed && amount > 1) {
         // Re-calculate stealth score at new position/state
@@ -5109,10 +5161,12 @@ function tryAttack(attacker, target, isFeint = false, isOffhand = false, bonusDa
 
     // ELEVATION MELEE IMMUNITY: a defender on a wall/rampart can't be melee'd
     // from the ground, and can't melee the ground from up there either —
-    // symmetric, same shape as the flying-immunity check above.
+    // symmetric, same shape as the flying-immunity check above. A climbing
+    // target is the deliberate exception: clinging to the wall face, they're
+    // reachable in melee from both the wall itself and the ground below.
     const attackerElevated = window.getTerrainAt(attacker.hex.q, attacker.hex.r).elevated;
     const targetElevated = window.getTerrainAt(target.hex.q, target.hex.r).elevated;
-    if (!isRanged && !!attackerElevated !== !!targetElevated) {
+    if (!isRanged && !target.climbing && !!attackerElevated !== !!targetElevated) {
         if (attacker.side === 'player') {
             window.showMessage(`Cannot reach ${target.name} with a melee attack across that height difference!`);
         }
@@ -5445,6 +5499,7 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   const targetTerrain = window.getTerrainAt(target.hex.q, target.hex.r);
   let hitChance = 50 + baseHit + attackerTerrain.hitBonus - (target.passiveDodge + targetTerrain.dodgeBonus);
   if (attacker.toHitVsAnimal && target.tags?.includes('animal')) hitChance += attacker.toHitVsAnimal;
+  if (target.climbing) hitChance += 5; // exposed mid-climb — can't brace or use a shield properly
   
   // FOLIAGE DEFENSE
   if (targetTerrain.name === 'Foliage') {
@@ -5558,9 +5613,12 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
 
   // Caught off-guard mid-rest: armor was off, so equipment reduction doesn't
   // apply until the ambush fight is over (see triggerRestAmbush).
+  // Mid-climb: both hands are occupied holding on, so a shield does
+  // nothing (climbing.js/gameEngine.js's climbTransition) — same gating
+  // shape as caughtOffGuard just above.
   let red = target.caughtOffGuard ? 0 : (target.baseReduction || 0) +
             (target.equipped?.armor && window.items[target.equipped.armor] ? window.items[target.equipped.armor].reduction : 0) +
-            (target.equipped?.offhand && window.items[target.equipped.offhand] && window.items[target.equipped.offhand].type === 'shield' ? (window.items[target.equipped.offhand].reduction + (target.skills?.shield_proficiency || 0)) : 0) +
+            (!target.climbing && target.equipped?.offhand && window.items[target.equipped.offhand] && window.items[target.equipped.offhand].type === 'shield' ? (window.items[target.equipped.offhand].reduction + (target.skills?.shield_proficiency || 0)) : 0) +
             (target.equipped?.helmet && window.items[target.equipped.helmet] ? (window.items[target.equipped.helmet].reduction || 0) : 0) +
             (target.tempReduction || 0) +
             (target.skills?.spectral_form ? 2 : 0);
@@ -5579,6 +5637,27 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   if (window.spawnFloatingText) window.spawnFloatingText(target.hex, `-${fd}`, '#ff4d4d');
   if (window.flashEntity) window.flashEntity(target, '#f00');
   target.hp -= fd; syncBackToPlayer(target);
+
+  // FALLING: any hit landed while climbing risks losing the wall entirely —
+  // a straight 50/50 roll (no skill mitigation modeled yet). Failure loses
+  // all climb progress, drops them back to where they started climbing,
+  // and deals 5 unmitigated (armor/shield-bypassing) damage — applied
+  // directly to hp, not run through the `red` reduction above. If that's
+  // lethal, the existing target.hp<=0 check just below calls
+  // handleLethalDamage(target, attacker) same as any other death this
+  // function causes — attacker is still the one who landed the hit that
+  // caused the fall, so the kill/XP attribution is correct for free.
+  if (target.climbing) {
+      if (Math.random() < 0.5) {
+          sharedMessage(`${target.name} loses their grip and falls!`);
+          target.hex = { ...target.climbing.fromHex };
+          target.climbing = null;
+          target.hp -= 5; syncBackToPlayer(target);
+          if (window.spawnFloatingText) window.spawnFloatingText(target.hex, `-5`, '#ff4d4d');
+      } else {
+          sharedMessage(`${target.name} clings on despite the blow!`);
+      }
+  }
 
   // UNARMED REACTION BLOCK
   if (!weapon && attacker.skills?.unarmed_reaction_block) {
