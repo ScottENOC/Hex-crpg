@@ -3961,6 +3961,7 @@ function aiProcess(entity) {
         visibleOpponents.forEach(o => {
             entity.knownOpponents.set(o.id, { hex: { q: o.hex.q, r: o.hex.r }, tick: window.worldSeconds || 0, alive: true });
         });
+        entity.disengaged = false; // a previously-disengaged entity that's back in someone's sight is back in the fight
     }
 
     // HEARING: a moving opponent can be noticed without line of sight —
@@ -5604,7 +5605,7 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
 // could plausibly judge.
 function computeForceBalance(entity) {
     const weight = e => e.combatDirective?.outnumberWeight || 1;
-    const mine = window.entities.filter(e => e.alive && e.side === entity.side && e.aiState === 'combat')
+    const mine = window.entities.filter(e => e.alive && e.side === entity.side && e.aiState === 'combat' && !e.disengaged)
         .reduce((s, e) => s + weight(e), 0) || weight(entity);
     const theirs = entity.knownOpponents ?
         [...entity.knownOpponents.values()].filter(k => k.alive).length : 0;
@@ -5653,6 +5654,7 @@ function bestSearchHex(entity, anchorHex, illumWeight) {
 // original idle behavior (entities that never actually saw a hostile this
 // fight are untouched by any of this).
 function resolveNoVisibleTargetAI(entity, opponentSide) {
+    if (entity.disengaged) return null; // already made its call — normal targeting logic re-engages it if it sees someone again
     if (!entity.knownOpponents || entity.knownOpponents.size === 0) return null;
     const aliveKnown = [...entity.knownOpponents.values()].filter(k => k.alive);
     if (aliveKnown.length === 0) return null; // everyone it ever saw is confirmed dead — nothing left to hunt or flee
@@ -5682,7 +5684,18 @@ function resolveNoVisibleTargetAI(entity, opponentSide) {
         entity._parkedTurns++;
     }
     if (entity._parkedTurns >= 8) {
-        entity.aiState = 'idle';
+        // Deliberately NOT aiState='idle' here: for a 'enemy'-side entity
+        // that flips it into the OLD idle-scan branch further up aiProcess,
+        // which only ever looks for side==='player' targets — never a
+        // directed-hostility 'neutral' opponent (e.g. Northwatch's
+        // garrison). That collision was itself the bug behind "an entity
+        // disengages and then never does anything again, forever," found by
+        // reproducing the star-fort endgame directly. `disengaged` opts out
+        // of the force-balance count (computeForceBalance) and this
+        // function returns null (no more searching/fleeing), but the
+        // entity's normal targeting/attack logic stays fully live — if
+        // someone walks back into view, it fights.
+        entity.disengaged = true;
         if (entity.combatDirective) entity.combatDirective.mode = null;
         entity._parkedTurns = 0;
         return null;
@@ -5699,8 +5712,10 @@ function resolveNoVisibleTargetAI(entity, opponentSide) {
             const threatRadius = entity.combatDirective?.threatRadius || 3;
             if (nearestDist >= threatRadius * 10) {
                 // Far enough from every known-alive hostile to call it: drop
-                // out of the fight entirely rather than running forever.
-                entity.aiState = 'idle';
+                // out of the fight entirely rather than running forever. See
+                // the _parkedTurns branch above for why this is `disengaged`
+                // rather than aiState='idle'.
+                entity.disengaged = true;
                 if (entity.combatDirective) entity.combatDirective.mode = null;
                 return null;
             }
