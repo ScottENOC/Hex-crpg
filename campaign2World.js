@@ -3675,6 +3675,17 @@ function buildNorthwatchFort(turnHex) {
     // keep once the walls are overrun rather than fighting to the last man
     // at the point of breach.
     const fortInterior = new Set([...fortRegion.floorHexes, ...fortRegion.wallHexes].map(h => `${h.q},${h.r}`));
+    // Scaled to the fort's actual footprint rather than left as a flat
+    // count: a fixed "5 hostiles anywhere inside" fit the original,
+    // smaller fort, but on the doubled footprint (interior area grows
+    // roughly with radius^2) that same count is reached almost instantly
+    // by a handful of scattered attackers, sending the entire garrison
+    // sprinting for the keep at once — over a much longer retreat
+    // distance — instead of only once the walls are genuinely overrun.
+    // ~1.5% of the interior footprint keeps the same "walls are actually
+    // breached" feel at any fort size.
+    const RETREAT_TRIGGER_COUNT = Math.max(5, Math.round(fortInterior.size * 0.015));
+    window.campaign2NorthwatchRetreatTriggerCount = RETREAT_TRIGGER_COUNT; // exposed for testability
     const wallPatrolPath = fortRegion.wallHexes.filter((h, i) => i % 3 === 0); // a sparse loop, not every single wall hex
     (window.campaign2FortSoldiers || []).forEach((spec, i) => {
         const postHex = wallPatrolPath[i % wallPatrolPath.length] || fortRegion.wallHexes[0];
@@ -3706,7 +3717,7 @@ function buildNorthwatchFort(turnHex) {
                 id: 'retreat_if_walls_overrun',
                 when: () => window.entities.filter(e =>
                     e.alive && e.side === 'enemy' && fortInterior.has(`${e.hex.q},${e.hex.r}`)
-                ).length >= 5,
+                ).length >= RETREAT_TRIGGER_COUNT,
             }],
         };
         window.entities.push(soldier);
@@ -3749,7 +3760,7 @@ function buildNorthwatchFort(turnHex) {
             retreatTo: { q: center.q, r: center.r },
             contingencies: [{
                 id: 'retreat_if_walls_overrun',
-                when: () => window.entities.filter(e => e.alive && e.side === 'enemy' && fortInterior.has(`${e.hex.q},${e.hex.r}`)).length >= 5,
+                when: () => window.entities.filter(e => e.alive && e.side === 'enemy' && fortInterior.has(`${e.hex.q},${e.hex.r}`)).length >= RETREAT_TRIGGER_COUNT,
             }],
         };
         window.entities.push(defender);
@@ -3851,7 +3862,7 @@ function buildNorthwatchFort(turnHex) {
             retreatTo: { q: center.q, r: center.r },
             contingencies: [{
                 id: 'retreat_if_walls_overrun',
-                when: () => window.entities.filter(e => e.alive && e.side === 'enemy' && fortInterior.has(`${e.hex.q},${e.hex.r}`)).length >= 5,
+                when: () => window.entities.filter(e => e.alive && e.side === 'enemy' && fortInterior.has(`${e.hex.q},${e.hex.r}`)).length >= RETREAT_TRIGGER_COUNT,
             }],
         };
         window.entities.push(guard);

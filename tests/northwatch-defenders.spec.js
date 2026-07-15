@@ -52,14 +52,18 @@ test.describe('Northwatch fort soldiers: combat directive', () => {
         expect(result.stillInside).toBe(true);
     });
 
-    test('5 hostiles inside the walls triggers the retreat contingency toward the keep', async ({ page }) => {
+    test('enough hostiles inside the walls triggers the retreat contingency toward the keep', async ({ page }) => {
         await createCharacter(page);
         const result = await page.evaluate(async () => {
             const soldier = window.entities.find(e => (window.campaign2FortSoldiers || []).some(s => s.name === e.name));
             const region = window.campaign2NorthwatchFortRegion;
             soldier.aiState = 'combat';
             soldier.timePoints = 100;
-            const interiorSpots = region.floorHexes.slice(0, 5);
+            // The trigger count scales with the fort's own footprint
+            // (campaign2World.js's RETREAT_TRIGGER_COUNT) rather than a
+            // flat number, so this reads the real live threshold instead
+            // of assuming any specific fort size.
+            const interiorSpots = region.floorHexes.slice(0, window.campaign2NorthwatchRetreatTriggerCount);
             const hostiles = interiorSpots.map(h => {
                 const orc = window.createMonster('orc', h, null, null, 'enemy');
                 orc.timePoints = 100;
