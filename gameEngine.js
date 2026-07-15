@@ -3999,7 +3999,14 @@ function aiProcess(entity) {
         const adjacent = opponents.some(o => window.distance(entity.hex, o.hex) <= 1);
         if (!adjacent && theirs >= mine * fleeThreshold) {
             entity._chaseStuckTurns = (entity._chaseStuckTurns || 0) + 1;
-            if (entity._chaseStuckTurns >= 200) {
+            // 200 here previously meant 200 of THIS entity's own turns — for
+            // an isolated straggler that only gets a turn once every several
+            // hundred ticks (normal TP regen), that's tens of thousands of
+            // ticks before it ever fires, well past any real fight's tick
+            // budget. 20 resolves a genuine deadlock in a few thousand ticks
+            // instead, without meaningfully affecting a fight that's still
+            // actively being fought (adjacent resets the counter every turn).
+            if (entity._chaseStuckTurns >= 20) {
                 markFled(entity);
                 entity._chaseStuckTurns = 0;
                 window.currentTurnEntity = null;
