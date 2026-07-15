@@ -2328,6 +2328,21 @@ function collectPartyHexes() {
 
 function isDormantAmbientNpc(e, partyHexes) {
     if (!e.isNPC || e.side !== 'neutral') return false;
+    // A directed neutral (combatDirective — e.g. Northwatch's garrison,
+    // ordered to fight the orc assault while still side:'neutral' toward
+    // the player) is never ambient background flavor, no matter how far
+    // the literal player character's own hex is from the fight. Without
+    // this, every such defender gets silently excluded from the regen
+    // sweep below for the fight's entire duration — this check measures
+    // distance to the player's own body, which has nothing to do with
+    // whether the fight itself is active. The sibling function this
+    // mirrors, isCombatDormant, already carves out the same case for
+    // 'enemy'-side entities via aiState==='combat'; this one had no
+    // equivalent escape hatch at all, so a "neutral but actively fighting"
+    // combatant like a fort soldier could never regen TP mid-siege —
+    // confirmed directly: every regen tick in a Northwatch defense sim
+    // granted attackers TP and defenders exactly zero, every time.
+    if (e.combatDirective) return false;
     for (const ph of partyHexes) {
         if (window.distance(ph, e.hex) <= ACTIVE_SIM_RADIUS) return false;
     }
@@ -3484,7 +3499,35 @@ function aiProcess(entity) {
         (directive.contingencies || []).forEach(c => {
             if (c.when(entity)) directive.mode = 'retreat';
         });
-        if (directive.mode === 'retreat' && directive.retreatTo) {
+        // Sticky by design: once the walls are overrun, the whole garrison
+        // permanently falls back to make its stand at the chokepoint
+        // (retreatTo) instead of toggling back to holding the walls the
+        // moment the hostile count dips — that's what turns "the compound"
+        // into a real fallback position instead of just another line that
+        // gets contested back and forth.
+        //
+        // But sticky mode must not mean "never fights again": only step
+        // toward retreatTo (skipping attack logic entirely) while actually
+        // still traveling there. Once arrived, fall through to the normal
+        // targeting/attack logic below — the whole point of falling back to
+        // a chokepoint is to make a stand there, not to stand down. Without
+        // this check, a defender who reached the keep would just idle at
+        // the door forever, immortalized as a target dummy in every sim run.
+        const atRetreatPoint = directive.mode === 'retreat' && directive.retreatTo &&
+            window.distance(entity.hex, directive.retreatTo) === 0;
+        // A fighting withdrawal, not a blind sprint: something already
+        // adjacent gets a free attack every single turn if retreat always
+        // just moves — a defender who tripped the contingency mid-melee
+        // would take a hit on the way out with literally no chance to
+        // fight back, over and over, until it's cut down before ever
+        // reaching the chokepoint. Only auto-step toward retreatTo when
+        // nothing is breathing down its neck right now; an adjacent
+        // opponent means falling through to the normal attack logic below
+        // instead (fight this one hex, then keep falling back next turn).
+        const opponentSideForRetreat = directive.hostileTo || (entity.side === 'player' ? 'enemy' : 'player');
+        const opponentAdjacent = window.entities.some(e => e.alive && e.side === opponentSideForRetreat &&
+            window.distance(entity.hex, e.hex) <= 1);
+        if (directive.mode === 'retreat' && directive.retreatTo && !atRetreatPoint && !opponentAdjacent) {
             const next = window.stepToward(entity.hex, directive.retreatTo);
             if (next && isOpenHex(next)) entity.hex = next;
             spendTP(entity, 10);

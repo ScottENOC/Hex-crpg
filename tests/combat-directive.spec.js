@@ -55,7 +55,7 @@ test.describe('layered combat AI: combatDirective', () => {
     test('contingency: retreat mode triggers once the hostile count inside the guarded area is reached, and redirects movement', async ({ page }) => {
         await createCharacter(page);
         const result = await page.evaluate(async () => {
-            const guardedArea = new Set(['0,0', '1,0', '2,0', '3,0', '4,0', '5,0', '-1,0']);
+            const guardedArea = new Set(['0,0', '1,0', '2,0', '3,0', '4,0', '5,0', '6,0', '-1,0']);
             const defender = window.createMonster('goblin', { q: 0, r: 0 }, null, null, 'enemy');
             defender.aiState = 'combat';
             defender.timePoints = 100;
@@ -67,7 +67,12 @@ test.describe('layered combat AI: combatDirective', () => {
                     when: (e) => window.entities.filter(en => en.alive && en.side === 'player' && guardedArea.has(`${en.hex.q},${en.hex.r}`)).length >= 5,
                 }],
             };
-            const hostiles = [1, 2, 3, 4, 5].map(i => {
+            // Nearest hostile at q=2 — not adjacent to the defender's q=0
+            // start, so this exercises the "nothing on top of me yet, just
+            // fall back" path distinctly from the fighting-withdrawal path
+            // (an adjacent opponent instead makes it stand and fight this
+            // turn, covered by the northwatch-defenders.spec.js suite).
+            const hostiles = [2, 3, 4, 5, 6].map(i => {
                 const h = window.createMonster('goblin', { q: i, r: 0 }, null, null, 'player');
                 h.timePoints = 100;
                 return h;
