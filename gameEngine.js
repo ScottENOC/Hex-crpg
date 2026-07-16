@@ -2483,6 +2483,15 @@ function tick() {
                 // the isCatapult aiProcess block are actually built for.
                 const catapult = window.campaign2NorthwatchCatapult;
                 if (catapult && catapult.alive && catapult.firesRemaining > 0) fireCatapultShot(catapult);
+                // The catapult firing itself is the only thing that ever gets
+                // a scheduled turn while the player stays passive — nothing
+                // else acts until it's spent. The instant it's gone, spawn
+                // the real assault wave (window.spawnGreenskinAssaultWave,
+                // campaign2Dialogue.js), which also flips isInCombat so the
+                // wave actually starts taking turns from here on.
+                else if (catapult && !catapult.alive && !window.greenskinWaveSpawned && window.spawnGreenskinAssaultWave) {
+                    window.spawnGreenskinAssaultWave();
+                }
             }
             if (window.warState?.active) tickWarState();
             if (window.tickUnicornWander) window.tickUnicornWander();
@@ -3802,6 +3811,9 @@ function aiProcess(entity) {
     if (entity.combatDirective?.holdPosition) {
         const catapult = window.campaign2NorthwatchCatapult;
         if (!catapult || !catapult.alive) window.greenskinAssaultTriggered = true;
+        if (window.greenskinAssaultTriggered && !window.greenskinWaveSpawned && window.spawnGreenskinAssaultWave) {
+            window.spawnGreenskinAssaultWave();
+        }
         // Once the wait-for-the-catapult posture ends, give the entity a
         // one-time siege objective (the fort itself) so it has somewhere to
         // head once it falls through to normal targeting below and finds no

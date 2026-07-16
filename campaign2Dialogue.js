@@ -3763,6 +3763,54 @@ function joinGreenskinAssault() {
 }
 window.joinGreenskinAssault = joinGreenskinAssault;
 
+// THE REAL ASSAULT: until the catapult is spent (fired out or destroyed),
+// the besieging force does nothing but wait — no wandering, no probing, no
+// combat, regardless of which path the player took (matches the original
+// design: "this goes on until the catapult is destroyed, at which point the
+// greenskins go on their normal AI of attacking the castle"). The moment
+// it's gone, this spawns the real wave and flips real turn-based combat on.
+// Guarded by window.greenskinWaveSpawned (reset false per fort at world-gen,
+// campaign2World.js) so it only ever fires once regardless of how many
+// separate call sites notice the catapult is gone (the passive real-time
+// tick when the player never engages, and the turn-based GREENSKIN HOLD
+// check when they do) — see both call sites in gameEngine.js.
+function spawnGreenskinAssaultWave() {
+    if (window.greenskinWaveSpawned) return;
+    window.greenskinWaveSpawned = true;
+    const center = window.campaign2NorthwatchCenter;
+    if (!center) return;
+    const gateHex = window.campaign2NorthwatchGateHex || center;
+    const attackerCount = 30;
+    const spawnRadius = 30;
+    for (let i = 0; i < attackerCount; i++) {
+        const type = i % 2 === 0 ? 'orc' : 'goblin';
+        const angle = (i / attackerCount) * Math.PI * 2;
+        const hex = window.hexRound(center.q + Math.cos(angle) * spawnRadius, center.r + Math.sin(angle) * spawnRadius);
+        if (window.getTerrainAt(hex.q, hex.r).impassable) continue;
+        const ent = window.createMonster(type, hex, null, null, 'enemy');
+        if (!ent) continue;
+        ent.name = `${ent.name} ${i + 1}`;
+        ent.factionTag = 'greenskin_assault';
+        // hostileTo: 'neutral' matches the catapult's own guards
+        // (campaign2World.js) — Northwatch's garrison is side:'neutral',
+        // hostileTo:'enemy'. siegeObjective gives an attacker with no
+        // memory of any defender yet somewhere real to head toward instead
+        // of idling (resolveNoVisibleTargetAI, gameEngine.js).
+        ent.combatDirective = { hostileTo: 'neutral', siegeObjective: { hex: gateHex } };
+        ent.aiControlled = true;
+        ent.aiState = 'combat';
+        ent.timePoints = 100 + Math.random() * 0.9;
+        window.entities.push(ent);
+    }
+    window.greenskinAssaultTriggered = true;
+    window.isInCombat = true; // the wave arriving is what starts real turn-based scheduling
+    window.showMessage('Horns sound in the distance — the greenskin host surges toward the walls!');
+    if (window.drawMap) window.drawMap();
+    if (window.renderEntities) window.renderEntities();
+    if (window.updateTurnIndicator) window.updateTurnIndicator();
+}
+window.spawnGreenskinAssaultWave = spawnGreenskinAssaultWave;
+
 // DEV/TEST CHEAT: reach all three border_war player-choice paths directly
 // from the Cheat menu, without playing through Voss/Hart's dialogue first —
 // teleports the party to Northwatch, makes sure the quest exists (so
@@ -3777,7 +3825,8 @@ window.joinGreenskinAssault = joinGreenskinAssault;
 // the siegeState pressure tick is what actually progresses in that case.
 function cheatTestNorthwatchSiege(mode) {
     if (window.teleportPartyToLocation) window.teleportPartyToLocation('Northwatch Fort');
-    let quest = (window.questLog || []).find(q => q.id === 'border_war');
+    if (!window.questLog) window.questLog = [];
+    let quest = window.questLog.find(q => q.id === 'border_war');
     if (!quest) {
         quest = {
             id: 'border_war', title: 'The Northwatch Line', giver: 'Commander Ysolde Hart',

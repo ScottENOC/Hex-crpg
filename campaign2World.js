@@ -3731,6 +3731,7 @@ function buildNorthwatchFort(turnHex) {
         window.campaign2NorthwatchCatapult = catapult;
         window.catapultHasFired = false;
         window.greenskinAssaultTriggered = false;
+        window.greenskinWaveSpawned = false;
 
         const crewSpots = window.getNeighbors(catapultHex.q, catapultHex.r);
         // 3 goblin crew: hold near the catapult, flee the instant it's
