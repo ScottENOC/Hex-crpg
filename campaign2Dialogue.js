@@ -3763,6 +3763,42 @@ function joinGreenskinAssault() {
 }
 window.joinGreenskinAssault = joinGreenskinAssault;
 
+// DEV/TEST CHEAT: reach all three border_war player-choice paths directly
+// from the Cheat menu, without playing through Voss/Hart's dialogue first —
+// teleports the party to Northwatch, makes sure the quest exists (so
+// checkCombatEnd's border_war branch has something to resolve), then
+// triggers the chosen path with the same functions the real dialogue
+// options call. 'stay' has no dedicated trigger of its own: it just
+// activates the siege's abstracted pressure simulation (activateNorthwatchSiege)
+// without flipping the catapult hostile or spawning escorts — the catapult's
+// own turn-based firing (isCatapult, aiProcess) only ever gets scheduled
+// once window.isInCombat is true, which currently requires the player to
+// actually engage someone, so a genuinely passive player won't see it fire;
+// the siegeState pressure tick is what actually progresses in that case.
+function cheatTestNorthwatchSiege(mode) {
+    if (window.teleportPartyToLocation) window.teleportPartyToLocation('Northwatch Fort');
+    let quest = (window.questLog || []).find(q => q.id === 'border_war');
+    if (!quest) {
+        quest = {
+            id: 'border_war', title: 'The Northwatch Line', giver: 'Commander Ysolde Hart',
+            status: 'active', description: 'Destroy the siege engine battering Northwatch\'s wall.',
+            resolution: null
+        };
+        window.questLog.push(quest);
+    }
+    if (mode === 'sally') {
+        window.startNorthwatchSally();
+        window.showMessage('Cheat: Northwatch siege triggered — sally path (destroy the catapult yourself).');
+    } else if (mode === 'join') {
+        window.joinGreenskinAssault();
+        window.showMessage('Cheat: Northwatch siege triggered — joined the greenskin assault.');
+    } else {
+        if (window.activateNorthwatchSiege) window.activateNorthwatchSiege();
+        window.showMessage('Cheat: Northwatch siege triggered — staying passive in the fort (watch the siege pressure, not a literal catapult volley).');
+    }
+}
+window.cheatTestNorthwatchSiege = cheatTestNorthwatchSiege;
+
 // --- Companion attitude (BG3-style approval): a 0-100 meter per companion
 // name, moved by tagged actions and shown to the player as a toast message
 // every time it changes. Currently only Ser Aldric uses it, but the

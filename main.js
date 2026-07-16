@@ -426,6 +426,12 @@ document.addEventListener("DOMContentLoaded", () => {
             if (window.cheatMaxAllSkills) window.cheatMaxAllSkills();
         } else if (btnId === "cheat-explore-everything-btn") {
             if (window.cheatExploreEverything) window.cheatExploreEverything();
+        } else if (btnId === "cheat-siege-sally-btn") {
+            if (window.cheatTestNorthwatchSiege) window.cheatTestNorthwatchSiege('sally');
+        } else if (btnId === "cheat-siege-stay-btn") {
+            if (window.cheatTestNorthwatchSiege) window.cheatTestNorthwatchSiege('stay');
+        } else if (btnId === "cheat-siege-join-btn") {
+            if (window.cheatTestNorthwatchSiege) window.cheatTestNorthwatchSiege('join');
         } else if (e.target.classList && e.target.classList.contains('cheat-teleport-dest-btn')) {
             const dest = e.target.dataset.teleportDest;
             if (dest && window.teleportPartyToLocation) window.teleportPartyToLocation(dest);

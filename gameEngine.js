@@ -3591,6 +3591,32 @@ function behaviorTick(entity) {
 }
 window.behaviorTick = behaviorTick;
 
+// SHARED PERCEPTION: allies pool what they've spotted instead of each
+// maintaining an isolated memory — a real war-band calls out "enemy
+// sighted!" rather than only the one soldier who saw them acting on it.
+// Keyed by entity.side (the same grouping isOpponent already uses to
+// decide who's hostile to whom), so e.g. every 'enemy'-side attacker in a
+// siege shares one memory of every defender any of them has seen, and
+// defenders similarly share their own view of the attackers — the two
+// sides, being different keys, never see each other's memory.
+// Pruned on write (SHARED_SIGHTING_TTL) so a stray sighting from a
+// long-past, unrelated fight (e.g. a wolf a goblin scout glimpsed an hour
+// of playtime ago) doesn't linger forever in a map that's shared across
+// every 'enemy'-side entity in the entire persistent world, not just the
+// ones actually in this fight.
+const SHARED_SIGHTING_TTL = 900; // worldSeconds
+window.__sharedKnownOpponents = window.__sharedKnownOpponents || {};
+function getSharedKnownOpponents(side) {
+    if (!window.__sharedKnownOpponents[side]) window.__sharedKnownOpponents[side] = new Map();
+    const map = window.__sharedKnownOpponents[side];
+    const now = window.worldSeconds || 0;
+    for (const [id, info] of map) {
+        if (now - info.tick > SHARED_SIGHTING_TTL) map.delete(id);
+    }
+    return map;
+}
+window.getSharedKnownOpponents = getSharedKnownOpponents;
+
 function aiProcess(entity) {
     // If another entity's turn started while this AI was mid-chain (stale timeout), abort.
     if (window.currentTurnEntity && window.currentTurnEntity !== entity) return;
@@ -3730,6 +3756,15 @@ function aiProcess(entity) {
     if (entity.combatDirective?.holdPosition) {
         const catapult = window.campaign2NorthwatchCatapult;
         if (!catapult || !catapult.alive) window.greenskinAssaultTriggered = true;
+        // Once the wait-for-the-catapult posture ends, give the entity a
+        // one-time siege objective (the fort itself) so it has somewhere to
+        // head once it falls through to normal targeting below and finds no
+        // visible enemy — otherwise a besieger that's never actually seen a
+        // defender yet (walls block LOS at range) has nothing to go on and
+        // just idles in place. See resolveNoVisibleTargetAI.
+        if (window.greenskinAssaultTriggered && entity.combatDirective && !entity.combatDirective.siegeObjective) {
+            entity.combatDirective.siegeObjective = { hex: window.campaign2NorthwatchGateHex || window.campaign2NorthwatchCenter };
+        }
         if (!window.greenskinAssaultTriggered) {
             const homeHex = entity.combatDirective.homeHex || entity.hex;
             const holdRadius = entity.combatDirective.holdRadius || 18;
@@ -4312,7 +4347,7 @@ function aiProcess(entity) {
     // idle behavior further down, so this can't change anything for fights
     // that never reach it.
     if (visibleOpponents.length > 0) {
-        if (!entity.knownOpponents) entity.knownOpponents = new Map();
+        entity.knownOpponents = getSharedKnownOpponents(entity.side);
         visibleOpponents.forEach(o => {
             entity.knownOpponents.set(o.id, { hex: { q: o.hex.q, r: o.hex.r }, tick: window.worldSeconds || 0, alive: true });
         });
@@ -4333,7 +4368,7 @@ function aiProcess(entity) {
         if (d > HEARING_RADIUS) return;
         const hearChance = Math.max(10, 80 - d * 18);
         if (Math.random() * 100 < hearChance) {
-            if (!entity.knownOpponents) entity.knownOpponents = new Map();
+            entity.knownOpponents = getSharedKnownOpponents(entity.side);
             entity.knownOpponents.set(o.id, { hex: { q: o.hex.q, r: o.hex.r }, tick: window.worldSeconds || 0, alive: true });
         }
     });
@@ -6149,10 +6184,11 @@ window.checkPlayerCombatDisengage = checkPlayerCombatDisengage;
 // branch of aiProcess (once per idle entity per turn, not a global per-tick
 // pass) — "mine" is live same-side combatants weighted by
 // combatDirective.outnumberWeight (Northwatch defenders: 2, everyone else
-// defaults to 1); "theirs" is drawn from this entity's OWN knownOpponents
-// memory (alive entries only) rather than a fresh omniscient scan, so the
-// role assessment is "roughly what I know," matching what a real combatant
-// could plausibly judge.
+// defaults to 1); "theirs" is drawn from entity.knownOpponents — shared
+// across every same-side ally (see getSharedKnownOpponents) rather than a
+// fresh omniscient scan, so the role assessment is "roughly what the side
+// collectively knows," matching a real war-band pooling sightings instead
+// of each fighter reasoning in isolation.
 function computeForceBalance(entity) {
     const weight = e => e.combatDirective?.outnumberWeight || 1;
     const mine = window.entities.filter(e => e.alive && e.side === entity.side && e.aiState === 'combat' && !e.disengaged)
@@ -6205,9 +6241,22 @@ function bestSearchHex(entity, anchorHex, illumWeight) {
 // fight are untouched by any of this).
 function resolveNoVisibleTargetAI(entity, opponentSide) {
     if (entity.disengaged) return null; // already made its call — normal targeting logic re-engages it if it sees someone again
-    if (!entity.knownOpponents || entity.knownOpponents.size === 0) return null;
+    // SIEGE OBJECTIVE: a besieger with no memory of any defender yet (fresh
+    // spawn, or everyone it once saw is dead/lost) isn't a directionless
+    // wanderer — it knows there's a fort to take and roughly where it is.
+    // A gentle pull toward combatDirective.siegeObjective (same
+    // distance-dominant, lightly-illumination-biased scoring as hunter
+    // search, just a softer illumination weight) gives it real momentum
+    // toward the fight without overriding actual sighted-enemy information
+    // once there is any — this branch only ever fires when there's nothing
+    // better to go on.
+    const siegeObjective = entity.combatDirective?.siegeObjective;
+    const towardObjective = () => (siegeObjective && window.distance(entity.hex, siegeObjective.hex) > 1)
+        ? bestSearchHex(entity, siegeObjective.hex, 2)
+        : null;
+    if (!entity.knownOpponents || entity.knownOpponents.size === 0) return towardObjective();
     const aliveKnown = [...entity.knownOpponents.values()].filter(k => k.alive);
-    if (aliveKnown.length === 0) return null; // everyone it ever saw is confirmed dead — nothing left to hunt or flee
+    if (aliveKnown.length === 0) return towardObjective(); // everyone it ever saw is confirmed dead — fall back on the objective instead of stopping cold
 
     let nearest = aliveKnown[0], nearestDist = window.distance(entity.hex, nearest.hex);
     aliveKnown.forEach(k => {

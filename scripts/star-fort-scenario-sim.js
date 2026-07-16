@@ -317,7 +317,7 @@ async function main() {
             ent.name = `${ent.name} ${i + 1}`;
             // Already-triggered assault: hostile and active immediately,
             // no holdPosition — the "wait for the catapult" beat is over.
-            ent.combatDirective = { hostileTo: 'neutral' };
+            ent.combatDirective = { hostileTo: 'neutral', siegeObjective: { hex: window.campaign2NorthwatchGateHex || center } };
             ent.aiControlled = true;
             ent.hasBeenSeenByPlayer = true;
             ent.timePoints = 100 + Math.random() * 0.9;
