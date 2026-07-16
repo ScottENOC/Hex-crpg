@@ -1088,7 +1088,15 @@ function isVisibleToPlayer(targetHex, friendliesOverride) {
 
             // Elf Darkvision: treat light as 1.0 for range if they have the skill
             const effectiveLight = (f.skills?.elf_darkvision || f.skills?.goblin_low_light_eyes) ? 1.0 : light;
-            const finalRange = visionRange * Math.max(0.2, effectiveLight);
+            let finalRange = visionRange * Math.max(0.2, effectiveLight);
+            // A target hex lit by its own nearby light source (a campfire,
+            // torch...) is visible up to full (undimmed) range, same as
+            // hasLineOfSightUncached's targetIsIlluminated boost below — this
+            // duplicated its own range cap without that boost, so a fire tile
+            // standing just past the ambient-darkness floor (e.g. 6 hexes out
+            // at a 5-hex dark-vision floor) was rejected before hasLineOfSight
+            // ever got a chance to apply the correct, illumination-aware check.
+            if (window.isHexIlluminated && window.isHexIlluminated(targetHex)) finalRange = visionRange;
 
             if (dist <= finalRange && hasLineOfSight(fh, targetHex)) {
                 return true;
