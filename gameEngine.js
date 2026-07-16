@@ -3599,6 +3599,162 @@ function aiProcess(entity) {
         setTimeout(() => aiProcess(entity), 20);
         return;
     }
+    // GREENSKIN CATAPULT: fires at the fort's wall (indirect, long-range —
+    // no LOS/range gate) as long as at least one crew member is standing
+    // adjacent to it. Breaks permanently once it's fired 10 times, on top
+    // of being a real attackable target (hp + baseReduction) the whole
+    // time — either path sets alive=false, and every other piece of this
+    // siege (crew flee, knights beeline it, greenskins hold/assault) reads
+    // that same alive flag rather than caring which way it happened.
+    if (entity.isCatapult) {
+        if (entity.alive && entity.firesRemaining > 0 && entity.timePoints >= 80) {
+            const crewCount = window.entities.filter(e => e.alive && e.isCatapultCrew && window.distance(e.hex, entity.hex) <= 1).length;
+            if (crewCount >= 1) {
+                const region = window.campaign2NorthwatchFortRegion;
+                const targetWall = region?.wallHexes?.length
+                    ? region.wallHexes[Math.floor(window.pseudoRandom(entity.firesRemaining, window.worldSeconds || 0) * region.wallHexes.length)]
+                    : null;
+                if (targetWall && window.damageWall) window.damageWall(targetWall.q, targetWall.r, 10);
+                entity.firesRemaining--;
+                window.catapultHasFired = true;
+                if (window.showMessage) window.showMessage(`The catapult fires! (${entity.firesRemaining} shot${entity.firesRemaining === 1 ? '' : 's'} left)`);
+                if (entity.firesRemaining <= 0) {
+                    entity.hp = 0;
+                    entity.alive = false;
+                    if (window.showMessage) window.showMessage('The catapult breaks apart from the strain of its final shot!');
+                }
+                spendTP(entity, 80);
+                window.currentTurnEntity = null;
+                window.gamePhase = 'WAITING';
+                return;
+            }
+        }
+        entity.timePoints = 0;
+        window.currentTurnEntity = null;
+        window.gamePhase = 'WAITING';
+        return;
+    }
+
+    // CATAPULT CREW: passive (handled by the passiveUnlessThreatened block
+    // further down) as long as the catapult stands. The instant it's gone
+    // — worn out or destroyed in combat, doesn't matter which — they flee,
+    // overriding passivity by setting mode:'retreat' directly, which the
+    // existing retreat-movement code (below) then drives exactly like any
+    // other fallback: step away, fight back only if something's already
+    // adjacent.
+    if (entity.isCatapultCrew) {
+        const catapult = window.campaign2NorthwatchCatapult;
+        if (!catapult || !catapult.alive) {
+            entity.combatDirective = entity.combatDirective || {};
+            if (entity.combatDirective.mode !== 'retreat') {
+                entity.combatDirective.mode = 'retreat';
+                entity.combatDirective.retreatTo = entity._fleeHex || entity.hex;
+            }
+        }
+    }
+
+    // KNIGHTS: three phases, gated on the catapult's own state rather than
+    // any timer. (A) Hidden and idle until the catapult's first shot —
+    // "out of vision range" is handled purely by spawn placement, this
+    // just keeps them inert regardless. (B) The instant it's fired once,
+    // beeline the catapult and attack ONLY it — no target priority, no
+    // constraint, nothing else considered, overriding the normal
+    // target-selection entirely. (C) Once the catapult is down, decide
+    // once (whichever direction currently has fewer enemies on the route
+    // wins) and hand off to the ordinary combatDirective retreat mechanism
+    // — same "step there, fight anything already adjacent" behavior the
+    // wall garrison's own fallback already uses, just aimed at a different
+    // destination (into the fort, or away from it).
+    if (entity.isKnight) {
+        const catapult = window.campaign2NorthwatchCatapult;
+        if (!window.catapultHasFired) {
+            entity.timePoints = 0;
+            window.currentTurnEntity = null;
+            window.gamePhase = 'WAITING';
+            return;
+        }
+        if (catapult && catapult.alive) {
+            if (window.distance(entity.hex, catapult.hex) <= 1) {
+                tryAttack(entity, catapult, false, false, 0, true);
+                window.currentTurnEntity = null;
+                window.gamePhase = 'WAITING';
+                return;
+            }
+            const next = stepToward(entity.hex, catapult.hex);
+            if (next && isOpenHex(next)) {
+                entity.hex = next;
+                entity._lastMoveTick = window.worldSeconds || 0;
+                if (entity.riding) entity.riding.hex = { ...next };
+            }
+            spendTP(entity, 10);
+            window.currentTurnEntity = null;
+            window.gamePhase = 'WAITING';
+            return;
+        }
+        if (!entity._knightDecided) {
+            const fortEntry = window.campaign2NorthwatchGateHex || window.campaign2NorthwatchCenter;
+            const fleeHex = { q: (catapult ? catapult.hex.q : entity.hex.q) + 30, r: entity.hex.r };
+            const enemiesNear = (hex) => window.entities.filter(e => e.alive && e.side === 'enemy' && window.distance(hex, e.hex) <= 15).length;
+            const towardFort = fortEntry ? enemiesNear(fortEntry) : Infinity;
+            const towardFlee = enemiesNear(fleeHex);
+            entity.combatDirective = entity.combatDirective || {};
+            entity.combatDirective.hostileTo = 'enemy';
+            entity.combatDirective.mode = 'retreat';
+            entity.combatDirective.retreatTo = (fortEntry && towardFort <= towardFlee) ? fortEntry : fleeHex;
+            entity._knightDecided = true;
+        }
+        // Falls through into the normal combatDirective handling below,
+        // which now sees mode:'retreat' and drives the chosen destination.
+    }
+
+    // GREENSKIN HOLD: the besieging force's default posture is passive —
+    // hold position and wait for the catapult to soften the fort up —
+    // until something worth reacting to is actually close. "Close" is
+    // measured from the entity's own homeHex (its spawn point), not its
+    // current position, specifically so a unit lured a few hexes away by
+    // a feint can't be kited indefinitely: the instant the threat is no
+    // longer near ITS post, it walks back and resumes holding rather than
+    // continuing to chase. Ends permanently the moment the catapult is
+    // gone (worn out or destroyed) — checked fresh every turn, not on a
+    // one-time hook, so it's correct regardless of how the catapult died.
+    if (entity.combatDirective?.holdPosition) {
+        const catapult = window.campaign2NorthwatchCatapult;
+        if (!catapult || !catapult.alive) window.greenskinAssaultTriggered = true;
+        if (!window.greenskinAssaultTriggered) {
+            const homeHex = entity.combatDirective.homeHex || entity.hex;
+            const holdRadius = entity.combatDirective.holdRadius || 18;
+            const threatNearby = window.entities.some(e => e.alive && (e.isKnight || e.side === 'player') &&
+                window.distance(homeHex, e.hex) <= holdRadius);
+            if (!threatNearby) {
+                const knightsAllDead = !window.entities.some(e => e.isKnight && e.alive);
+                const crewCount = catapult ? window.entities.filter(e => e.alive && e.isCatapultCrew && window.distance(e.hex, catapult.hex) <= 1).length : 0;
+                const needsCrew = !!catapult && catapult.alive && knightsAllDead && crewCount < 3;
+                const nearCatapult = catapult && window.distance(entity.hex, catapult.hex) <= 40;
+                if (needsCrew && nearCatapult) {
+                    if (window.distance(entity.hex, catapult.hex) <= 1) {
+                        entity.isCatapultCrew = true;
+                        entity.timePoints = 0;
+                    } else {
+                        const next = stepToward(entity.hex, catapult.hex);
+                        if (next && isOpenHex(next)) entity.hex = next;
+                        spendTP(entity, 10);
+                    }
+                } else if (window.distance(entity.hex, homeHex) > 0) {
+                    const next = stepToward(entity.hex, homeHex);
+                    if (next && isOpenHex(next)) entity.hex = next;
+                    spendTP(entity, 10);
+                } else {
+                    entity.timePoints = 0;
+                }
+                window.currentTurnEntity = null;
+                window.gamePhase = 'WAITING';
+                return;
+            }
+            // Threat is close to home — fall through to normal targeting/
+            // attack logic below for this turn.
+        }
+    }
+
     // A neutral entity with a combatDirective (e.g. Northwatch's garrison —
     // 'neutral' toward the player, but ordered to fight the orc assault) is
     // NOT a no-op — it falls through to the full combat logic below instead

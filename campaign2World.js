@@ -3703,6 +3703,117 @@ function buildNorthwatchFort(turnHex) {
     }
     window.campaign2NorthwatchMoatExit = { q: moatEastQ, r: center.r + MOAT_RADIUS };
 
+    // GREENSKIN CATAPULT: a genuine siege weapon (distinct from the ambient
+    // "sally target" siege engine below), sitting east of the new moat —
+    // 45 hexes past the wall's own farthest reach (CORE_RADIUS+POINT_LENGTH
+    // = 18). Fires slow indirect shots at the wall as long as it's crewed
+    // (isCatapult block, aiProcess), and can be destroyed either by
+    // wearing itself out (10 shots) or by being fought down (hp + a flat
+    // baseReduction, same mechanic armor uses). Spawned idle/inert — same
+    // convention the ambient siege engine below already uses — so it does
+    // nothing until something (a sim script, or a future quest trigger)
+    // explicitly activates it; this pass only wires the mechanic and the
+    // NPC-only sim, not a real dialogue trigger.
+    const catapultHex = { q: center.q + CORE_RADIUS + POINT_LENGTH + 45, r: center.r };
+    const catapult = window.createMonster('siege_engine', catapultHex, null, null, 'enemy');
+    if (catapult) {
+        catapult.name = 'Greenskin Catapult';
+        catapult.isCatapult = true;
+        catapult.isNPC = true;
+        catapult.aiState = 'idle';
+        catapult.noAttack = true;
+        catapult.hp = 80; catapult.maxHp = 80;
+        catapult.baseReduction = 6;
+        catapult.firesRemaining = 10;
+        catapult.factionTag = 'greenskin_assault';
+        catapult.canLoot = false;
+        window.entities.push(catapult);
+        window.campaign2NorthwatchCatapult = catapult;
+        window.catapultHasFired = false;
+        window.greenskinAssaultTriggered = false;
+
+        const crewSpots = window.getNeighbors(catapultHex.q, catapultHex.r);
+        // 3 goblin crew: hold near the catapult, flee the instant it's
+        // gone — worn out or destroyed, doesn't matter which (isCatapultCrew
+        // block, aiProcess).
+        for (let i = 0; i < 3 && crewSpots[i]; i++) {
+            const goblin = window.createMonster('goblin', crewSpots[i], null, null, 'enemy');
+            if (!goblin) continue;
+            goblin.name = `Catapult Crew ${i + 1}`;
+            goblin.isCatapultCrew = true;
+            goblin.aiState = 'idle';
+            goblin.factionTag = 'greenskin_assault';
+            goblin._fleeHex = { q: catapultHex.q + 30, r: catapultHex.r };
+            goblin.combatDirective = {
+                hostileTo: 'neutral',
+                passiveUnlessThreatened: true,
+                threatRadius: 3,
+            };
+            window.entities.push(goblin);
+        }
+        // 2 orc guards: normal (random savage) equipment, defend the
+        // catapult, then simply fold into the general hold/assault
+        // posture below like every other greenskin once it's gone — no
+        // bespoke flee logic, they're combat troops, not crew.
+        for (let i = 0; i < 2 && crewSpots[i + 3]; i++) {
+            const orc = window.createMonster('orc', crewSpots[i + 3], null, null, 'enemy');
+            if (!orc) continue;
+            orc.name = `Catapult Guard ${i + 1}`;
+            orc.aiState = 'idle';
+            orc.factionTag = 'greenskin_assault';
+            orc.combatDirective = {
+                hostileTo: 'neutral',
+                holdPosition: true,
+                homeHex: { ...catapultHex },
+                holdRadius: 15,
+            };
+            window.entities.push(orc);
+        }
+    }
+
+    // FIVE HUMAN KNIGHTS: an elite reserve, spawned well south of the
+    // fort (out of the besiegers' vision — the catapult and its guards
+    // sit far east, any assault force spawns north/around the fort itself)
+    // and left idle until the catapult opens fire, at which point they
+    // beeline it exclusively (isKnight block, aiProcess) and, once it's
+    // down, either push into the fort or fall back — whichever direction
+    // has fewer greenskins on the route. Genuinely better-equipped than
+    // the wall garrison: 4 fighter levels (garrison: 3), medium armor (one
+    // tier up from the garrison's light armor — medium_armor_training's
+    // own prereq chain means light_armor_training comes with it), and
+    // mounted.
+    const KNIGHT_LOADOUT = {
+        classLevels: ['fighter', 'fighter', 'fighter', 'fighter'],
+        skillPicks: [
+            'health', 'health', 'health', 'health',
+            'sword_hit', 'sword_hit', 'sword_dmg', 'sword_dmg',
+            'shield_proficiency', 'light_armor_training', 'medium_armor_training', 'riding',
+        ],
+        equipment: ['sword', 'wooden_shield', 'medium_armor'],
+    };
+    const knightBaseHex = { q: center.q, r: center.r + 60 };
+    window.campaign2NorthwatchKnights = [];
+    for (let i = 0; i < 5; i++) {
+        const spot = { q: knightBaseHex.q + (i % 3) - 1, r: knightBaseHex.r + Math.floor(i / 3) };
+        const knight = window.buildNPC({
+            name: `Knight ${i + 1}`, title: 'Silverhart Knight', race: 'human',
+            gender: i % 2 === 0 ? 'male' : 'female',
+            side: 'neutral', factionId: 'silverhart_kingdom', color: '#c9a227',
+            hex: { q: spot.q, r: spot.r }, ...KNIGHT_LOADOUT,
+        });
+        knight.isKnight = true;
+        knight.factionTag = 'silverhart_knights';
+        knight.aiState = 'idle';
+        const horse = window.createMonster('horse', spot, null, null, 'neutral');
+        if (horse) {
+            knight.riding = horse;
+            horse.rider = knight;
+            window.entities.push(horse);
+        }
+        window.entities.push(knight);
+        window.campaign2NorthwatchKnights.push(knight);
+    }
+
     // Garrison: patrol the wall ring out of combat (behaviorType 'patrol'
     // over the fort's own wallHexes, same mechanism as any other patrol
     // NPC). In combat, combatDirective (gameEngine.js — see the "Layered
