@@ -3771,57 +3771,14 @@ function buildNorthwatchFort(turnHex) {
         }
     }
 
-    // FIVE HUMAN KNIGHTS: an elite reserve, spawned well south of the
-    // fort (out of the besiegers' vision — the catapult and its guards
-    // sit far east, any assault force spawns north/around the fort itself)
-    // and left idle until the catapult opens fire, at which point they
-    // beeline it exclusively (isKnight block, aiProcess) and, once it's
-    // down, either push into the fort or fall back — whichever direction
-    // has fewer greenskins on the route. Genuinely better-equipped than
-    // the wall garrison: 4 fighter levels (garrison: 3), medium armor (one
-    // tier up from the garrison's light armor — medium_armor_training's
-    // own prereq chain means light_armor_training comes with it), and
-    // mounted.
-    const KNIGHT_LOADOUT = {
-        classLevels: ['fighter', 'fighter', 'fighter', 'fighter'],
-        skillPicks: [
-            'health', 'health', 'health', 'health',
-            'sword_hit', 'sword_hit', 'sword_dmg', 'sword_dmg',
-            'shield_proficiency', 'light_armor_training', 'medium_armor_training', 'riding',
-        ],
-        equipment: ['sword', 'wooden_shield', 'medium_armor'],
-    };
-    const knightBaseHex = { q: center.q, r: center.r + 60 };
-    window.campaign2NorthwatchKnights = [];
-    for (let i = 0; i < 5; i++) {
-        const spot = { q: knightBaseHex.q + (i % 3) - 1, r: knightBaseHex.r + Math.floor(i / 3) };
-        const knight = window.buildNPC({
-            name: `Knight ${i + 1}`, title: 'Silverhart Knight', race: 'human',
-            gender: i % 2 === 0 ? 'male' : 'female',
-            side: 'neutral', factionId: 'silverhart_kingdom', color: '#c9a227',
-            hex: { q: spot.q, r: spot.r }, ...KNIGHT_LOADOUT,
-        });
-        knight.isKnight = true;
-        knight.factionTag = 'silverhart_knights';
-        knight.aiState = 'idle';
-        // A bare marker directive, not real orders yet — the isKnight
-        // block (aiProcess) fully controls actual behavior regardless of
-        // what's in here. Needed anyway: isDormantAmbientNpc treats any
-        // side:'neutral' NPC with no combatDirective as background flavor
-        // and permanently excludes it from ever being scheduled a turn
-        // once it's far from the real player — which a knight hidden well
-        // south of the fort always is. Without this, a knight never gets
-        // a turn at all, so it can never even notice the catapult firing.
-        knight.combatDirective = { hostileTo: 'enemy' };
-        const horse = window.createMonster('horse', spot, null, null, 'neutral');
-        if (horse) {
-            knight.riding = horse;
-            horse.rider = knight;
-            window.entities.push(horse);
-        }
-        window.entities.push(knight);
-        window.campaign2NorthwatchKnights.push(knight);
-    }
+    // No standing knight squad — that role is the PLAYER's, not NPCs'.
+    // The sally-the-catapult option (border_war quest, once wired up)
+    // starts the player at this same hidden staging hex the knights used
+    // to occupy: far enough south that the besieging force never has
+    // eyes on it until the player actually moves. Kept as a plain marker
+    // hex, not an entity, so there's nothing here to simulate or hold
+    // dormant/active state for.
+    window.campaign2NorthwatchHiddenStagingHex = { q: center.q, r: center.r + 60 };
 
     // Garrison: patrol the wall ring out of combat (behaviorType 'patrol'
     // over the fort's own wallHexes, same mechanism as any other patrol

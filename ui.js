@@ -608,7 +608,19 @@ function cancelAllMoveOrders() {
     window.renderEntities();
 }
 
-function showMessage(msg) { 
+// Combat messages (a hit/miss/death line per attack) fire constantly —
+// a long fight among many combatants can push this into the thousands.
+// Unbounded appendChild here left the log DOM growing forever, and every
+// call's scrollHeight read forces a synchronous reflow proportional to
+// that ever-growing node count: confirmed directly as the cause of a
+// long combat sim getting steadily slower over its own lifetime (fast at
+// first, crawling after thousands of messages) rather than the AI logic
+// itself being expensive. Capping the log to the most recent entries
+// keeps every future append (and its reflow) cheap regardless of how
+// long the fight runs — matches how the panel is actually used, since
+// nobody scrolls back through thousands of old combat lines anyway.
+const MESSAGE_LOG_MAX_ENTRIES = 200;
+function showMessage(msg) {
     console.log(msg);
     const logDiv = document.getElementById("message-log");
     if (logDiv) {
@@ -616,6 +628,9 @@ function showMessage(msg) {
         p.style.marginBottom = "2px";
         p.innerText = `> ${msg}`;
         logDiv.appendChild(p);
+        while (logDiv.childNodes.length > MESSAGE_LOG_MAX_ENTRIES) {
+            logDiv.removeChild(logDiv.firstChild);
+        }
         requestAnimationFrame(() => {
             logDiv.scrollTop = logDiv.scrollHeight;
         });
