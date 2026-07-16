@@ -3403,6 +3403,12 @@ window.deployCoverFire = deployCoverFire;
 // shot centered on their own post, plus a commander announcement in the
 // message log — the "orders covering fire" beat, readable without any new
 // UI since showMessage already drives the existing log panel.
+//
+// At the same moment, every wall-ring defender who is actually retreating
+// (mode === 'retreat') gets a free 10 TP — enough for a real head start on
+// the run back to the keep, on top of whatever TP they already have —
+// modeling the retreat order landing on everyone at once rather than each
+// soldier only noticing on their own next turn.
 function triggerNorthwatchCoveringFire() {
     const inner = (window.entities || []).filter(e =>
         e.alive && e.factionTag === 'northwatch_human' && e.skills?.bow_cover &&
@@ -3413,6 +3419,11 @@ function triggerNorthwatchCoveringFire() {
         window.showMessage(`${commander.name} orders: "Covering fire!"`);
     }
     inner.forEach(e => deployCoverFire(e, e.homeHex || e.hex, { free: true }));
+
+    (window.entities || []).filter(e =>
+        e.alive && e.factionTag === 'northwatch_human' &&
+        e.combatDirective?.contingencies?.some(c => c.id === 'retreat_if_walls_overrun')
+    ).forEach(e => { e.timePoints = (e.timePoints || 0) + 10; });
 }
 window.triggerNorthwatchCoveringFire = triggerNorthwatchCoveringFire;
 

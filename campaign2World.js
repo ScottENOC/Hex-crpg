@@ -3701,7 +3701,7 @@ function buildNorthwatchFort(turnHex) {
     // distance — instead of only once the walls are genuinely overrun.
     // ~1.5% of the interior footprint keeps the same "walls are actually
     // breached" feel at any fort size.
-    const RETREAT_TRIGGER_COUNT = Math.max(5, Math.round(fortInterior.size * 0.015));
+    const RETREAT_TRIGGER_COUNT = Math.max(10, Math.round(fortInterior.size * 0.015));
     window.campaign2NorthwatchRetreatTriggerCount = RETREAT_TRIGGER_COUNT; // exposed for testability
     // A FIXED, NON-RANDOM 31-DEFENDER ROSTER — replaces the old cycling-
     // named-spec assignment (which left equipment effectively randomized
@@ -3856,7 +3856,18 @@ function buildNorthwatchFort(turnHex) {
             retreatTo: { q: center.q, r: center.r }, // reassigned below, once the melee-triangle slots exist
             contingencies: [{
                 id: 'retreat_if_walls_overrun',
-                when: () => window.entities.filter(e => e.alive && e.side === 'enemy' && fortInterior.has(`${e.hex.q},${e.hex.r}`)).length >= RETREAT_TRIGGER_COUNT,
+                // Two conditions, both required: at least RETREAT_TRIGGER_COUNT
+                // enemies have actually made it inside the walls (not just a
+                // handful of scouts), AND they outnumber the defenders still
+                // fighting inside — late enough that the outer wall has
+                // certainly fallen, but before the defenders are so
+                // outnumbered they can't fight their way clear to the keep.
+                when: () => {
+                    const enemiesInside = window.entities.filter(e => e.alive && e.side === 'enemy' && fortInterior.has(`${e.hex.q},${e.hex.r}`)).length;
+                    if (enemiesInside < RETREAT_TRIGGER_COUNT) return false;
+                    const defendersInside = window.entities.filter(e => e.alive && e.factionTag === 'northwatch_human' && fortInterior.has(`${e.hex.q},${e.hex.r}`)).length;
+                    return enemiesInside > defendersInside;
+                },
             }],
         };
         window.entities.push(defender);
