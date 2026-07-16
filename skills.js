@@ -1732,13 +1732,13 @@ function generateMagicSkills(school, spellName, spellId) {
 
     s[`${school}_range`] = {
         name: `${capitalized} Range`,
-        description: 'Increases spell range by 1 and mana cost by 1 per rank.',
+        description: 'Increases spell range by 5 and mana cost by 5 per rank.',
         tree: school,
         maxRanks: 0,
         apply: (player) => {
             if (!player.unlockedCastingOptions) player.unlockedCastingOptions = {};
             if (!player.unlockedCastingOptions[school]) player.unlockedCastingOptions[school] = {};
-            player.unlockedCastingOptions[school].extraRange = (player.unlockedCastingOptions[school].extraRange || 0) + 1;
+            player.unlockedCastingOptions[school].extraRange = (player.unlockedCastingOptions[school].extraRange || 0) + 5;
         }
     };
 
