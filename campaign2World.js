@@ -3804,6 +3804,15 @@ function buildNorthwatchFort(turnHex) {
         knight.isKnight = true;
         knight.factionTag = 'silverhart_knights';
         knight.aiState = 'idle';
+        // A bare marker directive, not real orders yet — the isKnight
+        // block (aiProcess) fully controls actual behavior regardless of
+        // what's in here. Needed anyway: isDormantAmbientNpc treats any
+        // side:'neutral' NPC with no combatDirective as background flavor
+        // and permanently excludes it from ever being scheduled a turn
+        // once it's far from the real player — which a knight hidden well
+        // south of the fort always is. Without this, a knight never gets
+        // a turn at all, so it can never even notice the catapult firing.
+        knight.combatDirective = { hostileTo: 'enemy' };
         const horse = window.createMonster('horse', spot, null, null, 'neutral');
         if (horse) {
             knight.riding = horse;

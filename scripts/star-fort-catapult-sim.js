@@ -173,6 +173,8 @@ async function main() {
     let ticks = 0;
     let winner = null;
     const shots = { firstShot: false, catapultDown: false, assaultTriggered: false };
+    let lastCurrentTurnName = null;
+    let stuckStreak = 0;
 
     console.log('Running (status every 1000 ticks)...');
     while (ticks < MAX_TICKS) {
@@ -200,6 +202,37 @@ async function main() {
                 ].filter(Boolean);
                 roster.forEach(e => { if (e.alive && e.timePoints < 150) e.timePoints = Math.min(150, e.timePoints + 50); });
             });
+        }
+
+        // WATCHDOG: runTickInternal's very first line is `if
+        // (window.currentTurnEntity && !isSleepCycle) return;` — if
+        // anything leaves currentTurnEntity (or the related
+        // isPausedForReaction flag) set without ever clearing it — a
+        // reaction wait that expects real UI input that will never come
+        // in a headless sim, confirmed directly as the actual cause via a
+        // throwaway diagnostic tracking a stuck entity's identity across
+        // ticks — every subsequent tick becomes a silent global no-op for
+        // the rest of the run. Detect "same entity, stuck, for a while"
+        // and force-clear both flags — the one thing a real player
+        // wouldn't need (they'd just click through the prompt), but this
+        // is an automated NPC-only harness with nobody to click.
+        if (ticks % 20 === 0) {
+            const stuck = await page.evaluate(() => window.currentTurnEntity ? window.currentTurnEntity.name : null);
+            if (stuck && stuck === lastCurrentTurnName) {
+                stuckStreak++;
+                if (stuckStreak >= 3) {
+                    console.log(`  >>> WATCHDOG: currentTurnEntity stuck on "${stuck}" for ${stuckStreak * 20} ticks — force-clearing`);
+                    await page.evaluate(() => {
+                        window.currentTurnEntity = null;
+                        window.isPausedForReaction = false;
+                        window.gamePhase = 'WAITING';
+                    });
+                    stuckStreak = 0;
+                }
+            } else {
+                stuckStreak = 0;
+            }
+            lastCurrentTurnName = stuck;
         }
 
         if (ticks % 200 === 0) {

@@ -3675,9 +3675,19 @@ function aiProcess(entity) {
         }
         if (catapult && catapult.alive) {
             if (window.distance(entity.hex, catapult.hex) <= 1) {
+                // Matches the established AI-attack idiom elsewhere in this
+                // function (e.g. the normal melee branch below): tryAttack
+                // can itself pause for a reaction (isPausedForReaction) that
+                // only resolves on a later re-entry into aiProcess — nulling
+                // currentTurnEntity immediately here, before that resolves,
+                // left window.isPausedForReaction stuck true forever (it's
+                // global, not per-entity), freezing every entity's turn in
+                // the whole fight. setTimeout + no immediate null lets the
+                // same resolution path everything else already relies on
+                // actually complete.
                 tryAttack(entity, catapult, false, false, 0, true);
-                window.currentTurnEntity = null;
-                window.gamePhase = 'WAITING';
+                spendTP(entity, 10);
+                setTimeout(() => aiProcess(entity), 20);
                 return;
             }
             const next = stepToward(entity.hex, catapult.hex);
