@@ -94,7 +94,24 @@ async function runTicks(page, maxTicks, checkEvery, onCheck) {
                     // is a sim-only patch, not a real gameplay fix — the
                     // real game's own assault doesn't spawn a fresh 62-unit
                     // ring 30 hexes out mid-fight.
-                    if (e.disengaged) { e.disengaged = false; if (e.combatDirective) e.combatDirective.mode = null; }
+                    // markFled (gameEngine.js) is the harsher sibling of the
+                    // same heuristic — a "severely outnumbered, can't reach
+                    // anyone" verdict permanently marks fled=true (a
+                    // one-shot flag: markFled itself refuses to run twice)
+                    // and is EXACTLY the same false-positive for a fresh
+                    // attacker that hasn't reached the fight yet. Only
+                    // clearing disengaged (as this patch originally did)
+                    // left every attacker that hit this harsher branch
+                    // permanently benched — reads as "the horde got far
+                    // enough away to escape" in the results even though
+                    // ticks keep advancing, because they're silently
+                    // excluded from the alive-count filter forever, not
+                    // actually resolved one way or the other.
+                    if (e.disengaged || e.fled) {
+                        e.disengaged = false;
+                        e.fled = false;
+                        if (e.combatDirective) e.combatDirective.mode = null;
+                    }
                     e._chaseStuckTurns = 0;
                 });
             });
