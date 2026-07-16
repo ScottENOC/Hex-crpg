@@ -3755,8 +3755,11 @@ function aiProcess(entity) {
                 });
                 if (worstAlly) {
                     const stayWithin = directive.constraints?.stayWithinHexes;
+                    const holdGround = directive.mode !== 'retreat' ? directive.holdGround : null;
                     const next = window.stepToward(entity.hex, worstAlly.hex);
-                    if (next && isOpenHex(next) && (!stayWithin || stayWithin.has(`${next.q},${next.r}`))) entity.hex = next;
+                    const allowed = (!stayWithin || stayWithin.has(`${next?.q},${next?.r}`)) &&
+                        (!holdGround || holdGround.has(`${next?.q},${next?.r}`));
+                    if (next && isOpenHex(next) && allowed) entity.hex = next;
                     spendTP(entity, 10);
                     window.currentTurnEntity = null;
                     window.gamePhase = 'WAITING';
@@ -4599,6 +4602,20 @@ function aiProcess(entity) {
             // chase someone standing just out of range.
             const stayWithin = entity.combatDirective?.constraints?.stayWithinHexes;
             if (stayWithin && !stayWithin.has(`${h.q},${h.r}`)) s -= 1000;
+            // HOLD GROUND: a tighter, mode-gated constraint on top of
+            // stayWithinHexes — while set and not yet retreating, a
+            // defender won't step off its held hex set (typically "the
+            // wall ring itself") even to advance toward a target still
+            // outside it. Lets go automatically the instant mode flips to
+            // 'retreat', so it never blocks the actual fallback.
+            const holdGround = entity.combatDirective?.holdGround;
+            if (holdGround && entity.combatDirective?.mode !== 'retreat' && !holdGround.has(`${h.q},${h.r}`)) s -= 1000;
+            // Generic wall-preference: an entity marked to prefer holding a
+            // wall/elevated position (defensive + vision bonus) scores its
+            // current terrain type higher than stepping off it, so all else
+            // equal it stays put rather than wandering down for a target
+            // that isn't actually in range yet.
+            if (entity.combatDirective?.preferWalls && t.climbRisk) s += 8;
             return {h, s};
         }).sort((a,b) => b.s - a.s)[0].h;
 

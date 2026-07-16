@@ -3683,6 +3683,26 @@ function buildNorthwatchFort(turnHex) {
     window.campaign2NorthwatchKeepRegion = keepRegion;
     window.campaign2NorthwatchKeepGaps = keepRegion.gapHexes;
 
+    // MOAT: an L-shaped river bend along the fort's north and east sides,
+    // sitting just outside the wall ring's own reach (CORE_RADIUS+
+    // POINT_LENGTH = 18, moat set at 22 so it never overlaps a wedge tip).
+    // Ties into the world's main river (which ends its eastward run around
+    // q=220,r=-25, see the village-scene stream-painting calls) via a
+    // bending connector leg, then continues past the fort's east side so a
+    // later fort further along the road (Ridgehold, buildRidgeholdFort)
+    // can pick the same river back up — see campaign2NorthwatchMoatExit.
+    const MOAT_RADIUS = 22, MOAT_WIDTH = 3;
+    const moatNorthR = center.r - MOAT_RADIUS;
+    const moatEastQ = center.q + MOAT_RADIUS;
+    const connectorEnd = paintStreamSegment(220, center.q - MOAT_RADIUS, 1, -25, moatNorthR, 0.5);
+    for (let q = connectorEnd.q; q <= moatEastQ; q++) {
+        for (let w = 0; w < MOAT_WIDTH; w++) window.setTerrainAt(q, moatNorthR - w, 'Water');
+    }
+    for (let r = moatNorthR; r <= center.r + MOAT_RADIUS; r++) {
+        for (let w = 0; w < MOAT_WIDTH; w++) window.setTerrainAt(moatEastQ + w, r, 'Water');
+    }
+    window.campaign2NorthwatchMoatExit = { q: moatEastQ, r: center.r + MOAT_RADIUS };
+
     // Garrison: patrol the wall ring out of combat (behaviorType 'patrol'
     // over the fort's own wallHexes, same mechanism as any other patrol
     // NPC). In combat, combatDirective (gameEngine.js — see the "Layered
@@ -3845,12 +3865,23 @@ function buildNorthwatchFort(turnHex) {
     // are overrun — collected here so the melee-triangle formation below
     // can reassign each of their retreat points individually.
     const wallDefenders = [];
+    const wallHexesOnly = new Set(fortRegion.wallHexes.map(h => `${h.q},${h.r}`));
     function addWallRingDefender(roleLabel, roleIdx, loadout, postHex) {
         const defender = nextDefender(roleLabel, roleIdx, loadout, postHex);
         defender.combatDirective = {
             hostileTo: 'enemy',
             outnumberWeight: 2,
             constraints: { stayWithinHexes: fortInterior },
+            // HOLD GROUND + PREFER WALLS: until the wall is genuinely
+            // overrun (retreat_if_walls_overrun below), a wall-ring
+            // defender won't step off the wall ring itself — not outward
+            // over the wall, and not inward onto the floor either — even
+            // to chase a target that isn't in range yet. The wall gives
+            // them a defensive + vision advantage, and climbing back down
+            // later is real friction (climbDownCost above), so leaving it
+            // early is a bad trade the AI shouldn't make on its own.
+            holdGround: wallHexesOnly,
+            preferWalls: true,
             priorities: [{ type: 'nearHex', hex: gateHex, radius: 3 }, { type: 'insideRegion', hexes: fortInterior }],
             canReinforce: true,
             retreatTo: { q: center.q, r: center.r }, // reassigned below, once the melee-triangle slots exist
@@ -4032,6 +4063,18 @@ function buildRidgeholdFort(roadEnd) {
 
     window.campaign2RidgeholdCenter = center;
     window.campaign2RidgeholdFortRegion = fortRegion;
+
+    // Picks the river back up from Northwatch's moat (campaign2NorthwatchMoatExit,
+    // buildNorthwatchFort) and continues it on past Ridgehold's far side, so
+    // the two forts read as sitting along one continuous waterway rather
+    // than Northwatch having an isolated, disconnected moat.
+    if (window.campaign2NorthwatchMoatExit) {
+        const exit = window.campaign2NorthwatchMoatExit;
+        if (center.q > exit.q) {
+            let toRidgehold = paintStreamSegment(exit.q, center.q - 24, 1, exit.r, center.r - 6, 0.5);
+            paintStreamSegment(toRidgehold.q, toRidgehold.q + 60, 1, toRidgehold.r);
+        }
+    }
 
     const wallPatrolPath = fortRegion.wallHexes.filter((h, i) => i % 3 === 0);
     (window.campaign2FortSoldiers || []).forEach((spec, i) => {
