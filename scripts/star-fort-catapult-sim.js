@@ -38,6 +38,11 @@ async function takeScreenshot(page, label, outDir) {
         window.cameraZoom = 0.18;
         window.cameraFollowEnabled = false;
         window.centerCameraOn({ q: window.campaign2NorthwatchCenter.q + 30, r: window.campaign2NorthwatchCenter.r });
+        // Combat messages (e.g. the commander's "Covering fire!" order) can
+        // pop the dialogue modal open mid-sim with nobody there to close
+        // it — force every modal shut before capturing so screenshots show
+        // the map, not a stray dialogue box.
+        document.querySelectorAll('.modal').forEach(el => { el.style.display = 'none'; });
     });
     await page.waitForTimeout(200);
     if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
