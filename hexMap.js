@@ -740,7 +740,17 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
 
             // Check for ENEMY obstacles (Living enemies only)
             // Friendlies DO NOT block movement
-            const occupant = (occupantsByHex.get(key) || []).find(e => e.side !== entity.side);
+            // The player's own route planning matches playerMoveProcess's
+            // step-execution rule (gameEngine.js): a neutral NPC (garrison
+            // soldier, shopkeeper, anyone just standing around) isn't a
+            // threat and shouldn't be able to wall off a whole area just by
+            // being densely packed in it — only a genuine 'enemy', or an
+            // NPC explicitly opted in via entity.blocksPlayerPath (a guard
+            // deliberately denying access to somewhere), blocks the player.
+            // AI pathing (isPlayer false) keeps the original "any other
+            // side blocks" rule unchanged.
+            const occupant = (occupantsByHex.get(key) || []).find(e =>
+                isPlayer ? (e.side === 'enemy' || e.blocksPlayerPath) : e.side !== entity.side);
 
             const isLightOrNoArmorEntity = !entity.equipped || !entity.equipped.armor || window.items[entity.equipped.armor]?.id === 'light_armor';
             let acrobaticsCost = 0;

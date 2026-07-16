@@ -2475,7 +2475,13 @@ function tick() {
             // this out-of-combat refresh, whenever the siege is active and
             // no turn-based combat is covering it.
             if (window.siegeState?.active) {
-                const catapult = window.campaign2NorthwatchSiegeEngine;
+                // NOT campaign2NorthwatchSiegeEngine — that's a separate,
+                // older 'siege_engine' entity that startNorthwatchSally/
+                // joinGreenskinAssault operate on and has no firesRemaining
+                // at all. campaign2NorthwatchCatapult (crew, guards,
+                // isCatapult/firesRemaining) is the one fireCatapultShot and
+                // the isCatapult aiProcess block are actually built for.
+                const catapult = window.campaign2NorthwatchCatapult;
                 if (catapult && catapult.alive && catapult.firesRemaining > 0) fireCatapultShot(catapult);
             }
             if (window.warState?.active) tickWarState();
@@ -2668,6 +2674,21 @@ function updateVisualPositions(dt) {
     });
 }
 
+// Matches findPath's player-pathing rule (hexMap.js): a neutral NPC never
+// blocks the player's own movement, only a genuine 'enemy' or an NPC
+// explicitly opted in via blocksPlayerPath. AI-controlled entities keep the
+// original "any other side blocks" rule. Shared by processRealTimeStep's
+// path-cache validity check and its actual per-step collision check below —
+// before this existed, findPath (loosened) and this function (still
+// side!==side) disagreed, so the player's path planner would route through
+// a neutral NPC and then this function would immediately cancel the whole
+// destination the moment it tried to actually take that step.
+function isRealMoveBlocker(entity, occupant) {
+    if (!occupant) return false;
+    if (entity.side === 'player') return occupant.side === 'enemy' || occupant.blocksPlayerPath;
+    return occupant.side !== entity.side;
+}
+
 function processRealTimeStep(entity, overage = 0) {
     const moveEntity = entity.riding || entity;
     const dest = entity.destination;
@@ -2694,7 +2715,7 @@ function processRealTimeStep(entity, overage = 0) {
     if (cacheValid) {
         const candidate = entity._pathCache[1];
         const occ = window.getEntityAtHex(candidate.q, candidate.r);
-        const blocked = (occ && occ.side !== entity.side) || window.getTerrainAt(candidate.q, candidate.r).impassable;
+        const blocked = isRealMoveBlocker(entity, occ) || window.getTerrainAt(candidate.q, candidate.r).impassable;
         if (!blocked) {
             nextHex = candidate;
             fullPath = entity._pathCache;
@@ -2712,9 +2733,9 @@ function processRealTimeStep(entity, overage = 0) {
     }
 
     if (fullPath && fullPath.length > 1) {
-        // Prevent walking onto occupied hexes (collision) â€” enemies only; friendlies don't block
+        // Prevent walking onto occupied hexes (collision) — enemies only; friendlies don't block
         const nextOccupant = window.getEntityAtHex(nextHex.q, nextHex.r);
-        if (nextOccupant && nextOccupant.side !== entity.side) {
+        if (isRealMoveBlocker(entity, nextOccupant)) {
             entity.destination = null;
             entity._pathCache = null;
             entity.moveCooldown = 0;
@@ -3296,9 +3317,9 @@ function autoMoveProcess(entity) {
     if (fullPath && fullPath.length > 1) {
         const nextHex = fullPath[1];
 
-        // Prevent walking onto occupied hexes (collision) â€” enemies only; friendlies don't block
+        // Prevent walking onto occupied hexes (collision) — enemies only; friendlies don't block
         const nextOccupant = window.getEntityAtHex(nextHex.q, nextHex.r);
-        if (nextOccupant && nextOccupant.side !== entity.side) {
+        if (isRealMoveBlocker(entity, nextOccupant)) {
             entity.destination = null;
             entity.moveCooldown = 0;
             entity.moveTotalTime = 0;
