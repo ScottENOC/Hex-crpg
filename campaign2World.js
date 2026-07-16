@@ -3742,6 +3742,10 @@ function buildNorthwatchFort(turnHex) {
             goblin.name = `Catapult Crew ${i + 1}`;
             goblin.isCatapultCrew = true;
             goblin.aiState = 'idle';
+            // Same wander-by-default gap as the orc guards below — a
+            // wandering crew member also breaks fireCatapultShot's crew
+            // adjacency check, silencing the catapult entirely.
+            goblin.behaviorType = 'stationary';
             goblin.factionTag = 'greenskin_assault';
             goblin._fleeHex = { q: catapultHex.q + 30, r: catapultHex.r };
             goblin.combatDirective = {
@@ -3760,6 +3764,16 @@ function buildNorthwatchFort(turnHex) {
             if (!orc) continue;
             orc.name = `Catapult Guard ${i + 1}`;
             orc.aiState = 'idle';
+            // Without an explicit behaviorType, createMonster defaults to
+            // 'wander' — since 'enemy'-side entities are always fully
+            // simulated (never dormant, unlike ambient neutral NPCs, see
+            // ACTIVE_SIM_RADIUS in gameEngine.js), an idle catapult guard
+            // would wander unboundedly over real time and could drift
+            // straight through the fort's gate onto an inner wall tile.
+            // 'stationary' keeps it planted at its post until something
+            // actually gives it a reason to move (holdPosition's own logic
+            // below, or real combat).
+            orc.behaviorType = 'stationary';
             orc.factionTag = 'greenskin_assault';
             orc.combatDirective = {
                 hostileTo: 'neutral',

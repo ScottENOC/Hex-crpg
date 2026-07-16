@@ -2466,6 +2466,18 @@ function tick() {
             updateNpcSchedules();
             rebuildRestlessSet(); // refresh whose HP/mana/poison the regen loop needs to touch
             if (window.siegeState?.active) tickSiegeState();
+            // The catapult only ever gets a scheduled turn (isCatapult block,
+            // aiProcess) while window.isInCombat is true — fine for the
+            // sally/join paths where the player is actively fighting nearby,
+            // but a player who stays passive in the fort never flips that
+            // flag, so the catapult would otherwise just sit there silently
+            // forever. Fire it here too, on the same real-time cadence as
+            // this out-of-combat refresh, whenever the siege is active and
+            // no turn-based combat is covering it.
+            if (window.siegeState?.active) {
+                const catapult = window.campaign2NorthwatchSiegeEngine;
+                if (catapult && catapult.alive && catapult.firesRemaining > 0) fireCatapultShot(catapult);
+            }
             if (window.warState?.active) tickWarState();
             if (window.tickUnicornWander) window.tickUnicornWander();
             tickCounter = 0;
@@ -3617,6 +3629,33 @@ function getSharedKnownOpponents(side) {
 }
 window.getSharedKnownOpponents = getSharedKnownOpponents;
 
+// Fires one catapult shot at a random fort wall hex, decrementing
+// firesRemaining and breaking the catapult once it's spent — shared by both
+// the turn-based isCatapult block in aiProcess (used whenever real combat
+// is active nearby) and the real-time out-of-combat tick (runTickInternal's
+// periodic-refresh block) that keeps the siege progressing even while the
+// player stays passive and nothing ever flips window.isInCombat true.
+// Returns false without doing anything if there's no crew to operate it.
+function fireCatapultShot(entity) {
+    const crewCount = window.entities.filter(e => e.alive && e.isCatapultCrew && window.distance(e.hex, entity.hex) <= 1).length;
+    if (crewCount < 1) return false;
+    const region = window.campaign2NorthwatchFortRegion;
+    const targetWall = region?.wallHexes?.length
+        ? region.wallHexes[Math.floor(window.pseudoRandom(entity.firesRemaining, window.worldSeconds || 0) * region.wallHexes.length)]
+        : null;
+    if (targetWall && window.damageWall) window.damageWall(targetWall.q, targetWall.r, 10);
+    entity.firesRemaining--;
+    window.catapultHasFired = true;
+    if (window.showMessage) window.showMessage(`The catapult fires! (${entity.firesRemaining} shot${entity.firesRemaining === 1 ? '' : 's'} left)`);
+    if (entity.firesRemaining <= 0) {
+        entity.hp = 0;
+        entity.alive = false;
+        if (window.showMessage) window.showMessage('The catapult breaks apart from the strain of its final shot!');
+    }
+    return true;
+}
+window.fireCatapultShot = fireCatapultShot;
+
 function aiProcess(entity) {
     // If another entity's turn started while this AI was mid-chain (stale timeout), abort.
     if (window.currentTurnEntity && window.currentTurnEntity !== entity) return;
@@ -3634,21 +3673,7 @@ function aiProcess(entity) {
     // that same alive flag rather than caring which way it happened.
     if (entity.isCatapult) {
         if (entity.alive && entity.firesRemaining > 0 && entity.timePoints >= 80) {
-            const crewCount = window.entities.filter(e => e.alive && e.isCatapultCrew && window.distance(e.hex, entity.hex) <= 1).length;
-            if (crewCount >= 1) {
-                const region = window.campaign2NorthwatchFortRegion;
-                const targetWall = region?.wallHexes?.length
-                    ? region.wallHexes[Math.floor(window.pseudoRandom(entity.firesRemaining, window.worldSeconds || 0) * region.wallHexes.length)]
-                    : null;
-                if (targetWall && window.damageWall) window.damageWall(targetWall.q, targetWall.r, 10);
-                entity.firesRemaining--;
-                window.catapultHasFired = true;
-                if (window.showMessage) window.showMessage(`The catapult fires! (${entity.firesRemaining} shot${entity.firesRemaining === 1 ? '' : 's'} left)`);
-                if (entity.firesRemaining <= 0) {
-                    entity.hp = 0;
-                    entity.alive = false;
-                    if (window.showMessage) window.showMessage('The catapult breaks apart from the strain of its final shot!');
-                }
+            if (fireCatapultShot(entity)) {
                 spendTP(entity, 80);
                 window.currentTurnEntity = null;
                 window.gamePhase = 'WAITING';
