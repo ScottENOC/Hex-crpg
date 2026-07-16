@@ -1020,6 +1020,17 @@ function hasLineOfSightUncached(start, end) {
     const isOpaqueWallName = (name) => name === 'Wall' || name === 'Keep Wall' || name === 'Climbable Wall';
     const startOnWall = isOpaqueWallName(window.getTerrainAt(start.q, start.r).name);
     const endOnWall = isOpaqueWallName(window.getTerrainAt(end.q, end.r).name);
+    // ELEVATED SHADOW: a wall only fully blocks sight for someone standing
+    // at ground level looking through it. Someone already elevated (on a
+    // wall, Pedestal, High Ground — anything with terrain.elevated) is
+    // looking down/across from height, so a wall hex the ray merely grazes
+    // far off in the distance shouldn't block them the same way one right
+    // in front of them does — it "casts a shadow" only a short way out.
+    // Adjacent-to-start/adjacent-to-end (below) already covers standing
+    // right next to your own wall; this widens that same idea to a small
+    // radius, but only when the viewer has the height to look past it.
+    const viewerElevated = !!window.getTerrainAt(start.q, start.r).elevated;
+    const ELEVATED_SHADOW_RADIUS = 3;
 
     for (let i = 0; i <= d; i++) {
         const t = d === 0 ? 0 : i / d;
@@ -1034,6 +1045,7 @@ function hasLineOfSightUncached(start, end) {
 
             if (startOnWall && adjacentToStart) continue;
             if (endOnWall && adjacentToEnd) continue;
+            if (viewerElevated && distance(start, current) > ELEVATED_SHADOW_RADIUS) continue;
 
             return false;
         }
