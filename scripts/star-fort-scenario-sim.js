@@ -113,6 +113,16 @@ async function runTicks(page, maxTicks, checkEvery, onCheck) {
                         if (e.combatDirective) e.combatDirective.mode = null;
                     }
                     e._chaseStuckTurns = 0;
+                    // Also clear the "parked" give-up counter
+                    // (resolveNoVisibleTargetAI, gameEngine.js): without this,
+                    // an entity that already hit its 8-parked-turns threshold
+                    // re-triggers the same disengage/markFled branch on its
+                    // very next no-visible-target turn, immediately re-benching
+                    // itself faster than this 20-tick top-up can keep clearing
+                    // it — reads as a permanent stall even though the flags
+                    // are technically being reset each cycle.
+                    e._parkedTurns = 0;
+                    e._parkedAtHex = null;
                 });
             });
         }
