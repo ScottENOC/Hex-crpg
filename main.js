@@ -736,7 +736,7 @@ window.updateRoguelikePreview = function() {
         html += `</p>`;
 
         html += `<p style="margin: 0;"><strong>${cls.charAt(0).toUpperCase() + cls.slice(1)}:</strong> `;
-        html += Object.entries(cb).map(([k, v]) => `+${v} ${k.charAt(0).toUpperCase() + k.slice(1)}`).join(", ");
+        html += Object.entries(cb).filter(([, v]) => v !== 0).map(([k, v]) => `+${v} ${k.charAt(0).toUpperCase() + k.slice(1)}`).join(", ");
         html += `</p>`;
 
         preview.innerHTML = html;

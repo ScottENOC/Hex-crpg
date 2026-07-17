@@ -20,14 +20,19 @@ const skills = {
         apply: (player) => {}
     },
     // STRENGTH
+    // Applied once here via baseDamage AND separately read again in the
+    // damage formula (attacker.skills['meleeDamage'], gameEngine.js's
+    // resolveAttack) with no melee/ranged distinction at all despite the
+    // name — the combination was a genuine +2 to every attack (melee,
+    // ranged, unarmed) per rank, not the +1-melee-only the description
+    // claimed. Now applies only via the direct skill-value read, which
+    // already covers every weapon type uniformly, so it's a real flat +1.
     'meleeDamage': {
-        name: 'Melee Damage',
-        description: 'Increases damage dealt by melee attacks by 1 per rank.',
+        name: 'Weapon Damage',
+        description: 'Increases damage dealt by any attack (melee, ranged, or unarmed) by 1 per rank.',
         tree: 'strength',
         maxRanks: 0,
-        apply: (player) => {
-            player.baseDamage += 1;
-        }
+        apply: (player) => {}
     },
     'light_armor_training': {
         name: 'Light Armor Training',
