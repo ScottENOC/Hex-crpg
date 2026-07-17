@@ -5512,11 +5512,33 @@ function handleClick(e){
     if (window.playerAction) {
         const act = window.playerAction;
         if (act.type === 'force_attack') {
+            // Force-Attack exists to bypass the neutral-target confirmation,
+            // not weapon range/LOS — tryAttack itself never validates
+            // distance (it trusts whoever's calling it already checked,
+            // same as the normal highlighted-'attack'-hex click path below
+            // does via getHexesInRange/hasLineOfSight), so without this
+            // check here a Force-Attack click on a genuinely out-of-range
+            // target (e.g. a climber several hexes below the wall) would
+            // still resolve — including the climbing-fall roll on hit —
+            // despite the player being unable to actually fire normally.
+            let inRange = false;
             if (target && target.alive && target !== player) {
+                let range = 1;
+                const weapon = player.equipped?.weapon ? window.items[player.equipped.weapon] : null;
+                if (weapon) {
+                    range += (weapon.range || 0);
+                    if (weapon.id === 'bow' && player.skills?.elf_bow_range) range += (player.skills.elf_bow_range * 4);
+                    if (weapon.subType === 'ranged' && window.getTerrainAt(player.hex.q, player.hex.r).elevated) range += 2;
+                }
+                inRange = getMinDistance(player, target) <= range && window.hasLineOfSight(player.hex, target.hex);
+            }
+            if (target && target.alive && target !== player && inRange) {
                 if (tryAttack(player, target, false, false, 0, true) !== false) {
                     spendTP(player, 10);
                     actionHandled = 'main_attack';
                 }
+            } else if (target) {
+                window.showMessage("Target out of range.");
             }
             window.playerAction = null;
             if (actionHandled) finalizePlayerAction(player, actionHandled);
