@@ -48,6 +48,20 @@ test.describe('monster art: distinct sprites and dialogue portraits', () => {
         expect(result.revenantBaseLoaded).toBe(true);
     });
 
+    test('a goblin player/NPC uses the layered CHAR_CONFIG body renderer via race/gender + monsterDefault, not the flat-circle fallback', async ({ page }) => {
+        await createCharacter(page, { race: 'goblin', campaign: '2' });
+        const result = await page.evaluate(() => ({
+            hasConfigMale: !!window.CHAR_CONFIG['goblin_male'],
+            hasConfigFemale: !!window.CHAR_CONFIG['goblin_female'],
+            baseKey: window.CHAR_CONFIG['goblin_male'].baseKey,
+            monsterDefaultLoaded: window.gameVisuals.monsterDefault?.complete,
+        }));
+        expect(result.hasConfigMale).toBe(true);
+        expect(result.hasConfigFemale).toBe(true);
+        expect(result.baseKey).toBe('monsterDefault');
+        expect(result.monsterDefaultLoaded).toBe(true);
+    });
+
     test('a renamed unique boss reusing generic monster art (e.g. elite_goblin base) keeps its spriteBase tint instead of showing the flat un-tinted art', async ({ page }) => {
         await createCharacter(page, { campaign: '1' });
         const result = await page.evaluate(() => {

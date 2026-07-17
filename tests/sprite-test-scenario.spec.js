@@ -24,8 +24,8 @@ test('campaign 4 sprite test scenario builds a full grid on visible grassland', 
         };
     });
     expect(result.currentCampaign).toBe('4');
-    expect(result.npcCount).toBe(48); // 4 races x 2 genders x 6 loadouts
-    expect(result.races).toEqual(['dwarf', 'elf', 'human', 'orc']);
+    expect(result.npcCount).toBe(60); // 5 races x 2 genders x 6 loadouts
+    expect(result.races).toEqual(['dwarf', 'elf', 'goblin', 'human', 'orc']);
     expect(result.terrainAtOrigin).toBe('Grass');
     expect(result.allEquipped).toBe(true);
     expect(result.originVisible).toBe(true);

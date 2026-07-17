@@ -1,9 +1,11 @@
 // tests/goblin-race.spec.js
 // Goblin as a playable race/mercenary race: race select options, the
 // goblin skill tree (data.js/skills.js), asymmetric starting faction
-// standing (factions.js's seedStanding), the flat goblin.png fallback
-// render (gameEngine.js's drawPlayerCharacter), and the alternate
-// goblin-camp spawn that skips the Hollowmere tavern scene entirely.
+// standing (factions.js's seedStanding), the layered CHAR_CONFIG render
+// reusing goblin.png as the body layer (gameEngine.js's
+// drawPlayerCharacter — see monster-art.spec.js for the render-path
+// assertion itself), and the alternate goblin-camp spawn that skips the
+// Hollowmere tavern scene entirely.
 
 const { test, expect } = require('@playwright/test');
 const { createCharacter } = require('./helpers.js');

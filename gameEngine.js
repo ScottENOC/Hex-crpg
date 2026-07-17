@@ -1142,16 +1142,16 @@ function updatePlayerUI() {
 }
 
 // CAMPAIGN 4: SPRITE OVERLAY TEST SCENARIO — a plain grassland populated
-// with static NPCs covering every race/gender combo that has a real layered
-// CHAR_CONFIG rig (human/elf/dwarf/orc; goblin has no layered rig at all —
-// see drawPlayerCharacter's early-return comment — so it's skipped here,
-// there's nothing to position), each shown in a few fixed loadouts so
-// weapon/armor/helmet overlay anchors (CHAR_CONFIG's mainHand/offHand/helm/
-// weaponSizeMult etc., gameEngine.js's drawPlayerCharacter) can be eyeballed
-// and tuned side by side. Not a real fight: no monsters, no combat, side
-// left 'neutral' so nothing auto-engages.
+// with static NPCs covering every playable race/gender combo, each shown in
+// a few fixed loadouts so weapon/armor/helmet overlay anchors (CHAR_CONFIG's
+// mainHand/offHand/helm/weaponSizeMult etc., gameEngine.js's
+// drawPlayerCharacter) can be eyeballed and tuned side by side. All five
+// races now have a real CHAR_CONFIG entry (goblin/orc reuse their flat
+// monster sprite as the body layer, same pipeline as everyone else — see
+// CHAR_CONFIG's goblin_male/orc_male comments). Not a real fight: no
+// monsters, no combat, side left 'neutral' so nothing auto-engages.
 window.SPRITE_TEST_ORIGIN = { q: 0, r: -6000 }; // far off in unused coordinate space, well clear of every other campaign's hand-placed content
-const SPRITE_TEST_RACES = ['human', 'elf', 'dwarf', 'orc'];
+const SPRITE_TEST_RACES = ['human', 'elf', 'dwarf', 'orc', 'goblin'];
 const SPRITE_TEST_GENDERS = ['male', 'female'];
 const SPRITE_TEST_LOADOUTS = [
     { label: 'sword+light+helm', equipment: ['sword', 'light_armor', 'nasal_helm'] },
@@ -1720,6 +1720,16 @@ const CHAR_CONFIG = {
     orc_male:     { bodyW:1.90, bodyH:2.10, yOff:-0.15, baseKey:'orcBase', hair:{ key:null }, armour:{ wMult:1.1, topShift:0.1 }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.35, y:0.64 }, offHand:{ x:0.59, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
     orc_female:   { bodyW:1.85, bodyH:2.05, yOff:-0.15, baseKey:'orcBase', hair:{ key:null }, armour:{ wMult:1.1, topShift:0.1 }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.40, y:0.66 }, offHand:{ x:0.60, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
 
+    // Goblin: same treatment as orc above — no dedicated layered body art,
+    // reuses the flat goblin.png monster sprite (window.gameVisuals.
+    // monsterDefault) as the body layer. Smaller bodyW/H than orc (goblins
+    // are the small/wiry race per raceData's flavor), otherwise the same
+    // full equipment-layering pipeline every other race gets. This used to
+    // hit drawPlayerCharacter's early-return (no CHAR_CONFIG entry at all),
+    // drawing only the flat sprite with no weapon/armor/helmet ever shown.
+    goblin_male:   { bodyW:1.50, bodyH:1.75, yOff:-0.12, baseKey:'monsterDefault', hair:{ key:null }, armour:{ wMult:0.9, topShift:0.1 }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.0 }, mainHand:{ x:0.35, y:0.64 }, offHand:{ x:0.59, y:0.50 }, weaponSizeMult:0.85, shieldSizeMult:0.36 },
+    goblin_female: { bodyW:1.45, bodyH:1.70, yOff:-0.12, baseKey:'monsterDefault', hair:{ key:null }, armour:{ wMult:0.9, topShift:0.1 }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.0 }, mainHand:{ x:0.40, y:0.66 }, offHand:{ x:0.60, y:0.50 }, weaponSizeMult:0.85, shieldSizeMult:0.36 },
+
     // ENEMY HUMANOIDS — sprite keys need matching images (e.g. gameVisuals.revenantBase)
     // Use backtick debug overlay to tune anchor dots once sprites are loaded.
     revenant_male:   { bodyW:1.85, bodyH:2.20, yOff:-0.18, baseKey:'revenantBase', hair:{ key:null }, armour:{ wMult:1.05, topShift:0 }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.35, y:0.64 }, offHand:{ x:0.59, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
@@ -1748,19 +1758,11 @@ window.CLOTHING_PRESETS = {
 function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
     const cfg = CHAR_CONFIG[`${e.race}_${e.gender}`];
     if (!cfg || !window.gameVisuals) {
-        // Goblin players/companions have no layered CHAR_CONFIG rig — reuse
-        // the same flat goblin.png the goblin monster template already uses
-        // (window.gameVisuals.monsterDefault) instead of the generic circle.
-        if (e.race === 'goblin' && window.gameVisuals?.monsterDefault?.complete) {
-            const size = window.hexSize * 1.5 * z;
-            ctx.drawImage(window.gameVisuals.monsterDefault, x - size / 2, y - size / 2 + flyOff, size, size);
-            return;
-        }
-        // Note: orc now has a real CHAR_CONFIG entry (orc_male/orc_female,
-        // above) reusing orcBase as its body layer, so it goes through the
-        // full equipment-layering path below instead of hitting this
-        // fallback block at all (this branch only fires if gameVisuals
-        // itself isn't loaded yet, same as every other race).
+        // Note: orc and goblin both now have real CHAR_CONFIG entries
+        // (baseKey:'orcBase'/'monsterDefault' respectively), so they go
+        // through the full equipment-layering path below instead of
+        // hitting this fallback block at all (this branch only fires if
+        // gameVisuals itself isn't loaded yet, same as every other race).
         // Fallback: draw a colored circle so the entity is always visible
         const r = window.hexSize * 0.45 * z;
         ctx.beginPath();
