@@ -687,7 +687,24 @@ function playerMoveProcess(player, path) {
             window.showMessage(hasLadder
                 ? `${player.name} scrambles up the ladder.`
                 : `${player.name} begins climbing the wall.`);
-            finalizePlayerAction(player, true);
+            // Committing to a climb always ends the turn right here,
+            // regardless of how much TP is left — the ~125 TP cost is
+            // banked into climbing.ticksRequired and paid off gradually via
+            // takeTurn's scripted CLIMBING block on future turns, not spent
+            // up front. finalizePlayerAction's normal shouldEndTurn check
+            // (TP <= 80) doesn't apply here: after only a 1-TP debit a
+            // fresh turn's TP is still well above 80, so it would restore
+            // gamePhase to 'PLAYER_TURN' and hand control straight back —
+            // the turn never actually ends, so the scripted climbing
+            // progression on takeTurn's next call never gets a chance to
+            // run, reading as "hangs at their turn."
+            window.clearHighlights();
+            window.currentTurnEntity = null;
+            window.gamePhase = 'WAITING';
+            window.updateTurnIndicator();
+            syncBackToPlayer(player);
+            window.drawMap();
+            window.renderEntities();
             return;
         }
 

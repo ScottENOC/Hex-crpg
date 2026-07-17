@@ -4186,8 +4186,29 @@ function buildRidgeholdFort(roadEnd) {
 // arrives together instead of stranding companions back wherever they were.
 function teleportPartyTo(centerHex) {
     const partyEntities = window.entities.filter(e => e.side === 'player' && !e.rider);
+    const anchorTerrain = window.getTerrainAt ? window.getTerrainAt(centerHex.q, centerHex.r) : {};
+    const wantElevated = !!anchorTerrain.elevated;
+    const seen = new Set([`${centerHex.q},${centerHex.r}`]);
+    const spots = [centerHex];
+    let frontier = [centerHex];
+    while (spots.length < partyEntities.length && frontier.length > 0 && window.getNeighbors) {
+        const next = [];
+        frontier.forEach(h => {
+            window.getNeighbors(h.q, h.r).forEach(n => {
+                const key = `${n.q},${n.r}`;
+                if (seen.has(key)) return;
+                seen.add(key);
+                const t = window.getTerrainAt(n.q, n.r);
+                if (t.impassable) return;
+                if (wantElevated && !t.elevated) return;
+                spots.push(n);
+                next.push(n);
+            });
+        });
+        frontier = next;
+    }
     partyEntities.forEach((e, i) => {
-        const hex = { q: centerHex.q + (i % 3), r: centerHex.r + Math.floor(i / 3) };
+        const hex = spots[i] || centerHex;
         e.hex = hex;
         e.visualQ = hex.q; e.visualR = hex.r;
         e.destination = null;

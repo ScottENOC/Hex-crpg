@@ -795,9 +795,40 @@ window.teleportPartyToLocation = function(locationName) {
     // Real party members/mounts only — never temporary combat allies, who
     // should stay wherever the fight they belong to left them.
     const friendlies = window.entities.filter(e => e.alive && e.side === 'player' && !e.aiControlled);
-    const spread = window.getNeighbors ? window.getNeighbors(hex.q, hex.r) : [];
+    // Land every party member on the same KIND of ground as the anchor hex
+    // itself, not just any neighbor of it — Northwatch's gate teleport
+    // target sits on the Climbable Wall ring, but a plain getNeighbors()
+    // spread doesn't care about terrain, so a follower (e.g. a companion
+    // like Wren, regardless of whatever formation was active before this
+    // teleport) could land one hex off the wall on ordinary ground while
+    // the leader stood right on it — reads as "they spawned outside the
+    // wall." BFS outward from the anchor, only accepting hexes that share
+    // its elevated/non-elevated classification, so the whole party ends up
+    // together on the wall (or together on the ground) regardless of
+    // formation.
+    const anchorTerrain = window.getTerrainAt ? window.getTerrainAt(hex.q, hex.r) : {};
+    const wantElevated = !!anchorTerrain.elevated;
+    const seen = new Set([`${hex.q},${hex.r}`]);
+    const spots = [hex];
+    let frontier = [hex];
+    while (spots.length < friendlies.length && frontier.length > 0 && window.getNeighbors) {
+        const next = [];
+        frontier.forEach(h => {
+            window.getNeighbors(h.q, h.r).forEach(n => {
+                const key = `${n.q},${n.r}`;
+                if (seen.has(key)) return;
+                seen.add(key);
+                const t = window.getTerrainAt(n.q, n.r);
+                if (t.impassable) return;
+                if (wantElevated && !t.elevated) return;
+                spots.push(n);
+                next.push(n);
+            });
+        });
+        frontier = next;
+    }
     friendlies.forEach((f, i) => {
-        const dest = i === 0 ? hex : (spread[i - 1] || hex);
+        const dest = spots[i] || hex;
         f.hex = { q: dest.q, r: dest.r };
         f.destination = null;
     });
