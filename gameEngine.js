@@ -1141,6 +1141,89 @@ function updatePlayerUI() {
     window.renderEntities();
 }
 
+// CAMPAIGN 4: SPRITE OVERLAY TEST SCENARIO — a plain grassland populated
+// with static NPCs covering every race/gender combo that has a real layered
+// CHAR_CONFIG rig (human/elf/dwarf/orc; goblin has no layered rig at all —
+// see drawPlayerCharacter's early-return comment — so it's skipped here,
+// there's nothing to position), each shown in a few fixed loadouts so
+// weapon/armor/helmet overlay anchors (CHAR_CONFIG's mainHand/offHand/helm/
+// weaponSizeMult etc., gameEngine.js's drawPlayerCharacter) can be eyeballed
+// and tuned side by side. Not a real fight: no monsters, no combat, side
+// left 'neutral' so nothing auto-engages.
+window.SPRITE_TEST_ORIGIN = { q: 0, r: -6000 }; // far off in unused coordinate space, well clear of every other campaign's hand-placed content
+const SPRITE_TEST_RACES = ['human', 'elf', 'dwarf', 'orc'];
+const SPRITE_TEST_GENDERS = ['male', 'female'];
+const SPRITE_TEST_LOADOUTS = [
+    { label: 'sword+light+helm', equipment: ['sword', 'light_armor', 'nasal_helm'] },
+    { label: 'spear+medium', equipment: ['spear', 'medium_armor'] },
+    { label: 'axe+heavy', equipment: ['axe', 'heavy_armor'] },
+    { label: 'dagger', equipment: ['dagger'] },
+    { label: 'club', equipment: ['club'] },
+    { label: 'bow', equipment: ['bow'] },
+];
+function setupSpriteTestScenario() {
+    window.entities = [];
+    window.isInCombat = false;
+    window.currentTurnEntity = null;
+
+    const origin = window.SPRITE_TEST_ORIGIN;
+    const radius = Math.max(SPRITE_TEST_RACES.length * SPRITE_TEST_GENDERS.length, SPRITE_TEST_LOADOUTS.length) * 2 + 6;
+    window.hexDisk(origin.q, origin.r, radius).forEach(h => window.setTerrainAt(h.q, h.r, 'Grass'));
+
+    // One row per race/gender combo, one column per loadout — 4 hexes of
+    // spacing both ways so a wide sprite (e.g. dwarf's 1.4x armour wMult)
+    // never visually overlaps its neighbor.
+    const rowSpacing = 4, colSpacing = 4;
+    const colStart = -Math.floor((SPRITE_TEST_LOADOUTS.length - 1) / 2) * colSpacing;
+    const combos = [];
+    SPRITE_TEST_RACES.forEach(race => SPRITE_TEST_GENDERS.forEach(gender => combos.push({ race, gender })));
+    const rowStart = -Math.floor((combos.length - 1) / 2) * rowSpacing;
+
+    // Visibility (isVisibleToPlayer, hexMap.js) is computed relative to a
+    // real side:'player' entity — without one, every hex here reads as
+    // unexplored and renders as blank canvas. A big visionBonus guarantees
+    // the whole grid is lit regardless of its final size; parked one row
+    // above the topmost combo row (not at the grid's exact center, which
+    // would land exactly on one of the NPCs since row/col spacing is even)
+    // so it never visually overlaps whatever's being inspected.
+    const playerHex = { q: origin.q, r: origin.r + rowStart - rowSpacing };
+    const playerEntity = new window.Entity(window.party[0].name, 'red', playerHex, window.party[0].attributes.agility + 10);
+    playerEntity.side = 'player';
+    Object.assign(playerEntity, window.party[0]);
+    playerEntity.hex = playerHex;
+    playerEntity.visualQ = playerHex.q; playerEntity.visualR = playerHex.r;
+    playerEntity.skills = window.party[0].skills;
+    // A big flat bonus rather than radius-derived: vision range gets
+    // multiplied by the current light level (worldTime.js), floored at
+    // 0.2x at night — campaign 4 doesn't bother forcing full daylight (this
+    // is a static display, not a real scene), so the bonus needs enough
+    // headroom to clear that 5x worst-case reduction and still cover the
+    // whole grid.
+    playerEntity.visionBonus = 400;
+    window.entities.push(playerEntity);
+
+    combos.forEach((combo, row) => {
+        SPRITE_TEST_LOADOUTS.forEach((loadout, col) => {
+            const hex = { q: origin.q + colStart + col * colSpacing, r: origin.r + rowStart + row * rowSpacing };
+            const ent = window.buildNPC({
+                name: `${combo.race}_${combo.gender}_${loadout.label}`,
+                title: loadout.label,
+                race: combo.race, gender: combo.gender,
+                hex,
+                classLevels: ['fighter'],
+                skillPicks: [],
+                equipment: loadout.equipment,
+                side: 'neutral',
+            });
+            window.entities.push(ent);
+        });
+    });
+
+    window.drawMap();
+    window.renderEntities();
+}
+window.setupSpriteTestScenario = setupSpriteTestScenario;
+
 function startGameCore(isLoading = false) {
   window.gamePhase = 'WAITING';
   window.playerWorldPos = { x: 220, y: 200 };
@@ -1411,7 +1494,7 @@ function startGameCore(isLoading = false) {
   visuals.harpy.src = 'images/harpy.svg';
   visuals.wraith.src = 'images/wraith.svg';
   visuals.basilisk.src = 'images/basilisk.svg';
-  visuals.minotaur.src = 'images/minotaur.svg';
+  visuals.minotaur.src = 'images/minotaur.png';
   visuals.revenantBase.src = 'images/revenant.svg';
   visuals.skeletonBase.src = 'images/skeletonBase.svg';
   visuals.barding_light.src = 'images/barding_light.svg';
@@ -1530,6 +1613,15 @@ function startGameCore(isLoading = false) {
       if (!window.tickInterval) window.tickInterval = setInterval(tick, 10);
       const fp = window.entities.find(e => e.side === 'player' && !e.rider);
       if (fp && window.centerCameraOn) window.centerCameraOn(fp.hex);
+      return;
+  }
+
+  if (window.currentCampaign === "4") {
+      setupSpriteTestScenario();
+      document.addEventListener("keydown", window.handleMovement);
+      window.mapCanvas.addEventListener("click", window.handleClick);
+      if (!window.tickInterval) window.tickInterval = setInterval(tick, 10);
+      if (window.centerCameraOn) window.centerCameraOn(window.SPRITE_TEST_ORIGIN);
       return;
   }
 

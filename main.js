@@ -85,7 +85,7 @@ document.addEventListener("DOMContentLoaded", () => {
             {key: 'harpy', src: 'images/harpy.svg'},
             {key: 'wraith', src: 'images/wraith.svg'},
             {key: 'basilisk', src: 'images/basilisk.svg'},
-            {key: 'minotaur', src: 'images/minotaur.svg'},
+            {key: 'minotaur', src: 'images/minotaur.png'},
             {key: 'revenantBase', src: 'images/revenant.svg'},
             {key: 'wolf', src: 'images/wolf.png'},
             {key: 'torch_lit', src: 'images/torch_lit.svg'},
