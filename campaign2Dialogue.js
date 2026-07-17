@@ -3780,6 +3780,7 @@ function spawnGreenskinAssaultWave() {
     const center = window.campaign2NorthwatchCenter;
     if (!center) return;
     const gateHex = window.campaign2NorthwatchGateHex || center;
+    if (window.spawnBrotherAlden) window.spawnBrotherAlden();
     const attackerCount = 30;
     const spawnRadius = 30;
     for (let i = 0; i < attackerCount; i++) {
@@ -4268,6 +4269,94 @@ function grantStarFortCompanion(side) {
     window.renderEntities();
 }
 window.grantStarFortCompanion = grantStarFortCompanion;
+
+// BROTHER ALDEN: fights in the compound during the real Northwatch assault
+// (spawned once wave 1 triggers, see spawnGreenskinAssaultWave above)
+// instead of being granted out of nowhere once the siege resolved.
+// Constrained to the keep interior/hexagon gaps alongside the commander
+// and the 6 hexagon-point archers (same preferHexagonPoints behavior,
+// gameEngine.js), level-matched to the party via the same
+// applyClassLevelScaling the arena's humanoid roster already uses. If he
+// dies in the fight, resolveNorthwatchSiege (gameEngine.js) simply never
+// sets offersToJoin — no separate death handling needed, e.alive already
+// covers it, and the join dialogue (npcDialogueTrees.brother_alden below)
+// only ever fires for a survivor.
+function spawnBrotherAlden() {
+    if (window.entities.some(e => e.name === 'Brother Alden')) return;
+    const keepRegion = window.campaign2NorthwatchKeepRegion;
+    const center = window.campaign2NorthwatchCenter;
+    if (!center) return;
+    const spawnHex = keepRegion?.floorHexes?.[0] || { q: center.q, r: center.r + 1 };
+
+    const data = window.createCharacterData('human', 'monk', 'Brother Alden', 'male', 'pc_1');
+    const ent = new window.Entity(data.name, 'red', spawnHex, (data.attributes.agility || 10) + 10);
+    Object.assign(ent, data);
+    ent.hex = { ...spawnHex };
+    ent.visualQ = ent.hex.q; ent.visualR = ent.hex.r;
+    ent.startQ = ent.hex.q; ent.startR = ent.hex.r;
+    ent.destination = null; ent.moveCooldown = 0;
+    ent.side = 'neutral';
+    ent.factionTag = 'northwatch_human';
+    ent.isNPC = true;
+    ent.aiState = 'idle';
+    ent.aiControlled = true;
+    ent.timePoints = 100;
+    ent.dialogueId = 'brother_alden';
+
+    if (window.party?.length) {
+        let avgPartyLevel = window.party.reduce((sum, c) => sum + c.level, 0) / window.party.length;
+        const bonusLevels = Math.max(0, Math.round(avgPartyLevel) - 1);
+        if (window.applyClassLevelScaling) window.applyClassLevelScaling(ent, bonusLevels);
+    }
+
+    const keepFloorAndGaps = keepRegion
+        ? new Set([...keepRegion.floorHexes, ...keepRegion.gapHexes].map(h => `${h.q},${h.r}`))
+        : new Set();
+    ent.combatDirective = {
+        hostileTo: 'enemy',
+        outnumberWeight: 2,
+        constraints: { stayWithinHexes: keepFloorAndGaps },
+        priorities: [{ type: 'insideRegion', hexes: keepFloorAndGaps }],
+        preferHexagonPoints: true,
+    };
+
+    window.entities.push(ent);
+    if (window.drawMap) window.drawMap();
+    if (window.renderEntities) window.renderEntities();
+}
+window.spawnBrotherAlden = spawnBrotherAlden;
+
+window.npcDialogueTrees.brother_alden = (npc) => {
+    if (!npc.offersToJoin) {
+        window.showDialogue(npc, "Brother Alden gives you a brief nod, still watching the walls. \"Questions can wait — help however you can.\"");
+        return;
+    }
+    if (window.party.some(p => p.name === 'Brother Alden')) {
+        window.showDialogue(npc, "\"Glad to be fighting alongside you now.\"");
+        return;
+    }
+    window.showDialogue(npc, "Brother Alden lowers his guard, breathing hard but very much alive. \"Brother Alden, of the Silverhart monastery — posted here to help hold the wall. And hold it we did, thanks to you. I've nowhere pressing to be, and I don't much fancy more garrison duty after this. Would you have me along?\"", [
+        { label: "Join us, Brother Alden.", action: () => {
+            const companion = window.createCharacterData(npc.race, npc.class, npc.name, npc.gender, 'pc_1');
+            Object.assign(companion, {
+                level: npc.level, exp: npc.exp, hp: npc.hp, maxHp: npc.maxHp,
+                skills: npc.skills, equipped: npc.equipped, inventory: npc.inventory,
+                attributes: npc.attributes, classLevelsGranted: npc.classLevelsGranted,
+            });
+            window.party.push(companion);
+            npc.side = 'player';
+            npc.isNPC = false;
+            npc.aiControlled = false;
+            delete npc.combatDirective;
+            window.companionAttitude[npc.name] = 60;
+            if (window.updatePartyTabs) window.updatePartyTabs();
+            window.showMessage(`${npc.name} joins your party.`);
+        }},
+        { label: "Not this time.", action: () => {
+            window.showMessage(`${npc.name} nods and stays behind to help rebuild the garrison.`);
+        }}
+    ]);
+};
 
 // Converts a placeholder Entity (placed by buildSideQuestContent,
 // campaign2World.js) into a real party member — same shape as

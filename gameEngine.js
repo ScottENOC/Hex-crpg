@@ -5087,6 +5087,19 @@ function aiProcess(entity) {
             // equal it stays put rather than wandering down for a target
             // that isn't actually in range yet.
             if (entity.combatDirective?.preferWalls && t.climbRisk) s += 8;
+            // HEXAGON POINT PREFERENCE: the keep's 6 gap hexes are the best
+            // vision in the compound (every hexagon archer's post,
+            // buildNorthwatchFort) — an entity marked to want one gravitates
+            // to whichever is currently unoccupied, rather than idling
+            // wherever it happens to be standing. Weaker than holdGround/
+            // preferWalls's hard holds (a real target still takes priority
+            // via the distance term this only adds on top of), so it only
+            // shapes behavior while nothing more urgent is going on.
+            if (entity.combatDirective?.preferHexagonPoints) {
+                const gaps = window.campaign2NorthwatchKeepGaps || [];
+                const onGap = gaps.some(g => g.q === h.q && g.r === h.r);
+                if (onGap && !getEntityAtHex(h.q, h.r)) s += 12;
+            }
             return {h, s};
         }).sort((a,b) => b.s - a.s)[0].h;
 
@@ -6142,6 +6155,12 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   const weapon = window.items[attacker.equipped?.[weaponSlot]] || null;
   const isRanged = weapon?.subType === 'ranged';
 
+  // A visible arrow/bolt flying attacker->target on every ranged attack
+  // (hit or miss — a real shot still flies even when it misses), so a
+  // ranged exchange actually reads as an attack instead of just a combat
+  // log line. Melee never gets this; it already has its own hit-flash.
+  if (isRanged && window.spawnProjectile) window.spawnProjectile(attacker.hex, target.hex);
+
   // Marks this target as under direct attack this combat regardless of
   // hit/miss — read by combatDirective.passiveUnlessThreatened (aiProcess)
   // so a normally hang-back defender (e.g. a commander) still fights back
@@ -6953,6 +6972,13 @@ window.setFactionHostileToPlayer = setFactionHostileToPlayer;
 function tickSiegeState() {
     const s = window.siegeState;
     if (!s || !s.active) return;
+    // Once the real scripted assault begins (wave 1 spawned,
+    // spawnGreenskinAssaultWave), the abstract pressure-drift model stops
+    // driving resolution — checkCombatEnd's dedicated Northwatch check
+    // takes over instead, tied to the real fight's actual outcome (all
+    // defenders dead, or all of wave 1/wave 2/the ram/the sapper dead)
+    // rather than a random walk with no idea any of that exists.
+    if (window.greenskinWaveSpawned) return;
     s.pressure += (Math.random() - 0.5) * 2;
 
     if (s.commanderAlive && s.segments.length) {
@@ -7012,7 +7038,22 @@ function resolveNorthwatchSiege(outcome) {
     else if (window.playerAidingGreenskins) playerSide = 'greenskin';
     else playerSide = outcome === 'fort_fallen' ? 'greenskin' : 'human';
     window.northwatchPlayerSide = playerSide;
-    if (window.grantStarFortCompanion) window.grantStarFortCompanion(playerSide);
+    // Brother Alden (human side) now fights in the compound during the real
+    // assault (spawnBrotherAlden, campaign2Dialogue.js) instead of being
+    // granted out of nowhere afterward — he only gets a chance to join if
+    // he actually survived the fight, and it's a real conversation
+    // (npcDialogueTrees.brother_alden) rather than an automatic grant.
+    // The greenskin side's Snik Fangtooth still uses the older automatic
+    // grant unchanged.
+    if (playerSide === 'human') {
+        const alden = window.entities.find(e => e.name === 'Brother Alden');
+        if (alden && alden.alive) {
+            alden.offersToJoin = true;
+            window.showMessage("Brother Alden lowers his guard, breathing hard but alive. He looks like he wants to talk.");
+        }
+    } else if (window.grantStarFortCompanion) {
+        window.grantStarFortCompanion(playerSide);
+    }
 
     // The fort fight settles who the player is now fighting for, not the
     // whole war — that's window.warState, a slower, mission-driven tug of
@@ -7213,6 +7254,21 @@ function checkCombatEnd() {
         window.entities.some(e => e.isLichChapterhouseDefender) &&
         !window.entities.some(e => e.isLichChapterhouseDefender && e.alive)) {
         if (window.resolveLichChapterhouseDestroyed) window.resolveLichChapterhouseDestroyed();
+    }
+
+    // NORTHWATCH REAL ASSAULT RESOLUTION: once the scripted wave 1 assault
+    // actually begins (spawnGreenskinAssaultWave, campaign2Dialogue.js),
+    // the old abstracted pressure-drift model (tickSiegeState) stops
+    // resolving the siege on its own — see the early return there — and
+    // this precise check takes over instead, same "checked on its own
+    // condition" pattern as the Ironbond/lich-hunt blocks above: fort_fallen
+    // once every Northwatch defender is dead, siege_broken once every
+    // greenskin_assault attacker (wave 1, wave 2, the ram, the sapper) is.
+    if (window.currentCampaign === "2" && window.greenskinWaveSpawned && window.siegeState?.active) {
+        const defendersAlive = window.entities.some(e => e.factionTag === 'northwatch_human' && e.alive);
+        const attackersAlive = window.entities.some(e => e.factionTag === 'greenskin_assault' && e.alive);
+        if (!defendersAlive && window.resolveNorthwatchSiege) window.resolveNorthwatchSiege('fort_fallen');
+        else if (!attackersAlive && window.resolveNorthwatchSiege) window.resolveNorthwatchSiege('siege_broken');
     }
 
     // Track Boss defeats

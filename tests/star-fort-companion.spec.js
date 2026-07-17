@@ -1,32 +1,72 @@
 // tests/star-fort-companion.spec.js
 // Whichever side the player ends up on when the Northwatch siege resolves
-// (win or lose) grants a companion: a goblin rogue for the greenskin side,
-// a human monk for the human side. Player-side is forced from the
-// unforgivable-act hostility flips if any fired, else falls back to
-// whoever won the siege.
+// (win or lose) can gain a companion. Greenskin side (Snik Fangtooth) is
+// still an automatic grant. Human side (Brother Alden) now fights in the
+// compound during the real assault instead of appearing out of nowhere:
+// he has to actually survive the fight (spawnBrotherAlden), the siege
+// resolving in the humans' favor only offers a real join/reject
+// conversation (npcDialogueTrees.brother_alden), and he's not in the
+// party until that's accepted.
 
 const { test, expect } = require('@playwright/test');
 const { createCharacter } = require('./helpers.js');
 
 test.describe('Star Fort companion reward', () => {
-    test('siege_broken with no betrayals grants the human monk companion', async ({ page }) => {
+    test('siege_broken with no betrayals offers Brother Alden a join conversation, not an automatic grant', async ({ page }) => {
         await createCharacter(page);
         const result = await page.evaluate(() => {
             window.activateNorthwatchSiege();
+            window.spawnBrotherAlden();
             window.resolveNorthwatchSiege('siege_broken');
-            const companion = window.party.find(p => p.name === 'Brother Alden');
             const ent = window.entities.find(e => e.name === 'Brother Alden');
             return {
                 side: window.northwatchPlayerSide,
-                inParty: !!companion,
-                companionRace: companion?.race,
+                inPartyBeforeTalking: window.party.some(p => p.name === 'Brother Alden'),
+                offersToJoin: ent?.offersToJoin,
+                entAlive: ent?.alive,
                 entSide: ent?.side,
+                stayWithinCompound: !!ent?.combatDirective?.constraints?.stayWithinHexes,
             };
         });
         expect(result.side).toBe('human');
-        expect(result.inParty).toBe(true);
-        expect(result.companionRace).toBe('human');
-        expect(result.entSide).toBe('player');
+        expect(result.inPartyBeforeTalking).toBe(false);
+        expect(result.offersToJoin).toBe(true);
+        expect(result.entAlive).toBe(true);
+        expect(result.entSide).toBe('neutral');
+        expect(result.stayWithinCompound).toBe(true);
+    });
+
+    test('accepting Brother Alden\'s offer via dialogue adds him to the party; declining leaves him behind', async ({ page }) => {
+        await createCharacter(page);
+        const accepted = await page.evaluate(() => {
+            window.activateNorthwatchSiege();
+            window.spawnBrotherAlden();
+            window.resolveNorthwatchSiege('siege_broken');
+            const ent = window.entities.find(e => e.name === 'Brother Alden');
+            window.npcDialogueTrees.brother_alden(ent);
+            const btn = [...document.querySelectorAll('#dialogue-options button')].find(b => b.innerText.includes('Join us'));
+            btn.click();
+            return {
+                inParty: window.party.some(p => p.name === 'Brother Alden'),
+                entSide: ent.side,
+            };
+        });
+        expect(accepted.inParty).toBe(true);
+        expect(accepted.entSide).toBe('player');
+    });
+
+    test('a dead Brother Alden never gets offersToJoin set, so the siege reward is skipped entirely', async ({ page }) => {
+        await createCharacter(page);
+        const result = await page.evaluate(() => {
+            window.activateNorthwatchSiege();
+            window.spawnBrotherAlden();
+            const ent = window.entities.find(e => e.name === 'Brother Alden');
+            ent.alive = false;
+            window.resolveNorthwatchSiege('siege_broken');
+            return { offersToJoin: !!ent.offersToJoin, inParty: window.party.some(p => p.name === 'Brother Alden') };
+        });
+        expect(result.offersToJoin).toBe(false);
+        expect(result.inParty).toBe(false);
     });
 
     test('fort_fallen with no betrayals grants the goblin rogue companion', async ({ page }) => {

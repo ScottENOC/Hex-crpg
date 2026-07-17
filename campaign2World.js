@@ -3956,6 +3956,7 @@ function buildNorthwatchFort(turnHex) {
             constraints: { stayWithinHexes: keepFloorAndGaps },
             priorities: [{ type: 'nearHex', hex: postHex, radius: 0 }, { type: 'insideRegion', hexes: keepFloorAndGaps }],
             retreatTo: { q: center.q, r: center.r },
+            preferHexagonPoints: true,
             contingencies: [{
                 id: 'fall_back_to_hexagon_center',
                 when: (e) => window.entities.some(o => o.alive && o.side === 'enemy' && window.distance(e.hex, o.hex) <= 1),
@@ -4064,6 +4065,7 @@ function buildNorthwatchFort(turnHex) {
             threatRadius: 3,
             priorities: [{ type: 'insideRegion', hexes: fortInterior }],
             meleeTriggerHexes,
+            preferHexagonPoints: true,
         };
         // FALLEN ARCHER POST: the instant the first of the 6 hexagon
         // archers dies, the commander abandons the passive keep-center

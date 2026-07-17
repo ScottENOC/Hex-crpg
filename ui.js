@@ -1876,7 +1876,12 @@ function updateTurnIndicator() {
         const infoDiv = document.createElement('div');
         infoDiv.classList.add('turn-indicator-info');
         const dcTag = entity.disconnected ? ' <span style="color:#f44336;font-size:0.8em">(offline)</span>' : '';
-        let infoHtml = `<p><strong>${entity.name.split(' ')[0]}</strong>${dcTag}</p><p>HP: ${Math.ceil(entity.hp)}/${entity.maxHp} ${window.isInCombat ? `| TP: ${Math.floor(entity.timePoints)}` : ''}</p>`;
+        // Full name for real party members/companions (e.g. "Brother
+        // Alden", not just "Brother") — first-word-only stays for
+        // monster-side entities, where it's trimming a numbered suffix
+        // like "Orc 5" down to the species name, not a real name.
+        const displayName = entity.side === 'player' ? entity.name : entity.name.split(' ')[0];
+        let infoHtml = `<p><strong>${displayName}</strong>${dcTag}</p><p>HP: ${Math.ceil(entity.hp)}/${entity.maxHp} ${window.isInCombat ? `| TP: ${Math.floor(entity.timePoints)}` : ''}</p>`;
         if (entity.maxMana > 0 || entity.currentMana > 0) infoHtml += `<p>MP: ${Math.floor(entity.currentMana)}/${entity.maxMana || 0}</p>`;
         if (entity.riding) {
             const m = entity.riding;

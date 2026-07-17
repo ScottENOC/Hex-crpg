@@ -438,6 +438,7 @@ function drawMap() {
 
   // 7. PASS 6: Floating combat text (damage/heal/miss) - always on top
   if (window.renderFloatingTexts) window.renderFloatingTexts(mapCtx, hexToPixel, window.cameraZoom);
+  if (window.renderProjectiles) window.renderProjectiles(mapCtx, hexToPixel, window.cameraZoom);
 
   // Speech bubbles render after renderEntities (gameEngine.js), not here —
   // drawMap() always runs before renderEntities() in every call site, so
