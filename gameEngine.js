@@ -669,13 +669,22 @@ function playerMoveProcess(player, path) {
         // total cost this single step would otherwise have charged in full.
         const climbTransition = !player.isFlying && terrain.climbRisk && !previousTerrain.climbRisk;
         if (climbTransition) {
+            // A ladder propped against this exact wall hex (Northwatch's
+            // notches, campaign2World.js) makes climbing up it as much
+            // faster as it already makes climbing back down it
+            // (climbDownCost's own hasLadderHere check, below) — same
+            // ~40% ratio (10 vs the usual 25).
+            const hasLadder = window.tileObjects?.[`${player.hex.q},${player.hex.r}`]?.type === 'ladder';
+            const climbCost = hasLadder ? Math.round(stepCost * 0.4) : stepCost;
             moveEntity.climbing = {
                 fromHex: previousHex,
-                ticksRequired: Math.max(1, Math.round(stepCost)),
+                ticksRequired: Math.max(1, Math.round(climbCost)),
                 ticksSpent: 0,
             };
             spendTP(moveEntity, 1);
-            window.showMessage(`${player.name} begins climbing the wall.`);
+            window.showMessage(hasLadder
+                ? `${player.name} scrambles up the ladder.`
+                : `${player.name} begins climbing the wall.`);
             finalizePlayerAction(player, true);
             return;
         }
@@ -996,6 +1005,27 @@ function updatePlayerUI() {
                 }
             }
         }
+    }
+
+    // CLIMBING START: an adjacent Climbable Wall hex is always a valid move
+    // target regardless of its full climb cost — climbing is a committed
+    // multi-turn status (climbTransition, playerMoveProcess) that only
+    // charges 1 TP to begin, not the whole ~25 TP up front. The BFS above
+    // prices it like ordinary terrain via getMoveCostMult and so never
+    // highlights it once that exceeds availableTP, which read to the
+    // player as the wall being permanently "out of range this turn."
+    // Climbing can only be initiated from the player's own current hex
+    // (not chained mid-path), and only when not already on climbRisk
+    // terrain themselves.
+    if (!player.isFlying && !window.getTerrainAt(player.hex.q, player.hex.r).climbRisk && availableTP >= 1) {
+        window.getNeighbors(player.hex.q, player.hex.r).forEach(n => {
+            if (getEntityAtHex(n.q, n.r)) return;
+            const t = window.getTerrainAt(n.q, n.r);
+            if (!t.climbRisk) return;
+            const key = `${n.q},${n.r}`;
+            if (reachable.has(key)) return; // already included at its real (affordable) cost
+            window.highlightedHexes.push({ ...n, type: 'move' });
+        });
     }
 
     let attackRange = 1;
@@ -2039,16 +2069,13 @@ function renderEntities() {
       // Basic off-screen culling for drawing
       if (x < -100 || y < -100 || x > window.mapCanvas.width + 100 || y > window.mapCanvas.height + 100) return;
       
-      // TERRAIN OFFSET: stand on top of any elevated terrain (pedestals, fort ramparts)
-      const t = window.getTerrainAt(e.hex.q, e.hex.r);
-      if (t.elevated) {
-          y -= (window.hexSize * 0.6) * z; // 30% of hex height (2*size is full height)
-      }
-
       // ALLEGIANCE OUTLINE: a fight with several factions in the same room
       // (the tavern brawl, an arena boss + guards, a goblin camp) is hard to
       // read from sprite color alone — party/temporary-ally/bystander/enemy
-      // each get their own hex outline color, drawn under the sprite.
+      // each get their own hex outline color, drawn under the sprite. Drawn
+      // at the true (pre-elevation-offset) grid position — it marks which
+      // hex the entity actually occupies, so it must stay put even when the
+      // sprite itself is lifted for the elevated-terrain 3D effect below.
       const outlineMode = window.allegianceOutlineMode || 'combat';
       const showOutline = outlineMode === 'always' || (outlineMode === 'combat' && window.isInCombat);
       if (showOutline && e.alive && !e.rider) {
@@ -2060,6 +2087,14 @@ function renderEntities() {
           if (allegianceColor) {
               window.drawHex(x, y, window.hexSize, { stroke: allegianceColor, lineWidth: 2.5 * z });
           }
+      }
+
+      // TERRAIN OFFSET: stand on top of any elevated terrain (pedestals, fort
+      // ramparts) — a purely visual lift for the sprite itself, applied after
+      // the outline above so the outline stays anchored to the real hex.
+      const t = window.getTerrainAt(e.hex.q, e.hex.r);
+      if (t.elevated) {
+          y -= (window.hexSize * 0.6) * z; // 30% of hex height (2*size is full height)
       }
 
           if (e.isStealthed) window.mapCtx.globalAlpha = 0.5;
@@ -4904,9 +4939,11 @@ function aiProcess(entity) {
                 // non-climbRisk terrain commits to climbing instead of
                 // paying the full cost in one atomic step.
                 if (!entity.isFlying && terrain.climbRisk && !previousTerrain.climbRisk) {
+                    const aiHasLadder = window.tileObjects?.[`${entity.hex.q},${entity.hex.r}`]?.type === 'ladder';
+                    const aiClimbCost = 5 * window.getMoveCostMult(entity.hex.q, entity.hex.r, moveEntity) * (aiHasLadder ? 0.4 : 1);
                     moveEntity.climbing = {
                         fromHex: previousHex,
-                        ticksRequired: Math.max(1, Math.round(5 * window.getMoveCostMult(entity.hex.q, entity.hex.r, moveEntity))),
+                        ticksRequired: Math.max(1, Math.round(aiClimbCost)),
                         ticksSpent: 0,
                     };
                     spendTP(moveEntity, 1);
