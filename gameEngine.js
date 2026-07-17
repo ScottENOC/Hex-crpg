@@ -2609,6 +2609,14 @@ function tick() {
                 // isCatapult/firesRemaining) is the one fireCatapultShot and
                 // the isCatapult aiProcess block are actually built for.
                 const catapult = window.campaign2NorthwatchCatapult;
+                // Built with isNPC:true (campaign2World.js, "spawned idle/
+                // inert") and never cleared once it actually starts firing
+                // — updateTurnIndicator (ui.js) excludes anyone with isNPC
+                // set, so the catapult (and by extension "the attackers,"
+                // since it's the only one doing anything during this early
+                // phase) never showed in the initiative tracker even while
+                // actively bombarding the wall.
+                if (catapult) catapult.isNPC = false;
                 if (catapult && catapult.alive && catapult.firesRemaining > 0) fireCatapultShot(catapult);
                 // The catapult firing itself is the only thing that ever gets
                 // a scheduled turn while the player stays passive — nothing
@@ -3898,6 +3906,7 @@ function aiProcess(entity) {
     // siege (crew flee, knights beeline it, greenskins hold/assault) reads
     // that same alive flag rather than caring which way it happened.
     if (entity.isCatapult) {
+        entity.isNPC = false; // see the matching real-time-cadence clear above
         if (entity.alive && entity.firesRemaining > 0 && entity.timePoints >= 80) {
             if (fireCatapultShot(entity)) {
                 spendTP(entity, 80);
