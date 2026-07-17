@@ -3832,6 +3832,15 @@ function spawnGreenskinAssaultWave() {
             e.destination = null;
             e.moveCooldown = 0;
         }
+        // Northwatch's whole garrison is built via buildNPC (npcBuilder.js),
+        // which always sets isNPC:true — fine for a dialogue-only NPC, but
+        // updateTurnIndicator (ui.js) excludes anyone with isNPC set, so the
+        // defenders never appeared in the initiative tracker even while
+        // actively fighting for their lives. Clear it the instant the real
+        // assault begins, same convention already used everywhere else a
+        // placed NPC becomes a genuine combatant (e.g. startNorthwatchSally's
+        // siege engine).
+        if (e.factionTag === 'northwatch_human') e.isNPC = false;
     });
     if (window.deconflictPartyStacking) window.deconflictPartyStacking();
     if (window.snapVisuals) window.snapVisuals();
