@@ -4274,8 +4274,7 @@ window.grantStarFortCompanion = grantStarFortCompanion;
 // (spawned once wave 1 triggers, see spawnGreenskinAssaultWave above)
 // instead of being granted out of nowhere once the siege resolved.
 // Constrained to the keep interior/hexagon gaps alongside the commander
-// and the 6 hexagon-point archers (same preferHexagonPoints behavior,
-// gameEngine.js), level-matched to the party via the same
+// and the 6 hexagon-point archers, level-matched to the party via the same
 // applyClassLevelScaling the arena's humanoid roster already uses. If he
 // dies in the fight, resolveNorthwatchSiege (gameEngine.js) simply never
 // sets offersToJoin — no separate death handling needed, e.alive already
@@ -4317,7 +4316,6 @@ function spawnBrotherAlden() {
         outnumberWeight: 2,
         constraints: { stayWithinHexes: keepFloorAndGaps },
         priorities: [{ type: 'insideRegion', hexes: keepFloorAndGaps }],
-        preferHexagonPoints: true,
     };
 
     window.entities.push(ent);
