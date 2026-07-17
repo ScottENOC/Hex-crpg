@@ -3802,6 +3802,52 @@ function spawnGreenskinAssaultWave() {
         ent.timePoints = 100 + Math.random() * 0.9;
         window.entities.push(ent);
     }
+
+    // BATTERING RAM + REAR SAPPER: the first wave isn't meant to win —
+    // it's cover. While it occupies the garrison, a ram works the gate and
+    // a sapper creeps a fire charge to the rear wall; once BOTH have run
+    // their course (breached through or been killed by defenders who
+    // weren't distracted enough), a real second wave pours through
+    // whatever's actually open. Both gated on defendersDistracted()
+    // (gameEngine.js) — see the isBatteringRam/isSiegeSapper aiProcess
+    // blocks for the actual per-turn progress and the wave-2 trigger.
+    const region = window.campaign2NorthwatchFortRegion;
+    if (region?.wallHexes?.length) {
+        const ram = window.createMonster('siege_engine', { q: gateHex.q, r: gateHex.r - 2 }, null, null, 'enemy');
+        if (ram) {
+            ram.name = 'Battering Ram';
+            ram.isBatteringRam = true;
+            ram.roundsRemaining = 5;
+            ram.hp = 60; ram.maxHp = 60; ram.canLoot = false; ram.noAttack = true;
+            ram.factionTag = 'greenskin_assault';
+            ram.aiControlled = true;
+            ram.aiState = 'combat';
+            ram.timePoints = 100;
+            window.entities.push(ram);
+            window.campaign2NorthwatchRam = ram;
+        }
+        // Rear wall: the wall hex furthest from the gate.
+        let rearHex = region.wallHexes[0];
+        let rearDist = window.distance(gateHex, rearHex);
+        region.wallHexes.forEach(h => {
+            const d = window.distance(gateHex, h);
+            if (d > rearDist) { rearDist = d; rearHex = h; }
+        });
+        const sapper = window.createMonster('goblin', { q: rearHex.q, r: rearHex.r + 2 }, null, null, 'enemy');
+        if (sapper) {
+            sapper.name = 'Sapper';
+            sapper.isSiegeSapper = true;
+            sapper.siegeTargetHex = { ...rearHex };
+            sapper.roundsRemaining = 5;
+            sapper.factionTag = 'greenskin_assault';
+            sapper.aiControlled = true;
+            sapper.aiState = 'combat';
+            sapper.timePoints = 100;
+            window.entities.push(sapper);
+            window.campaign2NorthwatchSapper = sapper;
+        }
+    }
+
     window.greenskinAssaultTriggered = true;
     // COMBAT ONSET: this is a real, sudden scripted fight starting, not a
     // gradual wander-into-view — everyone actually present (the player
@@ -3833,6 +3879,43 @@ function spawnGreenskinAssaultWave() {
     if (window.updateTurnIndicator) window.updateTurnIndicator();
 }
 window.spawnGreenskinAssaultWave = spawnGreenskinAssaultWave;
+
+// SECOND WAVE: once the ram and sapper have both run their course (breached
+// through, or been killed by defenders who weren't distracted enough — see
+// the isBatteringRam/isSiegeSapper aiProcess blocks in gameEngine.js, which
+// call this the instant the second of the two resolves), a real second
+// assault pours through whatever's actually open — the gate if the ram
+// broke it, the rear wall if the sapper's charge went off, or just the
+// existing wall ring if neither succeeded and this is simply reinforcements
+// pressing the point the first wave already made.
+function spawnSecondGreenskinWave() {
+    if (window.greenskinSecondWaveSpawned) return;
+    window.greenskinSecondWaveSpawned = true;
+    const center = window.campaign2NorthwatchCenter;
+    if (!center) return;
+    const gateHex = window.campaign2NorthwatchGateHex || center;
+    const attackerCount = 25;
+    const spawnRadius = 30;
+    for (let i = 0; i < attackerCount; i++) {
+        const type = i % 2 === 0 ? 'orc' : 'goblin';
+        const angle = (i / attackerCount) * Math.PI * 2;
+        const hex = window.hexRound(center.q + Math.cos(angle) * spawnRadius, center.r + Math.sin(angle) * spawnRadius);
+        if (window.getTerrainAt(hex.q, hex.r).impassable) continue;
+        const ent = window.createMonster(type, hex, null, null, 'enemy');
+        if (!ent) continue;
+        ent.name = `${ent.name} II-${i + 1}`;
+        ent.factionTag = 'greenskin_assault';
+        ent.combatDirective = { hostileTo: 'neutral', siegeObjective: { hex: gateHex } };
+        ent.aiControlled = true;
+        ent.aiState = 'combat';
+        ent.timePoints = 100 + Math.random() * 0.9;
+        window.entities.push(ent);
+    }
+    window.showMessage('A second horn call — the real assault begins!');
+    if (window.drawMap) window.drawMap();
+    if (window.renderEntities) window.renderEntities();
+}
+window.spawnSecondGreenskinWave = spawnSecondGreenskinWave;
 
 // DEV/TEST CHEAT: reach all three border_war player-choice paths directly
 // from the Cheat menu, without playing through Voss/Hart's dialogue first —

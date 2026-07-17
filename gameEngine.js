@@ -3712,6 +3712,26 @@ window.getSharedKnownOpponents = getSharedKnownOpponents;
 // periodic-refresh block) that keeps the siege progressing even while the
 // player stays passive and nothing ever flips window.isInCombat true.
 // Returns false without doing anything if there's no crew to operate it.
+// Are the defenders busy enough with the first wave for a ram/sapper to
+// actually make progress unnoticed? Cheap and deliberately coarse: at least
+// 25% of the living Northwatch garrison currently has a live remembered
+// opponent (knownOpponents, gameEngine.js's shared-perception system) —
+// reuses perception state that's already being maintained every turn rather
+// than scanning distances/LOS fresh here. Originally 40%, lowered after
+// simulation showed contact building up gradually as wave 1 closes the
+// distance (real progress — closest attacker 9 hexes from the gate by tick
+// 8000 in one run — just not fast enough to clear 40% within a reasonable
+// tick budget against the fort's current ~2x-scaled size and turn-sharing
+// across ~90 entities); 25% matches what a real siege force actually
+// achieves once it's meaningfully engaged, not just first spotted.
+function defendersDistracted() {
+    const defenders = window.entities.filter(e => e.alive && e.factionTag === 'northwatch_human');
+    if (defenders.length === 0) return false;
+    const engaged = defenders.filter(d => d.knownOpponents && [...d.knownOpponents.values()].some(k => k.alive)).length;
+    return engaged / defenders.length >= 0.25;
+}
+window.defendersDistracted = defendersDistracted;
+
 function fireCatapultShot(entity) {
     const crewCount = window.entities.filter(e => e.alive && e.isCatapultCrew && window.distance(e.hex, entity.hex) <= 1).length;
     if (crewCount < 1) return false;
@@ -3772,6 +3792,54 @@ function aiProcess(entity) {
             }
         }
         entity.timePoints = 0;
+        window.currentTurnEntity = null;
+        window.gamePhase = 'WAITING';
+        return;
+    }
+
+    // BATTERING RAM / SIEGE SAPPER: both only make real progress while the
+    // garrison is distracted (defendersDistracted below) — a ram or a
+    // sneaking sapper in full view of a free defender just gets shot/cut
+    // down instead (ordinary combat targeting already handles that, since
+    // both are plain 'enemy'-side entities). Once the second of the two to
+    // resolve — win or lose — the real second wave spawns.
+    if (entity.isBatteringRam || entity.isSiegeSapper) {
+        if (entity.alive && entity.roundsRemaining > 0 && entity.timePoints >= 80) {
+            if (defendersDistracted()) {
+                entity.roundsRemaining--;
+                if (entity.isBatteringRam) {
+                    window.showMessage(`The battering ram slams into the gate! (${entity.roundsRemaining} more strikes needed)`);
+                } else {
+                    window.showMessage(`The sapper creeps the fire charge closer to the rear wall. (${entity.roundsRemaining} rounds left)`);
+                }
+                if (entity.roundsRemaining <= 0) {
+                    if (entity.isBatteringRam) {
+                        const gate = window.campaign2NorthwatchGateHex;
+                        if (gate) {
+                            window.setTerrainAt(gate.q, gate.r, 'Rubble');
+                            delete window.tileObjects[`${gate.q},${gate.r}`];
+                        }
+                        window.showMessage('The gate splinters and gives way!');
+                    } else {
+                        const t = entity.siegeTargetHex;
+                        if (t) {
+                            window.setTerrainAt(t.q, t.r, 'Rubble');
+                            window.showMessage('The charge at the rear wall goes off — a breach opens!');
+                        }
+                    }
+                    entity.hp = 0;
+                    entity.alive = false;
+                }
+            }
+            spendTP(entity, 80);
+        } else {
+            entity.timePoints = 0;
+        }
+        const ram = window.campaign2NorthwatchRam;
+        const sapper = window.campaign2NorthwatchSapper;
+        if (ram && sapper && !ram.alive && !sapper.alive && !window.greenskinSecondWaveSpawned && window.spawnSecondGreenskinWave) {
+            window.spawnSecondGreenskinWave();
+        }
         window.currentTurnEntity = null;
         window.gamePhase = 'WAITING';
         return;
@@ -6599,6 +6667,18 @@ function handleLethalDamage(target, attacker) {
     target.alive = false; window.showMessage(`${target.name} defeated!`);
     if (window.triggerScreenShake) window.triggerScreenShake();
     const side = target.side;
+
+    // SECOND WAVE TRIGGER (safety net): the primary check runs inside the
+    // ram/sapper's own scripted turn (gameEngine.js's isBatteringRam block),
+    // but if defenders kill BOTH of them in ordinary combat before either
+    // gets another turn of its own, neither one is left to notice — check
+    // here too, on every kill, so a defender-won outcome for both still
+    // spawns the second wave.
+    if ((target.isBatteringRam || target.isSiegeSapper) && window.campaign2NorthwatchRam && window.campaign2NorthwatchSapper
+        && !window.campaign2NorthwatchRam.alive && !window.campaign2NorthwatchSapper.alive
+        && !window.greenskinSecondWaveSpawned && window.spawnSecondGreenskinWave) {
+        window.spawnSecondGreenskinWave();
+    }
 
     // FALLEN ARCHER POST (Northwatch hexagon keep): the first of the 6
     // hexagon-point archers to die sends the commander to take their post,
