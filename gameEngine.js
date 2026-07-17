@@ -1209,7 +1209,8 @@ function startGameCore(isLoading = false) {
       barding_heavy: new Image(),
       wolf: new Image(),
       torch_lit: new Image(),
-      fireplace: new Image(),
+      fireplace_base: new Image(),
+      fireplace_flame: new Image(),
       fireplace_unlit: new Image(),
       oil_barrel: new Image(),
       axe: new Image(),
@@ -1314,7 +1315,8 @@ function startGameCore(isLoading = false) {
   visuals.revenantBase.onload = () => { window.drawMap(); };
   visuals.wolf.onload = () => { window.drawMap(); };
   visuals.torch_lit.onload = () => { window.drawMap(); };
-  visuals.fireplace.onload = () => { window.drawMap(); };
+  visuals.fireplace_base.onload = () => { window.drawMap(); };
+  visuals.fireplace_flame.onload = () => { window.drawMap(); };
   visuals.fireplace_unlit.onload = () => { window.drawMap(); };
   visuals.oil_barrel.onload = () => { window.drawMap(); };
   visuals.axe.onload = () => { window.drawMap(); };
@@ -1417,7 +1419,8 @@ function startGameCore(isLoading = false) {
   visuals.barding_heavy.src = 'images/barding_heavy.svg';
   visuals.wolf.src = 'images/wolf.png';
   visuals.torch_lit.src = 'images/torch_lit.svg';
-  visuals.fireplace.src = 'images/fireplace.svg';
+  visuals.fireplace_base.src = 'images/fireplace_base.svg';
+  visuals.fireplace_flame.src = 'images/fireplace_flame.svg';
   visuals.fireplace_unlit.src = 'images/fireplace_unlit.svg';
   visuals.oil_barrel.src = 'images/oil_barrel.svg';
   visuals.axe.src = 'images/axe.png';
@@ -1889,11 +1892,16 @@ function renderEntities() {
           const size = window.hexSize * 1.5 * z;
           if (obj.type === 'fireplace' && obj.lit === false && window.gameVisuals.fireplace_unlit?.complete) {
               window.mapCtx.drawImage(window.gameVisuals.fireplace_unlit, x - size/2, y - size/2, size, size);
-          } else if (obj.type === 'fireplace' && window.gameVisuals.fireplace?.complete) {
+          } else if (obj.type === 'fireplace' && window.gameVisuals.fireplace_base?.complete && window.gameVisuals.fireplace_flame?.complete) {
+              // Stones/logs are static; only the flame layer pulses — drawing
+              // the whole fireplace.svg at a scaled/faded size made the
+              // stone base flicker along with the fire, which read as the
+              // whole prop wobbling rather than a fire flickering.
+              window.mapCtx.drawImage(window.gameVisuals.fireplace_base, x - size/2, y - size/2, size, size);
               const { scale, alpha } = fireFlicker(key);
               const fSize = size * scale;
               window.mapCtx.globalAlpha = alpha;
-              window.mapCtx.drawImage(window.gameVisuals.fireplace, x - fSize/2, y - fSize/2, fSize, fSize);
+              window.mapCtx.drawImage(window.gameVisuals.fireplace_flame, x - fSize/2, y - fSize/2, fSize, fSize);
               window.mapCtx.globalAlpha = 1.0;
           } else if (obj.type === 'oil_barrel' && window.gameVisuals.oil_barrel?.complete) {
               window.mapCtx.drawImage(window.gameVisuals.oil_barrel, x - size/2, y - size/2, size, size);
@@ -2188,6 +2196,18 @@ function renderEntities() {
           y -= (window.hexSize * 0.6) * z; // 30% of hex height (2*size is full height)
       }
 
+      // MELEE LUNGE: pivot+bump toward whoever this entity is mid-swing at
+      // (see combatFX.js). Wraps body+equipment+torch/flash below so the
+      // whole entity moves as one unit; the allegiance outline above is
+      // deliberately drawn before this and stays anchored to the real hex.
+      const _lunge = window.getMeleeLungeTransform ? window.getMeleeLungeTransform(e, window.hexToPixel, z) : null;
+      if (_lunge) {
+          window.mapCtx.save();
+          window.mapCtx.translate(x + _lunge.dx, y + _lunge.dy);
+          window.mapCtx.rotate(_lunge.rotation);
+          window.mapCtx.translate(-x, -y);
+      }
+
           if (e.isStealthed) window.mapCtx.globalAlpha = 0.5;
           if (e.unconscious) window.mapCtx.globalAlpha = 0.4;
           const isSentientAlly = e.side === 'player' && !e.aiControlled && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(e.name);
@@ -2365,6 +2385,7 @@ function renderEntities() {
     }
 
     window.mapCtx.globalAlpha = 1.0;
+    if (_lunge) window.mapCtx.restore();
     } catch (err) {
         // Same reasoning as the tile-object loop above: one entity failing
         // to draw (bad/missing sprite, etc.) must never take every entity
@@ -6253,6 +6274,13 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   // ranged exchange actually reads as an attack instead of just a combat
   // log line. Melee never gets this; it already has its own hit-flash.
   if (isRanged && window.spawnProjectile) window.spawnProjectile(attacker.hex, target.hex);
+
+  // Melee counterpart: the attacker pivots toward the target and bumps a
+  // few pixels that way then springs back (see combatFX.js's
+  // triggerMeleeLunge/getMeleeLungeTransform, consumed by renderEntities)
+  // so swords/axes/spears/unarmed hits read as an actual swing instead of
+  // a silent stat change, same spirit as the ranged projectile above.
+  if (!isRanged && window.triggerMeleeLunge) window.triggerMeleeLunge(attacker, target);
 
   // Marks this target as under direct attack this combat regardless of
   // hit/miss — read by combatDirective.passiveUnlessThreatened (aiProcess)

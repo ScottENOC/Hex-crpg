@@ -142,3 +142,58 @@ function renderProjectiles(ctx, hexToPixel, zoom) {
     });
 }
 window.renderProjectiles = renderProjectiles;
+
+// MELEE LUNGE: the melee counterpart to the ranged projectile above — the
+// attacker pivots toward the target and bumps a few pixels that way, then
+// springs back, so a sword/axe/spear/unarmed hit reads as an actual swing
+// instead of a silent stat change. State lives on the entity itself
+// (_meleeLungeStart/_meleeLungeTargetHex) rather than a separate list like
+// projectiles, since only one lunge per entity can ever be in flight and
+// this way a dead/removed entity's lunge just stops mattering with it.
+// Consumed by renderEntities (gameEngine.js), which wraps that entity's
+// body+equipment draw calls in the returned rotate/translate.
+const MELEE_LUNGE_DURATION_MS = 260;
+const MELEE_LUNGE_MAX_ANGLE = 45 * Math.PI / 180;
+const MELEE_LUNGE_MAX_BUMP = 10; // px at zoom 1, scaled by the caller's zoom
+
+let _meleeAnimRunning = false;
+function _driveMeleeAnimation() {
+    const now = performance.now();
+    const stillAnimating = window.entities && window.entities.some(e => e._meleeLungeStart && now - e._meleeLungeStart < e._meleeLungeDuration);
+    if (!stillAnimating) { _meleeAnimRunning = false; return; }
+    if (window.drawMap) window.drawMap();
+    requestAnimationFrame(_driveMeleeAnimation);
+}
+
+function triggerMeleeLunge(attacker, target) {
+    if (!attacker || !target) return;
+    attacker._meleeLungeStart = performance.now();
+    attacker._meleeLungeDuration = MELEE_LUNGE_DURATION_MS;
+    attacker._meleeLungeTargetHex = { q: target.hex.q, r: target.hex.r };
+    if (!_meleeAnimRunning) {
+        _meleeAnimRunning = true;
+        requestAnimationFrame(_driveMeleeAnimation);
+    }
+}
+window.triggerMeleeLunge = triggerMeleeLunge;
+
+// Returns null once the lunge has finished (renderEntities then draws the
+// entity with no transform at all — same as any entity that never lunged).
+function getMeleeLungeTransform(entity, hexToPixel, zoom) {
+    if (!entity._meleeLungeStart) return null;
+    const now = performance.now();
+    const t = (now - entity._meleeLungeStart) / entity._meleeLungeDuration;
+    if (t >= 1) { entity._meleeLungeStart = null; return null; }
+    // 0 -> 1 -> 0 across the duration: out toward the target, then back.
+    const wave = Math.sin(Math.min(1, Math.max(0, t)) * Math.PI);
+    const from = hexToPixel(entity.hex.q, entity.hex.r);
+    const to = hexToPixel(entity._meleeLungeTargetHex.q, entity._meleeLungeTargetHex.r);
+    const angle = Math.atan2(to.y - from.y, to.x - from.x);
+    const sign = Math.cos(angle) >= 0 ? 1 : -1;
+    return {
+        dx: Math.cos(angle) * MELEE_LUNGE_MAX_BUMP * zoom * wave,
+        dy: Math.sin(angle) * MELEE_LUNGE_MAX_BUMP * zoom * wave,
+        rotation: sign * MELEE_LUNGE_MAX_ANGLE * wave,
+    };
+}
+window.getMeleeLungeTransform = getMeleeLungeTransform;
