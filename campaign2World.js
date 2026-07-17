@@ -2216,6 +2216,28 @@ function buildSilverhartPalace(roadEnd) {
         window.campaign2SilverhartCottageCenters.push(center);
     });
 
+    // --- East quarter: a small cluster of extra houses, same carveFlatRoom
+    // + single-door-side-Path pattern as the cottages above, filling in a
+    // patch of open ground east of the manor/cottage row (roughly the
+    // quadrilateral bounded by (21,-478), (27,-484), (40,-484), (21,-465) —
+    // no other building currently claims this area). Doors face east. ---
+    const eastQuarterHouses = [
+        { q: 26, r: -479, halfW: 2, halfH: 2 },
+        { q: 32, r: -480, halfW: 2, halfH: 2 },
+        { q: 23, r: -470, halfW: 1, halfH: 2 },
+        { q: 26, r: -471, halfW: 1, halfH: 1 },
+    ];
+    window.campaign2SilverhartEastQuarterHouses = [];
+    eastQuarterHouses.forEach(({ q, r, halfW, halfH }) => {
+        const center = { q, r };
+        const door = { q: center.q + halfW, r: center.r };
+        const room = carveFlatRoom(center.q, center.r, halfW, halfH, door, 'Wood Floor');
+        window.interiorRegions.push(room);
+        window.setTerrainAt(door.q + 1, door.r, 'Path');
+        window.tileObjects[`${center.q},${center.r}`] = { type: 'fireplace', lightRadius: 6 };
+        window.campaign2SilverhartEastQuarterHouses.push(center);
+    });
+
     // --- Middle-class ring: a handful of plain houses further out, past
     // the inner ring road, cheaper than anything hugging the wall. A
     // second ring road (same hex-distance-circle technique) at radius 45,
