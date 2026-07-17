@@ -370,15 +370,21 @@ button:hover { background-color: #3f51b5; }
 }
 
 .modal {
-    display: none; 
-    position: fixed; 
-    z-index: 300; 
+    display: none;
+    position: fixed;
+    z-index: 300;
     left: 0;
     top: 0;
-    width: 100%; 
-    height: 100%; 
-    overflow: auto; 
-    background-color: rgba(0,0,0,0.6); 
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    /* iOS Safari: position:fixed + overflow:auto on the same element makes
+       everything inside touch-unresponsive until the element itself is
+       scrolled. .modal-content already handles its own scrolling
+       (overflow-y:auto, max-height:90vh), so this only needs to opt into
+       momentum scrolling to dodge the bug, not actually scroll content. */
+    -webkit-overflow-scrolling: touch;
+    background-color: rgba(0,0,0,0.6);
 }
 
 .modal-content {
