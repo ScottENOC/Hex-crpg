@@ -1013,12 +1013,35 @@ function updatePlayerUI() {
         const neighbors = window.getNeighbors(hex.q, hex.r);
         
         for (const n of neighbors) {
-            if (getEntityAtHex(n.q, n.r)) continue;
-            
+            // Only a genuine enemy (or an NPC explicitly opted in via
+            // blocksPlayerPath) blocks the player's own move highlighting —
+            // matches findPath's occupant rule (gameEngine.js's tryAttack-
+            // adjacent comment). Without this, any neutral standing on a
+            // one-hex-wide wall walkway made every hex past them
+            // permanently unreachable in the highlight BFS, even though
+            // findPath itself (used for real-time destinations) already
+            // tolerates walking past/onto a neutral.
+            const occupant = getEntityAtHex(n.q, n.r);
+            if (occupant && (occupant.side === 'enemy' || occupant.blocksPlayerPath)) continue;
+
             const terrain = window.getTerrainAt(n.q, n.r);
             if (terrain.name === 'Wall') continue;
 
-            const stepCost = baseMoveCost * (player.isFlying ? 1 : window.getMoveCostMult(n.q, n.r, player));
+            // FLAT MOVEMENT ALONG THE SAME ELEVATION: mirrors
+            // playerMoveProcess's own HEIGHT PENALTY block (gameEngine.js,
+            // "else if (previousTerrain.elevated && terrain.elevated)
+            // terrainMult = 1.0") — without it, this highlight BFS priced
+            // every single step along a wall walkway at the full
+            // climbRisk moveCostMult (the climb surcharge), as if the
+            // player were climbing up fresh at each hex, instead of only
+            // once on the initial ascent. That made "how far can I walk
+            // along the wall" collapse to almost nothing despite the real
+            // move (playerMoveProcess) charging ordinary cost for exactly
+            // this case — the highlight and the real cost disagreed.
+            const previousTerrain = window.getTerrainAt(hex.q, hex.r);
+            const sameElevation = previousTerrain.elevated && terrain.elevated;
+            const moveCostMult = sameElevation ? 1 : window.getMoveCostMult(n.q, n.r, player);
+            const stepCost = baseMoveCost * (player.isFlying ? 1 : moveCostMult);
             const totalCost = cost + stepCost;
 
             if (totalCost <= availableTP) {
@@ -1048,7 +1071,8 @@ function updatePlayerUI() {
     // hasn't ended yet.
     if (moveEntity.timePoints > threshold) {
         window.getNeighbors(player.hex.q, player.hex.r).forEach(n => {
-            if (getEntityAtHex(n.q, n.r)) return;
+            const occupant = getEntityAtHex(n.q, n.r);
+            if (occupant && (occupant.side === 'enemy' || occupant.blocksPlayerPath)) return;
             const t = window.getTerrainAt(n.q, n.r);
             if (t.impassable) return;
             const key = `${n.q},${n.r}`;
@@ -2911,6 +2935,22 @@ function runTickInternal(isSleepCycle = false, skipUI = false, tickMultiplier = 
     }
     if (window.currentTurnEntity && !isSleepCycle) return;
 
+    // NORTHWATCH RAM/SAPPER PACING: they deliberately don't exist yet when
+    // wave 1 first spawns (spawnGreenskinAssaultWave, campaign2Dialogue.js)
+    // — they spawn later and march in from outside the wall, same as any
+    // other attacker. Counted in real ticks (this function's own call
+    // cadence — every 10ms of live play, see the setInterval(tick, 10)
+    // call sites) rather than wave-1 entity-turns, which scaled badly: with
+    // 30 wave-1 attackers cycling through, an entity-turn counter reached
+    // its threshold within just a couple of rounds. A tick count is
+    // independent of how many attackers exist.
+    if (window.isInCombat && window.greenskinWaveSpawned && !window.greenskinRamSapperSpawned) {
+        window.greenskinWaveTicksSinceSpawn = (window.greenskinWaveTicksSinceSpawn || 0) + 1;
+        if (window.greenskinWaveTicksSinceSpawn >= 3000 && window.spawnBatteringRamAndSapper) {
+            window.spawnBatteringRamAndSapper();
+        }
+    }
+
     // TIMED BUFF/DEBUFF EXPIRY: any activeSpells entry carrying
     // ticksRemaining (e.g. Wild Fury, spells.js) counts down once per call,
     // scaled by tickMultiplier the same way poison/wither ticks already
@@ -3839,17 +3879,6 @@ function aiProcess(entity) {
         return;
     }
 
-    // WAVE 1 PACING: the ram/sapper deliberately don't exist yet when wave 1
-    // first spawns (spawnGreenskinAssaultWave, campaign2Dialogue.js) — they
-    // spawn later and march in from outside the wall, same as any other
-    // attacker. Counted in wave-1 entity-turns (not real time) so it's
-    // correct for a headless sim and for a player who tabs away alike.
-    if (entity.factionTag === 'greenskin_assault' && !entity.isBatteringRam && !entity.isSiegeSapper && window.greenskinWaveSpawned) {
-        window.greenskinWaveTurnsSinceSpawn = (window.greenskinWaveTurnsSinceSpawn || 0) + 1;
-        if (!window.greenskinRamSapperSpawned && window.greenskinWaveTurnsSinceSpawn >= 60 && window.spawnBatteringRamAndSapper) {
-            window.spawnBatteringRamAndSapper();
-        }
-    }
 
     // BATTERING RAM / SIEGE SAPPER: march in like any other attacker
     // (falling through to the normal combatDirective/siegeObjective
@@ -6522,7 +6551,14 @@ function scoreSearchNeighbor(entity, h, anchorHex, illumWeight) {
     let s = anchorHex ? -window.distance(h, anchorHex) * 3 : 0;
     const t = window.getTerrainAt(h.q, h.r);
     if (t.name === 'Wall') return -1000;
-    if (t.name === 'Water') s -= 10;
+    // Same fix as the main chase-movement scorer above: Water only costs
+    // 2x move (terrain.js), not impassable — a -10 penalty here dwarfed
+    // the anchor-distance term too, so an attacker marching toward its
+    // siegeObjective with no visible target yet (this is the path that
+    // actually drives wave 1 approaching the fort, via
+    // resolveNoVisibleTargetAI) would refuse to cross Northwatch's moat
+    // even with no dry route anywhere nearby.
+    if (t.name === 'Water') s -= 2;
     if (getEntityAtHex(h.q, h.r)) s -= 5;
     if (window.isHexIlluminated(h)) s += illumWeight;
     // ANTI-OSCILLATION: a hex this entity's own search lit up moments ago

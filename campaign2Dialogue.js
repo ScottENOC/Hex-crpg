@@ -4296,7 +4296,11 @@ function spawnBrotherAlden() {
     ent.destination = null; ent.moveCooldown = 0;
     ent.side = 'neutral';
     ent.factionTag = 'northwatch_human';
-    ent.isNPC = true;
+    // false, not true: he's a real fight participant, not a dialogue-only
+    // NPC — updateTurnIndicator (ui.js) excludes anyone with isNPC set, same
+    // convention already used everywhere else a placed NPC becomes an
+    // actual combatant (e.g. startNorthwatchSally's siege engine, above).
+    ent.isNPC = false;
     ent.aiState = 'idle';
     ent.aiControlled = true;
     ent.timePoints = 100;
