@@ -652,6 +652,17 @@ function playerMoveProcess(player, path) {
             const climbRiskSide = terrain.climbRisk ? terrain : (previousTerrain.climbRisk ? previousTerrain : null);
             if (climbRiskSide) {
                 heightPenalty *= getClimbCostMult(moveEntity); // stacking climbing skills
+                // Only the descent direction ever actually spends this —
+                // climbTransition below overrides the ascent with its own
+                // flat 1-TP charge before stepCost is ever used. A ladder
+                // right where the player is standing (leaving climbRisk
+                // terrain) makes climbing back down it as much cheaper as
+                // it already makes the AI's own retreat-off-the-wall step
+                // (climbDownCost, aiProcess's retreat contingency).
+                if (previousTerrain.climbRisk && !terrain.climbRisk &&
+                    window.tileObjects?.[`${previousHex.q},${previousHex.r}`]?.type === 'ladder') {
+                    heightPenalty *= 0.4;
+                }
             } else if (moveEntity.skills?.agile_climber) {
                 heightPenalty = 0.5;
             }
@@ -1040,8 +1051,30 @@ function updatePlayerUI() {
             // this case — the highlight and the real cost disagreed.
             const previousTerrain = window.getTerrainAt(hex.q, hex.r);
             const sameElevation = previousTerrain.elevated && terrain.elevated;
-            const moveCostMult = sameElevation ? 1 : window.getMoveCostMult(n.q, n.r, player);
-            const stepCost = baseMoveCost * (player.isFlying ? 1 : moveCostMult);
+            const climbingUp = !player.isFlying && terrain.climbRisk && !previousTerrain.climbRisk;
+            const climbingDown = !player.isFlying && previousTerrain.climbRisk && !terrain.climbRisk;
+            let stepCost;
+            if (climbingUp) {
+                // Matches playerMoveProcess's own climbTransition: starting
+                // a climb only ever charges 1 TP up front (the real ~125 TP
+                // cost is deferred to the multi-turn climbing status), so
+                // it should essentially always show as reachable rather
+                // than being priced like a full atomic move.
+                stepCost = 1;
+            } else if (climbingDown) {
+                // A ladder right where the player is currently standing
+                // discounts climbing back down it, same as the ascent side
+                // already does for the multi-turn climb — mirrors the
+                // matching discount in playerMoveProcess's HEIGHT PENALTY
+                // block above.
+                const hasLadder = window.tileObjects?.[`${hex.q},${hex.r}`]?.type === 'ladder';
+                const heightPenalty = getClimbCostMult(player) * (hasLadder ? 0.4 : 1);
+                const moveCostMult = window.getMoveCostMult(n.q, n.r, player) + heightPenalty;
+                stepCost = baseMoveCost * moveCostMult;
+            } else {
+                const moveCostMult = sameElevation ? 1 : window.getMoveCostMult(n.q, n.r, player);
+                stepCost = baseMoveCost * (player.isFlying ? 1 : moveCostMult);
+            }
             const totalCost = cost + stepCost;
 
             if (totalCost <= availableTP) {
@@ -6821,6 +6854,16 @@ function handleLethalDamage(target, attacker) {
         && !window.campaign2NorthwatchRam.alive && !window.campaign2NorthwatchSapper.alive
         && !window.greenskinSecondWaveSpawned && window.spawnSecondGreenskinWave) {
         window.spawnSecondGreenskinWave();
+    }
+
+    // THIRD WAVE TRIGGER: same shape as the second wave's own trigger above
+    // — wave 1 alone wasn't meant to win, and neither is wave 2. Once every
+    // wave-2 attacker (name tagged 'II-', spawnSecondGreenskinWave) is dead,
+    // a third and final wave presses the point, gated the same "only once"
+    // way via window.greenskinThirdWaveSpawned.
+    if (window.greenskinSecondWaveSpawned && !window.greenskinThirdWaveSpawned && target.name?.includes('II-') &&
+        !window.entities.some(e => e.name?.includes('II-') && e.alive) && window.spawnThirdGreenskinWave) {
+        window.spawnThirdGreenskinWave();
     }
 
     // FALLEN ARCHER POST (Northwatch hexagon keep): the first of the 6

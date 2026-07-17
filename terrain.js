@@ -50,7 +50,11 @@ const terrainTypes = {
     'keep_wall': { name: 'Keep Wall', color: '#4a4a4a', moveCostMult: 999, hitBonus: 10, dodgeBonus: 0, stealthBonus: 0, impassable: true },
     // What a keep_wall hex becomes once a siege engine breaks it down — a
     // walkable breach, cosmetically distinct from untouched floor.
-    'rubble': { name: 'Rubble', color: '#8a8378', moveCostMult: 1.5, hitBonus: 0, dodgeBonus: 0, stealthBonus: 0 },
+    // Lighter/greyer than either wall it can result from (Climbable Wall
+    // #7a6a52, Keep Wall #4a4a4a) — both walls read as a fairly similar
+    // dark, muted brown/gray at a glance, so a broken hex needs real
+    // contrast to be visible as "this changed" rather than blending in.
+    'rubble': { name: 'Rubble', color: '#b8ab98', moveCostMult: 1.5, hitBonus: 0, dodgeBonus: 0, stealthBonus: 0 },
     // A chasm: genuinely impassable (like Wall) but does NOT block line of
     // sight or ranged attacks — the opposite of Wall's "blocks both"
     // profile. This falls out almost entirely from existing generic checks:

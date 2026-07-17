@@ -3781,7 +3781,7 @@ function spawnGreenskinAssaultWave() {
     if (!center) return;
     const gateHex = window.campaign2NorthwatchGateHex || center;
     if (window.spawnBrotherAlden) window.spawnBrotherAlden();
-    const attackerCount = 30;
+    const attackerCount = 45;
     const spawnRadius = 30;
     for (let i = 0; i < attackerCount; i++) {
         const type = i % 2 === 0 ? 'orc' : 'goblin';
@@ -3923,7 +3923,7 @@ function spawnSecondGreenskinWave() {
     const center = window.campaign2NorthwatchCenter;
     if (!center) return;
     const gateHex = window.campaign2NorthwatchGateHex || center;
-    const attackerCount = 25;
+    const attackerCount = 35;
     const spawnRadius = 30;
     for (let i = 0; i < attackerCount; i++) {
         const type = i % 2 === 0 ? 'orc' : 'goblin';
@@ -3945,6 +3945,40 @@ function spawnSecondGreenskinWave() {
     if (window.renderEntities) window.renderEntities();
 }
 window.spawnSecondGreenskinWave = spawnSecondGreenskinWave;
+
+// THIRD WAVE: same shape as spawnSecondGreenskinWave, triggered once wave 2
+// is entirely wiped out (see the kill-hook in handleLethalDamage,
+// gameEngine.js) — the first two waves weren't enough to take the fort by
+// themselves, so a final, larger push presses whatever ground was already
+// won.
+function spawnThirdGreenskinWave() {
+    if (window.greenskinThirdWaveSpawned) return;
+    window.greenskinThirdWaveSpawned = true;
+    const center = window.campaign2NorthwatchCenter;
+    if (!center) return;
+    const gateHex = window.campaign2NorthwatchGateHex || center;
+    const attackerCount = 40;
+    const spawnRadius = 30;
+    for (let i = 0; i < attackerCount; i++) {
+        const type = i % 2 === 0 ? 'orc' : 'goblin';
+        const angle = (i / attackerCount) * Math.PI * 2;
+        const hex = window.hexRound(center.q + Math.cos(angle) * spawnRadius, center.r + Math.sin(angle) * spawnRadius);
+        if (window.getTerrainAt(hex.q, hex.r).impassable) continue;
+        const ent = window.createMonster(type, hex, null, null, 'enemy');
+        if (!ent) continue;
+        ent.name = `${ent.name} III-${i + 1}`;
+        ent.factionTag = 'greenskin_assault';
+        ent.combatDirective = { hostileTo: 'neutral', siegeObjective: { hex: gateHex } };
+        ent.aiControlled = true;
+        ent.aiState = 'combat';
+        ent.timePoints = 100 + Math.random() * 0.9;
+        window.entities.push(ent);
+    }
+    window.showMessage('A third horn call sounds — the greenskins throw everything they have left at the walls!');
+    if (window.drawMap) window.drawMap();
+    if (window.renderEntities) window.renderEntities();
+}
+window.spawnThirdGreenskinWave = spawnThirdGreenskinWave;
 
 // DEV/TEST CHEAT: reach all three border_war player-choice paths directly
 // from the Cheat menu, without playing through Voss/Hart's dialogue first —
