@@ -2853,7 +2853,12 @@ function startHollowmereShakedown() {
     window.hollowmereEventFired = true;
 
     const dray = window.entities.find(e => e.name === 'Dray Coltayne');
-    const enforcers = window.entities.filter(e => e.factionId === 'ironbond_company' && e !== dray);
+    // factionId alone isn't enough to scope this — other Ironbond Company
+    // NPCs exist far away (e.g. Border War content), and matching on
+    // factionId globally used to drag them into the tavern scene and send
+    // them on pointless cross-map pathfinds. Distance to Dray's wait hex
+    // keeps this to the actual tavern enforcers.
+    const enforcers = window.entities.filter(e => e.factionId === 'ironbond_company' && e !== dray && dray && window.distance(e.hex, dray.hex) <= 10);
     const garrick = window.entities.find(e => e.name === 'Garrick Holt');
 
     // Open the door, then have the soldiers walk in for real (destination +
@@ -2861,7 +2866,10 @@ function startHollowmereShakedown() {
     // teleporting), closing it again once they're through.
     if (window.toggleDoor) window.toggleDoor(0, 4);
 
-    const entryHexes = [{ q: -2, r: 3 }, { q: 0, r: 3 }, { q: 2, r: 3 }];
+    // All three must be real Wood Floor tiles reachable through the door at
+    // (0,4) — {-2,3} used to sit inside the tavern's Wall terrain, so Dray's
+    // pathfind failed instantly every run and he never left his wait hex.
+    const entryHexes = [{ q: 0, r: 3 }, { q: -1, r: 2 }, { q: 2, r: 3 }];
     [dray, ...enforcers].forEach((e, i) => {
         if (!e) return;
         e.pendingEntry = false;
@@ -2891,7 +2899,12 @@ function resolveShakedown(branch) {
     const mira = window.entities.find(e => e.name === 'Mira Ashbrook');
     const oskar = window.entities.find(e => e.name === 'Oskar Vinn');
     const dray = window.entities.find(e => e.name === 'Dray Coltayne');
-    const enforcers = window.entities.filter(e => e.factionId === 'ironbond_company' && e !== dray);
+    // factionId alone isn't enough to scope this — other Ironbond Company
+    // NPCs exist far away (e.g. Border War content), and matching on
+    // factionId globally used to drag them into the tavern scene and send
+    // them on pointless cross-map pathfinds. Distance to Dray's wait hex
+    // keeps this to the actual tavern enforcers.
+    const enforcers = window.entities.filter(e => e.factionId === 'ironbond_company' && e !== dray && dray && window.distance(e.hex, dray.hex) <= 10);
     const ironbond = window.factions.ironbond_company;
     const silverhart = window.factions.silverhart_kingdom;
     const elder = window.regionalNPCs?.elder;
