@@ -5008,6 +5008,14 @@ function wakeUp(entity) {
         surprisedSide.forEach(e => { e.timePoints = surprisedStartTP; e.destination = null; e.moveCooldown = 0; });
 
         deconflictPartyStacking();
+        // A fight can start mid-stride during real-time movement — nulling
+        // destination above stops any FURTHER movement, but doesn't correct
+        // a rendered position that was mid-lerp between the last completed
+        // hex and the next one (hex itself already updated the instant that
+        // step began; only the smooth visual interpolation lagged). Snap
+        // everyone's rendered position to match their actual hex so combat
+        // doesn't open with someone drawn floating between two tiles.
+        if (window.snapVisuals) window.snapVisuals();
 
         // Fights shouldn't play out at 3x just because the player left
         // fast-forward on during the walk over.

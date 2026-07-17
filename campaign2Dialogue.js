@@ -3803,6 +3803,29 @@ function spawnGreenskinAssaultWave() {
         window.entities.push(ent);
     }
     window.greenskinAssaultTriggered = true;
+    // COMBAT ONSET: this is a real, sudden scripted fight starting, not a
+    // gradual wander-into-view — everyone actually present (the player
+    // party, the garrison, the wave itself) needs the same "fight just
+    // started" reset wakeUp()'s own firstAlert transition already does for
+    // a normal two-sided encounter, widened to all three sides since this
+    // isn't a simple player-vs-enemy pairing. Without this, the player
+    // party kept whatever leftover (possibly negative) TP real-time
+    // exploration had left them at, instead of starting the fight at 100
+    // like everyone else, and stayed rendered mid-lerp between hexes if
+    // the wave triggered while they were still walking (snapVisuals below
+    // — same as "let any in-progress step finish, then hold" since hex
+    // itself already updated the instant the step began; only the visual
+    // interpolation lagged).
+    window.entities.forEach(e => {
+        if (!e.alive) return;
+        if (e.side === 'player' || e.side === 'neutral' || e.side === 'enemy') {
+            e.timePoints = 100;
+            e.destination = null;
+            e.moveCooldown = 0;
+        }
+    });
+    if (window.deconflictPartyStacking) window.deconflictPartyStacking();
+    if (window.snapVisuals) window.snapVisuals();
     window.isInCombat = true; // the wave arriving is what starts real turn-based scheduling
     window.showMessage('Horns sound in the distance — the greenskin host surges toward the walls!');
     if (window.drawMap) window.drawMap();
