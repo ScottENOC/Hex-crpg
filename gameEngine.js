@@ -657,25 +657,27 @@ function playerMoveProcess(player, path) {
         let stepCost = baseMoveCost * (player.isFlying ? 1 : terrainMult);
 
         // WALL CLIMB: entering climbRisk terrain from non-climbRisk terrain
-        // commits the climber to a multi-turn climb rather than paying the
-        // full (often ~25 TP) cost in one atomic step. They already occupy
-        // the wall hex (matches how every other status effect here works —
-        // a debuff timer on top of a real position, not a partial-position
-        // render) but are `climbing` until `ticksRequired` more TP has been
-        // spent, 1 at a time, each future turn (see takeTurn's scripted-
-        // status handling, mirroring the existing petrifiedTicks/
-        // charmedByHarpy pattern) — no further pathfinding or player
-        // decision needed per tick. `climbing.ticksRequired` banks the same
-        // total cost this single step would otherwise have charged in full.
+        // commits the climber to a multi-turn climb — scaling a real castle
+        // wall bare-handed should be serious work, well beyond one turn's
+        // full 100 TP. Base cost 125 (climbing skills still apply their
+        // usual discount, getClimbCostMult, down to a 40% floor). They
+        // already occupy the wall hex (matches how every other status
+        // effect here works — a debuff timer on top of a real position,
+        // not a partial-position render) but are `climbing` until
+        // `ticksRequired` total TP has been spent toward it — see takeTurn's
+        // scripted-status handling below, which spends everything above the
+        // 80 end-of-turn threshold each turn (not 1 at a time) until it's
+        // paid off or they're knocked off.
         const climbTransition = !player.isFlying && terrain.climbRisk && !previousTerrain.climbRisk;
         if (climbTransition) {
             // A ladder propped against this exact wall hex (Northwatch's
             // notches, campaign2World.js) makes climbing up it as much
             // faster as it already makes climbing back down it
             // (climbDownCost's own hasLadderHere check, below) — same
-            // ~40% ratio (10 vs the usual 25).
+            // ~40% ratio.
             const hasLadder = window.tileObjects?.[`${player.hex.q},${player.hex.r}`]?.type === 'ladder';
-            const climbCost = hasLadder ? Math.round(stepCost * 0.4) : stepCost;
+            const baseClimbCost = 125 * getClimbCostMult(moveEntity);
+            const climbCost = hasLadder ? Math.round(baseClimbCost * 0.4) : baseClimbCost;
             moveEntity.climbing = {
                 fromHex: previousHex,
                 ticksRequired: Math.max(1, Math.round(climbCost)),
@@ -1007,21 +1009,25 @@ function updatePlayerUI() {
         }
     }
 
-    // CLIMBING START: an adjacent Climbable Wall hex is always a valid move
-    // target regardless of its full climb cost — climbing is a committed
-    // multi-turn status (climbTransition, playerMoveProcess) that only
-    // charges 1 TP to begin, not the whole ~25 TP up front. The BFS above
-    // prices it like ordinary terrain via getMoveCostMult and so never
-    // highlights it once that exceeds availableTP, which read to the
-    // player as the wall being permanently "out of range this turn."
-    // Climbing can only be initiated from the player's own current hex
-    // (not chained mid-path), and only when not already on climbRisk
-    // terrain themselves.
-    if (!player.isFlying && !window.getTerrainAt(player.hex.q, player.hex.r).climbRisk && availableTP >= 1) {
+    // ANY ADJACENT HEX IS REACHABLE (unless literally impassable): TP works
+    // like every other action cost in this engine — a single action can
+    // spend more than the caller has left as long as they hadn't already
+    // ended their turn (TP > threshold), it just drops them to (likely
+    // negative) TP and ends the turn immediately afterward; you just can't
+    // chain several such actions in one turn. The BFS above prices a single
+    // step at its computed cost and only ever includes it if that fits
+    // within the *remaining* budget, which is right for multi-hex chained
+    // paths but wrong for a single adjacent step — a Climbable Wall hex
+    // (now a committed multi-turn climb, climbTransition below, needing
+    // only 1 TP to start) or any other expensive-but-passable terrain right
+    // next to the player was being flatly rejected as "out of range" even
+    // though a single move onto it is always a legal action while the turn
+    // hasn't ended yet.
+    if (moveEntity.timePoints > threshold) {
         window.getNeighbors(player.hex.q, player.hex.r).forEach(n => {
             if (getEntityAtHex(n.q, n.r)) return;
             const t = window.getTerrainAt(n.q, n.r);
-            if (!t.climbRisk) return;
+            if (t.impassable) return;
             const key = `${n.q},${n.r}`;
             if (reachable.has(key)) return; // already included at its real (affordable) cost
             window.highlightedHexes.push({ ...n, type: 'move' });
@@ -3136,11 +3142,16 @@ function takeTurn(entity) {
     }
 
     // CLIMBING: committed to a multi-turn wall climb (see the climbTransition
-    // branches in playerMoveProcess/aiProcess) — spend exactly 1 TP toward
-    // it and end the turn immediately, no menu/decision either way, same
-    // shape as the petrified/charmed scripted-turn cases above.
+    // branches in playerMoveProcess/aiProcess) — same TP rule as every other
+    // action: spend everything above the 80 end-of-turn threshold (not all
+    // the way to 0) toward it, then the turn ends immediately, no menu/
+    // decision either way, same shape as the petrified/charmed scripted-turn
+    // cases above. A fresh 100-TP turn banks 20 progress; with the 125 base
+    // cost that's 7 turns (6x20 + 5) exposed on the wall without a ladder —
+    // genuinely hard work, and genuinely risky (resolveAttack's fall check).
     if (entity.climbing) {
-        spendTP(entity, 1);
+        const climbSpend = Math.max(1, entity.timePoints - 80);
+        spendTP(entity, climbSpend);
         window.currentTurnEntity = null;
         window.gamePhase = 'WAITING';
         window.updateTurnIndicator();
@@ -3705,9 +3716,24 @@ function fireCatapultShot(entity) {
     const crewCount = window.entities.filter(e => e.alive && e.isCatapultCrew && window.distance(e.hex, entity.hex) <= 1).length;
     if (crewCount < 1) return false;
     const region = window.campaign2NorthwatchFortRegion;
-    const targetWall = region?.wallHexes?.length
-        ? region.wallHexes[Math.floor(window.pseudoRandom(entity.firesRemaining, window.worldSeconds || 0) * region.wallHexes.length)]
-        : null;
+    // CONCENTRATED FIRE: a crew re-picking a fresh random hex every single
+    // shot (the old behavior) spreads 10 shots across dozens of wall hexes
+    // with no memory between them — with wallHexes this large, the odds of
+    // ever hitting the same hex twice are low, so nothing ever accumulates
+    // enough damage to actually break (reported as "no rubble ever
+    // appears"). A real siege crew keeps hammering the same spot until it
+    // gives, then picks a new one — persist the target on the entity and
+    // only re-roll once it's been reduced to Rubble (damageWall clears its
+    // tileObjects entry on breaking, which is what we check for).
+    if (entity.currentWallTarget) {
+        if (window.getTerrainAt(entity.currentWallTarget.q, entity.currentWallTarget.r).name === 'Rubble') {
+            entity.currentWallTarget = null; // already broken by something else
+        }
+    }
+    if (!entity.currentWallTarget && region?.wallHexes?.length) {
+        entity.currentWallTarget = region.wallHexes[Math.floor(window.pseudoRandom(entity.firesRemaining, window.worldSeconds || 0) * region.wallHexes.length)];
+    }
+    const targetWall = entity.currentWallTarget;
     if (targetWall && window.damageWall) window.damageWall(targetWall.q, targetWall.r, 10);
     entity.firesRemaining--;
     window.catapultHasFired = true;
@@ -4940,7 +4966,8 @@ function aiProcess(entity) {
                 // paying the full cost in one atomic step.
                 if (!entity.isFlying && terrain.climbRisk && !previousTerrain.climbRisk) {
                     const aiHasLadder = window.tileObjects?.[`${entity.hex.q},${entity.hex.r}`]?.type === 'ladder';
-                    const aiClimbCost = 5 * window.getMoveCostMult(entity.hex.q, entity.hex.r, moveEntity) * (aiHasLadder ? 0.4 : 1);
+                    const aiBaseClimbCost = 125 * getClimbCostMult(moveEntity);
+                    const aiClimbCost = aiHasLadder ? aiBaseClimbCost * 0.4 : aiBaseClimbCost;
                     moveEntity.climbing = {
                         fromHex: previousHex,
                         ticksRequired: Math.max(1, Math.round(aiClimbCost)),
@@ -5923,9 +5950,17 @@ window.isCoveredFromRangedAttack = isCoveredFromRangedAttack;
 // becomes passable Rubble and the tileObject is cleared.
 function damageWall(q, r, amount) {
     const terrain = window.getTerrainAt(q, r);
-    if (!terrain.impassable) return; // only the keep's real walls are destructible this way
+    // Climbable Wall (Northwatch/Ridgehold's actual curtain wall,
+    // carveStarFort) is deliberately not impassable — that's what makes it
+    // climbable — but a catapult round should still be able to breach it,
+    // same as the keep's genuinely impassable walls. Without this,
+    // fireCatapultShot's whole "damage the wall" mechanic was a silent
+    // no-op against every real fort wall in the game (no rubble ever
+    // appeared, because this function refused to act on the one terrain
+    // type the catapult actually targets).
+    if (!terrain.impassable && !terrain.climbRisk) return;
     const key = `${q},${r}`;
-    const maxHp = 40;
+    const maxHp = 20; // 2 catapult shots (10 dmg each) to breach one hex
     if (!window.tileObjects[key] || window.tileObjects[key].type !== 'siege_wall') {
         window.tileObjects[key] = { type: 'siege_wall', hp: maxHp, maxHp };
     }
