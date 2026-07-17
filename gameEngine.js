@@ -4759,7 +4759,12 @@ function aiProcess(entity) {
             // "give the search room to actually work" intent (still well
             // above the 15-turn point where the anchor starts widening)
             // while resolving in a more realistic window.
-            const timeoutTurns = severelyOutnumbered ? 20 : 30;
+            // ARENA SCALE: same lever as resolveNoVisibleTargetAI's arena
+            // shrink below — this timeout must stay above wherever the
+            // search anchor starts widening (15 siege / 8 arena) so a
+            // fight isn't declared a stalemate before the search even had
+            // a chance to adapt.
+            const timeoutTurns = window.isInArena ? (severelyOutnumbered ? 10 : 14) : (severelyOutnumbered ? 20 : 30);
             if (entity._chaseStuckTurns >= timeoutTurns) {
                 if (severelyOutnumbered) markFled(entity);
                 else { entity.disengaged = true; if (entity.combatDirective) entity.combatDirective.mode = null; }
@@ -6682,6 +6687,16 @@ function bestSearchHex(entity, anchorHex, illumWeight) {
 // fight are untouched by any of this).
 function resolveNoVisibleTargetAI(entity, opponentSide) {
     if (entity.disengaged) return null; // already made its call — normal targeting logic re-engages it if it sees someone again
+    // ARENA SCALE: the constants below (parked-turn/stuck-turn counts, flee
+    // distance, search jitter) were tuned by feel for a 40+ hex fort siege —
+    // a fight meant to sprawl over a long map and many turns. Unchanged,
+    // they let an arena monster dawdle for turns before ever reaching a
+    // flee/disengage decision, and checkCombatEnd already resolves a fight
+    // the instant every remaining enemy is fled/disengaged — so shrinking
+    // these for arenas is the direct lever for shorter arena fights, not a
+    // new mechanic. Northwatch/siege fights (window.isInArena false) are
+    // untouched.
+    const arena = !!window.isInArena;
     // SIEGE OBJECTIVE: a besieger with no memory of any defender yet (fresh
     // spawn, or everyone it once saw is dead/lost) isn't a directionless
     // wanderer — it knows there's a fort to take and roughly where it is.
@@ -6723,7 +6738,7 @@ function resolveNoVisibleTargetAI(entity, opponentSide) {
     } else {
         entity._parkedTurns++;
     }
-    if (entity._parkedTurns >= 8) {
+    if (entity._parkedTurns >= (arena ? 4 : 8)) {
         // Deliberately NOT aiState='idle' here: for a 'enemy'-side entity
         // that flips it into the OLD idle-scan branch further up aiProcess,
         // which only ever looks for side==='player' targets — never a
@@ -6750,7 +6765,7 @@ function resolveNoVisibleTargetAI(entity, opponentSide) {
         const fleeThreshold = (entity.combatDirective?.outnumberWeight || 1) > 1 ? 4 : 2.5;
         if (theirs >= mine * fleeThreshold) {
             const threatRadius = entity.combatDirective?.threatRadius || 3;
-            if (nearestDist >= threatRadius * 10) {
+            if (nearestDist >= threatRadius * (arena ? 4 : 10)) {
                 // Far enough from every known-alive hostile to call it: a
                 // successful escape, functionally the same as a defeat (see
                 // markFled) rather than merely a paused fight.
@@ -6792,11 +6807,11 @@ function resolveNoVisibleTargetAI(entity, opponentSide) {
     // different part of the area instead of orbiting one stale point.
     const stuckTurns = entity._chaseStuckTurns || 0;
     let anchor = nearest.hex;
-    if (stuckTurns >= 15) {
+    if (stuckTurns >= (arena ? 8 : 15)) {
         const bucket = Math.floor(stuckTurns / 10);
         const seed = ((entity.id * 2654435761 + bucket * 40503) % 1000) / 1000;
         const angle = seed * Math.PI * 2;
-        const dist = 6 + Math.floor(seed * 8);
+        const dist = arena ? 3 + Math.floor(seed * 4) : 6 + Math.floor(seed * 8);
         anchor = { q: nearest.hex.q + Math.round(Math.cos(angle) * dist), r: nearest.hex.r + Math.round(Math.sin(angle) * dist) };
     }
     return bestSearchHex(entity, anchor, illumWeight);
