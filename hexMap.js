@@ -762,6 +762,17 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
                     // at a TP surcharge — plate-wearers stay blocked outright.
                     if (entity.skills?.acrobatics && isLightOrNoArmorEntity) {
                         acrobaticsCost = 3;
+                    } else if (window.getTerrainAt(next.q, next.r).climbRisk) {
+                        // A wall walkway is one hex wide by design — there's no
+                        // alternate route around whoever's standing on the only
+                        // hex forward, unlike open ground where a blocked hex
+                        // just means walking around it. Squeezing past (at a
+                        // steeper TP surcharge than Acrobatics' own discount)
+                        // is always possible here instead of a hard stop, same
+                        // as how a same-side occupant never fully blocks a path
+                        // — this just extends "can pass, can't stop here" to a
+                        // blocking enemy on a narrow rampart specifically.
+                        acrobaticsCost = 8;
                     } else {
                         // It's a known obstacle.
                         // Task 1: If it's the target hex, it's blocked.

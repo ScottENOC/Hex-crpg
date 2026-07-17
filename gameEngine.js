@@ -1163,6 +1163,8 @@ function startGameCore(isLoading = false) {
       spear: new Image(),
       club: new Image(),
       giant_club: new Image(),
+      bow: new Image(),
+      battering_ram: new Image(),
       spiderweb: new Image(),
       spider1: new Image(),
       spider2: new Image(),
@@ -1369,6 +1371,8 @@ function startGameCore(isLoading = false) {
   visuals.spear.src = 'images/spear.png';
   visuals.club.src = 'images/club.svg';
   visuals.giant_club.src = 'images/giant_club.png';
+  visuals.bow.src = 'images/bow.svg';
+  visuals.battering_ram.src = 'images/battering_ram.svg';
   visuals.spiderweb.src = 'images/spiderweb.png';
   visuals.spider1.src = 'images/spider1.png';
   visuals.spider2.src = 'images/spider2.png';
@@ -1723,6 +1727,7 @@ function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
     else if (mainW === 'axe')    weaponImg = window.gameVisuals.axe;
     else if (mainW === 'spear')  weaponImg = window.gameVisuals.spear;
     else if (mainW === 'club')   weaponImg = window.gameVisuals.club;
+    else if (mainW === 'bow')    weaponImg = window.gameVisuals.bow;
     else if (mainW === 'dagger') { weaponImg = window.gameVisuals.swordIcon; weaponScale = 0.75; mainYAdj = 0.1; }
 
     if (weaponImg?.complete) {
@@ -2253,6 +2258,7 @@ function renderEntities() {
                           if (e.equipped?.weapon === 'sword') weaponImgEn = window.gameVisuals.swordIcon;
                           else if (e.equipped?.weapon === 'axe') weaponImgEn = window.gameVisuals.axe;
                           else if (e.equipped?.weapon === 'spear') weaponImgEn = window.gameVisuals.spear;
+                          else if (e.equipped?.weapon === 'bow') weaponImgEn = window.gameVisuals.bow;
                           else if (e.equipped?.weapon === 'club') {
                               // Large creatures swing the oversized tree-trunk
                               // club; anything human-scale gets the small stick.
@@ -3833,52 +3839,74 @@ function aiProcess(entity) {
         return;
     }
 
-    // BATTERING RAM / SIEGE SAPPER: both only make real progress while the
-    // garrison is distracted (defendersDistracted below) — a ram or a
-    // sneaking sapper in full view of a free defender just gets shot/cut
-    // down instead (ordinary combat targeting already handles that, since
-    // both are plain 'enemy'-side entities). Once the second of the two to
-    // resolve — win or lose — the real second wave spawns.
+    // WAVE 1 PACING: the ram/sapper deliberately don't exist yet when wave 1
+    // first spawns (spawnGreenskinAssaultWave, campaign2Dialogue.js) — they
+    // spawn later and march in from outside the wall, same as any other
+    // attacker. Counted in wave-1 entity-turns (not real time) so it's
+    // correct for a headless sim and for a player who tabs away alike.
+    if (entity.factionTag === 'greenskin_assault' && !entity.isBatteringRam && !entity.isSiegeSapper && window.greenskinWaveSpawned) {
+        window.greenskinWaveTurnsSinceSpawn = (window.greenskinWaveTurnsSinceSpawn || 0) + 1;
+        if (!window.greenskinRamSapperSpawned && window.greenskinWaveTurnsSinceSpawn >= 60 && window.spawnBatteringRamAndSapper) {
+            window.spawnBatteringRamAndSapper();
+        }
+    }
+
+    // BATTERING RAM / SIEGE SAPPER: march in like any other attacker
+    // (falling through to the normal combatDirective/siegeObjective
+    // movement below) until actually at their target, then take over with
+    // the scripted battering behavior — which only makes real progress
+    // while the garrison is distracted (defendersDistracted below); a ram
+    // or a sneaking sapper in full view of a free defender just gets shot/
+    // cut down instead (ordinary combat targeting already handles that,
+    // since both are plain 'enemy'-side entities). Once the second of the
+    // two to resolve — win or lose — the real second wave spawns.
     if (entity.isBatteringRam || entity.isSiegeSapper) {
-        if (entity.alive && entity.roundsRemaining > 0 && entity.timePoints >= 80) {
-            if (defendersDistracted()) {
-                entity.roundsRemaining--;
-                if (entity.isBatteringRam) {
-                    window.showMessage(`The battering ram slams into the gate! (${entity.roundsRemaining} more strikes needed)`);
-                } else {
-                    window.showMessage(`The sapper creeps the fire charge closer to the rear wall. (${entity.roundsRemaining} rounds left)`);
-                }
-                if (entity.roundsRemaining <= 0) {
+        const targetHex = entity.isBatteringRam ? window.campaign2NorthwatchGateHex : entity.siegeTargetHex;
+        const arrived = targetHex && window.distance(entity.hex, targetHex) <= 2;
+        if (arrived) {
+            if (entity.alive && entity.roundsRemaining > 0 && entity.timePoints >= 80) {
+                if (defendersDistracted()) {
+                    entity.roundsRemaining--;
                     if (entity.isBatteringRam) {
-                        const gate = window.campaign2NorthwatchGateHex;
-                        if (gate) {
-                            window.setTerrainAt(gate.q, gate.r, 'Rubble');
-                            delete window.tileObjects[`${gate.q},${gate.r}`];
-                        }
-                        window.showMessage('The gate splinters and gives way!');
+                        window.showMessage(`The battering ram slams into the gate! (${entity.roundsRemaining} more strikes needed)`);
                     } else {
-                        const t = entity.siegeTargetHex;
-                        if (t) {
-                            window.setTerrainAt(t.q, t.r, 'Rubble');
-                            window.showMessage('The charge at the rear wall goes off — a breach opens!');
-                        }
+                        window.showMessage(`The sapper creeps the fire charge closer to the rear wall. (${entity.roundsRemaining} rounds left)`);
                     }
-                    entity.hp = 0;
-                    entity.alive = false;
+                    if (entity.roundsRemaining <= 0) {
+                        if (entity.isBatteringRam) {
+                            const gate = window.campaign2NorthwatchGateHex;
+                            if (gate) {
+                                window.setTerrainAt(gate.q, gate.r, 'Rubble');
+                                delete window.tileObjects[`${gate.q},${gate.r}`];
+                            }
+                            window.showMessage('The gate splinters and gives way!');
+                        } else {
+                            const t = entity.siegeTargetHex;
+                            if (t) {
+                                window.setTerrainAt(t.q, t.r, 'Rubble');
+                                window.showMessage('The charge at the rear wall goes off — a breach opens!');
+                            }
+                        }
+                        entity.hp = 0;
+                        entity.alive = false;
+                    }
                 }
+                spendTP(entity, 80);
+            } else {
+                entity.timePoints = 0;
             }
-            spendTP(entity, 80);
-        } else {
-            entity.timePoints = 0;
+            const ram = window.campaign2NorthwatchRam;
+            const sapper = window.campaign2NorthwatchSapper;
+            if (ram && sapper && !ram.alive && !sapper.alive && !window.greenskinSecondWaveSpawned && window.spawnSecondGreenskinWave) {
+                window.spawnSecondGreenskinWave();
+            }
+            window.currentTurnEntity = null;
+            window.gamePhase = 'WAITING';
+            return;
         }
-        const ram = window.campaign2NorthwatchRam;
-        const sapper = window.campaign2NorthwatchSapper;
-        if (ram && sapper && !ram.alive && !sapper.alive && !window.greenskinSecondWaveSpawned && window.spawnSecondGreenskinWave) {
-            window.spawnSecondGreenskinWave();
-        }
-        window.currentTurnEntity = null;
-        window.gamePhase = 'WAITING';
-        return;
+        // Not arrived yet — fall through to ordinary movement AI further
+        // down, which already knows how to walk toward
+        // combatDirective.siegeObjective, same as any other attacker.
     }
 
     // CATAPULT CREW: passive (handled by the passiveUnlessThreatened block
@@ -4970,7 +4998,19 @@ function aiProcess(entity) {
     // out of range. Melee (dist<=1, no intervening hex) is never affected.
     const blockedByAlly = target && rangeWeapon?.subType === 'ranged' && dist > 1 && window.isShotBlockedByAlly(entity, target);
 
-    if (target && dist <= attackRange && hasLOE && !isSkirmishRetreat && !blockedByAlly) {
+    // ELEVATION MELEE IMMUNITY (AI side, mirrors tryAttack's own check): a
+    // ground attacker standing next to a wall defender is technically
+    // dist<=attackRange, but a real melee swing across that height
+    // difference is illegal (tryAttack would just no-op it). Without this
+    // check the AI kept "attacking" every turn from the base of the wall
+    // instead of ever climbing up to actually reach the defender — treat
+    // it as out of range here too, so it falls through to the movement
+    // branch below and climbs like it should.
+    const attackerElevatedAI = window.getTerrainAt(entity.hex.q, entity.hex.r).elevated;
+    const targetElevatedAI = target ? window.getTerrainAt(target.hex.q, target.hex.r).elevated : false;
+    const elevationBlocksMelee = target && rangeWeapon?.subType !== 'ranged' && !target.climbing && !!attackerElevatedAI !== !!targetElevatedAI;
+
+    if (target && dist <= attackRange && hasLOE && !isSkirmishRetreat && !blockedByAlly && !elevationBlocksMelee) {
         if (entity.skills['quarterstaff_trip'] && entity.timePoints >= 5 && Math.random() > 0.5) {
             const hitChance = 50 + entity.toHitMelee - target.passiveDodge;
             if (Math.random() * 100 < hitChance) {
@@ -5013,7 +5053,14 @@ function aiProcess(entity) {
             // them (findPath rightly refuses), leaving them stuck bumping
             // into the wall instead of routing around it.
             if (t.name === 'Wall') s -= 20;
-            if (t.name === 'Water') s -= 10;
+            // Water only costs 2x move (terrain.js), not impassable — this
+            // should nudge the greedy step-picker toward a dry route when
+            // one's equally close, not make it refuse to ever cross a moat
+            // (a -10 penalty dwarfed the distance term entirely, so an
+            // attacker on the far side of a moat with no short dry route
+            // would rather walk away from its objective than take one wet
+            // step, reading as "can't get through the moat at all").
+            if (t.name === 'Water') s -= 2;
             if (getEntityAtHex(h.q, h.r)) s -= 5;
             if (opponentsHaveBurst) {
                 const alliesNearby = window.entities.filter(e => e.alive && e !== entity && e.side === entity.side &&
@@ -6078,10 +6125,10 @@ function damageWall(q, r, amount) {
     if (wall.hp <= 0) {
         window.setTerrainAt(q, r, 'Rubble');
         delete window.tileObjects[key];
-        window.showMessage('The wall gives way with a groan of shattered stone — a breach opens!');
+        window.showMessage(`Wall segment at (${q},${r}) destroyed — a breach opens!`);
         window.drawMap();
     } else {
-        window.showMessage(`The wall groans under the impact (${wall.hp}/${wall.maxHp}).`);
+        window.showMessage(`Wall segment at (${q},${r}) hit (${wall.hp}/${wall.maxHp}).`);
     }
 }
 window.damageWall = damageWall;

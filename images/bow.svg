@@ -1,0 +1,13 @@
+<svg width="100" height="200" viewBox="0 0 100 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Simple recurve-ish longbow, held vertically like the other one-handed weapon icons -->
+  <g stroke="#3f2a18" stroke-width="2" stroke-linejoin="round" fill="none">
+    <path d="M60 10 Q30 30 34 60 Q22 90 34 100 Q22 110 34 140 Q30 170 60 190"
+          stroke="#8a5a34" stroke-width="6"/>
+    <path d="M60 10 Q30 30 34 60 Q22 90 34 100 Q22 110 34 140 Q30 170 60 190"
+          stroke="#6e4527" stroke-width="2"/>
+  </g>
+  <!-- taut string -->
+  <line x1="60" y1="12" x2="60" y2="188" stroke="#e8e0c8" stroke-width="1.5"/>
+  <!-- grip wrap -->
+  <path d="M52 92 L52 108" stroke="#3f2a18" stroke-width="6" stroke-linecap="round"/>
+</svg>

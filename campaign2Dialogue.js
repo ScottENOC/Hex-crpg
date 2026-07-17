@@ -3803,55 +3803,12 @@ function spawnGreenskinAssaultWave() {
         window.entities.push(ent);
     }
 
-    // BATTERING RAM + REAR SAPPER: the first wave isn't meant to win —
-    // it's cover. While it occupies the garrison, a ram works the gate and
-    // a sapper creeps a fire charge to the rear wall; once BOTH have run
-    // their course (breached through or been killed by defenders who
-    // weren't distracted enough), a real second wave pours through
-    // whatever's actually open. Both gated on defendersDistracted()
-    // (gameEngine.js) — see the isBatteringRam/isSiegeSapper aiProcess
-    // blocks for the actual per-turn progress and the wave-2 trigger.
-    const region = window.campaign2NorthwatchFortRegion;
-    if (region?.wallHexes?.length) {
-        // r+2, not r-2: r increases southward away from the fort center
-        // (gateHex itself is center.r + 19, the south point facing the
-        // road) — the ram needs to sit outside the gate on the attackers'
-        // side, not r-2 which lands it two hexes north of the gate,
-        // i.e. INSIDE the fort past the wall.
-        const ram = window.createMonster('siege_engine', { q: gateHex.q, r: gateHex.r + 2 }, null, null, 'enemy');
-        if (ram) {
-            ram.name = 'Battering Ram';
-            ram.isBatteringRam = true;
-            ram.roundsRemaining = 5;
-            ram.hp = 60; ram.maxHp = 60; ram.canLoot = false; ram.noAttack = true;
-            ram.factionTag = 'greenskin_assault';
-            ram.aiControlled = true;
-            ram.aiState = 'combat';
-            ram.timePoints = 100;
-            window.entities.push(ram);
-            window.campaign2NorthwatchRam = ram;
-        }
-        // Rear wall: the wall hex furthest from the gate.
-        let rearHex = region.wallHexes[0];
-        let rearDist = window.distance(gateHex, rearHex);
-        region.wallHexes.forEach(h => {
-            const d = window.distance(gateHex, h);
-            if (d > rearDist) { rearDist = d; rearHex = h; }
-        });
-        const sapper = window.createMonster('goblin', { q: rearHex.q, r: rearHex.r + 2 }, null, null, 'enemy');
-        if (sapper) {
-            sapper.name = 'Sapper';
-            sapper.isSiegeSapper = true;
-            sapper.siegeTargetHex = { ...rearHex };
-            sapper.roundsRemaining = 5;
-            sapper.factionTag = 'greenskin_assault';
-            sapper.aiControlled = true;
-            sapper.aiState = 'combat';
-            sapper.timePoints = 100;
-            window.entities.push(sapper);
-            window.campaign2NorthwatchSapper = sapper;
-        }
-    }
+    // BATTERING RAM + REAR SAPPER now spawn later and further out (see
+    // spawnBatteringRamAndSapper below), once wave 1 has been fighting a
+    // while — not at the same instant as the very first wave, right on
+    // top of the wall.
+    window.greenskinRamSapperSpawned = false;
+    window.greenskinWaveTurnsSinceSpawn = 0;
 
     window.greenskinAssaultTriggered = true;
     // COMBAT ONSET: this is a real, sudden scripted fight starting, not a
@@ -3884,6 +3841,72 @@ function spawnGreenskinAssaultWave() {
     if (window.updateTurnIndicator) window.updateTurnIndicator();
 }
 window.spawnGreenskinAssaultWave = spawnGreenskinAssaultWave;
+
+// BATTERING RAM + REAR SAPPER: deliberately spawn later than wave 1 (see
+// window.greenskinWaveTurnsSinceSpawn, incremented once per wave-1 turn in
+// aiProcess's isBatteringRam/isSiegeSapper block, gameEngine.js) and well
+// outside the wall — same spawnRadius as wave 1 itself, marching in behind
+// it under the same combatDirective.siegeObjective movement every other
+// attacker already uses, rather than popping into existence already
+// standing at the gate. They only flip into their scripted battering
+// behavior once they've actually closed the distance (see the "arrived"
+// check in aiProcess).
+function spawnBatteringRamAndSapper() {
+    if (window.greenskinRamSapperSpawned) return;
+    window.greenskinRamSapperSpawned = true;
+    const center = window.campaign2NorthwatchCenter;
+    const gateHex = window.campaign2NorthwatchGateHex || center;
+    const region = window.campaign2NorthwatchFortRegion;
+    if (!center || !region?.wallHexes?.length) return;
+    const spawnRadius = 30;
+
+    const ramAngle = Math.PI / 2; // due south, same side as the gate
+    const ramHex = window.hexRound(center.q + Math.cos(ramAngle) * spawnRadius, center.r + Math.sin(ramAngle) * spawnRadius);
+    const ram = window.createMonster('siege_engine', ramHex, null, null, 'enemy');
+    if (ram) {
+        ram.name = 'Battering Ram';
+        ram.isBatteringRam = true;
+        ram.roundsRemaining = 5;
+        ram.hp = 60; ram.maxHp = 60; ram.canLoot = false;
+        ram.customImage = 'battering_ram';
+        ram.factionTag = 'greenskin_assault';
+        ram.combatDirective = { hostileTo: 'neutral', siegeObjective: { hex: gateHex } };
+        ram.aiControlled = true;
+        ram.aiState = 'combat';
+        ram.timePoints = 100;
+        window.entities.push(ram);
+        window.campaign2NorthwatchRam = ram;
+    }
+
+    // Rear wall: the wall hex furthest from the gate.
+    let rearHex = region.wallHexes[0];
+    let rearDist = window.distance(gateHex, rearHex);
+    region.wallHexes.forEach(h => {
+        const d = window.distance(gateHex, h);
+        if (d > rearDist) { rearDist = d; rearHex = h; }
+    });
+    const rearAngle = Math.atan2(rearHex.r - center.r, rearHex.q - center.q);
+    const sapperHex = window.hexRound(center.q + Math.cos(rearAngle) * spawnRadius, center.r + Math.sin(rearAngle) * spawnRadius);
+    const sapper = window.createMonster('goblin', sapperHex, null, null, 'enemy');
+    if (sapper) {
+        sapper.name = 'Sapper';
+        sapper.isSiegeSapper = true;
+        sapper.siegeTargetHex = { ...rearHex };
+        sapper.roundsRemaining = 5;
+        sapper.factionTag = 'greenskin_assault';
+        sapper.combatDirective = { hostileTo: 'neutral', siegeObjective: { hex: rearHex } };
+        sapper.aiControlled = true;
+        sapper.aiState = 'combat';
+        sapper.timePoints = 100;
+        window.entities.push(sapper);
+        window.campaign2NorthwatchSapper = sapper;
+    }
+
+    window.showMessage('A battering ram rolls into view, goblins hauling it toward the gate!');
+    if (window.drawMap) window.drawMap();
+    if (window.renderEntities) window.renderEntities();
+}
+window.spawnBatteringRamAndSapper = spawnBatteringRamAndSapper;
 
 // SECOND WAVE: once the ram and sapper have both run their course (breached
 // through, or been killed by defenders who weren't distracted enough — see
