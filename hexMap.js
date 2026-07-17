@@ -1049,7 +1049,14 @@ function hasLineOfSightUncached(start, end) {
         if ((current.q === start.q && current.r === start.r) || (current.q === end.q && current.r === end.r)) continue;
 
         const terrain = window.getTerrainAt(current.q, current.r);
-        if (isOpaqueWallName(terrain.name)) {
+        // An open gate (Northwatch's gate hex stays 'Climbable Wall' terrain
+        // even when open, campaign2World.js, so wall-top continuity/melee
+        // elevation are unaffected either way) shouldn't block sight through
+        // it while open — a real door swings the terrain to something
+        // non-opaque already; a gate can't do that without breaking the
+        // wall, so check the door state directly instead.
+        const doorOpenHere = window.tileObjects?.[`${current.q},${current.r}`]?.type === 'door_open';
+        if (isOpaqueWallName(terrain.name) && !doorOpenHere) {
             const adjacentToStart = distance(start, current) === 1;
             const adjacentToEnd = distance(end, current) === 1;
 

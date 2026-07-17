@@ -3660,11 +3660,25 @@ function buildNorthwatchFort(turnHex) {
     // lever "unforgivable act", or the siege's own hostility flip) can
     // still open it to reach the commander — this represents a guard
     // waving a recognized, non-hostile visitor through, not a puzzle.
+    // openTerrain matches closedTerrain deliberately (both 'Climbable
+    // Wall') — this hex is simultaneously part of the wall ring and a
+    // door. Swapping it to Wood Floor when opened (the ordinary door
+    // pattern) would puncture the wall's elevation continuity right at
+    // the gate: a defender walking the rampart would suddenly drop to
+    // ground level mid-stride, and LOS/melee-elevation rules would treat
+    // the open gate as flat ground instead of wall. Keeping the terrain
+    // constant means toggleDoor's terrain "swap" here is a no-op and only
+    // the door_open/door_closed tileObject flips — ground-level passability
+    // and LOS then key off that tileObject state instead (see the
+    // climbTransition/HEIGHT PENALTY gate-open checks in gameEngine.js and
+    // the door_open exception in hasLineOfSightUncached, hexMap.js), while
+    // wall-top movement (already climbRisk-to-climbRisk) is never affected
+    // either way.
     window.setTerrainAt(gateHex.q, gateHex.r, 'Climbable Wall');
     window.tileObjects[`${gateHex.q},${gateHex.r}`] = {
         type: 'door_closed', lightRadius: 0, locked: false,
         hp: 40, maxHp: 40,
-        closedTerrain: 'Climbable Wall', openTerrain: 'Wood Floor',
+        closedTerrain: 'Climbable Wall', openTerrain: 'Climbable Wall',
         accessThreshold: { faction: 'silverhart_kingdom', standing: -20 },
         accessDeniedMessage: "The gate guards won't open up for you.",
     };

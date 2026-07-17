@@ -641,7 +641,13 @@ function playerMoveProcess(player, path) {
         }
 
         // HEIGHT PENALTY (any elevated terrain — Pedestals, and now fort ramparts)
-        if (previousTerrain.name !== terrain.name && (previousTerrain.elevated || terrain.elevated)) {
+        // An open gate is a real door at ground level despite sitting on
+        // permanently-elevated wall terrain (see isOpenGateAt) — crossing
+        // through it from either side shouldn't pay a climb surcharge.
+        const throughOpenGate = isOpenGateAt(player.hex.q, player.hex.r) || isOpenGateAt(previousHex.q, previousHex.r);
+        if (throughOpenGate) {
+            // no height penalty, walk straight through
+        } else if (previousTerrain.name !== terrain.name && (previousTerrain.elevated || terrain.elevated)) {
             let heightPenalty = 1.0;
             const climbRiskSide = terrain.climbRisk ? terrain : (previousTerrain.climbRisk ? previousTerrain : null);
             if (climbRiskSide) {
@@ -668,7 +674,7 @@ function playerMoveProcess(player, path) {
         // scripted-status handling below, which spends everything above the
         // 80 end-of-turn threshold each turn (not 1 at a time) until it's
         // paid off or they're knocked off.
-        const climbTransition = !player.isFlying && terrain.climbRisk && !previousTerrain.climbRisk;
+        const climbTransition = !player.isFlying && terrain.climbRisk && !previousTerrain.climbRisk && !throughOpenGate;
         if (climbTransition) {
             // A ladder propped against this exact wall hex (Northwatch's
             // notches, campaign2World.js) makes climbing up it as much
@@ -3466,6 +3472,16 @@ function getClimbCostMult(entity) {
 }
 window.getClimbCostMult = getClimbCostMult;
 
+// A gate hex (Northwatch's, campaign2World.js) stays 'Climbable Wall'
+// terrain permanently, open or closed, so wall-top continuity is never
+// broken — ground-level passability comes from this door state instead of
+// a terrain swap. Movement/climb code checks this wherever it would
+// otherwise treat a climbRisk hex as requiring a climb.
+function isOpenGateAt(q, r) {
+    return window.tileObjects?.[`${q},${r}`]?.type === 'door_open';
+}
+window.isOpenGateAt = isOpenGateAt;
+
 // COVER FIRE (bow_cover skill, skills.js): previously a purchasable skill
 // with zero actual game effect (apply/prereq only — no mechanic anywhere
 // in the engine). Declaring a hex marks it plus its 6 neighbors (7 hexes
@@ -3549,7 +3565,10 @@ function activeCoverFirePenalty(q, r, entity) {
 function getMoveCostMult(q, r, entity) {
     const terrain = window.getTerrainAt(q, r);
     let mult = terrain.moveCostMult || 1;
-    if (terrain.climbRisk) {
+    // An open gate keeps its wall terrain permanently (isOpenGateAt) but
+    // shouldn't charge the climb surcharge while open — that's the whole
+    // point of it acting like a door for ground traffic.
+    if (terrain.climbRisk && !isOpenGateAt(q, r)) {
         mult = 1 + (terrain.moveCostMult - 1) * getClimbCostMult(entity);
     }
     const obj = window.tileObjects && window.tileObjects[`${q},${r}`];
@@ -5049,7 +5068,8 @@ function aiProcess(entity) {
                 // an AI entity stepping onto climbRisk terrain from
                 // non-climbRisk terrain commits to climbing instead of
                 // paying the full cost in one atomic step.
-                if (!entity.isFlying && terrain.climbRisk && !previousTerrain.climbRisk) {
+                const aiThroughOpenGate = isOpenGateAt(entity.hex.q, entity.hex.r) || isOpenGateAt(previousHex.q, previousHex.r);
+                if (!entity.isFlying && terrain.climbRisk && !previousTerrain.climbRisk && !aiThroughOpenGate) {
                     const aiHasLadder = window.tileObjects?.[`${entity.hex.q},${entity.hex.r}`]?.type === 'ladder';
                     const aiBaseClimbCost = 125 * getClimbCostMult(moveEntity);
                     const aiClimbCost = aiHasLadder ? aiBaseClimbCost * 0.4 : aiBaseClimbCost;
@@ -5371,9 +5391,10 @@ function handleClick(e){
         const act = window.playerAction;
         if (act.type === 'force_attack') {
             if (target && target.alive && target !== player) {
-                tryAttack(player, target, false, false, 0, true);
-                spendTP(player, 10);
-                actionHandled = 'main_attack';
+                if (tryAttack(player, target, false, false, 0, true) !== false) {
+                    spendTP(player, 10);
+                    actionHandled = 'main_attack';
+                }
             }
             window.playerAction = null;
             if (actionHandled) finalizePlayerAction(player, actionHandled);
@@ -5404,7 +5425,7 @@ function handleClick(e){
             if (act.id === 'shove' || act.id.endsWith('_feint')) {
                 if (target && target.side !== player.side && window.distance(player.hex, clickedHex) === 1) {
                     if (act.id === 'shove') actionHandled = window.tryShove(player, target);
-                    else { tryAttack(player, target, true); spendTP(player, 1); actionHandled = true; }
+                    else { if (tryAttack(player, target, true) !== false) { spendTP(player, 1); actionHandled = true; } }
                 }
             } else if (act.id === 'quarterstaff_trip') {
                 if (target && target.side !== player.side) {
@@ -5432,9 +5453,10 @@ function handleClick(e){
                             player.hex = bestHex;
                             if (player.riding) player.riding.hex = {q: bestHex.q, r: bestHex.r};
                             window.showMessage(`${player.name} charges ${target.name}!`);
-                            tryAttack(player, target, false, false, 4); // +4 bonus damage
-                            spendTP(player, 10);
-                            actionHandled = true;
+                            if (tryAttack(player, target, false, false, 4) !== false) { // +4 bonus damage
+                                spendTP(player, 10);
+                                actionHandled = true;
+                            }
                         } else {
                             window.showMessage("No space to complete the charge.");
                         }
@@ -5460,10 +5482,12 @@ function handleClick(e){
                         window.showMessage(`${player.name} performs an assassination strike!`);
                         // Temporarily boost hit chance
                         player.tempHitBonus = 50;
-                        tryAttack(player, target, false);
+                        const struck = tryAttack(player, target, false);
                         delete player.tempHitBonus;
-                        spendTP(player, 80);
-                        actionHandled = true;
+                        if (struck !== false) {
+                            spendTP(player, 80);
+                            actionHandled = true;
+                        }
                     } else {
                         window.showMessage("Cannot assassinate while seen by any enemy!");
                     }
@@ -5577,7 +5601,7 @@ function handleClick(e){
         } else if (act.type === 'offhand_attack') {
             if (target && target.side !== player.side) {
                 let range = 1 + (player.equipped?.offhand ? (window.items[player.equipped.offhand].range || 0) : 0);
-                if (getMinDistance(player, target) <= range) { tryAttack(player, target, false, true); spendTP(player, 2); actionHandled = true; }
+                if (getMinDistance(player, target) <= range) { if (tryAttack(player, target, false, true) !== false) { spendTP(player, 2); actionHandled = true; } }
             }
         } else if (act.type === 'spell') {
             const spell = window.player.createdSpells[act.index];
@@ -5629,7 +5653,7 @@ function handleClick(e){
         if (target && target.side !== player.side) {
             window.gamePhase = 'AI_TURN'; // Block clicks
             window.clearHighlights();
-            tryAttack(player, target); spendTP(player, 10); actionHandled = 'main_attack';
+            if (tryAttack(player, target) !== false) { spendTP(player, 10); actionHandled = 'main_attack'; }
         }
     } else if (window.highlightedHexes.some(h => h.type === 'move' && h.q === clickedHex.q && h.r === clickedHex.r)) {
         let threshold = 80;
@@ -5686,11 +5710,11 @@ function tryAttack(attacker, target, isFeint = false, isOffhand = false, bonusDa
     // target, not even via Force-Attack's ignoreNeutralCheck override.
     if (target.noAttack) {
         if (attacker.side === 'player') window.showMessage(`${target.name} isn't part of any fight — leave them be.`);
-        return;
+        return false;
     }
     if (target.side === 'neutral' && !ignoreNeutralCheck) {
         if (attacker.side === 'player') window.showMessage("You cannot attack a neutral character!");
-        return;
+        return false;
     }
 
     // UNFORGIVABLE ACT: deliberately, directly attacking a faction-tagged
@@ -5738,7 +5762,7 @@ function tryAttack(attacker, target, isFeint = false, isOffhand = false, bonusDa
         if (attacker.side === 'player') {
             window.showMessage(`Cannot reach ${target.name} with a melee attack while ${attacker.isFlying ? 'flying' : 'they are flying'}!`);
         }
-        return;
+        return false;
     }
 
     // ELEVATION MELEE IMMUNITY: a defender on a wall/rampart can't be melee'd
@@ -5752,7 +5776,7 @@ function tryAttack(attacker, target, isFeint = false, isOffhand = false, bonusDa
         if (attacker.side === 'player') {
             window.showMessage(`Cannot reach ${target.name} with a melee attack across that height difference!`);
         }
-        return;
+        return false;
     }
 
     // Wake up target if attacked

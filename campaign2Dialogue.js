@@ -3813,7 +3813,12 @@ function spawnGreenskinAssaultWave() {
     // blocks for the actual per-turn progress and the wave-2 trigger.
     const region = window.campaign2NorthwatchFortRegion;
     if (region?.wallHexes?.length) {
-        const ram = window.createMonster('siege_engine', { q: gateHex.q, r: gateHex.r - 2 }, null, null, 'enemy');
+        // r+2, not r-2: r increases southward away from the fort center
+        // (gateHex itself is center.r + 19, the south point facing the
+        // road) — the ram needs to sit outside the gate on the attackers'
+        // side, not r-2 which lands it two hexes north of the gate,
+        // i.e. INSIDE the fort past the wall.
+        const ram = window.createMonster('siege_engine', { q: gateHex.q, r: gateHex.r + 2 }, null, null, 'enemy');
         if (ram) {
             ram.name = 'Battering Ram';
             ram.isBatteringRam = true;

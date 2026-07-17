@@ -36,10 +36,17 @@ test.describe('Northwatch gate: a real door, and neutral NPCs no longer block th
             window.toggleDoor(gate.q, gate.r, window.player);
             const terrain = window.getTerrainAt(gate.q, gate.r);
             const door = window.tileObjects[`${gate.q},${gate.r}`];
-            return { terrainName: terrain.name, doorType: door?.type };
+            return { terrainName: terrain.name, doorType: door?.type, isOpenGate: window.isOpenGateAt(gate.q, gate.r) };
         });
-        expect(result.terrainName).toBe('Wood Floor');
+        // The gate hex stays 'Climbable Wall' terrain permanently, open or
+        // closed — it's simultaneously part of the wall ring and a door,
+        // and swapping to Wood Floor when opened would puncture the wall's
+        // elevation continuity right at the gate. Ground-level passability
+        // comes from the door_open/door_closed tileObject state instead
+        // (isOpenGateAt), not a terrain swap.
+        expect(result.terrainName).toBe('Climbable Wall');
         expect(result.doorType).toBe('door_open');
+        expect(result.isOpenGate).toBe(true);
     });
 
     test('the player can walk through a neutral NPC standing in their path', async ({ page }) => {
