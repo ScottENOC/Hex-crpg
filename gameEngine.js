@@ -3495,8 +3495,16 @@ function takeTurn(entity) {
         if (isSentientAlly) {
             if (window.isInCombat) sharedMessage(`It is ${entity.name}'s turn!`);
             window.selectCharacterByName(entity.name);
+            // Fog of war/exploration otherwise only updates on the
+            // out-of-combat periodic tick (see tick(), gameEngine.js) — a
+            // fight that starts in previously-unexplored terrain (an ambush,
+            // a wandering monster) would otherwise stay pitch black around
+            // the party for the fight's entire duration, even as they move
+            // and new hexes come into line of sight turn by turn. Refresh it
+            // here too, once per player-controlled character's turn.
+            if (window.updateExploration) window.updateExploration();
             // RE-CALC HIGHLIGHTS IMMEDIATELY
-            window.updateActionButtons(); 
+            window.updateActionButtons();
         }
 
         // AUTO-MOVE LOGIC
