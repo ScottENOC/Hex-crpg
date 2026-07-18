@@ -3262,6 +3262,7 @@ function setupVillageScene(forLoadOnly = false) {
     // settlement at the new end" pattern used for Millbrook up north.
     const westRoadEnd = paintRoad({ q: -1, r: 0 }, WORLD_HEX_SIZE * 2, 18, 0.35, () => {});
 
+    buildHollowmereGuildDen();
     buildFarmstead(farmRoadEnd);
     buildGoblinCamp(goblinCampWaypoint);
     buildPlayerCottagePlot(CP);
@@ -3563,6 +3564,22 @@ function readSignpost() {
     );
 }
 
+// A quiet back-alley den tucked away from the tavern/store — the
+// Thieves' Guild's toehold in Hollowmere itself, well before the player
+// ever reaches Silverhart. Deliberately unassuming: a single small room,
+// not a district. Same thieves_guild faction/dialogue tree as the
+// capital's fence, just a friendlier face closer to home.
+function buildHollowmereGuildDen() {
+    const center = { q: -12, r: -8 };
+    const door = { q: center.q, r: center.r + 2 };
+    const region = carveBuilding(center.q, center.r, 2, 2, door, 'Wood Floor');
+    window.interiorRegions.push(region);
+    window.campaign2HollowmereGuildDenCenter = center;
+    if (window.campaign2HollowmereGuildContact) {
+        window.entities.push(window.buildNPC({ ...window.campaign2HollowmereGuildContact, hex: { q: center.q, r: center.r } }));
+    }
+}
+
 // Emberlode: a larger settlement two world-hexes west of Hollowmere (a full
 // world-hex further out than the goblin camp, which sits at the first
 // border — see setupVillageScene's westRoadEnd/goblinCampWaypoint split).
@@ -3605,6 +3622,11 @@ function buildEmberlode(roadEnd) {
     }
     if (window.campaign2EmberlodeMiner) {
         window.entities.push(window.buildNPC({ ...window.campaign2EmberlodeMiner, hex: { q: bunkCenter.q - 1, r: bunkCenter.r } }));
+    }
+    // The guild's reach even out here — a miner moonlighting as a fence for
+    // ore skimmed off the top, same reputation track as Silverhart's.
+    if (window.campaign2EmberlodeGuildContact) {
+        window.entities.push(window.buildNPC({ ...window.campaign2EmberlodeGuildContact, hex: { q: bunkCenter.q + 1, r: bunkCenter.r } }));
     }
 
     setWorldMapMarker(center, { t: 'G', f: 'V', o: 'h', p: 1, n: 'Emberlode' });
@@ -3667,6 +3689,9 @@ function buildReddale(roadEnd) {
     }
     if (window.campaign2ReddaleInnkeeper) {
         window.entities.push(window.buildNPC({ ...window.campaign2ReddaleInnkeeper, hex: { q: innCenter.q, r: innCenter.r } }));
+    }
+    if (window.campaign2ReddaleGuildContact) {
+        window.entities.push(window.buildNPC({ ...window.campaign2ReddaleGuildContact, hex: { q: innCenter.q - 1, r: innCenter.r } }));
     }
     if (window.campaign2ReddaleDisciple) {
         window.entities.push(window.buildNPC({ ...window.campaign2ReddaleDisciple, hex: { q: innCenter.q + 1, r: innCenter.r } }));

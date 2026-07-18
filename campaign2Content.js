@@ -599,6 +599,33 @@ window.campaign2ThievesGuildDebtor = {
     side: 'neutral', factionId: null, color: '#5a4a3a',
     dialogueId: 'thieves_guild_debtor'
 };
+// The guild's reach outside Silverhart: a fence in each of the smaller
+// settlements, sharing the same thieves_guild reputation track and the
+// same thieves_guild_fence dialogue tree as Tessa in the capital — a
+// branch office, not a separate operation. Each carries the fenceItems
+// list Corvin's own operation uses; there's no "member" tier stock out
+// here (the capital fence is the only one who gets that).
+window.campaign2HollowmereGuildContact = {
+    name: 'Del Ashworth', title: "Fence",
+    race: 'human', gender: 'male',
+    classLevels: ['rogue'], skillPicks: ['health', 'stealth_agility'], equipment: ['dagger', 'light_armor'],
+    side: 'neutral', factionId: null, color: '#4a3a4a',
+    dialogueId: 'thieves_guild_fence'
+};
+window.campaign2EmberlodeGuildContact = {
+    name: 'Rennik Coalmarrow', title: "Fence",
+    race: 'human', gender: 'male',
+    classLevels: ['rogue'], skillPicks: ['health', 'stealth_agility'], equipment: ['dagger', 'light_armor'],
+    side: 'neutral', factionId: null, color: '#4a3a4a',
+    dialogueId: 'thieves_guild_fence'
+};
+window.campaign2ReddaleGuildContact = {
+    name: 'Mira Selk', title: "Fence",
+    race: 'human', gender: 'female',
+    classLevels: ['rogue'], skillPicks: ['health', 'stealth_agility'], equipment: ['dagger', 'light_armor'],
+    side: 'neutral', factionId: null, color: '#4a3a4a',
+    dialogueId: 'thieves_guild_fence'
+};
 // Silas Crane: the Crown's informant on the guild's own turf. Target of
 // "Blood Price" (thieves_guildmaster) — the third rung of the questline, and
 // the point where helping the guild starts costing the player something

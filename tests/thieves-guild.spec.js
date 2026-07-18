@@ -301,3 +301,87 @@ test.describe("Thieves' Guild: Blood Price + The Big Score", () => {
         expect(after.questStatus).toBe('completed');
     });
 });
+
+test.describe("Thieves' Guild: presence outside the capital", () => {
+    test('a guild fence is placed in Hollowmere, Emberlode, and Reddale, sharing the same reputation gating', async ({ page }) => {
+        await createCharacter(page);
+        const result = await page.evaluate(() => {
+            const names = ['Del Ashworth', 'Rennik Coalmarrow', 'Mira Selk'];
+            return names.map(name => {
+                const npc = window.entities.find(e => e.name === name);
+                return { name, placed: !!npc, dialogueId: npc?.dialogueId, side: npc?.side };
+            });
+        });
+        for (const r of result) {
+            expect(r.placed).toBe(true);
+            expect(r.dialogueId).toBe('thieves_guild_fence');
+            expect(r.side).toBe('neutral');
+        }
+    });
+
+    test('the Hollowmere fence refuses trade below standing 20, same as the capital fence', async ({ page }) => {
+        await createCharacter(page);
+        await page.evaluate(() => {
+            window.factions.thieves_guild.standing = 0;
+            const npc = window.entities.find(e => e.name === 'Del Ashworth');
+            window.npcDialogueTrees.thieves_guild_fence(npc);
+        });
+        const dialogue = await readDialogue(page);
+        expect(dialogue.options.some(o => o.toLowerCase().includes('show me'))).toBe(false);
+
+        await page.evaluate(() => { window.factions.thieves_guild.standing = 25; });
+        await page.evaluate(() => {
+            const npc = window.entities.find(e => e.name === 'Del Ashworth');
+            window.npcDialogueTrees.thieves_guild_fence(npc);
+        });
+        const dialogue2 = await readDialogue(page);
+        expect(dialogue2.options.some(o => o.toLowerCase().includes('show me'))).toBe(true);
+    });
+});
+
+test.describe("Thieves' Guild: rogue-flavor dialogue", () => {
+    test('getPartyMaxClassLevel reports the highest rogue level in the active party', async ({ page }) => {
+        await createCharacter(page);
+        const result = await page.evaluate(() => {
+            window.party[0].classLevels = { rogue: 4 };
+            return window.getPartyMaxClassLevel('rogue');
+        });
+        expect(result).toBe(4);
+    });
+
+    test('the Fence recognizes a heavily rogue-trained party even below trading standing', async ({ page }) => {
+        await createCharacter(page);
+        await page.evaluate(() => {
+            window.factions.thieves_guild.standing = 0;
+            window.party[0].classLevels = { rogue: 5 };
+            const fence = window.entities.find(e => e.dialogueId === 'thieves_guild_fence');
+            window.npcDialogueTrees.thieves_guild_fence(fence);
+        });
+        const dialogue = await readDialogue(page);
+        expect(dialogue.message).toContain("I know the look");
+    });
+
+    test('the Fence uses the plain refusal for a party without heavy rogue investment', async ({ page }) => {
+        await createCharacter(page);
+        await page.evaluate(() => {
+            window.factions.thieves_guild.standing = 0;
+            window.party[0].classLevels = { fighter: 3 };
+            const fence = window.entities.find(e => e.dialogueId === 'thieves_guild_fence');
+            window.npcDialogueTrees.thieves_guild_fence(fence);
+        });
+        const dialogue = await readDialogue(page);
+        expect(dialogue.message).not.toContain("I know the look");
+    });
+
+    test('the Guildmaster acknowledges a rogue-heavy party in the Initiation offer', async ({ page }) => {
+        await createCharacter(page);
+        await page.evaluate(() => {
+            window.factions.thieves_guild.standing = 0;
+            window.party[0].classLevels = { rogue: 4 };
+            const guildmaster = window.entities.find(e => e.dialogueId === 'thieves_guildmaster');
+            window.npcDialogueTrees.thieves_guildmaster(guildmaster);
+        });
+        const dialogue = await readDialogue(page);
+        expect(dialogue.message).toContain("most of them don't move like you do");
+    });
+});

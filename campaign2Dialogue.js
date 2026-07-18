@@ -362,13 +362,22 @@ window.npcDialogueTrees = {
             window.showDialogue(npc, "You're not welcome here. Corvin's word, not mine — take it up with him if you've got a death wish.", [{ label: "...", action: () => {} }]);
             return;
         }
+        // A visibly rogue-trained party gets read for what it is, even by a
+        // fence with nothing to offer them yet — professional recognition,
+        // not a reputation shortcut. hasHeavyRogue is reused a few lines
+        // down for the same flavor at the trading tiers.
+        const hasHeavyRogue = (window.getPartyMaxClassLevel && window.getPartyMaxClassLevel('rogue') >= 3);
         if (standing < 20) {
-            window.showDialogue(npc, "I don't know you. Whatever you're after, you won't find it from me.", [{ label: "Fair enough.", action: () => {} }]);
+            window.showDialogue(npc, hasHeavyRogue
+                ? "I don't know you. But I know the look — you've spent real time in this trade. Doesn't buy you anything here, though."
+                : "I don't know you. Whatever you're after, you won't find it from me.", [{ label: "Fair enough.", action: () => {} }]);
             return;
         }
         const member = standing >= 50;
         window.showDialogue(npc, member
-            ? "Corvin vouches for you now. Good — that means you actually get to see what I keep in the back."
+            ? (hasHeavyRogue
+                ? "Corvin vouches for you now, and honestly, he didn't need to sell me on it — anyone can see you've done this before. Good, that means you actually get to see what I keep in the back."
+                : "Corvin vouches for you now. Good — that means you actually get to see what I keep in the back.")
             : "Keep your voice down. I don't ask where coin comes from, and you don't ask where my stock comes from.", [
             { label: "Show me what you've got.", action: () => window.openShop({ itemIds: member ? window.campaign2ThievesGuildFenceMemberItems : window.campaign2ThievesGuildFenceItems, mounts: false }) },
             { label: "Just passing through.", action: () => {} }
@@ -521,7 +530,10 @@ window.npcDialogueTrees = {
         }
 
         if (standing < 20) {
-            window.showDialogue(npc, "Everyone who walks in here wants to be one of us. Words are cheap. Prove it — Perrin Vance at the general goods store keeps a strongbox under his counter. Bring me what's in it, and don't get seen doing it. That's the only introduction that means anything down here.", [
+            const rogueGreeting = (window.getPartyMaxClassLevel && window.getPartyMaxClassLevel('rogue') >= 3)
+                ? "Everyone who walks in here wants to be one of us — though most of them don't move like you do. That buys you a hearing, not a place. Words are cheap either way. Prove it — Perrin Vance at the general goods store keeps a strongbox under his counter. Bring me what's in it, and don't get seen doing it. That's the only introduction that means anything down here."
+                : "Everyone who walks in here wants to be one of us. Words are cheap. Prove it — Perrin Vance at the general goods store keeps a strongbox under his counter. Bring me what's in it, and don't get seen doing it. That's the only introduction that means anything down here.";
+            window.showDialogue(npc, rogueGreeting, [
                 {
                     label: "I'll do it.",
                     action: () => {
@@ -556,8 +568,9 @@ window.npcDialogueTrees = {
             return;
         }
 
+        const rogueHeavy = (window.getPartyMaxClassLevel && window.getPartyMaxClassLevel('rogue') >= 3);
         window.showDialogue(npc, standing >= 50
-            ? "You've earned your place here. What do you need?"
+            ? (rogueHeavy ? "You've earned your place here — and it shows, honestly. Not many walk in already knowing the trade like you do. What do you need?" : "You've earned your place here. What do you need?")
             : "You've done right by us so far. Keep it that way.", [
             { label: "Just checking in.", action: () => {} }
         ]);

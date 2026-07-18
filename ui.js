@@ -1513,6 +1513,15 @@ function partyHasRace(race) {
 }
 window.partyHasRace = partyHasRace;
 
+/** Highest total level anyone in the active party has taken in `cls` — used by
+ * NPCs whose dialogue reacts to how invested the party is in a class (e.g. the
+ * Thieves' Guild noticing a heavily-rogue party), not just whether anyone has
+ * a single level in it (that's what hasClassLevel/partyHasRace are for). */
+function getPartyMaxClassLevel(cls) {
+    return Math.max(0, ...(window.party || []).map(p => (p.classLevels && p.classLevels[cls]) || 0));
+}
+window.getPartyMaxClassLevel = getPartyMaxClassLevel;
+
 // Retrainer NPC (silverhart_retrainer, campaign2Dialogue.js): resets every
 // normally-purchased skill back into spendable attribute points, recomputed
 // fresh from race + classLevels rather than incrementally refunded — this is
