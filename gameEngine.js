@@ -3593,6 +3593,7 @@ function interactWithTileObject(q, r, player) {
     if (doorObj.type === 'evidence' && window.searchEvidence) { window.searchEvidence(q, r); return; }
     if (doorObj.type === 'gate_lever' && window.pullNorthwatchGateLever) { window.pullNorthwatchGateLever(); return; }
     if (doorObj.type === 'unicorn_track' && window.showUnicornTrackDetail) { window.showUnicornTrackDetail(doorObj, q, r); return; }
+    if (doorObj.type === 'rune_forge' && window.openRuneForge) { window.openRuneForge(); return; }
     if (doorObj.type === 'fireplace') { toggleFireplace(q, r, player); return; }
 }
 window.interactWithTileObject = interactWithTileObject;

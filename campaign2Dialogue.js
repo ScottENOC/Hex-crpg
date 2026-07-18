@@ -5264,8 +5264,12 @@ window.npcDialogueTrees.dwarf_king = (npc) => {
             infestationQuest.status = 'completed';
             window.adjustReputation(window.factions.dwarven_kingdom, 20, 20);
             if (window.gainExp) window.gainExp(200);
-            window.showMessage('Quest complete: What Nests Below. (+reputation with the Deepholds)');
-            window.showDialogue(npc, "The lower tunnels have gone quiet the right way, for once. The Deepholds don't forget a debt like that.", [{ label: "Glad to help.", action: () => {} }]);
+            // A shard of deep crystal from the reopened gallery — see
+            // deepcrystal_pendant's recipe in crafting.js. The King only
+            // parts with one of these for a debt this real.
+            window.party[0].inventory.push('deep_crystal');
+            window.showMessage('Quest complete: What Nests Below. (+reputation with the Deepholds, +1 Deep Crystal)');
+            window.showDialogue(npc, "The lower tunnels have gone quiet the right way, for once. The Deepholds don't forget a debt like that — take this, pulled from the same gallery you cleared. Dornik says it's grown deep enough to be worth something to the right hands.", [{ label: "Glad to help.", action: () => {} }]);
             return;
         }
         window.showDialogue(npc, "Whatever's nesting in the lower tunnels is still down there, near as the foreman can tell. Mind yourself.", [{ label: "I'll deal with it.", action: () => {} }]);
@@ -5321,4 +5325,129 @@ window.npcDialogueTrees.deepholds_trader = (npc) => {
         { label: "Let me see your wares.", action: () => window.openShop({ itemIds: window.campaign2DeepholdsTraderItems, mounts: false }) },
         { label: "Just looking.", action: () => {} }
     ]);
+};
+
+// Master Runesmith Thrain Emberhand — the whole runesmithing questline (see
+// crafting.js for the recipes/mechanics themselves). Two trust thresholds:
+// "The Forge Trusts a Stranger" unlocks having HIM craft for you (a real
+// gold premium, no skill needed); "The Forge Remembers Its Own" unlocks
+// teaching you the craft outright, gated far more easily for a dwarf PC
+// than anyone else — Kragmoor doesn't hide its own kind's birthright behind
+// the same wall it holds up for surface-dwellers.
+window.npcDialogueTrees.deepholds_runesmith = (npc) => {
+    window.questLog = window.questLog || [];
+    const player = window.party[0];
+    const standing = window.factions?.dwarven_kingdom?.standing ?? 0;
+    const isDwarf = player.race === 'dwarf';
+
+    const trustQuest = window.questLog.find(q => q.id === 'kragmoor_runesmith_trust');
+    const teachQuest = window.questLog.find(q => q.id === 'kragmoor_runesmith_teach');
+    const trusted = trustQuest && trustQuest.status === 'completed';
+    const taught = !!(player.skills && player.skills.runesmithing);
+
+    // Step 1: prove yourself worth the smith's attention at all — needs the
+    // Deepholds to already half-trust you (same standing bar as the
+    // Vault's trader) and a starmetal shard as real proof you can find one.
+    if (trustQuest && trustQuest.status === 'active') {
+        const hasOre = (player.inventory || []).includes('starmetal_ore');
+        if (hasOre) {
+            window.showDialogue(npc, "You actually found one. Most who claim it are lying, or dead before they can prove it.", [
+                {
+                    label: "Here — a starmetal shard.",
+                    action: () => {
+                        player.inventory.splice(player.inventory.indexOf('starmetal_ore'), 1);
+                        trustQuest.status = 'completed';
+                        window.adjustReputation(window.factions.dwarven_kingdom, 15, 15);
+                        window.showMessage('Quest complete: The Forge Trusts a Stranger. Thrain will craft for you now — for a price.');
+                        window.showDialogue(npc, "Bring me the makings and enough coin for my time, and I'll turn them into something worth carrying. That much, I owe anyone who proves themselves.", [{ label: "Good to know.", action: () => {} }]);
+                    }
+                },
+                { label: "Not yet.", action: () => {} }
+            ]);
+        } else {
+            window.showDialogue(npc, "A shard of starmetal, still. Rare enough that most smiths go a whole life without touching one.", [{ label: "I'll keep looking.", action: () => {} }]);
+        }
+        return;
+    }
+
+    if (!trustQuest) {
+        if (standing >= 10) {
+            window.questLog.push({
+                id: 'kragmoor_runesmith_trust', title: 'The Forge Trusts a Stranger', giver: 'Thrain Emberhand', status: 'active',
+                description: 'Bring Thrain a shard of starmetal ore to prove yourself before he\'ll craft for you.'
+            });
+            window.showMessage('Quest added: The Forge Trusts a Stranger.');
+            window.showDialogue(npc, "You've done right by the mountain — I've heard as much. But I don't work rune-forged steel for just anyone who walks in off the surface. Bring me a shard of starmetal, and I'll believe you're worth the trouble.", [{ label: "I'll find one.", action: () => {} }]);
+        } else {
+            window.showDialogue(npc, "The forge isn't a curiosity for tourists. Earn the mountain's trust first, then we'll talk.", [{ label: "Understood.", action: () => {} }]);
+        }
+        return;
+    }
+
+    // Step 2: learning the craft yourself, not just paying for it. A dwarf
+    // walks in already trusted by blood — no reputation gate beyond step 1,
+    // and only one shard asked for, not two.
+    if (teachQuest && teachQuest.status === 'active') {
+        const needed = isDwarf ? 1 : 2;
+        const have = (player.inventory || []).filter(i => i === 'starmetal_ore').length;
+        if (have >= needed) {
+            window.showDialogue(npc, isDwarf
+                ? "Kin asking for kin's craft. I'd have taught you the first day, if you'd asked."
+                : "Two shards, same as I asked. Fair's fair — I'll not pretend a surface-dweller earns this any cheaper than I'd charge my own cousin twice removed.", [
+                {
+                    label: `Here — ${needed}x starmetal shard${needed > 1 ? 's' : ''}.`,
+                    action: () => {
+                        let removed = 0;
+                        player.inventory = player.inventory.filter(i => { if (i === 'starmetal_ore' && removed < needed) { removed++; return false; } return true; });
+                        teachQuest.status = 'completed';
+                        window.grantSkillRank(player, 'runesmithing');
+                        window.adjustReputation(window.factions.dwarven_kingdom, 10, 10);
+                        window.showMessage('Quest complete: The Forge Remembers Its Own. You have learned Runesmithing.');
+                        window.showDialogue(npc, "Now the forge answers your own hand. Use it well.", [{ label: "My thanks.", action: () => {} }]);
+                    }
+                },
+                { label: "Not yet.", action: () => {} }
+            ]);
+        } else {
+            window.showDialogue(npc, `Still need ${needed - have} more shard${needed - have > 1 ? 's' : ''} of starmetal before I'll teach you anything.`, [{ label: "I'll keep looking.", action: () => {} }]);
+        }
+        return;
+    }
+
+    if (trusted && !taught && !teachQuest) {
+        const canOfferTeaching = isDwarf || standing >= 30;
+        if (canOfferTeaching) {
+            window.questLog.push({
+                id: 'kragmoor_runesmith_teach', title: 'The Forge Remembers Its Own', giver: 'Thrain Emberhand', status: 'active',
+                description: isDwarf
+                    ? 'Bring Thrain 1x starmetal ore — he\'ll teach a fellow dwarf the craft outright.'
+                    : 'Bring Thrain 2x starmetal ore to earn the runesmithing craft itself, not just his labor.'
+            });
+            window.showMessage('Quest added: The Forge Remembers Its Own.');
+            window.showDialogue(npc, isDwarf
+                ? "You're one of ours, whatever road brought you here — the craft's yours to learn if you want it. Bring me a shard of starmetal and I'll teach you myself, same as any apprentice."
+                : "You've more than proven your hands are steady and your word is good. I don't teach this to just anyone born outside the mountain, but... bring me two shards of starmetal, and I'll make an exception.", [{ label: "I'm listening.", action: () => {} }]);
+            return;
+        }
+    }
+
+    // Default: crafting-for-hire is available once trusted, regardless of
+    // race or whether the player has since learned the craft themselves.
+    const options = [];
+    if (trusted) {
+        options.push({
+            label: "Craft me something.",
+            action: () => {
+                const recipeOptions = Object.entries(window.CRAFTING_RECIPES).map(([id, recipe]) => ({
+                    label: `${recipe.name} (${Math.round(recipe.gold * 1.5)}g + materials)`,
+                    action: () => window.craftWithSmith(id)
+                }));
+                recipeOptions.push({ label: "Never mind.", action: () => {} });
+                window.showDialogue(npc, "Bring me what it needs, and the coin to make it worth my time.", recipeOptions);
+            }
+        });
+    }
+    options.push({ label: "Tell me of the Runeforge.", action: () => window.showDialogue(npc, "Every hold has its forge-secrets. Ours is starmetal — fallen ore that hasn't forgotten the sky. Rare enough that most smiths never touch it twice in a life.", [{ label: "...", action: () => {} }]) });
+    options.push({ label: "Just passing through.", action: () => {} });
+    window.showDialogue(npc, trusted ? "Back again. What do you need from the forge?" : "The forge isn't a curiosity for tourists. Earn the mountain's trust first, then we'll talk.", options);
 };

@@ -872,6 +872,23 @@ window.campaign2DwarfTrader = {
 };
 window.campaign2DeepholdsTraderItems = ['sword', 'axe', 'medium_armor', 'heavy_armor', 'wooden_shield', 'nasal_helm'];
 
+// Master Runesmith Thrain Emberhand, at the Runeforge (see
+// buildDwarvenKingdom's runeforgeCenter, campaign2World.js). Runs the whole
+// crafting questline in his own dialogue tree (deepholds_runesmith,
+// campaign2Dialogue.js): trust him enough and he'll craft a runeforged item
+// for you outright (window.craftWithSmith, crafting.js — no skill required
+// of the player), or trust him further still and he'll teach you the craft
+// yourself (window.craftAtForge, no fee, gated behind window.grantSkillRank
+// giving 'runesmithing'). A dwarf PC skips the reputation gate on the
+// teaching path entirely — see the dialogue's own race check.
+window.campaign2DwarfRunesmith = {
+    name: 'Thrain Emberhand', title: 'Master Runesmith',
+    race: 'dwarf', gender: 'male',
+    classLevels: ['fighter'], skillPicks: ['health'], equipment: ['axe', 'medium_armor'],
+    side: 'neutral', factionId: 'dwarven_kingdom', color: '#7a4a2a',
+    dialogueId: 'deepholds_runesmith'
+};
+
 // The Lower Tunnels' infestation: what's actually gone quiet down there —
 // same "reuse existing monster templates, tag them for the quest" pattern
 // as barrowMinion/isOrcStrongholdTroll.

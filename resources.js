@@ -29,7 +29,10 @@ function ensureWildernessResourceNode(q, r) {
     if (terrain.name === 'Rocky Outcrop' && roll < 0.05) {
         const oreRoll = window.pseudoRandom(q * 5.1 + 7, r * 7.3 + 11);
         let oreType = 'ore_iron';
-        if (oreRoll > 0.97) oreType = 'gem_blue';
+        // Starmetal: a needle in the haystack even among the already-rare
+        // gem rolls above it — see crafting.js's starforged_blade recipe.
+        if (oreRoll > 0.999) oreType = 'starmetal_ore';
+        else if (oreRoll > 0.97) oreType = 'gem_blue';
         else if (oreRoll > 0.94) oreType = 'gem_red';
         else if (oreRoll > 0.90) oreType = 'gem_green';
         else if (oreRoll > 0.80) oreType = 'ore_gold';

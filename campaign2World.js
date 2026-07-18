@@ -1032,11 +1032,29 @@ function buildDwarvenKingdom(anchor) {
         window.entities.push(m);
     });
 
+    // The Runeforge: Kragmoor's own runesmithing questline (see
+    // grantRunesmithing/npcDialogueTrees.deepholds_runesmith,
+    // campaign2Dialogue.js, and crafting.js for the recipes themselves).
+    // South-west of the hall, its own short spur off the gate's main
+    // north-south spine (the same corridor the mine/vault already lean on)
+    // rather than a second connector into the hall itself.
+    const runeforgeCenter = { q: anchor.q - 16, r: anchor.r + 8 };
+    const runeforgeDoor = { q: runeforgeCenter.q + 4, r: runeforgeCenter.r };
+    const runeforgeRegion = carveFlatRoom(runeforgeCenter.q, runeforgeCenter.r, 3, 3, runeforgeDoor, 'Cave Floor');
+    window.interiorRegions.push(runeforgeRegion);
+    for (let q = runeforgeDoor.q + 1; q < hallCenter.q; q++) window.setTerrainAt(q, runeforgeCenter.r, 'Cave Floor');
+    window.tileObjects[`${runeforgeCenter.q},${runeforgeCenter.r}`] = { type: 'rune_forge', lightRadius: 4 };
+    window.campaign2DeepholdsRuneforgeCenter = runeforgeCenter;
+    if (window.campaign2DwarfRunesmith) {
+        window.entities.push(window.buildNPC({ ...window.campaign2DwarfRunesmith, hex: { q: runeforgeCenter.q, r: runeforgeCenter.r + 1 } }));
+    }
+
     sealRoom(gateRegion);
     sealRoom(hallRegion);
     sealRoom(mineRegion);
     sealRoom(vaultRegion);
     sealRoom(tunnelRegion);
+    sealRoom(runeforgeRegion);
 
     setWorldMapMarker(gateCenter, { t: 'M', f: 'K', o: 'd', p: 2, n: 'Kragmoor' });
 }
@@ -1684,7 +1702,11 @@ function buildDragonLair() {
     // rather than via equipToMonster so nothing here ends up worn/wielded,
     // just carried hoard.
     dragon.gold = 750;
-    dragon.inventory.push('glowing_ring', 'stormcaller_spear');
+    // Its scale is the whole point of climbing this far up the mountain for
+    // anyone chasing the Kragmoor runesmithing questline — see
+    // dragonscale_mail's recipe in crafting.js. A dragon this size sheds
+    // more than one.
+    dragon.inventory.push('glowing_ring', 'stormcaller_spear', 'dragon_scale', 'dragon_scale', 'dragon_scale');
     window.entities.push(dragon);
 
     window.campaign2DragonLairCenter = center;

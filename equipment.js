@@ -57,6 +57,17 @@ const items = {
     'gem_blue': { id: 'gem_blue', name: 'Blue Gem', type: 'resource', sellPrice: 30, description: 'A rare, uncut gemstone — flavor and favor, nothing more.' },
     'gem_green': { id: 'gem_green', name: 'Green Gem', type: 'resource', sellPrice: 30, description: 'A rare, uncut gemstone — flavor and favor, nothing more.' },
 
+    // Rare crafting materials — see crafting.js. Each one gates a specific
+    // magic-item recipe and each comes from a specific, memorable source
+    // rather than a generic drop table, so finding one feels like a real
+    // event: starmetal is a needle-in-a-haystack ore roll (see resources.js),
+    // dragon scale only exists because Millbrook's dragon Ashveil carries it,
+    // and deep crystal is Kragmoor's own thanks for clearing the lower
+    // tunnels. None of them are sold in any shop.
+    'starmetal_ore': { id: 'starmetal_ore', name: 'Starmetal Ore', type: 'resource', sellPrice: 60, description: 'A fist-sized ore vein this pale and this heavy is no ordinary iron — smiths say it fell from the sky before anyone was around to see it land.' },
+    'dragon_scale': { id: 'dragon_scale', name: 'Dragon Scale', type: 'resource', sellPrice: 100, description: "A single scale, still warm to the touch. There's no mistaking where it came from." },
+    'deep_crystal': { id: 'deep_crystal', name: 'Deep Crystal', type: 'resource', sellPrice: 80, description: 'A shard of crystal grown in total darkness, deep enough that no surface-dweller has ever seen its vein.' },
+
     // Magic Items
     // Deliberately avoid flat +hit/+damage stacking (bounded accuracy) —
     // these lean on situational effects, skill grants already consumed
@@ -79,6 +90,18 @@ const items = {
     'moonlit_armor': { id: 'moonlit_armor', name: "Moonlit Chain", type: 'armor', reduction: 2, buyPrice: 320, lightRadius: 3, description: 'Faintly luminous links, like captured moonlight — dim, but never quite dark around you.' },
     'huntsman_helm': { id: 'huntsman_helm', name: "Huntsman's Helm", type: 'helmet', reduction: 1, buyPrice: 140, auraTag: 'wolf', auraRadius: 5, description: "A wolf-tooth is set in the brow; it aches faintly when the pack is near." },
     'shadowcloak': { id: 'shadowcloak', name: "Shadowcloak", type: 'accessory', buyPrice: 380, skills: { 'stealth_agility': 1 }, description: "Thieves' Guild work — dyed to swallow torchlight rather than reflect it." },
+
+    // Runeforged items — the only three things craftable through the
+    // Kragmoor runesmithing questline (see crafting.js). No buyPrice: never
+    // sold in any shop, only ever made from their specific rare material at
+    // a rune forge or by Kragmoor's own Runesmith. Same bounded-accuracy
+    // discipline as every other magic item above — the sword and armor sit
+    // at the same damage/reduction tier as their mundane equivalents
+    // (sword, medium_armor), the value is entirely in the situational
+    // effect layered on top.
+    'starforged_blade': { id: 'starforged_blade', name: "Starforged Blade", type: 'weapon', subType: 'melee', damage: 3, range: 0, hands: 1, canOffhand: true, lightRadius: 3, description: 'Forged from a fallen ore vein — the edge holds a faint, cold light of its own, like starlight folded into steel.' },
+    'dragonscale_mail': { id: 'dragonscale_mail', name: "Dragonscale Mail", type: 'armor', reduction: 2, auraTag: 'dragon', auraRadius: 8, description: "Scaled from Ashveil's own hide. It never quite loses the smell of embers, and hums faintly around anything else with dragon blood." },
+    'deepcrystal_pendant': { id: 'deepcrystal_pendant', name: "Deep Crystal Pendant", type: 'accessory', skills: { 'parley_bonus': 1 }, description: "Kragmoor's emissaries swear a shard of deep crystal lends clarity to the tongue — whether that's magic or just dwarven stubbornness is anyone's guess." },
 
     // Quest items — no buyPrice, so they never show up in the shop.
     'elder_locket': { id: 'elder_locket', name: 'Tarnished Locket', type: 'quest_item' },

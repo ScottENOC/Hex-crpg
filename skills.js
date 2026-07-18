@@ -1872,6 +1872,27 @@ Object.assign(skills, {
     }
 });
 
+// Runesmithing: same "quest-granted only, invisible until then" convention
+// as the lich tree above — never funded by the normal attribute pool, never
+// granted by level-up, the only way in is window.grantSkillRank from the
+// Kragmoor Runesmith questline (see grantRunesmithing, campaign2Dialogue.js).
+// Deliberately not a combat stat: apply() just flags the player as able to
+// self-craft at a rune forge (see crafting.js's canCraftRecipe), matching
+// this game's whole magic-item design — the effects live in the recipes'
+// results (an aura, a light radius, a skill grant), never in the crafting
+// skill itself.
+Object.assign(skills, {
+    'runesmithing': {
+        name: 'Runesmithing',
+        description: "Kragmoor's own craft, hard-won: lets you work rune forge materials into a magic item yourself, without paying a smith to do it for you.",
+        tree: 'runesmith',
+        maxRanks: 1,
+        apply: (player) => {
+            player.canRunesmith = true;
+        }
+    }
+});
+
 Object.assign(skills, {
     'persuasion': {
         name: 'Persuasion',
