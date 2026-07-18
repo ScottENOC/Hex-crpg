@@ -5515,6 +5515,20 @@ function wakeUp(entity) {
     }
 
     entity.aiState = 'combat';
+    // Every scripted world NPC is built with isNPC:true (buildNPC,
+    // npcBuilder.js — used for the "diff against a deterministic baseline"
+    // save trick, persistence.js), and updateTurnIndicator (ui.js)
+    // deliberately excludes anyone with isNPC set so background flavor NPCs
+    // don't clutter the tracker. That's correct right up until one of them
+    // actually enters a fight — a handful of scripted encounters already
+    // flip this by hand (Oskar's duel, Northwatch's defenders, the siege
+    // engine, arena bosses), but any plain hostile spawn with no such script
+    // (e.g. a wandering bandit) never got the same treatment and silently
+    // never appeared in the initiative tracker despite fighting. Clearing it
+    // generically here, for whichever entity's wakeUp() call actually starts
+    // this fight, covers every case instead of requiring a new one-off flip
+    // for each new piece of content.
+    entity.isNPC = false;
 
     // Reset initiative and cancel movement if this is the start of combat
     if (firstAlert) {
