@@ -112,11 +112,37 @@ def build_emblem(size, transparent_bg=False):
     return canvas
 
 
+IOS_APPICON_PATH = 'ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png'
+IOS_SPLASH_DIR = 'ios/App/App/Assets.xcassets/Splash.imageset'
+IOS_SPLASH_FILES = ['splash-2732x2732.png', 'splash-2732x2732-1.png', 'splash-2732x2732-2.png']
+
+
+def build_ios_assets(icon):
+    """Drops the generated art directly into the Capacitor-generated iOS
+    asset catalog, at the exact filenames/sizes its Contents.json already
+    expects (both created once by `npx cap add ios`, not touched here)."""
+    import os
+    if os.path.exists(IOS_APPICON_PATH):
+        icon.save(IOS_APPICON_PATH)
+
+    if os.path.isdir(IOS_SPLASH_DIR):
+        splash = Image.new('RGB', (2732, 2732), BG_TOP)
+        logo = build_emblem(1536, transparent_bg=True)  # ~56% of canvas, generous margin
+        x = (splash.width - logo.width) // 2
+        y = (splash.height - logo.height) // 2
+        splash_rgba = splash.convert('RGBA')
+        splash_rgba.alpha_composite(logo, (x, y))
+        splash = splash_rgba.convert('RGB')
+        for fname in IOS_SPLASH_FILES:
+            splash.save(os.path.join(IOS_SPLASH_DIR, fname))
+
+
 def main():
     # 1. App Store icon: 1024x1024, RGB (NO alpha — Apple rejects icons
     #    with a transparency channel), full painted background.
     icon = build_emblem(1024, transparent_bg=False).convert('RGB')
     icon.save('appstore/icon-1024.png')
+    build_ios_assets(icon)
 
     # 2. Launch-screen centered logo: transparent background, meant to sit
     #    on a solid-color LaunchScreen storyboard background in Xcode (set

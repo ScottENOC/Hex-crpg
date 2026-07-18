@@ -11,9 +11,16 @@
     "start": "node server.js",
     "test": "playwright test",
     "test:ui": "playwright test --ui",
-    "test:headed": "playwright test --headed"
+    "test:headed": "playwright test --headed",
+    "build:mobile": "node scripts/build-mobile-www.js",
+    "cap:sync": "npm run build:mobile && npx cap sync ios",
+    "cap:open:ios": "npm run cap:sync && npx cap open ios"
   },
   "devDependencies": {
-    "@playwright/test": "^1.56.1"
+    "@capacitor/cli": "^8.4.2",
+    "@capacitor/core": "^8.4.2",
+    "@capacitor/ios": "^8.4.2",
+    "@playwright/test": "^1.56.1",
+    "socket.io-client": "^4.7.2"
   }
 }
