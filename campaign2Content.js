@@ -188,6 +188,17 @@ window.campaign2ReddaleInnkeeper = {
     color: '#a0724a',
     dialogueId: 'reddale_innkeeper'
 };
+// Reddale's own smithy — previously the town had an inn, a guildhouse, and
+// a manor, but nowhere to actually buy or repair gear short of a much
+// longer walk back to Hollowmere or on to Silverhart.
+window.campaign2ReddaleBlacksmith = {
+    name: 'Torvald Anvik', title: 'Blacksmith',
+    race: 'human', gender: 'male',
+    classLevels: ['fighter'], skillPicks: ['health'], equipment: ['axe', 'medium_armor'],
+    side: 'neutral', factionId: 'silverhart_kingdom', color: '#5a4a3a',
+    dialogueId: 'reddale_blacksmith'
+};
+window.campaign2ReddaleBlacksmithItems = ['sword', 'axe', 'spear', 'medium_armor', 'nasal_helm', 'wooden_shield'];
 
 // A disciple of the necromancer (see the abandoned house/phylactery arc in
 // campaign2World.js), hiding in plain sight in Reddale as an ordinary

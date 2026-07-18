@@ -3881,6 +3881,21 @@ function buildReddale(roadEnd) {
         window.entities.push(steward);
     }
 
+    // A proper smithy — Reddale had an inn, a guildhouse, and a manor, but
+    // nowhere for an ordinary traveler to actually buy or repair gear short
+    // of walking all the way back to Hollowmere or on to Silverhart. Sits
+    // on its own short spur off the guardhouse, opposite the inn.
+    const smithyCenter = { q: roadEnd.q - 4, r: roadEnd.r + 8 };
+    const smithyDoor = { q: smithyCenter.q + 3, r: smithyCenter.r };
+    const smithyRegion = carveBuilding(smithyCenter.q, smithyCenter.r, 3, 2, smithyDoor, 'Wood Floor');
+    window.interiorRegions.push(smithyRegion);
+    window.tileObjects[`${smithyCenter.q},${smithyCenter.r}`] = { type: 'fireplace', lightRadius: 6 };
+    for (let r = roadEnd.r + 1; r < smithyCenter.r; r++) window.setTerrainAt(roadEnd.q - 4, r, 'Path');
+    window.campaign2ReddaleSmithyCenter = smithyCenter;
+    if (window.campaign2ReddaleBlacksmith) {
+        window.entities.push(window.buildNPC({ ...window.campaign2ReddaleBlacksmith, hex: { q: smithyCenter.q, r: smithyCenter.r + 1 } }));
+    }
+
     // One world-hex east of Hollowmere [6][6].
     setWorldMapMarker(roadEnd, { t: 'G', f: 'T', o: 'h', p: 1, n: 'Reddale' });
 }

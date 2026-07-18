@@ -1211,6 +1211,16 @@ window.npcDialogueTrees = {
             ]);
         }
     },
+    reddale_blacksmith: (npc) => {
+        if (window.isShunnedByHumanCommerce && window.isShunnedByHumanCommerce()) {
+            window.showDialogue(npc, "I don't sell to your kind. Move along.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "Reddale's a waypoint, not a city — but the road wears down blades and armor same as anywhere. I keep enough stock to fix you up without a trip back to Hollowmere.", [
+            { label: "Show me your wares.", action: () => window.openShop({ itemIds: window.campaign2ReddaleBlacksmithItems, mounts: false }) },
+            { label: "Just looking.", action: () => {} }
+        ]);
+    },
     // --- The necromancer's disciple, hiding as an ordinary herbalist in
     // Reddale (see the abandoned house/phylactery-shard arc in
     // campaign2World.js). Knowledge: Religion is what actually lets the
