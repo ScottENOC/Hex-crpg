@@ -72,4 +72,46 @@ test.describe('map rendering performance at extreme zoom', () => {
         });
         expect(result.secondMs).toBeLessThan(result.firstMs);
     });
+
+    // sceneNeedsRedraw (gameEngine.js) — the real-time tick's redraw call
+    // skips entirely (not just throttles) when nothing that could change
+    // the picture has happened: no camera pan/zoom, no entity mid-move, no
+    // transient FX in flight, no light-level drift. This is the bigger win
+    // over the ~60Hz throttle alone for how most play sessions actually
+    // spend their time (standing still, reading dialogue, idling).
+    test('drawMap/renderEntities are skipped entirely while the scene is truly idle', async ({ page }) => {
+        const result = await page.evaluate(async () => {
+            let drawCalls = 0, renderCalls = 0;
+            const realDraw = window.drawMap, realRender = window.renderEntities;
+            window.drawMap = (...a) => { drawCalls++; return realDraw(...a); };
+            window.renderEntities = (...a) => { renderCalls++; return realRender(...a); };
+
+            // Let a few ticks pass with the player stationary and nothing animating.
+            await new Promise(r => setTimeout(r, 300));
+
+            window.drawMap = realDraw;
+            window.renderEntities = realRender;
+            return { drawCalls, renderCalls };
+        });
+        expect(result.drawCalls).toBe(0);
+        expect(result.renderCalls).toBe(0);
+    });
+
+    test('drawMap/renderEntities still redraw every ~60Hz frame while an entity is actually moving', async ({ page }) => {
+        const result = await page.evaluate(async () => {
+            const player = window.entities.find(e => e.side === 'player' && !e.rider);
+            player.destination = { q: player.hex.q + 20, r: player.hex.r };
+
+            let drawCalls = 0;
+            const realDraw = window.drawMap;
+            window.drawMap = (...a) => { drawCalls++; return realDraw(...a); };
+
+            await new Promise(r => setTimeout(r, 300));
+
+            window.drawMap = realDraw;
+            return { drawCalls, stillMoving: !!player.destination };
+        });
+        expect(result.drawCalls).toBeGreaterThan(5); // ~300ms at up to 60Hz — comfortably more than a handful
+        expect(result.stillMoving).toBe(true); // sanity: the move genuinely hadn't finished (20 hexes takes a while)
+    });
 });

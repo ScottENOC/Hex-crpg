@@ -2657,6 +2657,43 @@ window.rebuildRestlessSet = rebuildRestlessSet;
 let lastTimestamp = performance.now();
 let tickCounter = 0;
 let _lastRealtimeRenderTime = 0; // throttles tick()'s real-time-branch redraw to ~60Hz, independent of the 100Hz simulation cadence
+let _lastDrawCameraX, _lastDrawCameraY, _lastDrawCameraZoom, _lastDrawLightLevel;
+
+// Is there any actual reason the canvas would look different from the last
+// frame drawn? drawMap() alone re-walks every visible hex (terrain lookup,
+// variant/tint picking, occupied-hex scans) even when the camera hasn't
+// moved and nothing on screen is animating — standing still reading
+// dialogue or idling in a safe room was paying that full cost 60 times a
+// second for a pixel-identical frame. Checked once per tick instead of
+// unconditionally redrawing: camera pan/zoom, any entity mid-movement,
+// any transient FX in flight (projectiles/floating text/screen shake/melee
+// lunge), or the day-night light level having actually drifted since the
+// last frame we drew. Deliberately NOT gated on fire/torch flicker
+// specifically — pausing that animation for the handful of idle frames
+// before the next real reason to redraw is imperceptible, and gating on it
+// would mean every scene with a lit torch never gets to skip a frame at
+// all, defeating the point.
+function sceneNeedsRedraw() {
+    if (window.cameraX !== _lastDrawCameraX || window.cameraY !== _lastDrawCameraY || window.cameraZoom !== _lastDrawCameraZoom) return true;
+    if (window.lightLevel !== _lastDrawLightLevel) return true;
+    if (window.projectiles && window.projectiles.length > 0) return true;
+    if (window.floatingTexts && window.floatingTexts.length > 0) return true;
+    if (performance.now() < (window._screenShakeUntil || 0)) return true;
+    for (const e of window.entities) {
+        if (!e.alive) continue;
+        if (e.destination) return true;
+        // Same "actually mid-move" condition updateVisualPositions itself
+        // uses to decide whether to keep lerping — NOT a raw visualQ/hex.q
+        // comparison: a multi-hex creature's resting visual position is its
+        // footprint's centroid (updateVisualPositions' targetQ/targetR),
+        // which is legitimately fractional and unequal to hex.q even
+        // standing still, so that comparison flagged every Troll/Ogre as
+        // "always animating" and defeated the whole point of this check.
+        if (e.moveCooldown !== undefined && e.moveCooldown > 0 && e.moveTotalTime) return true;
+        if (e._meleeLungeStart && performance.now() - e._meleeLungeStart < e._meleeLungeDuration) return true;
+    }
+    return false;
+}
 
 let _pausedForReactionSince = 0;
 function tick() {
@@ -2885,17 +2922,23 @@ function tick() {
         updateVisualPositions(scaledDt);
         if (window.smoothFollowPlayer) window.smoothFollowPlayer(dt);
         // Simulation runs at the tick's own 10ms (100Hz) cadence for movement
-        // precision, but painting doesn't need to — this used to call
-        // drawMap/renderEntities unconditionally on every tick, i.e. a full
-        // canvas repaint 100 times a second forever, even completely
-        // stationary. Desktop GPUs absorb that redundant rate without a
-        // visible cost, but mobile Safari's canvas compositor does not scale
-        // the same way, so it burns battery/CPU disproportionately there
-        // instead of showing up as a raw-benchmark difference. Throttling to
-        // ~60Hz (the highest real display refresh rate this needs to match)
-        // cuts the paint count by ~40% with no visible behavior change.
-        if (now - _lastRealtimeRenderTime >= 16) {
+        // precision, but painting doesn't need to. Two layers of savings:
+        // 1. Throttled to ~60Hz (the highest real display refresh rate this
+        //    needs to match) instead of repainting on every 10ms tick.
+        // 2. Skipped ENTIRELY (not just throttled) when sceneNeedsRedraw()
+        //    says nothing could actually look different from the last frame
+        //    drawn — standing still reading dialogue, idling in a safe room,
+        //    a paused/menu-only moment — drawMap() alone re-walks every
+        //    visible hex (terrain lookup, variant/tint picking, occupied-hex
+        //    scans) even when literally nothing on screen has changed, so
+        //    this is the bigger win of the two for how most play sessions
+        //    actually spend their time. Both are no-ops on the *content* of
+        //    any frame that does draw — this only ever removes redundant,
+        //    pixel-identical repaints, never changes what gets shown.
+        if (now - _lastRealtimeRenderTime >= 16 && sceneNeedsRedraw()) {
             _lastRealtimeRenderTime = now;
+            _lastDrawCameraX = window.cameraX; _lastDrawCameraY = window.cameraY; _lastDrawCameraZoom = window.cameraZoom;
+            _lastDrawLightLevel = window.lightLevel;
             window.drawMap();
             window.renderEntities();
         }
