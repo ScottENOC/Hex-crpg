@@ -864,6 +864,21 @@ function checkMovementReactions(movingEntity, nextHex, callback) {
     if (movingEntity.riding) movingEntity.riding.hex = { q: nextHex.q, r: nextHex.r };
     window.drawMap();
     window.renderEntities();
+    // Belt-and-suspenders redraw one frame later: player.hex is already
+    // correct the instant this function returns (confirmed directly and via
+    // handleClick's real click path in testing), but a turn-based move is a
+    // single discrete hex jump with no interpolation to fall back on, unlike
+    // real-time movement's continuous position updates — if a device drops
+    // or defers this synchronous canvas paint for any reason, there's
+    // nothing else to naturally repaint the entity at its new hex until
+    // some unrelated later event (e.g. the next character's turn) forces
+    // one. Reported as "the character doesn't appear to move until the next
+    // character acts" even though the highlighted move range (recomputed
+    // from the same already-updated position) showed correctly the whole
+    // time — i.e. state was right, only the paint lagged.
+    if (window.requestAnimationFrame) {
+        window.requestAnimationFrame(() => { window.drawMap(); window.renderEntities(); });
+    }
 
     const potentialReactors = window.entities.filter(e => e.alive && e !== movingEntity && window.areAdjacent(nextHex, e.hex));
     let allOptions = [];
