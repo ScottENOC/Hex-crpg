@@ -2787,7 +2787,14 @@ function tick() {
     const inCombat = checkInCombat();
     if (inCombat && !window._wasInCombat && window.showTutorialTip) {
         window.showTutorialTip('combat_start', "Combat is turn based now, not real time. Each character spends Time Points (TP) on actions; once you're below 80 TP you can no longer act until it regenerates. Watch the initiative bar to track who has the most time points (TP).");
-    } else if (!inCombat && window._wasInCombat && window.showTutorialTip) {
+    }
+    // ROADMAP E4: a one-shot stinger layered over musicDirector.js's own
+    // combat ramp — same isInCombat transition edge the tutorial tip above
+    // already keys off of, so no new state tracking needed.
+    if (inCombat && !window._wasInCombat && window.currentCampaign === '2' && window.playSting) {
+        window.playSting('combatStartSting');
+    }
+    if (!inCombat && window._wasInCombat && window.showTutorialTip) {
         window.showTutorialTip('combat_end', "Combat's over — you're back in real-time exploration. Movement and actions now happen continuously instead of waiting for turns.");
     }
     window._wasInCombat = inCombat;

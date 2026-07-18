@@ -17,7 +17,14 @@ const tracks = {
     sting: new Audio('audio/Arena battle sting.wav'),
     teleportSting: new Audio('audio/Arenalobby2arena.wav'),
     deathSting: new Audio('audio/Arena death sting.wav'),
-    deathTheme: new Audio('audio/Arena death.wav')
+    deathTheme: new Audio('audio/Arena death.wav'),
+    // ROADMAP E4: a one-shot brass hit on combat start in Campaign 2,
+    // layered over musicDirector.js's own combat ramp rather than
+    // replacing it (see gameEngine.js's isInCombat transition). Missing
+    // like every other stem: playSting silently no-ops on a 0-length/
+    // unloaded file, same as the arena stings above when their .wav isn't
+    // present yet.
+    combatStartSting: new Audio('audio/music/combat_start_sting.wav')
 };
 
 // Loop the main themes

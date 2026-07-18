@@ -2550,6 +2550,14 @@ function updateMusicState() {
                    (settingsModal && settingsModal.style.display === "block") ||
                    (document.getElementById("characterCreator").style.display === "block");
 
+    // ROADMAP E2: Campaign 2 never uses the arena title theme at all — its
+    // own living director (musicDirector.js) keeps playing under a menu,
+    // just ducked, instead of getting swapped out for a hard cut.
+    if (window.currentCampaign === "2") {
+        if (window.setMusicDirectorDucked) window.setMusicDirectorDucked(inMenu);
+        return;
+    }
+
     if (inMenu) {
         window.playMusic('title');
     } else {

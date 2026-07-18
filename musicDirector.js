@@ -76,8 +76,11 @@ window.MUSIC_PALETTES = {
 //    or a raided/goblin-allied region drags everything toward dread/drums).
 //  - PROXIMITY: standing near a faction's seat of power leans the mix its
 //    way. Anchors are registered by world code in window.musicPOIs as
-//    { factionKey: {q, r} } — unregistered factions just use their baseline,
-//    so this works before any POIs exist and gets richer as they're added.
+//    { factionKey: {q, r} | Array<{q, r}> } — a faction can hold more than
+//    one seat (greenskin spans both the goblin camp and the orc stronghold,
+//    a whole country's worth of ground, not one hut) and the nearest one
+//    wins. Unregistered factions just use their baseline, so this works
+//    before any POIs exist and gets richer as they're added.
 const POI_RADIUS = 18; // hexes over which a faction's seat colors the mix
 function computeFactionDominance(playerHex) {
     const f = { crown: 0.35, guild: 0.15, church: 0.1, greenskin: 0, necro: 0 }; // peacetime baseline: the Crown's town
@@ -95,9 +98,15 @@ function computeFactionDominance(playerHex) {
 
     if (playerHex && window.musicPOIs) {
         for (const key in window.musicPOIs) {
-            const poi = window.musicPOIs[key];
-            if (!poi || f[key] === undefined) continue;
-            const d = window.distance(playerHex, poi);
+            const entry = window.musicPOIs[key];
+            if (!entry || f[key] === undefined) continue;
+            const pois = Array.isArray(entry) ? entry : [entry];
+            let d = Infinity;
+            for (const poi of pois) {
+                if (!poi) continue;
+                const dist = window.distance(playerHex, poi);
+                if (dist < d) d = dist;
+            }
             if (d < POI_RADIUS) {
                 // Linear falloff from full boost at the doorstep to nothing
                 // at the radius edge — layered ON TOP of the baseline.
@@ -122,8 +131,11 @@ function computeMusicContext() {
     const enemiesVisible = !!(window.entities && player && window.entities.some(e =>
         e.alive && e.side === 'enemy' && window.isVisibleToPlayer && window.isVisibleToPlayer(e.hex)));
 
+    const indoors = !!(hex && window.findInteriorRegion && window.findInteriorRegion(hex));
+
     return {
         scene,
+        indoors,
         inCombat: !!window.isInCombat,
         daylight: Math.max(0, Math.min(1, window.lightLevel ?? 1)), // already folds in season + indoor mult
         threat: window.wildernessThreatMult || 1,
@@ -158,9 +170,11 @@ window.computeStemTargets = computeStemTargets;
 
 let _ctx = null;            // AudioContext
 let _masterGain = null;
+let _interiorFilter = null; // ROADMAP E3 — lowpass, see _ensureContext
 let _activePalette = null;  // name currently playing
 let _stemNodes = {};        // stemName -> { gain, source, buffer } (buffer null if file missing)
 let _loadingPalette = null;
+let _ducked = false;        // ROADMAP E2 — see setMusicDirectorDucked below
 
 const STEM_RAMP_SECONDS = 2.5;   // how slowly a layer breathes in/out
 const COMBAT_RAMP_SECONDS = 0.6; // combat entrance/exit is snappier
@@ -172,9 +186,25 @@ function _ensureContext() {
     _ctx = new AC();
     _masterGain = _ctx.createGain();
     _masterGain.gain.value = 0;
-    _masterGain.connect(_ctx.destination);
+    // ROADMAP E3: one lowpass node, inserted once here, routes every stem
+    // through it (they all connect to _masterGain, which now feeds this
+    // instead of destination directly) — indoors ramps the cutoff down so
+    // the outdoor mix reads as muffled through walls; outdoors it's opened
+    // back up past audible range (bypassed in effect, not literally).
+    _interiorFilter = _ctx.createBiquadFilter();
+    _interiorFilter.type = 'lowpass';
+    _interiorFilter.frequency.value = 22000;
+    _masterGain.connect(_interiorFilter);
+    _interiorFilter.connect(_ctx.destination);
     return true;
 }
+
+// Debug getter for tests/verification (ROADMAP E3's own verify step) —
+// the actual live value, not a recomputation.
+function _getMusicFilterHz() {
+    return _interiorFilter ? _interiorFilter.frequency.value : null;
+}
+window._getMusicFilterHz = _getMusicFilterHz;
 
 async function _loadPalette(name) {
     if (!_ensureContext()) return;
@@ -243,10 +273,19 @@ function _tickMusicDirectorInner() {
     if (!_ensureContext()) return;
     if (_ctx.state === 'suspended') _ctx.resume();
 
-    const musicVol = (window.audioSettings?.master ?? 1) * (window.audioSettings?.music ?? 0.7);
+    const musicVol = (window.audioSettings?.master ?? 1) * (window.audioSettings?.music ?? 0.7) * (_ducked ? 0.3 : 1);
     _rampGain(_masterGain, musicVol, 1.5);
 
     const ctx = computeMusicContext();
+
+    // ROADMAP E3: same ramped-transition treatment as every gain change
+    // above, just on the filter's frequency AudioParam instead of a gain.
+    if (_interiorFilter) {
+        const targetHz = ctx.indoors ? 800 : 22000;
+        const now = _ctx.currentTime;
+        _interiorFilter.frequency.cancelScheduledValues(now);
+        _interiorFilter.frequency.setTargetAtTime(targetHz, now, STEM_RAMP_SECONDS / 3);
+    }
     if (_activePalette !== ctx.scene && _loadingPalette !== ctx.scene) {
         _loadPalette(ctx.scene); // async; current palette keeps playing until the swap
         return;
@@ -262,6 +301,19 @@ function _tickMusicDirectorInner() {
     }
 }
 window.tickMusicDirector = tickMusicDirector;
+
+// ROADMAP E2: a full-screen menu in Campaign 2 shouldn't hard-swap to the
+// arena title theme (updateMusicState, ui.js, used to do this for every
+// campaign) — the world's music continuing quietly underneath a menu feels
+// alive, a hard cut doesn't. Just ramps the director's own master gain down
+// (via the same _rampGain smoothing every other transition uses) rather
+// than stopping/swapping anything; the next tick re-applies the ducked
+// multiplier automatically.
+function setMusicDirectorDucked(ducked) {
+    _ducked = !!ducked;
+    if (_ctx && _masterGain) tickMusicDirector(true); // re-apply the target immediately, don't wait up to 1s for the next tick
+}
+window.setMusicDirectorDucked = setMusicDirectorDucked;
 
 // World code registers faction seats of power here as they're built, e.g.
 // window.musicPOIs.church = chapelCenterHex. Optional — see

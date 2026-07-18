@@ -803,6 +803,15 @@ function buildGoblinCamp(roadEnd) {
     window.tileObjects[`${center.q + 1},${center.r - 2}`] = { type: 'journal', lightRadius: 0, readId: 'goblin_scout_note' };
 
     window.campaign2GoblinCampCenter = center;
+    // ROADMAP E1: registered unconditionally at build time — proximity to
+    // the camp already only actually colors the mix once f.greenskin has a
+    // real baseline (goblin_threat resolved as alliance/betrayal, see
+    // computeFactionDominance, musicDirector.js), so there's no need to
+    // gate the registration itself on that resolution. greenskin holds two
+    // seats (this camp and the orc stronghold, see buildOrcStronghold) —
+    // it's a whole country, not one hut — so the POI is an array; nearest
+    // seat wins.
+    (window.musicPOIs.greenskin = window.musicPOIs.greenskin || []).push({ ...center });
 
     const chief = buildGoblinNPC({ ...window.campaign2GoblinChief, hex: { q: center.q, r: center.r - 1 } });
     // A gift-based way into the chief's trust, same leverage/`wants` pattern
@@ -930,6 +939,9 @@ function buildOrcStronghold(roadEnd) {
     window.tileObjects[`${center.q},${center.r}`] = { type: 'fireplace', lightRadius: 6 };
 
     window.campaign2OrcStrongholdCenter = center;
+    // ROADMAP E1: greenskin's second seat — see buildGoblinCamp's matching
+    // comment for why this is an array push rather than a single hex.
+    (window.musicPOIs.greenskin = window.musicPOIs.greenskin || []).push({ ...center });
 
     const warlord = buildOrcNPC({ ...window.campaign2OrcWarlord, hex: { q: center.q, r: center.r - 2 } });
     const trader = buildOrcNPC({
@@ -1788,6 +1800,9 @@ function buildSilverhartPalace(roadEnd) {
     const throneDoor = { q: throneCenter.q, r: throneCenter.r + 5 };
     const throneRegion = carveFlatRoom(throneCenter.q, throneCenter.r, 7, 5, throneDoor, 'Wood Floor');
     window.interiorRegions.push(throneRegion);
+    // ROADMAP E1: the Queen's own throne room is the clearest "crown" seat
+    // of power in the game (see computeFactionDominance, musicDirector.js).
+    window.musicPOIs.crown = { ...throneCenter };
     window.campaign2PalaceThroneCenter = throneCenter;
 
     for (let r = roadEnd.r + 1; r < throneDoor.r; r++) window.setTerrainAt(roadEnd.q, r, 'Path');
@@ -2728,6 +2743,9 @@ function buildSilverhartPalace(roadEnd) {
     window.tileObjects[`${ironbondOfficeCenter.q},${ironbondOfficeCenter.r}`] = { type: 'table' };
     window.tileObjects[`${ironbondOfficeCenter.q + 1},${ironbondOfficeCenter.r}`] = { type: 'bench' };
     window.campaign2IronbondOfficeCenter = ironbondOfficeCenter;
+    // ROADMAP E1: the Ironbond Company's own seat is the clearest "guild"
+    // faction POI in the game (see computeFactionDominance, musicDirector.js).
+    window.musicPOIs.guild = { ...ironbondOfficeCenter };
     // A leftover wall stub between the Ironbond office and its eastern
     // neighbor, spanning (6,-452) to (10,-454) — never part of either
     // building's own floor, just a stray seam left standing where the two
@@ -3181,6 +3199,12 @@ function setupVillageScene(forLoadOnly = false) {
 
     // Quest item for "A Missing Locket" (Elder Marta) — tucked in the chapel.
     window.mapItems['-14,0'] = ['elder_locket'];
+
+    // ROADMAP E1: the chapel is the Church's own seat of power, so it's the
+    // one faction POI that exists from the very start of Campaign 2 rather
+    // than being registered by some later quest/build step (see
+    // computeFactionDominance, musicDirector.js).
+    window.musicPOIs.church = { q: -14, r: 0 };
 
     // Register interior regions for hex-local indoor lighting (see worldTime.js).
     // Bounds widened to cover the row-shifted floor's actual r-range across
