@@ -81,6 +81,7 @@ test.describe('map rendering performance at extreme zoom', () => {
     // spend their time (standing still, reading dialogue, idling).
     test('drawMap/renderEntities are skipped entirely while the scene is truly idle', async ({ page }) => {
         const result = await page.evaluate(async () => {
+            window._resetRenderPacing();
             let drawCalls = 0, renderCalls = 0;
             const realDraw = window.drawMap, realRender = window.renderEntities;
             window.drawMap = (...a) => { drawCalls++; return realDraw(...a); };
@@ -99,6 +100,7 @@ test.describe('map rendering performance at extreme zoom', () => {
 
     test('drawMap/renderEntities still redraw every ~60Hz frame while an entity is actually moving', async ({ page }) => {
         const result = await page.evaluate(async () => {
+            window._resetRenderPacing();
             const player = window.entities.find(e => e.side === 'player' && !e.rider);
             player.destination = { q: player.hex.q + 20, r: player.hex.r };
 
@@ -113,5 +115,50 @@ test.describe('map rendering performance at extreme zoom', () => {
         });
         expect(result.drawCalls).toBeGreaterThan(5); // ~300ms at up to 60Hz — comfortably more than a handful
         expect(result.stillMoving).toBe(true); // sanity: the move genuinely hadn't finished (20 hexes takes a while)
+    });
+
+    // hexMap.js's terrain buffer (see comment above renderTerrainPass): the
+    // terrain-image pass is cached into an offscreen canvas anchored to the
+    // camera, and small pans just blit that buffer at an offset instead of
+    // re-walking every hex. This is the fix for "panning the camera feels
+    // terrible on a phone even though the idle-skip already helps standing
+    // still" — a small in-buffer pan should cost meaningfully less than the
+    // first draw that had to build the buffer from scratch.
+    test('small camera pans within the terrain buffer slack are cheaper than the draw that built it', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            for (let q = -200; q <= 200; q += 2) {
+                for (let r = -200; r <= 200; r += 2) {
+                    window.exploredHexes.add(`${q},${r}`);
+                }
+            }
+            window.cameraZoom = 1.0;
+            const t0 = performance.now();
+            window.drawMap(); // builds the terrain buffer from scratch
+            const firstMs = performance.now() - t0;
+
+            window.cameraX += 5; // small pan, well within the buffer's slack margin
+            window.cameraY += 5;
+            const t1 = performance.now();
+            window.drawMap(); // should just blit the existing buffer
+            const secondMs = performance.now() - t1;
+
+            return { firstMs, secondMs };
+        });
+        expect(result.secondMs).toBeLessThan(result.firstMs);
+    });
+
+    // gameEngine.js's adaptive render-interval cap: a device too slow to
+    // paint at 60fps gets backed off to a lower, achievable target instead of
+    // every redraw arriving late. Simulated here by directly feeding a high
+    // cost sample rather than by making the test environment itself slow.
+    test('feeding a sustained high render cost backs the redraw interval off below 60fps', async ({ page }) => {
+        const finalInterval = await page.evaluate(() => {
+            window._resetRenderPacing();
+            const start = window._getRenderIntervalMs();
+            for (let i = 0; i < 20; i++) window._recordRenderCost(40); // consistently slower than a 16ms budget
+            return { start, end: window._getRenderIntervalMs() };
+        });
+        expect(finalInterval.start).toBe(16);
+        expect(finalInterval.end).toBeGreaterThan(16);
     });
 });

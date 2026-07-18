@@ -243,43 +243,54 @@ function getVisibleHexes() {
     return { minQ, maxQ, minR, maxR };
 }
 
-function drawMap() {
-  if (!mapCtx) return;
-  invalidateLightSourcesCache();
-  refreshVisibilityCacheIfStale();
-  if (window.applyScreenShake) window.applyScreenShake();
-  mapCtx.clearRect(0,0,mapCanvas.width,mapCanvas.height);
+// Same idea as getVisibleHexes but with an extra pixel margin on all sides,
+// used to gather hexes for the terrain buffer's larger (viewport + slack)
+// footprint. Relies on window.cameraX/Y already being temporarily offset by
+// the caller — screenToHex reads them directly.
+function getVisibleHexesForRect(extraMargin) {
+  const rect = mapCanvas.getBoundingClientRect();
+  const m = 2 * hexSize * window.cameraZoom + extraMargin;
 
-  const bounds = getVisibleHexes();
-  const visibleAndExplored = [];
+  const tl = screenToHex({x: rect.left - m, y: rect.top - m});
+  const br = screenToHex({x: rect.right + m, y: rect.bottom + m});
+  const tr = screenToHex({x: rect.right + m, y: rect.top - m});
+  const bl = screenToHex({x: rect.left - m, y: rect.bottom + m});
 
-  // Computed once per drawMap() call, not once per hex — isVisibleToPlayer
-  // otherwise re-filters the entire (100+ entity) window.entities array on
-  // every single call, and this gather loop alone calls it once per hex in
-  // the *rectangular bounding box* (which over-covers the actual hex-shaped
-  // visible area — e.g. ~675 calls for ~84 hexes actually kept). That
-  // redundant re-filtering was measured at ~15ms of drawMap's ~20ms in a
-  // dense scene (Silverhart) — this alone doesn't change any behavior,
-  // just avoids repeating the same array scan hundreds of times per frame.
-  const friendlies = window.entities.filter(e => e.alive && e.side === 'player');
+  const minQ = Math.min(tl.q, br.q, tr.q, bl.q);
+  const maxQ = Math.max(tl.q, br.q, tr.q, bl.q);
+  const minR = Math.min(tl.r, br.r, tr.r, bl.r);
+  const maxR = Math.max(tl.r, br.r, tr.r, bl.r);
 
-  // 1. Gather visible hexes
-  for (let q = bounds.minQ; q <= bounds.maxQ; q++) {
-      for (let r = bounds.minR; r <= bounds.maxR; r++) {
-          const visible = isVisibleToPlayer({q, r}, friendlies);
-          const explored = window.isHexExplored(q, r);
-          if (visible || explored) visibleAndExplored.push({q, r, visible});
-      }
-  }
+  return { minQ, maxQ, minR, maxR };
+}
 
-  // No sorting needed for flat-top hexes as long as we draw in a consistent order
-  // visibleAndExplored.sort((a, b) => (a.r + a.q/2) - (b.r + b.q/2));
+// Terrain-image render pass (foliage tint compute, pickVariantKey, per-hex
+// clip+draw) is the expensive part of drawMap — cheap per hex individually
+// (the hexTileCache already avoids re-clipping a given terrain/zoom), but
+// panning the camera or walking redraws it at up to 60fps regardless, and on
+// a slow phone that adds up to visibly janky motion even though the terrain
+// under a panning camera hasn't actually changed, just shifted a few pixels.
+// _terrainBuffer holds that pass pre-rendered into an offscreen canvas sized
+// larger than the viewport (TERRAIN_BUFFER_MARGIN of slack on each side), in
+// camera-anchored space. As long as the camera stays within that slack, each
+// frame just blits (cheap drawImage) the buffer at an offset instead of
+// re-walking every hex. Only rebuilt when the camera drifts near the edge of
+// the slack, zoom changes, or the explored-hex set grows (new terrain to
+// paint) — a real reduction in redraw frequency during panning/movement,
+// not just a raw speedup of the existing per-frame work.
+let _terrainBuffer = null, _terrainBufferCtx = null;
+let _terrainBufferOriginX = 0, _terrainBufferOriginY = 0; // cameraX/Y the buffer was last rendered at
+let _terrainBufferZoom = null;
+let _terrainBufferExploredCount = -1;
+const TERRAIN_BUFFER_MARGIN = 500;
 
-  // Guard: complete=true on both loaded AND broken images; naturalWidth===0 means broken
-  const imgOk = img => img && img.complete && img.naturalWidth !== 0;
-
-  // 2. PASS 1: Base Terrain & Foliage
-  visibleAndExplored.forEach(({q, r, visible}) => {
+// Renders only the terrain-image pass (no fog dim, no water/vision/highlight
+// overlays — those still run live every frame in drawMap). Draws via the
+// module-level mapCtx/hexToPixel, so the caller temporarily points mapCtx at
+// the buffer and offsets window.cameraX/Y before calling this, then restores
+// both afterward.
+function renderTerrainPass(visibleAndExplored, imgOk) {
+  visibleAndExplored.forEach(({q, r}) => {
       const terrain = window.getTerrainAt(q, r);
       const {x, y} = hexToPixel(q, r);
       const zoomedSize = hexSize * window.cameraZoom;
@@ -367,8 +378,103 @@ function drawMap() {
       } else {
           drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
       }
+  });
+}
 
-      if (!visible) drawHex(x, y, hexSize, { fill: "rgba(0,0,0,0.6)" });
+function drawMap() {
+  if (!mapCtx) return;
+  invalidateLightSourcesCache();
+  refreshVisibilityCacheIfStale();
+  if (window.applyScreenShake) window.applyScreenShake();
+  mapCtx.clearRect(0,0,mapCanvas.width,mapCanvas.height);
+
+  const bounds = getVisibleHexes();
+  const visibleAndExplored = [];
+
+  // Computed once per drawMap() call, not once per hex — isVisibleToPlayer
+  // otherwise re-filters the entire (100+ entity) window.entities array on
+  // every single call, and this gather loop alone calls it once per hex in
+  // the *rectangular bounding box* (which over-covers the actual hex-shaped
+  // visible area — e.g. ~675 calls for ~84 hexes actually kept). That
+  // redundant re-filtering was measured at ~15ms of drawMap's ~20ms in a
+  // dense scene (Silverhart) — this alone doesn't change any behavior,
+  // just avoids repeating the same array scan hundreds of times per frame.
+  const friendlies = window.entities.filter(e => e.alive && e.side === 'player');
+
+  // 1. Gather visible hexes
+  for (let q = bounds.minQ; q <= bounds.maxQ; q++) {
+      for (let r = bounds.minR; r <= bounds.maxR; r++) {
+          const visible = isVisibleToPlayer({q, r}, friendlies);
+          const explored = window.isHexExplored(q, r);
+          if (visible || explored) visibleAndExplored.push({q, r, visible});
+      }
+  }
+
+  // Guard: complete=true on both loaded AND broken images; naturalWidth===0 means broken
+  const imgOk = img => img && img.complete && img.naturalWidth !== 0;
+
+  // 2. PASS 1: Base Terrain & Foliage — via the camera-anchored buffer (see
+  // comment above renderTerrainPass/TERRAIN_BUFFER_MARGIN). Rebuilt only
+  // when the camera has drifted near the edge of its slack, zoom changed, or
+  // new terrain became explored; otherwise just blitted at an offset.
+  const exploredCount = window.exploredHexes ? window.exploredHexes.size : 0;
+  const dx = window.cameraX - _terrainBufferOriginX;
+  const dy = window.cameraY - _terrainBufferOriginY;
+  const rebuildMargin = TERRAIN_BUFFER_MARGIN * 0.6;
+  const needsRebuild = !_terrainBuffer ||
+      _terrainBufferZoom !== window.cameraZoom ||
+      _terrainBufferExploredCount !== exploredCount ||
+      Math.abs(dx) > rebuildMargin || Math.abs(dy) > rebuildMargin;
+
+  if (needsRebuild) {
+      const bufW = mapCanvas.width + TERRAIN_BUFFER_MARGIN * 2;
+      const bufH = mapCanvas.height + TERRAIN_BUFFER_MARGIN * 2;
+      if (!_terrainBuffer || _terrainBuffer.width !== bufW || _terrainBuffer.height !== bufH) {
+          _terrainBuffer = document.createElement('canvas');
+          _terrainBuffer.width = bufW;
+          _terrainBuffer.height = bufH;
+          _terrainBufferCtx = _terrainBuffer.getContext('2d');
+      }
+      // Gather hexes over the larger buffer footprint, not just the current
+      // viewport, so panning within the slack has real terrain already drawn.
+      const savedCameraX = window.cameraX, savedCameraY = window.cameraY;
+      _terrainBufferOriginX = savedCameraX;
+      _terrainBufferOriginY = savedCameraY;
+      _terrainBufferZoom = window.cameraZoom;
+      _terrainBufferExploredCount = exploredCount;
+
+      window.cameraX = savedCameraX + TERRAIN_BUFFER_MARGIN;
+      window.cameraY = savedCameraY + TERRAIN_BUFFER_MARGIN;
+      const bufBounds = getVisibleHexesForRect(TERRAIN_BUFFER_MARGIN);
+      const bufVisibleAndExplored = [];
+      for (let q = bufBounds.minQ; q <= bufBounds.maxQ; q++) {
+          for (let r = bufBounds.minR; r <= bufBounds.maxR; r++) {
+              const explored = window.isHexExplored(q, r);
+              const visible = isVisibleToPlayer({q, r}, friendlies);
+              if (visible || explored) bufVisibleAndExplored.push({q, r, visible});
+          }
+      }
+      _terrainBufferCtx.clearRect(0, 0, bufW, bufH);
+      const savedMapCtx = mapCtx;
+      mapCtx = _terrainBufferCtx;
+      renderTerrainPass(bufVisibleAndExplored, imgOk);
+      mapCtx = savedMapCtx;
+      window.cameraX = savedCameraX;
+      window.cameraY = savedCameraY;
+  }
+
+  mapCtx.drawImage(_terrainBuffer,
+      window.cameraX - _terrainBufferOriginX - TERRAIN_BUFFER_MARGIN,
+      window.cameraY - _terrainBufferOriginY - TERRAIN_BUFFER_MARGIN);
+
+  // 2b. Fog-of-war dim for currently-unseen-but-explored hexes — kept live
+  // (not baked into the buffer) since which hexes count as "visible" shifts
+  // with player movement far more often than the terrain itself changes.
+  visibleAndExplored.forEach(({q, r, visible}) => {
+      if (!visible) {
+          const {x, y} = hexToPixel(q, r);
+          drawHex(x, y, hexSize, { fill: "rgba(0,0,0,0.6)" });
+      }
   });
 
   // 3. PASS 2: Entities & Items

@@ -2656,8 +2656,34 @@ window.rebuildRestlessSet = rebuildRestlessSet;
 
 let lastTimestamp = performance.now();
 let tickCounter = 0;
-let _lastRealtimeRenderTime = 0; // throttles tick()'s real-time-branch redraw to ~60Hz, independent of the 100Hz simulation cadence
+let _lastRealtimeRenderTime = 0; // throttles tick()'s real-time-branch redraw, cadence set adaptively below
 let _lastDrawCameraX, _lastDrawCameraY, _lastDrawCameraZoom, _lastDrawLightLevel;
+
+// Adaptive frame-rate cap: on a phone too slow to actually paint at 60fps,
+// forcing 60 redraws/sec just means every one of them arrives late and the
+// game feels worse than if it had simply targeted a lower, achievable rate.
+// Track a rolling average of how long drawMap()+renderEntities() actually
+// take on frames that do draw, and back off the throttle interval (60fps ->
+// 30fps -> 15fps) when that average can't fit inside the current interval;
+// recover back up if the device turns out to keep up comfortably.
+const _RENDER_INTERVALS_MS = [16, 33, 66]; // ~60fps, ~30fps, ~15fps
+let _renderIntervalTier = 0;
+let _avgRenderCostMs = 0;
+function _recordRenderCost(ms) {
+    _avgRenderCostMs = _avgRenderCostMs === 0 ? ms : _avgRenderCostMs * 0.9 + ms * 0.1;
+    const currentInterval = _RENDER_INTERVALS_MS[_renderIntervalTier];
+    if (_avgRenderCostMs > currentInterval * 0.9 && _renderIntervalTier < _RENDER_INTERVALS_MS.length - 1) {
+        _renderIntervalTier++;
+    } else if (_renderIntervalTier > 0 && _avgRenderCostMs < _RENDER_INTERVALS_MS[_renderIntervalTier - 1] * 0.5) {
+        _renderIntervalTier--;
+    }
+}
+window._getRenderIntervalMs = () => _RENDER_INTERVALS_MS[_renderIntervalTier];
+window._recordRenderCost = _recordRenderCost; // exposed for direct testing of the adaptive backoff
+// Test-only hook: force back to the fastest tier so tests asserting a fixed
+// ~60Hz redraw cadence aren't thrown off by cost measurements picked up from
+// earlier, unrelated heavy draws in the same page.
+window._resetRenderPacing = () => { _renderIntervalTier = 0; _avgRenderCostMs = 0; };
 
 // Is there any actual reason the canvas would look different from the last
 // frame drawn? drawMap() alone re-walks every visible hex (terrain lookup,
@@ -2935,12 +2961,14 @@ function tick() {
         //    actually spend their time. Both are no-ops on the *content* of
         //    any frame that does draw — this only ever removes redundant,
         //    pixel-identical repaints, never changes what gets shown.
-        if (now - _lastRealtimeRenderTime >= 16 && sceneNeedsRedraw()) {
+        if (now - _lastRealtimeRenderTime >= _RENDER_INTERVALS_MS[_renderIntervalTier] && sceneNeedsRedraw()) {
             _lastRealtimeRenderTime = now;
             _lastDrawCameraX = window.cameraX; _lastDrawCameraY = window.cameraY; _lastDrawCameraZoom = window.cameraZoom;
             _lastDrawLightLevel = window.lightLevel;
+            const _renderStart = performance.now();
             window.drawMap();
             window.renderEntities();
+            _recordRenderCost(performance.now() - _renderStart);
         }
         window.updateTurnIndicator();
     } else {
