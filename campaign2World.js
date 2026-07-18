@@ -2690,6 +2690,56 @@ function buildSilverhartPalace(roadEnd) {
         }
     }
 
+    // --- Silverhart Commons: a tavern + market square, north of the palace
+    // (the entrance road/gate/Diplomatic Quarter/Warrens are all south —
+    // this was the one wedge of the walled city with nothing in it at
+    // all). Sits between the ring road (radius 30) and the middle ring
+    // (radius 45), same distance band the Merchant/Noble Quarters occupy
+    // on the west/east faces. ---
+    const commonsCenter = { q: throneCenter.q, r: throneCenter.r - 33 };
+    const commonsDoor = { q: commonsCenter.q, r: commonsCenter.r + 3 };
+    const commonsRegion = carveFlatRoom(commonsCenter.q, commonsCenter.r, 4, 3, commonsDoor, 'Wood Floor');
+    window.interiorRegions.push(commonsRegion);
+    window.tileObjects[`${commonsCenter.q},${commonsCenter.r}`] = { type: 'fireplace', lightRadius: 6 };
+    window.tileObjects[`${commonsCenter.q - 2},${commonsCenter.r}`] = { type: 'bench' };
+    window.tileObjects[`${commonsCenter.q + 2},${commonsCenter.r}`] = { type: 'bench' };
+    window.campaign2SilverhartCommonsCenter = commonsCenter;
+    if (window.campaign2SilverhartInnkeeper) {
+        window.entities.push(window.buildNPC({ ...window.campaign2SilverhartInnkeeper, hex: { q: commonsCenter.q, r: commonsCenter.r - 1 } }));
+    }
+    for (let r = commonsDoor.r + 1; r <= throneCenter.r - RING_ROAD_RADIUS; r++) window.setTerrainAt(commonsCenter.q, r, 'Path');
+
+    // Market square: the open plaza between the tavern and the ring road —
+    // a well, a bounty board (the Cutpurse bounty below), and the Watch
+    // sergeant keeping an eye on it.
+    const marketSquare = { q: commonsCenter.q, r: commonsCenter.r + 8 };
+    window.tileObjects[`${marketSquare.q},${marketSquare.r}`] = { type: 'table' };
+    window.tileObjects[`${marketSquare.q + 2},${marketSquare.r}`] = { type: 'journal', lightRadius: 0, readId: 'silverhart_bounty_board' };
+    window.campaign2SilverhartMarketSquare = marketSquare;
+    if (window.campaign2SilverhartWatchSergeant) {
+        window.entities.push(window.buildNPC({ ...window.campaign2SilverhartWatchSergeant, hex: { q: marketSquare.q - 2, r: marketSquare.r } }));
+    }
+    if (window.campaign2SilverhartCutpurse) {
+        window.entities.push(window.buildNPC({ ...window.campaign2SilverhartCutpurse, hex: { q: marketSquare.q + 3, r: marketSquare.r + 2 } }));
+    }
+
+    // Three scattered outlying houses further out toward the city wall
+    // (radius ~50, well clear of the middle ring's own 6 corner houses and
+    // the Merchant/Noble/Diplomatic Quarter footprints) — simple flavor,
+    // no quest logic, just making the huge empty band between the middle
+    // ring and the wall feel lived-in rather than empty grass.
+    const outlyingSpecs = [
+        { center: { q: throneCenter.q + 15, r: throneCenter.r - 50 }, doorOffset: { q: 0, r: 2 }, npc: window.campaign2SilverhartOutlyingResident1 },
+        { center: { q: throneCenter.q + 40, r: throneCenter.r - 50 }, doorOffset: { q: 0, r: 2 }, npc: window.campaign2SilverhartOutlyingResident2 },
+        { center: { q: throneCenter.q - 40, r: throneCenter.r + 20 }, doorOffset: { q: 2, r: 0 }, npc: window.campaign2SilverhartOutlyingResident3 },
+    ];
+    outlyingSpecs.forEach(({ center, doorOffset, npc }) => {
+        const door = { q: center.q + doorOffset.q, r: center.r + doorOffset.r };
+        const region = carveFlatRoom(center.q, center.r, 2, 2, door, 'Wood Floor');
+        window.interiorRegions.push(region);
+        if (npc) window.entities.push(window.buildNPC({ ...npc, hex: { q: center.q, r: center.r } }));
+    });
+
     setWorldMapMarker(throneCenter, { t: 'G', f: 'K', o: 'h', p: 3, n: 'Silverhart' });
 }
 
@@ -4786,6 +4836,40 @@ function readEmberlodeLedger() {
     }
 }
 window.readEmberlodeLedger = readEmberlodeLedger;
+
+// The Commons' bounty board (Silverhart Market Square) — a flat, no-standing
+// bounty rather than a real quest-giver conversation: reading it starts the
+// quest directly, same "the object itself is the quest giver" shape as a
+// journal breadcrumb, just with a reward attached. Nix is a plain hostile
+// entity from world-gen (side: 'enemy'), so "completed" is entirely
+// death-driven — no report-back step, checked lazily whenever the board is
+// read again.
+function readSilverhartBountyBoard() {
+    if (!window.questLog) window.questLog = [];
+    let quest = window.questLog.find(q => q.id === 'silverhart_bounty_cutpurse');
+    const cutpurseAlive = window.entities.some(e => e.name === 'Nix the Cutpurse' && e.alive);
+    if (quest && quest.status === 'active' && !cutpurseAlive) {
+        quest.status = 'completed';
+        window.party[0].gold = (window.party[0].gold || 0) + 25;
+        if (window.gainExp) window.gainExp(75);
+        window.showMessage("You claim the bounty on Nix the Cutpurse. (+25 gold, quest complete: A Bounty in the Commons)");
+        window.showDialogue({ name: 'Bounty Board', customImage: 'journal' }, "The notice has been struck through — paid out.");
+        return;
+    }
+    if (quest && quest.status === 'active') {
+        window.showDialogue({ name: 'Bounty Board', customImage: 'journal' }, "WANTED: Nix the Cutpurse, for repeated theft in the Commons market. 25 gold, paid on proof of the deed.");
+        return;
+    }
+    if (quest && quest.status === 'completed') {
+        window.showDialogue({ name: 'Bounty Board', customImage: 'journal' }, "Nothing else posted worth the walk.");
+        return;
+    }
+    quest = { id: 'silverhart_bounty_cutpurse', title: 'A Bounty in the Commons', giver: 'Bounty Board', status: 'active', description: 'Kill Nix the Cutpurse, wanted for theft in the Silverhart Commons market, and return to the bounty board.' };
+    window.questLog.push(quest);
+    window.showDialogue({ name: 'Bounty Board', customImage: 'journal' }, "WANTED: Nix the Cutpurse, for repeated theft in the Commons market. 25 gold, paid on proof of the deed.");
+    window.showMessage("Quest added: A Bounty in the Commons.");
+}
+window.readSilverhartBountyBoard = readSilverhartBountyBoard;
 
 function readDeepholdsMineLedger() {
     const quest = window.questLog && window.questLog.find(q => q.id === 'deepholds_infestation');

@@ -3170,6 +3170,47 @@ window.npcDialogueTrees = {
     }
 };
 
+// --- Silverhart Commons: the tavern, the Watch, and the outlying houses'
+// flavor NPCs (see buildSilverhartPalace's Commons section, campaign2World.js).
+window.npcDialogueTrees.silverhart_innkeeper = (npc) => {
+    const rumors = [
+        "Half the Warrens swears the Thieves' Guild has eyes in the palace itself. I wouldn't know — I just pour the ale.",
+        "Ever since the ring road went in, this place gets more foot traffic than the old inn ever did. Not complaining.",
+        "There's a cutpurse working the market square again. Watch Sergeant's put a bounty up if you're looking for coin.",
+        "The Chancellor's been keeping odd hours lately. None of my business, but people talk."
+    ];
+    const rumor = rumors[Math.floor(Math.random() * rumors.length)];
+    window.showDialogue(npc, `Welcome to the Antler. ${rumor}`, [
+        { label: "Anything else?", action: () => window.showDialogue(npc, rumors[Math.floor(Math.random() * rumors.length)], [{ label: "Thanks.", action: () => {} }]) },
+        { label: "Thanks.", action: () => {} }
+    ]);
+};
+window.npcDialogueTrees.silverhart_watch_sergeant = (npc) => {
+    if (window.isShunnedByHumanCommerce && window.isShunnedByHumanCommerce()) {
+        window.showDialogue(npc, "I've got my eye on you. Keep it clean while you're in my Commons.", [{ label: "...", action: () => {} }]);
+        return;
+    }
+    const quest = (window.questLog || []).find(q => q.id === 'silverhart_bounty_cutpurse');
+    if (quest && quest.status === 'active') {
+        window.showDialogue(npc, "That cutpurse still owes the crown for three purses I know of. Board's got the bounty if you're the one to collect it.", [{ label: "I'm on it.", action: () => {} }]);
+        return;
+    }
+    if (quest && quest.status === 'completed') {
+        window.showDialogue(npc, "Market's been quieter since you dealt with that thief. Good work.", [{ label: "Just doing my part.", action: () => {} }]);
+        return;
+    }
+    window.showDialogue(npc, "Keep to yourself and we won't have trouble. There's a bounty board by the market if you're after honest coin.", [{ label: "Noted.", action: () => {} }]);
+};
+window.npcDialogueTrees.silverhart_outlying_resident_1 = (npc) => {
+    window.showDialogue(npc, "Quiet out here. That's exactly how I like it — close enough to the wall to feel safe, far enough from the palace to be left alone.", [{ label: "Fair enough.", action: () => {} }]);
+};
+window.npcDialogueTrees.silverhart_outlying_resident_2 = (npc) => {
+    window.showDialogue(npc, "You don't see many strangers out this far. Most people stick to the districts near the gate.", [{ label: "Just passing through.", action: () => {} }]);
+};
+window.npcDialogueTrees.silverhart_outlying_resident_3 = (npc) => {
+    window.showDialogue(npc, "The wall keeps the worst of it out, they say. I still lock my door at night.", [{ label: "Can't blame you.", action: () => {} }]);
+};
+
 function startHollowmereShakedown() {
     if (window.hollowmereEventFired) return;
     window.hollowmereEventFired = true;

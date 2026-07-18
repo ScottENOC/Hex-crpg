@@ -901,3 +901,54 @@ window.campaign2ElfHealer = {
     side: 'neutral', factionId: 'elven_realm', color: '#3a7a4a',
     dialogueId: 'elf_healer'
 };
+
+// --- Silverhart Commons: a tavern + market square north of the palace —
+// previously the one wedge of the walled city with nothing built in it at
+// all (Merchant/Noble hug the west/east walls, the Diplomatic Quarter and
+// Warrens sit south of the gate). Same "populate the city out to its own
+// walls" pass that added the scattered outlying houses further out. ---
+window.campaign2SilverhartInnkeeper = {
+    name: 'Hollis Vane', title: 'Innkeeper',
+    race: 'human', gender: 'male',
+    classLevels: ['fighter'], skillPicks: ['health'], equipment: [],
+    side: 'neutral', factionId: 'silverhart_kingdom', color: '#6a4a2a',
+    dialogueId: 'silverhart_innkeeper'
+};
+// Watch Sergeant Bell: the city's ordinary law, distinct from the palace's
+// own royal guards (those are the Queen's personal garrison, not street
+// patrol) — reacts to isShunnedByHumanCommerce the same way the merchants
+// do, and points the player at the bounty board's cutpurse problem.
+window.campaign2SilverhartWatchSergeant = {
+    name: 'Sergeant Bell', title: 'City Watch',
+    race: 'human', gender: 'female',
+    classLevels: ['fighter', 'fighter'], skillPicks: ['health', 'sword_hit'], equipment: ['sword', 'medium_armor', 'nasal_helm'],
+    side: 'neutral', factionId: 'silverhart_kingdom', color: '#4a4a6a',
+    dialogueId: 'silverhart_watch_sergeant'
+};
+// Nix the Cutpurse: the bounty board's target and the Commons' own "some
+// fights" — an ordinary street bandit, not tied to any faction or quest
+// chain beyond the flat bounty payout on the board itself.
+window.campaign2SilverhartCutpurse = {
+    name: 'Nix the Cutpurse', title: 'Wanted: Thief',
+    race: 'human', gender: 'male',
+    classLevels: ['rogue', 'rogue'], skillPicks: ['health', 'dagger_hit', 'stealth_agility'], equipment: ['dagger', 'light_armor'],
+    side: 'enemy', factionId: null, color: '#3a2a3a'
+};
+// Three scattered outlying houses further out toward the city wall —
+// simple flavor NPCs, no quest logic, just making the huge empty ring
+// between the middle-ring houses and the wall itself feel lived-in.
+window.campaign2SilverhartOutlyingResident1 = {
+    name: 'Osric Fenn', title: 'Resident',
+    race: 'human', gender: 'male', classLevels: [], skillPicks: [], equipment: [],
+    side: 'neutral', factionId: null, color: '#5a5a4a', dialogueId: 'silverhart_outlying_resident_1'
+};
+window.campaign2SilverhartOutlyingResident2 = {
+    name: 'Greta Aldwyn', title: 'Resident',
+    race: 'human', gender: 'female', classLevels: [], skillPicks: [], equipment: [],
+    side: 'neutral', factionId: null, color: '#5a5a4a', dialogueId: 'silverhart_outlying_resident_2'
+};
+window.campaign2SilverhartOutlyingResident3 = {
+    name: 'Tomlin Reed', title: 'Resident',
+    race: 'human', gender: 'male', classLevels: [], skillPicks: [], equipment: [],
+    side: 'neutral', factionId: null, color: '#5a5a4a', dialogueId: 'silverhart_outlying_resident_3'
+};
