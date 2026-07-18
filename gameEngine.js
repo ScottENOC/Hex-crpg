@@ -1705,10 +1705,20 @@ function startGameCore(isLoading = false) {
 const CHAR_CONFIG = {
     human_male:   { bodyW:1.80, bodyH:2.16, yOff:-0.18, baseKey:'humanMaleBase',  hair:{ key:'humanMaleHair',   type:'small', wFrac:0.30, hFrac:0.30, topFrac:0.19 }, armour:{ wMult:1.0, topShift:0   }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.35, y:0.64 }, offHand:{ x:0.59, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42, shieldOffset:{ x:0.15, y:0.15 }, mainHandYAdj:-0.3, offHandYAdj:-0.15 },
     human_female: { bodyW:1.60, bodyH:1.92, yOff:-0.16, baseKey:'humanBase',       hair:{ key:'humanHair',       type:'full',  yRaw:-3                              }, armour:{ wMult:1.0, topShift:0   }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.40, y:0.66 }, offHand:{ x:0.60, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42, shieldOffset:{ x:0.30, y:0.30 }, mainHandYAdj:0.25 },
-    elf_male:     { bodyW:2.00, bodyH:2.40, yOff:-0.20, baseKey:'elfMaleBase',     hair:{ key:'elfMaleHair',     type:'full'                                        }, armour:{ wMult:1.0, topShift:0.3 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.37, y:0.63 }, offHand:{ x:0.58, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
+    // elfMaleHair.png and dwarfFemaleHair.png are both drawn essentially
+    // edge-to-edge with no transparent padding (confirmed directly: ~99.5%
+    // of each canvas is opaque, versus ~52-82% for their well-padded
+    // siblings elfFemaleHair/dwarfMaleHair) — "full" hair stretches the raw
+    // image to the whole body box, so these two read as a giant hair-cape
+    // covering nearly the entire body instead of a normal hairstyle. hair.
+    // sizeMult (below) is the CHAR_CONFIG-level default for this correction
+    // — same mechanism as the per-entity e.hairSizeMult override already
+    // used for a couple of named NPCs before this was traced to specific
+    // broken assets rather than a per-character quirk.
+    elf_male:     { bodyW:2.00, bodyH:2.40, yOff:-0.20, baseKey:'elfMaleBase',     hair:{ key:'elfMaleHair',     type:'full', sizeMult:0.15                         }, armour:{ wMult:1.0, topShift:0.3 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.37, y:0.63 }, offHand:{ x:0.58, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
     elf_female:   { bodyW:2.00, bodyH:2.40, yOff:-0.20, baseKey:'elfFemaleBase',   hair:{ key:'elfFemaleHair',   type:'full'                                        }, armour:{ wMult:1.0, topShift:0.3 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.37, y:0.63 }, offHand:{ x:0.58, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
     dwarf_male:   { bodyW:1.60, bodyH:1.92, yOff:-0.07, baseKey:'dwarfMaleBase',   hair:{ key:'dwarfMaleHair',   type:'full'                                        }, armour:{ wMult:1.4, topShift:0.1 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.33, y:0.61 }, offHand:{ x:0.52, y:0.45 }, weaponSizeMult:1.0, shieldSizeMult:0.36 },
-    dwarf_female: { bodyW:1.60, bodyH:1.92, yOff:-0.07, baseKey:'dwarfFemaleBase', hair:{ key:'dwarfFemaleHair', type:'full' }, armour:{ wMult:1.4, topShift:0.1 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.33, y:0.61 }, offHand:{ x:0.52, y:0.45 }, weaponSizeMult:1.0, shieldSizeMult:0.36 },
+    dwarf_female: { bodyW:1.60, bodyH:1.92, yOff:-0.07, baseKey:'dwarfFemaleBase', hair:{ key:'dwarfFemaleHair', type:'full', sizeMult:0.2 }, armour:{ wMult:1.4, topShift:0.1 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.33, y:0.61 }, offHand:{ x:0.52, y:0.45 }, weaponSizeMult:1.0, shieldSizeMult:0.36 },
     // No dedicated layered orc body art exists (no orcMaleBase/orcFemaleBase
     // images) — reuses the flat orc.png monster sprite (window.gameVisuals.
     // orcBase) as the body layer itself, same "no hair" treatment as
@@ -1827,7 +1837,7 @@ function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
             // Per-entity override for an otherwise-fixed full-body hair sprite
             // (e.g. Ambassador Elarion's absurdly oversized default) — scales
             // around the head anchor (top-center) rather than stretching.
-            const sizeMult = e.hairSizeMult !== undefined ? e.hairSizeMult : 1;
+            const sizeMult = e.hairSizeMult !== undefined ? e.hairSizeMult : (hc.sizeMult !== undefined ? hc.sizeMult : 1);
             const hW = bW * sizeMult, hH = bH * sizeMult;
             ctx.drawImage(drawHair, x - hW / 2, top + (hc.yRaw || 0) * z, hW, hH);
         } else {

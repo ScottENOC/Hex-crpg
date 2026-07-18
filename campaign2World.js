@@ -2547,8 +2547,11 @@ function buildSilverhartPalace(roadEnd) {
     window.campaign2CathedralCenter = cathedralCenter;
 
     if (window.campaign2ElvenAmbassador) {
+        // hairSizeMult no longer needed here — CHAR_CONFIG.elf_male now
+        // carries this correction as its own default (gameEngine.js), once
+        // it was traced to elfMaleHair.png specifically rather than being
+        // an Elarion-only quirk.
         const elarion = window.buildNPC({ ...window.campaign2ElvenAmbassador, hex: { q: elvenCenter.q, r: elvenCenter.r + 1 } });
-        elarion.hairSizeMult = 0.15; // the default full-body elf hair sprite reads absurdly oversized on him specifically
         window.entities.push(elarion);
     }
     if (window.campaign2DwarvenAmbassador) window.entities.push(window.buildNPC({ ...window.campaign2DwarvenAmbassador, hex: { q: dwarvenCenter.q, r: dwarvenCenter.r + 1 } }));
@@ -2584,8 +2587,11 @@ function buildSilverhartPalace(roadEnd) {
         // room for the relocated cathedral (see cathedralCenter above).
         const retrainerHex = { q: 9, r: -459 };
         window.setTerrainAt(retrainerHex.q, retrainerHex.r, 'Path');
+        // hairSizeMult no longer needed here — CHAR_CONFIG.dwarf_female now
+        // carries this correction as its own default (gameEngine.js), once
+        // it was traced to dwarfFemaleHair.png specifically rather than
+        // being a Retrainer-only quirk.
         const retrainer = window.buildNPC({ ...window.campaign2Retrainer, hex: retrainerHex });
-        retrainer.hairSizeMult = 0.2; // the default dwarf-female hair sprite reads absurdly oversized on her specifically
         window.entities.push(retrainer);
         window.campaign2RetrainerHex = retrainerHex;
     }
