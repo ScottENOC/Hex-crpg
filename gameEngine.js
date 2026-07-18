@@ -2815,8 +2815,16 @@ let _pausedForReactionSince = 0;
 // "entity.hex = next" movement call sites individually.
 function checkStairTransitions() {
     if (!window.multiStoryBuildings || !window.multiStoryBuildings.length) return;
+    // Same "don't simulate what's nowhere near the player" discipline as
+    // isDormantAmbientNpc above (this is a fresh full-entity scan every
+    // tick otherwise — exactly the 80+-NPC-every-10ms cost that pattern
+    // exists to avoid; a dormant NPC's position is also just snapped by its
+    // schedule, never resolved via real stairs, so it can't have actually
+    // used one anyway).
+    const partyHexes = window.collectPartyHexes();
     for (const e of window.entities) {
         if (!e.alive || e.rider) continue; // a rider piggybacks on its mount's hex/floor, not its own
+        if (window.isDormantAmbientNpc(e, partyHexes)) continue;
         const obj = window.getTileObjectAtFloor(e.hex.q, e.hex.r, e.floor || 0);
         if (obj && (obj.type === 'stair_up' || obj.type === 'stair_down') && obj.toFloor !== undefined && obj.toFloor !== e.floor) {
             e.floor = obj.toFloor;
