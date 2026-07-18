@@ -2656,6 +2656,7 @@ window.rebuildRestlessSet = rebuildRestlessSet;
 
 let lastTimestamp = performance.now();
 let tickCounter = 0;
+let _lastRealtimeRenderTime = 0; // throttles tick()'s real-time-branch redraw to ~60Hz, independent of the 100Hz simulation cadence
 
 let _pausedForReactionSince = 0;
 function tick() {
@@ -2883,8 +2884,21 @@ function tick() {
 
         updateVisualPositions(scaledDt);
         if (window.smoothFollowPlayer) window.smoothFollowPlayer(dt);
-        window.drawMap();
-        window.renderEntities();
+        // Simulation runs at the tick's own 10ms (100Hz) cadence for movement
+        // precision, but painting doesn't need to — this used to call
+        // drawMap/renderEntities unconditionally on every tick, i.e. a full
+        // canvas repaint 100 times a second forever, even completely
+        // stationary. Desktop GPUs absorb that redundant rate without a
+        // visible cost, but mobile Safari's canvas compositor does not scale
+        // the same way, so it burns battery/CPU disproportionately there
+        // instead of showing up as a raw-benchmark difference. Throttling to
+        // ~60Hz (the highest real display refresh rate this needs to match)
+        // cuts the paint count by ~40% with no visible behavior change.
+        if (now - _lastRealtimeRenderTime >= 16) {
+            _lastRealtimeRenderTime = now;
+            window.drawMap();
+            window.renderEntities();
+        }
         window.updateTurnIndicator();
     } else {
         // TURN-BASED COMBAT SYSTEM (1x Speed)
