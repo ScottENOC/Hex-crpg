@@ -44,6 +44,8 @@ window.wireSharedInventory = wireSharedInventory;
 // competes over.
 const BASE_CARRY_PER_MEMBER = 40;
 const STRONG_BACK_BONUS_PER_RANK = 15;
+const CARRY_PER_OWNED_MOUNT = 40;
+const CARRY_PER_ANIMAL_COMPANION = 20;
 
 function getItemWeight(id) {
     const item = window.items && window.items[id];
@@ -63,8 +65,32 @@ function getPartyCarryWeight() {
 }
 window.getPartyCarryWeight = getPartyCarryWeight;
 
+// Equipped-item carrying bonuses (magic_backpack, equipment.js) — any
+// party member's own accessory slot, checked generically off a
+// `carryBonus` field rather than hardcoding the backpack's item id, so a
+// future item could grant this the same way without touching this file.
+function getEquippedCarryBonus() {
+    return (window.party || []).reduce((sum, p) => {
+        const accessoryId = p.equipped?.accessory;
+        const item = accessoryId && window.items[accessoryId];
+        return sum + (item?.carryBonus || 0);
+    }, 0);
+}
+window.getEquippedCarryBonus = getEquippedCarryBonus;
+
 function getPartyCarryCapacity() {
-    return (window.party || []).reduce((sum, p) => sum + BASE_CARRY_PER_MEMBER + (p.skills?.strong_back || 0) * STRONG_BACK_BONUS_PER_RANK, 0);
+    const memberCapacity = (window.party || []).reduce((sum, p) => sum + BASE_CARRY_PER_MEMBER + (p.skills?.strong_back || 0) * STRONG_BACK_BONUS_PER_RANK, 0);
+    // Owned mounts (mountSize > 0 — horses, wolves, boars, unicorns; see
+    // monsters.js) help carry whether they're currently being ridden or
+    // just following along, same as an animal companion (a permanent
+    // summon, see the animal_companion skill) — both are real pack animals,
+    // just smaller ones than a proper mount.
+    const ownedMounts = (window.entities || []).filter(e => e.alive && e.side === 'player' && (e.mountSize || 0) > 0).length;
+    const animalCompanions = (window.party || []).filter(p => p.animalCompanion && p.animalCompanion.alive).length;
+    return memberCapacity
+        + ownedMounts * CARRY_PER_OWNED_MOUNT
+        + animalCompanions * CARRY_PER_ANIMAL_COMPANION
+        + getEquippedCarryBonus();
 }
 window.getPartyCarryCapacity = getPartyCarryCapacity;
 

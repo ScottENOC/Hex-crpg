@@ -671,7 +671,7 @@ window.campaign2MagicShopItems = [
     'sword_arrow_deflection', 'glowing_ring', 'orcbane_pendant', 'wolfward_charm',
     'undying_locket', 'silvertongue_ring', 'stormcaller_spear', 'nightowl_bow',
     'featherweight_dagger', 'bulwark_shield', 'ashenwood_club', 'travelers_cloakpin',
-    'moonlit_armor', 'huntsman_helm',
+    'moonlit_armor', 'huntsman_helm', 'magic_backpack',
 ];
 
 // A political-intrigue quest giver: a noble with a personal grudge against

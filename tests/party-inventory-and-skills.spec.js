@@ -64,6 +64,51 @@ test.describe('Encumbrance', () => {
         expect(result.afterOneRank).toBe(result.base + 15);
     });
 
+    test('an owned horse (or any owned mount) adds to capacity whether ridden or not', async ({ page }) => {
+        await createCharacter(page);
+        const result = await page.evaluate(() => {
+            const before = window.getPartyCarryCapacity();
+            const playerEntity = window.entities.find(e => e.side === 'player' && !e.rider);
+            const horse = window.createMonster('horse', { q: playerEntity.hex.q + 1, r: playerEntity.hex.r }, null, null, 'player');
+            window.entities.push(horse);
+            const afterUnridden = window.getPartyCarryCapacity();
+            horse.rider = playerEntity;
+            playerEntity.riding = horse;
+            const afterRidden = window.getPartyCarryCapacity();
+            return { before, afterUnridden, afterRidden };
+        });
+        expect(result.afterUnridden).toBeGreaterThan(result.before);
+        expect(result.afterRidden).toBe(result.afterUnridden); // riding it doesn't add or remove the bonus
+    });
+
+    test('a living animal companion adds to capacity; a dead one does not', async ({ page }) => {
+        await createCharacter(page);
+        const result = await page.evaluate(() => {
+            const before = window.getPartyCarryCapacity();
+            const companion = window.createMonster('wolf', { q: 5, r: 5 }, null, null, 'player');
+            window.entities.push(companion);
+            window.party[0].animalCompanion = companion;
+            const afterAlive = window.getPartyCarryCapacity();
+            companion.alive = false;
+            const afterDead = window.getPartyCarryCapacity();
+            return { before, afterAlive, afterDead };
+        });
+        expect(result.afterAlive).toBeGreaterThan(result.before);
+        expect(result.afterDead).toBe(result.before);
+    });
+
+    test('the magic backpack (Bag of Holding) adds a flat carry bonus when equipped in the accessory slot', async ({ page }) => {
+        await createCharacter(page);
+        const result = await page.evaluate(() => {
+            const before = window.getPartyCarryCapacity();
+            window.party[0].equipped = window.party[0].equipped || {};
+            window.party[0].equipped.accessory = 'magic_backpack';
+            const after = window.getPartyCarryCapacity();
+            return { before, after, bonus: window.items.magic_backpack.carryBonus };
+        });
+        expect(result.after).toBe(result.before + result.bonus);
+    });
+
     test('weight is computed from item type/subtype defaults without needing a weight field on every item', async ({ page }) => {
         await createCharacter(page);
         const result = await page.evaluate(() => ({

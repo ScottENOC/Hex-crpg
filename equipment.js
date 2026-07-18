@@ -90,6 +90,13 @@ const items = {
     'moonlit_armor': { id: 'moonlit_armor', name: "Moonlit Chain", type: 'armor', reduction: 2, buyPrice: 320, lightRadius: 3, description: 'Faintly luminous links, like captured moonlight — dim, but never quite dark around you.' },
     'huntsman_helm': { id: 'huntsman_helm', name: "Huntsman's Helm", type: 'helmet', reduction: 1, buyPrice: 140, auraTag: 'wolf', auraRadius: 5, description: "A wolf-tooth is set in the brow; it aches faintly when the pack is near." },
     'shadowcloak': { id: 'shadowcloak', name: "Shadowcloak", type: 'accessory', buyPrice: 380, skills: { 'stealth_agility': 1 }, description: "Thieves' Guild work — dyed to swallow torchlight rather than reflect it." },
+    // Bigger on the inside than it looks — adds straight to the party's
+    // shared carry capacity (see getPartyCarryCapacity, partyInventory.js)
+    // rather than granting a skill or aura like every other accessory
+    // above. Only one accessory slot exists per character, so wearing this
+    // instead of a combat-relevant accessory is a real tradeoff, not a
+    // free bonus.
+    'magic_backpack': { id: 'magic_backpack', name: "Bag of Holding", type: 'accessory', buyPrice: 300, carryBonus: 40, description: "Cinches shut to the size of an ordinary satchel, yet somehow never runs out of room." },
 
     // Runeforged items — the only three things craftable through the
     // Kragmoor runesmithing questline (see crafting.js). No buyPrice: never

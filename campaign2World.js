@@ -277,9 +277,22 @@ function reconcileAllRegionFootprints() {
         ((other.floorHexes || []).some(f => f.q === h.q && f.r === h.r) ||
          (other.wallHexes || []).some(f => f.q === h.q && f.r === h.r)));
 
+    // A floor hex holding a reputation-gated door (accessThreshold, see
+    // toggleDoor/gameEngine.js) is deliberately painted as impassable Wall
+    // terrain while locked — a real, intentional state, not a breach. Found
+    // via the Silverhart Palace rear-door tests: sealRoom's own bookkeeping
+    // fix (see its comment above) folds a locked door's hex into the
+    // region's floorHexes since it started life as a wallHex, so without
+    // this exclusion this function "fixed" the lock straight back open the
+    // moment setupVillageScene finished building the palace.
+    const isLockedDoorHex = (h) => {
+        const obj = window.tileObjects && window.tileObjects[`${h.q},${h.r}`];
+        return !!(obj && obj.type === 'door_closed' && obj.accessThreshold);
+    };
+
     regions.forEach(region => {
         (region.floorHexes || []).forEach(h => {
-            if (claimedByOtherRegion(h, region)) return;
+            if (claimedByOtherRegion(h, region) || isLockedDoorHex(h)) return;
             if (window.getTerrainAt(h.q, h.r).name !== region.floorType) {
                 window.setTerrainAt(h.q, h.r, region.floorType);
             }
