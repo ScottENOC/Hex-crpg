@@ -6419,8 +6419,9 @@ function canSee(viewer, target) {
         // Spot chance: base on target's stealth score
         // stealthScore is roughly 0-60 (higher is more stealthy)
         // distance makes it easier: +5 per hex closer than 15
-        const distBonus = Math.max(0, (15 - d) * 5); 
-        const spotChance = Math.max(5, 100 - target.stealthScore + distBonus);
+        const distBonus = Math.max(0, (15 - d) * 5);
+        const perceptionBonus = (viewer.skills?.keen_perception || 0) * 10;
+        const spotChance = Math.max(5, 100 - target.stealthScore + distBonus + perceptionBonus);
         
         // Light source bonus for viewer
         let hasLight = false;

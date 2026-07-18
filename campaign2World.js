@@ -1458,6 +1458,7 @@ function buildNecromancerCrypt() {
 
     window.campaign2NecromancerCryptCenter = entranceCenter;
     window.campaign2NecromancerRitualCenter = ritualCenter;
+    window.campaign2NecromancerOssuaryCenter = ossuaryCenter;
 
     // Entrance chamber: a light guard, same dormant-until-seen skeletons
     // as the abandoned house.
@@ -1477,6 +1478,15 @@ function buildNecromancerCrypt() {
         const m = window.createMonster(type, { q: ossuaryCenter.q + off.q, r: ossuaryCenter.r + off.r }, null, null, 'enemy');
         m.cryptMinion = true;
         window.entities.push(m);
+    });
+
+    // A grave-robber's own stash, hidden loose under the ossuary floor —
+    // not a door, an easy-to-walk-past hidden object (see secrets.js) —
+    // whoever buried it here didn't want the necromancer's minions finding
+    // it either.
+    window.placeSecretStash(ossuaryCenter.q, ossuaryCenter.r, {
+        concealment: 65, gold: 80, items: ['gem_green'],
+        discoveryMessage: "A loose flagstone gives way underfoot — someone hid a stash down here long before Malachar ever arrived."
     });
 
     // Malachar himself: built off the revenant template (already the
@@ -2559,6 +2569,26 @@ function buildSilverhartPalace(roadEnd) {
     if (window.campaign2ThievesGuildDebtor) {
         window.entities.push(window.buildNPC({ ...window.campaign2ThievesGuildDebtor, hex: { q: thievesGuildCenter.q + 4, r: thievesGuildCenter.r + 3 } }));
     }
+    // A hidden vault behind the guild's own back wall — no signposted door,
+    // no quest gate, just a wall that happens to conceal one (see
+    // secrets.js). A dead-end corridor leads right up to it so a player
+    // who's actually exploring finds a wall that looks like it should lead
+    // somewhere, without the room's existence being obvious from outside.
+    const vaultCenter = { q: thievesGuildCenter.q + 7, r: thievesGuildCenter.r };
+    const vaultRegion = carveFlatRoom(vaultCenter.q, vaultCenter.r, 2, 2, null, 'Wood Floor');
+    window.interiorRegions.push(vaultRegion);
+    sealRoom(vaultRegion);
+    for (let q = thievesGuildCenter.q + 4; q < vaultCenter.q - 2; q++) window.setTerrainAt(q, thievesGuildCenter.r, 'Wood Floor');
+    window.placeSecretDoor(vaultCenter.q - 2, vaultCenter.r, {
+        concealment: 75,
+        discoveryMessage: "A section of the wall doesn't quite match the rest — a hidden door swings open onto a guild vault."
+    });
+    window.tileObjects[`${vaultCenter.q},${vaultCenter.r}`] = { type: 'fireplace', lightRadius: 6, lit: false };
+    // A real payoff for finding it — the guild's own stash, not just an
+    // empty room (see openStorageChest, partyInventory.js).
+    window.tileObjects[`${vaultCenter.q + 1},${vaultCenter.r}`] = { type: 'storage_chest', items: ['gem_blue', 'gem_red', 'silvertongue_ring'] };
+    window.campaign2ThievesGuildVaultCenter = vaultCenter;
+
     // Target of "Blood Price" (thieves_guildmaster) — lurks near the
     // Warrens' edge, close enough to the guild's own turf to plausibly be
     // watching it for the Crown.

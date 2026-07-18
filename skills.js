@@ -149,6 +149,13 @@ const skills = {
         maxRanks: 1,
         apply: (player) => {}
     },
+    'keen_perception': {
+        name: 'Keen Perception',
+        description: 'A sharp eye for what others miss — +10 per rank to the roll for spotting a stealthed opponent, and to the same kind of roll made passively against secret doors and other hidden objects as you pass near them.',
+        tree: 'agility',
+        maxRanks: 3,
+        apply: (player) => {}
+    },
     'sure_footed': {
         name: 'Sure-Footed',
         description: 'Reduces the TP cost of climbing (fort ramparts and similar) and lowers the chance of a failed climb in combat. Stacks with other climbing skills.',

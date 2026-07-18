@@ -1288,6 +1288,7 @@ function updateExploration() {
                     if (!window.lastSeenTimeMap) window.lastSeenTimeMap = {};
                     window.lastSeenTimeMap[key] = window.worldSeconds;
                     if (window.ensureWildernessResourceNode) window.ensureWildernessResourceNode(targetHex.q, targetHex.r);
+                    if (window.checkSecretDoorDiscovery) window.checkSecretDoorDiscovery(f, targetHex);
 
                     const ent = window.getEntityAtHex(targetHex.q, targetHex.r);
                     if (ent) {
