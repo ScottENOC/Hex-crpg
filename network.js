@@ -1,20 +1,34 @@
 // network.js
-// If on GitHub Pages, connect to the hosted backend. Otherwise, connect to current origin.
-const backendUrl = window.location.hostname === 'scottenoc.github.io' 
-    ? 'https://your-rpg-backend.onrender.com' // Replace with your actual hosted backend URL
-    : window.location.origin;
+// The hosted multiplayer backend — GitHub Pages, the Capacitor-wrapped app
+// (window.location.origin there is some inert custom scheme, e.g.
+// capacitor://localhost, never this backend itself), or any other static
+// hosting all need to reach out to this. The one case that should NOT use
+// it is running server.js locally (`npm start`), which serves index.html
+// *and* the socket.io backend from the same origin — that already-correct
+// origin would otherwise get needlessly overridden. Comparing against
+// window.location.origin (rather than sniffing a specific hostname like
+// 'scottenoc.github.io') makes this self-updating for every hosting
+// context without needing a new special case each time one's added.
+const HOSTED_BACKEND_URL = 'https://hex-crpg.onrender.com';
+const backendUrl = window.location.origin === HOSTED_BACKEND_URL
+    ? window.location.origin
+    : HOSTED_BACKEND_URL;
 
-// socket.io's client lib loads from a CDN <script> tag (index.html) before
-// this file runs. If that CDN request is slow, blocked, or fails outright
-// (seen on at least one hosting environment, plus any sandboxed/offline
-// network), `io` is never defined — and since this used to be a bare
-// `io(backendUrl)` call with no guard, that ReferenceError aborted the
-// entire rest of this script, so window.multiplayer never got assigned at
-// all. Anything downstream that reads window.multiplayer.* unguarded then
-// throws too, breaking solo play in ways that have nothing to do with
-// multiplayer — a stub socket (real API shape, every method a no-op) keeps
-// window.multiplayer always defined and solo play fully working even with
-// no multiplayer backend reachable at all.
+// socket.io's client lib loads from a local vendor/socket.io.min.js
+// <script> tag (index.html) before this file runs — bundled locally
+// (see vendor/socket.io.min.js and the Capacitor build's copy of it)
+// rather than a CDN, so it can never fail to load solely because there's
+// no network yet at the moment the page opens (the wrapped app's own
+// window, or a slow/offline connection). Still guarded here regardless:
+// if the file is ever missing/corrupted, `io` is undefined — and since
+// this used to be a bare `io(backendUrl)` call with no guard, that
+// ReferenceError aborted the entire rest of this script, so
+// window.multiplayer never got assigned at all. Anything downstream that
+// reads window.multiplayer.* unguarded then throws too, breaking solo
+// play in ways that have nothing to do with multiplayer — a stub socket
+// (real API shape, every method a no-op) keeps window.multiplayer always
+// defined and solo play fully working even with no multiplayer backend
+// reachable at all.
 let socket;
 try {
     if (typeof io !== 'function') throw new Error('socket.io client did not load (io is undefined)');
