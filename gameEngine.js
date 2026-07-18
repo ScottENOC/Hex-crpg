@@ -637,6 +637,12 @@ function playerMoveProcess(player, path) {
                 if (isUnarmored) baseMoveCost -= 1;
             }
         }
+        // Movement discounts (fastMovement, swift_step, ...) should make
+        // moving cheaper, never free or a net TP *gain* — with fastMovement
+        // now capped at 1 rank this can't actually go negative anymore, but
+        // clamp defensively anyway (matches updatePlayerUI's own highlight
+        // BFS, which already does the same for the highlighted-range case).
+        baseMoveCost = Math.max(1, baseMoveCost);
         const previousTerrain = window.getTerrainAt(previousHex.q, previousHex.r);
         const terrain = window.getTerrainAt(player.hex.q, player.hex.r);
         
@@ -676,7 +682,7 @@ function playerMoveProcess(player, path) {
             terrainMult = 1.0; // Flat movement on same level
         }
 
-        let stepCost = baseMoveCost * (player.isFlying ? 1 : terrainMult);
+        let stepCost = Math.max(1, baseMoveCost * (player.isFlying ? 1 : terrainMult));
 
         // WALL CLIMB: entering climbRisk terrain from non-climbRisk terrain
         // commits the climber to a multi-turn climb — scaling a real castle
@@ -1095,6 +1101,10 @@ function updatePlayerUI() {
                 const moveCostMult = sameElevation ? 1 : window.getMoveCostMult(n.q, n.r, player);
                 stepCost = baseMoveCost * (player.isFlying ? 1 : moveCostMult);
             }
+            // Never free or a net TP gain — matches the real-move clamps
+            // (playerMoveProcess etc.) so the highlighted range never shows
+            // a hex as reachable more cheaply than it will actually cost.
+            stepCost = Math.max(1, stepCost);
             const totalCost = cost + stepCost;
 
             if (totalCost <= availableTP) {
@@ -3126,6 +3136,9 @@ function processRealTimeStep(entity, overage = 0) {
 
         let stepCost = 5 * window.getMoveCostMult(nextHex.q, nextHex.r, moveEntity);
         if (moveEntity.skills?.fastMovement) stepCost -= moveEntity.skills.fastMovement;
+        // Never free or a net TP gain — see the matching clamp in
+        // playerMoveProcess above.
+        stepCost = Math.max(1, stepCost);
 
         // Set start point to current hex center for lerp
         entity.startQ = entity.hex.q;
@@ -3738,6 +3751,9 @@ function autoMoveProcess(entity) {
         const terrain = window.getTerrainAt(nextHex.q, nextHex.r);
         let stepCost = 5 * window.getMoveCostMult(nextHex.q, nextHex.r, moveEntity);
         if (moveEntity.skills['fastMovement']) stepCost -= 1;
+        // Never free or a net TP gain — see the matching clamp in
+        // playerMoveProcess above.
+        stepCost = Math.max(1, stepCost);
 
         entity.startQ = entity.hex.q;
         entity.startR = entity.hex.r;
@@ -5472,16 +5488,19 @@ function aiProcess(entity) {
                     const isUnarmored = (!moveEntity.equipped || !moveEntity.equipped.armor) && (!moveEntity.equipped || !moveEntity.equipped.offhand || window.items[moveEntity.equipped.offhand].type !== 'shield');
                     if (isUnarmored) cost -= 1;
                 }
+                // Never free or a net TP gain — see the matching clamp in
+                // playerMoveProcess above.
+                cost = Math.max(1, cost);
 
                 if (entity.riding) {
                     if (entity.riding.timePoints > 80) {
-                        spendTP(entity.riding, cost * window.getMoveCostMult(entity.hex.q, entity.hex.r, entity.riding));
+                        spendTP(entity.riding, Math.max(1, cost * window.getMoveCostMult(entity.hex.q, entity.hex.r, entity.riding)));
                     } else {
                         setTimeout(() => aiProcess(entity), 20);
                         return;
                     }
                 } else {
-                    spendTP(entity, cost * window.getMoveCostMult(entity.hex.q, entity.hex.r, entity));
+                    spendTP(entity, Math.max(1, cost * window.getMoveCostMult(entity.hex.q, entity.hex.r, entity)));
                 }
 
                 if (forceEnd) entity.timePoints = threshold;

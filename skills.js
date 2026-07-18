@@ -100,9 +100,9 @@ const skills = {
     },
     'fastMovement': {
         name: 'Fast Movement',
-        description: 'Reduces move TP cost by 1 per rank if wearing light or no armor.',
+        description: 'Reduces move TP cost by 1 if wearing light or no armor. Stacks with Swift Step.',
         tree: 'agility',
-        maxRanks: 0,
+        maxRanks: 1,
         apply: (player) => {}
     },
     'riding': {
