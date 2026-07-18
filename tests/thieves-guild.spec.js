@@ -185,3 +185,119 @@ test.describe("Thieves' Guild: A Favor for the Guild (debt collection)", () => {
         expect(result.questStatus).toBe('completed');
     });
 });
+
+test.describe("Thieves' Guild: Blood Price + The Big Score", () => {
+    async function completeInitiation(page) {
+        await page.evaluate(() => {
+            window.factions.thieves_guild.standing = 0;
+            const guildmaster = window.entities.find(e => e.dialogueId === 'thieves_guildmaster');
+            window.npcDialogueTrees.thieves_guildmaster(guildmaster);
+        });
+        await clickDialogueOption(page, "I'll do it.");
+        await page.evaluate(() => {
+            const evidenceHex = Object.entries(window.tileObjects).find(([, o]) => o.evidenceKey === 'guild_initiation_prize')[0];
+            const [q, r] = evidenceHex.split(',').map(Number);
+            window.searchEvidence(q, r);
+        });
+    }
+    async function completeFavor(page) {
+        await page.evaluate(() => {
+            const guildmaster = window.entities.find(e => e.dialogueId === 'thieves_guildmaster');
+            window.npcDialogueTrees.thieves_guildmaster(guildmaster);
+        });
+        await clickDialogueOption(page, "I'll collect it");
+        await page.evaluate(() => {
+            const debtor = window.entities.find(e => e.name === 'Marsh Dobbins');
+            debtor.alive = false;
+            debtor.hp = 0;
+            const guildmaster = window.entities.find(e => e.dialogueId === 'thieves_guildmaster');
+            window.npcDialogueTrees.thieves_guildmaster(guildmaster);
+        });
+    }
+
+    test('Blood Price offers after Favor is done, and killing Silas resolves it with a Kingdom standing cost', async ({ page }) => {
+        await createCharacter(page);
+        await completeInitiation(page);
+        await completeFavor(page);
+        await page.evaluate(() => {
+            const guildmaster = window.entities.find(e => e.dialogueId === 'thieves_guildmaster');
+            window.npcDialogueTrees.thieves_guildmaster(guildmaster);
+        });
+        const offerDialogue = await readDialogue(page);
+        expect(offerDialogue.options.some(o => o.includes("I'll handle it"))).toBe(true);
+        await clickDialogueOption(page, "I'll handle it");
+
+        const before = await page.evaluate(() => ({
+            kingdom: window.factions.silverhart_kingdom.standing,
+            guild: window.factions.thieves_guild.standing,
+        }));
+        await page.evaluate(() => {
+            const informant = window.entities.find(e => e.name === 'Silas Crane');
+            informant.alive = false;
+            informant.hp = 0;
+        });
+        const after = await page.evaluate(() => {
+            const guildmaster = window.entities.find(e => e.dialogueId === 'thieves_guildmaster');
+            window.npcDialogueTrees.thieves_guildmaster(guildmaster);
+            return {
+                kingdom: window.factions.silverhart_kingdom.standing,
+                guild: window.factions.thieves_guild.standing,
+                questStatus: (window.questLog || []).find(q => q.id === 'guild_blood_price')?.status,
+            };
+        });
+        expect(after.questStatus).toBe('completed');
+        expect(after.guild).toBeGreaterThan(before.guild);
+        expect(after.kingdom).toBeLessThan(before.kingdom);
+    });
+
+    test('The Big Score is only offered to full members (standing 50+), and completing it steals from the Chancellor', async ({ page }) => {
+        await createCharacter(page);
+        await completeInitiation(page);
+        await completeFavor(page);
+        await page.evaluate(() => {
+            const guildmaster = window.entities.find(e => e.dialogueId === 'thieves_guildmaster');
+            window.npcDialogueTrees.thieves_guildmaster(guildmaster);
+        });
+        await clickDialogueOption(page, "I'll handle it");
+        await page.evaluate(() => {
+            const informant = window.entities.find(e => e.name === 'Silas Crane');
+            informant.alive = false;
+            informant.hp = 0;
+            window.factions.thieves_guild.standing = 30; // below the 50 threshold
+        });
+        await page.evaluate(() => {
+            const guildmaster = window.entities.find(e => e.dialogueId === 'thieves_guildmaster');
+            window.npcDialogueTrees.thieves_guildmaster(guildmaster);
+        });
+        const belowThreshold = await readDialogue(page);
+        expect(belowThreshold.options.some(o => o.includes("I'm in"))).toBe(false);
+
+        await page.evaluate(() => { window.factions.thieves_guild.standing = 55; });
+        await page.evaluate(() => {
+            const guildmaster = window.entities.find(e => e.dialogueId === 'thieves_guildmaster');
+            window.npcDialogueTrees.thieves_guildmaster(guildmaster);
+        });
+        const offerDialogue = await readDialogue(page);
+        expect(offerDialogue.options.some(o => o.includes("I'm in"))).toBe(true);
+        await clickDialogueOption(page, "I'm in");
+
+        const mission = await page.evaluate(() => window.activeStealthMission);
+        expect(mission.guardName).toBe('Chancellor Merric Vane');
+        expect(mission.evidenceKey).toBe('guild_big_score_prize');
+
+        const before = await page.evaluate(() => ({ gold: window.party[0].gold || 0, standing: window.factions.thieves_guild.standing }));
+        const after = await page.evaluate(() => {
+            const evidenceHex = Object.entries(window.tileObjects).find(([, o]) => o.evidenceKey === 'guild_big_score_prize')[0];
+            const [q, r] = evidenceHex.split(',').map(Number);
+            window.searchEvidence(q, r);
+            return {
+                gold: window.party[0].gold || 0,
+                standing: window.factions.thieves_guild.standing,
+                questStatus: (window.questLog || []).find(q => q.id === 'guild_big_score')?.status,
+            };
+        });
+        expect(after.gold).toBeGreaterThan(before.gold);
+        expect(after.standing).toBeGreaterThan(before.standing);
+        expect(after.questStatus).toBe('completed');
+    });
+});

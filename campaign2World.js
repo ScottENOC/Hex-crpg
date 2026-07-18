@@ -1761,6 +1761,10 @@ function buildSilverhartPalace(roadEnd) {
     if (window.campaign2PalaceChancellor) {
         window.entities.push(window.buildNPC({ ...window.campaign2PalaceChancellor, hex: { q: councilCenter.q, r: councilCenter.r - 1 } }));
     }
+    // "The Big Score" (thieves_guildmaster) capstone heist target — the
+    // Chancellor's own strongbox, tucked in the council chamber's far
+    // corner, away from the table/bench/Chancellor's own hex.
+    window.tileObjects[`${councilCenter.q + 3},${councilCenter.r + 2}`] = { type: 'evidence', evidenceKey: 'guild_big_score_prize', lightRadius: 0 };
 
     // Royal Wizard's Tower: a small standalone chamber further out to the
     // south-west, clear of the throne room's own wall (it used to sit close
@@ -2459,6 +2463,12 @@ function buildSilverhartPalace(roadEnd) {
     window.campaign2SilverhartWarrensCenter = { q: throneCenter.q, r: warrensRow };
     if (window.campaign2ThievesGuildDebtor) {
         window.entities.push(window.buildNPC({ ...window.campaign2ThievesGuildDebtor, hex: { q: thievesGuildCenter.q + 4, r: thievesGuildCenter.r + 3 } }));
+    }
+    // Target of "Blood Price" (thieves_guildmaster) — lurks near the
+    // Warrens' edge, close enough to the guild's own turf to plausibly be
+    // watching it for the Crown.
+    if (window.campaign2ThievesGuildInformant) {
+        window.entities.push(window.buildNPC({ ...window.campaign2ThievesGuildInformant, hex: { q: thievesGuildCenter.q - 5, r: thievesGuildCenter.r + 5 } }));
     }
 
     // Diplomatic Quarter: south of the gate, along the road's continued

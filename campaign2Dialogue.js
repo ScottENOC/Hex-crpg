@@ -408,11 +408,98 @@ window.npcDialogueTrees = {
             ]);
             return;
         }
-        if (quest && quest.status === 'completed' && favorQuest && favorQuest.status === 'completed') {
-            window.showDialogue(npc, standing >= 50
-                ? "You've more than proven yourself. Full member, as far as I'm concerned — Tessa will treat you accordingly."
-                : "Twice now you've come through. Keep it up.", [
+        // "Blood Price" — the third rung, opens once the debt's settled.
+        // Unlike the first two, this one costs the player something with
+        // the Kingdom, not just the guild's own approval.
+        const bloodQuest = (window.questLog || []).find(q => q.id === 'guild_blood_price');
+        if (quest && quest.status === 'completed' && favorQuest && favorQuest.status === 'completed' && bloodQuest && bloodQuest.status === 'active') {
+            const informantAlive = window.entities.some(e => e.name === 'Silas Crane' && e.alive);
+            if (!informantAlive) {
+                bloodQuest.status = 'completed';
+                window.party[0].gold = (window.party[0].gold || 0) + 40;
+                if (window.adjustReputation) window.adjustReputation(window.factions.thieves_guild, 20, 20);
+                if (window.adjustReputation) window.adjustReputation(window.factions.silverhart_kingdom, -15, 15);
+                if (window.gainExp) window.gainExp(150);
+                window.showMessage("Silas Crane won't be reporting to anyone again. (+40 gold, +Thieves' Guild standing, -Silverhart Kingdom standing)");
+                window.showDialogue(npc, "Good. The Crown's ear on us just went quiet — that's worth more to me than the coin. You've got real weight now.", [
+                    { label: "It's done.", action: () => {} }
+                ]);
+                return;
+            }
+            window.showDialogue(npc, "Silas Crane. He's been selling us out to the Crown for months. Doesn't matter how — just make sure he doesn't talk again.", [
+                { label: "Working on it.", action: () => {} }
+            ]);
+            return;
+        }
+        // "The Big Score" — the capstone, only for full members (standing 50+).
+        const bigScoreQuest = (window.questLog || []).find(q => q.id === 'guild_big_score');
+        if (quest && quest.status === 'completed' && favorQuest && favorQuest.status === 'completed' && bloodQuest && bloodQuest.status === 'completed') {
+            if (bigScoreQuest && bigScoreQuest.status === 'active') {
+                window.showDialogue(npc, "The Chancellor's own strongbox, in the council chamber. This is the one that matters — don't get caught, and don't come back empty-handed.", [
+                    { label: "Working on it.", action: () => {} }
+                ]);
+                return;
+            }
+            if (bigScoreQuest && bigScoreQuest.status === 'completed') {
+                window.showDialogue(npc, "You robbed the Chancellor blind and walked out clean. That's not odd jobs anymore — that's legend. You're one of us, no question left about it.", [
+                    { label: "Glad to be of service.", action: () => {} }
+                ]);
+                return;
+            }
+            if (standing >= 50) {
+                window.showDialogue(npc, "There's one more thing, if you've got the nerve for it. The Chancellor keeps a strongbox in the council chamber — Kingdom secrets, guild ledgers he shouldn't have, coin enough to matter. Pull this off and there's nothing left to prove.", [
+                    {
+                        label: "I'm in.",
+                        action: () => {
+                            window.questLog.push({
+                                id: 'guild_big_score', title: 'The Big Score', giver: 'Corvin Ashe', status: 'active',
+                                description: "Steal from Chancellor Merric Vane's strongbox in the Silverhart council chamber without being seen, and bring it to Corvin Ashe."
+                            });
+                            if (window.startStealthMission) {
+                                window.startStealthMission({
+                                    questId: 'guild_big_score',
+                                    guardName: 'Chancellor Merric Vane',
+                                    evidenceKey: 'guild_big_score_prize',
+                                    itemId: 'guild_big_score_prize',
+                                    evidenceFlavor: "the Chancellor's strongbox, heavy with coin and sealed letters",
+                                    factionSpiedOn: 'silverhart_kingdom',
+                                    failStandingHit: -25,
+                                    objectiveText: "Steal from the Chancellor's strongbox without being seen.",
+                                    onSuccess: () => {
+                                        const q = window.questLog.find(q => q.id === 'guild_big_score');
+                                        if (q) q.status = 'completed';
+                                        if (window.adjustReputation) window.adjustReputation(window.factions.thieves_guild, 30, 25);
+                                        window.party[0].gold = (window.party[0].gold || 0) + 100;
+                                        if (window.gainExp) window.gainExp(400);
+                                        window.showMessage("The Big Score, pulled off clean. (+100 gold, +Thieves' Guild standing)");
+                                    }
+                                });
+                            }
+                            window.showMessage("Quest added: The Big Score.");
+                        }
+                    },
+                    { label: "Not yet.", action: () => {} }
+                ]);
+                return;
+            }
+            window.showDialogue(npc, "Twice now you've come through. There's bigger work for a full member of this guild — keep earning it.", [
                 { label: "Good to hear.", action: () => {} }
+            ]);
+            return;
+        }
+        if (quest && quest.status === 'completed' && favorQuest && favorQuest.status === 'completed' && !bloodQuest) {
+            window.showDialogue(npc, "You've done right by us twice now. There's a harder job, if you want it — Silas Crane's been selling word of guild business to the Crown. He needs to stop, permanently.", [
+                {
+                    label: "I'll handle it.",
+                    action: () => {
+                        window.questLog.push({
+                            id: 'guild_blood_price', title: 'Blood Price', giver: 'Corvin Ashe', status: 'active',
+                            description: "Kill Silas Crane, the Crown's informant on the Thieves' Guild, and report back to Corvin Ashe."
+                        });
+                        window.showMessage("Quest added: Blood Price.");
+                    }
+                },
+                { label: "Not that far.", action: () => {} }
             ]);
             return;
         }
@@ -515,6 +602,13 @@ window.npcDialogueTrees = {
             },
             { label: "Leave.", action: () => {} }
         ]);
+    },
+    // Silas Crane — target of "Blood Price" (thieves_guildmaster). Denies
+    // everything right up until he's dead; there's no talk-down here, the
+    // quest resolves on his death alone, same convention as Marsh's
+    // forceful-resolution path above.
+    thieves_guild_informant: (npc) => {
+        window.showDialogue(npc, "Don't know what you've heard, but I'm nobody. Just a man minding his own business.", [{ label: "...", action: () => {} }]);
     },
     wick_hallow: (npc) => {
         const ironbondQuest = window.questLog && window.questLog.find(q => q.id === 'ironbond_pitch');

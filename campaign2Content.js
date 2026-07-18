@@ -599,6 +599,17 @@ window.campaign2ThievesGuildDebtor = {
     side: 'neutral', factionId: null, color: '#5a4a3a',
     dialogueId: 'thieves_guild_debtor'
 };
+// Silas Crane: the Crown's informant on the guild's own turf. Target of
+// "Blood Price" (thieves_guildmaster) — the third rung of the questline, and
+// the point where helping the guild starts costing the player something
+// with the Kingdom, not just goblins/Ironbond.
+window.campaign2ThievesGuildInformant = {
+    name: 'Silas Crane', title: 'Informant',
+    race: 'human', gender: 'male',
+    classLevels: ['rogue'], skillPicks: ['health', 'dagger_hit'], equipment: ['dagger', 'light_armor'],
+    side: 'neutral', factionId: null, color: '#4a4a5a',
+    dialogueId: 'thieves_guild_informant'
+};
 // The Bone Trader: the necromancer_cult's own equivalent of a general
 // store, placed in the crypt/barrow rather than any human settlement — the
 // villain-path player's alternative once human merchants refuse them (see
