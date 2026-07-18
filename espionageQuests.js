@@ -89,6 +89,10 @@ function searchEvidence(q, r) {
     window.player.inventory.push(mission.itemId);
     window.activeStealthMission = null;
     window.showMessage(`You find ${mission.evidenceFlavor} and pocket it. Time to get out before anyone notices.`);
+    // Optional per-mission success hook (e.g. the Thieves' Guild initiation
+    // quest bumps thieves_guild standing here) — every existing mission
+    // config simply omits this, so it's a no-op for them.
+    if (mission.onSuccess) mission.onSuccess();
 }
 window.searchEvidence = searchEvidence;
 

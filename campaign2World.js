@@ -2079,6 +2079,10 @@ function buildSilverhartPalace(roadEnd) {
     if (window.campaign2SilverhartGeneralGoods) {
         window.entities.push(window.buildNPC({ ...window.campaign2SilverhartGeneralGoods, hex: { q: generalGoodsCenter.q, r: generalGoodsCenter.r + 1 } }));
     }
+    // Thieves' Guild "Initiation" quest target — a strongbox tucked in the
+    // back corner of the general goods store, away from the door and the
+    // shopkeeper's own hex (see thieves_guildmaster, campaign2Dialogue.js).
+    window.tileObjects[`${generalGoodsCenter.q - 2},${generalGoodsCenter.r - 1}`] = { type: 'evidence', evidenceKey: 'guild_initiation_prize', lightRadius: 0 };
 
     const clothierCenter = { q: merchantFarQ + 3, r: throneCenter.r - 6 };
     const clothierDoor = { q: clothierCenter.q - 3, r: clothierCenter.r };
@@ -2448,6 +2452,9 @@ function buildSilverhartPalace(roadEnd) {
     window.campaign2ThievesGuildCenter = thievesGuildCenter;
     if (window.campaign2ThievesGuildFence) {
         window.entities.push(window.buildNPC({ ...window.campaign2ThievesGuildFence, hex: { q: thievesGuildCenter.q, r: thievesGuildCenter.r + 1 } }));
+    }
+    if (window.campaign2ThievesGuildmaster) {
+        window.entities.push(window.buildNPC({ ...window.campaign2ThievesGuildmaster, hex: { q: thievesGuildCenter.q - 1, r: thievesGuildCenter.r } }));
     }
     window.campaign2SilverhartWarrensCenter = { q: throneCenter.q, r: warrensRow };
 

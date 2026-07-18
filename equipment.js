@@ -78,6 +78,7 @@ const items = {
     'travelers_cloakpin': { id: 'travelers_cloakpin', name: "Traveler's Cloakpin", type: 'accessory', buyPrice: 90, skills: { 'sure_footed': 1 }, description: "Keeps a cloak from snagging — the wearer rarely stumbles on rough ground." },
     'moonlit_armor': { id: 'moonlit_armor', name: "Moonlit Chain", type: 'armor', reduction: 2, buyPrice: 320, lightRadius: 3, description: 'Faintly luminous links, like captured moonlight — dim, but never quite dark around you.' },
     'huntsman_helm': { id: 'huntsman_helm', name: "Huntsman's Helm", type: 'helmet', reduction: 1, buyPrice: 140, auraTag: 'wolf', auraRadius: 5, description: "A wolf-tooth is set in the brow; it aches faintly when the pack is near." },
+    'shadowcloak': { id: 'shadowcloak', name: "Shadowcloak", type: 'accessory', buyPrice: 380, skills: { 'stealth_agility': 1 }, description: "Thieves' Guild work — dyed to swallow torchlight rather than reflect it." },
 
     // Quest items — no buyPrice, so they never show up in the shop.
     'elder_locket': { id: 'elder_locket', name: 'Tarnished Locket', type: 'quest_item' },

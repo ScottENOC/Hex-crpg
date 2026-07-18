@@ -57,7 +57,16 @@ window.factions = {
     // (elven_ambassador, campaign2Dialogue.js) well before this capital
     // existed in the world — same "that quest thread now actually leads
     // somewhere" shape as dwarven_kingdom/Kragmoor above.
-    elven_realm:        { id: 'elven_realm',        name: 'The Sylvan Court',       race: 'elf', knowledge: 0, standing: 0 }
+    elven_realm:        { id: 'elven_realm',        name: 'The Sylvan Court',       race: 'elf', knowledge: 0, standing: 0 },
+    // Silverhart's Thieves' Guild, tucked behind the Warrens (see
+    // campaign2ThievesGuildCenter, campaign2World.js). Unlike every other
+    // faction here, standing seeds at a flat 0 for every race — the guild
+    // doesn't care who you are, only what you've proven. Thresholds (read
+    // by thieves_guildmaster/thieves_guild_fence, campaign2Dialogue.js):
+    // <0 hostile (enforcers sent after the player), 0-19 refused/watched,
+    // 20-49 accepted (odd jobs, the fence's real stock), 50+ full member
+    // (guild-quest content, the fence's best prices).
+    thieves_guild:      { id: 'thieves_guild',       name: "Silverhart's Thieves' Guild", race: null, knowledge: 0, standing: 0 }
 };
 
 function seedStanding(race, playerRace) {

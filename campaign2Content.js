@@ -571,6 +571,22 @@ window.campaign2ThievesGuildFence = {
     dialogueId: 'thieves_guild_fence'
 };
 window.campaign2ThievesGuildFenceItems = ['dagger', 'light_armor', 'potion_health'];
+// Better stock, unlocked once thieves_guild standing reaches full-member
+// (50+, see thieves_guild_fence's dialogue gating in campaign2Dialogue.js) —
+// same "prices/stock improve with standing" shape as the goblin trader once
+// actually allied (campaign2Dialogue.js's chief_skarnub thread).
+window.campaign2ThievesGuildFenceMemberItems = ['dagger', 'featherweight_dagger', 'light_armor', 'potion_health', 'shadowcloak'];
+
+// Runs the guild's actual business — the one NPC who decides whether the
+// player is watched, an odd-jobber, or a real member (see thieves_guildmaster
+// dialogue, campaign2Dialogue.js).
+window.campaign2ThievesGuildmaster = {
+    name: 'Corvin Ashe', title: 'Guildmaster',
+    race: 'human', gender: 'male',
+    classLevels: ['rogue'], skillPicks: ['health', 'dagger_hit', 'stealth_agility'], equipment: ['dagger', 'light_armor'],
+    side: 'neutral', factionId: null, color: '#3a2a4a',
+    dialogueId: 'thieves_guildmaster'
+};
 // The Bone Trader: the necromancer_cult's own equivalent of a general
 // store, placed in the crypt/barrow rather than any human settlement — the
 // villain-path player's alternative once human merchants refuse them (see

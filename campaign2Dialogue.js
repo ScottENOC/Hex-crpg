@@ -353,10 +353,90 @@ window.npcDialogueTrees = {
             { label: "Just looking.", action: () => {} }
         ]);
     },
+    // Silverhart's Thieves' Guild — see the thieves_guild faction entry
+    // (factions.js) for the standing thresholds both trees below share:
+    // <0 hostile, 0-19 refused/watched, 20-49 accepted, 50+ full member.
     thieves_guild_fence: (npc) => {
-        window.showDialogue(npc, "Keep your voice down. I don't ask where coin comes from, and you don't ask where my stock comes from.", [
-            { label: "Show me what you've got.", action: () => window.openShop({ itemIds: window.campaign2ThievesGuildFenceItems, mounts: false }) },
+        const standing = window.factions?.thieves_guild?.standing ?? 0;
+        if (standing < 0) {
+            window.showDialogue(npc, "You're not welcome here. Corvin's word, not mine — take it up with him if you've got a death wish.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+        if (standing < 20) {
+            window.showDialogue(npc, "I don't know you. Whatever you're after, you won't find it from me.", [{ label: "Fair enough.", action: () => {} }]);
+            return;
+        }
+        const member = standing >= 50;
+        window.showDialogue(npc, member
+            ? "Corvin vouches for you now. Good — that means you actually get to see what I keep in the back."
+            : "Keep your voice down. I don't ask where coin comes from, and you don't ask where my stock comes from.", [
+            { label: "Show me what you've got.", action: () => window.openShop({ itemIds: member ? window.campaign2ThievesGuildFenceMemberItems : window.campaign2ThievesGuildFenceItems, mounts: false }) },
             { label: "Just passing through.", action: () => {} }
+        ]);
+    },
+    thieves_guildmaster: (npc) => {
+        const standing = window.factions?.thieves_guild?.standing ?? 0;
+        if (standing < 0) {
+            window.showDialogue(npc, "You've got some nerve, showing your face here after that. Walk away while you still can.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+
+        const quest = (window.questLog || []).find(q => q.id === 'guild_initiation');
+        if (quest && quest.status === 'active') {
+            window.showDialogue(npc, "Perrin Vance's strongbox, at the general goods store. Get in, get it, don't get seen. Come back when it's done — or when you've been caught, I suppose.", [
+                { label: "Working on it.", action: () => {} }
+            ]);
+            return;
+        }
+        if (quest && quest.status === 'completed') {
+            window.showDialogue(npc, standing >= 50
+                ? "You've more than proven yourself. Full member, as far as I'm concerned — Tessa will treat you accordingly."
+                : "Clean work. You're one of ours now, in the loose sense — odd jobs, the fence's ordinary stock. Keep at it and we'll talk about more.", [
+                { label: "Good to hear.", action: () => {} }
+            ]);
+            return;
+        }
+
+        if (standing < 20) {
+            window.showDialogue(npc, "Everyone who walks in here wants to be one of us. Words are cheap. Prove it — Perrin Vance at the general goods store keeps a strongbox under his counter. Bring me what's in it, and don't get seen doing it. That's the only introduction that means anything down here.", [
+                {
+                    label: "I'll do it.",
+                    action: () => {
+                        window.questLog = window.questLog || [];
+                        window.questLog.push({
+                            id: 'guild_initiation', title: 'Initiation', giver: 'Corvin Ashe', status: 'active',
+                            description: "Steal from Perrin Vance's strongbox at the Silverhart general goods store without being seen, and bring it to Corvin Ashe."
+                        });
+                        if (window.startStealthMission) {
+                            window.startStealthMission({
+                                questId: 'guild_initiation',
+                                guardName: 'Perrin Vance',
+                                evidenceKey: 'guild_initiation_prize',
+                                itemId: 'guild_initiation_prize',
+                                evidenceFlavor: "a fat purse from Perrin Vance's strongbox",
+                                factionSpiedOn: 'silverhart_kingdom',
+                                failStandingHit: -10,
+                                objectiveText: "Steal from Perrin Vance's strongbox without being seen.",
+                                onSuccess: () => {
+                                    const q = window.questLog.find(q => q.id === 'guild_initiation');
+                                    if (q) q.status = 'completed';
+                                    if (window.adjustReputation) window.adjustReputation(window.factions.thieves_guild, 25, 20);
+                                    window.showMessage("The guild will hear about this. (+Thieves' Guild standing)");
+                                }
+                            });
+                        }
+                        window.showMessage("Quest added: Initiation.");
+                    }
+                },
+                { label: "Not interested.", action: () => {} }
+            ]);
+            return;
+        }
+
+        window.showDialogue(npc, standing >= 50
+            ? "You've earned your place here. What do you need?"
+            : "You've done right by us so far. Keep it that way.", [
+            { label: "Just checking in.", action: () => {} }
         ]);
     },
     wick_hallow: (npc) => {
