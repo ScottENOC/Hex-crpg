@@ -388,11 +388,47 @@ window.npcDialogueTrees = {
             ]);
             return;
         }
-        if (quest && quest.status === 'completed') {
+        // "A Favor for the Guild" only opens up once Initiation is behind
+        // the player — a second rung, not an alternate way in.
+        const favorQuest = (window.questLog || []).find(q => q.id === 'guild_favor');
+        if (quest && quest.status === 'completed' && favorQuest && favorQuest.status === 'active') {
+            const debtorAlive = window.entities.some(e => e.name === 'Marsh Dobbins' && e.alive);
+            if (!debtorAlive) {
+                favorQuest.status = 'completed';
+                window.party[0].gold = (window.party[0].gold || 0) + 15;
+                if (window.adjustReputation) window.adjustReputation(window.factions.thieves_guild, 5, 15);
+                window.showMessage("Corvin takes the coin off the body without much ceremony. (+15 gold, +Thieves' Guild standing)");
+                window.showDialogue(npc, "Wasn't the quiet way I'd have picked, but the debt's the debt. Rougher than the guild likes, but it's done.", [
+                    { label: "It's done.", action: () => {} }
+                ]);
+                return;
+            }
+            window.showDialogue(npc, "Marsh Dobbins, out in the Warrens. He's been ducking our collector for a month. However you get it out of him, get it.", [
+                { label: "Working on it.", action: () => {} }
+            ]);
+            return;
+        }
+        if (quest && quest.status === 'completed' && favorQuest && favorQuest.status === 'completed') {
             window.showDialogue(npc, standing >= 50
                 ? "You've more than proven yourself. Full member, as far as I'm concerned — Tessa will treat you accordingly."
-                : "Clean work. You're one of ours now, in the loose sense — odd jobs, the fence's ordinary stock. Keep at it and we'll talk about more.", [
+                : "Twice now you've come through. Keep it up.", [
                 { label: "Good to hear.", action: () => {} }
+            ]);
+            return;
+        }
+        if (quest && quest.status === 'completed' && !favorQuest) {
+            window.showDialogue(npc, "Clean work, the strongbox. You're one of ours now, in the loose sense — odd jobs, the fence's ordinary stock. There's actual work too, if you want it: Marsh Dobbins out in the Warrens owes the guild coin and keeps finding excuses. Collect it, however you see fit.", [
+                {
+                    label: "I'll collect it.",
+                    action: () => {
+                        window.questLog.push({
+                            id: 'guild_favor', title: 'A Favor for the Guild', giver: 'Corvin Ashe', status: 'active',
+                            description: "Collect the debt Marsh Dobbins owes the Thieves' Guild, in the Silverhart Warrens."
+                        });
+                        window.showMessage("Quest added: A Favor for the Guild.");
+                    }
+                },
+                { label: "Not right now.", action: () => {} }
             ]);
             return;
         }
@@ -437,6 +473,47 @@ window.npcDialogueTrees = {
             ? "You've earned your place here. What do you need?"
             : "You've done right by us so far. Keep it that way.", [
             { label: "Just checking in.", action: () => {} }
+        ]);
+    },
+    // Marsh Dobbins — target of "A Favor for the Guild" (thieves_guildmaster).
+    // Three ways to close the debt out, all of them valid: talk it out of
+    // him, threaten it out of him (the guild's name does the work), or just
+    // kill him and loot it — the quest doesn't care which, only that the
+    // coin ends up with Corvin.
+    thieves_guild_debtor: (npc) => {
+        const favorQuest = (window.questLog || []).find(q => q.id === 'guild_favor');
+        if (!favorQuest || favorQuest.status !== 'active') {
+            window.showDialogue(npc, "Whatever you're selling, I'm not buying. And whatever I owe, I don't have it. Move along.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+        if (npc.debtPaid) {
+            window.showDialogue(npc, "We're square. I told you, I'm good for it.", [{ label: "See that you stay that way.", action: () => {} }]);
+            return;
+        }
+        const settle = () => {
+            npc.debtPaid = true;
+            favorQuest.status = 'completed';
+            window.party[0].gold = (window.party[0].gold || 0) + 20;
+            if (window.adjustReputation) window.adjustReputation(window.factions.thieves_guild, 10, 15);
+            window.showMessage("Marsh hands over what he owes. (+20 gold, +Thieves' Guild standing)");
+        };
+        window.showDialogue(npc, "Look, I know why you're here. I just need more time, I—", [
+            {
+                label: "\"Corvin Ashe sent me. Pay up.\"",
+                action: () => {
+                    window.showDialogue(npc, "...Corvin. Right. Here — take it, just don't let him send anyone worse next time.", [
+                        { label: "Take the coin.", action: settle }
+                    ]);
+                }
+            },
+            {
+                label: "\"I can wait a day or two.\" (let him off)",
+                action: () => {
+                    if (window.adjustReputation) window.adjustReputation(window.factions.thieves_guild, -5, 10);
+                    window.showMessage("Corvin won't like hearing you went soft on this. (-Thieves' Guild standing)");
+                }
+            },
+            { label: "Leave.", action: () => {} }
         ]);
     },
     wick_hallow: (npc) => {

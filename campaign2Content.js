@@ -587,6 +587,18 @@ window.campaign2ThievesGuildmaster = {
     side: 'neutral', factionId: null, color: '#3a2a4a',
     dialogueId: 'thieves_guildmaster'
 };
+// Marsh Dobbins: a small-time debtor in the Warrens who's been ducking the
+// guild's collector for weeks. Target of the "A Favor for the Guild" quest
+// (thieves_guildmaster) — the player can talk him down, shake him for the
+// coin, or just take it by force; all three resolve the debt one way or
+// another, so this is deliberately not a hard fail state.
+window.campaign2ThievesGuildDebtor = {
+    name: 'Marsh Dobbins', title: 'Debtor',
+    race: 'human', gender: 'male',
+    classLevels: ['fighter'], skillPicks: ['health'], equipment: ['club'],
+    side: 'neutral', factionId: null, color: '#5a4a3a',
+    dialogueId: 'thieves_guild_debtor'
+};
 // The Bone Trader: the necromancer_cult's own equivalent of a general
 // store, placed in the crypt/barrow rather than any human settlement — the
 // villain-path player's alternative once human merchants refuse them (see

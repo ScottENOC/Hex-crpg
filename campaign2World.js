@@ -2457,6 +2457,9 @@ function buildSilverhartPalace(roadEnd) {
         window.entities.push(window.buildNPC({ ...window.campaign2ThievesGuildmaster, hex: { q: thievesGuildCenter.q - 1, r: thievesGuildCenter.r } }));
     }
     window.campaign2SilverhartWarrensCenter = { q: throneCenter.q, r: warrensRow };
+    if (window.campaign2ThievesGuildDebtor) {
+        window.entities.push(window.buildNPC({ ...window.campaign2ThievesGuildDebtor, hex: { q: thievesGuildCenter.q + 4, r: thievesGuildCenter.r + 3 } }));
+    }
 
     // Diplomatic Quarter: south of the gate, along the road's continued
     // extension — an elven embassy, a dwarven embassy, embassies for two
