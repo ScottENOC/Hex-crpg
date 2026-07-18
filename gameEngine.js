@@ -3594,6 +3594,7 @@ function interactWithTileObject(q, r, player) {
     if (doorObj.type === 'gate_lever' && window.pullNorthwatchGateLever) { window.pullNorthwatchGateLever(); return; }
     if (doorObj.type === 'unicorn_track' && window.showUnicornTrackDetail) { window.showUnicornTrackDetail(doorObj, q, r); return; }
     if (doorObj.type === 'rune_forge' && window.openRuneForge) { window.openRuneForge(); return; }
+    if (doorObj.type === 'storage_chest' && window.openStorageChest) { window.openStorageChest(q, r); return; }
     if (doorObj.type === 'fireplace') { toggleFireplace(q, r, player); return; }
 }
 window.interactWithTileObject = interactWithTileObject;
@@ -3942,6 +3943,20 @@ function getMoveCostMult(q, r, entity) {
             entity.hex.q === obj.interiorHex.q && entity.hex.r === obj.interiorHex.r;
         const canClimb = entity?.skills?.agile_climber;
         mult = (hasLadder || canClimb) ? 2 : terrain.moveCostMult;
+    }
+    // ENCUMBRANCE: the whole party shares one carry-capacity pool (see
+    // partyInventory.js) — going over it doesn't block a pickup or
+    // purchase, it just makes every party member's (and their mount's)
+    // steps heavier, softened per rank by quartermaster (skills.js).
+    const isPlayerSide = entity && (entity.side === 'player' || (entity.rider && entity.rider.side === 'player'));
+    if (isPlayerSide && window.isPartyOverencumbered && window.isPartyOverencumbered()) {
+        mult *= window.getEncumbranceMoveMult();
+    }
+    // HAMSTRING (skills.js): a stacking on-hit debuff applied in
+    // resolveAttack — the TARGET pays this, so it never touches the
+    // attacker's own damage output the way stacking a bonus would.
+    if (entity && entity.hobbledStacks) {
+        mult *= 1 + entity.hobbledStacks * 0.2;
     }
     return mult;
 }
@@ -6766,6 +6781,28 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   if (attacker.witheringTouchStacks) {
       target.witherTicks = (target.witherTicks || 0) + 5;
       target.witherDamage = attacker.witheringTouchStacks;
+  }
+
+  // SUNDER ARMOR (skills.js): weakens the TARGET's own reduction instead of
+  // buffing the attacker's damage — capped at the skill's own rank count so
+  // it can't be chipped away indefinitely across a long fight.
+  if (attacker.skills?.sunder_armor && !isRanged) {
+      target.sunderStacks = target.sunderStacks || 0;
+      if (target.sunderStacks < attacker.skills.sunder_armor) {
+          target.sunderStacks++;
+          target.baseReduction = Math.max(0, (target.baseReduction || 0) - 1);
+          sharedMessage(`${attacker.name} sunders ${target.name}'s armor!`);
+      }
+  }
+
+  // HAMSTRING (skills.js): stacks a movement-cost debuff on the TARGET
+  // (consumed in getMoveCostMult) rather than speeding up the attacker.
+  if (attacker.skills?.hamstring && !isRanged) {
+      target.hobbledStacks = target.hobbledStacks || 0;
+      if (target.hobbledStacks < attacker.skills.hamstring) {
+          target.hobbledStacks++;
+          sharedMessage(`${target.name} is hobbled!`);
+      }
   }
 
   // SIPHONING PALM (Way of the Open Palm): an unarmed hit drains mana

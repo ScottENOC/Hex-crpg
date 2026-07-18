@@ -200,6 +200,17 @@ function loadGame(saveName = "rpg_save_game") {
         // engine hasn't been initialized yet this session.
         window.player = gameState.player;
         window.party = gameState.party || [window.player];
+        // Every party member's saved `.inventory` is its own duplicate
+        // snapshot of the same shared pool (an accessor property serializes
+        // to a plain array copy per member — see wireSharedInventory,
+        // partyInventory.js) — merge:false re-attaches everyone to ONE
+        // canonical copy (the player's) instead of concatenating N copies
+        // of the same items back together.
+        window.partyInventory = undefined;
+        if (window.wireSharedInventory) {
+            window.wireSharedInventory(window.player, { merge: false });
+            window.party.forEach(p => { if (p !== window.player) window.wireSharedInventory(p, { merge: false }); });
+        }
         window.currentCampaign = gameState.currentCampaign || "3";
         window.selectedCharacterIndex = gameState.selectedCharacterIndex || 0;
 

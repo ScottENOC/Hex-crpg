@@ -15,6 +15,7 @@ if (!window.benchedCompanions) window.benchedCompanions = [];
 function addCompanionToRoster(companionData) {
     if (window.party.length < window.MAX_ACTIVE_PARTY) {
         window.party.push(companionData);
+        if (window.wireSharedInventory) window.wireSharedInventory(companionData);
         const near = window.player?.hex || window.entities.find(e => e.side === 'player')?.hex || { q: 0, r: 0 };
         const spawnHex = (window.getNeighbors(near.q, near.r).find(h => !window.getEntityAtHex(h.q, h.r) && window.getTerrainAt(h.q, h.r).name !== 'Wall' && window.getTerrainAt(h.q, h.r).name !== 'Water')) || near;
         const ent = new window.Entity(companionData.name, 'red', spawnHex, (companionData.attributes?.agility || 10) + 10);

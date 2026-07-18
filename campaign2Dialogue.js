@@ -4562,6 +4562,7 @@ function rescuePaladin() {
     companion.dialogueId = 'companion_ser_aldric';
 
     window.party.push(companion);
+    if (window.wireSharedInventory) window.wireSharedInventory(companion);
     const ent = new window.Entity(companion.name, 'red', captiveEnt.hex, (companion.attributes.agility || 10) + 10);
     ent.side = 'player';
     Object.assign(ent, companion);
@@ -4612,6 +4613,7 @@ function recruitGoblinCompanion() {
     companion.dialogueId = 'companion_nix_sharpear';
 
     window.party.push(companion);
+    if (window.wireSharedInventory) window.wireSharedInventory(companion);
     const ent = new window.Entity(companion.name, '#5a7a3a', nixEnt.hex, (companion.attributes.agility || 10) + 10);
     ent.side = 'player';
     Object.assign(ent, companion);
@@ -4661,6 +4663,7 @@ function recruitOrcCompanion() {
     companion.dialogueId = 'companion_orc_warlord';
 
     window.party.push(companion);
+    if (window.wireSharedInventory) window.wireSharedInventory(companion);
     const ent = new window.Entity(companion.name, '#7a3a1f', warlordEnt.hex, (companion.attributes.agility || 10) + 10);
     ent.side = 'player';
     Object.assign(ent, companion);
@@ -4700,6 +4703,7 @@ function grantStarFortCompanion(side) {
     if (customImage) companion.customImage = customImage;
 
     window.party.push(companion);
+    if (window.wireSharedInventory) window.wireSharedInventory(companion);
     const ent = new window.Entity(companion.name, 'red', spawnHex, (companion.attributes.agility || 10) + 10);
     ent.side = 'player';
     Object.assign(ent, companion);
@@ -4793,6 +4797,7 @@ window.npcDialogueTrees.brother_alden = (npc) => {
                 attributes: npc.attributes, classLevelsGranted: npc.classLevelsGranted,
             });
             window.party.push(companion);
+    if (window.wireSharedInventory) window.wireSharedInventory(companion);
             npc.side = 'player';
             npc.isNPC = false;
             npc.aiControlled = false;
@@ -4887,6 +4892,7 @@ window.recruitFenn = recruitFenn;
 // party-side one and register it everywhere the game expects a party member.
 function finishRecruiting(companion, placeholder) {
     window.party.push(companion);
+    if (window.wireSharedInventory) window.wireSharedInventory(companion);
     const ent = new window.Entity(companion.name, 'red', placeholder.hex, (companion.attributes.agility || 10) + 10);
     ent.side = 'player';
     Object.assign(ent, companion);

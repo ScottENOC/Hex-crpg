@@ -1893,6 +1893,57 @@ Object.assign(skills, {
     }
 });
 
+// A batch of skills that strengthen the party without stacking a flat
+// combat number (see partyInventory.js's carry-capacity system and the
+// resources.js gathering nodes these hook into). Every one changes WHAT the
+// party can do rather than making an existing attack roll bigger — an
+// enemy debuff, a shared resource, a discount, or the encumbrance system's
+// own mitigation, never a bonus applied to your own to-hit/damage.
+Object.assign(skills, {
+    'strong_back': {
+        name: 'Strong Back',
+        description: "Adds 15 to the party's shared carrying capacity per rank — the whole party carries one pool, so anyone who takes this makes everyone's packs a little lighter.",
+        tree: 'strength',
+        maxRanks: 4,
+        apply: (player) => {}
+    },
+    'sunder_armor': {
+        name: 'Sunder Armor',
+        description: "A melee hit chips away at the target's armor instead of your own damage — each rank reduces the target's damage reduction by 1 for the rest of the fight, stacking up to 2 hits.",
+        tree: 'weapons',
+        maxRanks: 2,
+        apply: (player) => {}
+    },
+    'hamstring': {
+        name: 'Hamstring',
+        description: "A melee hit slows the target instead of hurting it more — each hit adds a stack of Hobbled (+20% movement cost), stacking up to 3 times for the rest of the fight.",
+        tree: 'weapons',
+        maxRanks: 3,
+        apply: (player) => {}
+    },
+    'appraiser': {
+        name: 'Appraiser',
+        description: "A sharp eye for what things are actually worth — every shop's buy prices are reduced 5% per rank (capped at 15%).",
+        tree: 'social',
+        maxRanks: 3,
+        apply: (player) => {}
+    },
+    'keen_forager': {
+        name: 'Keen Forager',
+        description: 'Always finds the best of what a gathering node has to offer — ore veins, herb patches, fruit trees, and fishing spots all yield their maximum amount instead of a random roll.',
+        tree: 'nature',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+    'quartermaster': {
+        name: 'Quartermaster',
+        description: "Knows how to pack a party's gear so being overloaded hurts less — halves the movement penalty from being over the party's shared carry capacity, per rank (fully negated at rank 2).",
+        tree: 'endurance',
+        maxRanks: 2,
+        apply: (player) => {}
+    }
+});
+
 Object.assign(skills, {
     'persuasion': {
         name: 'Persuasion',

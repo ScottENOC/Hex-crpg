@@ -1319,6 +1319,11 @@ function buildPlayerCottage(q, r) {
     window.interiorRegions.push(region);
     window.tileObjects[`${plot.q},${plot.r}`] = { type: 'player_bed', lightRadius: 0 };
     window.tileObjects[`${plot.q - 1},${plot.r}`] = { type: 'fireplace', lightRadius: 5 };
+    // Genuinely unlimited storage (see openStorageChest, partyInventory.js)
+    // — the one place the shared party carry-capacity limit doesn't apply,
+    // so a haul that's pushing the party over capacity has somewhere to go
+    // besides the market.
+    window.tileObjects[`${plot.q + 1},${plot.r}`] = { type: 'storage_chest', items: [] };
     window.campaign2PlayerCottageBuilt = true;
     window.showMessage("You build a small cottage here. It's yours now — free to rest whenever you need.");
     if (window.drawMap) window.drawMap();
@@ -3223,6 +3228,7 @@ function setupVillageScene(forLoadOnly = false) {
         }
         companion.dialogueId = 'companion_wren_talbot'; // "Talk" button in the party tab (updatePartyTabs, ui.js) dispatches through talkToNPC
         window.party.push(companion);
+        if (window.wireSharedInventory) window.wireSharedInventory(companion);
     }
 
     // --- Party: spawn seated at a table inside the tavern ---

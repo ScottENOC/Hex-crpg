@@ -334,6 +334,7 @@ socket.on('syncFullState', (data) => {
                 } else {
                     // This case should be rare if party was initialized correctly
                     window.party.push(ent);
+                    if (window.wireSharedInventory) window.wireSharedInventory(ent);
                 }
             }
         }

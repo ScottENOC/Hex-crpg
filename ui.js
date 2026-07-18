@@ -131,6 +131,7 @@ function addJerry() {
     
     const jerry = window.createCharacterData(randRace, randCls, `Jerry ${window.party.length}`, randGender);
     window.party.push(jerry);
+    if (window.wireSharedInventory) window.wireSharedInventory(jerry);
     
     const playerEntity = window.entities.find(e => e.side === 'player');
     if (!playerEntity) {
@@ -2187,18 +2188,25 @@ function openShop(options) {
         if (item.buyPrice === undefined) continue;
         if (stock && (stock[id] === undefined || stock[id] <= 0)) continue;
 
+        // Appraiser (skills.js): a passive 5%/rank buy-price discount,
+        // capped at 15% — applied here so it's live everywhere openShop is
+        // used (every merchant in the game), not just one shop's own code.
+        const discountMult = window.getAppraiserDiscountMult ? window.getAppraiserDiscountMult() : 1;
+        const price = Math.max(1, Math.round(item.buyPrice * discountMult));
+
         const div = document.createElement("div");
         div.style.display = "flex";
         div.style.justifyContent = "space-between";
         div.style.marginBottom = "5px";
         const stockLabel = stock ? ` [${stock[id]} left]` : '';
-        div.innerHTML = `<span>${item.name} (${item.buyPrice}g)${stockLabel}</span>`;
+        const priceLabel = price < item.buyPrice ? `<s>${item.buyPrice}</s> ${price}g` : `${price}g`;
+        div.innerHTML = `<span>${item.name} (${priceLabel})${stockLabel}</span>`;
         const btn = document.createElement("button");
         btn.innerText = "Buy";
         btn.style.fontSize = "0.8em";
-        btn.disabled = player.gold < item.buyPrice;
+        btn.disabled = player.gold < price;
         btn.onclick = () => {
-            player.gold -= item.buyPrice;
+            player.gold -= price;
             player.inventory.push(id);
             if (stock) stock[id]--;
             openShop(options); // Refresh

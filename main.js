@@ -386,6 +386,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
             window.party.push(merc);
+            if (window.wireSharedInventory) window.wireSharedInventory(merc);
             
             // Spawn next to player
             const pEnt = window.entities.find(e => e.name === mainChar.name);

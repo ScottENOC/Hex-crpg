@@ -71,7 +71,8 @@ function harvestOreNode(q, r) {
         window.showMessage("You need a pickaxe to mine this.");
         return;
     }
-    const amount = 1 + Math.floor(Math.random() * 3);
+    const isForager = (window.party || []).some(p => p.skills?.keen_forager);
+    const amount = isForager ? 3 : 1 + Math.floor(Math.random() * 3);
     for (let i = 0; i < amount; i++) window.player.inventory.push(node.oreType);
     node.depleted = true;
     node.regrowAt = window.worldSeconds + 72 * 3600; // ore veins take days to be worth re-mining
@@ -86,7 +87,8 @@ function harvestFruitTree(q, r) {
     const node = window.tileObjects[key];
     if (!node || !node.hasFruit) { window.showMessage("No ripe fruit here right now."); return; }
     const bonus = (window.party || []).some(p => p.skills?.nature_bounty) ? 1 : 0;
-    const amount = 1 + Math.floor(Math.random() * 2) + bonus;
+    const isForager = (window.party || []).some(p => p.skills?.keen_forager);
+    const amount = (isForager ? 2 : 1 + Math.floor(Math.random() * 2)) + bonus;
     for (let i = 0; i < amount; i++) window.player.inventory.push('fruit');
     node.hasFruit = false;
     node.regrowAt = window.worldSeconds + NODE_REGROW_HOURS.fruit_tree * 3600;
@@ -131,7 +133,8 @@ function harvestHerbPatch(q, r) {
     const node = window.tileObjects[key];
     if (!node || !node.hasHerbs) { window.showMessage("This patch is picked over — nothing worth taking yet."); return; }
     const bonus = (window.party || []).some(p => p.skills?.nature_bounty) ? 1 : 0;
-    const amount = 1 + Math.floor(Math.random() * 2) + bonus;
+    const isForager = (window.party || []).some(p => p.skills?.keen_forager);
+    const amount = (isForager ? 2 : 1 + Math.floor(Math.random() * 2)) + bonus;
     for (let i = 0; i < amount; i++) window.player.inventory.push('herbs');
     node.hasHerbs = false;
     node.regrowAt = window.worldSeconds + NODE_REGROW_HOURS.herb_patch * 3600;

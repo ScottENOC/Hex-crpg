@@ -1,6 +1,7 @@
 // characterCreation.js
 function initializePlayer(race, cls, gender, campaign = "3", voice = "pc_1") {
   window.party = [];
+  window.partyInventory = undefined; // reset the shared pool for a fresh game (see partyInventory.js)
   window.selectedCharacterIndex = 0;
   window.currentCampaign = campaign;
   
@@ -18,6 +19,7 @@ function initializePlayer(race, cls, gender, campaign = "3", voice = "pc_1") {
 
   window.party.push(mainChar);
   window.player = mainChar; // Keep window.player as a reference to the selected one for compatibility
+  if (window.wireSharedInventory) window.wireSharedInventory(mainChar);
 }
 
 function createCharacterData(race, cls, name, gender = "female", voice = "pc_1") {
