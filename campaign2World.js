@@ -210,6 +210,51 @@ function carveFlatRoom(centerQ, centerR, halfW, halfH, doorHex, floorType, wallT
     };
 }
 
+// Turns one of a carved region's own wall-ring hexes into walkable ground
+// (an extra apron/corridor step past a door that itself already sits on the
+// floor's edge rather than the wall row — see towerDoor/barracksDoor/
+// councilDoor's own comments for why that pattern needs this). Repainting
+// the terrain alone leaves the region's own wallHexes/floorHexes bookkeeping
+// stale — exactly the bug tests/building-integrity-audit.spec.js exists to
+// catch, already hand-fixed once for the manor and Master Builder Hallis's
+// house (search manorOldWallQ/builderHouseFootprint) but not applied
+// everywhere a doorApron/wallGap-style hex existed. This is that fix,
+// factored into one reusable helper instead of six more hand-rolled copies.
+// A district's street re-stamp (see "Re-stamp the two streets" in the
+// Merchant/Noble Quarter code below) deliberately overwrites a building's
+// own front wall with Path — "the street always wins over a wall it
+// fronts" — but never updates that building's own wallHexes/floorHexes
+// bookkeeping to match, the exact bug tests/building-integrity-audit.spec.js
+// catches. Rather than hand-patch every shop's street-facing wall column
+// individually, this runs once after the whole world (and every corridor/
+// street repaint) is built: any region's wallHexes entry whose actual
+// terrain is now Path is reclassified as floor, since a paved-over wall
+// is, definitionally, no longer a wall — it's part of the street.
+function reconcileRegionWallBookkeeping() {
+    (window.interiorRegions || []).forEach(region => {
+        if (!region.wallHexes) return;
+        const stillWall = [];
+        region.floorHexes = region.floorHexes || [];
+        region.wallHexes.forEach(h => {
+            if (window.getTerrainAt(h.q, h.r).name === 'Path') {
+                if (!region.floorHexes.some(f => f.q === h.q && f.r === h.r)) region.floorHexes.push(h);
+            } else {
+                stillWall.push(h);
+            }
+        });
+        region.wallHexes = stillWall;
+    });
+}
+window.reconcileRegionWallBookkeeping = reconcileRegionWallBookkeeping;
+
+function openWallGap(region, hex, floorType) {
+    window.setTerrainAt(hex.q, hex.r, floorType);
+    region.wallHexes = region.wallHexes.filter(h => !(h.q === hex.q && h.r === hex.r));
+    if (!region.floorHexes.some(h => h.q === hex.q && h.r === hex.r)) {
+        region.floorHexes.push({ q: hex.q, r: hex.r });
+    }
+}
+
 // The 6 native hex directions (same order getNeighbors uses, hexMap.js) —
 // carveStarFort walks these outward to build each of a star fort's 6
 // points, one per direction, so the shape always has exactly 6 points
@@ -318,6 +363,20 @@ function sealRoom(region, extraDoorHexes = []) {
         const [q, r] = k.split(',').map(Number);
         window.setTerrainAt(q, r, region.floorType);
         if (!window.tileObjects[k]) window.tileObjects[k] = { type: 'door_open', lightRadius: 0 };
+    });
+    // Bookkeeping fix (tests/building-integrity-audit.spec.js): any
+    // extraDoorHex that was actually one of this region's own wallHexes (the
+    // common "the room's real door sits on the floor's edge, one wall-ring
+    // hex further out" pattern — see towerDoor/rearDoor's own comments) just
+    // got repainted to floorType above. Without this, the region object
+    // itself still claims that hex as a wall forever — terrain and
+    // bookkeeping disagreeing is exactly the "cut in half" class of bug.
+    extraDoorHexes.forEach(h => {
+        if (!region.wallHexes) return;
+        const wasWall = region.wallHexes.some(w => w.q === h.q && w.r === h.r);
+        if (!wasWall) return;
+        region.wallHexes = region.wallHexes.filter(w => !(w.q === h.q && w.r === h.r));
+        if (!region.floorHexes.some(f => f.q === h.q && f.r === h.r)) region.floorHexes.push({ q: h.q, r: h.r });
     });
 }
 
@@ -1793,7 +1852,7 @@ function buildSilverhartPalace(roadEnd) {
     // graphic right next to rearDoor).
     sealRoom(bedroomRegion);
     const bedroomWallGap = { q: bedroomCenter.q, r: bedroomCenter.r + 3 };
-    window.setTerrainAt(bedroomWallGap.q, bedroomWallGap.r, 'Wood Floor');
+    openWallGap(bedroomRegion, bedroomWallGap, 'Wood Floor');
     delete window.tileObjects[`${bedroomWallGap.q},${bedroomWallGap.r}`];
 
     // A real curtain wall around the whole complex — hex-distance ring
@@ -3290,6 +3349,7 @@ function setupVillageScene(forLoadOnly = false) {
     // treated as a player-caused save diff instead of part of the
     // deterministic world-gen layout they actually are.
     if (window.connectAllRoadNetworks) window.connectAllRoadNetworks();
+    reconcileRegionWallBookkeeping();
 
     // Campaign 2's entire world is this one deterministic layout, regenerated
     // by this function every time it runs (fresh game or the "engine not
