@@ -55,6 +55,11 @@ class Entity {
     this.riding = null; // Reference to mount entity
     this.rider = null;  // Reference to rider entity
 
+    // Multi-story buildings: which registered floor (window.multiStoryBuildings)
+    // this entity is standing on. 0 = ground floor / not in a multi-story
+    // building — the vast majority of entities never touch this.
+    this.floor = 0;
+
     // Visual Interpolation — guard against null hex from a corrupt sync payload
     this.hex = hex || { q: 0, r: 0 };
     this.visualQ = this.hex.q;

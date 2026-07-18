@@ -210,6 +210,32 @@ function carveFlatRoom(centerQ, centerR, halfW, halfH, doorHex, floorType, wallT
     };
 }
 
+// Multi-story buildings (window.multiStoryBuildings, terrain.js): same
+// rectangle-carving shape as carveFlatRoom, but paints into a building's own
+// floors[N] per-hex maps instead of the global terrain/tileObjects dicts, so
+// an upper floor can occupy the exact same (q,r) footprint as the ground
+// floor below it without overwriting it — the whole point of the "layers"
+// approach over the earlier (rejected) coordinate-offset trick. Registers
+// the building in window.multiStoryBuildings if it isn't already there.
+function carveFloorRoom(building, floorN, centerQ, centerR, halfW, halfH, doorHex, floorType, wallType = 'Wall') {
+    building.floors[floorN] = building.floors[floorN] || { terrain: {}, tileObjects: {} };
+    const f = building.floors[floorN];
+    const floorHexes = [];
+    for (let dq = -halfW + 1; dq <= halfW - 1; dq++) {
+        const shift = hexRowShiftFlat(dq);
+        for (let dr = -halfH + 1; dr <= halfH - 1; dr++) {
+            floorHexes.push({ q: centerQ + dq, r: centerR + dr + shift });
+        }
+    }
+    wallRingAroundFloor(floorHexes).forEach(h => { f.terrain[`${h.q},${h.r}`] = wallType; });
+    floorHexes.forEach(h => { f.terrain[`${h.q},${h.r}`] = floorType; });
+    if (doorHex) {
+        f.terrain[`${doorHex.q},${doorHex.r}`] = floorType;
+        f.tileObjects[`${doorHex.q},${doorHex.r}`] = { type: 'door_open', lightRadius: 0 };
+    }
+    return floorHexes;
+}
+
 // Turns one of a carved region's own wall-ring hexes into walkable ground
 // (an extra apron/corridor step past a door that itself already sits on the
 // floor's edge rather than the wall row — see towerDoor/barracksDoor/
@@ -1804,6 +1830,20 @@ function buildSilverhartPalace(roadEnd) {
     // of power in the game (see computeFactionDominance, musicDirector.js).
     window.musicPOIs.crown = { ...throneCenter };
     window.campaign2PalaceThroneCenter = throneCenter;
+
+    // A second floor over the Grand Hall — the throne room's own gallery,
+    // a real BG3-style layered floor rather than a separate map: it shares
+    // the exact (q,r) footprint of the hall below it (see carveFloorRoom,
+    // window.multiStoryBuildings, terrain.js), so standing up there still
+    // shows the hall's own walls/surroundings from above through the
+    // rendering "cutaway" (drawMap, hexMap.js), and stepping on the stairs
+    // changes floor instantly with no loading screen.
+    const palaceBuilding = { minQ: throneRegion.minQ, maxQ: throneRegion.maxQ, minR: throneRegion.minR, maxR: throneRegion.maxR, floors: [] };
+    window.multiStoryBuildings.push(palaceBuilding);
+    carveFloorRoom(palaceBuilding, 1, throneCenter.q, throneCenter.r, 4, 3, null, 'Wood Floor');
+    const stairHex = { q: throneCenter.q, r: throneCenter.r };
+    window.tileObjects[`${stairHex.q},${stairHex.r}`] = { type: 'stair_up', toFloor: 1 };
+    palaceBuilding.floors[1].tileObjects[`${stairHex.q},${stairHex.r}`] = { type: 'stair_down', toFloor: 0 };
 
     for (let r = roadEnd.r + 1; r < throneDoor.r; r++) window.setTerrainAt(roadEnd.q, r, 'Path');
 

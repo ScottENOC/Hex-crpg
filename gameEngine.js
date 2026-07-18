@@ -2017,14 +2017,30 @@ function renderEntities() {
   }
 
   // Render Tile Objects (Fireplaces etc.)
+  // Multi-story buildings: the viewer's own floor. Ground-floor tileObjects
+  // (this dict) that fall inside a footprint hex the viewer's actual floor
+  // owns (i.e. the upper room covers this hex) are skipped here — they'd
+  // otherwise show ground-floor furniture floating inside the upper room.
+  // Everywhere else (0, the overwhelming majority of play) this is a no-op.
+  const _viewerFloor = window._viewerFloor || 0;
   for (const key in window.tileObjects) {
     try {
       const obj = window.tileObjects[key];
       const [q, r] = key.split(',').map(Number);
+      if (_viewerFloor) {
+          const _b = window.getMultiStoryBuildingAt({ q, r });
+          if (_b && _b.floors[_viewerFloor] && _b.floors[_viewerFloor].terrain[key] !== undefined) continue;
+      }
       if (_inViewBounds(q, r) && window.isVisibleToPlayer({q, r}, _friendlies)) {
           const {x, y} = window.hexToPixel(q, r);
           const size = window.hexSize * 1.5 * z;
-          if (obj.type === 'fireplace' && obj.lit === false && window.gameVisuals.fireplace_unlit?.complete) {
+          if (obj.type === 'stair_up' || obj.type === 'stair_down') {
+              // No dedicated stair art yet — reuses the ladder sprite as a
+              // placeholder the same way building_plot reuses the signpost.
+              if (window.gameVisuals.ladder?.complete) {
+                  window.mapCtx.drawImage(window.gameVisuals.ladder, x - size/2, y - size/2, size, size);
+              }
+          } else if (obj.type === 'fireplace' && obj.lit === false && window.gameVisuals.fireplace_unlit?.complete) {
               window.mapCtx.drawImage(window.gameVisuals.fireplace_unlit, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'fireplace' && window.gameVisuals.fireplace_base?.complete && window.gameVisuals.fireplace_flame?.complete) {
               // Stones/logs are static; only the flame layer pulses — drawing
@@ -2275,13 +2291,46 @@ function renderEntities() {
     }
   }
 
+  // Multi-story buildings: the viewer's own floor's tileObjects (stairs,
+  // furniture placed on an upper floor) live in
+  // window.multiStoryBuildings[i].floors[floor].tileObjects, not the global
+  // dict above, and only need drawing when the viewer is actually up there.
+  if (_viewerFloor) {
+      for (const b of window.multiStoryBuildings) {
+          const f = b.floors[_viewerFloor];
+          if (!f) continue;
+          for (const key in f.tileObjects) {
+              try {
+                  const obj = f.tileObjects[key];
+                  const [q, r] = key.split(',').map(Number);
+                  if (!_inViewBounds(q, r) || !window.isVisibleToPlayer({ q, r }, _friendlies)) continue;
+                  const { x, y } = window.hexToPixel(q, r);
+                  const size = window.hexSize * 1.5 * z;
+                  if ((obj.type === 'stair_up' || obj.type === 'stair_down') && window.gameVisuals.ladder?.complete) {
+                      window.mapCtx.drawImage(window.gameVisuals.ladder, x - size / 2, y - size / 2, size, size);
+                  } else if (obj.type === 'throne' && window.gameVisuals.throne?.complete) {
+                      window.mapCtx.drawImage(window.gameVisuals.throne, x - size / 2, y - size / 2, size, size);
+                  } else if (obj.type === 'table' && window.gameVisuals.table?.complete) {
+                      window.mapCtx.drawImage(window.gameVisuals.table, x - size / 2, y - size / 2, size, size);
+                  } else if (obj.type === 'door_open' && window.gameVisuals.door_open?.complete) {
+                      window.mapCtx.drawImage(window.gameVisuals.door_open, x - size / 2, y - size / 2, size, size);
+                  } else if (obj.type === 'door_closed' && window.gameVisuals.door_closed?.complete) {
+                      window.mapCtx.drawImage(window.gameVisuals.door_closed, x - size / 2, y - size / 2, size, size);
+                  }
+              } catch (err) {
+                  console.warn('renderEntities: failed to draw floor tile object', key, err);
+              }
+          }
+      }
+  }
+
   // 2. Sort entities by "z-index" for layering: Rider -> Normal -> Mounts (on top)
   // Same viewport pre-filter as above: a cheap bounding-box check on every
   // entity's own hex before the real (and now much cheaper, but still non-
   // free) isVisibleToPlayer call and the sort — avoids copying/sorting the
   // *entire* entity roster (thousands, in a populous world) every frame
   // when only a handful can possibly be on screen.
-  const sorted = window.entities.filter(e => e.alive && _inViewBounds(e.hex.q, e.hex.r) && window.isVisibleToPlayer(e.hex, _friendlies)).sort((a, b) => {
+  const sorted = window.entities.filter(e => e.alive && (e.floor || 0) === _viewerFloor && _inViewBounds(e.hex.q, e.hex.r) && window.isVisibleToPlayer(e.hex, _friendlies)).sort((a, b) => {
       const az = a.rider ? 3 : (a.riding ? 1 : 2); // Mounts (has rider) get 3, Riders (riding something) get 1
       const bz = b.rider ? 3 : (b.riding ? 1 : 2);
       return az - bz;
@@ -2757,6 +2806,26 @@ function sceneNeedsRedraw() {
 }
 
 let _pausedForReactionSince = 0;
+// Multi-story buildings: stepping onto a stair_up/stair_down tileObject
+// changes an entity's floor immediately — no loading screen, since the
+// destination floor's terrain/tileObjects already live in
+// window.multiStoryBuildings (see terrain.js). Idempotent (re-checking an
+// entity already on its stair's toFloor is a no-op), so it's cheap to run
+// for every entity every tick rather than hooking each of the many separate
+// "entity.hex = next" movement call sites individually.
+function checkStairTransitions() {
+    if (!window.multiStoryBuildings || !window.multiStoryBuildings.length) return;
+    for (const e of window.entities) {
+        if (!e.alive || e.rider) continue; // a rider piggybacks on its mount's hex/floor, not its own
+        const obj = window.getTileObjectAtFloor(e.hex.q, e.hex.r, e.floor || 0);
+        if (obj && (obj.type === 'stair_up' || obj.type === 'stair_down') && obj.toFloor !== undefined && obj.toFloor !== e.floor) {
+            e.floor = obj.toFloor;
+            if (e.riding) e.riding.floor = obj.toFloor;
+        }
+    }
+}
+window.checkStairTransitions = checkStairTransitions;
+
 function tick() {
     if (window.isPausedForReaction) {
         // Safety valve: if something left isPausedForReaction stuck true
@@ -2799,6 +2868,8 @@ function tick() {
     }
     window._wasInCombat = inCombat;
     window.isInCombat = inCombat; // Expose globally for UI
+
+    checkStairTransitions();
 
     // PERIODIC UI REFRESH (Out of combat)
     if (!inCombat && window.updateActionButtons) {

@@ -282,6 +282,7 @@ let _terrainBuffer = null, _terrainBufferCtx = null;
 let _terrainBufferOriginX = 0, _terrainBufferOriginY = 0; // cameraX/Y the buffer was last rendered at
 let _terrainBufferZoom = null;
 let _terrainBufferExploredCount = -1;
+let _terrainBufferFloor = 0;
 const TERRAIN_BUFFER_MARGIN = 500;
 
 // Forces the next drawMap() to rebuild the terrain buffer from scratch —
@@ -295,11 +296,24 @@ window.invalidateTerrainBuffer = () => { _terrainBufferZoom = null; };
 // module-level mapCtx/hexToPixel, so the caller temporarily points mapCtx at
 // the buffer and offsets window.cameraX/Y before calling this, then restores
 // both afterward.
-function renderTerrainPass(visibleAndExplored, imgOk) {
+function renderTerrainPass(visibleAndExplored, imgOk, viewerFloor) {
   visibleAndExplored.forEach(({q, r}) => {
-      const terrain = window.getTerrainAt(q, r);
+      // Multi-story buildings (window.multiStoryBuildings, terrain.js): a hex
+      // outside every registered building's footprint is unaffected no
+      // matter what floor the viewer is on — getTerrainAtFloor already falls
+      // straight back to getTerrainAt for it. A hex INSIDE a building's
+      // footprint but not part of the viewer's actual floor (either the
+      // viewer is on floor 0 looking at upper-floor-only interior hexes, or
+      // on floor 1+ looking at a ground-floor hex the upper room doesn't
+      // cover) is the BG3 "roof cutaway" case — same ground terrain, drawn
+      // dimmed, so you still see the building's footprint from above.
+      const building = viewerFloor ? window.getMultiStoryBuildingAt({ q, r }) : null;
+      const onViewerFloor = !building || (building.floors[viewerFloor] && building.floors[viewerFloor].terrain[`${q},${r}`] !== undefined);
+      const isCutaway = !!building && !onViewerFloor;
+      const terrain = viewerFloor ? window.getTerrainAtFloor(q, r, viewerFloor) : window.getTerrainAt(q, r);
       const {x, y} = hexToPixel(q, r);
       const zoomedSize = hexSize * window.cameraZoom;
+      if (isCutaway) mapCtx.globalAlpha = 0.45;
 
       // SPECIAL: Arena/Lobby Floor Randomization
       if ((window.currentCampaign === "1" || window.isInArena) && terrain.name === 'Cave Floor') {
@@ -386,6 +400,7 @@ function renderTerrainPass(visibleAndExplored, imgOk) {
       } else {
           drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
       }
+      if (isCutaway) mapCtx.globalAlpha = 1.0;
   });
 }
 
@@ -408,6 +423,11 @@ function drawMap() {
   // dense scene (Silverhart) — this alone doesn't change any behavior,
   // just avoids repeating the same array scan hundreds of times per frame.
   const friendlies = window.entities.filter(e => e.alive && e.side === 'player');
+  // Multi-story buildings: which floor the player's actually standing on.
+  // 0 (the vast majority of play) means every floor-aware lookup below
+  // short-circuits straight to the legacy single-floor path.
+  const viewerFloor = (friendlies[0] && friendlies[0].floor) || 0;
+  window._viewerFloor = viewerFloor; // read by renderEntities' tileObjects pass, gameEngine.js
 
   // 1. Gather visible hexes
   for (let q = bounds.minQ; q <= bounds.maxQ; q++) {
@@ -432,6 +452,7 @@ function drawMap() {
   const needsRebuild = !_terrainBuffer ||
       _terrainBufferZoom !== window.cameraZoom ||
       _terrainBufferExploredCount !== exploredCount ||
+      _terrainBufferFloor !== viewerFloor ||
       Math.abs(dx) > rebuildMargin || Math.abs(dy) > rebuildMargin;
 
   if (needsRebuild) {
@@ -450,6 +471,7 @@ function drawMap() {
       _terrainBufferOriginY = savedCameraY;
       _terrainBufferZoom = window.cameraZoom;
       _terrainBufferExploredCount = exploredCount;
+      _terrainBufferFloor = viewerFloor;
 
       window.cameraX = savedCameraX + TERRAIN_BUFFER_MARGIN;
       window.cameraY = savedCameraY + TERRAIN_BUFFER_MARGIN;
@@ -465,7 +487,7 @@ function drawMap() {
       _terrainBufferCtx.clearRect(0, 0, bufW, bufH);
       const savedMapCtx = mapCtx;
       mapCtx = _terrainBufferCtx;
-      renderTerrainPass(bufVisibleAndExplored, imgOk);
+      renderTerrainPass(bufVisibleAndExplored, imgOk, viewerFloor);
       mapCtx = savedMapCtx;
       window.cameraX = savedCameraX;
       window.cameraY = savedCameraY;
@@ -809,9 +831,16 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
     // session (dead ones stick around with alive:false forever). This is
     // the likely cause of the "click to move freezes, then teleports"
     // symptom getting more common the longer a game runs.
+    // Multi-story buildings: entities on a different floor share a (q,r)
+    // without blocking each other, same idea as a mount/rider pair sharing
+    // one hex — keyed on floor instead of the .rider flag. entity.floor is
+    // 0 for everything outside a registered multi-story building, so this
+    // is a no-op filter almost everywhere.
+    const pathFloor = entity.floor || 0;
     const occupantsByHex = new Map();
     for (const e of window.entities) {
         if (!e.alive) continue;
+        if ((e.floor || 0) !== pathFloor) continue;
         for (const h of e.getAllHexes()) {
             const k = `${h.q},${h.r}`;
             if (!occupantsByHex.has(k)) occupantsByHex.set(k, []);
@@ -892,7 +921,7 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
                     // at a TP surcharge — plate-wearers stay blocked outright.
                     if (entity.skills?.acrobatics && isLightOrNoArmorEntity) {
                         acrobaticsCost = 3;
-                    } else if (window.getTerrainAt(next.q, next.r).climbRisk) {
+                    } else if (window.getTerrainAtFloor(next.q, next.r, pathFloor).climbRisk) {
                         // A wall walkway is one hex wide by design — there's no
                         // alternate route around whoever's standing on the only
                         // hex forward, unlike open ground where a blocked hex
@@ -930,7 +959,7 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
                 baseCost = Math.max(1, baseCost - 2);
             }
 
-            const terrain = window.getTerrainAt(next.q, next.r);
+            const terrain = window.getTerrainAtFloor(next.q, next.r, pathFloor);
             // Impassable-terrain check (Wall, and now the keep's Keep Wall)
             if (terrain.impassable) {
                 const isKnownWall = !isPlayer || isExplored;
@@ -1097,11 +1126,14 @@ function refreshVisibilityCacheIfStale() {
     }
 }
 
-function hasLineOfSight(start, end) {
-    const key = `${start.q},${start.r}|${end.q},${end.r}`;
+function hasLineOfSight(start, end, floor) {
+    // floor is only ever non-zero inside a registered multi-story building
+    // (see window.multiStoryBuildings, terrain.js) — every other caller
+    // omits it and this behaves exactly as before.
+    const key = floor ? `${start.q},${start.r}|${end.q},${end.r}|f${floor}` : `${start.q},${start.r}|${end.q},${end.r}`;
     const cached = _visibilityCache.get(key);
     if (cached !== undefined) return cached;
-    const result = hasLineOfSightUncached(start, end);
+    const result = hasLineOfSightUncached(start, end, floor);
     _visibilityCache.set(key, result);
     return result;
 }
@@ -1119,7 +1151,8 @@ const EXPLORE_VISION_RANGE = 30;
 window.LIVE_VISION_RANGE = LIVE_VISION_RANGE;
 window.EXPLORE_VISION_RANGE = EXPLORE_VISION_RANGE;
 
-function hasLineOfSightUncached(start, end) {
+function hasLineOfSightUncached(start, end, floor) {
+    const getTerrain = floor ? (q, r) => window.getTerrainAtFloor(q, r, floor) : window.getTerrainAt;
     const d = distance(start, end);
     const nightFactor = window.lightLevel || 1.0;
 
@@ -1169,8 +1202,8 @@ function hasLineOfSightUncached(start, end) {
     // third, separate terrain name that was never added here — meaning an
     // archer outside a fort could always shoot straight through its walls.
     const isOpaqueWallName = (name) => name === 'Wall' || name === 'Keep Wall' || name === 'Climbable Wall';
-    const startOnWall = isOpaqueWallName(window.getTerrainAt(start.q, start.r).name);
-    const endOnWall = isOpaqueWallName(window.getTerrainAt(end.q, end.r).name);
+    const startOnWall = isOpaqueWallName(getTerrain(start.q, start.r).name);
+    const endOnWall = isOpaqueWallName(getTerrain(end.q, end.r).name);
     // ELEVATED SHADOW: a wall only fully blocks sight for someone standing
     // at ground level looking through it. Someone already elevated (on a
     // wall, Pedestal, High Ground — anything with terrain.elevated) is
@@ -1180,7 +1213,7 @@ function hasLineOfSightUncached(start, end) {
     // Adjacent-to-start/adjacent-to-end (below) already covers standing
     // right next to your own wall; this widens that same idea to a small
     // radius, but only when the viewer has the height to look past it.
-    const viewerElevated = !!window.getTerrainAt(start.q, start.r).elevated;
+    const viewerElevated = !!getTerrain(start.q, start.r).elevated;
     const ELEVATED_SHADOW_RADIUS = 3;
 
     for (let i = 0; i <= d; i++) {
@@ -1189,14 +1222,14 @@ function hasLineOfSightUncached(start, end) {
 
         if ((current.q === start.q && current.r === start.r) || (current.q === end.q && current.r === end.r)) continue;
 
-        const terrain = window.getTerrainAt(current.q, current.r);
+        const terrain = getTerrain(current.q, current.r);
         // An open gate (Northwatch's gate hex stays 'Climbable Wall' terrain
         // even when open, campaign2World.js, so wall-top continuity/melee
         // elevation are unaffected either way) shouldn't block sight through
         // it while open — a real door swings the terrain to something
         // non-opaque already; a gate can't do that without breaking the
         // wall, so check the door state directly instead.
-        const doorOpenHere = window.tileObjects?.[`${current.q},${current.r}`]?.type === 'door_open';
+        const doorOpenHere = (floor ? window.getTileObjectAtFloor(current.q, current.r, floor) : window.tileObjects?.[`${current.q},${current.r}`])?.type === 'door_open';
         if (isOpaqueWallName(terrain.name) && !doorOpenHere) {
             const adjacentToStart = distance(start, current) === 1;
             const adjacentToEnd = distance(end, current) === 1;

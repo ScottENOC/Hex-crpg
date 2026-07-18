@@ -243,10 +243,56 @@ function isHexExplored(q, r) {
     return window.exploredHexes.has(`${q},${r}`);
 }
 
+// Multi-story buildings: a zoned registry, not a general floor system —
+// only buildings explicitly built with an upper floor ever get an entry
+// here. Floor 0 is never stored per-building; it's whatever's already
+// painted into the normal global terrain/tileObjects maps, so a
+// single-story building (the overwhelming majority) never touches this
+// at all and every lookup below falls straight through to the existing
+// flat-map path.
+window.multiStoryBuildings = window.multiStoryBuildings || [];
+
+function getMultiStoryBuildingAt(hex) {
+    if (!hex) return null;
+    for (const b of window.multiStoryBuildings) {
+        if (hex.q >= b.minQ && hex.q <= b.maxQ && hex.r >= b.minR && hex.r <= b.maxR) return b;
+    }
+    return null;
+}
+
+function getTerrainAtFloor(q, r, floor) {
+    if (!floor) return getTerrainAt(q, r);
+    const b = getMultiStoryBuildingAt({ q, r });
+    const f = b && b.floors[floor];
+    if (!f) return getTerrainAt(q, r);
+    const t = f.terrain[`${q},${r}`];
+    if (!t) return getTerrainAt(q, r);
+    const typeKey = t.toLowerCase().replace(' ', '_');
+    return terrainTypes[typeKey] || getTerrainAt(q, r);
+}
+
+function setTerrainAtFloor(q, r, floor, typeName) {
+    const b = getMultiStoryBuildingAt({ q, r });
+    if (!b || !b.floors[floor]) return; // not a registered multi-story hex; caller should use setTerrainAt directly
+    b.floors[floor].terrain[`${q},${r}`] = typeName;
+}
+
+function getTileObjectAtFloor(q, r, floor) {
+    if (!floor) return window.tileObjects?.[`${q},${r}`];
+    const b = getMultiStoryBuildingAt({ q, r });
+    const f = b && b.floors[floor];
+    if (!f) return window.tileObjects?.[`${q},${r}`];
+    return f.tileObjects[`${q},${r}`];
+}
+
 window.terrainTypes = terrainTypes;
 window.getTerrainAt = getTerrainAt;
 window.setTerrainAt = setTerrainAt;
 window.isHexExplored = isHexExplored;
+window.getMultiStoryBuildingAt = getMultiStoryBuildingAt;
+window.getTerrainAtFloor = getTerrainAtFloor;
+window.setTerrainAtFloor = setTerrainAtFloor;
+window.getTileObjectAtFloor = getTileObjectAtFloor;
 window.battleToWorld = battleToWorld;
 // generateTerrain is deprecated/removed
 window.generateTerrain = () => {}; 
