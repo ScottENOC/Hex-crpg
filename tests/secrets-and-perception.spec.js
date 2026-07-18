@@ -160,4 +160,14 @@ test.describe('Secret doors and hidden objects', () => {
         expect(result.stashType).toBe('secret_stash');
         expect(result.stashGold).toBe(80);
     });
+
+    test('design guardrail: nothing in secrets.js ever touches questLog — secret doors/stashes gate loot, shortcuts, and utility, never quest completion', async ({ page }) => {
+        await createCharacter(page);
+        const result = await page.evaluate(() => ({
+            doorSrc: window.checkSecretDoorDiscovery.toString() + window.placeSecretDoor.toString(),
+            stashSrc: window.placeSecretStash.toString(),
+        }));
+        expect(result.doorSrc).not.toMatch(/questLog/);
+        expect(result.stashSrc).not.toMatch(/questLog/);
+    });
 });

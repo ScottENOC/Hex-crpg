@@ -3704,6 +3704,25 @@ function isNearAnyBuilding(hex, radius) {
 }
 window.isNearAnyBuilding = isNearAnyBuilding;
 
+// Every random-encounter spawn candidate (wolves, orc raiders, lich
+// hunters — see below) should be rejected here, not just the wilderness
+// wolf check this was originally written for: nothing should ever spawn
+// on top of a town, the capital, a star fort, or any other hand-placed
+// site. The one exception is a kingdom in genuinely dire straits — once
+// overall security craters, patrols/garrisons have thinned out enough
+// that monsters pushing right up to a settlement's own walls is the
+// point, not a bug. "Dire" is deliberately a hard floor (not a smooth
+// scale-in like the safeRadius/chance formulas above it) so it stays a
+// rare, readable state change rather than random spawns slowly creeping
+// closer as security merely dips below "good."
+const DIRE_SECURITY_THRESHOLD = 20;
+function isNearAnyBuildingUnlessDire(hex, radius) {
+    const kingdomSecurity = window.regions?.silverhart_kingdom?.security ?? 55;
+    if (kingdomSecurity < DIRE_SECURITY_THRESHOLD) return false;
+    return isNearAnyBuilding(hex, radius);
+}
+window.isNearAnyBuildingUnlessDire = isNearAnyBuildingUnlessDire;
+
 // Random wilderness encounters: out past the village/farmland (35+ hexes
 // from the village center), wandering risks a wolf pack — especially
 // heading west, toward the unnamed, skull-marked road. Rolled at most once
@@ -3754,7 +3773,7 @@ function checkWildernessEncounter(playerEntity, delta) {
             if (window.getEntityAtHex(candidate.q, candidate.r)) continue;
             if (window.getTerrainAt(candidate.q, candidate.r).name === 'Water') continue;
             if (window.isVisibleToPlayer(candidate)) continue;
-            if (window.isNearAnyBuilding(candidate, 30)) continue;
+            if (window.isNearAnyBuildingUnlessDire(candidate, 30)) continue;
             spot = candidate;
         }
         if (!spot) continue;
@@ -3883,6 +3902,7 @@ function checkOrcRaiderEncounter(playerEntity, delta) {
             if (window.getEntityAtHex(candidate.q, candidate.r)) continue;
             if (window.getTerrainAt(candidate.q, candidate.r).name === 'Water') continue;
             if (window.isVisibleToPlayer(candidate)) continue;
+            if (window.isNearAnyBuildingUnlessDire(candidate, 30)) continue;
             spot = candidate;
         }
         if (!spot) continue;
@@ -3950,6 +3970,7 @@ function checkLichHunterEncounter(playerEntity, delta) {
             if (window.getEntityAtHex(candidate.q, candidate.r)) continue;
             if (window.getTerrainAt(candidate.q, candidate.r).name === 'Water') continue;
             if (window.isVisibleToPlayer(candidate)) continue;
+            if (window.isNearAnyBuildingUnlessDire(candidate, 30)) continue;
             spot = candidate;
         }
         if (!spot) continue;
