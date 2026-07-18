@@ -37,6 +37,7 @@ const QUIET_WEIGHT = 10;
 const WORLD_EVENT_TYPES = [
     {
         type: 'wolf_resurgence',
+        regionId: 'hollowmere',
         weight: () => {
             const sec = window.regions?.hollowmere?.security ?? 50;
             return sec < 45 ? 4 : 1; // wild country creeps back when patrols thin out
@@ -49,6 +50,7 @@ const WORLD_EVENT_TYPES = [
     },
     {
         type: 'bandit_activity',
+        regionId: 'aldervale',
         weight: () => {
             const sec = window.regions?.aldervale?.security ?? 50;
             return sec < 40 ? 4 : (sec < 55 ? 2 : 0);
@@ -57,11 +59,15 @@ const WORLD_EVENT_TYPES = [
             window.adjustRegionStat?.('aldervale', 'security', -3);
             window.adjustRegionStat?.('aldervale', 'prosperity', -2);
             window.wildernessThreatMult = Math.min(2.5, window.wildernessThreatMult + 0.25);
+            // D2: village guards go on alert for a day — see applyGuardAlert.
+            window._guardAlertUntil = (window.worldSeconds || 0) + 24 * 3600;
+            if (window.applyGuardAlert) window.applyGuardAlert();
             return "A wagon was robbed on the barony road. No one killed, thank the gods, but folk are traveling in groups now.";
         }
     },
     {
         type: 'caravan_arrived',
+        regionId: 'aldervale',
         weight: () => {
             const pros = window.regions?.aldervale?.prosperity ?? 40;
             return pros > 45 ? 3 : 1;
@@ -69,11 +75,16 @@ const WORLD_EVENT_TYPES = [
         apply: () => {
             window.adjustRegionStat?.('hollowmere', 'prosperity', 2);
             window.adjustRegionStat?.('aldervale', 'prosperity', 1);
+            // Physical body spawned by checkCaravanSpawn below, not here —
+            // spawning needs the player to be outdoors right now, which
+            // isn't guaranteed at the moment this event happens to roll.
+            window._pendingCaravanArrival = true;
             return "A trade caravan came through from the south — good cloth, better prices. The Tankard was full two nights running.";
         }
     },
     {
         type: 'patrol_sweep',
+        regionId: 'hollowmere',
         weight: () => {
             const kSec = window.regions?.silverhart_kingdom?.security ?? 55;
             return kSec > 50 ? 3 : 1;
@@ -86,6 +97,7 @@ const WORLD_EVENT_TYPES = [
     },
     {
         type: 'harvest_festival',
+        regionId: 'hollowmere',
         weight: () => {
             const r = window.regions?.hollowmere;
             return (r && r.security > 55 && r.prosperity > 45) ? 2 : 0;
@@ -97,6 +109,7 @@ const WORLD_EVENT_TYPES = [
     },
     {
         type: 'mine_trouble',
+        regionId: 'emberlode',
         weight: () => {
             const r = window.regions?.emberlode;
             return (r && r.prosperity < 30) ? 3 : 1;
@@ -108,8 +121,8 @@ const WORLD_EVENT_TYPES = [
     }
 ];
 
-function recordWorldEvent(type, text) {
-    window.worldEvents.push({ type, text, worldSeconds: window.worldSeconds || 0 });
+function recordWorldEvent(type, text, regionId = null) {
+    window.worldEvents.push({ type, text, regionId, worldSeconds: window.worldSeconds || 0 });
     if (window.worldEvents.length > WORLD_EVENT_LOG_CAP) {
         window.worldEvents.splice(0, window.worldEvents.length - WORLD_EVENT_LOG_CAP);
     }
@@ -128,13 +141,180 @@ function rollWorldPulseEvent(rng = Math.random) {
     for (const c of candidates) {
         if (roll < c.w) {
             const text = c.ev.apply();
-            recordWorldEvent(c.ev.type, text);
-            return { type: c.ev.type, text };
+            recordWorldEvent(c.ev.type, text, c.ev.regionId || null);
+            // Region-linked events (e.g. Hollowmere's prosperity shifting)
+            // should show up in the village itself, not just as a rumor —
+            // see applyRegionDressing (campaign2World.js).
+            if (c.ev.regionId === 'hollowmere' && window.applyRegionDressing) window.applyRegionDressing();
+            return { type: c.ev.type, text, regionId: c.ev.regionId || null };
         }
         roll -= c.w;
     }
     return null;
 }
+
+// A2: self-seeding bandit camps. If Aldervale's security stays below 30 for
+// 3+ consecutive in-game days, a small bandit camp appears somewhere in the
+// wilderness; clearing it (every camp bandit dead) rewards security back and
+// lets the camp seed again — at a *different* random site next time — if
+// security collapses again later. This is the direct mechanism against
+// "cleared areas stay empty forever": the world can re-populate a threat
+// exactly where the underlying condition (low security) recurs, not just
+// once at a fixed hand-placed location.
+const BANDIT_CAMP_SECURITY_THRESHOLD = 30;
+const BANDIT_CAMP_SEED_SECONDS = 3 * 24 * 3600;
+const BANDIT_CAMP_SECURITY_REWARD = 8;
+window._banditCampLowSecurityAccum = window._banditCampLowSecurityAccum || 0;
+window._activeBanditCamp = window._activeBanditCamp || null; // { hexes: [{q,r}], memberNames: [...] }
+
+function findBanditCampSite() {
+    // Same "unseen, unobstructed, not on top of existing content" search
+    // checkWildernessEncounter (campaign2Dialogue.js) already uses for wolf
+    // spawns — reused here via the same window.* helpers rather than
+    // duplicating the algorithm.
+    const cp = window.campaign2Landmarks?.crossroads || { q: 0, r: 0 };
+    for (let attempt = 0; attempt < 20; attempt++) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 40 + Math.floor(Math.random() * 30); // well clear of the village and its named content
+        const candidate = window.hexRound(
+            cp.q + Math.round(Math.cos(angle) * dist),
+            cp.r + Math.round(Math.sin(angle) * dist)
+        );
+        if (window.getEntityAtHex && window.getEntityAtHex(candidate.q, candidate.r)) continue;
+        if (window.getTerrainAt && window.getTerrainAt(candidate.q, candidate.r).name === 'Water') continue;
+        if (window.isVisibleToPlayer && window.isVisibleToPlayer(candidate)) continue;
+        if (window.isNearAnyBuilding && window.isNearAnyBuilding(candidate, 30)) continue;
+        return candidate;
+    }
+    return null;
+}
+
+function seedBanditCamp() {
+    const site = findBanditCampSite();
+    if (!site) return; // no clear spot found this attempt; tickWorldPulse will retry later ticks
+    const memberNames = [];
+    const count = 3 + Math.floor(Math.random() * 2); // 3-4 bandits
+    for (let i = 0; i < count; i++) {
+        const hex = { q: site.q + (i % 2), r: site.r + Math.floor(i / 2) };
+        const bandit = window.createMonster('bandit', hex, null, null, 'enemy');
+        bandit.behaviorType = 'campRoutine';
+        bandit.isRandomEncounter = true; // eligible for corpse pruning once cleared and left behind
+        bandit.banditCampId = site; // tags this member as belonging to this seeding, for the clear-check below
+        window.entities.push(bandit);
+        memberNames.push(bandit.name);
+    }
+    window.tileObjects[`${site.q},${site.r}`] = { type: 'fireplace', lightRadius: 6 };
+    window._activeBanditCamp = { hexes: [site], memberIds: window.entities.filter(e => e.banditCampId === site).map(e => e.id) };
+    if (window.recordWorldEvent) window.recordWorldEvent('bandit_camp_seeded', "Word spreads of a new bandit camp somewhere out past the barony road.", 'aldervale');
+}
+
+// Checked every tickWorldPulse call: has the active camp been fully cleared?
+function checkBanditCampCleared() {
+    if (!window._activeBanditCamp) return;
+    const site = window._activeBanditCamp.hexes[0];
+    const stillAlive = window.entities.some(e => e.banditCampId === site && e.alive);
+    if (stillAlive) return;
+    window.adjustRegionStat?.('aldervale', 'security', BANDIT_CAMP_SECURITY_REWARD);
+    window._activeBanditCamp = null;
+    window._banditCampLowSecurityAccum = 0; // give the world a fresh 3-day grace period before another can seed
+    if (window.recordWorldEvent) window.recordWorldEvent('bandit_camp_cleared', "Word travels fast: that bandit camp on the barony road is gone.", 'aldervale');
+}
+
+function checkBanditCampSeeding(deltaSeconds) {
+    checkBanditCampCleared();
+    const sec = window.regions?.aldervale?.security ?? 50;
+    if (window._activeBanditCamp) return; // only one live camp at a time
+    if (sec >= BANDIT_CAMP_SECURITY_THRESHOLD) {
+        window._banditCampLowSecurityAccum = 0;
+        return;
+    }
+    window._banditCampLowSecurityAccum += deltaSeconds;
+    if (window._banditCampLowSecurityAccum >= BANDIT_CAMP_SEED_SECONDS) {
+        window._banditCampLowSecurityAccum = 0;
+        seedBanditCamp();
+    }
+}
+
+// A1: a physical caravan for the caravan_arrived event. Only actually spawns
+// once the player is outdoors and not in combat (the flag just waits
+// patiently otherwise) — 2 merchants + 1 guard walk the crossroads' north-
+// south road column past the village and despawn at the far end. Capped at
+// one live caravan at a time.
+window._activeCaravan = window._activeCaravan || null; // { memberIds: [...] }
+
+function checkCaravanSpawn() {
+    if (!window._pendingCaravanArrival || window._activeCaravan) return;
+    if (window.isInCombat) return;
+    const player = window.entities && window.entities.find(e => e.side === 'player' && !e.rider);
+    if (!player) return;
+    if (window.findInteriorRegion && window.findInteriorRegion(player.hex)) return; // wait until the player steps outside
+
+    window._pendingCaravanArrival = false;
+    const cp = window.campaign2Landmarks?.crossroads;
+    if (!cp) return; // not in the Hollowmere overworld (e.g. a different campaign/scene)
+    const startR = cp.r + 20;
+    const endR = cp.r - 20;
+    const roles = [
+        { name: 'Caravan Guard', dialogueId: null, color: '#8a8a8a' },
+        { name: 'Caravan Merchant', dialogueId: null, color: '#c9a35a' },
+        { name: 'Caravan Merchant', dialogueId: null, color: '#c9a35a' },
+    ];
+    const memberIds = [];
+    roles.forEach((role, i) => {
+        const npc = window.buildNPC({
+            name: role.name, title: 'Traveling South', race: 'human', gender: i % 2 === 0 ? 'male' : 'female',
+            hex: { q: cp.q, r: startR - i }, side: 'neutral', factionId: 'silverhart_kingdom', color: role.color,
+            dialogueId: role.dialogueId
+        });
+        npc.prefersRoads = true;
+        npc.isCaravanMember = true;
+        npc.destination = { q: cp.q, r: endR - i };
+        window.entities.push(npc);
+        memberIds.push(npc.id);
+    });
+    window._activeCaravan = { memberIds };
+}
+
+// Checked every tickWorldPulse call: has the caravan finished crossing (every
+// member arrived at its destination, i.e. destination cleared by the normal
+// real-time movement system) or died? Either way, it's done — remove it so
+// it doesn't just stand at the map edge forever.
+function checkCaravanDespawn() {
+    if (!window._activeCaravan) return;
+    const members = window.entities.filter(e => window._activeCaravan.memberIds.includes(e.id));
+    const allDone = members.every(e => !e.alive || !e.destination);
+    if (!allDone) return;
+    // Drop every surviving caravan member once the crossing's done; a dead
+    // one stays behind as a body, same convention as random wilderness
+    // encounters (see pruneDistantEncounterCorpses, campaign2Dialogue.js).
+    window.entities = window.entities.filter(e => !(window._activeCaravan.memberIds.includes(e.id) && e.alive));
+    window._activeCaravan = null;
+}
+
+// D2: guards react to nearby world events. A bandit_activity event puts
+// every patrol-behaviorType entity "on alert" for a day — a temporary
+// visionBonus (the same field wolves' keen-scent bonus already uses, see
+// canSee/gameEngine.js) so alert guards spot trouble sooner, reflecting
+// "word got around, patrols are watching harder" rather than adding a new
+// mechanic. Applied/cleared idempotently so calling it repeatedly (once at
+// the moment the event fires, once whenever the alert window elapses) never
+// double-stacks the bonus.
+const GUARD_ALERT_VISION_BONUS = 8;
+
+function applyGuardAlert() {
+    const alert = (window.worldSeconds || 0) < (window._guardAlertUntil || 0);
+    window.entities.forEach(e => {
+        if (!e.alive || e.behaviorType !== 'patrol') return;
+        if (alert && !e._guardAlertBonusApplied) {
+            e.visionBonus = (e.visionBonus || 0) + GUARD_ALERT_VISION_BONUS;
+            e._guardAlertBonusApplied = true;
+        } else if (!alert && e._guardAlertBonusApplied) {
+            e.visionBonus = (e.visionBonus || 0) - GUARD_ALERT_VISION_BONUS;
+            e._guardAlertBonusApplied = false;
+        }
+    });
+}
+window.applyGuardAlert = applyGuardAlert;
 
 let _pulseAccum = 0;
 function tickWorldPulse(deltaSeconds) {
@@ -149,16 +329,31 @@ function tickWorldPulse(deltaSeconds) {
         // Via window so tests (and mods) can observe/wrap the roll.
         window.rollWorldPulseEvent();
     }
+
+    checkBanditCampSeeding(deltaSeconds);
+    checkCaravanDespawn();
+    checkCaravanSpawn();
+
+    // Expire the guard alert once its day is up (the event that started it
+    // already applied the bonus at the moment it fired; this only ever
+    // needs to *remove* it, but calling the same idempotent function keeps
+    // there being exactly one code path for both directions).
+    if (window._guardAlertUntil && (window.worldSeconds || 0) >= window._guardAlertUntil) {
+        applyGuardAlert();
+    }
 }
 
 // Most recent rumors first, for NPC smalltalk. An event stops circulating
 // as a "current" rumor after ~5 in-game days — old news dies out of the
 // tavern on its own instead of NPCs reciting month-old wolf sightings.
 const RUMOR_FRESH_SECONDS = 5 * 24 * 3600;
-function getRecentWorldRumors(n = 2) {
+// regionId: optional filter so a given NPC only repeats news about their own
+// area (Emberlode's foreman shouldn't be reciting Hollowmere wolf sightings).
+function getRecentWorldRumors(n = 2, regionId = null) {
     const now = window.worldSeconds || 0;
     return window.worldEvents
         .filter(ev => now - ev.worldSeconds < RUMOR_FRESH_SECONDS)
+        .filter(ev => !regionId || ev.regionId === regionId)
         .slice(-n)
         .reverse()
         .map(ev => ev.text);
@@ -168,3 +363,8 @@ window.rollWorldPulseEvent = rollWorldPulseEvent;
 window.tickWorldPulse = tickWorldPulse;
 window.getRecentWorldRumors = getRecentWorldRumors;
 window.recordWorldEvent = recordWorldEvent;
+window.checkBanditCampSeeding = checkBanditCampSeeding;
+window.findBanditCampSite = findBanditCampSite;
+window.seedBanditCamp = seedBanditCamp;
+window.checkCaravanSpawn = checkCaravanSpawn;
+window.checkCaravanDespawn = checkCaravanDespawn;

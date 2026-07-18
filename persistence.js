@@ -68,15 +68,13 @@ function diffEntityAgainstNpcBaseline(entity) {
     return diff;
 }
 
-function saveGame(saveName = "rpg_save_game") {
-    if (!window.player) {
-        window.showMessage("Nothing to save yet!");
-        return;
-    }
-
+// Extracted from saveGame so B3's exportSaveCode (below) can build the exact
+// same gameState object without duplicating this ~65-line list, and without
+// touching saveGame's own localStorage-writing behavior at all.
+function buildGameStateObject(saveName) {
     const isCampaign2WithBaseline = window.currentCampaign === '2' && window._campaign2TerrainBaseline;
 
-    const gameState = {
+    return {
         player: window.player,
         party: window.party,
         currentCampaign: window.currentCampaign,
@@ -108,6 +106,8 @@ function saveGame(saveName = "rpg_save_game") {
         regions: window.regions,
         worldEvents: window.worldEvents,
         wildernessThreatMult: window.wildernessThreatMult,
+        banditCampLowSecurityAccum: window._banditCampLowSecurityAccum,
+        activeBanditCamp: window._activeBanditCamp,
         companionAttitude: window.companionAttitude,
         firedBanterIds: window.firedBanterIds,
         interiorRegions: window.interiorRegions,
@@ -140,6 +140,15 @@ function saveGame(saveName = "rpg_save_game") {
         saveDate: new Date().toISOString(),
         saveName: saveName
     };
+}
+
+function saveGame(saveName = "rpg_save_game") {
+    if (!window.player) {
+        window.showMessage("Nothing to save yet!");
+        return;
+    }
+
+    const gameState = buildGameStateObject(saveName);
 
     const isQuickSave = (saveName === "quick_save");
     const key = isQuickSave ? "rpg_save_quick_save" : `rpg_save_${saveName}`;
@@ -228,6 +237,8 @@ function loadGame(saveName = "rpg_save_game") {
         if (gameState.regions) window.regions = gameState.regions;
         if (gameState.worldEvents) window.worldEvents = gameState.worldEvents;
         if (gameState.wildernessThreatMult !== undefined) window.wildernessThreatMult = gameState.wildernessThreatMult;
+        if (gameState.banditCampLowSecurityAccum !== undefined) window._banditCampLowSecurityAccum = gameState.banditCampLowSecurityAccum;
+        if (gameState.activeBanditCamp) window._activeBanditCamp = gameState.activeBanditCamp;
         if (gameState.companionAttitude) window.companionAttitude = gameState.companionAttitude;
         if (gameState.firedBanterIds) window.firedBanterIds = gameState.firedBanterIds;
         window.interiorRegions = gameState.interiorRegions || [];
@@ -437,6 +448,83 @@ function updateSaveList() {
         listDiv.appendChild(div);
     });
 }
+
+// B3 (mobile roadmap): a portable save code, so a player can move a save
+// between the Safari-tested copy and the installed Capacitor app — separate
+// localStorage origins (see Silverhart Saga's App Store prep notes) — or
+// between two devices entirely, by just copying text. base64 of the exact
+// same JSON saveGame() writes, via buildGameStateObject() above, so nothing
+// about save *content* is duplicated — only the "where does it go" differs
+// (a clipboard-friendly string vs. a localStorage key).
+function exportSaveCode() {
+    if (!window.player) {
+        window.showMessage("Nothing to export yet!");
+        return null;
+    }
+    const gameState = buildGameStateObject('exported_save');
+    const json = JSON.stringify(gameState);
+    // btoa is Latin1-only; encodeURIComponent/unescape round-trips any
+    // Unicode in names/dialogue text through it safely (a well-known JS
+    // idiom for base64-encoding arbitrary UTF-8 strings).
+    return btoa(unescape(encodeURIComponent(json)));
+}
+window.exportSaveCode = exportSaveCode;
+
+// UI wiring for the settings-modal buttons (index.html) — puts the code in
+// the textarea (and tries the clipboard, best-effort) rather than an alert,
+// since save codes are long and an alert box truncates/can't be selected
+// reliably on mobile.
+function handleExportSaveCode() {
+    const code = window.exportSaveCode();
+    if (!code) return;
+    const textarea = document.getElementById('save-code-textarea');
+    if (textarea) textarea.value = code;
+    if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(code).then(
+            () => window.showMessage("Save code copied to clipboard!"),
+            () => window.showMessage("Save code ready below (clipboard copy failed — select and copy manually).")
+        );
+    } else {
+        window.showMessage("Save code ready below — select and copy it.");
+    }
+}
+window.handleExportSaveCode = handleExportSaveCode;
+
+function handleImportSaveCode() {
+    const textarea = document.getElementById('save-code-textarea');
+    const code = textarea ? textarea.value : '';
+    if (window.importSaveCode(code) && textarea) textarea.value = '';
+}
+window.handleImportSaveCode = handleImportSaveCode;
+
+// Writes the decoded code into a scratch localStorage slot and hands it to
+// the existing loadGame() — reuses every bit of loadGame's real restore
+// logic (DOM state, engine init, all ~40 restored fields) instead of
+// duplicating any of it here. Returns true/false so the settings-modal UI
+// can react (e.g. clear the textarea only on success).
+function importSaveCode(code) {
+    if (!code || !code.trim()) {
+        window.showMessage("Paste a save code first.");
+        return false;
+    }
+    let json;
+    try {
+        json = decodeURIComponent(escape(atob(code.trim())));
+        JSON.parse(json); // validate before touching real save slots
+    } catch (e) {
+        window.showMessage("That doesn't look like a valid save code.");
+        return false;
+    }
+    const tempKey = 'rpg_save_imported_temp';
+    localStorage.setItem(tempKey, json);
+    try {
+        loadGame('imported_temp');
+    } finally {
+        localStorage.removeItem(tempKey);
+    }
+    return true;
+}
+window.importSaveCode = importSaveCode;
 
 window.saveGame = saveGame;
 window.loadGame = loadGame;

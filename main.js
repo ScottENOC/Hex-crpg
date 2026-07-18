@@ -5,6 +5,15 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("DOM Content Loaded - Preloading assets and setting up listeners");
     preloadAssets();
 
+    // Re-apply a persisted non-Auto frame-rate choice (graphicsSettings.js)
+    // now that gameEngine.js's _setManualRenderInterval hook actually
+    // exists — graphicsSettings.js itself loads before gameEngine.js, so it
+    // only reads the saved preference into window.frameRateMode, it can't
+    // act on it yet.
+    if (window.frameRateMode && window.frameRateMode !== 'auto' && window.setFrameRateMode) {
+        window.setFrameRateMode(window.frameRateMode);
+    }
+
     const createCharacterButton = document.getElementById("createCharacterButton");
     if (createCharacterButton) {
         createCharacterButton.addEventListener("click", window.startGame);

@@ -2773,6 +2773,44 @@ window.readVampireGrave = function() {
 // scripted intro (Wren's banter, the tavern shakedown timer) must NOT be
 // re-scheduled, or loading a save from hours into the game would replay
 // the opening scene.
+// Makes Hollowmere's prosperity/security legible without opening a menu.
+// Idempotent and re-callable (worldPulse.js calls this again whenever a
+// hollowmere-tagged event fires) — it only ever adds/removes its own two
+// named entities, never touches anything else, so calling it repeatedly as
+// the numbers drift just keeps the village dressing in sync.
+function applyRegionDressing() {
+    const spot = window.campaign2RegionDressingSpot;
+    if (!spot || !window.entities) return;
+    const r = window.regions?.hollowmere;
+    if (!r) return;
+
+    const wantBeggar = r.prosperity < 25;
+    const wantPeddler = r.prosperity > 60;
+    const beggar = window.entities.find(e => e.name === 'Weary Beggar');
+    const peddler = window.entities.find(e => e.name === 'Traveling Peddler');
+
+    if (wantBeggar && !beggar) {
+        window.entities.push(window.buildNPC({
+            name: 'Weary Beggar', title: 'Down on Their Luck', race: 'human', gender: 'male',
+            hex: { q: spot.q, r: spot.r }, side: 'neutral', factionId: 'silverhart_kingdom',
+            color: '#8a8270', dialogueId: 'hollowmere_beggar'
+        }));
+    } else if (!wantBeggar && beggar) {
+        window.entities = window.entities.filter(e => e !== beggar);
+    }
+
+    if (wantPeddler && !peddler) {
+        window.entities.push(window.buildNPC({
+            name: 'Traveling Peddler', title: 'Merchant', race: 'human', gender: 'female',
+            hex: { q: spot.q, r: spot.r + 1 }, side: 'neutral', factionId: 'silverhart_kingdom',
+            color: '#c9a35a', dialogueId: 'hollowmere_peddler'
+        }));
+    } else if (!wantPeddler && peddler) {
+        window.entities = window.entities.filter(e => e !== peddler);
+    }
+}
+window.applyRegionDressing = applyRegionDressing;
+
 function setupVillageScene(forLoadOnly = false) {
     window.overrideTerrain = {};
     window.tileObjects = {};
@@ -3058,6 +3096,12 @@ function setupVillageScene(forLoadOnly = false) {
     window.setTerrainAt(CP.q, CP.r, 'Path');
     window.tileObjects[`${CP.q},${CP.r}`] = { type: 'signpost', lightRadius: 0 };
 
+    // Where applyRegionDressing (below) places its prosperity-linked
+    // beggar/peddler — a couple of hexes off the signpost itself, on the
+    // village-approach stretch of road so either is easy to stumble across
+    // without blocking the signpost's own tile.
+    window.campaign2RegionDressingSpot = { q: CP.q, r: CP.r - 3 };
+
     // Walks actual hex-adjacent steps (the same neighbor offsets getNeighbors
     // uses) so the road is always contiguous — no gaps from a wiggle jumping
     // more than one hex sideways in axial coordinates. The "wiggle" is an
@@ -3317,6 +3361,8 @@ function setupVillageScene(forLoadOnly = false) {
         moveGroupBtn.innerText = 'Move Group: ON';
         moveGroupBtn.style.backgroundColor = '#ff9800';
     }
+
+    if (window.applyRegionDressing) window.applyRegionDressing();
 
     window.drawMap();
     window.renderEntities();

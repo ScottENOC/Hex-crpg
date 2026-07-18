@@ -73,8 +73,30 @@ function resolveWizardVendetta(resolution) {
 window.resolveWizardVendetta = resolveWizardVendetta;
 
 window.npcDialogueTrees = {
+    hollowmere_beggar: (npc) => {
+        window.showDialogue(npc, "Spare a coin? Times are hard in Hollowmere just now. Wasn't always like this.", [
+            {
+                label: "Give 2 gold.",
+                action: () => {
+                    if ((window.party[0].gold || 0) < 2) { window.showMessage("You don't have enough gold."); return; }
+                    window.party[0].gold -= 2;
+                    window.showMessage("The beggar thanks you quietly.");
+                }
+            },
+            { label: "Sorry, nothing to spare.", action: () => {} }
+        ]);
+    },
+    hollowmere_peddler: (npc) => {
+        window.showDialogue(npc, "Business is good these days — Hollowmere's doing well for itself. Care to see my wares? Just trinkets, nothing you can't live without, but pretty ones.", [
+            { label: "Maybe another time.", action: () => {} }
+        ]);
+    },
     garrick_holt: (npc) => {
         const restOption = { label: "Can we get a room to rest? (1 gold)", action: () => window.restAtInn(npc) };
+        // A visibly less secure Hollowmere gets a warier greeting from its
+        // own barkeep — the same region.security number that scales
+        // wilderness danger also reads as unease in the village itself.
+        const wary = (window.regions?.hollowmere?.security ?? 50) < 30;
         // A barkeep hears everything — surfaces the worldPulse.js event log
         // as living smalltalk, so the world's autonomous goings-on actually
         // reach the player instead of only moving hidden region numbers.
@@ -86,13 +108,19 @@ window.npcDialogueTrees = {
             window.showDialogue(npc, text, [{ label: "Thanks for the news.", action: () => {} }]);
         }};
         if (window.hollowmereEventFired) {
-            window.showDialogue(npc, "Thanks again for that, friend. The Tankard's doors are always open to you.", [
+            const greeting = wary
+                ? "Thanks again for that, friend — though I'll admit I feel it less than I used to. Keep the door barred at night, these days."
+                : "Thanks again for that, friend. The Tankard's doors are always open to you.";
+            window.showDialogue(npc, greeting, [
                 restOption,
                 newsOption,
                 { label: "Glad to help.", action: () => {} }
             ]);
         } else {
-            window.showDialogue(npc, "Welcome to the Hollow Tankard! Sit, drink, rest a while.", [
+            const greeting = wary
+                ? "Welcome to the Hollow Tankard, such as it is. Sit, drink — just mind the roads after dark, if you can help it."
+                : "Welcome to the Hollow Tankard! Sit, drink, rest a while.";
+            window.showDialogue(npc, greeting, [
                 restOption,
                 newsOption,
                 { label: "Thanks, we will.", action: () => {} }
@@ -903,6 +931,16 @@ window.npcDialogueTrees = {
                             description: 'Bring Nella Brook a blue gem.'
                         });
                         window.showDialogue(npc, "Funny you ask — my mother always wore a blue stone, before we lost everything on the road here. If you ever find one out there, I'd pay well for it. Sentimental, I know.", [{ label: "I'll keep an eye out.", action: () => {} }]);
+                    }
+                },
+                {
+                    label: "Hear anything from Hollowmere way?",
+                    action: () => {
+                        const rumors = window.getRecentWorldRumors ? window.getRecentWorldRumors(2, 'hollowmere') : [];
+                        const text = rumors.length
+                            ? rumors.join("\n\n")
+                            : "Nothing much travels this far down the road. Quiet out that way, far as I know.";
+                        window.showDialogue(npc, text, [{ label: "Thanks.", action: () => {} }]);
                     }
                 },
                 { label: "Good to know.", action: () => {} }
@@ -1863,7 +1901,15 @@ window.npcDialogueTrees = {
                 { label: "Good to hear.", action: () => {} }
             ]);
         } else {
+            const newsOption = { label: "Anything new around Emberlode?", action: () => {
+                const rumors = window.getRecentWorldRumors ? window.getRecentWorldRumors(2, 'emberlode') : [];
+                const text = rumors.length
+                    ? rumors.join("\n\n")
+                    : "Nothing new. Same ore, same trouble getting it out.";
+                window.showDialogue(npc, text, [{ label: "Thanks.", action: () => {} }]);
+            }};
             window.showDialogue(npc, "Ore's still in the ground same as ever — it's getting it out that's the trouble. Nobody wants to run the west road with the Skarn-tooth camp sitting right on it.", [
+                newsOption,
                 { label: "Hang in there.", action: () => {} }
             ]);
         }

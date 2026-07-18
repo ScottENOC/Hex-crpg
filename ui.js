@@ -2516,6 +2516,7 @@ window.initSettingsUI = function() {
     if (modeSelect) modeSelect.value = window.allegianceOutlineMode;
     const tutCheck = document.getElementById('tutorial-mode-toggle');
     if (tutCheck) tutCheck.checked = window.tutorialModeEnabled;
+    if (window.syncGraphicsSettingsUI) window.syncGraphicsSettingsUI();
 };
 
 function updateMusicState() {

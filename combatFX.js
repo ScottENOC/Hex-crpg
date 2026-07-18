@@ -31,6 +31,7 @@ window.flashEntity = flashEntity;
 window._screenShakeUntil = 0;
 window._screenShakeMagnitude = 0;
 function triggerScreenShake(magnitude = 6, durationMs = 250) {
+    if (window.reduceMotion) return; // B1 graphics option (graphicsSettings.js)
     window._screenShakeUntil = performance.now() + durationMs;
     window._screenShakeMagnitude = magnitude;
 }
@@ -59,7 +60,10 @@ function renderFloatingTexts(ctx, hexToPixel, zoom) {
     window.floatingTexts.forEach(t => {
         const age = (now - t.start) / 900; // 0..1
         const { x, y } = hexToPixel(t.q, t.r);
-        const riseY = y - 20 * zoom - age * 30 * zoom;
+        // B1 graphics option: reduce motion keeps the number in place (still
+        // fades out) instead of rising — the numbers themselves stay
+        // informative either way, only the drift is what's skipped.
+        const riseY = window.reduceMotion ? y - 20 * zoom : y - 20 * zoom - age * 30 * zoom;
         ctx.save();
         ctx.globalAlpha = Math.max(0, 1 - age);
         ctx.font = `bold ${Math.round(16 * zoom)}px sans-serif`;
@@ -167,6 +171,7 @@ function _driveMeleeAnimation() {
 
 function triggerMeleeLunge(attacker, target) {
     if (!attacker || !target) return;
+    if (window.reduceMotion) return; // B1 graphics option (graphicsSettings.js)
     attacker._meleeLungeStart = performance.now();
     attacker._meleeLungeDuration = MELEE_LUNGE_DURATION_MS;
     attacker._meleeLungeTargetHex = { q: target.hex.q, r: target.hex.r };

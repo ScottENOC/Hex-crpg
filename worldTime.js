@@ -18,6 +18,7 @@ function findInteriorRegion(hex) {
         hex.q >= r.minQ && hex.q <= r.maxQ && hex.r >= r.minR && hex.r <= r.maxR
     ) || null;
 }
+window.findInteriorRegion = findInteriorRegion; // reused by worldPulse.js's checkCaravanSpawn (A1) to gate on "player is outdoors"
 
 function computeIndoorLightMult() {
     const p = window.entities && window.entities.find(e => e.side === 'player' && !e.rider);
@@ -181,6 +182,11 @@ function updateTime(delta) {
         // Discrete world events (raids, caravans, wolf resurgences) rolled
         // on top of the continuous region drift — see worldPulse.js.
         if (window.tickWorldPulse) window.tickWorldPulse(delta);
+
+        // Adaptive layered music (musicDirector.js): retargets stem volumes
+        // from the current world state. Internally cheap — just gain-ramp
+        // scheduling — and a no-op while audio is muted.
+        if (window.tickMusicDirector) window.tickMusicDirector();
     }
     window.lightLevel = getLightLevel() * (window.indoorLightMult !== undefined ? window.indoorLightMult : 1.0);
     

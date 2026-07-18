@@ -284,6 +284,12 @@ let _terrainBufferZoom = null;
 let _terrainBufferExploredCount = -1;
 const TERRAIN_BUFFER_MARGIN = 500;
 
+// Forces the next drawMap() to rebuild the terrain buffer from scratch —
+// needed whenever the canvas itself changes size (render-scale toggle,
+// window resize) independent of any camera movement, since the buffer's own
+// dimensions are derived from mapCanvas.width/height.
+window.invalidateTerrainBuffer = () => { _terrainBufferZoom = null; };
+
 // Renders only the terrain-image pass (no fog dim, no water/vision/highlight
 // overlays — those still run live every frame in drawMap). Draws via the
 // module-level mapCtx/hexToPixel, so the caller temporarily points mapCtx at
@@ -340,7 +346,9 @@ function renderTerrainPass(visibleAndExplored, imgOk) {
               // Height) before any tinting, since getRecoloredHairSprite
               // returns a <canvas> (width/height only, no naturalWidth).
               let drawImg = overlayImg;
-              if (window.getSeasonalLeafTint && window.getRecoloredHairSprite) {
+              // B1 graphics option: "Simple" foliage skips this recolor —
+              // one of the pricier per-hex operations in the terrain pass.
+              if (window.foliageDetail !== 'simple' && window.getSeasonalLeafTint && window.getRecoloredHairSprite) {
                   const tint = window.getSeasonalLeafTint();
                   const tinted = window.getRecoloredHairSprite(overlayImg, tint.hue, tint.light, tint.sat);
                   if (tinted) drawImg = tinted;
@@ -1306,12 +1314,25 @@ function isHexInBounds(hex) {
 function resizeCanvas() {
     const container = document.getElementById("game-board");
     if (container && mapCanvas) {
-        mapCanvas.width = container.clientWidth;
-        mapCanvas.height = container.clientHeight;
+        // Render scale (B1, options menu): the backing store can be smaller
+        // than the container while the CSS box (style.width/height) stays
+        // full-size — the browser upscales when painting, trading a little
+        // sharpness for fewer pixels to fill every frame. Every coordinate
+        // helper (screenToHex, getVisibleHexes) already reads
+        // getBoundingClientRect() — the CSS box — rather than
+        // mapCanvas.width/height for its screen-space math, so this needs no
+        // changes anywhere else: clicks and hex placement stay correct at
+        // any scale.
+        const scale = window._renderScale || 1;
+        mapCanvas.width = container.clientWidth * scale;
+        mapCanvas.height = container.clientHeight * scale;
+        mapCanvas.style.width = container.clientWidth + 'px';
+        mapCanvas.style.height = container.clientHeight + 'px';
         drawMap();
         if (window.renderEntities) window.renderEntities();
     }
 }
+window.resizeCanvas = resizeCanvas;
 
 function initHexMap() {
   mapCanvas = document.getElementById("mapCanvas");

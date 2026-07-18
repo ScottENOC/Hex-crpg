@@ -444,6 +444,11 @@ function getNpcSchedules() {
             { start: 10, end: 23, hex: { q: 3, r: -2 } },  // his usual tavern spot
             { start: 23, end: 24, hex: { q: -6, r: 9 } },
         ],
+        'Elder Marta Wynfield': [
+            { start: 0, end: 8, hex: { q: 0, r: -12 } },   // home (the House) overnight
+            { start: 8, end: 18, hex: { q: 8, r: 24 } },   // tending village business near the crossroads
+            { start: 18, end: 24, hex: { q: 0, r: -12 } },
+        ],
         ...(farmHome ? {
             'Old Mac': [
                 { start: 0, end: 8, hex: { q: farmHome.q + 1, r: farmHome.r } },          // home overnight
@@ -2669,7 +2674,9 @@ let _lastDrawCameraX, _lastDrawCameraY, _lastDrawCameraZoom, _lastDrawLightLevel
 const _RENDER_INTERVALS_MS = [16, 33, 66]; // ~60fps, ~30fps, ~15fps
 let _renderIntervalTier = 0;
 let _avgRenderCostMs = 0;
+let _manualRenderIntervalMs = null; // set by the B1 graphics-options menu; null = adaptive Auto mode
 function _recordRenderCost(ms) {
+    if (_manualRenderIntervalMs !== null) return; // manual frame-rate pin: adaptive backoff is off
     _avgRenderCostMs = _avgRenderCostMs === 0 ? ms : _avgRenderCostMs * 0.9 + ms * 0.1;
     const currentInterval = _RENDER_INTERVALS_MS[_renderIntervalTier];
     if (_avgRenderCostMs > currentInterval * 0.9 && _renderIntervalTier < _RENDER_INTERVALS_MS.length - 1) {
@@ -2678,12 +2685,15 @@ function _recordRenderCost(ms) {
         _renderIntervalTier--;
     }
 }
-window._getRenderIntervalMs = () => _RENDER_INTERVALS_MS[_renderIntervalTier];
+window._getRenderIntervalMs = () => _manualRenderIntervalMs !== null ? _manualRenderIntervalMs : _RENDER_INTERVALS_MS[_renderIntervalTier];
 window._recordRenderCost = _recordRenderCost; // exposed for direct testing of the adaptive backoff
 // Test-only hook: force back to the fastest tier so tests asserting a fixed
 // ~60Hz redraw cadence aren't thrown off by cost measurements picked up from
 // earlier, unrelated heavy draws in the same page.
-window._resetRenderPacing = () => { _renderIntervalTier = 0; _avgRenderCostMs = 0; };
+window._resetRenderPacing = () => { _renderIntervalTier = 0; _avgRenderCostMs = 0; _manualRenderIntervalMs = null; };
+// graphicsSettings.js's setFrameRateMode: a manual pin overrides the
+// adaptive backoff entirely (pass null to hand control back to Auto).
+window._setManualRenderInterval = (ms) => { _manualRenderIntervalMs = ms; };
 
 // Is there any actual reason the canvas would look different from the last
 // frame drawn? drawMap() alone re-walks every visible hex (terrain lookup,
@@ -2961,7 +2971,7 @@ function tick() {
         //    actually spend their time. Both are no-ops on the *content* of
         //    any frame that does draw — this only ever removes redundant,
         //    pixel-identical repaints, never changes what gets shown.
-        if (now - _lastRealtimeRenderTime >= _RENDER_INTERVALS_MS[_renderIntervalTier] && sceneNeedsRedraw()) {
+        if (now - _lastRealtimeRenderTime >= window._getRenderIntervalMs() && sceneNeedsRedraw()) {
             _lastRealtimeRenderTime = now;
             _lastDrawCameraX = window.cameraX; _lastDrawCameraY = window.cameraY; _lastDrawCameraZoom = window.cameraZoom;
             _lastDrawLightLevel = window.lightLevel;

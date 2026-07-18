@@ -31,14 +31,16 @@ body {
 
 #gameContainer {
     position: fixed;
-    top: 110px; /* Base for turn bar (60) + menu (50) */
+    top: calc(110px + env(safe-area-inset-top)); /* Base for turn bar (60) + menu (50), plus notch/Dynamic Island clearance */
     left: 0;
     width: 100%;
-    bottom: 0;
+    bottom: env(safe-area-inset-bottom); /* clear the home indicator */
     display: flex;
     flex-direction: column;
     z-index: 1;
     pointer-events: none; /* Let clicks pass to map through empty space */
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
 }
 
 #game-container {
@@ -350,8 +352,10 @@ button:hover { background-color: #3f51b5; }
 
 #top-menu {
     position: fixed;
-    top: 70px; /* 60px turn bar + 10px gap */
+    top: calc(70px + env(safe-area-inset-top)); /* 60px turn bar + 10px gap, plus notch/Dynamic Island clearance */
     left: 0;
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
     width: 100%;
     background-color: rgba(51, 51, 51, 0.4); 
     padding: 1px;
@@ -438,13 +442,20 @@ button:hover { background-color: #3f51b5; }
     width: 100%;
     background-color: #222;
     padding: 2px 5px;
+    /* B2 (mobile roadmap): the Capacitor-wrapped app draws under a notch/
+       Dynamic Island and the home indicator on modern iPhones — env() is a
+       no-op (falls back to 0) everywhere else, including plain browser
+       testing, so this is safe to leave on unconditionally. */
+    padding-top: max(2px, env(safe-area-inset-top));
+    padding-left: max(5px, env(safe-area-inset-left));
+    padding-right: max(5px, env(safe-area-inset-right));
     display: flex;
     justify-content: flex-start;
     align-items: center;
     box-shadow: 0 2px 5px rgba(0,0,0,0.5);
     z-index: 102; /* Above top-menu */
-    height: 60px; 
-    overflow-x: auto; 
+    height: calc(60px + env(safe-area-inset-top));
+    overflow-x: auto;
     overflow-y: hidden; /* Prevent vertical scroll/wobble */
     white-space: nowrap;
     box-sizing: border-box; /* Include padding/border in 60px height */

@@ -48,6 +48,26 @@ const monsterTemplates = {
         },
         defaultEquipment: 'savage'
     },
+    // Human brigands — worldPulse.js's bandit_activity/checkBanditCampSeeding
+    // (campaign2World.js) spawn these when Aldervale's security collapses.
+    // Deliberately a notch tougher than a goblin (real highwaymen, not
+    // wildlife) but not elite-tier — a small camp of these should be a fair
+    // fight for a party actually equipped to go looking for one.
+    'bandit': {
+        name: 'Bandit',
+        color: '#6b4a3a',
+        hp: 14,
+        expValue: 150,
+        riderSize: 2,
+        tags: ['humanoid'],
+        voice: 'pc_1',
+        skills: {
+            'meleeDamage': 1,
+            'health': 2,
+            'sword_hit': 1
+        },
+        defaultEquipment: ['sword', 'light_armor']
+    },
     // A real objective, not a combatant in the usual sense — high HP (the
     // point of the sally-out fight), no weapon, no loot. Its only "attack"
     // is the isSiegeEngine behaviorTick branch in gameEngine.js, which calls

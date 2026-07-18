@@ -129,6 +129,55 @@ The water overlay + fog dim still run per-hex per-frame. Fog could render into
 its own small offscreen layer refreshed only when `visibleHexes` actually
 changes (player moved a hex, not a pixel).
 
+## E. Adaptive music (engine shipped; these are the follow-ons)
+
+The layered-stem music director is implemented (`musicDirector.js` — read
+its header comment first) with two palettes (wilderness, village), faction
+dominance, day/night, combat, threat, stealth, and unrest inputs, all
+covered by `tests/music-director.spec.js`. The audio *files* are being
+produced by the project owner per `audio/music/MUSIC_ASSETS.md` — do not
+generate or commit placeholder audio. Remaining code tasks:
+
+### E1. Register faction POIs as the world provides them
+**What:** `window.musicPOIs` maps faction keys (`crown`, `guild`, `church`,
+`greenskin`, `necro`) to a hex; proximity leans the town mix toward that
+faction. Register the ones that exist: the chapel (search campaign2World.js
+for the chapel build; key `church`), the goblin camp center once allied
+(`greenskin` -> `window.campaign2GoblinCampCenter`), Silverhart palace/manor
+when in Silverhart (`crown`), the Ironbond-relevant tavern (`guild`).
+**Where:** at each build site in campaign2World.js, one line:
+`window.musicPOIs.church = { ...chapelCenter };`
+**Verify:** extend tests/music-director.spec.js: after scene setup, the POI
+keys exist and `computeFactionDominance` at that hex exceeds the baseline.
+
+### E2. Menu music for Campaign 2
+**What:** `updateMusicState` (ui.js) plays the arena `title` track for every
+menu. Keep that for campaign 1; for campaign 2, opening a full-screen menu
+should just duck the director's master gain (add a
+`window.setMusicDirectorDucked(true/false)` that ramps `_masterGain` to 30%)
+instead of switching to the arena title theme — the world's music
+continuing quietly under a menu feels alive; a hard swap doesn't.
+**Where:** musicDirector.js (small exported setter), ui.js's
+updateMusicState campaign-2 branch.
+**Verify:** test that the setter changes the internal target without error.
+
+### E3. Interior filtering
+**What:** Inside a building (`findInteriorRegion` truthy), the outdoor mix
+should sound muffled: route `_masterGain` through a BiquadFilterNode
+(lowpass, ~800Hz when indoors, bypassed/22kHz outdoors), ramped like every
+other transition. One node, inserted once at context creation.
+**Where:** musicDirector.js `_ensureContext` + `_tickMusicDirectorInner`.
+**Verify:** test that the filter frequency target differs indoors vs out
+(expose a `window._getMusicFilterHz()` debug getter).
+
+### E4. Combat stingers
+**What:** On combat start in campaign 2, fire a one-shot brass hit
+(`audio/music/combat_start_sting.wav`, listed for the owner to record) via
+the existing `playSting` pattern, layered over the director's combat ramp.
+**Where:** wherever `isInCombat` flips true (search gameEngine.js for the
+combat-start message), guarded by campaign === '2'.
+**Verify:** spy on playSting in a test; assert one call per combat start.
+
 ## D. NPC AI polish
 
 ### D1. Wolf pack coordination
