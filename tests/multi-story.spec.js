@@ -103,6 +103,51 @@ test.describe('Multi-story buildings: stairs and floor-aware terrain', () => {
     });
 });
 
+test.describe('Multi-story buildings: capital has several (barracks loft, wizard\'s tower)', () => {
+    test.beforeEach(async ({ page }) => { await createCharacter(page); });
+
+    test('the barracks loft is registered with beds and its own stairs', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const b = window.getMultiStoryBuildingAt(window.campaign2PalaceBarracksCenter);
+            const f1 = b && b.floors[1];
+            const bedCount = f1 ? Object.values(f1.tileObjects).filter(o => o.type === 'bed').length : 0;
+            return { found: !!b, bedCount };
+        });
+        expect(result.found).toBe(true);
+        expect(result.bedCount).toBe(4);
+    });
+
+    test('the wizard\'s tower has 3 floors (ground, study, observatory) all sharing one footprint', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const b = window.getMultiStoryBuildingAt(window.campaign2PalaceTowerCenter);
+            return { found: !!b, hasFloor1: !!(b && b.floors[1]), hasFloor2: !!(b && b.floors[2]) };
+        });
+        expect(result.found).toBe(true);
+        expect(result.hasFloor1).toBe(true);
+        expect(result.hasFloor2).toBe(true);
+    });
+
+    test('climbing the tower goes ground -> study -> observatory via successive stairs', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const player = window.entities.find(e => e.side === 'player' && !e.rider);
+            const center = window.campaign2PalaceTowerCenter;
+
+            player.floor = 0;
+            player.hex = { q: center.q + 1, r: center.r + 1 }; // ground-floor stair_up
+            window.checkStairTransitions();
+            const afterFirst = player.floor;
+
+            player.hex = { q: center.q, r: center.r }; // study's stair_up to observatory
+            window.checkStairTransitions();
+            const afterSecond = player.floor;
+
+            return { afterFirst, afterSecond };
+        });
+        expect(result.afterFirst).toBe(1);
+        expect(result.afterSecond).toBe(2);
+    });
+});
+
 test.describe('Multi-story buildings: floor-aware LOS and pathfinding', () => {
     test.beforeEach(async ({ page }) => { await createCharacter(page); });
 

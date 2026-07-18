@@ -1903,6 +1903,22 @@ function buildSilverhartPalace(roadEnd) {
     window.tileObjects[`${barracksCenter.q},${barracksCenter.r + 1}`] = { type: 'bench' };
     window.tileObjects[`${barracksCenter.q - 1},${barracksCenter.r}`] = { type: 'table' };
     window.campaign2PalaceBarracksCenter = barracksCenter;
+
+    // Barracks loft: where the off-duty garrison actually sleeps, above the
+    // mess hall below — same layered-floor approach as the throne room's
+    // gallery (carveFloorRoom, window.multiStoryBuildings, terrain.js).
+    const barracksBuilding = { minQ: barracksRegion.minQ, maxQ: barracksRegion.maxQ, minR: barracksRegion.minR, maxR: barracksRegion.maxR, floors: [] };
+    window.multiStoryBuildings.push(barracksBuilding);
+    carveFloorRoom(barracksBuilding, 1, barracksCenter.q, barracksCenter.r, 4, 4, null, 'Wood Floor');
+    const barracksLoftFloor = barracksBuilding.floors[1];
+    barracksLoftFloor.tileObjects[`${barracksCenter.q - 1},${barracksCenter.r - 1}`] = { type: 'bed' };
+    barracksLoftFloor.tileObjects[`${barracksCenter.q + 1},${barracksCenter.r - 1}`] = { type: 'bed' };
+    barracksLoftFloor.tileObjects[`${barracksCenter.q - 1},${barracksCenter.r + 1}`] = { type: 'bed' };
+    barracksLoftFloor.tileObjects[`${barracksCenter.q + 1},${barracksCenter.r + 1}`] = { type: 'bed' };
+    const barracksStairHex = { q: barracksCenter.q + 1, r: barracksCenter.r };
+    window.tileObjects[`${barracksStairHex.q},${barracksStairHex.r}`] = { type: 'stair_up', toFloor: 1 };
+    barracksLoftFloor.tileObjects[`${barracksStairHex.q},${barracksStairHex.r}`] = { type: 'stair_down', toFloor: 0 };
+
     for (let q = courtyard.q + 1; q < barracksDoor.q; q++) window.setTerrainAt(q, courtyard.r, 'Path');
     for (let r = Math.min(courtyard.r, barracksDoor.r); r <= Math.max(courtyard.r, barracksDoor.r); r++) window.setTerrainAt(barracksDoor.q - 1, r, 'Path');
 
@@ -1949,6 +1965,26 @@ function buildSilverhartPalace(roadEnd) {
     // picked up yet (same "flavor readable regardless of quest state"
     // convention as every other journal in the game).
     window.tileObjects[`${towerCenter.q},${towerCenter.r + 1}`] = { type: 'journal', readId: 'wizard_corruption_ledger', lightRadius: 0 };
+
+    // A tower with only one floor is just a room — this one gets its actual
+    // spire: a study one flight up, then an open observatory above that,
+    // stacked via the same layered-floor system as the throne room's
+    // gallery and the barracks loft (carveFloorRoom, window.multiStoryBuildings).
+    const towerBuilding = { minQ: towerRegion.minQ, maxQ: towerRegion.maxQ, minR: towerRegion.minR, maxR: towerRegion.maxR, floors: [] };
+    window.multiStoryBuildings.push(towerBuilding);
+    carveFloorRoom(towerBuilding, 1, towerCenter.q, towerCenter.r, 3, 3, null, 'Wood Floor');
+    const studyFloor = towerBuilding.floors[1];
+    studyFloor.tileObjects[`${towerCenter.q - 1},${towerCenter.r}`] = { type: 'table' };
+    studyFloor.tileObjects[`${towerCenter.q + 1},${towerCenter.r}`] = { type: 'journal', readId: 'wizard_spire_notes', lightRadius: 0 };
+    const towerStair1 = { q: towerCenter.q + 1, r: towerCenter.r + 1 };
+    window.tileObjects[`${towerStair1.q},${towerStair1.r}`] = { type: 'stair_up', toFloor: 1 };
+    studyFloor.tileObjects[`${towerStair1.q},${towerStair1.r}`] = { type: 'stair_down', toFloor: 0 };
+
+    carveFloorRoom(towerBuilding, 2, towerCenter.q, towerCenter.r, 3, 3, null, 'Stone Floor');
+    const observatoryFloor = towerBuilding.floors[2];
+    const towerStair2 = { q: towerCenter.q, r: towerCenter.r };
+    observatoryFloor.tileObjects[`${towerStair2.q},${towerStair2.r}`] = { type: 'stair_down', toFloor: 1 };
+    studyFloor.tileObjects[`${towerStair2.q},${towerStair2.r}`] = { type: 'stair_up', toFloor: 2 };
     window.campaign2PalaceTowerCenter = towerCenter;
     // Like the throne room's own front door, towerDoor sits on the floor's
     // own edge rather than on the wall ring itself — the wall ring hex is
