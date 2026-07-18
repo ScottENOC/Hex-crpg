@@ -5570,6 +5570,19 @@ function wakeUp(entity) {
         awareSide.forEach(e => { e.timePoints = 100; e.destination = null; e.moveCooldown = 0; });
         surprisedSide.forEach(e => { e.timePoints = surprisedStartTP; e.destination = null; e.moveCooldown = 0; });
 
+        // Move Group is a real-time-only mechanic (assignGroupMoveDestinations
+        // assigns each follower a formation-offset .destination, stepped by
+        // the real-time movement loop above/in tick() while !isInCombat) — it
+        // has no meaning once combat's turn-based movement takes over, and
+        // reported as leaving stray followers stuck mid-formation-walk until
+        // an unrelated later turn nudges something into reprocessing them.
+        // Every party member's own .destination is already nulled just
+        // above; clearing the mode/leader/path state here too means there's
+        // nothing left for any leftover reference to that state to act on.
+        window.groupMoveMode = false;
+        window.groupLeader = null;
+        window.leaderPath = null;
+
         deconflictPartyStacking();
         // A fight can start mid-stride during real-time movement — nulling
         // destination above stops any FURTHER movement, but doesn't correct
