@@ -247,6 +247,61 @@ function reconcileRegionWallBookkeeping() {
 }
 window.reconcileRegionWallBookkeeping = reconcileRegionWallBookkeeping;
 
+// A broader sweep than reconcileRegionWallBookkeeping above: that one only
+// ever moves a wall hex into floorHexes once a street legitimately paves
+// over it ("the street always wins"). It doesn't catch every other way a
+// later-painted feature can step on an earlier building's own declared
+// footprint — a district's connector spur clipping a corner of a room's
+// real floor (leaving a stray Path tile inside what should be solid Wood/
+// Stone Floor), or a stray gap left in a wall ring by an overlapping spur.
+// Run once, as the very last step before setupVillageScene snapshots the
+// deterministic terrain baseline, so every building's footprint matches its
+// own bookkeeping no matter what got painted near it afterward — reseals
+// floor cells back to their declared floorType (door hexes included — a
+// door is still the room's own floor underneath, just with a door graphic
+// layered on top) and wall cells back to a real wall terrain (sampled from
+// whichever of that same region's own wall cells is still intact, so
+// Palisade/Climbable/Keep walls aren't incorrectly downgraded to plain
+// 'Wall'). A wall hex is left alone if some OTHER region's own floor/wall
+// list also explicitly claims that exact cell — the star-fort
+// keep-inside-courtyard pattern, where the keep's wall genuinely overwrites
+// a few of the fort's own courtyard floor cells by design. This is an exact
+// cell-ownership check (does another region's own hex list contain this
+// coordinate), not a bounding-box-area heuristic — two unrelated buildings
+// that simply sit close enough for their bounding boxes to overlap (common
+// in a dense district) never falsely trip it.
+function reconcileAllRegionFootprints() {
+    const regions = (window.interiorRegions || []).filter(r => r.minQ !== undefined);
+    const wallTerrainSet = new Set(['Wall', 'Palisade Wall', 'Climbable Wall', 'Keep Wall']);
+    const claimedByOtherRegion = (h, selfRegion) => regions.some(other => other !== selfRegion &&
+        ((other.floorHexes || []).some(f => f.q === h.q && f.r === h.r) ||
+         (other.wallHexes || []).some(f => f.q === h.q && f.r === h.r)));
+
+    regions.forEach(region => {
+        (region.floorHexes || []).forEach(h => {
+            if (claimedByOtherRegion(h, region)) return;
+            if (window.getTerrainAt(h.q, h.r).name !== region.floorType) {
+                window.setTerrainAt(h.q, h.r, region.floorType);
+            }
+        });
+
+        let wallType = null;
+        (region.wallHexes || []).forEach(h => {
+            if (wallType) return;
+            const t = window.getTerrainAt(h.q, h.r).name;
+            if (wallTerrainSet.has(t)) wallType = t;
+        });
+        wallType = wallType || 'Wall';
+        (region.wallHexes || []).forEach(h => {
+            if (claimedByOtherRegion(h, region)) return;
+            if (!wallTerrainSet.has(window.getTerrainAt(h.q, h.r).name)) {
+                window.setTerrainAt(h.q, h.r, wallType);
+            }
+        });
+    });
+}
+window.reconcileAllRegionFootprints = reconcileAllRegionFootprints;
+
 function openWallGap(region, hex, floorType) {
     window.setTerrainAt(hex.q, hex.r, floorType);
     region.wallHexes = region.wallHexes.filter(h => !(h.q === hex.q && h.r === hex.r));
@@ -3421,6 +3476,7 @@ function setupVillageScene(forLoadOnly = false) {
     // deterministic world-gen layout they actually are.
     if (window.connectAllRoadNetworks) window.connectAllRoadNetworks();
     reconcileRegionWallBookkeeping();
+    reconcileAllRegionFootprints();
 
     // Campaign 2's entire world is this one deterministic layout, regenerated
     // by this function every time it runs (fresh game or the "engine not
