@@ -3813,6 +3813,22 @@ function joinGreenskinAssault() {
     engine.aiState = 'idle';
     engine.combatDirective = assaultDirective();
 
+    // The catapult and its crew/guards (buildNorthwatchFort) are already
+    // tagged factionTag: 'greenskin_assault' from world-build — they're the
+    // same warband, just built side:'enemy' by default since most players
+    // never join them. Flip every one of them here too, not just the engine
+    // + newly-spawned escorts below, so the whole tagged warband actually
+    // becomes the player's non-hostile ally, symmetric with how attacking
+    // any one of them (checkGreenskinAssaultBetrayal) turns the whole tag
+    // hostile as a single unit.
+    window.entities.forEach(e => {
+        if (e.alive && e.factionTag === 'greenskin_assault' && e !== engine) {
+            e.side = 'neutral';
+            e.aiState = 'idle';
+            e.combatDirective = assaultDirective();
+        }
+    });
+
     const escortTypes = window.campaign2SiegeEscortTypes || ['orc', 'orc', 'goblin', 'goblin'];
     escortTypes.forEach((type, i) => {
         const angle = (i / escortTypes.length) * Math.PI * 2;

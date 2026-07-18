@@ -710,7 +710,13 @@ function hexLine(a, b) {
 // type that gets added; an allowlist of "these are the natural terrains a
 // road may cross" doesn't, and Water is deliberately excluded too (a road
 // connector has no business laying a land bridge across a river/lake).
-const ROAD_SAFE_TERRAIN = new Set(['Grass', 'Forest', 'Mountain', 'Sand', 'Swamp', 'Dirt', 'Foliage', 'Rocky Outcrop', 'Rubble', 'Path']);
+// Wood/Cave Floor included: a fort/settlement's own gate is a plain floor
+// tile in an otherwise-Wall ring (see carveStarFort's gateHex handling) —
+// walkable ground, not an obstacle, so a connector is allowed to route
+// through a gateway/doorway the same as any open terrain. Only genuine
+// obstacles (Wall variants, Water, buildings' own furniture-occupied tiles)
+// stay excluded.
+const ROAD_SAFE_TERRAIN = new Set(['Grass', 'Forest', 'Mountain', 'Sand', 'Swamp', 'Dirt', 'Foliage', 'Rocky Outcrop', 'Rubble', 'Path', 'Wood Floor', 'Cave Floor']);
 function isSafeToPaintRoad(q, r) {
     return ROAD_SAFE_TERRAIN.has(window.getTerrainAt(q, r).name);
 }
@@ -769,7 +775,16 @@ function connectAllRoadNetworks() {
             const candidates = [routed, hexLine(pair.a, pair.b)];
             for (const candidate of candidates) {
                 if (!candidate || candidate.length < 2) continue;
-                const allSafe = candidate.every(h => window.isHexInBounds(h) && isSafeToPaintRoad(h.q, h.r));
+                // A short Water crossing (a stream/moat) becomes a bridge —
+                // the same "the road just overwrites the water at the
+                // crossing hex" convention already used for the north road's
+                // stream crossing (setupVillageScene, campaign2World.js).
+                // Only a couple of Water hexes are ever tolerated this way:
+                // a real lake spanning most of the candidate route should
+                // still reject it and let the next-nearest pair be tried.
+                const waterHexes = candidate.filter(h => window.getTerrainAt(h.q, h.r).name === 'Water').length;
+                const allSafe = waterHexes <= 2 && candidate.every(h =>
+                    window.isHexInBounds(h) && (isSafeToPaintRoad(h.q, h.r) || window.getTerrainAt(h.q, h.r).name === 'Water'));
                 if (!allSafe) continue;
                 candidate.forEach(h => window.setTerrainAt(h.q, h.r, 'Path'));
                 merged = true;

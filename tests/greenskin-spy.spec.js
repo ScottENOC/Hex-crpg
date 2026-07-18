@@ -43,9 +43,14 @@ test.describe('greenskin_spy: joining the assault on Northwatch', () => {
         const result = await page.evaluate(() => {
             window.joinGreenskinAssault();
             const player = window.entities.find(e => e.side === 'player' && !e.rider);
+            player.timePoints = 100;
             const escorts = window.entities.filter(e => e.factionTag === 'greenskin_assault');
-            const target = escorts[0];
-            const untouched = escorts.slice(1);
+            // The catapult itself (index 0) is noAttack:true — not a valid
+            // attack target at all, same as its human-side counterpart —
+            // so this picks an actual combatant, matching the intent of
+            // "attacking a member of the warband", not the siege engine.
+            const target = escorts.find(e => !e.noAttack);
+            const untouched = escorts.filter(e => e !== target);
             player.hex = { q: target.hex.q + 1, r: target.hex.r };
             window.tryAttack(player, target, false, false, 0, true);
             return { allNowHostile: untouched.every(e => e.combatDirective?.hostileToPlayer === true) };

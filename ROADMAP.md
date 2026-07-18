@@ -178,6 +178,128 @@ the existing `playSting` pattern, layered over the director's combat ramp.
 combat-start message), guarded by campaign === '2'.
 **Verify:** spy on playSting in a test; assert one call per combat start.
 
+## F. Fix the Silverhart palace complex's wall/floor integrity (tracked bug)
+
+`tests/building-integrity-audit.spec.js` is a general audit that walks every
+`window.interiorRegions` entry in the whole game checking for a complete
+wall ring, an intact floor, and a real door (with a structural exception for
+a keep legitimately nested inside its own fort's courtyard, e.g. Northwatch/
+Ridgehold). Three of its four checks are currently marked `test.fail()` —
+**remove those three annotations once this section is done; the assertions
+underneath already encode the real requirement (`expect(result).toEqual([])`)
+and don't need to change.**
+
+**What's broken:** ~12 interior regions clustered around
+`window.campaign2PalaceThroneCenter` (the barracks, council chamber, tower,
+Queen's chambers — built in `buildSilverhartPalace`, campaign2World.js) have
+real wall and/or floor hexes silently overwritten by later corridor/street
+painting, the same root cause already hand-fixed once or twice elsewhere in
+this file (search `manorOldWallQ` and `builderHouseFootprint` for the two
+existing fixes, both with detailed comments explaining the exact bug shape:
+a corridor/street re-stamp that's supposed to only overwrite a building's
+*front-facing* wall column ends up cutting through real interior floor or a
+side/rear wall instead). One region (the tower/chambers wing, roughly
+q6-10, r-509..-501) has no door registered at all.
+
+**How to actually fix it:** run the audit test locally
+(`npx playwright test tests/building-integrity-audit.spec.js`), temporarily
+delete its three `test.fail();` lines so the real failures print with exact
+`{idx, q, r, terrain}` coordinates, then walk `buildSilverhartPalace` in
+campaign2World.js cross-referencing each breach coordinate against the
+corridor-painting lines (`for (let q = ...) window.setTerrainAt(...)`) that
+run *after* that building is carved. The fix shape each time is one of:
+(a) skip the building's own wall/floor footprint in the corridor's paint
+loop (same `if (!builderHouseFootprint.has(...))` pattern already used for
+the Noble Quarter street), or (b) shrink/shift the building by one column
+like the manor fix did, when the door itself sits on the shared street
+column. Re-run the audit after each fix — don't try to fix all 12 at once
+blind; fix the ones with the most breach cells first, re-run, repeat.
+
+**Verify:** all four `building-integrity-audit.spec.js` tests pass with the
+`test.fail()` annotations removed. Also do one manual browser walk of the
+palace interior (enter every room via its door) since the audit checks
+terrain correctness, not "is this room walkably enclosed" in a way a player
+would notice a visual seam.
+
+## G. Populate the Silverhart capital city + Thieves' Guild
+
+The city currently has: the palace complex, a Merchant Quarter (stable,
+general goods, clothier, magic shop), a Noble Quarter (Corstane manor,
+Master Builder Hallis's hexagon house, a neighbor house), a curtain wall at
+`CITY_WALL_RADIUS` (60 hexes from the throne), and a ring road. That's a
+fraction of what a capital should feel like. This section is the big
+content build the player asked for; it's scoped into independent, buildable
+pieces.
+
+### G1. Thieves' Guild + its own reputation track
+**What:** A hidden-in-plain-sight guild (a "legitimate" front business at
+street level — a pawnshop or a fence's stall — with a real guild hall
+reachable through a back room or a password-gated door), run by a Guildmaster
+NPC. A new reputation track, same shape as `factions.js`'s existing standing
+system: `window.factions.thieves_guild = { standing: 0 }`, gated content at
+standing thresholds (0: refused/watched; 20: accepted odd jobs; 50: full
+member, access to the fence's real prices and guild quests; -20 or below:
+hostile, guild enforcers sent after the player — mirrors the existing
+Ironbond/goblin faction-hostility patterns).
+**Where:** new building in the capital (pick a spot in the "Warrens" district
+already stubbed at `warrensRow` — search campaign2World.js), a new
+`window.campaign2ThievesGuildmaster` NPC in campaign2Content.js, dialogue
+tree in campaign2Dialogue.js, faction entry in factions.js.
+**Verify:** tests for standing thresholds gating dialogue/fence access, same
+style as `tests/goblin-reactivity.spec.js`.
+
+### G2. Guild quests (3-4, escalating trust)
+1. **Initiation**: steal a specific item from a named Merchant Quarter NPC
+   without being caught (reuses the stealth/detection primitives from the
+   goblin-camp stealth path — search `isPlayerStealthed`/`hasLineOfSight`
+   usage in the existing stealth-resolution quest code for the pattern).
+2. **A Favor for the Guild**: intimidate or bribe a Noble Quarter NPC into
+   silence about something (reuses `leverage.js`'s persuasion system).
+3. **Blood Price**: assassinate a rival informant (mirrors the existing
+   goblin-camp assassination path's structure).
+4. **The Big Score**: a multi-step heist against the palace treasury or a
+   noble's vault — the capstone, gated on guild standing ≥50.
+Each should move `thieves_guild` standing and, for the more visible ones,
+cascade a small `hollowmere`/`aldervale` security or `silverhart_kingdom`
+reputation hit (getting caught helping thieves has consequences with the
+Crown) — reuse `cascadeReputation`/`adjustRegionStat`, already-established
+patterns.
+
+### G3. Fill out the city to the walls
+**What:** More streets, more named buildings between the existing districts
+and `CITY_WALL_RADIUS` — a proper Warrens/slum district (the thieves' guild's
+natural neighborhood), a temple district (the church faction musicDirector.js
+already expects a POI for — see ROADMAP section E1), a docks/market square,
+several unnamed flavor houses (no interior needed for all of them — a locked
+door + a one-line "just a home" note is fine for background buildings).
+**Guard rails:** run `tests/building-integrity-audit.spec.js` after adding
+each new building — that's exactly what it's for now.
+**Scattered outlying buildings:** a handful of buildings between the ring
+road and the curtain wall that aren't part of a tight district grid — a
+lone farmstead-style plot, a hermit's shack — reachable but not part of the
+street grid, for the "doesn't feel gridded/artificial" texture the player
+asked for.
+
+### G4. Flavor NPCs, shops, taverns, and a few fights
+**What:** At least one real tavern (with a barkeep, a rumor-hook option
+mirroring Garrick's — see worldPulse.js's `getRecentWorldRumors` pattern,
+filtered to a `silverhart` or `crown` regionId once G1's district exists),
+2-3 more shops with distinct personalities (not just restocked copies of the
+Merchant Quarter's existing four), and a handful of street encounters —
+a pickpocket who tries to steal from the player (a light combat/skill-check
+mini-scene), a City Watch patrol that reacts if the player is
+`isShunnedByHumanCommerce` (see campaign2World.js) inside the walls.
+
+### G5. Reuse checklist before building any of the above
+Before adding new mechanics, check for an existing pattern to reuse — this
+codebase has one for nearly everything already: faction standing
+(factions.js), region security/prosperity (regions.js), world events
+(worldPulse.js), stealth detection (search the goblin-camp stealth quest),
+persuasion (leverage.js), NPC daily schedules (`getNpcSchedules`,
+gameEngine.js), shop inventories (search `campaign2SilverhartGeneralGoods`
+for the limited-stock shop pattern). Don't invent a second version of any
+of these.
+
 ## D. NPC AI polish
 
 ### D1. Wolf pack coordination
