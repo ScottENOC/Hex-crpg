@@ -75,14 +75,26 @@ window.resolveWizardVendetta = resolveWizardVendetta;
 window.npcDialogueTrees = {
     garrick_holt: (npc) => {
         const restOption = { label: "Can we get a room to rest? (1 gold)", action: () => window.restAtInn(npc) };
+        // A barkeep hears everything — surfaces the worldPulse.js event log
+        // as living smalltalk, so the world's autonomous goings-on actually
+        // reach the player instead of only moving hidden region numbers.
+        const newsOption = { label: "What's the word around here?", action: () => {
+            const rumors = window.getRecentWorldRumors ? window.getRecentWorldRumors(2) : [];
+            const text = rumors.length
+                ? rumors.join("\n\n")
+                : "Quiet, lately. Same faces, same ale. I'll take it — quiet's been hard-earned around here.";
+            window.showDialogue(npc, text, [{ label: "Thanks for the news.", action: () => {} }]);
+        }};
         if (window.hollowmereEventFired) {
             window.showDialogue(npc, "Thanks again for that, friend. The Tankard's doors are always open to you.", [
                 restOption,
+                newsOption,
                 { label: "Glad to help.", action: () => {} }
             ]);
         } else {
             window.showDialogue(npc, "Welcome to the Hollow Tankard! Sit, drink, rest a while.", [
                 restOption,
+                newsOption,
                 { label: "Thanks, we will.", action: () => {} }
             ]);
         }
@@ -3357,7 +3369,9 @@ function checkWildernessEncounter(playerEntity, delta) {
     // top of that — whatever earned that skull on the signpost isn't part
     // of this security system yet.
     const maxChance = headingWest ? 0.5 : 0.2;
-    const chance = ((100 - security) / 100) * maxChance;
+    // wildernessThreatMult: worldPulse.js events (wolf resurgence, patrol
+    // sweeps) scale the ambient danger up or down for a few in-game days.
+    const chance = ((100 - security) / 100) * maxChance * (window.wildernessThreatMult || 1);
     if (Math.random() >= chance) return;
 
     const count = 1 + Math.floor(Math.random() * 2); // 1-2 wolves

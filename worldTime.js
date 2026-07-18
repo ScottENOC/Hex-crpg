@@ -177,6 +177,10 @@ function updateTime(delta) {
         // Region security/prosperity decay toward their (parent-influenced)
         // baselines on the same clock (see regions.js).
         if (window.tickRegions) window.tickRegions(delta);
+
+        // Discrete world events (raids, caravans, wolf resurgences) rolled
+        // on top of the continuous region drift — see worldPulse.js.
+        if (window.tickWorldPulse) window.tickWorldPulse(delta);
     }
     window.lightLevel = getLightLevel() * (window.indoorLightMult !== undefined ? window.indoorLightMult : 1.0);
     

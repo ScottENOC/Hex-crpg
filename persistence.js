@@ -106,6 +106,8 @@ function saveGame(saveName = "rpg_save_game") {
         lichHuntState: window.lichHuntState,
         factions: window.factions,
         regions: window.regions,
+        worldEvents: window.worldEvents,
+        wildernessThreatMult: window.wildernessThreatMult,
         companionAttitude: window.companionAttitude,
         firedBanterIds: window.firedBanterIds,
         interiorRegions: window.interiorRegions,
@@ -224,6 +226,8 @@ function loadGame(saveName = "rpg_save_game") {
         if (gameState.lichHuntState) window.lichHuntState = gameState.lichHuntState;
         if (gameState.factions) window.factions = gameState.factions;
         if (gameState.regions) window.regions = gameState.regions;
+        if (gameState.worldEvents) window.worldEvents = gameState.worldEvents;
+        if (gameState.wildernessThreatMult !== undefined) window.wildernessThreatMult = gameState.wildernessThreatMult;
         if (gameState.companionAttitude) window.companionAttitude = gameState.companionAttitude;
         if (gameState.firedBanterIds) window.firedBanterIds = gameState.firedBanterIds;
         window.interiorRegions = gameState.interiorRegions || [];
