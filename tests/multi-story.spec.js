@@ -522,4 +522,53 @@ test.describe('Kragmoor (dwarf capital): a genuinely descending mountain hold', 
         });
         expect(result).toEqual([-1, -2, -3, -4]);
     });
+
+    test('the Sunken Deep (-5) is carved and populated at world-build time, but has no way in yet', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const b = window.campaign2DeepholdsBuilding;
+            const horror = window.entities.find(e => e.name === 'The Ember-Wreathed Horror');
+            const tunnelFloor = b.floors[-4];
+            const hex = window.campaign2DeepholdsSunkenDeepStairHex;
+            return {
+                hasFloor: !!b.floors[-5],
+                horrorFloor: horror?.floor,
+                stairAlreadyThere: !!tunnelFloor.tileObjects[`${hex.q},${hex.r}`],
+            };
+        });
+        expect(result.hasFloor).toBe(true);
+        expect(result.horrorFloor).toBe(-5);
+        expect(result.stairAlreadyThere).toBe(false);
+    });
+
+    test('completing "What Nests Below" reveals the stairwell down to the Sunken Deep', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            // Kill the vermin and turn the quest in, exactly like the
+            // existing dwarven-kingdom.spec.js coverage for this quest.
+            window.entities.filter(e => e.deepholdsVermin).forEach(e => { e.alive = false; e.hp = 0; });
+            (window.questLog = window.questLog || []).push({ id: 'deepholds_infestation', title: 'What Nests Below', giver: 'King Balrik Deepholm', status: 'active' });
+            const king = window.entities.find(e => e.name === window.campaign2DwarfKing?.name);
+            window.npcDialogueTrees.dwarf_king(king);
+
+            const b = window.campaign2DeepholdsBuilding;
+            const tunnelFloor = b.floors[-4];
+            const hex = window.campaign2DeepholdsSunkenDeepStairHex;
+            const stair = tunnelFloor.tileObjects[`${hex.q},${hex.r}`];
+            return { stairType: stair?.type, toFloor: stair?.toFloor };
+        });
+        expect(result.stairType).toBe('stair_down');
+        expect(result.toFloor).toBe(-5);
+    });
+
+    test('stepping onto the revealed stair actually takes the player down to -5', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            window.revealSunkenDeepPassage();
+            const player = window.entities.find(e => e.side === 'player' && !e.rider);
+            const hex = window.campaign2DeepholdsSunkenDeepStairHex;
+            player.floor = -4;
+            player.hex = { q: hex.q, r: hex.r };
+            window.checkStairTransitions();
+            return player.floor;
+        });
+        expect(result).toBe(-5);
+    });
 });

@@ -1161,8 +1161,56 @@ function buildDwarvenKingdom(anchor) {
         window.entities.push(m);
     });
 
+    // The Sunken Deep (-5): dug too greedily and too deep — a sealed
+    // gallery below the Lower Tunnels the vermin had been guarding without
+    // anyone realizing what they were guarding it FROM. Its floor is
+    // carved now (so it's fully populated and ready), but the stairwell
+    // down to it doesn't exist yet — revealSunkenDeepPassage
+    // (below) adds it once "What Nests Below" is actually completed (see
+    // npcDialogueTrees.dwarf_king, campaign2Dialogue.js), the same
+    // "reopened gallery" the King's own completion line refers to.
+    const sunkenDeepCenter = { q: anchor.q - 18, r: anchor.r + 24 };
+    carveFloorRoom(kragmoorBuilding, -5, sunkenDeepCenter.q, sunkenDeepCenter.r, 4, 3, null, 'Cave Floor');
+    const sunkenDeepFloor = kragmoorBuilding.floors[-5];
+    const sunkenDeepStairHex = { q: tunnelCenter.q, r: tunnelCenter.r + 1 };
+    sunkenDeepFloor.tileObjects[`${sunkenDeepStairHex.q},${sunkenDeepStairHex.r}`] = { type: 'stair_up', toFloor: -4 };
+    paintFloorCorridor(kragmoorBuilding, -5, sunkenDeepStairHex, sunkenDeepCenter, 'Cave Floor');
+    sunkenDeepFloor.tileObjects[`${sunkenDeepCenter.q},${sunkenDeepCenter.r - 1}`] = { type: 'journal', readId: 'sunken_deep_warning', lightRadius: 0 };
+    window.campaign2DeepholdsSunkenDeepCenter = sunkenDeepCenter;
+    window.campaign2DeepholdsSunkenDeepStairHex = sunkenDeepStairHex;
+
+    // Reused-base-monster pattern (same as Corvin Ashgrave in the lich
+    // barrow above): a dragon_young's stats/art, renamed and buffed into
+    // whatever the dwarves actually woke.
+    const horror = window.createMonster('dragon_young', { q: sunkenDeepCenter.q, r: sunkenDeepCenter.r }, {
+        health: 10, meleeDamage: 6, heavy_armor_training: 2,
+    }, null, 'enemy');
+    horror.name = 'The Ember-Wreathed Horror';
+    horror.hp = 160; horror.maxHp = 160;
+    horror.floor = -5;
+    window.entities.push(horror);
+
     setWorldMapMarker(gateCenter, { t: 'M', f: 'K', o: 'd', p: 2, n: 'Kragmoor' });
 }
+
+// Called once "What Nests Below" is turned in — punches the actual
+// stairwell through from the Lower Tunnels (-4) down to the Sunken Deep
+// (-5), which was carved and populated at world-build time but had no way
+// in until now. Idempotent: safe to call more than once.
+function revealSunkenDeepPassage() {
+    const building = window.campaign2DeepholdsBuilding;
+    const hex = window.campaign2DeepholdsSunkenDeepStairHex;
+    if (!building || !hex) return;
+    const tunnelFloor = building.floors[-4];
+    if (tunnelFloor.tileObjects[`${hex.q},${hex.r}`]) return; // already revealed
+    tunnelFloor.tileObjects[`${hex.q},${hex.r}`] = { type: 'stair_down', toFloor: -5 };
+}
+window.revealSunkenDeepPassage = revealSunkenDeepPassage;
+
+window.readSunkenDeepWarning = function() {
+    window.showDialogue({ name: 'Weathered Rune-Plaque', customImage: 'journal' },
+        "The runes are old even by dwarven reckoning, chiseled in a hand no living smith would recognize: \"WE DUG TOO GREEDILY, AND TOO DEEP. SEAL WHAT WAITS BELOW, AND SPEAK OF IT TO NO ONE.\" Someone sealed this gallery on purpose. Someone else, more recently, dug it back open.");
+};
 
 // Sil'thandriel, the Sylvan Court's capital (see worldMap.js's southern
 // forest belt). Unlike Kragmoor's solid-Wall massif — dwarves carve INTO

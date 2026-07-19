@@ -3671,6 +3671,7 @@ function interactWithTileObject(q, r, player) {
         if (doorObj.readId === 'deepholds_mine_ledger' && window.readDeepholdsMineLedger) { window.readDeepholdsMineLedger(); return; }
         if (doorObj.readId === 'silverhart_bounty_board' && window.readSilverhartBountyBoard) { window.readSilverhartBountyBoard(); return; }
         if (doorObj.readId === 'sunken_cave_ledger' && window.readSunkenCaveLedger) { window.readSunkenCaveLedger(); return; }
+        if (doorObj.readId === 'sunken_deep_warning' && window.readSunkenDeepWarning) { window.readSunkenDeepWarning(); return; }
         if (window.readAbandonedHouseJournal) window.readAbandonedHouseJournal();
         return;
     }

@@ -5397,6 +5397,9 @@ window.npcDialogueTrees.dwarf_king = (npc) => {
             // deepcrystal_pendant's recipe in crafting.js. The King only
             // parts with one of these for a debt this real.
             window.party[0].inventory.push('deep_crystal');
+            // The vermin were guarding something, not just infesting it —
+            // see revealSunkenDeepPassage's own comment (campaign2World.js).
+            if (window.revealSunkenDeepPassage) window.revealSunkenDeepPassage();
             window.showMessage('Quest complete: What Nests Below. (+reputation with the Deepholds, +1 Deep Crystal)');
             window.showDialogue(npc, "The lower tunnels have gone quiet the right way, for once. The Deepholds don't forget a debt like that — take this, pulled from the same gallery you cleared. Dornik says it's grown deep enough to be worth something to the right hands.", [{ label: "Glad to help.", action: () => {} }]);
             return;
