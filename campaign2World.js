@@ -1665,6 +1665,30 @@ function plantAppleTree(q, r) {
 }
 window.plantAppleTree = plantAppleTree;
 
+// Flips an ordinary 'table' tileObject into 'overturned_table' — a real
+// barrier, same cover mechanism isCoveredFromRangedAttack (gameEngine.js)
+// already grants behind elevated terrain, just checked against a tileObject
+// flag (`cover: true`) instead of terrain.elevated. Reachable from anywhere
+// a plain table exists (see interactWithTileObject's dispatch), but only
+// meaningful mid-fight — a flipped table outside combat is just flavor, so
+// it's free there, same as toggleFireplace's own TP-only-in-combat split.
+function flipTable(q, r, actor) {
+    const obj = window.tileObjects[`${q},${r}`];
+    if (!obj || obj.type !== 'table') return;
+    if (window.isInCombat) {
+        if ((actor?.timePoints || 0) < 5) {
+            window.showMessage("Not enough time points to flip the table (needs 5).");
+            return;
+        }
+        window.spendTP(actor, 5);
+    }
+    window.tileObjects[`${q},${r}`] = { type: 'overturned_table', cover: true, lightRadius: obj.lightRadius };
+    window.showMessage("The table crashes over onto its side — solid cover now.");
+    window.drawMap();
+    window.renderEntities();
+}
+window.flipTable = flipTable;
+
 // A small house standing alone partway up the north road — the first
 // breadcrumb toward a much larger plot arc (a necromancer working toward
 // lichdom). The residents were taken, not killed here; skeletons left

@@ -147,9 +147,17 @@ window.npcDialogueTrees = {
         if (!window.questLog) window.questLog = [];
         const quest = window.questLog.find(q => q.id === 'oskars_wager');
         if (quest && quest.status === 'completed') {
-            window.showDialogue(npc, "Good bout, that. I'll get my revenge one of these days.", [
-                { label: "We'll see.", action: () => {} }
-            ]);
+            const brawlOptions = [{ label: "We'll see.", action: () => {} }];
+            // A bigger, sillier follow-up once the one-on-one bout is settled
+            // — the whole tavern piles in this time. One-shot (see
+            // tavernBrawlTriggered, startTavernBrawl below).
+            if (!window.tavernBrawlTriggered && !window.isInCombat) {
+                brawlOptions.unshift({
+                    label: "Fancy a real donnybrook? Whole tavern this time.",
+                    action: () => window.startTavernBrawl && window.startTavernBrawl()
+                });
+            }
+            window.showDialogue(npc, "Good bout, that. I'll get my revenge one of these days.", brawlOptions);
             return;
         }
         window.showDialogue(npc, "First time in Hollowmere? Mind the Ironbond lot if they're about.", [
@@ -3715,6 +3723,120 @@ function endOskarDuel() {
     window.drawMap();
     window.renderEntities();
 }
+
+// THE TAVERN BRAWL: a bigger, sillier follow-up to Oskar's one-on-one
+// sparring match — the whole tavern piles in, 5-a-side. Garrick/Mira/Oskar
+// (already standing around the tavern floor from the shakedown scene) join
+// as allies exactly the way resolveShakedown's 'fight' branch already flips
+// them (side:'player', aiControlled:true — they fight on their own) so the
+// player + those three + Wren Talbot (a real party member, already
+// side:'player') makes five. Five hostile brawlers are spawned to match.
+// Everyone gets a chair to swing (see equipment.js's `improvised: true`) —
+// nobody in a bar fight is drawing a real sword — and a scatter of loose
+// chairs/bottles sits on the floor for whoever loses theirs mid-fight (see
+// breakImprovisedWeapon, gameEngine.js) to grab another.
+const TAVERN_BRAWL_OPEN_HEXES = [
+    { q: -3, r: -2 }, { q: -1, r: -2 }, { q: 1, r: -2 }, { q: 3, r: -2 }, { q: 0, r: -3 },
+    { q: -4, r: 0 }, { q: 4, r: 0 }, { q: -3, r: 2 }, { q: 3, r: 2 }, { q: 0, r: 3 },
+];
+
+function startTavernBrawl() {
+    if (window.tavernBrawlTriggered || window.isInCombat) return;
+    window.tavernBrawlTriggered = true;
+    window.tavernBrawlActive = true;
+
+    const allies = ['Garrick Holt', 'Mira Ashbrook', 'Oskar Vinn']
+        .map(name => window.entities.find(e => e.name === name))
+        .filter(Boolean);
+    allies.forEach(ally => {
+        ally.side = 'player';
+        ally.aiControlled = true;
+        ally.aiState = 'combat';
+        ally.isNPC = false;
+        ally.hasBeenSeenByPlayer = true;
+        if (!ally.equipped) ally.equipped = { weapon: null, offhand: null, armor: null, helmet: null };
+        if (!ally.equipped.weapon) window.equipToMonster(ally, 'chair');
+    });
+
+    const openHexes = [...TAVERN_BRAWL_OPEN_HEXES];
+    for (let i = 0; i < 5; i++) {
+        const hex = openHexes.find(h => !window.getEntityAtHex(h.q, h.r) && !window.getTerrainAt(h.q, h.r).impassable);
+        if (!hex) break;
+        openHexes.splice(openHexes.indexOf(hex), 1);
+        const brawler = window.buildNPC({
+            name: `Rowdy Brawler ${i + 1}`,
+            title: 'Rowdy Brawler',
+            race: 'human',
+            gender: i % 2 === 0 ? 'male' : 'female',
+            hex,
+            classLevels: ['fighter'],
+            skillPicks: ['health'],
+            equipment: ['chair'],
+            side: 'enemy',
+            voice: 'pc_1',
+            expValue: 20,
+        });
+        brawler.isNPC = false;
+        brawler.hasBeenSeenByPlayer = true;
+        brawler.aiState = 'combat';
+        window.entities.push(brawler);
+    }
+
+    // A few loose chairs/bottles on the floor — replacements for whoever's
+    // improvised weapon breaks mid-fight (see breakImprovisedWeapon), picked
+    // up the normal way any dropped item is (lootItems, gameEngine.js).
+    window.mapItems['2,0'] = ['bottle', 'bottle'];
+    window.mapItems['-2,0'] = ['chair', 'bottle'];
+    window.mapItems['0,-1'] = ['chair'];
+
+    const firstBrawler = window.entities.find(e => e.name === 'Rowdy Brawler 1');
+    if (firstBrawler) window.wakeUp(firstBrawler);
+
+    window.showMessage("Someone throws the first punch, and the whole tavern erupts into chaos!");
+    window.isInCombat = true;
+    if (window.updateActionButtons) window.updateActionButtons();
+    window.drawMap();
+    window.renderEntities();
+}
+window.startTavernBrawl = startTavernBrawl;
+
+function endTavernBrawl() {
+    if (!window.tavernBrawlActive) return;
+    window.tavernBrawlActive = false;
+
+    ['Garrick Holt', 'Mira Ashbrook', 'Oskar Vinn'].forEach(name => {
+        const ally = window.entities.find(e => e.name === name && e.alive);
+        if (ally) {
+            ally.side = 'neutral';
+            ally.isNPC = true;
+            ally.aiState = 'idle';
+            ally.aiControlled = false;
+            ally.timePoints = 0;
+        }
+    });
+
+    if (window.party && window.party[0]) window.party[0].gold = (window.party[0].gold || 0) + 30;
+    if (window.gainExp) window.gainExp(150);
+
+    window.isInCombat = false;
+    window.gamePhase = 'WAITING';
+    window.currentTurnEntity = null;
+
+    if (!window.questLog) window.questLog = [];
+    window.questLog.push({
+        id: 'tavern_brawl',
+        title: 'The Tavern Brawl',
+        giver: 'Oskar Vinn',
+        status: 'completed',
+        description: 'An all-out, five-a-side brawl at the Hollow Tankard.'
+    });
+
+    window.showMessage("The last brawler goes down amid the wreckage of chairs and broken bottles. Oskar whoops and claps you on the back. (+30 gold)");
+    if (window.updateActionButtons) window.updateActionButtons();
+    window.drawMap();
+    window.renderEntities();
+}
+window.endTavernBrawl = endTavernBrawl;
 
 // Fixed wilderness spot out along the west road (see campaign2World.js's
 // crossroads) where Tam went exploring. Checked from worldTime.js's tick —

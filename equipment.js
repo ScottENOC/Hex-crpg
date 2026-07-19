@@ -30,6 +30,14 @@ const items = {
     // harvestOreNode in resources.js).
     'pickaxe': { id: 'pickaxe', name: 'Pickaxe', type: 'weapon', subType: 'melee', damage: 1, range: 0, hands: 1, buyPrice: 15, description: 'Better for breaking rock than fighting. Carrying one unlocks mining.' },
 
+    // Improvised weapons (tavern brawl and similar scenes) — grabbed off the
+    // floor, not bought, and never worth much of a fight: `improvised: true`
+    // makes resolveAttack (gameEngine.js) break/consume one after a single
+    // swing or throw, win or miss, same spirit as a real bar fight where
+    // nobody's furniture survives more than one good hit.
+    'chair': { id: 'chair', name: 'Chair', type: 'weapon', subType: 'melee', damage: 1, range: 0, hands: 1, improvised: true, buyPrice: 0, description: "A barstool, swung in anger. Won't survive a second hit." },
+    'bottle': { id: 'bottle', name: 'Bottle', type: 'weapon', subType: 'ranged', damage: 1, range: 5, hands: 1, improvised: true, buyPrice: 0, description: 'Empty, but good for one solid throw — it shatters on impact.' },
+
     // Gathered wilderness resources — mundane goods, not magic items. Sold
     // for modest gold, donated to raise a region's prosperity, or (food only)
     // eaten for the non-healing "Well Fed" buff. See resources.js.

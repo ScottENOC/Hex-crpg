@@ -2057,6 +2057,16 @@ function renderEntities() {
               window.mapCtx.drawImage(window.gameVisuals.oil_barrel, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'table' && window.gameVisuals.table?.complete) {
               window.mapCtx.drawImage(window.gameVisuals.table, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'overturned_table' && window.gameVisuals.table?.complete) {
+              // Reuses the table sprite (no dedicated art yet, same "reuse an
+              // existing asset for a new tileObject" approach building_plot
+              // already takes with the signpost) — rotated so it reads as
+              // knocked over rather than just a table sitting where it was.
+              window.mapCtx.save();
+              window.mapCtx.translate(x, y);
+              window.mapCtx.rotate(Math.PI / 2);
+              window.mapCtx.drawImage(window.gameVisuals.table, -size/2, -size/2, size, size);
+              window.mapCtx.restore();
           } else if (obj.type === 'bench' && window.gameVisuals.bench?.complete) {
               window.mapCtx.drawImage(window.gameVisuals.bench, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'bed' && window.gameVisuals.bed?.complete) {
@@ -3691,6 +3701,7 @@ function interactWithTileObject(q, r, player) {
     if (doorObj.type === 'unicorn_track' && window.showUnicornTrackDetail) { window.showUnicornTrackDetail(doorObj, q, r); return; }
     if (doorObj.type === 'rune_forge' && window.openRuneForge) { window.openRuneForge(); return; }
     if (doorObj.type === 'storage_chest' && window.openStorageChest) { window.openStorageChest(q, r); return; }
+    if (doorObj.type === 'table' && window.flipTable) { window.flipTable(q, r, player); return; }
     if (doorObj.type === 'fireplace') { toggleFireplace(q, r, player); return; }
 }
 window.interactWithTileObject = interactWithTileObject;
@@ -5908,7 +5919,7 @@ function handleClick(e){
     // and the pendingInteractHex arrival hook in autoMoveProcess) rather than
     // silently just moving onto it without ever interacting.
     const doorObj = window.tileObjects && window.tileObjects[`${clickedHex.q},${clickedHex.r}`];
-    const interactableTypes = ['door_open', 'door_closed', 'signpost', 'journal', 'ore_node', 'timber_tree', 'stone_deposit', 'fruit_tree', 'herb_patch', 'fishing_spot', 'corpse', 'evidence', 'building_plot', 'player_bed', 'fireplace'];
+    const interactableTypes = ['door_open', 'door_closed', 'signpost', 'journal', 'ore_node', 'timber_tree', 'stone_deposit', 'fruit_tree', 'herb_patch', 'fishing_spot', 'corpse', 'evidence', 'building_plot', 'player_bed', 'fireplace', 'table'];
     if (doorObj && interactableTypes.includes(doorObj.type)) {
         if (window.distance(player.hex, clickedHex) <= 1) {
             interactWithTileObject(clickedHex.q, clickedHex.r, player);
@@ -6648,7 +6659,11 @@ window.isShotBlockedByAlly = isShotBlockedByAlly;
 // climbable wall segment gets the same cover bonus a pedestal already gave.
 function isCoveredFromRangedAttack(target) {
     const blockedHexes = [{ q: target.hex.q, r: target.hex.r - 1 }, { q: target.hex.q + 1, r: target.hex.r - 1 }];
-    return blockedHexes.some(bh => window.getTerrainAt(bh.q, bh.r).elevated);
+    // A flipped-over table (see flipTable, campaign2World.js's tavern brawl
+    // content) is a tileObject, not terrain, so it needs its own check
+    // alongside the elevated-terrain one above — same cover bonus, just a
+    // barrier someone dragged into place instead of a permanent wall.
+    return blockedHexes.some(bh => window.getTerrainAt(bh.q, bh.r).elevated || window.tileObjects?.[`${bh.q},${bh.r}`]?.cover);
 }
 window.isCoveredFromRangedAttack = isCoveredFromRangedAttack;
 
@@ -6688,6 +6703,24 @@ function damageWall(q, r, amount) {
     }
 }
 window.damageWall = damageWall;
+
+// Improvised weapons (chair, bottle — see equipment.js's `improvised: true`)
+// don't survive a fight: one swing or throw, hit or miss, and it's gone —
+// unequipped and removed from inventory, same "break after use" idea a
+// real bar-fight prop would have. Called from both resolveAttack exit
+// points (the miss-return and the end of a successful hit) below.
+function breakImprovisedWeapon(attacker, isOffhand) {
+    const slot = isOffhand ? 'offhand' : 'weapon';
+    const itemId = attacker.equipped?.[slot];
+    const item = window.items[itemId];
+    if (!item || !item.improvised) return;
+    attacker.equipped[slot] = null;
+    if (attacker.inventory) {
+        const idx = attacker.inventory.indexOf(itemId);
+        if (idx !== -1) attacker.inventory.splice(idx, 1);
+    }
+    window.showMessage(`${attacker.name}'s ${item.name.toLowerCase()} breaks apart.`);
+}
 
 function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallback = null, bonusDamage = 0) {
   if (isFeint) {
@@ -6794,6 +6827,7 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
           sharedMessage(`${attacker.name} misses ${target.name}! (Roll: ${roll} vs Need: <${hitChance})`);
           if (window.spawnFloatingText) window.spawnFloatingText(target.hex, 'Miss', '#ccc');
           if (!isOffhand) attacker.offhandAttackAvailable = (attacker.equipped?.offhand && window.items[attacker.equipped.offhand].type === 'weapon');
+          breakImprovisedWeapon(attacker, isOffhand);
           missCallbackFinal();
           return;
       }
@@ -6966,6 +7000,7 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   }
 
   attacker.offhandAttackAvailable = !isOffhand && (attacker.equipped?.offhand && window.items[attacker.equipped.offhand].type === 'weapon');
+  breakImprovisedWeapon(attacker, isOffhand);
   if (target.hp <= 0 && target.alive) {
       handleLethalDamage(target, attacker);
   }
@@ -7918,6 +7953,13 @@ function checkCombatEnd() {
              window.saveGame("AutoSave_CombatEnd");
         }
 
+        // The Tavern Brawl (startTavernBrawl/endTavernBrawl, campaign2Dialogue.js):
+        // same "all enemies dead" gate every other Campaign 2 scripted fight
+        // resolves through.
+        if (window.currentCampaign === "2" && window.tavernBrawlActive && window.endTavernBrawl) {
+            window.endTavernBrawl();
+        }
+
         if (window.currentCampaign === "2" && window.hollowmereFightTriggered && window.factions?.ironbond_company && !window.hollowmereVictoryBonusGiven) {
             window.hollowmereVictoryBonusGiven = true;
 
@@ -8260,20 +8302,40 @@ function tryShove(shover, target) {
         return false;
     }
 
-    // A shove is a forced reposition, not a real climb — it must not let a
-    // target be knocked up onto (or down off) a climbable wall for free.
+    // A shove is a forced reposition, not a real climb — it must never let a
+    // target be knocked *up* onto elevated terrain for free (that's a real
+    // climb, gated behind the multi-turn climbing status above). Knocking
+    // them *off* elevated terrain, though, is exactly what a shove should be
+    // able to do — gravity does the rest, at the cost of fall damage below.
     const newTerrain = window.getTerrainAt(newHex.q, newHex.r);
-    if (newTerrain.impassable || !!newTerrain.elevated !== !!targetTerrain.elevated) {
-        window.showMessage(`${target.name} braces against the wall — the shove can't force them up or down it.`);
+    const shovingUp = !!newTerrain.elevated && !targetTerrain.elevated;
+    if (newTerrain.impassable || shovingUp) {
+        window.showMessage(`${target.name} braces against the wall — the shove can't force them up it.`);
         spendTP(shover, 5);
         window.playerAction = null;
         return true;
     }
 
-    window.showMessage(`${shover.name} shoves ${target.name}.`);
+    const shovingOff = !!targetTerrain.elevated && !newTerrain.elevated;
     target.hex = newHex;
     spendTP(shover, 5);
-    window.playerAction = null; 
+    window.playerAction = null;
+
+    if (shovingOff) {
+        // A climb in progress is abandoned the instant the climber leaves
+        // the wall involuntarily — same "knocked off mid-climb" idea the
+        // climbing status comment already calls out (see climbTransition
+        // above), just triggered by a shove instead of running out of TP.
+        if (target.climbing) target.climbing = null;
+        const fallDmg = 8 + Math.floor(Math.random() * 8); // 8-15, a real hit but rarely lethal on its own
+        target.hp -= fallDmg;
+        syncBackToPlayer(target);
+        if (window.spawnFloatingText) window.spawnFloatingText(target.hex, `-${fallDmg}`, '#ff4d4d');
+        window.showMessage(`${shover.name} shoves ${target.name} off the wall! They hit the ground hard. (-${fallDmg})`);
+        if (target.hp <= 0 && target.alive) handleLethalDamage(target, shover);
+    } else {
+        window.showMessage(`${shover.name} shoves ${target.name}.`);
+    }
     return true;
 }
 
