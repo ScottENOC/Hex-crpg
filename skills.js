@@ -20,14 +20,19 @@ const skills = {
         apply: (player) => {}
     },
     // STRENGTH
+    // Applied once here via baseDamage AND separately read again in the
+    // damage formula (attacker.skills['meleeDamage'], gameEngine.js's
+    // resolveAttack) with no melee/ranged distinction at all despite the
+    // name — the combination was a genuine +2 to every attack (melee,
+    // ranged, unarmed) per rank, not the +1-melee-only the description
+    // claimed. Now applies only via the direct skill-value read, which
+    // already covers every weapon type uniformly, so it's a real flat +1.
     'meleeDamage': {
-        name: 'Melee Damage',
-        description: 'Increases damage dealt by melee attacks by 1 per rank.',
+        name: 'Weapon Damage',
+        description: 'Increases damage dealt by any attack (melee, ranged, or unarmed) by 1 per rank.',
         tree: 'strength',
         maxRanks: 0,
-        apply: (player) => {
-            player.baseDamage += 1;
-        }
+        apply: (player) => {}
     },
     'light_armor_training': {
         name: 'Light Armor Training',
@@ -50,6 +55,13 @@ const skills = {
         tree: 'strength',
         maxRanks: 1,
         prereq: 'medium_armor_training',
+        apply: (player) => {}
+    },
+    'iron_grip': {
+        name: 'Iron Grip',
+        description: 'Reduces the TP cost of climbing (fort ramparts and similar) and lowers the chance of a failed climb in combat. Stacks with other climbing skills.',
+        tree: 'strength',
+        maxRanks: 1,
         apply: (player) => {}
     },
     'shove': {
@@ -88,9 +100,9 @@ const skills = {
     },
     'fastMovement': {
         name: 'Fast Movement',
-        description: 'Reduces move TP cost by 1 per rank if wearing light or no armor.',
+        description: 'Reduces move TP cost by 1 if wearing light or no armor. Stacks with Swift Step.',
         tree: 'agility',
-        maxRanks: 0,
+        maxRanks: 1,
         apply: (player) => {}
     },
     'riding': {
@@ -116,7 +128,7 @@ const skills = {
     },
     'sidestep': {
         name: 'Sidestep',
-        description: 'Spend 6 TP to move to an adjacent hex when an opponent moves next to you.',
+        description: 'Spend 6 TP to move to an adjacent hex when an opponent moves next to you. Requires light armor or no armor.',
         tree: 'agility',
         maxRanks: 1,
         reaction: true,
@@ -133,6 +145,20 @@ const skills = {
     'stealth_agility': {
         name: 'Inconspicuous',
         description: 'Grants +5 bonus to stealth checks.',
+        tree: 'agility',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+    'keen_perception': {
+        name: 'Keen Perception',
+        description: 'A sharp eye for what others miss — +10 per rank to the roll for spotting a stealthed opponent, and to the same kind of roll made passively against secret doors and other hidden objects as you pass near them.',
+        tree: 'agility',
+        maxRanks: 3,
+        apply: (player) => {}
+    },
+    'sure_footed': {
+        name: 'Sure-Footed',
+        description: 'Reduces the TP cost of climbing (fort ramparts and similar) and lowers the chance of a failed climb in combat. Stacks with other climbing skills.',
         tree: 'agility',
         maxRanks: 1,
         apply: (player) => {}
@@ -191,6 +217,23 @@ const skills = {
         maxRanks: 1,
         apply: (player) => {}
     },
+    // SUBTLE SPELL: the rogue-side half of a rogue/caster multiclass — a
+    // metamagic option any known non-damaging spell (Heal, Calm Animal,
+    // Sanctuary, etc. — never Firebolt/Smite/burst-damage variants) can be
+    // built with, at +6 mana and +5 TP, that doesn't break stealth when
+    // cast. Deliberately universal across schools rather than arcane-only:
+    // this is a rogue skill about HOW you cast, not a caster skill about
+    // WHAT you cast, so a rogue/cleric or rogue/druid gets the same option
+    // as a rogue/wizard. See the Subtle checkbox (ui.js's spell builder)
+    // and the stealth-preserving check in tryCastSpell (gameEngine.js).
+    'subtle_spell': {
+        name: 'Subtle Spell',
+        description: 'Lets you build any known non-damaging spell as Subtle (+6 mana, +5 TP): casting it no longer breaks your stealth.',
+        tree: 'rogue',
+        maxRanks: 1,
+        prereq: 'stealth_rogue',
+        apply: (player) => {}
+    },
     'speedy_stealth': {
         name: 'Speedy Stealth',
         description: 'Passive: Reduces the Time Point penalty of moving while stealthed by 2.',
@@ -227,7 +270,7 @@ const skills = {
     },
     'unarmed_dmg': {
         name: 'Unarmed Mastery',
-        description: 'Grants +1 damage when fighting unarmed.',
+        description: 'Grants +2 damage when fighting unarmed.',
         tree: 'Way of the open palm',
         maxRanks: 1,
         prereq: 'unarmed_hit',
@@ -249,6 +292,20 @@ const skills = {
         reaction: true,
         apply: (player) => {}
     },
+    // A landed unarmed hit siphons mana straight from the opponent into the
+    // monk — read directly in resolveAttack (gameEngine.js), same
+    // live-read pattern as unarmed_hit/unarmed_dmg above, since it only
+    // matters at the moment of the hit rather than being a stat to mutate.
+    // Caps at 3 so it stays a real-but-bounded siphon, not a way to fully
+    // drain a caster in one hit.
+    'siphoning_palm': {
+        name: 'Siphoning Palm',
+        description: 'An unarmed hit drains 1 mana per rank (max 3) from the target into you.',
+        tree: 'Way of the open palm',
+        maxRanks: 3,
+        prereq: 'unarmed_reaction_block',
+        apply: (player) => {}
+    },
 
     // MONK
     'swift_step': {
@@ -268,7 +325,7 @@ const skills = {
     },
     'agile_climber': {
         name: 'Agile Climber',
-        description: 'Reduces movement TP penalty when moving up or down terrain levels.',
+        description: 'Reduces movement TP penalty when moving up or down terrain levels. Also reduces the TP cost of climbing (fort ramparts and similar) and lowers the chance of a failed climb in combat — stacks with other climbing skills.',
         tree: 'monk',
         maxRanks: 1,
         apply: (player) => {}
@@ -292,6 +349,8 @@ const skills = {
     ...generateMagicSkills('divine', 'Sanctuary', 'sanctuary'),
     ...generateMagicSkills('nature', 'Summon Animal', 'summon_animal'),
     ...generateMagicSkills('nature', 'Entangle', 'entangle'),
+    ...generateMagicSkills('nature', 'Calm Animal', 'calm_animal'),
+    ...generateMagicSkills('nature', 'Wild Fury', 'wild_fury'),
     'arcane_expand': {
         name: 'Arcane Expansion',
         description: 'Increase the radius of Arcane AOE spells by 1 per rank. (+10 mana per increase)',
@@ -312,6 +371,108 @@ const skills = {
         tree: 'nature',
         maxRanks: 3,
         apply: (player) => {}
+    },
+    // BURST: lets any single-target damage or heal spell of this school be
+    // built instead as an area burst centered on a clicked hex (a distant
+    // point, not the caster — the d&d-fireball shape), at radius 1 for a
+    // flat mana surcharge. The existing <school>_expand skill (above)
+    // scales that radius further, +10 mana/rank, exactly like it already
+    // does for the game's other AOE spell types — burst just unlocks a
+    // normally single-target spell into that same system rather than
+    // needing its own separate radius dial. See computeSpellVariant
+    // (spellPlanner.js) / renderSpellStats (ui.js) for where the type
+    // actually flips to aoe_damage/aoe_heal.
+    'arcane_burst': {
+        name: 'Arcane Burst',
+        description: 'Lets you cast single-target Arcane damage spells (e.g. Firebolt) as an area burst centered on a point instead, at radius 1 for +8 mana. Arcane Expansion increases the radius further.',
+        tree: 'arcane',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedCastingOptions) player.unlockedCastingOptions = {};
+            if (!player.unlockedCastingOptions.arcane) player.unlockedCastingOptions.arcane = {};
+            player.unlockedCastingOptions.arcane.burst = true;
+        }
+    },
+    'divine_burst': {
+        name: 'Divine Burst',
+        description: 'Lets you cast single-target Divine damage or heal spells (e.g. Smite Evil, Heal) as an area burst centered on a point instead, at radius 1 for +8 mana. Divine Expansion increases the radius further.',
+        tree: 'divine',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedCastingOptions) player.unlockedCastingOptions = {};
+            if (!player.unlockedCastingOptions.divine) player.unlockedCastingOptions.divine = {};
+            player.unlockedCastingOptions.divine.burst = true;
+        }
+    },
+    'nature_burst': {
+        name: 'Nature Burst',
+        description: 'Lets you cast single-target Nature damage or heal spells as an area burst centered on a point instead, at radius 1 for +8 mana. Nature Expansion increases the radius further.',
+        tree: 'nature',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedCastingOptions) player.unlockedCastingOptions = {};
+            if (!player.unlockedCastingOptions.nature) player.unlockedCastingOptions.nature = {};
+            player.unlockedCastingOptions.nature.burst = true;
+        }
+    },
+    // TOUCH: the opposite lever from <school>_range — instead of paying
+    // more mana to reach further, cap the spell at range 1 (adjacent only)
+    // for a mana discount. The point is tactical, not just economical: it
+    // gives a spellcaster a real reason to walk into melee range rather
+    // than always kiting at max range, which is what a spellsword/monk
+    // caster multiclass actually wants. Available for any spell whose
+    // normal range is already more than 1 (a spell that's already
+    // touch-range, e.g. Divine Protection, has nothing to discount).
+    // WARLOCK'S PACT: unlocks a toggleable ability (window.toggleBloodMagic,
+    // gameEngine.js) — once mana runs out, casting draws the shortfall from
+    // HP instead, at 2 HP per missing mana point. Deliberately worse than
+    // buying that HP back the honest way: Heal (baseMana 6, baseMagnitude
+    // 5) converts mana to HP at ~1.2 mana per HP, so recovering the 2 HP
+    // spent per mana here would cost ~2.4 mana — a strict net loss, so this
+    // can never be looped into free mana via a healer. Applies to whatever
+    // a spell's FINAL mana cost is after every other metamagic discount
+    // (Touch, Subtle, etc.) — it reads the same already-computed manaCost
+    // resolveSpell's caller pays, not a separate calculation.
+    'blood_magic': {
+        name: "Warlock's Pact",
+        description: "Toggle Blood Magic: once you're out of mana, casting draws the shortfall from your own HP instead, at 2 HP per missing mana — a worse rate than Heal converts mana back into HP.",
+        tree: 'arcane',
+        maxRanks: 1,
+        active: true,
+        apply: (player) => {}
+    },
+    'arcane_touch': {
+        name: 'Arcane Touch',
+        description: 'Lets you cast an Arcane spell at range 1 (adjacent only) for -3 mana instead of its normal range.',
+        tree: 'arcane',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedCastingOptions) player.unlockedCastingOptions = {};
+            if (!player.unlockedCastingOptions.arcane) player.unlockedCastingOptions.arcane = {};
+            player.unlockedCastingOptions.arcane.touch = true;
+        }
+    },
+    'divine_touch': {
+        name: 'Divine Touch',
+        description: 'Lets you cast a Divine spell at range 1 (adjacent only) for -3 mana instead of its normal range.',
+        tree: 'divine',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedCastingOptions) player.unlockedCastingOptions = {};
+            if (!player.unlockedCastingOptions.divine) player.unlockedCastingOptions.divine = {};
+            player.unlockedCastingOptions.divine.touch = true;
+        }
+    },
+    'nature_touch': {
+        name: 'Nature Touch',
+        description: 'Lets you cast a Nature spell at range 1 (adjacent only) for -3 mana instead of its normal range.',
+        tree: 'nature',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedCastingOptions) player.unlockedCastingOptions = {};
+            if (!player.unlockedCastingOptions.nature) player.unlockedCastingOptions.nature = {};
+            player.unlockedCastingOptions.nature.touch = true;
+        }
     },
     // Multi-target
     'arcane_targets': {
@@ -363,7 +524,7 @@ const skills = {
         name: 'Keen Elf Sight',
         description: 'Increases vision range by 4 per rank.',
         tree: 'elf',
-        maxRanks: 3,
+        maxRanks: 2,
         apply: (player) => {
             player.visionBonus = (player.visionBonus || 0) + 4;
         }
@@ -380,9 +541,14 @@ const skills = {
         description: 'Reduces vision penalties and stealth detection penalties in low light.',
         tree: 'elf',
         maxRanks: 1,
-        apply: (player) => {
-            player.visionBonus = (player.visionBonus || 0) + 5;
-        }
+        // No flat visionBonus here on purpose — this skill's actual effect is
+        // the elf_darkvision check elsewhere (gameEngine.js's canSee, hexMap.js's
+        // isVisibleToPlayer/updateExploration) that pins effectiveLight to 1.0,
+        // negating the low-light range penalty entirely. It was previously also
+        // granting an unconditional +5 vision bonus active even in broad
+        // daylight, which matched neither its own description nor the intended
+        // "keeps you near the ceiling in the dark" design.
+        apply: (player) => {}
     },
     'elf_foliage_expertise': {
         name: 'Woodland Stride',
@@ -400,6 +566,75 @@ const skills = {
         anti_prereq: 'elf_foliage_expertise',
         apply: (player) => {}
     },
+    'druid_knowledge_nature': {
+        name: 'Knowledge: Nature',
+        description: 'A trained eye for tracks, kills, and the wild in general — lets you read details others would miss. Higher ranks reveal more of a trail (see the unicorn tracking mechanic) and read it in more detail. (Anti-requisite: elf Knowledge: Nature)',
+        tree: 'druid',
+        maxRanks: 3,
+        anti_prereq: 'elf_knowledge_nature',
+        apply: (player) => {}
+    },
+    'elf_knowledge_nature': {
+        name: 'Knowledge: Nature',
+        description: 'A trained eye for tracks, kills, and the wild in general — lets you read details others would miss. Higher ranks reveal more of a trail (see the unicorn tracking mechanic) and read it in more detail. (Anti-requisite: druid Knowledge: Nature)',
+        tree: 'elf',
+        maxRanks: 3,
+        anti_prereq: 'druid_knowledge_nature',
+        apply: (player) => {}
+    },
+    // Knowledge: Nature used to single-handedly unlock reading tracks/kills
+    // AND (as of the resource-gathering system) harvesting/quality bonuses —
+    // one point doing too much. It now stays a pure "read details others
+    // would miss" flavor unlock; the actual mechanical hooks live in these
+    // three sub-skills, each requiring it as a prereq (either the druid or
+    // elf pickup — functionally identical, see hasKnowledgeNature).
+    'nature_butchery': {
+        name: 'Butchery',
+        description: 'Cleanly harvest meat and hides from animal corpses. (Requires Knowledge: Nature)',
+        tree: 'nature',
+        maxRanks: 1,
+        prereq_eval: (player) => window.hasKnowledgeNature(player),
+        apply: (player) => {}
+    },
+    'nature_bounty': {
+        name: "Forager's Bounty",
+        description: 'Extra yield when foraging fruit/herbs/fish. (Requires Knowledge: Nature)',
+        tree: 'nature',
+        maxRanks: 1,
+        prereq_eval: (player) => window.hasKnowledgeNature(player),
+        apply: (player) => {}
+    },
+    'nature_ranger': {
+        name: "Ranger's Instinct",
+        description: 'Grants +5 to-hit against animal-tagged enemies. (Requires Knowledge: Nature)',
+        tree: 'nature',
+        maxRanks: 1,
+        prereq_eval: (player) => window.hasKnowledgeNature(player),
+        apply: (player) => {
+            player.toHitVsAnimal = (player.toHitVsAnimal || 0) + 5;
+        }
+    },
+    'knowledge_religion': {
+        name: 'Knowledge: Religion',
+        description: 'Training in scripture, ritual, and the theory behind divine and forbidden magic alike — lets you recognize what others would dismiss as mere grave-robbing or superstition.',
+        tree: 'divine',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+    'divine_armor_ease': {
+        name: 'Vestment Ease',
+        description: "Reduces the mana-cost penalty for casting divine spells in armor by 1 per rank (can't reduce it below 0).",
+        tree: 'divine',
+        maxRanks: 2,
+        apply: (player) => {}
+    },
+    'nature_armor_ease': {
+        name: 'Wild Ease',
+        description: "Reduces the mana-cost penalty for casting nature spells in armor by 1 (can't reduce it below 0).",
+        tree: 'nature',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
     'dwarf_axe_mastery': {
         name: 'Dwarven Axe Mastery',
         description: 'Grants +2 damage when using an Axe.',
@@ -414,6 +649,85 @@ const skills = {
         maxRanks: 1,
         apply: (player) => {
             player.forcedMoveResistance = (player.forcedMoveResistance || 0) + 5;
+        }
+    },
+    'goblin_opportunist': {
+        name: 'Opportunist',
+        description: 'Deals +3 damage against a target that is caught off-guard.',
+        tree: 'goblin',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+    'goblin_keen_senses': {
+        name: 'Keen Senses',
+        description: 'Increases vision range by 3.',
+        tree: 'goblin',
+        maxRanks: 1,
+        apply: (player) => {
+            player.visionBonus = (player.visionBonus || 0) + 3;
+        }
+    },
+    'goblin_low_light_eyes': {
+        name: 'Low-Light Eyes',
+        description: 'Reduced vision/stealth-detection penalties in low light — same effect as elf Darkvision, a goblin trait from a life spent in warrens and caves.',
+        tree: 'goblin',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+    'goblin_quick_reflexes': {
+        name: 'Quick Reflexes',
+        description: 'Increases passive dodge chance by 2 per rank.',
+        tree: 'goblin',
+        maxRanks: 2,
+        apply: (player) => {
+            player.passiveDodge = (player.passiveDodge || 0) + 2;
+        }
+    },
+    'goblin_pack_hunter': {
+        name: 'Pack Hunter',
+        description: 'Deals +2 damage per rank against a target that already has an ally of yours standing next to it.',
+        tree: 'goblin',
+        maxRanks: 3,
+        apply: (player) => {}
+    },
+    'orc_brute_strength': {
+        name: 'Brute Strength',
+        description: 'Deals +2 melee damage per rank.',
+        tree: 'orc',
+        maxRanks: 3,
+        apply: (player) => {}
+    },
+    'orc_thick_hide': {
+        name: 'Thick Hide',
+        description: 'Reduces incoming damage by 1 per rank.',
+        tree: 'orc',
+        maxRanks: 2,
+        apply: (player) => {
+            player.baseReduction = (player.baseReduction || 0) + 1;
+        }
+    },
+    'orc_ferocity': {
+        name: 'Ferocity',
+        description: 'Deals +4 damage while at or below half HP — an orc fights hardest when it hurts.',
+        tree: 'orc',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+    'orc_momentum': {
+        name: 'Momentum',
+        description: 'Deals +3 damage per rank on an attack made after covering real ground (2+ hexes) since the start of the turn.',
+        tree: 'orc',
+        maxRanks: 2,
+        apply: (player) => {}
+    },
+    'orc_relentless': {
+        name: 'Relentless',
+        description: 'Increases current and max HP by 8 per rank.',
+        tree: 'orc',
+        maxRanks: 2,
+        apply: (player) => {
+            player.hp += 8;
+            player.maxHp += 8;
         }
     },
     'cleric_trigger_damage': {
@@ -487,6 +801,15 @@ const skills = {
         tree: 'nature',
         maxRanks: 1,
         prereq: 'learn_summon_animal',
+        apply: (player) => {}
+    },
+    'learn_unicorn_summon': {
+        name: 'Unicorn Bond',
+        description: "Allows a unicorn to answer your call for a permanent animal companion — a trust earned from the druids of the grove, not bought with skill points.",
+        tree: 'druid',
+        maxRanks: 1,
+        prereq_eval: () => false, // quest-granted only (see grantSkillRank in the druid grove questline, campaign2Dialogue.js) — never purchasable
+        questGrantedOnly: true, // excluded from respec's refund pass (resolveRespec, ui.js) — nothing was ever spent on this
         apply: (player) => {}
     },
     'poison_bite': {
@@ -601,7 +924,7 @@ const skills = {
     // AGILITY ADDITIONS
     'slip_away': {
         name: 'Slip Away',
-        description: 'Reaction (5 TP): When you are successfully hit, immediately move to any adjacent unoccupied hex.',
+        description: 'Reaction (5 TP): When you are successfully hit, immediately move to any adjacent unoccupied hex. Requires light armor or no armor.',
         tree: 'agility',
         maxRanks: 1,
         prereq: 'sidestep',
@@ -610,7 +933,7 @@ const skills = {
     },
     'acrobatics': {
         name: 'Acrobatics',
-        description: 'Passive: You can move through hexes occupied by enemies at +3 TP per such hex crossed.',
+        description: 'Passive: You can move through hexes occupied by enemies at +3 TP per such hex crossed. Requires light armor or no armor.',
         tree: 'agility',
         maxRanks: 1,
         apply: (player) => {}
@@ -651,15 +974,6 @@ const skills = {
     },
 
     // FIGHTER ADDITIONS
-    'counter_attack': {
-        name: 'Counter-Attack',
-        description: 'Reaction (3 TP): After a successful parry or Shield Bash, immediately make a basic attack against the attacker.',
-        tree: 'fighter',
-        maxRanks: 1,
-        prereq_eval: (p) => !!(p.skills['sword_parry'] || p.skills['dagger_parry'] || p.skills['shield_bash']),
-        reaction: true,
-        apply: (player) => {}
-    },
     'brace': {
         name: 'Brace',
         description: 'Active (3 TP): Enter a readied stance. Your next reaction this turn costs 1 fewer TP.',
@@ -981,7 +1295,7 @@ const skills = {
     },
     'learn_temporal_rift': {
         name: 'Learn Temporal Rift',
-        description: 'Unlocks Temporal Rift: Target entity skips their next turn, briefly displaced in time (20 mana, 15 TP).',
+        description: 'Unlocks Temporal Rift: Drains the target\'s Time Points to 0, briefly displacing them in time — since a turn only comes around at 100 TP, this pushes their next turn back by a full regen from zero (20 mana, 15 TP).',
         tree: 'arcane',
         maxRanks: 1,
         apply: (player) => {
@@ -1329,7 +1643,7 @@ function generateWeaponSkills(id, label, maxDmgRanks = 1) {
         };
         s[`bow_cover`] = {
             name: 'Cover Fire',
-            description: 'Active (15 TP): Declare a 3-hex zone. Enemies entering pay 4 extra TP to move through it until your next turn.',
+            description: 'Active (5 TP): Declare a hex — it and its 6 neighbors become a 7-hex zone. Enemies entering pay 4 extra TP to move through it until your next turn.',
             tree: 'weapons',
             maxRanks: 1,
             active: true,
@@ -1430,13 +1744,13 @@ function generateMagicSkills(school, spellName, spellId) {
 
     s[`${school}_range`] = {
         name: `${capitalized} Range`,
-        description: 'Increases spell range by 1 and mana cost by 1 per rank.',
+        description: 'Increases spell range by 5 and mana cost by 5 per rank.',
         tree: school,
         maxRanks: 0,
         apply: (player) => {
             if (!player.unlockedCastingOptions) player.unlockedCastingOptions = {};
             if (!player.unlockedCastingOptions[school]) player.unlockedCastingOptions[school] = {};
-            player.unlockedCastingOptions[school].extraRange = (player.unlockedCastingOptions[school].extraRange || 0) + 1;
+            player.unlockedCastingOptions[school].extraRange = (player.unlockedCastingOptions[school].extraRange || 0) + 5;
         }
     };
 
@@ -1460,6 +1774,20 @@ function generateMagicSkills(school, spellName, spellId) {
         apply: (player) => {
             if (!player.manaCaps) player.manaCaps = { arcane: 10, divine: 10, nature: 10 };
             player.manaCaps[school] += 5;
+        }
+    };
+
+    // How many prepared spells a character can have built at once (base 8,
+    // see entities.js/characterCreation.js) — one of these exists per school
+    // and all three stack, so a caster invested across all three trees can
+    // reach 8 + 2 + 2 + 2 = 14.
+    s[`${school}_spell_slots`] = {
+        name: `${capitalized} Spell Mastery`,
+        description: 'Increases the number of spells you can have prepared at once by 2.',
+        tree: school,
+        maxRanks: 1,
+        apply: (player) => {
+            player.maxSpellSlots = (player.maxSpellSlots || 8) + 2;
         }
     };
 
@@ -1497,4 +1825,247 @@ function generateMagicSkills(school, spellName, spellId) {
     return s;
 }
 
+// The lich tree: never funded by the normal attribute pool or wildcard
+// points (deliberately absent from ui.js's standardTrees list) and never
+// granted through level-up. The only way to gain a rank is window.grantSkillRank
+// being called directly by a necromancer-arc quest reward — which is also
+// what makes the tree visible at all, since ui.js only lists a tree once the
+// player already holds unspent points in it or a rank in one of its skills.
+Object.assign(skills, {
+    'lich_deathless_flesh': {
+        name: 'Deathless Flesh',
+        description: 'Your flesh forgets how to die properly. Reduces all incoming damage by 1 per rank.',
+        tree: 'lich',
+        maxRanks: 3,
+        apply: (player) => {
+            player.baseReduction = (player.baseReduction || 0) + 1;
+        }
+    },
+    'lich_grave_chill': {
+        name: 'Grave Chill',
+        description: 'Melee attacks drain a sliver of the target\'s life into your own. Heals 2 HP per rank on a successful melee hit.',
+        tree: 'lich',
+        maxRanks: 2,
+        apply: (player) => {
+            player.lifeDrainOnMeleeHit = (player.lifeDrainOnMeleeHit || 0) + 2;
+        }
+    },
+    'lich_withering_touch': {
+        name: 'Withering Touch',
+        description: 'Your touch withers what it strikes. Attacks apply a stacking damage-over-time.',
+        tree: 'lich',
+        maxRanks: 3,
+        apply: (player) => {
+            player.witheringTouchStacks = (player.witheringTouchStacks || 0) + 1;
+        }
+    },
+    'lich_command_the_dead': {
+        name: 'Command the Dead',
+        description: 'Nearby undead recognize a kindred will and fight for you instead of against you.',
+        tree: 'lich',
+        maxRanks: 1,
+        apply: (player) => {
+            player.commandsUndead = true;
+        }
+    },
+    'lich_soul_anchor': {
+        name: 'Soul Anchor',
+        description: "A fragment of you refuses to leave. Once per rest, damage that would kill you instead leaves you at 1 HP.",
+        tree: 'lich',
+        maxRanks: 1,
+        apply: (player) => {
+            player.hasSoulAnchor = true;
+        }
+    }
+});
+
+// Runesmithing: same "quest-granted only, invisible until then" convention
+// as the lich tree above — never funded by the normal attribute pool, never
+// granted by level-up, the only way in is window.grantSkillRank from the
+// Kragmoor Runesmith questline (see grantRunesmithing, campaign2Dialogue.js).
+// Deliberately not a combat stat: apply() just flags the player as able to
+// self-craft at a rune forge (see crafting.js's canCraftRecipe), matching
+// this game's whole magic-item design — the effects live in the recipes'
+// results (an aura, a light radius, a skill grant), never in the crafting
+// skill itself.
+Object.assign(skills, {
+    'runesmithing': {
+        name: 'Runesmithing',
+        description: "Kragmoor's own craft, hard-won: lets you work rune forge materials into a magic item yourself, without paying a smith to do it for you.",
+        tree: 'runesmith',
+        maxRanks: 1,
+        apply: (player) => {
+            player.canRunesmith = true;
+        }
+    },
+    // Sil'thandriel's own craft — same "quest-granted only, invisible until
+    // then" convention as runesmithing above (grantSkillRank from the
+    // sylvan_bowmaster questline, campaign2Dialogue.js), just built from
+    // hide/wood instead of rare ore. Same reasoning applies to the "apply
+    // just flags, the recipes carry the effects" design.
+    'leatherworking': {
+        name: 'Leatherworking',
+        description: "The Sylvan Court's craft: lets you work tanned hide and timber into bows and armor yourself, without paying a bowmaster to do it for you.",
+        tree: 'leatherworker',
+        maxRanks: 1,
+        apply: (player) => {
+            player.canLeatherwork = true;
+        }
+    }
+});
+
+// A batch of skills that strengthen the party without stacking a flat
+// combat number (see partyInventory.js's carry-capacity system and the
+// resources.js gathering nodes these hook into). Every one changes WHAT the
+// party can do rather than making an existing attack roll bigger — an
+// enemy debuff, a shared resource, a discount, or the encumbrance system's
+// own mitigation, never a bonus applied to your own to-hit/damage.
+Object.assign(skills, {
+    'strong_back': {
+        name: 'Strong Back',
+        description: "Adds 15 to the party's shared carrying capacity per rank — the whole party carries one pool, so anyone who takes this makes everyone's packs a little lighter.",
+        tree: 'strength',
+        maxRanks: 4,
+        apply: (player) => {}
+    },
+    'sunder_armor': {
+        name: 'Sunder Armor',
+        description: "A melee hit chips away at the target's armor instead of your own damage — each rank reduces the target's damage reduction by 1 for the rest of the fight, stacking up to 2 hits.",
+        tree: 'weapons',
+        maxRanks: 2,
+        apply: (player) => {}
+    },
+    'hamstring': {
+        name: 'Hamstring',
+        description: "A melee hit slows the target instead of hurting it more — each hit adds a stack of Hobbled (+20% movement cost), stacking up to 3 times for the rest of the fight.",
+        tree: 'weapons',
+        maxRanks: 3,
+        apply: (player) => {}
+    },
+    'appraiser': {
+        name: 'Appraiser',
+        description: "A sharp eye for what things are actually worth — every shop's buy prices are reduced 5% per rank (capped at 15%).",
+        tree: 'misc',
+        maxRanks: 3,
+        apply: (player) => {}
+    },
+    'keen_forager': {
+        name: 'Keen Forager',
+        description: 'Always finds the best of what a gathering node has to offer — ore veins, herb patches, fruit trees, and fishing spots all yield their maximum amount instead of a random roll.',
+        tree: 'nature',
+        maxRanks: 1,
+        apply: (player) => {}
+    },
+    'quartermaster': {
+        name: 'Quartermaster',
+        description: "Knows how to pack a party's gear so being overloaded hurts less — halves the movement penalty from being over the party's shared carry capacity, per rank (fully negated at rank 2).",
+        tree: 'endurance',
+        maxRanks: 2,
+        apply: (player) => {}
+    }
+});
+
+Object.assign(skills, {
+    'persuasion': {
+        name: 'Persuasion',
+        description: 'A modest, bounded discount (5%/rank, capped 15%) on the cost of anything you offer someone to win their cooperation. Never unlocks an outcome by itself — you still need something they actually want.',
+        tree: 'misc',
+        maxRanks: 3,
+        apply: (player) => {}
+    },
+    'insight': {
+        name: 'Insight',
+        description: "Reads people accurately — reveals what an NPC actually wants (and flags when they're bluffing) without having to guess and risk the consequences.",
+        tree: 'misc',
+        maxRanks: 3,
+        apply: (player) => {}
+    },
+    'intimidation': {
+        name: 'Intimidation',
+        description: 'An alternative to paying someone off: lean on them instead. Trades your reputation for not having to give anything up.',
+        tree: 'misc',
+        maxRanks: 2,
+        apply: (player) => {}
+    },
+    'lockpicking': {
+        name: 'Lockpicking',
+        description: 'Skill at opening locks without the key.',
+        tree: 'misc',
+        maxRanks: 3,
+        apply: (player) => {}
+    },
+    'survival': {
+        name: 'Survival',
+        description: 'Reduces the chance of being ambushed while resting in the wilderness.',
+        tree: 'misc',
+        maxRanks: 2,
+        apply: (player) => {}
+    },
+    'appraisal': {
+        name: 'Appraisal',
+        description: 'A bounded improvement to shop prices, and reveals a bit more about an item than the eye alone would tell you.',
+        tree: 'misc',
+        maxRanks: 2,
+        apply: (player) => {}
+    },
+    // Formerly split across 'social'/'practical' — consolidated into one
+    // 'misc' tree (see learnSkill, ui.js): no race/class ever grants a
+    // dedicated point in it, same as before, but a misc skill can now be
+    // funded by ANY pool with a spare point, not just wildcard — a player
+    // with unspent points in several different trees is asked which one to
+    // spend when the choice is ambiguous.
+    'smithing': {
+        name: 'Smithing',
+        description: "A working knowledge of the forge, short of a real smith's training — knocks a little off what any smith charges you for labor (10%/rank, capped at 30%), whether it's Runeforged steel or an ordinary repair.",
+        tree: 'misc',
+        maxRanks: 3,
+        apply: (player) => {}
+    },
+    'cooking': {
+        name: 'Cooking',
+        description: 'Makes gathered food actually worth carrying — each rank adds 2 hours to how long a meal keeps you Well Fed.',
+        tree: 'misc',
+        maxRanks: 2,
+        apply: (player) => {}
+    }
+});
+
 window.skills = skills;
+
+// Either the druid or elf pickup of Knowledge: Nature (mutually exclusive
+// via anti_prereq, but functionally identical) — checked wherever the game
+// wants to know "does this party member understand what happened here."
+function hasKnowledgeNature(entity) {
+    return !!(entity?.skills?.druid_knowledge_nature || entity?.skills?.elf_knowledge_nature);
+}
+window.hasKnowledgeNature = hasKnowledgeNature;
+
+// Rank (1-3) of whichever Knowledge: Nature pickup the entity has, 0 if
+// neither — used to scale how much of a trail (e.g. the unicorn's tracks,
+// gameEngine.js) is visible and how much detail (direction/age) reading it
+// reveals, rather than Knowledge: Nature being a flat yes/no gate.
+function getKnowledgeNatureRank(entity) {
+    return entity?.skills?.druid_knowledge_nature || entity?.skills?.elf_knowledge_nature || 0;
+}
+window.getKnowledgeNatureRank = getKnowledgeNatureRank;
+
+function hasKnowledgeReligion(entity) {
+    return !!entity?.skills?.knowledge_religion;
+}
+window.hasKnowledgeReligion = hasKnowledgeReligion;
+
+// Generic "does this character actually know spell X" check — same idea as
+// hasKnowledgeNature/hasKnowledgeReligion above, but for spells rather than
+// knowledge skills. Lets dialogue treat a learned spell as a real source of
+// in-world insight (e.g. Smite Evil training making a disciple of the dead
+// feel wrong to be near, the same way Knowledge: Religion lets you read the
+// literal symbols) rather than spells being purely a combat button.
+// Checks unlockedBaseSpells (set the moment the underlying skill is learned,
+// see e.g. learn_smite_evil's apply()) rather than createdSpells, since the
+// player may not have gotten around to customizing every spell they've
+// unlocked — knowing OF a spell is what should gate a dialogue option, not
+// whether they bothered building a casting configuration for it yet.
+function hasSpellUnlocked(entity, baseSpellId) {
+    return !!(entity?.unlockedBaseSpells || []).includes(baseSpellId);
+}
+window.hasSpellUnlocked = hasSpellUnlocked;

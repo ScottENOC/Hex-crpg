@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Hex RPG</title>
     <link rel="stylesheet" href="style.css">
     <style>
@@ -17,6 +17,13 @@
             position: absolute;
             background-color: #333;
             min-width: 160px;
+            /* Safety net alongside main.js's clampDropdownToViewport (which
+               repositions it after opening, based on where the trigger
+               button actually landed) — this caps its own width so it can
+               never force horizontal overflow on a narrow phone screen even
+               before that JS-driven clamp runs. */
+            max-width: min(280px, 94vw);
+            box-sizing: border-box;
             box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
             z-index: 105;
             border: 1px solid #555;
@@ -38,7 +45,7 @@
             background-color: #444;
         }
 
-        .dropdown:hover .dropdown-content {
+        .dropdown:hover .dropdown-content, .dropdown-content.show {
             display: block;
         }
 
@@ -55,6 +62,7 @@
         .dropbtn:hover {
             background-color: #3f51b5;
         }
+
     </style>
 </head>
 <body>
@@ -73,11 +81,14 @@
                 <button id="spell-menu-btn">Spell Menu</button>
                 <button id="inventory-btn">Inventory</button>
                 <button id="world-map-btn" style="background-color: #4CAF50;">World Map</button>
+                <button id="quest-log-btn" style="background-color: #8d6e63;">Quest Log</button>
+                <button id="roster-btn" style="background-color: #6d4c8d;">Roster</button>
                 <button id="save-menu-btn" style="background-color: #2196F3;">Save Game</button>
                 <button id="load-menu-btn" style="background-color: #9C27B0;">Load Game</button>
                 <button id="quick-save-btn" style="background-color: #1976D2;">Quick Save</button>
                 <button id="quick-load-btn" style="background-color: #7B1FA2;">Quick Load</button>
                 <button id="settings-menu-btn" style="background-color: #607d8b;">Settings</button>
+                <button id="controller-mode-btn" style="background-color: #455a64;">Controller: Cursor Mode</button>
                 <div style="padding: 10px; border-top: 1px solid #555; display: flex; align-items: center; gap: 5px;">
                     <input type="checkbox" id="mute-check-menu" onchange="window.syncMute(this.checked)" style="width: 15px; height: 15px;">
                     <label for="mute-check-menu" style="font-size: 0.8em; color: white;">Mute Music</label>
@@ -86,10 +97,12 @@
         </div>
 
         <button id="move-group-btn" style="background-color: #795548;">Move Group: OFF</button>
+        <button id="party-formation-btn" style="background-color: #6d4c41; color: white;">Formation: close</button>
         <button id="cancel-moves-btn" style="background-color: #d32f2f; color: white;">Cancel Move Orders</button>
         <button id="rest-btn" style="background-color: #607d8b; color: white;">Rest until Restored</button>
         <button id="sleep-btn" style="background-color: #3f51b5; color: white;">Sleep</button>
-        
+        <button id="time-speed-btn" style="background-color: #00838f; color: white;">Speed: 1x</button>
+
         <div class="dropdown">
             <button class="dropbtn">Cheat</button>
             <div class="dropdown-content">
@@ -98,6 +111,29 @@
         <button id="cheat-all-equip-btn" style="background-color: #607d8b; font-size: 0.7em; color: white;">Cheat: Add All Equipment</button>
         <button id="cheat-fly-btn" style="background-color: #03a9f4; font-size: 0.7em; color: white;">Cheat: Fly All</button>
         <button id="cheat-max-skills-btn" style="background-color: #e91e63; font-size: 0.7em; color: white;">Cheat: Max Skills</button>
+        <button id="cheat-max-all-skills-btn" style="background-color: #e91e63; font-size: 0.7em; color: white;">Cheat: Max All Skills</button>
+        <button id="cheat-explore-everything-btn" style="background-color: #795548; font-size: 0.7em; color: white;">Cheat: Explore Everything</button>
+        <div id="cheat-teleport-list" style="padding: 4px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center;">
+            <!-- A native <select> is deliberately NOT used here — on iOS
+                 Safari the native picker could be made to render correctly
+                 but never reliably opened on tap in this dropdown, unlike
+                 every other button in this menu. Plain buttons (one per
+                 destination) reuse the exact same click/touch handling that
+                 already works for every other Cheat button. -->
+            <button class="cheat-teleport-dest-btn" data-teleport-dest="Hollowmere (Village)" style="background-color: #009688; font-size: 0.7em; color: white;">Hollowmere (Village)</button>
+            <button class="cheat-teleport-dest-btn" data-teleport-dest="Millbrook (Village)" style="background-color: #009688; font-size: 0.7em; color: white;">Millbrook (Village)</button>
+            <button class="cheat-teleport-dest-btn" data-teleport-dest="Silverhart (Capital)" style="background-color: #009688; font-size: 0.7em; color: white;">Silverhart (Capital)</button>
+            <button class="cheat-teleport-dest-btn" data-teleport-dest="Reddale (Town)" style="background-color: #009688; font-size: 0.7em; color: white;">Reddale (Town)</button>
+            <button class="cheat-teleport-dest-btn" data-teleport-dest="Emberlode (Mining Village)" style="background-color: #009688; font-size: 0.7em; color: white;">Emberlode (Mining Village)</button>
+            <button class="cheat-teleport-dest-btn" data-teleport-dest="Old Mac's Farmstead" style="background-color: #009688; font-size: 0.7em; color: white;">Old Mac's Farmstead</button>
+            <button class="cheat-teleport-dest-btn" data-teleport-dest="Goblin Stronghold" style="background-color: #009688; font-size: 0.7em; color: white;">Goblin Stronghold</button>
+            <button class="cheat-teleport-dest-btn" data-teleport-dest="Abandoned House" style="background-color: #009688; font-size: 0.7em; color: white;">Abandoned House</button>
+            <button class="cheat-teleport-dest-btn" data-teleport-dest="Northwatch Fort" style="background-color: #009688; font-size: 0.7em; color: white;">Northwatch Fort</button>
+            <button class="cheat-teleport-dest-btn" data-teleport-dest="Ridgehold Fort" style="background-color: #009688; font-size: 0.7em; color: white;">Ridgehold Fort</button>
+        </div>
+        <button id="cheat-siege-sally-btn" style="background-color: #b71c1c; font-size: 0.7em; color: white;">Cheat: Northwatch Siege (Sally)</button>
+        <button id="cheat-siege-stay-btn" style="background-color: #b71c1c; font-size: 0.7em; color: white;">Cheat: Northwatch Siege (Stay in Fort)</button>
+        <button id="cheat-siege-join-btn" style="background-color: #b71c1c; font-size: 0.7em; color: white;">Cheat: Northwatch Siege (Join Greenskins)</button>
     </div>
     </div>
     </div>
@@ -114,18 +150,41 @@
             </div>
             <div class="form-group">
                 <label for="race-select">Race:</label>
-                <select id="race-select" onchange="window.updateSelectionPreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
+                <select id="race-select" onchange="window.updateSelectionPreview(); if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
                     <option value="human">Human</option>
                     <option value="dwarf">Dwarf</option>
                     <option value="elf">Elf</option>
+                    <option value="goblin">Goblin</option>
+                    <option value="orc">Orc</option>
                 </select>
             </div>
             <div class="form-group">
                 <label for="gender-select">Gender:</label>
-                <select id="gender-select" onchange="if(window.syncCharacterToServer) window.syncCharacterToServer()">
+                <select id="gender-select" onchange="if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
                     <option value="female">Female</option>
                     <option value="male">Male</option>
                 </select>
+            </div>
+            <div class="form-group">
+                <label>Appearance:</label>
+                <div style="display: flex; align-items: flex-start; gap: 10px;">
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 6px;">
+                        <label for="shirt-hue-slider" style="font-weight: normal; font-size: 0.85em;">Shirt Color</label>
+                        <input type="range" id="shirt-hue-slider" min="0" max="359" value="30"
+                               oninput="if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
+                        <label for="pants-hue-slider" style="font-weight: normal; font-size: 0.85em;">Pants Color</label>
+                        <input type="range" id="pants-hue-slider" min="0" max="359" value="220"
+                               oninput="if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
+                        <label for="hair-hue-slider" style="font-weight: normal; font-size: 0.85em;">Hair Color</label>
+                        <input type="range" id="hair-hue-slider" min="0" max="359" value="25"
+                               oninput="if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
+                        <label for="skin-hue-slider" style="font-weight: normal; font-size: 0.85em;">Skin Tone</label>
+                        <input type="range" id="skin-hue-slider" min="5" max="45" value="20"
+                               oninput="if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
+                    </div>
+                    <canvas id="appearance-preview-canvas" width="70" height="90" style="background:#222; border:1px solid #444; border-radius:4px; flex-shrink:0;"></canvas>
+                </div>
+                <small style="color: #aaa; display: block; margin-top: 3px;">Color only — no shape or race changes.</small>
             </div>
             <div class="form-group">
                 <label for="class-select">Class:</label>
@@ -184,6 +243,7 @@
                     <option value="1" selected>Campaign 1 (Arena)</option>
                     <option value="2">Campaign 2 (Small World)</option>
                     <option value="3">Campaign 3 (Main)</option>
+                    <option value="4">Campaign 4 (Sprite Test)</option>
                 </select>
             </div>
             <div id="arena-roguelike-options" style="margin-bottom: 15px;">
@@ -204,6 +264,15 @@
                     <label for="ironman-check" style="margin-bottom: 0; font-weight: bold; color: #f44336;">Iron Man Mode</label>
                 </div>
                 <small style="color: #aaa; display: block; margin-top: -5px; margin-left: 30px;">Mandatory for Arena. Save/Quick-save exits to title and deletes other run saves.</small>
+            </div>
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label for="difficulty-select">Difficulty:</label>
+                <select id="difficulty-select">
+                    <option value="easy">Easy</option>
+                    <option value="normal" selected>Normal</option>
+                    <option value="hard">Hard</option>
+                </select>
+                <small style="color: #aaa; display: block; margin-top: 3px;">Easy: more starting gold, a free rank of Health at level 1, better sell prices, weaker level-scaled enemies, slower world-event progress. Hard: you take more damage and deal less, worse sell prices.</small>
             </div>
             <!-- Skill Point Allocation Section -->
             <div class="skills-section">
@@ -276,17 +345,39 @@
         <div class="modal-content" style="width: 90%; height: 90%; max-width: none;">
             <button class="close-btn" id="close-world-map-modal">&times;</button>
             <h2>World Map</h2>
-            <div id="world-map-container" style="width: 100%; height: 85%; overflow: auto; background: #222; padding: 10px; border-radius: 8px;">
-                <canvas id="worldMapCanvas"></canvas>
+            <div style="display: flex; gap: 10px; height: 85%;">
+                <div id="world-map-container" style="flex: 1; overflow: auto; background: #222; padding: 10px; border-radius: 8px;">
+                    <canvas id="worldMapCanvas"></canvas>
+                </div>
+                <div id="world-map-details" style="width: 260px; flex-shrink: 0; background: #222; padding: 12px; border-radius: 8px; overflow-y: auto; display: none;">
+                    <h3 id="world-map-details-name" style="margin: 0 0 8px 0;">Location</h3>
+                    <p id="world-map-details-info" style="margin: 0 0 10px 0; color: #ccc; font-size: 0.9em;"></p>
+                    <label for="world-map-details-notes" style="font-size: 0.85em; color: #aaa;">Notes</label>
+                    <textarea id="world-map-details-notes" style="width: 100%; height: 120px; margin-top: 4px; background: #111; color: #eee; border: 1px solid #444; border-radius: 4px; resize: vertical;"></textarea>
+                    <button id="world-map-details-save" style="margin-top: 8px; width: 100%;">Save Notes</button>
+                </div>
             </div>
-            <div id="world-map-legend" style="margin-top: 10px; display: flex; gap: 20px; flex-wrap: wrap; font-size: 0.9em;">
-                <div><span style="display:inline-block; width:12px; height:12px; background:#ffd700; border-radius:50%; margin-right:5px;"></span>Dwarven Kingdom</div>
-                <div><span style="display:inline-block; width:12px; height:12px; background:#00ff00; border-radius:50%; margin-right:5px;"></span>Elven Realm</div>
-                <div><span style="display:inline-block; width:12px; height:12px; background:#ff4500; border-radius:50%; margin-right:5px;"></span>Orc Tribes</div>
-                <div><span style="display:inline-block; width:12px; height:12px; background:#9932cc; border-radius:50%; margin-right:5px;"></span>Goblin Hordes</div>
-                <div><span style="display:inline-block; width:12px; height:12px; background:#ffa500; border-radius:50%; margin-right:5px;"></span>Nomad Steppes</div>
-                <div><span style="display:inline-block; width:12px; height:12px; background:white; border-radius:50%; margin-right:5px;"></span>Human Lands</div>
-            </div>
+            <div id="world-map-legend" style="margin-top: 10px; display: flex; gap: 20px; flex-wrap: wrap; font-size: 0.9em;"></div>
+        </div>
+    </div>
+
+    <div id="quest-log-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="width: 500px; max-width: 90%;">
+            <button class="close-btn" id="close-quest-log-modal">&times;</button>
+            <h2>Quest Log</h2>
+            <div id="quest-log-list" style="max-height: 60vh; overflow-y: auto;"></div>
+        </div>
+    </div>
+
+    <div id="roster-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="width: 500px; max-width: 90%;">
+            <button class="close-btn" id="close-roster-modal">&times;</button>
+            <h2>Roster</h2>
+            <p style="color: #aaa; font-size: 0.85em; margin-top: -8px;">Only the main character plus 5 others can be with you at once. Everyone else waits safely off the field — swap freely, but only outside combat.</p>
+            <h3 style="margin-bottom: 4px;">Active Party</h3>
+            <div id="roster-active-list" style="max-height: 30vh; overflow-y: auto; margin-bottom: 12px;"></div>
+            <h3 style="margin-bottom: 4px;">Waiting</h3>
+            <div id="roster-benched-list" style="max-height: 30vh; overflow-y: auto;"></div>
         </div>
     </div>
 
@@ -300,7 +391,6 @@
 
     <div id="dialogue-modal" class="modal" style="display: none;">
         <div class="modal-content">
-            <button class="close-btn" id="close-dialogue-modal">&times;</button>
             <h2 id="dialogue-speaker">Speaker Name</h2>
             <div id="dialogue-portrait" style="width: 100px; height: 100px; background: #222; margin-bottom: 10px; position: relative;"></div>
             <p id="dialogue-message">Dialogue text goes here.</p>
@@ -348,6 +438,18 @@
         </div>
     </div>
 
+    <div id="game-over-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="text-align: center;">
+            <h2 style="color: #f44336;">Game Over</h2>
+            <p id="game-over-message" style="color: #ddd;"></p>
+            <p style="color: #999; font-size: 0.9em;">No power in this world can undo this — resurrection and true teleportation both demand the resources of an entire nation, and some of what they require can't be bought at any price.</p>
+            <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
+                <button id="game-over-load-btn" style="background-color: #2196F3;">Load Game</button>
+                <button id="game-over-menu-btn" style="background-color: #607d8b;">Main Menu</button>
+            </div>
+        </div>
+    </div>
+
     <div id="mercenary-creation-modal" class="modal" style="display: none;">
         <div class="modal-content">
             <h2>Hire Mercenary (100 Gold)</h2>
@@ -361,6 +463,8 @@
                     <option value="human">Human</option>
                     <option value="dwarf">Dwarf</option>
                     <option value="elf">Elf</option>
+                    <option value="goblin">Goblin</option>
+                    <option value="orc">Orc</option>
                 </select>
             </div>
             <div class="form-group">
@@ -443,30 +547,121 @@
                     <label>Dialogue Volume</label>
                     <input type="range" id="volume-dialogue" min="0" max="1" step="0.01" value="1" oninput="window.updateAudioSetting('dialogue', this.value)">
                 </div>
+
+                <h3>Allegiance Hex Outlines</h3>
+                <div class="form-group">
+                    <label>Show colored hex outlines around characters</label>
+                    <select id="allegiance-outline-mode" onchange="window.setAllegianceOutlineMode(this.value)">
+                        <option value="combat">On during combat (default)</option>
+                        <option value="always">Always on</option>
+                        <option value="never">Always off</option>
+                    </select>
+                </div>
+
+                <h3>Graphics</h3>
+                <div class="form-group">
+                    <label>Frame Rate</label>
+                    <select id="graphics-framerate-mode" onchange="window.setFrameRateMode(this.value)">
+                        <option value="auto">Auto (recommended)</option>
+                        <option value="60">60 fps</option>
+                        <option value="30">30 fps</option>
+                        <option value="15">15 fps</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Render Scale</label>
+                    <select id="graphics-render-scale" onchange="window.setRenderScale(this.value)">
+                        <option value="1">100%</option>
+                        <option value="0.75">75%</option>
+                        <option value="0.5">50%</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label><input type="checkbox" id="graphics-reduce-motion" onchange="window.setReduceMotion(this.checked)"> Reduce motion (screen shake, lunge, floating text drift)</label>
+                </div>
+                <div class="form-group">
+                    <label>Foliage Detail</label>
+                    <select id="graphics-foliage-detail" onchange="window.setFoliageDetail(this.value)">
+                        <option value="full">Full</option>
+                        <option value="simple">Simple (faster)</option>
+                    </select>
+                </div>
+
+                <h3>Save Code</h3>
+                <div class="form-group">
+                    <label>Copy this to move your save between devices, or between browser testing and the installed app</label>
+                    <div style="display:flex; gap:8px;">
+                        <button id="export-save-code-btn" style="flex:1;" onclick="window.handleExportSaveCode()">Export Save Code</button>
+                    </div>
+                    <textarea id="save-code-textarea" rows="3" style="width:100%; margin-top:8px; font-size:0.7em;" placeholder="Paste a save code here to import it"></textarea>
+                    <div style="display:flex; gap:8px; margin-top:4px;">
+                        <button id="import-save-code-btn" style="flex:1;" onclick="window.handleImportSaveCode()">Import Save Code</button>
+                    </div>
+                </div>
+
+                <h3>Tutorial Mode</h3>
+                <div class="form-group">
+                    <label><input type="checkbox" id="tutorial-mode-toggle" onchange="window.setTutorialModeEnabled(this.checked)"> Explain new things the first time they happen</label>
+                </div>
+                <div class="form-group" style="display:flex; gap:8px;">
+                    <button onclick="window.resetTutorialMemory()" style="flex:1;">Reset Tutorial Tips</button>
+                </div>
             </div>
         </div>
     </div>
 
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <script src="data.js"></script>
-    <script src="name.js"></script>
-    <script src="dialogue.js"></script>
-    <script src="worldTime.js"></script>
-    <script src="world_map_data.js"></script>
-    <script src="worldMap.js"></script>
-    <script src="characterCreation.js"></script>
-    <script src="hexMap.js"></script>
-    <script src="terrain.js"></script>
-    <script src="entities.js"></script>
-    <script src="monsters.js"></script>
-    <script src="equipment.js"></script>
-    <script src="spells.js"></script>
-    <script src="skills.js"></script>
-    <script src="persistence.js"></script>
-    <script src="audio.js"></script>
-    <script src="network.js"></script>
-    <script src="ui.js"></script>
-    <script src="gameEngine.js"></script>
-    <script src="main.js?v=2"></script>
+    <script src="vendor/socket.io.min.js"></script>
+    <!-- Cache-busting: every local script below shares one ?v=N query param.
+         Mobile Safari (regular tabs, not private/incognito) caches these
+         far more aggressively than desktop browsers and won't pick up a
+         changed file just because the server sent a new Last-Modified/ETag
+         — bump this number on every deploy that changes any .js file, or
+         returning players get served stale code until they clear site data. -->
+    <script src="data.js?v=3"></script>
+    <script src="name.js?v=3"></script>
+    <script src="dialogue.js?v=3"></script>
+    <script src="questLog.js?v=3"></script>
+    <script src="roster.js?v=3"></script>
+    <script src="worldTime.js?v=3"></script>
+    <script src="world_map_data.js?v=3"></script>
+    <script src="worldMap.js?v=3"></script>
+    <script src="characterCreation.js?v=3"></script>
+    <script src="spriteRecolor.js?v=3"></script>
+    <script src="hexMap.js?v=3"></script>
+    <script src="graphicsSettings.js?v=3"></script>
+    <script src="terrain.js?v=3"></script>
+    <script src="entities.js?v=3"></script>
+    <script src="monsters.js?v=3"></script>
+    <script src="equipment.js?v=3"></script>
+    <script src="spells.js?v=3"></script>
+    <script src="skills.js?v=3"></script>
+    <script src="spellPlanner.js?v=3"></script>
+    <script src="leverage.js?v=3"></script>
+    <script src="factions.js?v=3"></script>
+    <script src="ironbondArc.js?v=3"></script>
+    <script src="lichHunt.js?v=3"></script>
+    <script src="regions.js?v=3"></script>
+    <script src="worldPulse.js?v=3"></script>
+    <script src="resources.js?v=3"></script>
+    <script src="secrets.js?v=3"></script>
+    <script src="partyInventory.js?v=3"></script>
+    <script src="crafting.js?v=3"></script>
+    <script src="construction.js?v=3"></script>
+    <script src="stable.js?v=3"></script>
+    <script src="combatFX.js?v=3"></script>
+    <script src="espionageQuests.js?v=3"></script>
+    <script src="characterBanter.js?v=3"></script>
+    <script src="campaign2Content.js?v=3"></script>
+    <script src="npcBuilder.js?v=3"></script>
+    <script src="campaign2World.js?v=3"></script>
+    <script src="campaign2Dialogue.js?v=3"></script>
+    <script src="persistence.js?v=3"></script>
+    <script src="audio.js?v=3"></script>
+    <script src="musicDirector.js?v=3"></script>
+    <script src="network.js?v=3"></script>
+    <script src="ui.js?v=3"></script>
+    <script src="gameEngine.js?v=3"></script>
+    <script src="controller.js?v=3"></script>
+    <script src="main.js?v=3"></script>
 </body>
 </html>

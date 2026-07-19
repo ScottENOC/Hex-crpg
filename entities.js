@@ -39,6 +39,7 @@ class Entity {
     this.sleepRemainingSeconds = 0;
     this.isStealthed = false;
     this.stealthScore = 0; // Calculated when stealthing
+    this.unconscious = false; // Player-side "downed" state — still alive:true, just can't act (see gameEngine.js handleLethalDamage)
     this.lastMoveTime = 0; // To track movement penalties
     
     // NEW SYSTEM STATS
@@ -53,6 +54,11 @@ class Entity {
     this.mountSize = 0;
     this.riding = null; // Reference to mount entity
     this.rider = null;  // Reference to rider entity
+
+    // Multi-story buildings: which registered floor (window.multiStoryBuildings)
+    // this entity is standing on. 0 = ground floor / not in a multi-story
+    // building — the vast majority of entities never touch this.
+    this.floor = 0;
 
     // Visual Interpolation — guard against null hex from a corrupt sync payload
     this.hex = hex || { q: 0, r: 0 };
@@ -82,8 +88,11 @@ class Enemy extends Entity {
         this.expValue = expValue;
         this.gold = 0;
         this.inventory = [];
+        this.maxSpellSlots = 8;
+        this.manaCaps = { arcane: 10, divine: 10, nature: 10 };
+        this.unlockedCastingOptions = {};
         this.createdSpells = [];
-        this.equipped = { weapon: null, offhand: null, armor: null, helmet: null };
+        this.equipped = { weapon: null, offhand: null, armor: null, helmet: null, clothes: null };
         this.lastSeenTargetHex = null;
     }
 

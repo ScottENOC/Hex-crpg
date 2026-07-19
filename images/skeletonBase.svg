@@ -1,0 +1,38 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Skull -->
+  <path d="M23 14C23 8 27 4 32 4C37 4 41 8 41 14C41 18 39 21 32 21C25 21 23 18 23 14Z" fill="#F5F0E1" stroke="#333" stroke-width="1.5"/>
+  <circle cx="28" cy="14" r="1.8" fill="#000"/>
+  <circle cx="36" cy="14" r="1.8" fill="#000"/>
+  <path d="M31 17L32 15L33 17Z" fill="#000"/>
+  <rect x="27.5" y="19" width="9" height="1.5" fill="#000" opacity="0.35"/>
+
+  <!-- Spine -->
+  <path d="M32 21V38" stroke="#F5F0E1" stroke-width="3" stroke-linecap="round"/>
+  <!-- Ribcage rungs -->
+  <path d="M25 24C25 24 28 23 32 23C36 23 39 24 39 24" fill="none" stroke="#F5F0E1" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M24 28C24 28 28 27 32 27C36 27 40 28 40 28" fill="none" stroke="#F5F0E1" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M24 32C24 32 28 31 32 31C36 31 40 32 40 32" fill="none" stroke="#F5F0E1" stroke-width="2.2" stroke-linecap="round"/>
+
+  <!-- Pelvis -->
+  <path d="M26 38C26 38 29 40 32 40C35 40 38 38 38 38L36 43H28Z" fill="#F5F0E1" stroke="#333" stroke-width="1.2"/>
+
+  <!-- Left arm (screen-left, character's right) — upper arm + forearm + hand -->
+  <path d="M25 24L19 32" stroke="#F5F0E1" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M19 32L17 42" stroke="#F5F0E1" stroke-width="2.4" stroke-linecap="round"/>
+  <circle cx="16.5" cy="44" r="1.8" fill="#F5F0E1" stroke="#333" stroke-width="1"/>
+
+  <!-- Right arm -->
+  <path d="M39 24L45 32" stroke="#F5F0E1" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M45 32L47 42" stroke="#F5F0E1" stroke-width="2.4" stroke-linecap="round"/>
+  <circle cx="47.5" cy="44" r="1.8" fill="#F5F0E1" stroke="#333" stroke-width="1"/>
+
+  <!-- Left leg -->
+  <path d="M29 42L27 52" stroke="#F5F0E1" stroke-width="3" stroke-linecap="round"/>
+  <path d="M27 52L26 61" stroke="#F5F0E1" stroke-width="2.6" stroke-linecap="round"/>
+  <ellipse cx="24.5" cy="62" rx="3" ry="1.6" fill="#F5F0E1" stroke="#333" stroke-width="1"/>
+
+  <!-- Right leg -->
+  <path d="M35 42L37 52" stroke="#F5F0E1" stroke-width="3" stroke-linecap="round"/>
+  <path d="M37 52L38 61" stroke="#F5F0E1" stroke-width="2.6" stroke-linecap="round"/>
+  <ellipse cx="39.5" cy="62" rx="3" ry="1.6" fill="#F5F0E1" stroke="#333" stroke-width="1"/>
+</svg>

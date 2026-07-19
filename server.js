@@ -16,6 +16,12 @@ app.use(express.static(__dirname));
 
 const rooms = {};
 
+// Holds disconnected player data for a grace period so they can seamlessly rejoin.
+// Key: roomCode -> { playerName -> { characterData, timerId } }
+const disconnectedPlayers = {};
+
+const DISCONNECT_GRACE_MS = 30000;
+
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
@@ -40,29 +46,40 @@ io.on('connection', (socket) => {
     socket.on('joinRoom', ({ roomCode, characterData }) => {
         const room = rooms[roomCode];
         if (room) {
-            // UNIQUE NAME ENFORCEMENT
-            let baseName = characterData.name;
-            let finalName = baseName;
-            let counter = 2;
-            
-            const isNameTaken = (name) => {
-                const playerNames = Object.values(room.players).map(p => p.name);
-                return playerNames.includes(name) || room.savedCharacters.includes(name);
-            };
+            const graceSlot = disconnectedPlayers[roomCode]?.[characterData.name];
 
-            while (isNameTaken(finalName)) {
-                finalName = `${baseName} (${counter})`;
-                counter++;
+            if (graceSlot) {
+                // Reconnecting player reclaims their slot — cancel the removal timer
+                clearTimeout(graceSlot.timerId);
+                delete disconnectedPlayers[roomCode][characterData.name];
+                characterData = { ...graceSlot.characterData, ...characterData };
+                characterData.isReconnect = true;
+            } else {
+                // UNIQUE NAME ENFORCEMENT for genuinely new players
+                let baseName = characterData.name;
+                let finalName = baseName;
+                let counter = 2;
+
+                const isNameTaken = (name) => {
+                    const playerNames = Object.values(room.players).map(p => p.name);
+                    const graceNames = Object.keys(disconnectedPlayers[roomCode] || {});
+                    return playerNames.includes(name) || room.savedCharacters.includes(name) || graceNames.includes(name);
+                };
+
+                while (isNameTaken(finalName)) {
+                    finalName = `${baseName} (${counter})`;
+                    counter++;
+                }
+                characterData.name = finalName;
             }
-            characterData.name = finalName;
 
             characterData.hex = characterData.hex || { q: 0, r: 0 };
             room.players[socket.id] = characterData;
             socket.join(roomCode);
-            
-            socket.emit('roomJoined', { 
-                roomCode, 
-                players: room.players, 
+
+            socket.emit('roomJoined', {
+                roomCode,
+                players: room.players,
                 gameState: room.gameState,
                 savedCharacters: room.savedCharacters
             });
@@ -158,10 +175,32 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         for (const roomCode in rooms) {
-            if (rooms[roomCode].players[socket.id]) {
-                delete rooms[roomCode].players[socket.id];
+            const room = rooms[roomCode];
+            if (room.players[socket.id]) {
+                const characterData = room.players[socket.id];
+                const playerName = characterData.name;
+
+                delete room.players[socket.id];
                 io.to(roomCode).emit('playerLeft', socket.id);
-                if (Object.keys(rooms[roomCode].players).length === 0) {
+
+                // Hold the player's data in a grace buffer so they can reconnect
+                if (!disconnectedPlayers[roomCode]) disconnectedPlayers[roomCode] = {};
+                const timerId = setTimeout(() => {
+                    if (disconnectedPlayers[roomCode]) {
+                        delete disconnectedPlayers[roomCode][playerName];
+                        if (Object.keys(disconnectedPlayers[roomCode]).length === 0) {
+                            delete disconnectedPlayers[roomCode];
+                        }
+                    }
+                    // If room is now empty and the grace buffer is also empty, remove room
+                    if (rooms[roomCode] && Object.keys(rooms[roomCode].players).length === 0 &&
+                        !disconnectedPlayers[roomCode]) {
+                        delete rooms[roomCode];
+                    }
+                }, DISCONNECT_GRACE_MS);
+                disconnectedPlayers[roomCode][playerName] = { characterData, timerId };
+
+                if (Object.keys(room.players).length === 0 && !disconnectedPlayers[roomCode]) {
                     delete rooms[roomCode];
                 }
                 break;

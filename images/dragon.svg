@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
+  <!-- Tail -->
+  <path d="M 40 150 Q 10 140 8 115 Q 20 125 40 128 Z" fill="#3f7a4f" stroke="#204a2b" stroke-width="2"/>
+  <!-- Back legs -->
+  <path d="M 60 150 L 55 175 L 68 175 L 70 152 Z" fill="#356a44" stroke="#204a2b" stroke-width="2"/>
+  <path d="M 95 155 L 92 178 L 105 178 L 105 155 Z" fill="#356a44" stroke="#204a2b" stroke-width="2"/>
+  <!-- Body -->
+  <ellipse cx="95" cy="120" rx="55" ry="34" fill="#4a8c5c" stroke="#204a2b" stroke-width="3"/>
+  <!-- Wing (far) -->
+  <path d="M 90 100 L 130 40 L 118 95 L 145 70 L 110 108 Z" fill="#2f6b40" stroke="#183a24" stroke-width="2" opacity="0.85"/>
+  <!-- Wing (near) -->
+  <path d="M 100 105 L 155 30 L 138 100 L 170 68 L 125 118 Z" fill="#4a8c5c" stroke="#204a2b" stroke-width="3"/>
+  <!-- Front legs -->
+  <path d="M 130 150 L 126 178 L 140 178 L 142 152 Z" fill="#356a44" stroke="#204a2b" stroke-width="2"/>
+  <!-- Neck -->
+  <path d="M 130 105 Q 150 85 160 60 Q 168 75 155 100 Q 145 112 132 118 Z" fill="#4a8c5c" stroke="#204a2b" stroke-width="3"/>
+  <!-- Head -->
+  <path d="M 155 62 Q 168 45 190 42 Q 182 52 178 60 L 190 58 Q 180 70 165 72 Q 158 68 155 62 Z" fill="#5a9c6c" stroke="#204a2b" stroke-width="3"/>
+  <!-- Horn -->
+  <path d="M 162 48 L 168 30 L 172 50 Z" fill="#e8d9a0" stroke="#204a2b" stroke-width="1.5"/>
+  <!-- Eye -->
+  <circle cx="172" cy="58" r="3" fill="#ffcf3f"/>
+  <!-- Spine ridges -->
+  <path d="M 60 92 L 68 78 L 74 94 Z" fill="#356a44" stroke="#204a2b" stroke-width="1.5"/>
+  <path d="M 80 88 L 88 72 L 94 90 Z" fill="#356a44" stroke="#204a2b" stroke-width="1.5"/>
+  <path d="M 100 86 L 108 70 L 114 88 Z" fill="#356a44" stroke="#204a2b" stroke-width="1.5"/>
+</svg>

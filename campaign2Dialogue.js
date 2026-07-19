@@ -1,0 +1,5954 @@
+// campaign2Dialogue.js
+// Hollowmere opening dialogue: per-NPC talk trees (dispatched via
+// talkToNPC's dialogueId lookup) plus the scripted "soldiers shake down the
+// tavern keeper" sequence. Every line is its own window.dialogueData entry
+// (one key = one line) so each can be mapped to a separate recorded line for
+// external text-to-speech, matching the existing arena dialogue convention.
+
+Object.assign(window.dialogueData, {
+    hollowmere_soldiers_enter: {
+        speaker: 'Narrator', mood: 'neutral',
+        dialogue: "The tavern door bangs open. Three armed men in matching colors stride in, eyes on the bar."
+    },
+    hollowmere_dray_demand: {
+        speaker: 'Dray Coltayne', mood: 'cold',
+        dialogue: "Evening, Garrick. Ironbond Company's monthly due is past collecting. You know how this goes."
+    },
+    hollowmere_garrick_protest: {
+        speaker: 'Garrick Holt', mood: 'tense',
+        dialogue: "Business has been slow, Sergeant. Can it wait 'til the week's end?"
+    },
+    hollowmere_dray_threat: {
+        speaker: 'Dray Coltayne', mood: 'menacing',
+        dialogue: "It can't. Pay up, or this place finds out what an 'accident' looks like."
+    },
+    hollowmere_victory: {
+        speaker: 'Garrick Holt', mood: 'relieved',
+        dialogue: "It's over... thank you. I didn't think anyone would stand with us against the Company."
+    },
+    hollowmere_dray_approach: {
+        speaker: 'Dray Coltayne', mood: 'businesslike',
+        dialogue: "You there — a word, before you go."
+    },
+    wren_intro: {
+        speaker: 'Wren Talbot', mood: 'cheerful',
+        dialogue: "Well, here we are then. Try not to get us both killed, yeah?"
+    }
+});
+
+// Shared resolution for the wizard_vendetta quest (see lady_corstane,
+// royal_wizard, and silverhart_queen dialogue trees below) — exactly one
+// of three outcomes, each an ally gained and (in two of the three cases)
+// one or two personal relationships burned. Only personal reputation
+// (npc.reputation) moves for the noble/wizard; the Queen path instead
+// moves the kingdom's national standing, since turning evidence over to
+// the crown itself is a matter of state, not a private favor.
+function resolveWizardVendetta(resolution) {
+    const quest = (window.questLog || []).find(q => q.id === 'wizard_vendetta');
+    if (!quest || quest.status === 'completed') return;
+    const idx = window.player.inventory.indexOf('wizard_corruption_evidence');
+    if (idx === -1) return;
+    window.player.inventory.splice(idx, 1);
+    quest.status = 'completed';
+    quest.resolution = resolution;
+
+    const wizard = window.entities.find(e => e.name === 'Court Wizard Thessaly');
+    const noble = window.entities.find(e => e.name === 'Lady Miriel Corstane');
+
+    if (resolution === 'noble') {
+        if (noble) window.adjustReputation(noble.reputation, 30, 25);
+        if (wizard) window.adjustReputation(wizard.reputation, -30, 20);
+        window.showMessage("Lady Corstane takes the evidence with a satisfied smile. House Corstane owes you a real favor.");
+    } else if (resolution === 'wizard') {
+        if (wizard) window.adjustReputation(wizard.reputation, 30, 25);
+        if (noble) window.adjustReputation(noble.reputation, -30, 20);
+        window.showMessage("Thessaly's expression hardens as she reads, then eases toward you. \"Forewarned. I won't forget this.\"");
+    } else if (resolution === 'queen') {
+        window.adjustReputation(window.factions.silverhart_kingdom, 15, 10);
+        if (wizard) window.adjustReputation(wizard.reputation, -20, 15);
+        if (noble) window.adjustReputation(noble.reputation, -20, 15);
+        window.showMessage("The Queen takes the evidence without expression. \"I'll deal with this myself. You did right to bring it to me and no one else.\"");
+    }
+}
+window.resolveWizardVendetta = resolveWizardVendetta;
+
+window.npcDialogueTrees = {
+    hollowmere_beggar: (npc) => {
+        window.showDialogue(npc, "Spare a coin? Times are hard in Hollowmere just now. Wasn't always like this.", [
+            {
+                label: "Give 2 gold.",
+                action: () => {
+                    if ((window.party[0].gold || 0) < 2) { window.showMessage("You don't have enough gold."); return; }
+                    window.party[0].gold -= 2;
+                    window.showMessage("The beggar thanks you quietly.");
+                }
+            },
+            { label: "Sorry, nothing to spare.", action: () => {} }
+        ]);
+    },
+    hollowmere_peddler: (npc) => {
+        window.showDialogue(npc, "Business is good these days — Hollowmere's doing well for itself. Care to see my wares? Just trinkets, nothing you can't live without, but pretty ones.", [
+            { label: "Maybe another time.", action: () => {} }
+        ]);
+    },
+    garrick_holt: (npc) => {
+        const restOption = { label: "Can we get a room to rest? (1 gold)", action: () => window.restAtInn(npc) };
+        // A visibly less secure Hollowmere gets a warier greeting from its
+        // own barkeep — the same region.security number that scales
+        // wilderness danger also reads as unease in the village itself.
+        const wary = (window.regions?.hollowmere?.security ?? 50) < 30;
+        // A barkeep hears everything — surfaces the worldPulse.js event log
+        // as living smalltalk, so the world's autonomous goings-on actually
+        // reach the player instead of only moving hidden region numbers.
+        const newsOption = { label: "What's the word around here?", action: () => {
+            const rumors = window.getRecentWorldRumors ? window.getRecentWorldRumors(2) : [];
+            const text = rumors.length
+                ? rumors.join("\n\n")
+                : "Quiet, lately. Same faces, same ale. I'll take it — quiet's been hard-earned around here.";
+            window.showDialogue(npc, text, [{ label: "Thanks for the news.", action: () => {} }]);
+        }};
+        if (window.hollowmereEventFired) {
+            const greeting = wary
+                ? "Thanks again for that, friend — though I'll admit I feel it less than I used to. Keep the door barred at night, these days."
+                : "Thanks again for that, friend. The Tankard's doors are always open to you.";
+            window.showDialogue(npc, greeting, [
+                restOption,
+                newsOption,
+                { label: "Glad to help.", action: () => {} }
+            ]);
+        } else {
+            const greeting = wary
+                ? "Welcome to the Hollow Tankard, such as it is. Sit, drink — just mind the roads after dark, if you can help it."
+                : "Welcome to the Hollow Tankard! Sit, drink, rest a while.";
+            window.showDialogue(npc, greeting, [
+                restOption,
+                newsOption,
+                { label: "Thanks, we will.", action: () => {} }
+            ]);
+        }
+    },
+    mira_ashbrook: (npc) => {
+        window.showDialogue(npc, "Quiet little village, Hollowmere. Most days, anyway.", [
+            { label: "Any news from further out?", action: () => {
+                if (window.goblinScoutNoteRead) {
+                    window.showDialogue(npc, "My cousin rode with the Silverhart levy up to the borderlands, fighting off orc raiders. Last letter said the raids have gotten worse — bigger warbands, moving with more purpose than raiders usually bother with. Made me think of that goblin business you had a hand in. Strange, if it's all connected.", [
+                        { label: "Strange indeed.", action: () => {} }
+                    ]);
+                } else {
+                    window.showDialogue(npc, "My cousin rode with the Silverhart levy up to the borderlands, fighting off orc raiders. Last letter said the raids have gotten worse — bigger warbands than the old stories tell. I try not to think on it too much.", [
+                        { label: "I hope she's alright.", action: () => {} }
+                    ]);
+                }
+            }},
+            { label: "Good to know.", action: () => {} }
+        ]);
+    },
+    oskar_vinn: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'oskars_wager');
+        if (quest && quest.status === 'completed') {
+            const brawlOptions = [{ label: "We'll see.", action: () => {} }];
+            // A bigger, sillier follow-up once the one-on-one bout is settled
+            // — the whole tavern piles in this time. One-shot (see
+            // tavernBrawlTriggered, startTavernBrawl below).
+            if (!window.tavernBrawlTriggered && !window.isInCombat) {
+                brawlOptions.unshift({
+                    label: "Fancy a real donnybrook? Whole tavern this time.",
+                    action: () => window.startTavernBrawl && window.startTavernBrawl()
+                });
+            }
+            window.showDialogue(npc, "Good bout, that. I'll get my revenge one of these days.", brawlOptions);
+            return;
+        }
+        window.showDialogue(npc, "First time in Hollowmere? Mind the Ironbond lot if they're about.", [
+            {
+                label: "Care to spar? Friendly bout.",
+                action: () => {
+                    window.showDialogue(npc, "Ha! Thought you'd never ask. Don't hold back on my account.", [
+                        { label: "Let's go.", action: () => window.startOskarDuel() },
+                        { label: "Maybe later.", action: () => {} }
+                    ]);
+                }
+            },
+            { label: "Heard anything worth knowing?", action: () => {
+                window.showDialogue(npc, "Only that the levies keep marching north. Orc raiders on the border, apparently — worse than usual this year. Half tempted to go make a name for myself up there instead of sparring with tavern drunks.", [
+                    { label: "Maybe I'll head that way myself.", action: () => {} }
+                ]);
+            }},
+            { label: "Noted.", action: () => {} }
+        ]);
+    },
+    guild_investigator: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'hidden_bodies');
+        if (quest && quest.hidden) {
+            window.showDialogue(npc, "Three of our men were due back from Hollowmere weeks ago. Never arrived, never sent word. You wouldn't know anything about that, would you?", [
+                { label: "No idea what you're talking about.", action: () => {
+                    window.adjustReputation(window.factions.ironbond_company, -5, 10);
+                    window.showMessage(`${npc.name} studies you a moment too long before moving on to the next table.`);
+                }},
+                { label: "Say nothing.", action: () => window.showMessage(`${npc.name} watches you a moment, then shrugs and turns away.`) }
+            ]);
+        } else {
+            window.showDialogue(npc, "Three of our men went missing near here a while back. Left enough behind that we know what happened, at least — small mercy compared to some. Keep your eyes open, will you?", [
+                { label: "I will.", action: () => {} }
+            ]);
+        }
+    },
+    // Offers whichever build orders are currently available (see
+    // window.buildOrders in construction.js) — each with a resource-cost
+    // option and a flat-gold option, per the "gather it or just pay" design.
+    builder_tomas: (npc) => {
+        const orders = Object.entries(window.buildOrders).filter(([id, o]) => o.isAvailable());
+        if (orders.length === 0) {
+            const anyDone = Object.values(window.buildOrders).some(o => o.isDone());
+            window.showDialogue(npc, anyDone
+                ? "Nothing more for me to build right now — come back if you clear or claim somewhere new."
+                : "Get yourself a plot or a place worth fixing up, and I'll see what I can do.", [
+                { label: "Understood.", action: () => {} }
+            ]);
+            return;
+        }
+        const options = orders.map(([id, order]) => ({
+            label: order.cost == null
+                ? `${order.name} (${order.goldCost} gold)`
+                : order.goldCost != null
+                    ? `${order.name} (${window.buildOrderCostLabel(order)}, or ${order.goldCost} gold)`
+                    : `${order.name} (${window.buildOrderCostLabel(order)} — materials only)`,
+            action: () => {
+                if (order.cost == null) {
+                    // Gold-only order (e.g. buying land) — nothing to gather, so
+                    // skip straight to the purchase instead of a materials-vs-
+                    // gold sub-menu with no materials option in it.
+                    if (window.fulfillBuildOrder(id, true)) window.showMessage("The work is done.");
+                    return;
+                }
+                const subOptions = [
+                    { label: `Pay with materials (${window.buildOrderCostLabel(order)})`, action: () => {
+                        if (window.fulfillBuildOrder(id, false)) window.showMessage("The work is done.");
+                    }}
+                ];
+                if (order.goldCost != null) {
+                    subOptions.push({ label: `Pay ${order.goldCost} gold instead`, action: () => {
+                        if (window.fulfillBuildOrder(id, true)) window.showMessage("The work is done.");
+                    }});
+                }
+                subOptions.push({ label: "Never mind.", action: () => {} });
+                const prompt = order.goldCost != null
+                    ? `${order.name}. Pay with gathered materials, or just gold?`
+                    : `${order.name}. This one needs real materials — no shortcut with coin.`;
+                window.showDialogue(npc, prompt, subOptions);
+            }
+        }));
+        options.push({ label: "Nothing right now.", action: () => {} });
+        window.showDialogue(npc, "Name it and I'll build it, so long as you bring the materials — or the coin to cover them.", options);
+    },
+    manor_neighbor: (npc) => {
+        if (window.campaign2SilverhartManorGranted) {
+            window.showDialogue(npc, "Well, at least someone's finally doing something with that place. Better a living soul than another empty house drawing rats.", [
+                { label: "Glad to help.", action: () => {} }
+            ]);
+            return;
+        }
+        window.showDialogue(npc, "That empty manor's been sitting there for years — no heir, no upkeep, just an eyesore drawing rats and worse. The crown really ought to do something with it.", [
+            { label: "Someone should ask the Queen about it.", action: () => {} }
+        ]);
+    },
+    silverhart_stablehand: (npc) => {
+        if (window.isShunnedByHumanCommerce && window.isShunnedByHumanCommerce()) {
+            window.showDialogue(npc, "I know what you are. Get away from my horses.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+        if (!window.partyHasRiding()) {
+            window.showDialogue(npc, "Fine animals, every one — but they're wasted on someone who's never learned to sit a saddle. Come back once you've picked up Riding.", [
+                { label: "I'll be back.", action: () => {} }
+            ]);
+            return;
+        }
+
+        const pickColorThenBuy = (tierId) => {
+            const tier = window.MOUNT_TRAINING_TIERS[tierId];
+            const price = Math.round(window.HORSE_PRICE * tier.costMultiplier);
+            const colorOptions = Object.entries(window.HORSE_COAT_PRESETS)
+                .filter(([key]) => key !== 'skeleton') // that one's raised, not bought — see raiseSkeletonHorse
+                .map(([key, preset]) => ({
+                    label: `${preset.name} (${price} gold)`,
+                    action: () => { if (window.buyHorse(key, tierId)) window.showMessage("Enjoy the ride."); }
+                }));
+            colorOptions.push({ label: "Never mind.", action: () => {} });
+            window.showDialogue(npc, `A ${tier.label.toLowerCase()} horse runs ${price} gold — pick your color.`, colorOptions);
+        };
+
+        const tierOptions = Object.entries(window.MOUNT_TRAINING_TIERS)
+            .filter(([key]) => key !== 'untrained')
+            .map(([key, tier]) => ({
+                label: `${tier.label} (from ${Math.round(window.HORSE_PRICE * tier.costMultiplier)}g)`,
+                action: () => pickColorThenBuy(key)
+            }));
+
+        const bardingOptions = ['light_barding', 'medium_barding', 'heavy_barding'].map(id => ({
+            label: `Fit ${window.items[id].name} on my horse (${window.items[id].buyPrice}g)`,
+            action: () => {
+                const player = window.party[0];
+                const mount = window.entities.find(e => e.name === 'Horse' && e.alive && e.side === 'player' && e.rider?.name === player.name);
+                if (!mount) { window.showMessage("You'd need to bring the horse along first."); return; }
+                if ((player.gold || 0) < window.items[id].buyPrice) { window.showMessage("Not enough gold."); return; }
+                player.gold -= window.items[id].buyPrice;
+                window.equipMountBarding(mount, id);
+                window.showMessage(`Your horse is fitted with ${window.items[id].name.toLowerCase()}.`);
+            }
+        }));
+
+        window.showDialogue(npc, `${window.HORSE_PRICE} gold buys you a plain horse — pay more and it comes already trained, with armor to match. I can also fit barding to a horse you've already got.`, [
+            { label: `Untrained (${window.HORSE_PRICE}g)`, action: () => pickColorThenBuy('untrained') },
+            ...tierOptions,
+            ...bardingOptions,
+            { label: "Just looking.", action: () => {} }
+        ]);
+    },
+    silverhart_clothier: (npc) => {
+        if (window.isShunnedByHumanCommerce && window.isShunnedByHumanCommerce()) {
+            window.showDialogue(npc, "Out. Now. Before you frighten the other customers.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+        // Shop hours (see isShopOpen/getNpcSchedules, gameEngine.js) — closed
+        // overnight, same as Mirelle physically sleeping in the room instead
+        // of standing at the counter all night.
+        if (window.isShopOpen && !window.isShopOpen('Mirelle Sondhe')) {
+            window.showDialogue(npc, "Mm? Oh — we're closed for the night. Come back after sunrise.", [{ label: "Sorry to wake you.", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "Something for court, or something plainer for the road? Either way, it's all just for show — doesn't stop a blade any better than what you're already wearing.", [
+            { label: "Let me see what you have.", action: () => window.openShop({ itemIds: window.campaign2ClothierItems, mounts: false }) },
+            { label: "Not today.", action: () => {} }
+        ]);
+    },
+    silverhart_magic_dealer: (npc) => {
+        if (window.isShunnedByHumanCommerce && window.isShunnedByHumanCommerce()) {
+            window.showDialogue(npc, "Not to you. Not for any price.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+        if (window.isShopOpen && !window.isShopOpen('Corvin Ashe')) {
+            window.showDialogue(npc, "Shop's closed. Wares like these don't sell themselves at all hours — try again in the morning.", [{ label: "Fair enough.", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "Every piece here is genuine, and priced like it. Careful browsing — some of these will empty a purse fast.", [
+            { label: "Show me your wares.", action: () => window.openShop({ itemIds: window.campaign2MagicShopItems, mounts: false }) },
+            { label: "Just looking.", action: () => {} }
+        ]);
+    },
+    silverhart_general_goods: (npc) => {
+        if (window.isShunnedByHumanCommerce && window.isShunnedByHumanCommerce()) {
+            window.showDialogue(npc, "Not to you.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+        // World signal for surfacePower, the "regular merchants get worse"
+        // half of the pair (see ironbond_merchant below for the other
+        // half): once Ironbond's grip is strong, this shop's better stock
+        // (armor/shield/helm) dries up unless the kingdom actually trusts
+        // the player enough to make an exception.
+        const strained = window.getSurfacePower && window.getSurfacePower() >= 60;
+        const trusted = (window.factions?.silverhart_kingdom?.standing || 0) >= 20;
+        const items = (strained && !trusted)
+            ? window.campaign2SilverhartGeneralGoodsItems.filter(id => !['medium_armor', 'wooden_shield', 'nasal_helm'].includes(id))
+            : window.campaign2SilverhartGeneralGoodsItems;
+        const tone = (strained && !trusted)
+            ? "Ordinary gear, honest prices — though half my usual orders never arrived this month. Company's buying up the good stock before it reaches me."
+            : "Ordinary gear, honest prices — swords, shields, a decent helm, nothing fancy. The fancy stuff's a few doors down.";
+        window.showDialogue(npc, tone, [
+            { label: "Let me see your wares.", action: () => window.openShop({ itemIds: items, mounts: false }) },
+            { label: "Just looking.", action: () => {} }
+        ]);
+    },
+    ironbond_merchant: (npc) => {
+        // World signal for surfacePower, mirrored against
+        // silverhart_general_goods above: the good stock only exists to
+        // sell once the Company's grip is real (surfacePower), and only
+        // opens up to a player Ironbond actually trusts (its own standing),
+        // regardless of which side the player picked.
+        const strongEnough = window.getSurfacePower && window.getSurfacePower() >= 40;
+        const trusted = (window.factions?.ironbond_company?.standing || 0) >= 20;
+        if (!strongEnough) {
+            window.showDialogue(npc, "We're still finding our feet out here. Come back once the Company's better established in these parts.", [{ label: "I'll check back.", action: () => {} }]);
+            return;
+        }
+        if (!trusted) {
+            window.showDialogue(npc, "The Company doesn't arm strangers. Prove you're worth the trust and we'll talk.", [{ label: "Understood.", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "Ironbond doesn't stock what the crown's armorers do — we stock what they can't get anymore.", [
+            { label: "Let me see your wares.", action: () => window.openShop({ itemIds: window.campaign2IronbondMerchantItems, mounts: false }) },
+            { label: "Just looking.", action: () => {} }
+        ]);
+    },
+    // Silverhart's Thieves' Guild — see the thieves_guild faction entry
+    // (factions.js) for the standing thresholds both trees below share:
+    // <0 hostile, 0-19 refused/watched, 20-49 accepted, 50+ full member.
+    thieves_guild_fence: (npc) => {
+        const standing = window.factions?.thieves_guild?.standing ?? 0;
+        if (standing < 0) {
+            window.showDialogue(npc, "You're not welcome here. Corvin's word, not mine — take it up with him if you've got a death wish.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+        // A visibly rogue-trained party gets read for what it is, even by a
+        // fence with nothing to offer them yet — professional recognition,
+        // not a reputation shortcut. hasHeavyRogue is reused a few lines
+        // down for the same flavor at the trading tiers.
+        const hasHeavyRogue = (window.getPartyMaxClassLevel && window.getPartyMaxClassLevel('rogue') >= 3);
+        if (standing < 20) {
+            window.showDialogue(npc, hasHeavyRogue
+                ? "I don't know you. But I know the look — you've spent real time in this trade. Doesn't buy you anything here, though."
+                : "I don't know you. Whatever you're after, you won't find it from me.", [{ label: "Fair enough.", action: () => {} }]);
+            return;
+        }
+        const member = standing >= 50;
+
+        // Side offers (tunnel reveal, the Sunken Cache) are additional
+        // OPTIONS on the normal shop menu below, never a replacement for
+        // it — an earlier version returned early for these instead, which
+        // meant a player who hadn't yet touched either one couldn't reach
+        // the shop at all above standing 20. Neither of these interrupts
+        // the base "Show me what you've got." option.
+        const options = [
+            { label: "Show me what you've got.", action: () => window.openShop({ itemIds: member ? window.campaign2ThievesGuildFenceMemberItems : window.campaign2ThievesGuildFenceItems, mounts: false }) },
+        ];
+
+        // The tunnel network reveal — genuinely trusted members only.
+        // Unlocks both hidden doors outright (revealTunnelEntrances,
+        // campaign2World.js) rather than making the player go find them by
+        // touch.
+        if (standing >= 40 && !window.tunnelEntrancesRevealedByGuild) {
+            options.push({
+                label: "Anything else I should know?",
+                action: () => window.showDialogue(npc, "You've earned enough trust for this: the Guild's had its own way in and out of this city for longer than the Crown's known. One door behind the general goods store, another right under the Chancellor's own council chamber — dug decades back, never sealed. Use them if you ever need to move quiet.", [
+                    {
+                        label: "Show me.", action: () => {
+                            if (window.revealTunnelEntrances) window.revealTunnelEntrances();
+                            window.showMessage("Both hidden doors unlock at your touch — the Guild's word was good.");
+                        }
+                    },
+                    { label: "I'll pass, for now.", action: () => {} }
+                ])
+            });
+        }
+
+        // "The Sunken Cache" — an optional side job, independent of the
+        // guildmaster's own linear initiation/favor/blood-price/big-score
+        // rungs above. Offered by the fence instead of Corvin so it can't
+        // interfere with that chain's own strict return-per-rung gating.
+        const cacheQuest = (window.questLog || []).find(q => q.id === 'guild_sunken_cache');
+        const cacheConfig = () => ({
+            questId: 'guild_sunken_cache', guardName: 'Rook Talvane',
+            evidenceKey: 'guild_cache_prize', itemId: 'guild_cache_prize',
+            evidenceFlavor: "a heavy strongbox stuffed with the Guild's stolen coin and ledgers",
+            factionSpiedOn: 'thieves_guild', failStandingHit: -10,
+            objectiveText: "Recover the Guild's cache from the sea-cave smugglers — sneak past Rook Talvane, or cut straight through him.",
+            onSuccess: () => {
+                const q = window.questLog.find(q => q.id === 'guild_sunken_cache');
+                if (q) q.status = 'completed';
+                if (window.adjustReputation) window.adjustReputation(window.factions.thieves_guild, 20, 20);
+                window.party[0].gold = (window.party[0].gold || 0) + 60;
+                if (window.gainExp) window.gainExp(150);
+                window.showMessage("The cache is back where it belongs. (+60 gold, +Thieves' Guild standing)");
+            }
+        });
+        if (!cacheQuest) {
+            options.push({
+                label: "Got any special work?",
+                action: () => window.showDialogue(npc, "There's a job, if you're feeling bold. A crew calling themselves free of the Guild is squatting some old sea-caves out past the western road, sitting on a stash that's rightfully ours. Rook Talvane runs it. Get it back — quietly if you can manage it, or through the front door if you can't. Either way, it comes back to us.", [
+                    {
+                        label: "I'll handle it.", action: () => {
+                            window.questLog.push({
+                                id: 'guild_sunken_cache', title: "The Sunken Cache", giver: 'the fence', status: 'active',
+                                description: "Recover the Guild's stolen cache from Rook Talvane's smugglers, hidden in the sea-caves west of Silverhart — sneak in or fight your way through, whichever suits you."
+                            });
+                            if (window.startStealthMission) window.startStealthMission(cacheConfig());
+                        }
+                    },
+                    { label: "Not interested.", action: () => {} }
+                ])
+            });
+        } else if (cacheQuest.status === 'active') {
+            options.push({
+                label: "About that cache...",
+                action: () => window.showDialogue(npc, "Sea-caves west of the road. Rook Talvane and whatever's left of his crew. You'll know it when you smell the brine.", [
+                    { label: "Working on it.", action: () => {} }
+                ])
+            });
+        } else if (cacheQuest.status === 'failed') {
+            options.push({
+                label: "About that cache...",
+                action: () => window.showDialogue(npc, "Blew it once already, did you? Rook's crew will be jumpy now. Still owe us that cache.", [
+                    { label: "I'll go back.", action: () => { cacheQuest.status = 'active'; if (window.startStealthMission) window.startStealthMission(cacheConfig()); } }
+                ])
+            });
+        }
+
+        options.push({ label: "Just passing through.", action: () => {} });
+        window.showDialogue(npc, member
+            ? (hasHeavyRogue
+                ? "Corvin vouches for you now, and honestly, he didn't need to sell me on it — anyone can see you've done this before. Good, that means you actually get to see what I keep in the back."
+                : "Corvin vouches for you now. Good — that means you actually get to see what I keep in the back.")
+            : "Keep your voice down. I don't ask where coin comes from, and you don't ask where my stock comes from.", options);
+    },
+    thieves_guildmaster: (npc) => {
+        const standing = window.factions?.thieves_guild?.standing ?? 0;
+        if (standing < 0) {
+            window.showDialogue(npc, "You've got some nerve, showing your face here after that. Walk away while you still can.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+
+        const quest = (window.questLog || []).find(q => q.id === 'guild_initiation');
+        if (quest && quest.status === 'active') {
+            window.showDialogue(npc, "Perrin Vance's strongbox, at the general goods store. Get in, get it, don't get seen. Come back when it's done — or when you've been caught, I suppose.", [
+                { label: "Working on it.", action: () => {} }
+            ]);
+            return;
+        }
+        // "A Favor for the Guild" only opens up once Initiation is behind
+        // the player — a second rung, not an alternate way in.
+        const favorQuest = (window.questLog || []).find(q => q.id === 'guild_favor');
+        if (quest && quest.status === 'completed' && favorQuest && favorQuest.status === 'active') {
+            const debtorAlive = window.entities.some(e => e.name === 'Marsh Dobbins' && e.alive);
+            if (!debtorAlive) {
+                favorQuest.status = 'completed';
+                window.party[0].gold = (window.party[0].gold || 0) + 15;
+                if (window.adjustReputation) window.adjustReputation(window.factions.thieves_guild, 5, 15);
+                window.showMessage("Corvin takes the coin off the body without much ceremony. (+15 gold, +Thieves' Guild standing)");
+                window.showDialogue(npc, "Wasn't the quiet way I'd have picked, but the debt's the debt. Rougher than the guild likes, but it's done.", [
+                    { label: "It's done.", action: () => {} }
+                ]);
+                return;
+            }
+            window.showDialogue(npc, "Marsh Dobbins, out in the Warrens. He's been ducking our collector for a month. However you get it out of him, get it.", [
+                { label: "Working on it.", action: () => {} }
+            ]);
+            return;
+        }
+        // "Blood Price" — the third rung, opens once the debt's settled.
+        // Unlike the first two, this one costs the player something with
+        // the Kingdom, not just the guild's own approval.
+        const bloodQuest = (window.questLog || []).find(q => q.id === 'guild_blood_price');
+        if (quest && quest.status === 'completed' && favorQuest && favorQuest.status === 'completed' && bloodQuest && bloodQuest.status === 'active') {
+            const informantAlive = window.entities.some(e => e.name === 'Silas Crane' && e.alive);
+            if (!informantAlive) {
+                bloodQuest.status = 'completed';
+                window.party[0].gold = (window.party[0].gold || 0) + 40;
+                if (window.adjustReputation) window.adjustReputation(window.factions.thieves_guild, 20, 20);
+                if (window.adjustReputation) window.adjustReputation(window.factions.silverhart_kingdom, -15, 15);
+                if (window.gainExp) window.gainExp(150);
+                window.showMessage("Silas Crane won't be reporting to anyone again. (+40 gold, +Thieves' Guild standing, -Silverhart Kingdom standing)");
+                window.showDialogue(npc, "Good. The Crown's ear on us just went quiet — that's worth more to me than the coin. You've got real weight now.", [
+                    { label: "It's done.", action: () => {} }
+                ]);
+                return;
+            }
+            window.showDialogue(npc, "Silas Crane. He's been selling us out to the Crown for months. Doesn't matter how — just make sure he doesn't talk again.", [
+                { label: "Working on it.", action: () => {} }
+            ]);
+            return;
+        }
+        // "The Big Score" — the capstone, only for full members (standing 50+).
+        const bigScoreQuest = (window.questLog || []).find(q => q.id === 'guild_big_score');
+        if (quest && quest.status === 'completed' && favorQuest && favorQuest.status === 'completed' && bloodQuest && bloodQuest.status === 'completed') {
+            if (bigScoreQuest && bigScoreQuest.status === 'active') {
+                window.showDialogue(npc, "The Chancellor's own strongbox, in the council chamber. This is the one that matters — don't get caught, and don't come back empty-handed.", [
+                    { label: "Working on it.", action: () => {} }
+                ]);
+                return;
+            }
+            if (bigScoreQuest && bigScoreQuest.status === 'completed') {
+                window.showDialogue(npc, "You robbed the Chancellor blind and walked out clean. That's not odd jobs anymore — that's legend. You're one of us, no question left about it.", [
+                    { label: "Glad to be of service.", action: () => {} }
+                ]);
+                return;
+            }
+            if (standing >= 50) {
+                window.showDialogue(npc, "There's one more thing, if you've got the nerve for it. The Chancellor keeps a strongbox in the council chamber — Kingdom secrets, guild ledgers he shouldn't have, coin enough to matter. Pull this off and there's nothing left to prove.", [
+                    {
+                        label: "I'm in.",
+                        action: () => {
+                            window.questLog.push({
+                                id: 'guild_big_score', title: 'The Big Score', giver: 'Corvin Ashe', status: 'active',
+                                description: "Steal from Chancellor Merric Vane's strongbox in the Silverhart council chamber without being seen, and bring it to Corvin Ashe."
+                            });
+                            if (window.startStealthMission) {
+                                window.startStealthMission({
+                                    questId: 'guild_big_score',
+                                    guardName: 'Chancellor Merric Vane',
+                                    evidenceKey: 'guild_big_score_prize',
+                                    itemId: 'guild_big_score_prize',
+                                    evidenceFlavor: "the Chancellor's strongbox, heavy with coin and sealed letters",
+                                    factionSpiedOn: 'silverhart_kingdom',
+                                    failStandingHit: -25,
+                                    objectiveText: "Steal from the Chancellor's strongbox without being seen.",
+                                    onSuccess: () => {
+                                        const q = window.questLog.find(q => q.id === 'guild_big_score');
+                                        if (q) q.status = 'completed';
+                                        if (window.adjustReputation) window.adjustReputation(window.factions.thieves_guild, 30, 25);
+                                        window.party[0].gold = (window.party[0].gold || 0) + 100;
+                                        if (window.gainExp) window.gainExp(400);
+                                        window.showMessage("The Big Score, pulled off clean. (+100 gold, +Thieves' Guild standing)");
+                                    }
+                                });
+                            }
+                            window.showMessage("Quest added: The Big Score.");
+                        }
+                    },
+                    { label: "Not yet.", action: () => {} }
+                ]);
+                return;
+            }
+            window.showDialogue(npc, "Twice now you've come through. There's bigger work for a full member of this guild — keep earning it.", [
+                { label: "Good to hear.", action: () => {} }
+            ]);
+            return;
+        }
+        if (quest && quest.status === 'completed' && favorQuest && favorQuest.status === 'completed' && !bloodQuest) {
+            window.showDialogue(npc, "You've done right by us twice now. There's a harder job, if you want it — Silas Crane's been selling word of guild business to the Crown. He needs to stop, permanently.", [
+                {
+                    label: "I'll handle it.",
+                    action: () => {
+                        window.questLog.push({
+                            id: 'guild_blood_price', title: 'Blood Price', giver: 'Corvin Ashe', status: 'active',
+                            description: "Kill Silas Crane, the Crown's informant on the Thieves' Guild, and report back to Corvin Ashe."
+                        });
+                        window.showMessage("Quest added: Blood Price.");
+                    }
+                },
+                { label: "Not that far.", action: () => {} }
+            ]);
+            return;
+        }
+        if (quest && quest.status === 'completed' && !favorQuest) {
+            window.showDialogue(npc, "Clean work, the strongbox. You're one of ours now, in the loose sense — odd jobs, the fence's ordinary stock. There's actual work too, if you want it: Marsh Dobbins out in the Warrens owes the guild coin and keeps finding excuses. Collect it, however you see fit.", [
+                {
+                    label: "I'll collect it.",
+                    action: () => {
+                        window.questLog.push({
+                            id: 'guild_favor', title: 'A Favor for the Guild', giver: 'Corvin Ashe', status: 'active',
+                            description: "Collect the debt Marsh Dobbins owes the Thieves' Guild, in the Silverhart Warrens."
+                        });
+                        window.showMessage("Quest added: A Favor for the Guild.");
+                    }
+                },
+                { label: "Not right now.", action: () => {} }
+            ]);
+            return;
+        }
+
+        if (standing < 20) {
+            const rogueGreeting = (window.getPartyMaxClassLevel && window.getPartyMaxClassLevel('rogue') >= 3)
+                ? "Everyone who walks in here wants to be one of us — though most of them don't move like you do. That buys you a hearing, not a place. Words are cheap either way. Prove it — Perrin Vance at the general goods store keeps a strongbox under his counter. Bring me what's in it, and don't get seen doing it. That's the only introduction that means anything down here."
+                : "Everyone who walks in here wants to be one of us. Words are cheap. Prove it — Perrin Vance at the general goods store keeps a strongbox under his counter. Bring me what's in it, and don't get seen doing it. That's the only introduction that means anything down here.";
+            window.showDialogue(npc, rogueGreeting, [
+                {
+                    label: "I'll do it.",
+                    action: () => {
+                        window.questLog = window.questLog || [];
+                        window.questLog.push({
+                            id: 'guild_initiation', title: 'Initiation', giver: 'Corvin Ashe', status: 'active',
+                            description: "Steal from Perrin Vance's strongbox at the Silverhart general goods store without being seen, and bring it to Corvin Ashe."
+                        });
+                        if (window.startStealthMission) {
+                            window.startStealthMission({
+                                questId: 'guild_initiation',
+                                guardName: 'Perrin Vance',
+                                evidenceKey: 'guild_initiation_prize',
+                                itemId: 'guild_initiation_prize',
+                                evidenceFlavor: "a fat purse from Perrin Vance's strongbox",
+                                factionSpiedOn: 'silverhart_kingdom',
+                                failStandingHit: -10,
+                                objectiveText: "Steal from Perrin Vance's strongbox without being seen.",
+                                onSuccess: () => {
+                                    const q = window.questLog.find(q => q.id === 'guild_initiation');
+                                    if (q) q.status = 'completed';
+                                    if (window.adjustReputation) window.adjustReputation(window.factions.thieves_guild, 25, 20);
+                                    window.showMessage("The guild will hear about this. (+Thieves' Guild standing)");
+                                }
+                            });
+                        }
+                        window.showMessage("Quest added: Initiation.");
+                    }
+                },
+                { label: "Not interested.", action: () => {} }
+            ]);
+            return;
+        }
+
+        const rogueHeavy = (window.getPartyMaxClassLevel && window.getPartyMaxClassLevel('rogue') >= 3);
+        window.showDialogue(npc, standing >= 50
+            ? (rogueHeavy ? "You've earned your place here — and it shows, honestly. Not many walk in already knowing the trade like you do. What do you need?" : "You've earned your place here. What do you need?")
+            : "You've done right by us so far. Keep it that way.", [
+            { label: "Just checking in.", action: () => {} }
+        ]);
+    },
+    // Marsh Dobbins — target of "A Favor for the Guild" (thieves_guildmaster).
+    // Three ways to close the debt out, all of them valid: talk it out of
+    // him, threaten it out of him (the guild's name does the work), or just
+    // kill him and loot it — the quest doesn't care which, only that the
+    // coin ends up with Corvin.
+    thieves_guild_debtor: (npc) => {
+        const favorQuest = (window.questLog || []).find(q => q.id === 'guild_favor');
+        if (!favorQuest || favorQuest.status !== 'active') {
+            window.showDialogue(npc, "Whatever you're selling, I'm not buying. And whatever I owe, I don't have it. Move along.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+        if (npc.debtPaid) {
+            window.showDialogue(npc, "We're square. I told you, I'm good for it.", [{ label: "See that you stay that way.", action: () => {} }]);
+            return;
+        }
+        const settle = () => {
+            npc.debtPaid = true;
+            favorQuest.status = 'completed';
+            window.party[0].gold = (window.party[0].gold || 0) + 20;
+            if (window.adjustReputation) window.adjustReputation(window.factions.thieves_guild, 10, 15);
+            window.showMessage("Marsh hands over what he owes. (+20 gold, +Thieves' Guild standing)");
+        };
+        window.showDialogue(npc, "Look, I know why you're here. I just need more time, I—", [
+            {
+                label: "\"Corvin Ashe sent me. Pay up.\"",
+                action: () => {
+                    window.showDialogue(npc, "...Corvin. Right. Here — take it, just don't let him send anyone worse next time.", [
+                        { label: "Take the coin.", action: settle }
+                    ]);
+                }
+            },
+            {
+                label: "\"I can wait a day or two.\" (let him off)",
+                action: () => {
+                    if (window.adjustReputation) window.adjustReputation(window.factions.thieves_guild, -5, 10);
+                    window.showMessage("Corvin won't like hearing you went soft on this. (-Thieves' Guild standing)");
+                }
+            },
+            { label: "Leave.", action: () => {} }
+        ]);
+    },
+    // Silas Crane — target of "Blood Price" (thieves_guildmaster). Denies
+    // everything right up until he's dead; there's no talk-down here, the
+    // quest resolves on his death alone, same convention as Marsh's
+    // forceful-resolution path above.
+    thieves_guild_informant: (npc) => {
+        window.showDialogue(npc, "Don't know what you've heard, but I'm nobody. Just a man minding his own business.", [{ label: "...", action: () => {} }]);
+    },
+    wick_hallow: (npc) => {
+        const ironbondQuest = window.questLog && window.questLog.find(q => q.id === 'ironbond_pitch');
+        if (ironbondQuest && ironbondQuest.status === 'active' && !ironbondQuest.pitched) {
+            ironbondQuest.pitched = true;
+            window.showMessage("You put in a word for the Ironbond Company with Wick Hallow.");
+        }
+        if (window.isShunnedByHumanCommerce && window.isShunnedByHumanCommerce()) {
+            window.showDialogue(npc, "I've heard what you've become. Take your coin somewhere else.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+        if (window.isShopOpen && !window.isShopOpen('Wick Hallow')) {
+            window.showDialogue(npc, "Store's shut for the night — I'm asleep back here. Come by after sunrise.", [{ label: "Sorry to bother you.", action: () => {} }]);
+            return;
+        }
+        const storeOptions = [
+            { label: "Let me see your wares.", action: () => window.openShop({ itemIds: window.hollowmereStoreItems, stock: window.hollowmereStoreStock, mounts: false }) },
+        ];
+        // Only worth offering once there's a fenced field to put the animal
+        // in — see buyFieldLamb/isFieldFullyFenced, campaign2World.js.
+        if (window.campaign2PlayerFieldBought && window.isFieldFullyFenced && window.isFieldFullyFenced()) {
+            storeOptions.push({
+                label: "I'd like to buy a lamb. (20 gold)",
+                action: () => {
+                    if ((window.party[0].gold || 0) < 20) { window.showMessage("You don't have enough gold."); return; }
+                    window.party[0].gold -= 20;
+                    if (window.buyFieldLamb) window.buyFieldLamb();
+                }
+            });
+        }
+        window.showDialogue(npc, "Welcome to Hallow's Goods. Soldier-grade gear, fair prices — what's left of my stock, anyway.", [
+            ...storeOptions,
+            {
+                label: "Heard you've had some trouble.",
+                action: () => {
+                    if (!window.questLog) window.questLog = [];
+                    const quest = window.questLog.find(q => q.id === 'stolen_delivery');
+                    const thiefAlive = window.entities.some(e => e.isDeliveryThief && e.alive);
+                    if (quest && quest.status === 'completed') {
+                        window.showDialogue(npc, "That delivery business is sorted, thanks to you.", [{ label: "Anytime.", action: () => {} }]);
+                        return;
+                    }
+                    if (quest && quest.status === 'active') {
+                        if (!thiefAlive) {
+                            const idx = window.player.inventory.indexOf('potion_health');
+                            if (idx === -1) {
+                                window.showDialogue(npc, "Killed the little thief, did you? Where's my delivery, then?", [{ label: "...", action: () => {} }]);
+                                return;
+                            }
+                            window.player.inventory.splice(idx, 1);
+                            quest.status = 'completed';
+                            window.player.gold = (window.player.gold || 0) + 15;
+                            if (window.gainExp) window.gainExp(40);
+                            window.showMessage("Quest complete: A Snatched Delivery. (+15 gold)");
+                            window.showDialogue(npc, "My goods! Much obliged, traveler.", [{ label: "Happy to help.", action: () => {} }]);
+                        } else {
+                            window.showDialogue(npc, "That goblin scout's still out there with my delivery, far as I know.", [{ label: "I'll deal with it.", action: () => {} }]);
+                        }
+                        return;
+                    }
+                    window.showDialogue(npc, "A goblin scout snatched a delivery of mine not far from here — just south and west of the shop. Little thing, shouldn't be hard to catch, but I can't leave the counter to do it myself.", [
+                        {
+                            label: "I'll get it back.",
+                            action: () => {
+                                window.questLog.push({ id: 'stolen_delivery', title: 'A Snatched Delivery', giver: 'Wick Hallow', status: 'active', description: "A goblin scout stole a delivery meant for Wick Hallow's store. Kill it and return the goods." });
+                                window.showMessage("Quest added: A Snatched Delivery.");
+                            }
+                        },
+                        { label: "Not my problem.", action: () => {} }
+                    ]);
+                }
+            },
+            {
+                label: "Donate 5 fish/fruit/herbs to the village stores.",
+                action: () => {
+                    const foodLike = ['fish', 'fruit', 'herbs'];
+                    const have = window.player.inventory.filter(i => foodLike.includes(i)).length;
+                    if (have < 5) { window.showMessage("You need 5 fish/fruit/herbs (any mix) to donate."); return; }
+                    let removed = 0;
+                    window.player.inventory = window.player.inventory.filter(i => {
+                        if (foodLike.includes(i) && removed < 5) { removed++; return false; }
+                        return true;
+                    });
+                    if (window.adjustRegionStat) window.adjustRegionStat('hollowmere', 'prosperity', 3);
+                    window.showMessage("Hollowmere's stores are a little fuller. (Prosperity rises.)");
+                }
+            },
+            { label: "Just looking.", action: () => {} }
+        ]);
+    },
+    // The Bone Trader (campaign2World.js's buildLichBarrow): the villain
+    // path's alternative to the human merchants above, open to anyone who
+    // reaches the barrow's antechamber — not further gated, since the
+    // point is that a lich/goblin-aligned player still has somewhere to
+    // buy gear and a mount, not that this one spot is exclusive to them.
+    bone_trader: (npc) => {
+        window.showDialogue(npc, "Everything here came off someone who isn't using it anymore. Coin's coin, and I don't ask questions — you shouldn't either.", [
+            { label: "Let me see your wares.", action: () => window.openShop({ itemIds: window.campaign2BoneTraderItems, mounts: false }) },
+            { label: "Just looking.", action: () => {} }
+        ]);
+    },
+    hendra_wells: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'missing_child');
+
+        if (!quest) {
+            window.showDialogue(npc, "My boy Tam's always off exploring — never listens. But it's been since yesterday, and he always comes home by dark. He was headed out past the crossroads, west along the old road.", [
+                {
+                    label: "I'll go look for him.",
+                    action: () => {
+                        window.questLog.push({
+                            id: 'missing_child',
+                            title: 'The Missing Boy',
+                            giver: 'Hendra Wells',
+                            status: 'active',
+                            description: "Find Tam Wells — last seen heading west along the old road, past the crossroads.",
+                            offeredAt: window.worldSeconds
+                        });
+                        window.showMessage('Quest added: The Missing Boy.');
+                    }
+                },
+                { label: "I'm sure he's fine.", action: () => {} }
+            ]);
+            return;
+        }
+
+        if (quest.status === 'active' && !quest.encounterState) {
+            window.showDialogue(npc, "Please, if you find anything out there...", [{ label: "I'm still looking.", action: () => {} }]);
+            return;
+        }
+        if (quest.status === 'active' && quest.encounterState === 'wolves') {
+            window.showDialogue(npc, "Tam! Oh, thank the gods!", [
+                {
+                    label: "Found him just in time.",
+                    action: () => {
+                        quest.status = 'completed';
+                        window.adjustReputation(npc.reputation, 20, 20);
+                        window.party[0].gold = (window.party[0].gold || 0) + 30;
+                        if (window.gainExp) window.gainExp(200);
+                        window.showMessage('Quest complete: The Missing Boy. (+30 gold)');
+                    }
+                }
+            ]);
+            return;
+        }
+        if (quest.status === 'active' && quest.encounterState === 'corpse') {
+            window.showDialogue(npc, "You... you found him. Oh, Tam.", [
+                {
+                    label: "I'm so sorry.",
+                    action: () => {
+                        quest.status = 'completed';
+                        window.adjustReputation(npc.reputation, 5, 20);
+                        window.party[0].gold = (window.party[0].gold || 0) + 10;
+                        if (window.gainExp) window.gainExp(80);
+                        window.showMessage('Quest complete: The Missing Boy. (+10 gold)');
+                    }
+                }
+            ]);
+            return;
+        }
+        window.showDialogue(npc, "Thank you again, for what it's worth now.", [{ label: "...", action: () => {} }]);
+    },
+    old_mac: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'farm_wolves');
+
+        if (!quest) {
+            window.showDialogue(npc, "Wolves been at my pasture the past few nights. Lost two sheep already — can't fight 'em off alone anymore.", [
+                {
+                    label: "I'll deal with the wolves.",
+                    action: () => {
+                        window.questLog.push({
+                            id: 'farm_wolves',
+                            title: 'Wolves at the Farm',
+                            giver: 'Old Mac',
+                            status: 'active',
+                            description: "Clear the wolf pack menacing Old Mac's pasture."
+                        });
+                        window.showMessage('Quest added: Wolves at the Farm.');
+                    }
+                },
+                { label: "Not my problem.", action: () => {} }
+            ]);
+            return;
+        }
+
+        if (quest.status === 'active' && !quest.encounterState) {
+            window.showDialogue(npc, "They usually come round the pasture fence, after dark. Best go take a look.", [
+                { label: "I'm on it.", action: () => {} }
+            ]);
+            return;
+        }
+
+        if (quest.status === 'active' && quest.encounterState === 'engaged') {
+            const wolvesRemain = window.entities.some(e => e.farmQuestWolf && e.alive);
+            if (wolvesRemain) {
+                window.showDialogue(npc, "Still hear 'em out there. Best finish the job.", [{ label: "Back to it.", action: () => {} }]);
+            } else {
+                window.showDialogue(npc, "You got 'em! By God, every last one. That's a weight off, truly.", [
+                    {
+                        label: "Glad to help.",
+                        action: () => {
+                            quest.status = 'completed';
+                            window.adjustReputation(npc.reputation, 15, 20);
+                            window.party[0].gold = (window.party[0].gold || 0) + 25;
+                            if (window.gainExp) window.gainExp(150);
+                            // A cleared local threat nudges the village's security a little,
+                            // rippling faintly up toward the barony (see regions.js) — small
+                            // and slow, not a fix, matching the "fragile peace" this system models.
+                            if (window.cascadeRegionStat) window.cascadeRegionStat('hollowmere', 'security', 6);
+                            window.showMessage('Quest complete: Wolves at the Farm. (+25 gold)');
+                        }
+                    }
+                ]);
+            }
+            return;
+        }
+
+        window.showDialogue(npc, "Pasture's quiet now, thanks to you.", [{ label: "Good.", action: () => {} }]);
+    },
+    reddale_captain: (npc) => {
+        if (!window.questLog) window.questLog = [];
+
+        // Reporting the disciple takes priority over anything else she has
+        // going on — an accusation with real evidence behind it isn't the
+        // kind of thing that waits its turn. Only offered once the player
+        // actually holds the evidence (see readDiscipleNote), same "no free
+        // option without real signal" principle leverage.js uses for
+        // bribes/threats.
+        const discipleQuest = window.questLog.find(q => q.id === 'disciple_exposed');
+        if (!discipleQuest && window.player.inventory.includes('disciple_evidence')) {
+            window.showDialogue(npc, "Something on your mind?", [
+                {
+                    label: "Report a cult disciple hiding in town.",
+                    action: () => {
+                        window.player.inventory.splice(window.player.inventory.indexOf('disciple_evidence'), 1);
+                        window.questLog.push({
+                            id: 'disciple_exposed', title: "The Herbalist's Secret", giver: 'Captain Ilsa Rennick', status: 'completed',
+                            description: 'Reported Mirella Thorn, a disciple of the necromancer hiding in Reddale, to the Watch.'
+                        });
+                        const disciple = window.entities.find(e => e.name === 'Mirella Thorn');
+                        if (disciple) disciple.alive = false;
+                        window.adjustReputation(window.factions.necromancer_cult, -25, 20);
+                        window.adjustReputation(npc.reputation, 15, 15);
+                        if (window.adjustRegionStat) window.adjustRegionStat('hollowmere', 'security', 5);
+                        window.party[0].gold = (window.party[0].gold || 0) + 30;
+                        if (window.gainExp) window.gainExp(150);
+                        window.showMessage("The Watch moves on Mirella's shop before dawn. Whatever she really was, Reddale won't have to find out the hard way. (+30 gold)");
+                    }
+                },
+                { label: "Never mind.", action: () => {} }
+            ]);
+            return;
+        }
+
+        // The Vessel-Seeker's Crypt: only offered once Mirella's exposed —
+        // that's the real signal the player is actively hunting the
+        // necromancer, not just having stumbled onto a haunted house.
+        const huntQuest = window.questLog.find(q => q.id === 'necromancer_hunt');
+        if (discipleQuest?.status === 'completed' && !huntQuest) {
+            window.showDialogue(npc, "That disciple was one thread. Whatever she served isn't done — there are crypts north of here, past that ruined house, that no one's cleared out in a generation. If it's building itself a body that won't die, that's where it's doing it.", [
+                {
+                    label: "I'll find it and end this.",
+                    action: () => {
+                        window.questLog.push({
+                            id: 'necromancer_hunt', title: "The Vessel-Seeker's Crypt", giver: 'Captain Ilsa Rennick',
+                            status: 'active', description: "Find the necromancer's crypt north past the abandoned house and put an end to the ritual.", resolution: null
+                        });
+                        window.showMessage('Quest added: "The Vessel-Seeker\'s Crypt."');
+                    }
+                },
+                { label: "Not yet.", action: () => {} }
+            ]);
+            return;
+        }
+        if (huntQuest?.status === 'active') {
+            window.showDialogue(npc, "Careful going in. Whatever's down there has had a long time to get stronger.", [{ label: "I'll manage.", action: () => {} }]);
+            return;
+        }
+        if (huntQuest?.status === 'completed') {
+            const lichQuest = window.questLog.find(q => q.id === 'necromancer_lichdom');
+
+            if (!lichQuest && window.lichRisenNewsReady) {
+                window.showDialogue(npc, "Corvin Ashgrave. That's the name it goes by now, if it's still a 'who' at all. Whatever it built in that crypt, it finished — I've got scouts describing something that doesn't die twice. There's a barrow further out past the ritual chamber. If you're going, you'll want to find whatever's keeping it standing before you try to put it down for good.", [
+                    {
+                        label: "I'll finish what I started.",
+                        action: () => {
+                            window.questLog.push({
+                                id: 'necromancer_lichdom', title: "The Barrow of Corvin Ashgrave", giver: 'Captain Ilsa Rennick',
+                                status: 'active', description: "Find Corvin Ashgrave's barrow past the crypt, deal with whatever's keeping him alive, then end him for good.", resolution: null
+                            });
+                            window.showMessage('Quest added: "The Barrow of Corvin Ashgrave."');
+                        }
+                    },
+                    { label: "Not yet.", action: () => {} }
+                ]);
+                return;
+            }
+            if (lichQuest?.status === 'active') {
+                window.showDialogue(npc, "Whatever's out there past the crypt, it's had time to get worse. Watch yourself.", [{ label: "I will.", action: () => {} }]);
+                return;
+            }
+            if (lichQuest?.status === 'completed' && lichQuest.resolution === 'allied') {
+                window.showDialogue(npc, "You came back changed. I don't know what happened out there, and some days I'm not sure I want to.", [{ label: "...", action: () => {} }]);
+                return;
+            }
+            if (lichQuest?.status === 'completed') {
+                window.showDialogue(npc, "Ashgrave's gone for good this time. You've done more for this town than the Watch ever could.", [{ label: "Just doing what's needed.", action: () => {} }]);
+                return;
+            }
+            window.showDialogue(npc, "You did what none of us could. Reddale won't forget it.", [{ label: "Just doing what's needed.", action: () => {} }]);
+            return;
+        }
+
+        const quest = window.questLog.find(q => q.id === 'reddale_missing_watch');
+
+        if (!quest) {
+            window.showDialogue(npc, "Two of my watchmen went out on the east road patrol three days back. Never came home. I fear the worst, but I can't spare anyone else to look.", [
+                {
+                    label: "I'll find them.",
+                    action: () => {
+                        window.questLog.push({
+                            id: 'reddale_missing_watch',
+                            title: 'The Missing Watch',
+                            giver: 'Captain Ilsa Rennick',
+                            status: 'active',
+                            description: "Find Captain Rennick's missing patrol along the road east of Reddale."
+                        });
+                        if (window.triggerReddaleMissingWatch) window.triggerReddaleMissingWatch();
+                        window.showMessage('Quest added: The Missing Watch.');
+                    }
+                },
+                { label: "Not my concern.", action: () => {} }
+            ]);
+            return;
+        }
+
+        if (quest.status === 'active') {
+            const goblinsRemain = window.entities.some(e => e.reddaleQuestGoblin && e.alive);
+            if (goblinsRemain) {
+                window.showDialogue(npc, "Head out along the east road. Whatever got them didn't leave much sign — watch yourself.", [
+                    { label: "I'll report back.", action: () => {} }
+                ]);
+            } else {
+                window.showDialogue(npc, "Goblins, this far out? That's further than they've ever ranged before — worth knowing, and worth worrying about. My thanks, truly.", [
+                    {
+                        label: "Glad to help.",
+                        action: () => {
+                            quest.status = 'completed';
+                            window.adjustReputation(npc.reputation, 15, 20);
+                            window.party[0].gold = (window.party[0].gold || 0) + 40;
+                            if (window.gainExp) window.gainExp(200);
+                            window.showMessage('Quest complete: The Missing Watch. (+40 gold)');
+                        }
+                    }
+                ]);
+            }
+            return;
+        }
+
+        // "Eyes on the Border" - offered once the Missing Watch is behind
+        // her, and only once there's real cause to worry (either the goblin
+        // scout note or an aggressive resolution to the goblin_threat quest).
+        const goblinQuest = window.questLog.find(q => q.id === 'goblin_threat');
+        const causeForConcern = window.goblinScoutNoteRead || ['assault', 'betrayal'].includes(goblinQuest?.resolution);
+        const bordersQuest = window.questLog.find(q => q.id === 'eyes_on_border');
+
+        if (causeForConcern && !bordersQuest) {
+            window.showDialogue(npc, "One more thing, while you're here. Traders coming up the east road talk of tracks that aren't goblin-make — heavier, further apart. If something's scouting us from further out, I want to know who.", [
+                {
+                    label: "I'll find out.",
+                    action: () => {
+                        window.questLog.push({
+                            id: 'eyes_on_border', title: 'Eyes on the Border', giver: 'Captain Ilsa Rennick',
+                            status: 'active', description: "Investigate the orc scouts spotted east of Reddale."
+                        });
+                        if (window.triggerEyesOnBorder) window.triggerEyesOnBorder();
+                        window.showMessage('Quest added: Eyes on the Border.');
+                    }
+                },
+                { label: "Not my problem.", action: () => {} }
+            ]);
+            return;
+        }
+
+        if (bordersQuest && bordersQuest.status === 'active') {
+            const scoutAlive = window.entities.some(e => e.eyesOnBorderTarget && e.alive);
+            if (scoutAlive) {
+                window.showDialogue(npc, "Still out there, last I heard. Watch the road east.", [{ label: "On it.", action: () => {} }]);
+            } else {
+                window.showDialogue(npc, "One scout down, and you got a good look at their gear — that's Silverhart border-levy make, not tribal. Someone's testing how far they can push before we notice. My thanks — this matters more than you know.", [
+                    {
+                        label: "Glad to help.",
+                        action: () => {
+                            bordersQuest.status = 'completed';
+                            window.adjustReputation(npc.reputation, 15, 15);
+                            if (window.factions?.orc_raiders) window.adjustReputation(window.factions.orc_raiders, -15, 15);
+                            window.party[0].gold = (window.party[0].gold || 0) + 30;
+                            if (window.gainExp) window.gainExp(150);
+                            window.showMessage('Quest complete: Eyes on the Border. (+30 gold)');
+                        }
+                    }
+                ]);
+            }
+            return;
+        }
+
+        window.showDialogue(npc, "Keep your nose clean in Reddale and we won't have trouble.", [
+            {
+                label: "Try to read her.",
+                action: () => {
+                    const { text } = window.readTheRoom(npc, window.party[0]);
+                    window.showDialogue(npc, text, [{ label: "Understood.", action: () => {} }]);
+                }
+            },
+            { label: "Understood.", action: () => {} }
+        ]);
+    },
+    reddale_guard: (npc) => {
+        const baseOptions = [
+            {
+                label: "Try to read him.",
+                action: () => {
+                    const { text } = window.readTheRoom(npc, window.party[0]);
+                    const followUps = window.getLeverageOptions(npc, window.party[0]);
+                    window.showDialogue(npc, text, [...followUps, { label: "Noted.", action: () => {} }]);
+                }
+            },
+            { label: "Noted.", action: () => {} }
+        ];
+
+        // Con path for "Eyes on the Border": Bram (already establish as
+        // bribable) can be paid to bury the border sighting instead of it
+        // ever reaching the Captain — quietly resolves the quest but lets
+        // the threat go unreported.
+        const bordersQuest = (window.questLog || []).find(q => q.id === 'eyes_on_border');
+        if (bordersQuest && bordersQuest.status === 'active') {
+            baseOptions.unshift({
+                label: "Ask him to bury the border sighting. (25 gold)",
+                action: () => {
+                    if ((window.party[0].gold || 0) < 25) { window.showMessage("You don't have enough gold."); return; }
+                    window.party[0].gold -= 25;
+                    bordersQuest.status = 'buried';
+                    if (window.factions?.silverhart_kingdom) window.adjustReputation(window.factions.silverhart_kingdom, -10, 10);
+                    if (window.factions?.orc_raiders) window.adjustReputation(window.factions.orc_raiders, 10, 10);
+                    window.showMessage("Bram pockets the coin. \"Never saw a thing,\" he says.");
+                }
+            });
+        }
+        window.showDialogue(npc, "Captain Rennick runs the watch here — if there's work needs doing, she's the one to ask. Me, I just mind the gate.", baseOptions);
+    },
+    reddale_reeve: (npc) => {
+        const influence = window.factions?.ironbond_company?.merchantInfluence?.silverhart_kingdom ?? 30;
+        const cutQuest = (window.questLog || []).find(q => q.id === 'reddale_cut');
+
+        if (cutQuest && cutQuest.status === 'active') {
+            window.showDialogue(npc, "Have you decided which way this goes? Ironbond's man is still waiting on an answer.", [
+                {
+                    label: "Help you push back against Ironbond.",
+                    action: () => {
+                        cutQuest.status = 'completed';
+                        if (window.factions?.ironbond_company) {
+                            window.adjustReputation(window.factions.ironbond_company, -15, 15);
+                            window.adjustMerchantInfluence(window.factions.ironbond_company, 'silverhart_kingdom', -15);
+                        }
+                        window.adjustReputation(npc.reputation, 20, 20);
+                        window.showMessage("Reddale holds its ground against Ironbond. (Ironbond's grip on the kingdom weakens.)");
+                    }
+                },
+                {
+                    label: "Broker the deal in Ironbond's favor. (+50 gold)",
+                    action: () => {
+                        cutQuest.status = 'completed';
+                        window.party[0].gold = (window.party[0].gold || 0) + 50;
+                        if (window.factions?.ironbond_company) {
+                            window.adjustReputation(window.factions.ironbond_company, 20, 15);
+                            window.adjustMerchantInfluence(window.factions.ironbond_company, 'silverhart_kingdom', 15);
+                        }
+                        window.adjustReputation(npc.reputation, -10, 15);
+                        window.showMessage("The deal is struck. Ironbond's grip on the kingdom tightens. (+50 gold)");
+                    }
+                }
+            ]);
+            return;
+        }
+
+        if (influence >= 40 && !cutQuest) {
+            window.showDialogue(npc, "The Ironbond Company sent a man 'round last week — talking protection fees, same as they did in Hollowmere by all accounts. I won't roll over for it, but I won't pretend saying no is free either. What would you do in my place?", [
+                {
+                    label: "Take it seriously.",
+                    action: () => {
+                        window.questLog = window.questLog || [];
+                        window.questLog.push({ id: 'reddale_cut', title: "Reddale's Cut", giver: 'Reeve Aldous Finch', status: 'active', description: 'Decide how Reddale answers the Ironbond Company.' });
+                        window.showMessage("Quest added: Reddale's Cut.");
+                    }
+                },
+                { label: "Not my business.", action: () => {} }
+            ]);
+            return;
+        }
+
+        // Repeatable missions: for a crown-sider, mirrors Petra's above —
+        // same shape, but the crownInfiltration breadcrumb here stays a
+        // total blackout until the early->mid phase transition (per
+        // design, the crown-sider only starts to suspect something bigger
+        // is happening once they're already deep into "helping"). Early
+        // missions hit surfacePower directly and are framed as stalling;
+        // once ironbondArc.phase reaches 'mid' the pool leans toward the
+        // quieter feed_informant/protect_asset missions instead.
+        if (window.ironbondArc?.playerSide === 'crown') {
+            const activeMission = (window.questLog || []).find(q => q.isIronbondArcMission && q.status === 'active');
+            if (activeMission) {
+                window.showDialogue(npc, `Any progress on "${window.IRONBOND_ARC_MISSION_TYPES[activeMission.type]?.label}"?`, [
+                    { label: "Working on it.", action: () => {} },
+                    { label: "It's done.", action: () => { window.completeIronbondArcMission(activeMission.id); } },
+                ]);
+                return;
+            }
+            if (window.ironbondArc.phase !== 'early' && !window.ironbondArc.crownInfiltrationRevealed) {
+                window.ironbondArc.crownInfiltrationRevealed = true;
+                window.showDialogue(npc, "I'll be honest — pushing back on the Company one shipment at a time feels like bailing out a ship with a cup. Someone above my station is working a slower angle, I think. Whatever it is, keep doing what you're doing. It matters more than it looks like it does.", [
+                    { label: "I'll keep at it.", action: () => {} }
+                ]);
+                return;
+            }
+            const isMid = window.ironbondArc.phase !== 'early';
+            const pool = Object.keys(window.IRONBOND_ARC_MISSION_TYPES).filter(k => {
+                const spec = window.IRONBOND_ARC_MISSION_TYPES[k];
+                if (spec.side !== 'crown') return false;
+                return isMid ? !!spec.infiltrationDelta : !spec.infiltrationDelta;
+            });
+            const pick = pool[Math.floor(Math.random() * pool.length)];
+            window.showDialogue(npc, isMid
+                ? "Quieter work, this time — not the kind that shows up in a ledger."
+                : "Ironbond's not getting any gentler. Willing to make their week harder?", [
+                { label: `Take on: ${window.IRONBOND_ARC_MISSION_TYPES[pick].label}`, action: () => window.offerIronbondArcMission(pick) },
+                { label: "Not right now.", action: () => {} }
+            ]);
+            return;
+        }
+
+        const tone = influence >= 40
+            ? "Reddale answers to Silverhart same as anywhere, but I'll admit the Company's shadow reaches further east than it used to."
+            : "Reddale answers to Silverhart same as anywhere, but out here it's my word that keeps the peace. Trade's been steady — long may it stay that way.";
+        window.showDialogue(npc, tone, [
+            { label: "Good to hear.", action: () => {} }
+        ]);
+    },
+    reddale_innkeeper: (npc) => {
+        // A trade-good want that becomes a real quest (with a quest-log
+        // entry and turn-in tracking) instead of an instant leverage
+        // transaction — see leverage.js's design notes: leverage is for
+        // spur-of-the-moment persuasion, this is for something an NPC will
+        // actually wait on and remember.
+        const gemQuest = (window.questLog || []).find(q => q.id === 'a_stone_for_nella');
+        if (gemQuest && gemQuest.status === 'active') {
+            const has = window.player.inventory.includes('gem_blue');
+            if (has) {
+                window.showDialogue(npc, "Is that... you found one? A blue stone, just like I asked.", [
+                    {
+                        label: "Here you go.",
+                        action: () => {
+                            window.player.inventory.splice(window.player.inventory.indexOf('gem_blue'), 1);
+                            gemQuest.status = 'completed';
+                            window.adjustReputation(npc.reputation, 20, 20);
+                            window.party[0].gold = (window.party[0].gold || 0) + 20;
+                            window.showMessage("Quest complete: A Stone for Nella. (+20 gold)");
+                        }
+                    },
+                    { label: "Not yet.", action: () => {} }
+                ]);
+            } else {
+                window.showDialogue(npc, "Still keeping an eye out for that blue stone? No rush.", [{ label: "I'll find one.", action: () => {} }]);
+            }
+            return;
+        }
+
+        if (window.abandonedHouseJournalRead) {
+            window.showDialogue(npc, "Welcome to Reddale. Rooms are warm and the ale's better than the road food, I promise you that.\n\nSince you're asking after strange things — a family out past Millbrook way went quiet a season back, and a grave near here was found disturbed not long after. Everyone says animals. I'm not so sure they're the same kind of quiet.", [
+                { label: "Worth looking into.", action: () => {} }
+            ]);
+        } else {
+            window.showDialogue(npc, "Welcome to Reddale. Rooms are warm and the ale's better than the road food, I promise you that.", [
+                {
+                    label: "Anything you need?",
+                    action: () => {
+                        window.questLog = window.questLog || [];
+                        window.questLog.push({
+                            id: 'a_stone_for_nella', title: 'A Stone for Nella', giver: 'Nella Brook', status: 'active',
+                            description: 'Bring Nella Brook a blue gem.'
+                        });
+                        window.showDialogue(npc, "Funny you ask — my mother always wore a blue stone, before we lost everything on the road here. If you ever find one out there, I'd pay well for it. Sentimental, I know.", [{ label: "I'll keep an eye out.", action: () => {} }]);
+                    }
+                },
+                {
+                    label: "Hear anything from Hollowmere way?",
+                    action: () => {
+                        const rumors = window.getRecentWorldRumors ? window.getRecentWorldRumors(2, 'hollowmere') : [];
+                        const text = rumors.length
+                            ? rumors.join("\n\n")
+                            : "Nothing much travels this far down the road. Quiet out that way, far as I know.";
+                        window.showDialogue(npc, text, [{ label: "Thanks.", action: () => {} }]);
+                    }
+                },
+                { label: "Good to know.", action: () => {} }
+            ]);
+        }
+    },
+    reddale_blacksmith: (npc) => {
+        if (window.isShunnedByHumanCommerce && window.isShunnedByHumanCommerce()) {
+            window.showDialogue(npc, "I don't sell to your kind. Move along.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+        if (window.isShopOpen && !window.isShopOpen('Torvald Anvik')) {
+            window.showDialogue(npc, "Forge's cold and I'm off for the night. Come back with the sun.", [{ label: "Alright.", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "Reddale's a waypoint, not a city — but the road wears down blades and armor same as anywhere. I keep enough stock to fix you up without a trip back to Hollowmere.", [
+            { label: "Show me your wares.", action: () => window.openShop({ itemIds: window.campaign2ReddaleBlacksmithItems, mounts: false }) },
+            { label: "Just looking.", action: () => {} }
+        ]);
+    },
+    // --- The necromancer's disciple, hiding as an ordinary herbalist in
+    // Reddale (see the abandoned house/phylactery-shard arc in
+    // campaign2World.js). Knowledge: Religion is what actually lets the
+    // player notice anything is wrong with her — without it she's just
+    // another background townsperson, same convention as the abandoned
+    // house journal's vague/detailed split.
+    reddale_disciple: (npc) => {
+        // Two independent ways to notice something's wrong with her: reading
+        // the literal symbols (Knowledge: Religion), or a Smite Evil caster's
+        // trained sense for the unnatural — a concrete case of a spell
+        // gating a dialogue option the same way a knowledge skill does (see
+        // hasSpellUnlocked in skills.js).
+        const knowsReligion = window.party && window.party.some(p => window.hasKnowledgeReligion(p));
+        const sensesEvil = window.party && window.party.some(p => window.hasSpellUnlocked(p, 'smite_evil'));
+        if (!knowsReligion && !sensesEvil) {
+            window.showDialogue(npc, "Herbs for a cough, a bad hip, a bad night's sleep — that's all I sell. Anything else?", [
+                { label: "Nothing, thanks.", action: () => {} }
+            ]);
+            return;
+        }
+
+        if (!window.discipleSuspected) {
+            const lookCloserLabel = knowsReligion ? "Look closer at her wares." : "Something about her unsettles you.";
+            const revealText = knowsReligion
+                ? "Among the drying herbs, a sigil is scratched faintly into the shelf's underside — the same mark from the phylactery altar north of Millbrook. She notices you noticing, and her smile doesn't move."
+                : "The same cold prickle you feel from the walking dead crawls up your arms the moment she takes your hand to sell you herbs. Whatever she is, some part of you that answers to Smite Evil doesn't believe \"herbalist\" for a second.";
+            window.showDialogue(npc, "Herbs for a cough, a bad hip, a bad night's sleep — that's all I sell. Anything else?", [
+                {
+                    label: lookCloserLabel,
+                    action: () => {
+                        window.discipleSuspected = true;
+                        window.showDialogue(npc, revealText, [
+                            { label: "...", action: () => {} }
+                        ]);
+                    }
+                },
+                { label: "Nothing, thanks.", action: () => {} }
+            ]);
+            return;
+        }
+
+        const options = [
+            {
+                label: "You serve the Vessel-Seeker.",
+                action: () => window.showDialogue(npc, "\"The Vessel-Seeker\"? I sell herbs. Whatever you think you saw, keep it to yourself — for your own sake, if not mine.", [{ label: "...", action: () => {} }])
+            },
+            { label: "Nothing, thanks.", action: () => {} }
+        ];
+
+        const conspireStanding = window.factions?.necromancer_cult?.standing ?? 0;
+        if (conspireStanding > -20 && !window.discipleConspired) {
+            options.unshift({
+                label: "Your secret's safe with me — for now.",
+                action: () => {
+                    window.discipleConspired = true;
+                    window.adjustReputation(window.factions.necromancer_cult, 15, 15);
+                    if (window.factions?.silverhart_kingdom) window.adjustReputation(window.factions.silverhart_kingdom, -10, 10);
+                    window.showMessage("Mirella's shoulders ease, just slightly. \"Smart. We'll remember it.\"");
+                }
+            });
+        }
+        window.showDialogue(npc, "You've a sharp eye. Sharper than most who come through here.", options);
+    },
+    // --- Ironbond Company vs the Baron: mirrored espionage side-quests (the
+    // same Ironbond from the Hollowmere tavern shakedown, straining for
+    // influence against the Baron/kingdom here too — not a separate guild).
+    // spy_on_guild opens once the Baron trusts the player (kingdom standing
+    // >= 20); spy_on_baron opens once Ironbond's merchantInfluence over the
+    // kingdom is high enough (>= 40, same threshold reddale_cut uses) that
+    // it's ready to move against him directly. See espionageQuests.js for
+    // the actual stealth-mission tracker (activeStealthMission /
+    // checkStealthMissionStatus / searchEvidence) that enforces "stay
+    // stealthed or the mission fails."
+    reddale_steward: (npc) => {
+        window.showDialogue(npc, "The Baron is occupied. State your business, or don't waste my time.", [
+            {
+                label: "Try to read him.",
+                action: () => {
+                    const { text } = window.readTheRoom(npc, window.party[0]);
+                    const followUps = window.getLeverageOptions(npc, window.party[0]);
+                    window.showDialogue(npc, text, [...followUps, { label: "Noted.", action: () => {} }]);
+                }
+            },
+            { label: "Never mind.", action: () => {} }
+        ]);
+    },
+    reddale_baron: (npc) => {
+        // Double cross: while the player is nominally Ironbond's spy against
+        // the Baron (spy_on_baron), the Baron confronts them with exactly
+        // that accusation and offers to flip them into his own inside man —
+        // same reward-or-threat shape mirrored below in reddale_guildmaster
+        // for the opposite quest.
+        const spyOnBaronQuest = (window.questLog || []).find(q => q.id === 'spy_on_baron');
+        if (spyOnBaronQuest && spyOnBaronQuest.status === 'active' && !spyOnBaronQuest.doubleCrossOffered) {
+            spyOnBaronQuest.doubleCrossOffered = true;
+            window.showDialogue(npc, "I know Ironbond's coin when I smell it on someone. You've been pretending to court their favor so you could slip into my manor unnoticed — clever. Keep playing their spy, but bring what you learn to me first, and I'll see you rewarded properly. Cross me instead, and you'll find Reddale a very hard place to work in.", [
+                {
+                    label: "I'm your man on the inside now.",
+                    action: () => {
+                        spyOnBaronQuest.doubleAgentFor = 'silverhart_kingdom';
+                        window.adjustReputation(window.factions.silverhart_kingdom, 10, 15);
+                        window.showMessage("Baron Corwin Aldervale: \"Good. See that you remember it.\"");
+                    }
+                },
+                {
+                    label: "You're wrong about me.",
+                    action: () => {
+                        spyOnBaronQuest.doubleCrossDeclined = true;
+                        window.adjustReputation(window.factions.silverhart_kingdom, -10, 15);
+                        window.showMessage("Baron Corwin Aldervale: \"We'll see.\"");
+                    }
+                }
+            ]);
+            return;
+        }
+        const gemQuest = (window.questLog || []).find(q => q.id === 'baron_tribute');
+        if (gemQuest && gemQuest.status === 'active') {
+            if (window.player.inventory.includes('gem_red')) {
+                window.showDialogue(npc, "A tribute, is it? Let's see it, then.", [
+                    {
+                        label: "Present the gem.",
+                        action: () => {
+                            window.player.inventory.splice(window.player.inventory.indexOf('gem_red'), 1);
+                            gemQuest.status = 'completed';
+                            window.adjustReputation(window.factions.silverhart_kingdom, 10, 15);
+                            window.adjustReputation(npc.reputation, 20, 20);
+                            window.party[0].gold = (window.party[0].gold || 0) + 20;
+                            window.showMessage("Quest complete: The Baron's Tribute. (+20 gold)");
+                        }
+                    },
+                    { label: "Not yet.", action: () => {} }
+                ]);
+                return;
+            }
+            window.showDialogue(npc, "Still no tribute? A red stone isn't so hard to find, surely.", [{ label: "Still looking.", action: () => {} }]);
+            return;
+        }
+        const trust = window.factions?.silverhart_kingdom?.standing ?? 0;
+        const quest = (window.questLog || []).find(q => q.id === 'spy_on_guild');
+
+        if (quest && quest.status === 'active') {
+            if (window.player.inventory.includes('guild_ledger_evidence')) {
+                window.showDialogue(npc, "You look like someone who's been somewhere they shouldn't. Tell me you found something.", [
+                    {
+                        label: "Here — their ledgers. (Give evidence)",
+                        action: () => {
+                            window.player.inventory.splice(window.player.inventory.indexOf('guild_ledger_evidence'), 1);
+                            quest.status = 'completed';
+                            window.adjustReputation(npc.reputation, 20, 20);
+                            const doubleAgent = quest.doubleAgentFor === 'ironbond_company';
+                            let bonusGold = 40;
+                            if (doubleAgent) {
+                                // Petra believes the whole spying job was theater to win her
+                                // trust — it doesn't just soften the damage, it undoes it. The
+                                // kingdom, once it's plain whose side you're really playing,
+                                // gets no such mercy.
+                                if (window.factions.ironbond_company.standing < 0) window.factions.ironbond_company.standing = 0;
+                                window.factions.silverhart_kingdom.standing = window.FACTION_DOUBLE_CROSS_STANDING;
+                                bonusGold += 20;
+                                window.showMessage("Word quietly reaches you later: Ironbond isn't half as furious as they should be. (+20 secret gold from Petra Voss)");
+                            } else {
+                                window.adjustReputation(window.factions.silverhart_kingdom, 15, 15);
+                                if (window.factions.ironbond_company) {
+                                    window.adjustReputation(window.factions.ironbond_company, -20, 20);
+                                    if (window.adjustMerchantInfluence) window.adjustMerchantInfluence(window.factions.ironbond_company, 'silverhart_kingdom', -10);
+                                }
+                            }
+                            window.party[0].gold = (window.party[0].gold || 0) + bonusGold;
+                            if (window.gainExp) window.gainExp(150);
+                            window.showMessage("Quest complete: Eyes on the Guildhouse. (+40 gold)");
+                        }
+                    },
+                    { label: "Not yet.", action: () => {} }
+                ]);
+            } else {
+                window.showDialogue(npc, "Still nothing from the guildhouse? Take your time — but not too much of it.", [{ label: "Working on it.", action: () => {} }]);
+            }
+            return;
+        }
+        if (quest && quest.status === 'failed') {
+            window.showDialogue(npc, "Word reached me you were caught snooping around the guildhouse. That's put us both in a poor position. I won't ask that of you again.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+
+        if (trust >= 20 && !quest) {
+            window.showDialogue(npc, "Ironbond's books don't add up, and Voss won't open them for any tax man I send. I need someone who isn't a tax man. Get into their guildhouse, find their real ledgers, and bring them to me — quietly. If you're seen, this goes badly for both of us.", [
+                {
+                    label: "I'll do it.",
+                    action: () => {
+                        window.questLog = window.questLog || [];
+                        window.questLog.push({
+                            id: 'spy_on_guild', title: 'Eyes on the Guildhouse', giver: 'Baron Corwin Aldervale', status: 'active',
+                            description: "Sneak into the Reddale guildhouse and find Ironbond's real ledgers, without being seen."
+                        });
+                        if (window.startStealthMission) {
+                            window.startStealthMission({
+                                questId: 'spy_on_guild',
+                                guardName: 'Guild Watchman Corley',
+                                evidenceKey: 'guild_ledgers',
+                                itemId: 'guild_ledger_evidence',
+                                evidenceFlavor: "Ironbond's private ledgers",
+                                factionSpiedOn: 'ironbond_company',
+                                failStandingHit: -20,
+                                objectiveText: 'Search the guildhouse ledgers without being seen by the guild watchman.'
+                            });
+                        }
+                        window.showMessage("Quest added: Eyes on the Guildhouse.");
+                    }
+                },
+                { label: "Not my business.", action: () => {} }
+            ]);
+            return;
+        }
+
+        if (!gemQuest) {
+            window.showDialogue(npc, "Reddale answers to me, same as the rest of the barony. Mind your business here and we'll get along fine. Bring a gift worth the visit and I'll remember it kindly — a fine red gem would do nicely.", [
+                {
+                    label: "I'll bring you a tribute.",
+                    action: () => {
+                        window.questLog = window.questLog || [];
+                        window.questLog.push({
+                            id: 'baron_tribute', title: "The Baron's Tribute", giver: 'Baron Corwin Aldervale', status: 'active',
+                            description: 'Bring Baron Corwin Aldervale a red gem as tribute.'
+                        });
+                        window.showMessage("Quest added: The Baron's Tribute.");
+                    }
+                },
+                { label: "Understood.", action: () => {} }
+            ]);
+            return;
+        }
+
+        window.showDialogue(npc, "Reddale answers to me, same as the rest of the barony. Mind your business here and we'll get along fine.", [
+            { label: "Understood.", action: () => {} }
+        ]);
+    },
+    reddale_guildmaster: (npc) => {
+        // Ironbond's own merchantInfluence over the kingdom (the same stat
+        // reddale_cut reads) rather than a separate faction's standing — the
+        // Company only turns on the Baron once its grip here is strong
+        // enough to risk it.
+        const trust = window.factions?.ironbond_company?.merchantInfluence?.silverhart_kingdom ?? 0;
+        const quest = (window.questLog || []).find(q => q.id === 'spy_on_baron');
+
+        // Double cross, mirrored: while the player is nominally the Baron's
+        // spy against Ironbond (spy_on_guild), Petra confronts them with it
+        // and offers the same reward-or-threat flip.
+        const bogusQuest = (window.questLog || []).find(q => q.id === 'spy_on_guild');
+        if (bogusQuest && bogusQuest.status === 'active' && !bogusQuest.doubleCrossOffered) {
+            bogusQuest.doubleCrossOffered = true;
+            window.showDialogue(npc, "I know why you're really here. The Baron's got you creeping through my guildhouse, doesn't he? Don't bother lying — I've seen that look before. Good work getting this close. Now here's what happens next: you keep pretending to work for him, and you bring what you find to me first. I'll make it worth your while. Unless, of course, I'm wrong, and you're actually loyal to him — in which case, I've got ways of making Reddale very uncomfortable for you.", [
+                {
+                    label: "I'm your man on the inside now.",
+                    action: () => {
+                        bogusQuest.doubleAgentFor = 'ironbond_company';
+                        window.adjustReputation(window.factions.ironbond_company, 10, 15);
+                        window.showMessage("Guildmaster Petra Voss: \"Good. Don't make me regret this.\"");
+                    }
+                },
+                {
+                    label: "You're wrong about me.",
+                    action: () => {
+                        bogusQuest.doubleCrossDeclined = true;
+                        window.adjustReputation(window.factions.ironbond_company, -10, 15);
+                        window.showMessage("Guildmaster Petra Voss: \"We'll see.\"");
+                    }
+                }
+            ]);
+            return;
+        }
+
+        if (quest && quest.status === 'active') {
+            if (window.player.inventory.includes('baron_tariff_evidence')) {
+                window.showDialogue(npc, "You've the look of someone who's been in the manor and not through the front door. Well?", [
+                    {
+                        label: "Here — his steward's own tally. (Give evidence)",
+                        action: () => {
+                            window.player.inventory.splice(window.player.inventory.indexOf('baron_tariff_evidence'), 1);
+                            quest.status = 'completed';
+                            window.adjustReputation(npc.reputation, 20, 20);
+                            const doubleAgent = quest.doubleAgentFor === 'silverhart_kingdom';
+                            let bonusGold = 40;
+                            if (doubleAgent) {
+                                // The Baron believes the espionage was cover for winning his
+                                // trust — it undoes the damage rather than just softening it.
+                                // Ironbond, once it's obvious whose side you're really on,
+                                // gets no such mercy.
+                                if (window.factions.silverhart_kingdom.standing < 0) window.factions.silverhart_kingdom.standing = 0;
+                                window.factions.ironbond_company.standing = window.FACTION_DOUBLE_CROSS_STANDING;
+                                bonusGold += 20;
+                                window.showMessage("Word quietly reaches you later: the Baron isn't half as furious as he should be. (+20 secret gold from Corwin Aldervale)");
+                            } else {
+                                window.adjustReputation(window.factions.ironbond_company, 15, 15);
+                                if (window.adjustMerchantInfluence) window.adjustMerchantInfluence(window.factions.ironbond_company, 'silverhart_kingdom', 10);
+                                if (window.factions.silverhart_kingdom) window.adjustReputation(window.factions.silverhart_kingdom, -20, 20);
+                            }
+                            window.party[0].gold = (window.party[0].gold || 0) + bonusGold;
+                            if (window.gainExp) window.gainExp(150);
+                            window.showMessage("Quest complete: A Look at the Ledgers. (+40 gold)");
+                        }
+                    },
+                    { label: "Not yet.", action: () => {} }
+                ]);
+            } else {
+                window.showDialogue(npc, "Still no word from the manor? No rush — but the Baron isn't getting any less greedy while we wait.", [{ label: "Working on it.", action: () => {} }]);
+            }
+            return;
+        }
+        if (quest && quest.status === 'failed') {
+            window.showDialogue(npc, "I heard his steward caught someone poking around the manor. That was meant to stay quiet. I won't send you back in.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+
+        if (trust >= 40 && !quest) {
+            window.showDialogue(npc, "The Baron's tariffs have crept up twice this year and his own books somehow never show it. I need proof, not rumors. Get into the manor, find his steward's real tally, and get out without being seen. If his man catches you, I can't protect you.", [
+                {
+                    label: "I'll do it.",
+                    action: () => {
+                        window.questLog = window.questLog || [];
+                        window.questLog.push({
+                            id: 'spy_on_baron', title: 'A Look at the Ledgers', giver: 'Guildmaster Petra Voss', status: 'active',
+                            description: "Sneak into the Baron's manor and find the steward's real tariff records, without being seen."
+                        });
+                        if (window.startStealthMission) {
+                            window.startStealthMission({
+                                questId: 'spy_on_baron',
+                                guardName: 'Steward Halvard Greer',
+                                evidenceKey: 'baron_tariffs',
+                                itemId: 'baron_tariff_evidence',
+                                evidenceFlavor: "the steward's tariff tally",
+                                factionSpiedOn: 'silverhart_kingdom',
+                                failStandingHit: -20,
+                                objectiveText: "Search the manor's tariff records without being seen by the Baron's steward."
+                            });
+                        }
+                        window.showMessage("Quest added: A Look at the Ledgers.");
+                    }
+                },
+                { label: "Not my business.", action: () => {} }
+            ]);
+            return;
+        }
+
+        // Repeatable missions + the crownInfiltration breadcrumb: for a
+        // player who's already thrown in with the Company, Petra keeps
+        // handing out work indefinitely (same repeatable-mission shape as
+        // window.WAR_MISSION_TYPES, see ironbondArc.js), and — starting
+        // almost immediately, per design — something about her own ledgers
+        // stops adding up. It becomes explicit well before the mid-game
+        // reveal, not held back as a late twist for this side.
+        if (window.ironbondArc?.playerSide === 'ironbond') {
+            const activeMission = (window.questLog || []).find(q => q.isIronbondArcMission && q.status === 'active');
+            if (activeMission) {
+                window.showDialogue(npc, `Still working on "${window.IRONBOND_ARC_MISSION_TYPES[activeMission.type]?.label}"? Take your time — but not too much of it.`, [
+                    { label: "Almost there.", action: () => {} },
+                    { label: "It's done.", action: () => { window.completeIronbondArcMission(activeMission.id); } },
+                ]);
+                return;
+            }
+            if (!window.ironbondArc.crownInfiltrationRevealed && window.ironbondArc.phase !== 'early') {
+                window.ironbondArc.crownInfiltrationRevealed = true;
+                window.showDialogue(npc, "Between us — something's wrong in this guildhouse. Orders come down that don't trace back to anyone I trust, ledgers balance to numbers nobody wrote. I don't think we're as secure as the coin makes us look. I need people I can actually rely on.", [
+                    { label: "I'll look into it.", action: () => {} }
+                ]);
+                return;
+            }
+            const missionPool = Object.keys(window.IRONBOND_ARC_MISSION_TYPES).filter(k => window.IRONBOND_ARC_MISSION_TYPES[k].side === 'ironbond');
+            const pick = missionPool[Math.floor(Math.random() * missionPool.length)];
+            window.showDialogue(npc, window.ironbondArc.crownInfiltrationRevealed
+                ? "Coin and contracts mean nothing if the Company's rotten at the core. There's always more to do — inside and out."
+                : "Always more work than hands to do it. You interested?", [
+                { label: `Take on: ${window.IRONBOND_ARC_MISSION_TYPES[pick].label}`, action: () => window.offerIronbondArcMission(pick) },
+                { label: "Not right now.", action: () => {} }
+            ]);
+            return;
+        }
+
+        window.showDialogue(npc, "The Guild looks after its own here in Reddale. Trade fair with us and we'll do the same for you.", [
+            { label: "Good to know.", action: () => {} }
+        ]);
+    },
+    farm_sheep: (npc) => {
+        window.showDialogue(npc, "Baa.", [{ label: "...", action: () => {} }]);
+    },
+    ser_aldric_captive: (npc) => {
+        if (window.party.some(p => p.name === window.campaign2Paladin.name)) return; // already rescued
+        window.showDialogue(npc, "Please... cut me loose. I came out here to deal with this goblin problem myself, and, well — here we are. Whatever you decide to do about them, I intend to see them gone from this land. I'll owe you a debt either way.", [
+            { label: "I'll free you now.", action: () => window.rescuePaladin() },
+            { label: "Not yet.", action: () => {} }
+        ]);
+    },
+    // Reyna Fletcher (archer-specialist fighter companion): already tracking
+    // the bear raiding Old Mac's grain stores (see buildSideQuestContent,
+    // campaign2World.js) — an easy Hollowmere-area quest doubling as her
+    // recruitment hook.
+    reyna_fletcher: (npc) => {
+        if (window.party.some(p => p.name === window.campaign2ArcherCompanion.name)) return;
+        const bearAlive = window.entities.some(e => e.isSideQuestBear && e.alive);
+        if (!bearAlive) {
+            window.showDialogue(npc, "That's the last of it dead, then. Good riddance — it's cost Old Mac more grain than he can spare. I owe you for the help. I've been meaning to travel further than these woods for a while now — mind the company?", [
+                { label: "Join me.", action: () => window.recruitReyna() },
+                { label: "Not right now.", action: () => {} }
+            ]);
+            return;
+        }
+        window.showDialogue(npc, "Careful — there's a bear gone bold, raiding the grain stores at night. I've been tracking it a few days now. Help me finish it and I might just travel on with you afterward.", [
+            { label: "I'll help.", action: () => {} },
+            { label: "Not my business.", action: () => {} }
+        ]);
+    },
+    // Mirabel Quill (wizard companion): after a book/reagent inside the
+    // spider-infested ruin near Reddale (see buildSideQuestContent).
+    mirabel_quill: (npc) => {
+        if (window.party.some(p => p.name === window.campaign2WizardCompanion.name)) return;
+        const spidersAlive = window.entities.some(e => e.isSpiderRuinDefender && e.alive);
+        if (!spidersAlive) {
+            window.showDialogue(npc, "The nest's cleared, then — I felt them go quiet from here. Whatever's still readable in there is mine now, and I owe you for the opening. I travel light and I don't stay anywhere long, but I could use a steadier direction for a while.", [
+                { label: "Join me.", action: () => window.recruitMirabel() },
+                { label: "Not right now.", action: () => {} }
+            ]);
+            return;
+        }
+        window.showDialogue(npc, "There's a ruin nearby with something in it worth reading — old enough to matter, if the rumors are even half true. Spiders have made a nest of the entrance, though, and I'm no fighter. Clear them out and whatever's inside is worth knowing about.", [
+            { label: "I'll clear it out.", action: () => {} },
+            { label: "Not my business.", action: () => {} }
+        ]);
+    },
+    // Fenn Oakheart (druid companion): a grove apprentice, distinct from
+    // Elder Nessa Wren — recruited via a simple herb-gathering fetch using
+    // the grove's existing herb_patch tileObjects, not combat.
+    fenn_oakheart: (npc) => {
+        if (window.party.some(p => p.name === window.campaign2DruidCompanion.name)) return;
+        const herbCount = (window.player.inventory || []).filter(i => i === 'herbs').length;
+        if (herbCount >= 3) {
+            window.showDialogue(npc, "Three bundles, gathered clean — you've got a feel for this place. The grove doesn't need me the way it used to. I think I'm ready to see more of the world than these trees.", [
+                {
+                    label: "Give the herbs, and join me.",
+                    action: () => {
+                        let removed = 0;
+                        window.player.inventory = window.player.inventory.filter(i => {
+                            if (i === 'herbs' && removed < 3) { removed++; return false; }
+                            return true;
+                        });
+                        window.recruitFenn();
+                    }
+                },
+                { label: "Not right now.", action: () => {} }
+            ]);
+            return;
+        }
+        window.showDialogue(npc, "The Elder keeps the grove's peace; I mostly just gather. Bring me three bundles of herbs from the patches here and I'll know you respect the place, not just what grows in it.", [
+            { label: "I'll gather some.", action: () => {} }
+        ]);
+    },
+    // The goblin camp's own trader — the villain/greenskin-alliance path's
+    // alternative to the human merchants isShunnedByHumanCommerce locks
+    // out, open only once the tribe is actually allied (not just tolerated).
+    goblin_trader: (npc) => {
+        if (!window.isGoblinAligned || !window.isGoblinAligned()) {
+            window.showDialogue(npc, "Nothing for you here, human.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "Ha! Ally's coin spends same as anyone's. Look, take, pay.", [
+            { label: "Let me see your wares.", action: () => window.openShop({ itemIds: window.campaign2GoblinTraderItems, mounts: false }) },
+            { label: "Just looking.", action: () => {} }
+        ]);
+    },
+    orc_warlord: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'orc_stronghold_trust');
+        const trollAlive = window.entities.some(e => e.isOrcStrongholdTroll && e.alive);
+
+        if (quest && quest.status === 'completed') {
+            const orcRep = window.factions?.orc_raiders?.standing || 0;
+            if (window.party.some(p => p.name === window.campaign2OrcWarlord.name)) {
+                window.showDialogue(npc, "Hold's still standing. What is it?", [{ label: "Nothing, carry on.", action: () => {} }]);
+                return;
+            }
+            // A much higher bar than the trader's (20) — joining the party
+            // outright is a bigger trust ask than just doing business, the
+            // same "deeper trust, deeper unlock" shape chief_skarnub's
+            // stay-permanently offer uses relative to the trader's own gate.
+            if (orcRep >= 40) {
+                window.showDialogue(npc, "Skarnak's Hold remembers who dealt with the troll, and Kesh trades with you properly now — but I've had my fill of sitting behind a stockade counting raids. There's more out there worth breaking than trolls. Room for a warlord at your back?", [
+                    { label: "Come with me.", action: () => window.recruitOrcCompanion() },
+                    { label: "Not yet.", action: () => {} }
+                ]);
+                return;
+            }
+            window.showDialogue(npc, "Skarnak's Hold remembers who dealt with the troll. Kesh will trade with you properly now.", [{ label: "Good to know.", action: () => {} }]);
+            return;
+        }
+        if (quest && quest.status === 'active') {
+            if (!trollAlive) {
+                quest.status = 'completed';
+                window.adjustReputation(window.factions.orc_raiders, 25, 25);
+                window.party[0].gold = (window.party[0].gold || 0) + 40;
+                if (window.gainExp) window.gainExp(150);
+                window.showMessage("Quest complete: Prove Your Strength. (+40 gold)");
+                window.showDialogue(npc, "The denning troll stops taking our scouts, and a stranger's the one who stopped it. Good work. You've earned a proper welcome here.", [{ label: "Glad to help.", action: () => {} }]);
+                return;
+            }
+            window.showDialogue(npc, "That troll still denning east of here? Deal with it and we'll talk properly.", [{ label: "Working on it.", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "Humans don't usually walk in here and expect to walk out. Something's been picking off our scouts and cattle east of the stockade — a troll, denned in the rocks. Kill it, and maybe you're worth talking to.", [
+            {
+                label: "I'll deal with it.",
+                action: () => {
+                    window.questLog.push({
+                        id: 'orc_stronghold_trust', title: 'Prove Your Strength', giver: 'Warlord Grukk Ironhide', status: 'active',
+                        description: "A troll denning east of Skarnak's Hold has been killing orc scouts and cattle. Kill it to earn the stronghold's trust."
+                    });
+                    window.showMessage("Quest added: Prove Your Strength.");
+                }
+            },
+            { label: "Not interested.", action: () => {} }
+        ]);
+    },
+    orc_trader: (npc) => {
+        const trusted = (window.factions?.orc_raiders?.standing || 0) >= 20;
+        if (!trusted) {
+            window.showDialogue(npc, "Nothing for you here, human.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "Coin's coin. What do you need?", [
+            { label: "Let me see your wares.", action: () => window.openShop({ itemIds: window.campaign2OrcTraderItems, mounts: false }) },
+            { label: "Just looking.", action: () => {} }
+        ]);
+    },
+    chief_skarnub: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'goblin_threat');
+        const goblinRep = window.factions.goblin_tribe.standing;
+
+        // The alliance resolution keeps a door open (the mine-raid favor)
+        // that no other resolution does, so it's excluded from the generic
+        // "nothing left to discuss" shutdown below.
+        if (quest && quest.resolution && quest.resolution !== 'goblin_alliance') {
+            window.showDialogue(npc, "We have nothing left to discuss.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+
+        if (quest && quest.resolution === 'goblin_alliance') {
+            const mineQuest = window.questLog.find(q => q.id === 'goblin_mine_raid');
+            const spyQuest = window.questLog.find(q => q.id === 'greenskin_spy');
+            // Same continuity signal the human quartermaster's Border War
+            // breadcrumb uses (goblinScoutNoteRead) — the tribe you're now
+            // allied with is exactly who those scouts were counting walls
+            // for. Only offered once the mine-raid favor is settled, so it
+            // doesn't compete with/preempt that quest.
+            if (window.goblinScoutNoteRead && mineQuest?.status === 'completed' && !spyQuest) {
+                window.showDialogue(npc, "You've proven useful, human. There's a bigger prize than a mine — the warband pressing Northwatch Fort could use eyes and a hand on the inside. Help us take it, and there'll be a place for you when it falls.", [
+                    {
+                        label: "I'll help you take Northwatch.",
+                        action: () => {
+                            window.questLog.push({
+                                id: 'greenskin_spy', title: 'A Hand on the Inside', giver: 'Chief Skarnub',
+                                status: 'active', description: "Help the greenskin warband take Northwatch Fort.", resolution: null
+                            });
+                            if (window.joinGreenskinAssault) window.joinGreenskinAssault();
+                            window.showMessage('Quest started: A Hand on the Inside.');
+                        }
+                    },
+                    { label: "Not yet.", action: () => {} }
+                ]);
+                return;
+            }
+            if (spyQuest && spyQuest.status !== 'completed') {
+                window.showDialogue(npc, "Northwatch still stands. Get in there and help our warband bring it down.", [{ label: "On it.", action: () => {} }]);
+                return;
+            }
+            if (spyQuest?.status === 'completed' && window.warState?.active && window.warState.playerSide === 'greenskin') {
+                const activeMission = (window.questLog || []).find(q => q.isWarMission && q.status === 'active');
+                if (activeMission) {
+                    window.showDialogue(npc, `Still out on that ${activeMission.title.toLowerCase()}. Bring me word when it's done.`, [
+                        { label: "I'm on it.", action: () => {} }
+                    ]);
+                    return;
+                }
+                const options = Object.entries(window.WAR_MISSION_TYPES).map(([type, spec]) => ({
+                    label: spec.label,
+                    action: () => window.offerWarMission(type),
+                }));
+                options.push({ label: "Nothing right now.", action: () => {} });
+                window.showDialogue(npc, "Northwatch is ours, but the humans won't stop pushing back. Keep the pressure on them and there's a place for you at my fire.", options);
+                return;
+            }
+            if (mineQuest && mineQuest.status === 'completed') {
+                window.showDialogue(npc, "We're settled here, thanks to you. That mine haul didn't hurt either.", [{ label: "Good.", action: () => {} }]);
+                return;
+            }
+            if (!mineQuest) {
+                window.showDialogue(npc, "Since you've let us stay... there's a mining camp down the west road. Rich pickings, if you're willing to lead us there.", [
+                    {
+                        label: "I'll help you raid it.",
+                        action: () => {
+                            window.questLog.push({
+                                id: 'goblin_mine_raid', title: 'A Favor for the Tribe', giver: 'Chief Skarnub', status: 'active',
+                                description: "Help the Skarn-tooth tribe raid Emberlode's gold mine."
+                            });
+                            window.showMessage("Quest added: A Favor for the Tribe.");
+                        }
+                    },
+                    { label: "Not yet.", action: () => {} }
+                ]);
+                return;
+            }
+            window.showDialogue(npc, "Well? Are we raiding that mine or not?", [
+                {
+                    label: "Lead the raid now.",
+                    action: () => {
+                        window.resolveGoblinFavor('raid_mine');
+                        mineQuest.status = 'completed';
+                        window.showMessage("Quest complete: A Favor for the Tribe.");
+                    }
+                },
+                { label: "Not yet.", action: () => {} }
+            ]);
+            return;
+        }
+
+        if (goblinRep >= 40) {
+            window.showDialogue(npc, "You've done right by us. Truth told, this land's more trouble than it's worth — humans always come eventually. Guarantee us safe passage and supplies, and we'll move on. No more blood spilled, on either side.", [
+                {
+                    label: "Agreed. Take what you need and go.",
+                    action: () => {
+                        if (!quest) window.questLog.push({ id: 'goblin_threat', title: 'The Skarn-tooth Tribe', giver: 'Elder Marta Wynfield', status: 'active', description: '' });
+                        const q = window.questLog.find(q2 => q2.id === 'goblin_threat');
+                        q.status = 'completed';
+                        q.resolution = 'goblin_diplomacy';
+                        window.adjustReputation(window.factions.silverhart_kingdom, -10, 10); // letting a raiding tribe walk away paid off, doesn't sit well with the kingdom
+                        window.adjustReputation(window.factions.goblin_tribe, 15, 15);
+                        if (window.adjustRegionStat) window.adjustRegionStat('hollowmere', 'security', 8);
+                        if (window.gainExp) window.gainExp(150);
+                        window.rescuePaladin();
+                        if (window.adjustCompanionAttitude) window.adjustCompanionAttitude(window.campaign2Paladin.name, -10, "let the goblins go free instead of answering for what they've done");
+                        window.showMessage('The Skarn-tooth tribe breaks camp and moves on. Quest complete: The Skarn-tooth Tribe.');
+                    }
+                },
+                { label: "Not yet.", action: () => {} }
+            ]);
+            return;
+        }
+
+        const baseOptions = [
+            {
+                label: "I could help you, for the right price.",
+                action: () => {
+                    if (!quest) {
+                        window.questLog.push({ id: 'goblin_threat', title: 'The Skarn-tooth Tribe', giver: 'Elder Marta Wynfield', status: 'active', description: '' });
+                    }
+                    window.showDialogue(npc, "Hah. A human with sense. Bring me what I ask, and we'll get along fine.", [
+                        { label: "What do you need?", action: () => window.offerGoblinFavor(npc) }
+                    ]);
+                }
+            },
+            {
+                label: "Try to read him.",
+                action: () => {
+                    const { text } = window.readTheRoom(npc, window.party[0]);
+                    const followUps = window.getLeverageOptions(npc, window.party[0]);
+                    window.showDialogue(npc, text, [
+                        ...followUps,
+                        { label: "Keep talking.", action: () => window.npcDialogueTrees.chief_skarnub(npc) },
+                        { label: "Walk away.", action: () => {} }
+                    ]);
+                }
+            },
+            {
+                label: "Leave this land, or face us.",
+                action: () => window.showMessage('Chief Skarnub bares his teeth. "Face us, then — see how far that gets you."')
+            },
+            { label: "Just looking.", action: () => {} }
+        ];
+
+        // Unlocked once the chief's been gifted (see the leverage `wants`
+        // set on him in buildGoblinCamp) — an entirely different resolution
+        // from every other path: the tribe stays, permanently, as allies
+        // rather than being driven off or leaving on their own.
+        if (npc.giftedIn && !quest?.resolution) {
+            baseOptions.unshift({
+                label: "You don't have to leave. Stay.",
+                action: () => {
+                    if (!quest) window.questLog.push({ id: 'goblin_threat', title: 'The Skarn-tooth Tribe', giver: 'Elder Marta Wynfield', status: 'active', description: '' });
+                    const q = window.questLog.find(q2 => q2.id === 'goblin_threat');
+                    q.status = 'completed';
+                    q.resolution = 'goblin_alliance';
+                    // Worse for the kingdom/Hollowmere's long-term safety than
+                    // even watching them leave (goblin_diplomacy) — this is a
+                    // hostile tribe permanently camped on the doorstep, not a
+                    // problem that goes away.
+                    window.adjustReputation(window.factions.silverhart_kingdom, -20, 15);
+                    window.adjustReputation(window.factions.goblin_tribe, 25, 20);
+                    if (window.adjustRegionStat) window.adjustRegionStat('hollowmere', 'security', -10);
+                    if (window.gainExp) window.gainExp(100);
+                    window.rescuePaladin();
+                    if (window.adjustCompanionAttitude) window.adjustCompanionAttitude(window.campaign2Paladin.name, -20, "let a raiding tribe settle permanently on Hollowmere's doorstep");
+                    window.showMessage('The Skarn-tooth tribe stays, with your blessing. Quest complete: The Skarn-tooth Tribe.');
+                }
+            });
+        }
+
+        window.showDialogue(npc, "Another human, come to gawk or to fight? Speak quick.", baseOptions);
+    },
+    nix_sharpear: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'goblin_threat');
+        if (quest && quest.chiefAssassinated && !quest.resolution) {
+            window.showDialogue(npc, "You... you killed him. Skarnub was going to get us all killed clinging to this ground anyway. Truth told, I've wanted to move on for moons now. Let's not make enemies over this — we'll go, quietly, if you let us.", [
+                { label: "Take your people and go.", action: () => window.resolveGoblinSuccession() },
+                { label: "...", action: () => {} }
+            ]);
+            return;
+        }
+        if (quest && quest.resolution === 'goblin_alliance') {
+            if (window.party.some(p => p.name === window.campaign2GoblinLieutenant.name)) {
+                window.showDialogue(npc, "Still watching your back. What is it?", [{ label: "Nothing, carry on.", action: () => {} }]);
+                return;
+            }
+            window.showDialogue(npc, "We're not going anywhere now — you saw to that. Skarnub speaks for us, but I never much liked sitting still watching a road. You're headed for more trouble than this camp's seen in years. Room for one more?", [
+                { label: "Come with me.", action: () => window.recruitGoblinCompanion() },
+                { label: "Not yet.", action: () => {} }
+            ]);
+            return;
+        }
+        if (quest && quest.resolution) {
+            window.showDialogue(npc, "We're already gone from here, or will be soon enough.", [{ label: "Good.", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "Something you need? Speak quick, this isn't a place for wandering humans.", [
+            { label: "Why are you really this close to the village?", action: () => {
+                window.showDialogue(npc, "You think Skarnub chose this ground? We were told to sit here, watch the roads, count what comes and goes. Somebody's paying close attention to your precious Hollowmere, and it isn't us. I've said too much — forget I spoke.", [
+                    { label: "Who told you to watch us?", action: () => window.showDialogue(npc, "Someone with a lot more banners than we've got. That's all you're getting from me.", [{ label: "...", action: () => {} }]) }
+                ]);
+            }},
+            { label: "Just passing through.", action: () => {} }
+        ]);
+    },
+    petra_hollis: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const dragonQuest = window.questLog.find(q => q.id === 'millbrook_dragon');
+
+        if (dragonQuest && dragonQuest.resolution) {
+            window.showDialogue(npc, "Ashveil's gone, and good riddance. Sheep haven't slept easier in a generation. Millbrook won't forget it, traveler — nor will word stop there, I'd wager.", [{ label: "Glad to help.", action: () => {} }]);
+            return;
+        }
+
+        if (dragonQuest) {
+            if (window.isMillbrookDragonSlain && window.isMillbrookDragonSlain()) {
+                window.showDialogue(npc, "You're back — and you're standing, so I take it Ashveil isn't anymore?", [
+                    {
+                        label: "It's dead. The hoard's yours to hear about, not to share.",
+                        action: () => {
+                            dragonQuest.status = 'complete';
+                            dragonQuest.resolution = 'dragon_slain';
+                            if (window.cascadeReputation) {
+                                window.cascadeReputation([npc.reputation, window.factions?.silverhart_kingdom], 50, 40);
+                            }
+                            window.showDialogue(npc, "Gods above. You actually did it. I don't know how Millbrook thanks someone for that, but I'll make sure it does — and the crown will hear Ashveil's dead by nightfall, one way or another. Whatever you carried out of that cave, you earned every coin of it.", [{ label: "It was worth the risk.", action: () => {} }]);
+                        }
+                    },
+                    { label: "Not yet. Still working up the nerve.", action: () => {} }
+                ]);
+            } else {
+                window.showDialogue(npc, "Please tell me you're not going up there without a real plan. Ashveil's no wolf pack — that thing burned the Aldric barn to cinders and carried off half our flock in one night, and it barely noticed we were there at all. I marked the direction on your map. That's the most I can do for you.", [{ label: "I'll be careful.", action: () => {} }]);
+            }
+            return;
+        }
+
+        window.showDialogue(npc, "Don't get many travelers this far. Word is something's stirred up trouble on the road south of here — a house gone quiet, no one seen in or out for weeks. Nobody round here's brave enough to go look.", [
+            {
+                label: "I've been to that house.",
+                action: () => window.showDialogue(npc, "Then you know more than I care to. Keep whatever you found to yourself, if you can.", [{ label: "Noted.", action: () => {} }])
+            },
+            {
+                label: "What was that about a dragon?",
+                action: () => {
+                    window.showDialogue(npc, "You've heard, then. Something's nested out east in the high rocks — nobody's seen it up close and lived to draw it proper, but we've seen what it leaves behind. The Aldric barn's a scorch mark now. We've lost more sheep than I can count to something swooping down out of a clear sky. Whatever it is, it's not natural-sized, and it is not friendly.", [
+                        {
+                            label: "I'll go kill it.",
+                            action: () => {
+                                if (!window.questLog.find(q => q.id === 'millbrook_dragon')) {
+                                    window.questLog.push({
+                                        id: 'millbrook_dragon', title: 'Ashveil of the Ashfall Peaks',
+                                        giver: 'Petra Hollis', status: 'active',
+                                        description: 'A dragon has been raiding livestock and burning outbuildings east of Millbrook. Petra marked its lair on the map — this is a dangerous, high-level fight, not a wolf hunt. Slay it and return to Petra.'
+                                    });
+                                }
+                                if (window.revealDragonLairArea) window.revealDragonLairArea();
+                                window.showDialogue(npc, "Brave, or mad — we'll see which. I've marked roughly where the smoke rises from, out past the ridgeline. Understand me: this isn't a bandit or a hungry wolf. Whole villages have burned to things smaller than what's living up there. Go in with everything you've got, or don't go at all.", [{ label: "Understood.", action: () => {} }]);
+                            }
+                        },
+                        { label: "That's not my problem.", action: () => {} }
+                    ]);
+                }
+            },
+            {
+                label: "Heard anything else on the road?",
+                action: () => {
+                    if (!window.questLog) window.questLog = [];
+                    const ogreQuest = window.questLog.find(q => q.id === 'toll_ogre');
+                    const ogreAlive = window.entities.some(e => e.isTollOgre && e.alive);
+                    if (ogreQuest && ogreQuest.status === 'completed') {
+                        window.showDialogue(npc, "Word is the toll problem sorted itself out. Good riddance.", [{ label: "Wasn't easy.", action: () => {} }]);
+                        return;
+                    }
+                    if (ogreQuest && ogreQuest.status === 'active') {
+                        if (!ogreAlive) {
+                            ogreQuest.status = 'completed';
+                            if (window.factions?.silverhart_kingdom) window.adjustReputation(window.factions.silverhart_kingdom, 10, 10);
+                            window.party[0].gold = (window.party[0].gold || 0) + 30;
+                            if (window.gainExp) window.gainExp(120);
+                            window.showMessage("Quest complete: The Toll-Taker. (+30 gold)");
+                            window.showDialogue(npc, "You actually did it? Travelers on that road owe you a drink or ten.", [{ label: "Glad to help.", action: () => {} }]);
+                        } else {
+                            window.showDialogue(npc, "Still charging a toll in blood, last I heard.", [{ label: "I'll finish it.", action: () => {} }]);
+                        }
+                        return;
+                    }
+                    window.showDialogue(npc, "A trader passed through cursing about an ogre camped past the old abandoned house, demanding a 'toll' off anyone using the road — and eating the ones who argue. Silverhart's watch hasn't done anything about it, out this far.", [
+                        {
+                            label: "I'll clear it out.",
+                            action: () => {
+                                window.questLog.push({ id: 'toll_ogre', title: 'The Toll-Taker', giver: 'Petra Hollis', status: 'active', description: 'An ogre is demanding a toll (in blood) from travelers on the north road, past the abandoned house. Kill it.' });
+                                window.showMessage("Quest added: The Toll-Taker.");
+                            }
+                        },
+                        { label: "Not my problem.", action: () => {} }
+                    ]);
+                }
+            },
+            {
+                label: "Anything else I should know?",
+                action: () => window.showDialogue(npc, "Just that Millbrook keeps its head down and its doors locked at night, same as always.", [{ label: "Wise.", action: () => {} }])
+            }
+        ]);
+    },
+    corran_vale: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const goblinQuest = window.questLog.find(q => q.id === 'goblin_threat');
+        // Alliance excluded from "safe" — the tribe hasn't left, it's just
+        // settled in permanently, and (per goblin_mine_raid) may still come
+        // for Emberlode specifically even though Hollowmere itself is fine.
+        const resolvedSafe = !!(goblinQuest && goblinQuest.resolution && goblinQuest.resolution !== 'betrayal' && goblinQuest.resolution !== 'goblin_alliance');
+        const betrayed = !!(goblinQuest && goblinQuest.resolution === 'betrayal');
+        const alliedNotYetRaided = !!(goblinQuest && goblinQuest.resolution === 'goblin_alliance' && !window.emberlodeRaided);
+        let buriedRoad = window.questLog.find(q => q.id === 'buried_road');
+        let oreRoad = window.questLog.find(q => q.id === 'ore_road_reopened');
+
+        if (window.emberlodeRaided) {
+            window.showDialogue(npc, "Goblins came down out of nowhere and cleaned us out — strongbox, ore stores, the lot. Nobody killed, small mercy, but we've nothing left to run carts with even if the road were safe.", [
+                { label: "That's rough.", action: () => {} }
+            ]);
+            return;
+        }
+
+        if (alliedNotYetRaided) {
+            window.showDialogue(npc, "Word reached us you've made peace with the Skarn-tooth tribe. Peace for Hollowmere, maybe — but they're still sitting right on our road, and I don't much trust it holding.", [
+                { label: "I'll keep an eye on things.", action: () => {} }
+            ]);
+            return;
+        }
+
+        if (betrayed) {
+            window.showDialogue(npc, "Whatever's happening with the goblins now, it's worse, not better. We've pulled everyone we can spare back behind the hall doors. Emberlode isn't shipping anything until this passes.", [
+                { label: "I'm sorry.", action: () => {} }
+            ]);
+            return;
+        }
+
+        if (oreRoad && oreRoad.status === 'completed') {
+            window.showDialogue(npc, "First wagon home safe, thanks to you. We'll remember that, out here.", [
+                {
+                    label: "Donate 3 ore to Emberlode's stores.",
+                    action: () => {
+                        const oreTypes = ['ore_iron', 'ore_silver', 'ore_gold'];
+                        const have = window.player.inventory.filter(i => oreTypes.includes(i)).length;
+                        if (have < 3) { window.showMessage("You need 3 ore (any type) to donate."); return; }
+                        let removed = 0;
+                        window.player.inventory = window.player.inventory.filter(i => {
+                            if (oreTypes.includes(i) && removed < 3) { removed++; return false; }
+                            return true;
+                        });
+                        if (window.adjustRegionStat) window.adjustRegionStat('emberlode', 'prosperity', 4);
+                        window.showMessage("Emberlode's stockpiles grow. (Prosperity rises.)");
+                    }
+                },
+                { label: "Glad to help.", action: () => {} }
+            ]);
+            return;
+        }
+        if (oreRoad && oreRoad.status === 'active') {
+            window.showDialogue(npc, "Wagon's loaded and hitched whenever you're ready to see it down the road.", [
+                { label: "I'll get it moving.", action: () => window.startEmberlodeEscort() },
+                { label: "Not yet.", action: () => {} }
+            ]);
+            return;
+        }
+        if (resolvedSafe) {
+            if (buriedRoad) buriedRoad.status = 'completed';
+            window.showDialogue(npc, "Word reached us the Skarn-tooth business is settled. Can't tell you what that's worth to us — we've been running half-crews and losing carts for a season. First shipment in weeks, and I'd feel a lot better with an escort. Interested?", [
+                {
+                    label: "I'll see it there safely.",
+                    action: () => {
+                        window.questLog.push({
+                            id: 'ore_road_reopened', title: 'Ore Road Reopened', giver: 'Corran Vale', status: 'active',
+                            description: 'Escort Emberlode\'s first ore wagon safely down the road to Hollowmere.',
+                            offeredAt: window.worldSeconds
+                        });
+                        window.showMessage("Corran claps you on the shoulder. \"Wagon's being loaded now. Come find me when you're ready.\"");
+                    }
+                },
+                { label: "Maybe later.", action: () => {} }
+            ]);
+            return;
+        }
+
+        if (!buriedRoad) {
+            window.showDialogue(npc, "You're not from around here. Careful on that road — the Skarn-tooth tribe's dug in east of here, and they've taken three carts off us this month alone. Half my crew won't run it anymore.", [
+                {
+                    label: "I'll see what I can do about the goblins.",
+                    action: () => {
+                        window.questLog.push({
+                            id: 'buried_road', title: 'The Buried Road', giver: 'Corran Vale', status: 'active',
+                            description: "Deal with the Skarn-tooth tribe so Emberlode's ore carts can run the west road again."
+                        });
+                        window.showMessage('Corran nods, grim. "Do that, and Emberlode owes you a debt."');
+                    }
+                },
+                { label: "Not my problem.", action: () => {} }
+            ]);
+        } else {
+            window.showDialogue(npc, "Still no word the road's any safer. Whatever you're doing about those goblins, we're all hoping it works.", [
+                { label: "Working on it.", action: () => {} }
+            ]);
+        }
+    },
+    emberlode_miner: (npc) => {
+        const goblinQuest = window.questLog && window.questLog.find(q => q.id === 'goblin_threat');
+        const resolvedSafe = !!(goblinQuest && goblinQuest.resolution && goblinQuest.resolution !== 'betrayal' && goblinQuest.resolution !== 'goblin_alliance');
+        if (window.emberlodeRaided) {
+            window.showDialogue(npc, "We're still picking up the pieces from that raid. Didn't see it coming, not after word came the goblins had settled down.", [
+                { label: "I'm sorry.", action: () => {} }
+            ]);
+        } else if (goblinQuest && goblinQuest.resolution === 'goblin_alliance') {
+            window.showDialogue(npc, "Settled with Hollowmere or not, that camp's still sitting right on our road. Doesn't fill me with confidence.", [
+                { label: "Stay careful.", action: () => {} }
+            ]);
+        } else if (resolvedSafe) {
+            window.showDialogue(npc, "First good night's sleep I've had in a season, knowing the road's clear. Corran says we might even be back to full crews by next month.", [
+                { label: "Good to hear.", action: () => {} }
+            ]);
+        } else {
+            const newsOption = { label: "Anything new around Emberlode?", action: () => {
+                const rumors = window.getRecentWorldRumors ? window.getRecentWorldRumors(2, 'emberlode') : [];
+                const text = rumors.length
+                    ? rumors.join("\n\n")
+                    : "Nothing new. Same ore, same trouble getting it out.";
+                window.showDialogue(npc, text, [{ label: "Thanks.", action: () => {} }]);
+            }};
+            window.showDialogue(npc, "Ore's still in the ground same as ever — it's getting it out that's the trouble. Nobody wants to run the west road with the Skarn-tooth camp sitting right on it.", [
+                newsOption,
+                { label: "Hang in there.", action: () => {} }
+            ]);
+        }
+    },
+    marta_wynfield: (npc) => {
+        // A goblin OR orc player is the very thing Hollowmere's watching the
+        // west road/border for — Marta won't deal with either's own kin on
+        // sight, but (mirroring how a human player can win a greenskin
+        // faction's trust via diplomacy) offers a way to earn hers: report
+        // on your own leader's plans. See resolveGoblinSpyForHumans below —
+        // completing it flips window.goblinVouchedByMarta, which is what
+        // actually opens up Silverhart (silverhart_queen) and human
+        // commerce (isShunnedByHumanCommerce, factions.js).
+        if (window.isPlayerGreenskin && window.isPlayerGreenskin()) {
+            const isOrc = window.isPlayerOrc && window.isPlayerOrc();
+            const leaderNoun = isOrc ? 'warlord' : 'chief';
+            const factionNoun = isOrc ? 'the orc raiders pressing the border' : 'the Skarn-tooth tribe';
+            if (window.goblinVouchedByMarta) {
+                window.showDialogue(npc, "I still don't sleep easy seeing you on this street, but you kept your word to us. That's more than most of your lot manage — or most of ours, some days.", [{ label: "...", action: () => {} }]);
+                return;
+            }
+            if (!window.questLog) window.questLog = [];
+            const spyQuest = window.questLog.find(q => q.id === 'goblin_spy_for_humans');
+            if (spyQuest && spyQuest.status === 'active') {
+                window.showDialogue(npc, `Well? What word do you bring of your ${leaderNoun}'s true plans?`, [
+                    { label: "They mean Hollowmere no harm, so far as I've seen.", action: () => window.resolveGoblinSpyForHumans() },
+                    { label: "Not yet — give me more time.", action: () => {} }
+                ]);
+                return;
+            }
+            window.showDialogue(npc, "A greenskin, bold as you like, walking Hollowmere's own streets? Give me one reason the Watch shouldn't drag you out right now.", [
+                {
+                    label: `I'll bring you word of my own ${leaderNoun}'s plans, if that buys me anything.`,
+                    action: () => {
+                        window.questLog.push({
+                            id: 'goblin_spy_for_humans', title: 'Prove Your Worth', giver: 'Elder Marta Wynfield', status: 'active',
+                            description: `Learn what ${factionNoun} truly intends and report back to Elder Marta.`
+                        });
+                        window.showMessage('Quest added: Prove Your Worth.');
+                    }
+                },
+                { label: "...", action: () => {} }
+            ]);
+            return;
+        }
+        const aldenreachQuest = window.questLog && window.questLog.find(q => q.id === 'aldenreach_message');
+        if (aldenreachQuest && aldenreachQuest.status === 'active' && !aldenreachQuest.delivered) {
+            aldenreachQuest.delivered = true;
+            window.showMessage("You pass along Ambassador Wren's quiet word of goodwill to Elder Marta.");
+        }
+        let opening;
+        if (!window.hollowmereEventFired) {
+            opening = "Welcome, traveler. Hollowmere's a small place, but an honest one.";
+        } else {
+            const standing = npc.reputation?.standing ?? 0;
+            if (standing >= 15) opening = "Word of what you did at the Tankard reached me. Hollowmere doesn't forget a favor like that.";
+            else if (standing <= -5) opening = "I heard about the Tankard. Garrick's a proud man — I imagine that stung him more than you know.";
+            else opening = "I heard the Ironbond men were in the village again. Nothing's changed there, I'm afraid.";
+        }
+
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'elder_locket');
+        const player = window.party[0];
+        const hasLocket = player?.inventory?.includes('elder_locket');
+
+        if (quest && quest.status === 'active' && hasLocket) {
+            window.showDialogue(npc, "Is that... you found it! My mother's locket, after all these years.", [
+                { label: "Here you go.", action: () => {
+                    player.inventory = player.inventory.filter(i => i !== 'elder_locket');
+                    quest.status = 'completed';
+                    window.adjustReputation(npc.reputation, 15, 20);
+                    player.gold = (player.gold || 0) + 20;
+                    if (window.gainExp) window.gainExp(100);
+                    window.showMessage('Quest complete: A Missing Locket. (+20 gold)');
+                }}
+            ]);
+            return;
+        }
+        if (quest && quest.status === 'active') {
+            window.showDialogue(npc, "Still keeping an eye out for that locket, I hope? I lost it somewhere near the old chapel.", [
+                { label: "I'll find it.", action: () => {} }
+            ]);
+            return;
+        }
+        if (quest && quest.status === 'completed') {
+            const completedCount = (window.questLog || []).filter(q =>
+                ['elder_locket', 'oskars_wager', 'farm_wolves', 'missing_child'].includes(q.id) && q.status === 'completed'
+            ).length;
+            const goblinQuest = window.questLog.find(q => q.id === 'goblin_threat');
+            if (completedCount >= 2 && !goblinQuest) {
+                window.showDialogue(npc, "You've done more for Hollowmere than most ever do. There's... one more thing, if you're willing to hear it. West of here, past the crossroads, a goblin tribe has made camp. So far they've kept their distance, traded a little, even — but they're hungry more often than not, and hungry goblins raid. I fear it's only a matter of time before Hollowmere's their next target.", [
+                    {
+                        label: "Tell me more.",
+                        action: () => {
+                            window.questLog.push({
+                                id: 'goblin_threat',
+                                title: 'The Skarn-tooth Tribe',
+                                giver: 'Elder Marta Wynfield',
+                                status: 'active',
+                                description: "A goblin tribe has camped a long way west, past the crossroads. Deal with them however you see fit."
+                            });
+                            window.showMessage('Quest added: The Skarn-tooth Tribe.');
+                            window.showDialogue(npc, "How you handle it is your business — fight them off, talk them down, whatever ends with Hollowmere safe. Just... be careful. They're not mindless, whatever the stories say.", [
+                                { label: "I'll see what I can do.", action: () => {} }
+                            ]);
+                        }
+                    },
+                    { label: "Not my concern.", action: () => {} }
+                ]);
+                return;
+            }
+            window.showDialogue(npc, opening, [{ label: "Noted.", action: () => {} }]);
+            return;
+        }
+
+        window.showDialogue(npc, opening, [
+            {
+                label: "Need any help around the village?",
+                action: () => {
+                    // The locket sits freely in the chapel from world-gen —
+                    // nothing gates it behind actually taking this quest
+                    // first, so a player can easily find it before ever
+                    // talking to Marta. Skip straight to the reveal +
+                    // turn-in instead of asking her to "keep an eye out"
+                    // for something already sitting in the player's pack.
+                    if (hasLocket) {
+                        window.showDialogue(npc, "Wait — is that... my mother's locket? You already have it! However did you find it out there?", [
+                            { label: "Found it lying around. Here.", action: () => {
+                                window.questLog.push({
+                                    id: 'elder_locket',
+                                    title: 'A Missing Locket',
+                                    giver: 'Elder Marta Wynfield',
+                                    status: 'completed',
+                                    description: "Find Elder Marta's mother's locket, lost somewhere near the old chapel."
+                                });
+                                player.inventory = player.inventory.filter(i => i !== 'elder_locket');
+                                window.adjustReputation(npc.reputation, 15, 20);
+                                player.gold = (player.gold || 0) + 20;
+                                if (window.gainExp) window.gainExp(100);
+                                window.showMessage('Quest complete: A Missing Locket. (+20 gold)');
+                            }}
+                        ]);
+                        return;
+                    }
+                    window.showDialogue(npc, "As it happens... I lost my mother's locket years back, somewhere near the old chapel. Silly to still hope, but if you ever spot it...", [
+                        { label: "I'll keep an eye out.", action: () => {
+                            window.questLog.push({
+                                id: 'elder_locket',
+                                title: 'A Missing Locket',
+                                giver: 'Elder Marta Wynfield',
+                                status: 'active',
+                                description: "Find Elder Marta's mother's locket, lost somewhere near the old chapel."
+                            });
+                            window.showMessage('Quest added: A Missing Locket.');
+                        }}
+                    ]);
+                }
+            },
+            { label: "Noted.", action: () => {} }
+        ]);
+    },
+    // Breadcrumb for the borderlands/orc-raider thread — a worried mother,
+    // not a quest giver yet. No flags set, nothing tracked; just a reason
+    // to go looking north eventually.
+    yvette_marlow: (npc) => {
+        window.showDialogue(npc, "Oh — sorry, didn't mean to stare. My boy Tomas went off with the border levy three months back. Fighting orc raiders up past Aldervale.", [
+            {
+                label: "Have you heard from him?",
+                action: () => {
+                    window.showDialogue(npc, "A letter, once, back in Brightsun. Said the raids were getting worse — more of them, better organized than the raiding parties used to be. Nothing since. I try to tell myself the roads are just slow this time of year.", [
+                        { label: "I'm sure he's fine.", action: () => {} }
+                    ]);
+                }
+            },
+            { label: "I'm sorry to hear that.", action: () => {} }
+        ]);
+    },
+    // Silverhart Palace's great hall — an audience with the Queen herself.
+    // Her opening line still reflects raw kingdom standing (same value
+    // every other Silverhart-aligned NPC reads), but she's meant to be a
+    // genuinely significant, recurring character — the extra options below
+    // let her react to all three of the campaign's major arcs (greenskins,
+    // the Ironbond Company, and the necromancer/lichdom plot) using the
+    // exact same state every other NPC in those arcs already reads/writes,
+    // rather than a separate parallel tracker just for her.
+    silverhart_queen: (npc) => {
+        // A greenskin doesn't get past the throne room doors on sight — but
+        // once Elder Marta has actually vouched for them (see
+        // resolveGoblinSpyForHumans above), the same convergence a human
+        // player reaches with the tribe via diplomacy applies in reverse.
+        if (window.isPlayerGreenskin && window.isPlayerGreenskin() && !window.goblinVouchedByMarta) {
+            window.showDialogue(npc, "Guards! Get that thing out of my hall before I have it removed the hard way.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+        const standing = window.factions?.silverhart_kingdom?.standing ?? 0;
+        let line;
+        if (window.isPlayerGreenskin && window.isPlayerGreenskin()) {
+            line = "Elder Marta vouches for you, of all things. I still don't trust a greenskin in my hall, but I trust her judgment more than I distrust you. Speak your piece.";
+        } else if (standing >= 40) {
+            line = "So — you're the one Reddale and Hollowmere keep writing to me about. Good work, whatever you've been doing out there. The crown remembers those who make its work easier.";
+        } else if (standing >= 10) {
+            line = "You've kept my barony's business in decent order, from what reaches my desk. Keep it that way.";
+        } else if (standing <= -20) {
+            line = "I know your name, and not from anything I'd call flattering. Mind yourself in my hall.";
+        } else {
+            line = "Another face passing through court. Say your piece, if you have one.";
+        }
+        const options = [];
+
+        const goblinRep = window.factions?.goblin_tribe?.standing;
+        if (goblinRep !== undefined) {
+            options.push({
+                label: "What of the greenskins?",
+                action: () => {
+                    let greenskinLine;
+                    if (goblinRep >= 30) {
+                        greenskinLine = "Peace with the goblin tribe, brokered by your hand — I still find it strange to say aloud. Strange, and better than another decade of border war. Don't think it makes you popular with everyone at this court, though.";
+                    } else if (goblinRep <= -30) {
+                        greenskinLine = "Whatever's left of that tribe won't trouble the border again, thanks to you. My generals sleep easier. I'm less sure I do — that kind of ending always seems to breed another one somewhere else.";
+                    } else {
+                        greenskinLine = "Orc raiders past Aldervale, bigger warbands than the old stories tell. If you've dealt with any of it personally, the crown hasn't heard the particulars yet. I'd like to.";
+                    }
+                    window.showDialogue(npc, greenskinLine, [{ label: "I'll keep you informed.", action: () => {} }]);
+                }
+            });
+        }
+
+        const ironbondInfluence = window.factions?.ironbond_company?.merchantInfluence?.silverhart_kingdom;
+        if (ironbondInfluence !== undefined) {
+            options.push({
+                label: "What of the Ironbond Company?",
+                action: () => {
+                    let ironbondLine;
+                    if (ironbondInfluence >= 60) {
+                        ironbondLine = "The Company's coin runs through half my treasury's ledgers these days. Convenient, until the day it isn't. I'd sleep better if the crown owed them less.";
+                    } else if (ironbondInfluence <= 10) {
+                        ironbondLine = "Ironbond's grip on this kingdom has loosened lately — your doing, more than once, if the reports are honest. Good. A crown that answers to merchants isn't much of a crown.";
+                    } else {
+                        ironbondLine = "The Ironbond Company minds its manners at court and does as it pleases everywhere else. A tolerable arrangement, for now.";
+                    }
+                    window.showDialogue(npc, ironbondLine, [{ label: "Understood.", action: () => {} }]);
+                }
+            });
+        }
+
+        options.push({
+            label: "Rumors of necromancy in Reddale?",
+            action: () => {
+                let necroLine;
+                if (window.phylacteryReturned) {
+                    necroLine = "You brought that horror to my Chancellor's desk yourself, and I've had priests sworn to secrecy about it ever since. Whatever that thing was building toward, you closed the door on it. I don't forget that kind of favor.";
+                } else if (window.player?.inventory?.includes('phylactery_shard')) {
+                    necroLine = "You carry something you shouldn't, if half of what my Chancellor whispers to me is true. I won't ask what you mean to do with it — but know that I'll hear of it, whatever it is.";
+                } else if (window.factions?.necromancer_cult?.standing > 0) {
+                    necroLine = "There's talk of a cult working old, ugly magic somewhere near Reddale. Talk only, so far — but talk that keeps reaching my court from too many separate mouths to be nothing.";
+                } else {
+                    necroLine = "Nothing on my desk about necromancers, thank the gods. Should that change, I trust you'll be one of the first to hear of it — and one of the first I'd ask to do something about it.";
+                }
+                window.showDialogue(npc, necroLine, [{ label: "I'll watch for it.", action: () => {} }]);
+            }
+        });
+
+        // The inner-city manor grant: deliberately gated well above every
+        // other tier in this tree (60, versus 40 for her warmest ordinary
+        // greeting) — a reward for genuinely exceptional standing with the
+        // crown, not something a single quest chain hands out. Shown once
+        // reachable, and again (differently) once already granted so it
+        // doesn't just vanish from the menu.
+        if (window.campaign2SilverhartManorGranted) {
+            options.push({
+                label: "About the manor you granted me...",
+                action: () => window.showDialogue(npc, "I trust it's serving you well. Silverhart's better for having someone worth the address living there.", [
+                    { label: "It is. Thank you, Your Majesty.", action: () => {} }
+                ])
+            });
+        } else if (standing >= 60) {
+            options.push({
+                label: "Your Majesty, might I ask a favor?",
+                action: () => {
+                    window.showDialogue(npc, "Few enough have earned the right to ask. Go on.", [
+                        {
+                            label: "That empty manor near the inner city — could it be mine?",
+                            action: () => {
+                                window.campaign2SilverhartManorGranted = true;
+                                window.showMessage("The Queen grants you the abandoned manor. It needs work before it's livable — a builder could see to that.");
+                                window.showDialogue(npc, "Done. It's stood empty long enough, and you've more than earned an address inside these walls. See that it doesn't sit derelict a day longer than it has to.", [
+                                    { label: "I won't waste it.", action: () => {} }
+                                ]);
+                            }
+                        },
+                        { label: "Never mind, Your Majesty.", action: () => {} }
+                    ]);
+                }
+            });
+        }
+
+        const wizardQuest = (window.questLog || []).find(q => q.id === 'wizard_vendetta');
+        if (wizardQuest && wizardQuest.status === 'active' && window.player.inventory.includes('wizard_corruption_evidence')) {
+            options.push({
+                label: "I have evidence concerning your Court Wizard.",
+                action: () => window.showDialogue(npc, "Show me.", [
+                    { label: "Hand it over.", action: () => window.resolveWizardVendetta('queen') },
+                    { label: "On second thought, no.", action: () => {} }
+                ])
+            });
+        }
+
+        // Reporting the Chancellor's own tunnel — only offered for finding
+        // it independently (chancellorTunnelDiscoveredByPlayer, set by
+        // searchSecretPassage, campaign2World.js), not for being handed the
+        // knowledge by the Guild that dug it; see revealTunnelEntrances's
+        // own comment for why those two flags are kept separate.
+        if (window.chancellorTunnelDiscoveredByPlayer && !window.chancellorTunnelReportedToQueen) {
+            options.push({
+                label: "Your Majesty, I must tell you something about your Chancellor.",
+                action: () => {
+                    window.chancellorTunnelReportedToQueen = true;
+                    const hex = window.campaign2TunnelPalaceHex;
+                    if (hex) delete window.tileObjects[`${hex.q},${hex.r}`];
+                    if (window.adjustReputation) window.adjustReputation(window.factions.silverhart_kingdom, 15, 15);
+                    if (window.adjustReputation) window.adjustReputation(window.factions.thieves_guild, -20, 20);
+                    window.showMessage("The Queen's guards seal the passage before nightfall. (+Silverhart Kingdom standing, -Thieves' Guild standing)");
+                    window.showDialogue(npc, "A tunnel — into MY council chamber? Guards! Seal it, brick by brick if you must, and find out who dug it. You've done the crown a real service, coming to me with this instead of using it yourself.", [
+                        { label: "Just doing my part, Your Majesty.", action: () => {} }
+                    ]);
+                }
+            });
+        }
+
+        options.push({ label: "Just paying my respects, Your Majesty.", action: () => {} });
+        window.showDialogue(npc, line, options);
+    },
+    palace_chancellor: (npc) => {
+        window.showDialogue(npc, "Her Majesty's ledgers, her letters, her patience with petitioners — all mine to mind, in that order. If you've business with the crown, best it's brief.", [
+            {
+                label: "What's the news from the borderlands?",
+                action: () => {
+                    window.showDialogue(npc, "Nothing Her Majesty says in open court, if that's what you're asking. Orc raids past Aldervale, worse than the old stories — that much everyone already knows. What worries me is how organized they've gotten. Raiders don't usually keep to a plan.", [
+                        { label: "Noted.", action: () => {} }
+                    ]);
+                }
+            },
+            { label: "No business today.", action: () => {} }
+        ]);
+    },
+    royal_wizard: (npc) => {
+        const quest = (window.questLog || []).find(q => q.id === 'wizard_vendetta');
+        const hasEvidence = window.player.inventory.includes('wizard_corruption_evidence');
+        if (quest && quest.status === 'active' && hasEvidence) {
+            window.showDialogue(npc, "You've the look of someone with something to say. Out with it.", [
+                { label: "Someone's building a case against you. I thought you should have it first.", action: () => window.resolveWizardVendetta('wizard') },
+                { label: "Nothing, actually.", action: () => {} }
+            ]);
+            return;
+        }
+
+        // Demonstrates the personal/national reputation split: her own
+        // opinion of the player (npc.reputation.standing) is tracked
+        // completely separately from the kingdom's opinion of them
+        // (window.factions.silverhart_kingdom.standing) — she can dislike
+        // the player personally while still acknowledging they're a citizen
+        // in good standing with the crown. Neither ever affects whether she
+        // fights the player; that's driven entirely by side/aiState, not by
+        // how much she personally likes them.
+        const personal = npc.reputation?.standing ?? 0;
+        let line;
+        if (quest?.resolution === 'wizard') {
+            line = "I haven't forgotten what you did for me. Ask, if you ever need it returned.";
+        } else if (quest?.resolution && quest.resolution !== 'wizard') {
+            line = "You're a citizen of this kingdom, and I'll extend you the courtesy that demands — nothing warmer than that. Don't mistake civility for forgiveness.";
+        } else if (personal < -10) {
+            line = "The crown speaks well of you, for whatever that's worth to me personally. I have my own opinion, and it isn't as generous.";
+        } else {
+            line = "The Queen keeps me for omens and old books, mostly — court wizardry is duller than the stories make it sound. Still, I read a great deal I probably shouldn't.";
+        }
+        window.showDialogue(npc, line, [
+            { label: "Anything worth sharing?", action: () => {
+                if (window.readWizardTowerTome) window.readWizardTowerTome();
+            }},
+            { label: "Another time.", action: () => {} }
+        ]);
+    },
+    // A political-intrigue quest with three mutually-exclusive resolutions
+    // (see resolveWizardVendetta below): hand the evidence to Lady Corstane
+    // (ally with her, alienate the wizard), to the Court Wizard herself
+    // (the reverse), or to the Queen (ally with the crown, alienate both
+    // of them). The evidence itself lives in the wizard's own tower — see
+    // readWizardCorruptionLedger, campaign2World.js.
+    lady_corstane: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'wizard_vendetta');
+
+        if (quest && quest.status === 'completed') {
+            const line = quest.resolution === 'noble'
+                ? "You did right by House Corstane. That kind of loyalty isn't forgotten."
+                : "We're not exactly friends anymore, are we. I'd mind myself around my house, if I were you.";
+            window.showDialogue(npc, line, [{ label: "Understood.", action: () => {} }]);
+            return;
+        }
+
+        if (!quest) {
+            window.showDialogue(npc, "Court Wizard Thessaly has undermined my family at court one too many times. If you're capable of quiet work, find me something on her — the kind of thing she'd rather stayed buried. Do this, and House Corstane won't forget it.", [
+                {
+                    label: "I'll see what I can find.",
+                    action: () => {
+                        window.questLog.push({
+                            id: 'wizard_vendetta',
+                            title: "A Noble's Grudge",
+                            giver: 'Lady Miriel Corstane',
+                            status: 'active',
+                            resolution: null,
+                            description: "Find evidence against Court Wizard Thessaly — then decide who's actually worth giving it to: Lady Corstane, the Wizard herself, or the Queen.",
+                            offeredAt: window.worldSeconds
+                        });
+                        window.showMessage("Quest started: A Noble's Grudge");
+                    }
+                },
+                { label: "Not interested.", action: () => {} }
+            ]);
+            return;
+        }
+
+        if (window.player.inventory.includes('wizard_corruption_evidence')) {
+            window.showDialogue(npc, "You found something? Let's see it.", [
+                { label: "Hand over the evidence.", action: () => window.resolveWizardVendetta('noble') },
+                { label: "Not yet.", action: () => {} }
+            ]);
+        } else {
+            window.showDialogue(npc, "Still nothing? She keeps her secrets close, but she's not careful enough to have none at all.", [
+                { label: "I'm still looking.", action: () => {} }
+            ]);
+        }
+    },
+    // Diplomatic Quarter — each ambassador/envoy/cleric is a real (if modest)
+    // quest giver. The four foreign embassies deliberately don't trust the
+    // player with anything weighty yet — these are entry-point errands meant
+    // to open the door to bigger foreign-nation content later, not the
+    // content itself.
+    elven_ambassador: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'elven_gift');
+        const player = window.party[0];
+        const have = () => (player.inventory || []).filter(i => i === 'herbs').length;
+        // "Anyone in the vicinity" is approximated as the active party — the
+        // people actually standing in front of Elarion when this triggers,
+        // not just the selected character.
+        const kin = window.partyHasRace && window.partyHasRace('elf');
+        const herbsNeeded = kin ? 2 : 3; // one of his own makes the ask smaller
+        const isDruid = window.hasClassLevel && window.hasClassLevel(player, 'druid');
+
+        if (quest && quest.status === 'active') {
+            if (have() >= herbsNeeded) {
+                const line = kin
+                    ? "Kin, and herbs besides — the Court will hear of this twice over."
+                    : "You've brought herbs? The Court will be glad of it — small gestures matter more than gold, out here.";
+                window.showDialogue(npc, line, [
+                    { label: "Here you go.", action: () => {
+                        let removed = 0;
+                        player.inventory = player.inventory.filter(i => { if (i === 'herbs' && removed < herbsNeeded) { removed++; return false; } return true; });
+                        quest.status = 'completed';
+                        window.adjustReputation(npc.reputation, 10, 15);
+                        player.gold = (player.gold || 0) + 15;
+                        if (window.gainExp) window.gainExp(60);
+                        window.showMessage('Quest complete: A Gift of Green. (+15 gold)');
+                    }}
+                ]);
+                return;
+            }
+            const askLine = kin
+                ? `Herbs, if you can spare them — ${herbsNeeded} will do, less than I'd ask a stranger.`
+                : `Herbs, if you can find them — ${herbsNeeded} should do. The Sylvan Court sends its regards to the Queen, and its patience with her borders' woodcutters. Both are finite, in their way.`;
+            window.showDialogue(npc, askLine, [
+                { label: "Still looking.", action: () => {} }
+            ]);
+            return;
+        }
+        if (quest && quest.status === 'completed') {
+            // A Gift of Green opens the door; the Silver Accord is the real
+            // errand — send the player to Sil'thandriel itself and back
+            // (see elf_queen, below, and buildElvenCapital, campaign2World.js).
+            const accord = window.questLog.find(q => q.id === 'silver_accord');
+            if (accord && accord.status === 'active') {
+                if ((player.inventory || []).includes('queens_seal')) {
+                    window.showDialogue(npc, "The Queen's own seal — she saw you, then. Silverhart will remember this.", [
+                        { label: "Here.", action: () => {
+                            player.inventory = player.inventory.filter(i => i !== 'queens_seal');
+                            accord.status = 'completed';
+                            window.adjustReputation(npc.reputation, 15, 20);
+                            window.adjustReputation(window.factions.elven_realm, 10, 15);
+                            if (window.factions.silverhart_kingdom) window.adjustReputation(window.factions.silverhart_kingdom, 5, 10);
+                            player.gold = (player.gold || 0) + 40;
+                            if (window.gainExp) window.gainExp(120);
+                            window.showMessage('Quest complete: The Silver Accord. (+40 gold)');
+                        }}
+                    ]);
+                    return;
+                }
+                window.showDialogue(npc, "South, past the forest edge — the Sylvan Court doesn't grant an audience lightly, but you've earned enough goodwill to ask.", [{ label: "I'll find her.", action: () => {} }]);
+                return;
+            }
+            if (accord && accord.status === 'completed') {
+                window.showDialogue(npc, "The Accord holds. Small thanks to you, it holds.", [{ label: "Glad to help.", action: () => {} }]);
+                return;
+            }
+            window.showDialogue(npc, "The Sylvan Court remembers a kindness. Small as it was — but if you're the sort who carries things carefully, there's a bigger errand I'd trust you with. Queen Aelwen herself, in Sil'thandriel, south past the forest edge. Bring back her seal, and Silverhart will have something more than an ambassador's word to show for this friendship.", [
+                {
+                    label: "I'll seek an audience with the Queen.",
+                    action: () => {
+                        window.questLog.push({ id: 'silver_accord', title: 'The Silver Accord', giver: 'Ambassador Elarion', status: 'active', description: "Travel to Sil'thandriel and gain an audience with Queen Aelwen. Bring her seal back to Ambassador Elarion." });
+                        window.showMessage('Quest added: The Silver Accord.');
+                    }
+                },
+                { label: "Not yet.", action: () => {} }
+            ]);
+            return;
+        }
+        const opening = kin
+            ? "Well met, kin — a strange road to find one of our own on, but not an unwelcome one. The Sylvan Court sends its regards to the Queen, and its patience with her borders' woodcutters wears thinner by the season. A gift of good herbs would ease that some — two, from you, would carry the same weight as three from anyone else."
+            : "The Sylvan Court sends its regards to the Queen, and its patience with her borders' woodcutters. Both are finite, in their way. A gift of good herbs would go some way toward the latter — three, if you can spare them.";
+        const options = [
+            {
+                label: "I'll bring you some herbs.",
+                action: () => {
+                    window.questLog.push({ id: 'elven_gift', title: 'A Gift of Green', giver: 'Ambassador Elarion', status: 'active', description: `Bring ${herbsNeeded} herbs to Ambassador Elarion as a gesture of goodwill to the Sylvan Court.` });
+                    window.showMessage('Quest added: A Gift of Green.');
+                }
+            },
+        ];
+        if (isDruid) {
+            options.push({
+                label: "The grove taught me to read the land, if that's worth anything to you.",
+                action: () => window.showDialogue(npc, "It is, more than herbs. Someone still teaching that is worth more to the Court than a bundle of clippings — but I'll not turn down both.", [{ label: "Noted.", action: () => {} }])
+            });
+        }
+        options.push({ label: "I'll keep that in mind.", action: () => {} });
+        window.showDialogue(npc, opening, options);
+    },
+    // Sil'thandriel, the Sylvan Court's capital (see buildElvenCapital,
+    // campaign2World.js). Queen Aelwen only actually opens up once the
+    // Silver Accord errand (elven_ambassador above) sends the player here —
+    // an unannounced visit gets flavor only, same "entry-point errand"
+    // gating every foreign court in this game uses.
+    elf_queen: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const accord = window.questLog.find(q => q.id === 'silver_accord');
+        const player = window.party[0];
+        if (accord && accord.status === 'active') {
+            if ((player.inventory || []).includes('queens_seal')) {
+                window.showDialogue(npc, "Carry that back to Elarion safely — the Accord is only as good as the hands that carry it.", [{ label: "I will.", action: () => {} }]);
+                return;
+            }
+            window.showDialogue(npc, "Elarion's envoy, at last. Silverhart remembers its neighbors after all — tell him the Court remembers too.", [
+                { label: "He asked for a token of the Accord.", action: () => {
+                    player.inventory = player.inventory || [];
+                    player.inventory.push('queens_seal');
+                    window.showMessage("Queen Aelwen presses her seal into your hand.");
+                }}
+            ]);
+            return;
+        }
+        if (accord && accord.status === 'completed') {
+            window.showDialogue(npc, "Silverhart and the Silver Leaf, at peace a while longer. Good.", [{ label: "Glad to help.", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "You come unannounced — Sylvan halls aren't warm to strangers. But you're welcome to rest before you go.", [{ label: "Thank you, Your Majesty.", action: () => {} }]);
+    },
+    elf_archivist: (npc) => {
+        window.showDialogue(npc, "The Silverleaf Archive holds what the Court remembers and the rest of the world forgot — the old wars with the Deepholds, the long peace after, and why the woodcutters at Silverhart's border still test the Queen's patience. Ask, if you like; I've time enough.", [
+            { label: "Tell me of the Deepholds.", action: () => window.showDialogue(npc, "Old rivals turned older friends. The mountain and the wood share more border than either likes to admit — but the King and the Queen have kept peace longer than either of their thrones stood alone.", [{ label: "Good to know.", action: () => {} }]) },
+            { label: "I should go.", action: () => {} }
+        ]);
+    },
+    elf_healer: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'silverleaf_tonic');
+        const player = window.party[0];
+        const have = () => (player.inventory || []).filter(i => i === 'herbs').length;
+        const HERBS_NEEDED = 3;
+
+        if (quest && quest.status === 'active') {
+            if (have() >= HERBS_NEEDED) {
+                window.showDialogue(npc, "These will do nicely — the sickbed's been full since the frost came early this year.", [
+                    { label: "Here you go.", action: () => {
+                        let removed = 0;
+                        player.inventory = player.inventory.filter(i => { if (i === 'herbs' && removed < HERBS_NEEDED) { removed++; return false; } return true; });
+                        quest.status = 'completed';
+                        window.adjustReputation(npc.reputation, 10, 15);
+                        window.adjustReputation(window.factions.elven_realm, 5, 5);
+                        player.gold = (player.gold || 0) + 20;
+                        if (window.gainExp) window.gainExp(50);
+                        window.showMessage('Quest complete: A Tonic for the Sickbed. (+20 gold)');
+                    }}
+                ]);
+                return;
+            }
+            window.showDialogue(npc, `Still ${HERBS_NEEDED} herbs short, by my count. Take your time — the sick aren't going anywhere, thank the Leaf.`, [{ label: "Still looking.", action: () => {} }]);
+            return;
+        }
+        if (quest && quest.status === 'completed') {
+            window.showDialogue(npc, "The sickbed's quieter for it. My thanks, still.", [{ label: "Glad to help.", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, `Frost came early this year, and the sickbed's fuller for it. ${HERBS_NEEDED} herbs would let me brew what I need — more than gold, out here.`, [
+            { label: "I'll bring you some herbs.", action: () => {
+                window.questLog.push({ id: 'silverleaf_tonic', title: 'A Tonic for the Sickbed', giver: 'Healer Sylwen', status: 'active', description: `Bring ${HERBS_NEEDED} herbs to Healer Sylwen in Sil'thandriel.` });
+                window.showMessage('Quest added: A Tonic for the Sickbed.');
+            }},
+            { label: "I'll keep that in mind.", action: () => {} }
+        ]);
+    },
+    dwarven_ambassador: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'dwarven_toll');
+        const player = window.party[0];
+
+        if (quest && quest.status === 'active') {
+            if ((player.gold || 0) >= 15) {
+                window.showDialogue(npc, "Fifteen gold, as agreed. Not charity — a toll, same as any trade road. The Deepholds don't forget who pays their way.", [
+                    { label: "Here.", action: () => {
+                        player.gold -= 15;
+                        quest.status = 'completed';
+                        window.adjustReputation(npc.reputation, 10, 15);
+                        window.adjustReputation(window.factions.dwarven_kingdom, 10, 15);
+                        if (window.gainExp) window.gainExp(60);
+                        window.showMessage('Quest complete: Coin for the Deepholds.');
+                    }},
+                    { label: "Not yet.", action: () => {} }
+                ]);
+                return;
+            }
+            window.showDialogue(npc, "Fifteen gold, when you have it. The Deepholds trade in iron and good sense, in roughly that order.", [{ label: "Soon.", action: () => {} }]);
+            return;
+        }
+        // "A Word to the King": only offered once the toll's paid — a real
+        // errand for the ambassador, and the thread that actually connects
+        // Silverhart's court to Kragmoor itself (see dwarf_king below).
+        const letterQuest = window.questLog.find(q => q.id === 'deepholds_letter');
+        if (quest && quest.status === 'completed' && !letterQuest) {
+            window.showDialogue(npc, "One more thing, if you're willing. A letter for the King, sealed — I'd send it by our own courier, but the passes have been unquiet lately. A human face on the road draws less attention than one of ours.", [
+                {
+                    label: "I'll carry it.",
+                    action: () => {
+                        player.inventory = player.inventory || [];
+                        player.inventory.push('deepholds_sealed_letter');
+                        window.questLog.push({
+                            id: 'deepholds_letter', title: 'A Word to the King', giver: 'Ambassador Brokk Stonehammer', status: 'active',
+                            description: 'Deliver Ambassador Stonehammer\'s sealed letter to King Balrik Deepholm at Kragmoor.'
+                        });
+                        window.showMessage('Quest added: A Word to the King.');
+                    }
+                },
+                { label: "Not right now.", action: () => {} }
+            ]);
+            return;
+        }
+        if (letterQuest && letterQuest.status === 'active') {
+            window.showDialogue(npc, "Straight to the King's own hand, mind — not the seneschal, not a guard captain.", [{ label: "Understood.", action: () => {} }]);
+            return;
+        }
+        if (letterQuest && letterQuest.status === 'completed') {
+            window.showDialogue(npc, "Word came back from Kragmoor already — you made a good account of yourself there. That'll do more for relations between our two courts than another decade of tolls.", [{ label: "Glad to help.", action: () => {} }]);
+            return;
+        }
+        if (quest && quest.status === 'completed') {
+            window.showDialogue(npc, "Silverhart's been fair with us. Long may that last — and you've done your part toward it.", [{ label: "Long may it last.", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "The Deepholds trade in iron and good sense, in roughly that order. A trade toll of fifteen gold would smooth the road between us — nothing more than that, for now.", [
+            {
+                label: "I'll pay the toll.",
+                action: () => {
+                    window.questLog.push({ id: 'dwarven_toll', title: 'Coin for the Deepholds', giver: 'Ambassador Brokk Stonehammer', status: 'active', description: 'Pay a 15 gold trade toll to Ambassador Brokk Stonehammer.' });
+                    window.showMessage('Quest added: Coin for the Deepholds.');
+                }
+            },
+            { label: "Long may it last.", action: () => {} }
+        ]);
+    },
+    aldenreach_ambassador: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'aldenreach_message');
+
+        if (quest && quest.status === 'active') {
+            if (quest.delivered) {
+                window.showDialogue(npc, "Elder Marta had your word for it, then? Good. Aldenreach likes to know its friendlier gestures actually land somewhere.", [
+                    { label: "They landed.", action: () => {
+                        quest.status = 'completed';
+                        window.adjustReputation(npc.reputation, 10, 15);
+                        window.party[0].gold = (window.party[0].gold || 0) + 15;
+                        if (window.gainExp) window.gainExp(60);
+                        window.showMessage('Quest complete: A Quiet Word. (+15 gold)');
+                    }}
+                ]);
+                return;
+            }
+            window.showDialogue(npc, "Still waiting to hear whether Hollowmere's elder got my word. No rush — just don't forget.", [{ label: "I haven't.", action: () => {} }]);
+            return;
+        }
+        if (quest && quest.status === 'completed') {
+            window.showDialogue(npc, "Aldenreach and Silverhart haven't gone to war in three generations. Small favors like yours are most of why.", [{ label: "Glad to help.", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "Aldenreach and Silverhart haven't gone to war in three generations. My whole posting here is to keep it that way, one dull treaty dinner at a time. Would you carry a quiet word of goodwill to Hollowmere's elder for me? Nothing Silverhart needs to know about.", [
+            {
+                label: "I'll carry your word.",
+                action: () => {
+                    window.questLog.push({ id: 'aldenreach_message', title: 'A Quiet Word', giver: 'Ambassador Cassia Wren', status: 'active', description: "Deliver Ambassador Cassia Wren's message of goodwill to Elder Marta Wynfield in Hollowmere." });
+                    window.showMessage('Quest added: A Quiet Word.');
+                }
+            },
+            { label: "Sounds like important work.", action: () => {} }
+        ]);
+    },
+    corvane_ambassador: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'corvane_watch');
+        const goblinQuest = window.questLog.find(q => q.id === 'goblin_threat');
+        const goblinResolved = goblinQuest && goblinQuest.status !== 'active';
+
+        if (quest && quest.status === 'active') {
+            if (goblinResolved) {
+                window.showDialogue(npc, "The greenskin camp west of Hollowmere — word is it's settled, one way or another. That's the first good dispatch I've had cause to send home in months.", [
+                    { label: "It's settled.", action: () => {
+                        quest.status = 'completed';
+                        window.adjustReputation(npc.reputation, 10, 15);
+                        window.party[0].gold = (window.party[0].gold || 0) + 15;
+                        if (window.gainExp) window.gainExp(60);
+                        window.showMessage('Quest complete: Eyes on the Border. (+15 gold)');
+                    }}
+                ]);
+                return;
+            }
+            window.showDialogue(npc, "Corvane sent me to watch the greenskin trouble on Silverhart's border and report back. So far: it's trouble, and it's on the border. Riveting dispatches, I know.", [{ label: "Keep watching.", action: () => {} }]);
+            return;
+        }
+        if (quest && quest.status === 'completed') {
+            window.showDialogue(npc, "The border's quieter these days. Corvane appreciates knowing why.", [{ label: "Good to hear.", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "Corvane sent me to watch the greenskin trouble on Silverhart's border and report back. So far: it's trouble, and it's on the border. If you hear anything real out that way — anything I could actually put in a dispatch — I'd owe you.", [
+            {
+                label: "I'll let you know what I find.",
+                action: () => {
+                    window.questLog.push({ id: 'corvane_watch', title: 'Eyes on the Border', giver: 'Ambassador Toren Aldwyn', status: 'active', description: "Bring Ambassador Toren Aldwyn real word of how the greenskin trouble west of Hollowmere is resolved." });
+                    window.showMessage('Quest added: Eyes on the Border.');
+                }
+            },
+            { label: "Riveting.", action: () => {} }
+        ]);
+    },
+    ironbond_envoy: (npc) => {
+        const influence = window.factions?.ironbond_company?.merchantInfluence?.silverhart_kingdom ?? 30;
+        let line;
+        if (influence >= 60) {
+            line = "The Company's word carries real weight in this court these days. We like it that way.";
+        } else if (influence <= 10) {
+            line = "Harder going for us at court lately, if I'm honest. Someone's been undoing our work.";
+        } else {
+            line = "Business as usual — a little coin here, a little influence there. Nothing you'd need to worry about.";
+        }
+
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'ironbond_pitch');
+        if (quest && quest.status === 'active') {
+            if (quest.pitched) {
+                window.showDialogue(npc, "Wick Hallow, was it? He came around. That's Hollowmere's general store carrying Ironbond stock, from this week on. Good work.", [
+                    { label: "Glad it worked.", action: () => {
+                        quest.status = 'completed';
+                        if (window.factions?.ironbond_company?.merchantInfluence) window.factions.ironbond_company.merchantInfluence.silverhart_kingdom = (window.factions.ironbond_company.merchantInfluence.silverhart_kingdom ?? 30) + 10;
+                        window.adjustReputation(npc.reputation, 10, 15);
+                        window.party[0].gold = (window.party[0].gold || 0) + 20;
+                        if (window.gainExp) window.gainExp(60);
+                        window.showMessage('Quest complete: Good for Business. (+20 gold)');
+                    }}
+                ]);
+                return;
+            }
+            window.showDialogue(npc, line + " Still waiting on that storekeeper in Hollowmere, if you get the chance.", [{ label: "Working on it.", action: () => {} }]);
+            return;
+        }
+        if (quest && quest.status === 'completed') {
+            window.showDialogue(npc, line, [{ label: "Noted.", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, line + " There's a general store out in Hollowmere — Wick Hallow's place. Convince him to carry Ironbond stock and there's coin in it for you.", [
+            {
+                label: "I'll talk to him.",
+                action: () => {
+                    window.questLog.push({ id: 'ironbond_pitch', title: 'Good for Business', giver: 'Factor Willem Drass', status: 'active', description: "Convince Wick Hallow, Hollowmere's storekeeper, to carry Ironbond Company stock." });
+                    window.showMessage('Quest added: Good for Business.');
+                }
+            },
+            { label: "Noted.", action: () => {} }
+        ]);
+    },
+    high_cleric: (npc) => {
+        if (!window.questLog) window.questLog = [];
+        const quest = window.questLog.find(q => q.id === 'crimson_court');
+        const player = window.party[0];
+        const hasAsh = player?.inventory?.includes('ashen_fang');
+
+        if (quest && quest.status === 'active') {
+            if (hasAsh) {
+                window.showDialogue(npc, "A fang, drained of its own blood rather than another's — just as the old texts describe. So it's true, then. Something in the west isn't merely dying of hunger. Thank you for this. The Cathedral will want to know a great deal more, before long.", [
+                    { label: "Hand it over.", action: () => {
+                        player.inventory = player.inventory.filter(i => i !== 'ashen_fang');
+                        quest.status = 'completed';
+                        window.vampireLeadConfirmed = true;
+                        window.adjustReputation(npc.reputation, 15, 20);
+                        player.gold = (player.gold || 0) + 30;
+                        if (window.gainExp) window.gainExp(150);
+                        window.showMessage('Quest complete: Whispers of the Crimson Court. (+30 gold)');
+                    }}
+                ]);
+                return;
+            }
+            window.showDialogue(npc, "Still nothing from the west? Livestock drained, not torn — that's not wolves, whatever the farmers want to believe. Keep looking.", [{ label: "I'm still looking.", action: () => {} }]);
+            return;
+        }
+        if (quest && quest.status === 'completed') {
+            window.showDialogue(npc, "The Grand Cathedral keeps the gods' peace over the whole kingdom — and thanks to you, we now know a little more of what we're keeping the peace against.", [{ label: "Good to know.", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "The Grand Cathedral keeps the gods' peace over the whole kingdom — a bigger flock than Hollowmere's little chapel, but the same gods listening. Lately, though, something troubles me: reports from west of here, livestock found drained of blood rather than torn apart. Wolves don't drink, traveler. I fear something older is stirring.", [
+            {
+                label: "I'll look into it.",
+                action: () => {
+                    window.questLog.push({ id: 'crimson_court', title: 'Whispers of the Crimson Court', giver: 'High Cleric Adelram', status: 'active', description: "Investigate reports of exsanguinated livestock in the western wilds and bring any evidence to High Cleric Adelram." });
+                    window.showMessage('Quest added: Whispers of the Crimson Court.');
+                }
+            },
+            { label: "Good to know.", action: () => {} }
+        ]);
+    },
+    silverhart_mercenary_broker: (npc) => {
+        if (window.isShunnedByHumanCommerce && window.isShunnedByHumanCommerce()) {
+            window.showDialogue(npc, "No one I know will march with you. Not for any price.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+        const player = window.party[0];
+        const cost = 100;
+        const roomLine = window.party.length < window.MAX_ACTIVE_PARTY
+            ? "I've got someone ready to march out with you today."
+            : "Your company's full up for the road, but I can still find someone — they'll wait here 'til you've got room.";
+        window.showDialogue(npc, `Looking for some extra muscle? ${cost} gold and I'll find you a capable fighter. ${roomLine}`, [
+            {
+                label: `Hire a mercenary (${cost}g).`,
+                action: () => {
+                    if ((player.gold || 0) < cost) {
+                        window.showMessage("You don't have enough gold.");
+                        return;
+                    }
+                    player.gold -= cost;
+                    const taken = new Set([...window.party, ...(window.benchedCompanions || [])].map(p => p.name));
+                    const name = (window.campaign2MercenaryNamePool || []).find(n => !taken.has(n)) || `Sellsword ${Math.floor(Math.random() * 1000)}`;
+                    const mercenary = window.createCharacterData('human', 'fighter', name, Math.random() < 0.5 ? 'male' : 'female', 'pc_1');
+                    ['health', 'sword_hit', 'sword_dmg'].forEach(skillKey => {
+                        const skill = window.skills[skillKey];
+                        if (!skill) return;
+                        if (mercenary.attributes[skill.tree] > 0) mercenary.attributes[skill.tree]--;
+                        else if (mercenary.attributes.wildcard > 0) mercenary.attributes.wildcard--;
+                        mercenary.skills[skillKey] = (mercenary.skills[skillKey] || 0) + 1;
+                    });
+                    if (mercenary.skills.health) {
+                        const bonus = 10 * mercenary.skills.health;
+                        mercenary.hp += bonus;
+                        mercenary.maxHp += bonus;
+                    }
+                    const result = window.addCompanionToRoster(mercenary);
+                    window.showMessage(result === 'active'
+                        ? `${name} joins your party.`
+                        : `${name} waits for you — check the Roster once you have room.`);
+                }
+            },
+            { label: "Not right now.", action: () => {} }
+        ]);
+    },
+    // The Retrainer: full respec, see resolveRespec (ui.js). Cost scales
+    // with level since a higher-level respec is refunding more points.
+    silverhart_retrainer: (npc) => {
+        const player = window.party[0];
+        const cost = 50 + player.level * 25;
+        window.showDialogue(npc, `Spent your points somewhere you regret? For ${cost} gold I'll set every skill you've bought back to points, keeping only what's outside my trade — your unnatural gifts, whatever the arena burned into you, that sort of thing. Race and the classes you've taken decide how many points you'll have to spend again.`, [
+            {
+                label: `Retrain me (${cost}g).`,
+                action: () => {
+                    if ((player.gold || 0) < cost) {
+                        window.showMessage("You don't have enough gold.");
+                        return;
+                    }
+                    player.gold -= cost;
+                    window.resolveRespec(player);
+                    window.showMessage("Your skills have been reset — visit the character screen to respend your points.");
+                }
+            },
+            { label: "Not right now.", action: () => {} }
+        ]);
+    },
+    // Companion personal-story dialogue (see the "Talk" button in
+    // updatePartyTabs, ui.js) — a handful of branches per companion, some
+    // reacting to the player's race/class the way the elven ambassador does,
+    // so recruiting a wizard elf plays differently than a fighter dwarf.
+    companion_wren_talbot: (npc) => {
+        const player = window.party[0];
+        const attitude = window.companionAttitude?.['Wren Talbot'] ?? 50;
+        const isElf = window.partyHasRace && window.partyHasRace('elf');
+        const options = [];
+        options.push({
+            label: "How are you holding up?",
+            action: () => {
+                const line = attitude >= 70
+                    ? "Better than I've any right to, honestly. Didn't expect to still be standing next to you this far out — but here we are."
+                    : attitude >= 40
+                    ? "Sore feet, worse company some days, but standing. Can't complain more than that and still call myself useful."
+                    : "Tired. Of the road, mostly. Not of you — don't read into it more than that.";
+                window.showDialogue(npc, line, [{ label: "Fair enough.", action: () => {} }]);
+            }
+        });
+        options.push({
+            label: "Tell me about your parents.",
+            action: () => window.showDialogue(npc, "Went north a couple years back — work in Millbrook, they said. Stopped writing after the first winter. I used to tell myself the roads were just bad. I still half do.", [{ label: "I'm sorry.", action: () => {} }])
+        });
+        if (isElf) {
+            options.push({
+                label: "(Ask about traveling with an elf.)",
+                action: () => window.showDialogue(npc, "First few days I kept waiting for you to correct my sword grip and quote me a proverb about patience. You haven't yet. I'm choosing to take that as a compliment to my grip.", [{ label: "Ha.", action: () => {} }])
+            });
+        }
+        if (window.hasClassLevel && window.hasClassLevel(player, 'wizard')) {
+            options.push({
+                label: "(Ask what she thinks of magic.)",
+                action: () => window.showDialogue(npc, "Makes my skin crawl a bit, if I'm honest — the good kind of crawl, like standing too close to a cliff edge. I trust you not to drop us both off it.", [{ label: "Noted.", action: () => {} }])
+            });
+        }
+        options.push({ label: "Never mind.", action: () => {} });
+        window.showDialogue(npc, "What's on your mind?", options);
+    },
+    companion_ser_aldric: (npc) => {
+        const player = window.party[0];
+        const attitude = window.companionAttitude?.['Ser Aldric'] ?? 60;
+        const isDwarf = window.partyHasRace && window.partyHasRace('dwarf');
+        const options = [];
+        options.push({
+            label: "Do you regret the vow that got you tied to a post?",
+            action: () => {
+                const line = attitude >= 70
+                    ? "Not for a moment. I swore to stand against what came through that camp, and I'd have died at that post before breaking it. You just made sure I didn't have to."
+                    : "Some days. The vow was never the mistake — trusting the wrong company to hold the line with me was.";
+                window.showDialogue(npc, line, [{ label: "A fair answer.", action: () => {} }]);
+            }
+        });
+        options.push({
+            label: "What does the order teach about mercy?",
+            action: () => window.showDialogue(npc, "That it costs more than the sword arm ever will, and that's exactly why it's worth spending. I've watched you decide who lives more than once now. I'm still deciding what I think of how you've chosen.", [{ label: "Understood.", action: () => {} }])
+        });
+        if (isDwarf) {
+            options.push({
+                label: "(Ask about fighting alongside a dwarf.)",
+                action: () => window.showDialogue(npc, "Stubborn as a mountain and twice as hard to move once you've dug in — I mean that as the highest compliment I've got. My order could use a few more like you at the wall.", [{ label: "Ha.", action: () => {} }])
+            });
+        }
+        if (window.hasClassLevel && window.hasClassLevel(player, 'paladin')) {
+            options.push({
+                label: "(Ask what he thinks, one paladin to another.)",
+                action: () => window.showDialogue(npc, "That we don't get to choose easy fights, only honest ones. Glad to have someone else who understands that at my shoulder, for once.", [{ label: "Likewise.", action: () => {} }])
+            });
+        }
+        options.push({ label: "Never mind.", action: () => {} });
+        window.showDialogue(npc, "You wished to speak with me?", options);
+    },
+    companion_nix_sharpear: (npc) => {
+        const attitude = window.companionAttitude?.[window.campaign2GoblinLieutenant.name] ?? 60;
+        const isGoblin = window.isPlayerGoblin && window.isPlayerGoblin();
+        const options = [];
+        options.push({
+            label: "Any word from the tribe?",
+            action: () => window.showDialogue(npc, attitude >= 70
+                ? "Skarnub's still holding the camp, last I heard. Doing better than I expected, honestly — turns out he didn't need me looking over his shoulder after all."
+                : "Nothing recent. Road-watching teaches you patience, if nothing else — I'll hear when there's something worth hearing.", [{ label: "Fair enough.", action: () => {} }])
+        });
+        options.push({
+            label: "What were you really watching for, all those months?",
+            action: () => window.showDialogue(npc, "Anything moving on the road worth reporting back — troop counts, wagons, who came and went from Hollowmere. Small stuff, in the end. The horde wanted eyes here long before anyone thought to ask why.", [{ label: "...", action: () => {} }])
+        });
+        if (isGoblin) {
+            options.push({
+                label: "(Say nothing — you don't need it explained.)",
+                action: () => window.showDialogue(npc, "Right. You'd know better than these humans ever will.", [{ label: "...", action: () => {} }])
+            });
+        }
+        options.push({ label: "Never mind.", action: () => {} });
+        window.showDialogue(npc, "Yeah?", options);
+    },
+    companion_orc_warlord: (npc) => {
+        const attitude = window.companionAttitude?.[window.campaign2OrcWarlord.name] ?? 60;
+        const isOrc = window.isPlayerOrc && window.isPlayerOrc();
+        const options = [];
+        options.push({
+            label: "How's Skarnak's Hold holding up without you?",
+            action: () => window.showDialogue(npc, attitude >= 70
+                ? "Standing. Kesh runs the trading, the guards know their posts — a hold doesn't need its warlord standing over every hex of it once it's built right."
+                : "Standing, last I heard. Whether it stays that way without me watching the wall is a different question.", [{ label: "Fair enough.", action: () => {} }])
+        });
+        options.push({
+            label: "Why leave a stronghold you built to follow me?",
+            action: () => window.showDialogue(npc, "A stockade full of scouts and cattle-counting isn't what I bled to build a name doing. You're headed for something worth breaking. I'd rather be swinging than counting raids from behind a wall.", [{ label: "...", action: () => {} }])
+        });
+        if (isOrc) {
+            options.push({
+                label: "(Say nothing — you understand each other.)",
+                action: () => window.showDialogue(npc, "Good. Less explaining, more fighting.", [{ label: "...", action: () => {} }])
+            });
+        }
+        options.push({ label: "Never mind.", action: () => {} });
+        window.showDialogue(npc, "Yeah?", options);
+    }
+};
+
+// --- Silverhart Commons: the tavern, the Watch, and the outlying houses'
+// flavor NPCs (see buildSilverhartPalace's Commons section, campaign2World.js).
+window.npcDialogueTrees.silverhart_innkeeper = (npc) => {
+    const rumors = [
+        "Half the Warrens swears the Thieves' Guild has eyes in the palace itself. I wouldn't know — I just pour the ale.",
+        "Ever since the ring road went in, this place gets more foot traffic than the old inn ever did. Not complaining.",
+        "There's a cutpurse working the market square again. Watch Sergeant's put a bounty up if you're looking for coin.",
+        "The Chancellor's been keeping odd hours lately. None of my business, but people talk."
+    ];
+    const rumor = rumors[Math.floor(Math.random() * rumors.length)];
+    window.showDialogue(npc, `Welcome to the Antler. ${rumor}`, [
+        { label: "Anything else?", action: () => window.showDialogue(npc, rumors[Math.floor(Math.random() * rumors.length)], [{ label: "Thanks.", action: () => {} }]) },
+        { label: "Thanks.", action: () => {} }
+    ]);
+};
+window.npcDialogueTrees.silverhart_watch_sergeant = (npc) => {
+    if (window.isShunnedByHumanCommerce && window.isShunnedByHumanCommerce()) {
+        window.showDialogue(npc, "I've got my eye on you. Keep it clean while you're in my Commons.", [{ label: "...", action: () => {} }]);
+        return;
+    }
+    const quest = (window.questLog || []).find(q => q.id === 'silverhart_bounty_cutpurse');
+    if (quest && quest.status === 'active') {
+        window.showDialogue(npc, "That cutpurse still owes the crown for three purses I know of. Board's got the bounty if you're the one to collect it.", [{ label: "I'm on it.", action: () => {} }]);
+        return;
+    }
+    if (quest && quest.status === 'completed') {
+        window.showDialogue(npc, "Market's been quieter since you dealt with that thief. Good work.", [{ label: "Just doing my part.", action: () => {} }]);
+        return;
+    }
+    window.showDialogue(npc, "Keep to yourself and we won't have trouble. There's a bounty board by the market if you're after honest coin.", [{ label: "Noted.", action: () => {} }]);
+};
+window.npcDialogueTrees.silverhart_outlying_resident_1 = (npc) => {
+    window.showDialogue(npc, "Quiet out here. That's exactly how I like it — close enough to the wall to feel safe, far enough from the palace to be left alone.", [{ label: "Fair enough.", action: () => {} }]);
+};
+window.npcDialogueTrees.silverhart_outlying_resident_2 = (npc) => {
+    window.showDialogue(npc, "You don't see many strangers out this far. Most people stick to the districts near the gate.", [{ label: "Just passing through.", action: () => {} }]);
+};
+window.npcDialogueTrees.silverhart_outlying_resident_3 = (npc) => {
+    window.showDialogue(npc, "The wall keeps the worst of it out, they say. I still lock my door at night.", [{ label: "Can't blame you.", action: () => {} }]);
+};
+
+function startHollowmereShakedown() {
+    if (window.hollowmereEventFired) return;
+    window.hollowmereEventFired = true;
+
+    const dray = window.entities.find(e => e.name === 'Dray Coltayne');
+    // factionId alone isn't enough to scope this — other Ironbond Company
+    // NPCs exist far away (e.g. Border War content), and matching on
+    // factionId globally used to drag them into the tavern scene and send
+    // them on pointless cross-map pathfinds. Distance to Dray's wait hex
+    // keeps this to the actual tavern enforcers.
+    const enforcers = window.entities.filter(e => e.factionId === 'ironbond_company' && e !== dray && dray && window.distance(e.hex, dray.hex) <= 10);
+    const garrick = window.entities.find(e => e.name === 'Garrick Holt');
+
+    // Open the door, then have the soldiers walk in for real (destination +
+    // the engine's own autoMoveProcess/lerp — see gameEngine.js — rather than
+    // teleporting), closing it again once they're through.
+    if (window.toggleDoor) window.toggleDoor(0, 4);
+
+    // All three must be real Wood Floor tiles reachable through the door at
+    // (0,4) — {-2,3} used to sit inside the tavern's Wall terrain, so Dray's
+    // pathfind failed instantly every run and he never left his wait hex.
+    const entryHexes = [{ q: 0, r: 3 }, { q: -1, r: 2 }, { q: 2, r: 3 }];
+    [dray, ...enforcers].forEach((e, i) => {
+        if (!e) return;
+        e.pendingEntry = false;
+        e.destination = entryHexes[i] || entryHexes[0];
+    });
+
+    setTimeout(() => {
+        if (window.toggleDoor && window.getTerrainAt(0, 4).name !== 'Wall') window.toggleDoor(0, 4);
+    }, 3000);
+
+    window.triggerAmbientDialogue('hollowmere_soldiers_enter');
+    setTimeout(() => window.triggerAmbientDialogue('hollowmere_dray_demand'), 4500);
+    setTimeout(() => window.triggerAmbientDialogue('hollowmere_garrick_protest'), 7000);
+    setTimeout(() => window.triggerAmbientDialogue('hollowmere_dray_threat'), 9500);
+
+    setTimeout(() => {
+        window.showDialogue(dray || garrick, "What do you do?", [
+            { label: "Stay out of it.", action: () => window.resolveShakedown('stay_out') },
+            { label: "Tell Garrick to pay — and back it with a threat.", action: () => window.resolveShakedown('encourage_pay') },
+            { label: "Side with Garrick. Fight them.", action: () => window.resolveShakedown('fight') }
+        ]);
+    }, 12000);
+}
+
+function resolveShakedown(branch) {
+    const garrick = window.entities.find(e => e.name === 'Garrick Holt');
+    const mira = window.entities.find(e => e.name === 'Mira Ashbrook');
+    const oskar = window.entities.find(e => e.name === 'Oskar Vinn');
+    const dray = window.entities.find(e => e.name === 'Dray Coltayne');
+    // factionId alone isn't enough to scope this — other Ironbond Company
+    // NPCs exist far away (e.g. Border War content), and matching on
+    // factionId globally used to drag them into the tavern scene and send
+    // them on pointless cross-map pathfinds. Distance to Dray's wait hex
+    // keeps this to the actual tavern enforcers.
+    const enforcers = window.entities.filter(e => e.factionId === 'ironbond_company' && e !== dray && dray && window.distance(e.hex, dray.hex) <= 10);
+    const ironbond = window.factions.ironbond_company;
+    const silverhart = window.factions.silverhart_kingdom;
+    const elder = window.regionalNPCs?.elder;
+    const baron = window.regionalNPCs?.baron;
+
+    // Garrick's case is the one that plausibly reaches the authorities above
+    // him (he's the wronged business owner) — the elder hears about it, the
+    // baron gets a much fainter impression, and word barely reaches the
+    // kingdom at all. Patrons' personal opinions stay local (no cascade).
+    const authorityChain = [garrick?.reputation, elder?.reputation, baron?.reputation, silverhart];
+
+    const patrons = [mira, oskar].filter(Boolean);
+
+    // The Company's kingdom-wide influence barely moves on the back of one
+    // tavern's dues — a handful of points either way, not the reputation
+    // swings above. See factions.js: this is tracked but nothing else reads
+    // it yet.
+    if (branch === 'stay_out') {
+        window.cascadeReputation(authorityChain, -10, 10);
+        patrons.forEach(p => window.adjustReputation(p.reputation, -5, 5));
+        window.adjustReputation(ironbond, 5, 5);
+        window.adjustMerchantInfluence(ironbond, 'silverhart_kingdom', 1);
+        window.showMessage("Garrick pays up, shoulders slumped. The soldiers leave with their due.");
+        exitSoldiersPeacefully(dray, enforcers);
+    } else if (branch === 'encourage_pay') {
+        window.cascadeReputation(authorityChain, 5, 15);
+        patrons.forEach(p => window.adjustReputation(p.reputation, 0, 10));
+        window.adjustReputation(ironbond, 15, 15);
+        window.adjustMerchantInfluence(ironbond, 'silverhart_kingdom', 2);
+        if (window.setIronbondArcSide) window.setIronbondArcSide('ironbond');
+        window.showMessage("You back the demand with a hard stare. The soldiers take their due and leave without further trouble.");
+        exitSoldiersPeacefully(dray, enforcers);
+    } else if (branch === 'fight') {
+        // Distinct from hollowmereEventFired (which is set for every
+        // branch, including the two peaceful ones) — checkCombatEnd's
+        // victory-dialogue/reward block needs to know specifically that
+        // the fight actually happened, not just that the scene played out,
+        // otherwise it fires the very next time ANY unrelated fight ends
+        // (e.g. the abandoned house's skeletons).
+        window.hollowmereFightTriggered = true;
+        window.cascadeReputation(authorityChain, 25, 20);
+        patrons.forEach(p => window.adjustReputation(p.reputation, 20, 20));
+        window.adjustReputation(ironbond, -35, 25);
+        window.adjustMerchantInfluence(ironbond, 'silverhart_kingdom', -2);
+        if (window.setIronbondArcSide) window.setIronbondArcSide('crown');
+        window.showMessage("Steel rings out! Garrick grabs his club — this is happening.");
+
+        // Allies stay side:'player' (so all the existing friend/foe checks treat
+        // them correctly) but are flagged aiControlled so they fight on their own
+        // instead of being manually puppeted — same mechanism the game already
+        // uses for mounts (see the isSentientAlly exclusion in gameEngine.js).
+        [garrick, ...patrons].forEach(p => {
+            if (!p) return;
+            p.side = 'player';
+            p.aiControlled = true;
+            p.aiState = 'combat';
+            p.isNPC = false;
+            p.hasBeenSeenByPlayer = true;
+        });
+        [dray, ...enforcers].forEach(e => {
+            if (!e) return;
+            e.isNPC = false;
+            e.hasBeenSeenByPlayer = true;
+            // Tutorial difficulty guard (see targetPriorityCompare) — this is
+            // a level-1 protagonist's very first scripted fight, so these
+            // three never opportunistically finish off a downed main
+            // character just because an ally healer is nearby.
+            e.tutorialFightGuard = true;
+        });
+        if (dray) {
+            dray.side = 'enemy';
+            window.wakeUp(dray); // chain-alerts the enforcers within range automatically
+        }
+        enforcers.forEach(e => { e.side = 'enemy'; });
+    }
+
+    window.drawMap();
+    window.renderEntities();
+    if (window.updateActionButtons) window.updateActionButtons();
+}
+
+// The soldiers leave the same way they came in — through the front door,
+// not teleporting away — then wait just outside for the player to leave too.
+function exitSoldiersPeacefully(dray, enforcers) {
+    if (window.toggleDoor) window.toggleDoor(0, 4);
+
+    const waitHexes = [{ q: -1, r: 6 }, { q: 0, r: 6 }, { q: 1, r: 6 }];
+    [dray, ...enforcers].forEach((e, i) => {
+        if (!e) return;
+        e.destination = waitHexes[i] || waitHexes[0];
+    });
+
+    setTimeout(() => {
+        if (window.toggleDoor && window.getTerrainAt(0, 4).name !== 'Wall') window.toggleDoor(0, 4);
+    }, 3000);
+
+    window.hollowmereSoldiersWaitingOutside = true;
+    window.hollowmereQuestOfferFired = false;
+}
+
+// Only relevant after the 'fight' branch actually kills the three Ironbond
+// men (the other two branches let them leave alive — nothing to hide).
+// Called from checkCombatEnd (gameEngine.js) right after the victory
+// dialogue fires.
+function offerBodyDisposalQuest() {
+    if (!window.questLog) window.questLog = [];
+    if (window.questLog.find(q => q.id === 'hidden_bodies')) return;
+    const dray = window.entities.find(e => e.name === 'Dray Coltayne');
+    if (!dray || dray.alive) return;
+    const garrick = window.entities.find(e => e.name === 'Garrick Holt' && e.alive);
+    if (!garrick) return;
+
+    window.showDialogue(garrick, "Three Ironbond men, dead in my tavern. If word gets back to the Company before we're ready for it, they'll send twice as many next time. We should deal with this quietly.", [
+        {
+            label: "Help him hide the bodies.",
+            action: () => {
+                window.questLog.push({
+                    id: 'hidden_bodies', title: 'Loose Ends', giver: 'Garrick Holt', status: 'completed',
+                    description: "Helped Garrick dispose of the Ironbond dead before word could spread.",
+                    hidden: true, offeredAt: window.worldSeconds
+                });
+                window.showMessage("Between you, the bodies disappear into the old cellar before dawn. Whether it stays buried is another matter.");
+                if (window.updateActionButtons) window.updateActionButtons();
+            }
+        },
+        {
+            label: "Leave them for whoever finds them.",
+            action: () => {
+                window.questLog.push({
+                    id: 'hidden_bodies', title: 'Loose Ends', giver: 'Garrick Holt', status: 'completed',
+                    description: "Left the Ironbond dead where they fell, for whoever found them first.",
+                    hidden: false, offeredAt: window.worldSeconds
+                });
+                window.showMessage("You leave it be. Someone will find them soon enough.");
+                if (window.updateActionButtons) window.updateActionButtons();
+            }
+        }
+    ]);
+}
+window.offerBodyDisposalQuest = offerBodyDisposalQuest;
+
+// Weeks later, the Company notices its men never reported back and sends
+// someone to ask around. Watched from worldTime.js's tick, same time-gate
+// pattern as triggerMissingChildEncounter. Fires regardless of whether the
+// bodies were hidden or not — the dialogue just reacts differently (see
+// npcDialogueTrees.guild_investigator).
+function triggerGuildInvestigatorEncounter() {
+    if (!window.questLog) return;
+    const quest = window.questLog.find(q => q.id === 'hidden_bodies');
+    if (!quest || quest.encounterState) return;
+
+    const daysPassed = (window.worldSeconds - (quest.offeredAt || 0)) / (24 * 3600);
+    if (daysPassed < 14) return;
+    quest.encounterState = 'investigator_arrived';
+
+    const investigator = window.buildNPC({ ...window.campaign2GuildInvestigator, hex: { q: -2, r: -1 } });
+    window.entities.push(investigator);
+    window.showMessage(`${investigator.name} steps into the Hollow Tankard, eyes sweeping the room. "Ironbond Company. We're asking around about some new faces in town — mind a word?"`);
+    window.drawMap();
+    window.renderEntities();
+}
+window.triggerGuildInvestigatorEncounter = triggerGuildInvestigatorEncounter;
+
+// Watched from worldTime.js each tick: fires once, the first time the player
+// crosses back outside after the soldiers left peacefully.
+function triggerHollowmereQuestOffer() {
+    if (window.hollowmereQuestOfferFired) return;
+    window.hollowmereQuestOfferFired = true;
+
+    const dray = window.entities.find(e => e.name === 'Dray Coltayne' && e.alive);
+    const player = window.entities.find(e => e.side === 'player' && !e.rider);
+    if (!dray || !player) return;
+
+    dray.destination = { q: player.hex.q, r: player.hex.r + 1 };
+
+    window.triggerAmbientDialogue('hollowmere_dray_approach');
+    setTimeout(() => {
+        window.showDialogue(dray, "You handled that back there without making a mess of it. The Company can use people like that.", [
+            {
+                label: "What do you need?",
+                action: () => {
+                    window.showDialogue(dray, "A courier of ours went dark on the North Road with a satchel of signed contracts. Bring it back, and there's coin in it for you.", [
+                        { label: "Accept the job.", action: () => {
+                            if (!window.questLog) window.questLog = [];
+                            window.questLog.push({
+                                id: 'ironbond_missing_courier',
+                                title: 'The Missing Courier',
+                                giver: 'Dray Coltayne',
+                                factionId: 'ironbond_company',
+                                status: 'active',
+                                description: "Find the Ironbond courier who went missing on the North Road and recover the satchel of contracts."
+                            });
+                            window.adjustReputation(window.factions.ironbond_company, 10, 10);
+                            window.showMessage("Quest added: The Missing Courier.");
+                        }},
+                        { label: "Not interested.", action: () => {
+                            window.showMessage(`${dray.name}: "Suit yourself."`);
+                        }}
+                    ]);
+                }
+            },
+            { label: "Walk away.", action: () => {} }
+        ]);
+    }, 1500);
+}
+
+// Mid-combat parley: talk to a hostile instead of attacking. Humanoid enemies
+// get a "demand surrender" option; for now it's always declined (no mechanical
+// effect) per design — a place to hook morale/negotiation mechanics later.
+function parleyWithEnemy(target) {
+    // Corvin Ashgrave: the one enemy parley actually does something for — the
+    // player can end the necromancer_lichdom quest by allying with him
+    // instead of fighting, seeding the future "learn from the necromancer"
+    // villain arc. Resolves the quest directly (bypassing checkCombatEnd's
+    // usual "phylactery dealt with first" requirement — an alliance doesn't
+    // need him dead at all) then lets the normal combat-end gate clean up.
+    if (target.isLichBoss) {
+        window.showDialogue(target, "Ashgrave doesn't lower his blade, but he stops advancing. \"You didn't come all this way just to swing at a dead man. Say what you actually want.\"", [
+            {
+                label: "Join you. Teach me what you know.",
+                action: () => {
+                    const lichQuest = (window.questLog || []).find(q => q.id === 'necromancer_lichdom');
+                    if (lichQuest) { lichQuest.status = 'completed'; lichQuest.resolution = 'allied'; }
+                    window.necromancerAllied = true;
+                    window.playerIsLich = true;
+                    window.lichBecameKnownAt = window.worldSeconds;
+                    if (window.grantSkillRank) window.grantSkillRank(window.player, 'lich_deathless_flesh');
+                    if (window.factions?.necromancer_cult) window.adjustReputation(window.factions.necromancer_cult, 40, 30);
+                    ['silverhart_kingdom', 'ironbond_company'].forEach(id => {
+                        if (window.factions[id]) window.adjustReputation(window.factions[id], -35, 20);
+                    });
+                    if (window.adjustRegionStat) window.adjustRegionStat('hollowmere', 'security', -10);
+                    target.alive = false;
+                    target.hp = 0;
+                    window.showMessage("\"Good,\" Ashgrave says, and something ancient and patient settles into you. \"Then let's begin properly.\"");
+                    if (window.checkCombatEnd) window.checkCombatEnd();
+                    if (window.triggerLichCompanionFallout) window.triggerLichCompanionFallout();
+                }
+            },
+            { label: "No — this ends here.", action: () => {} }
+        ]);
+        return;
+    }
+    if (target.tags && target.tags.includes('humanoid')) {
+        window.showDialogue(target, "They eye you warily, weapon still raised.", [
+            { label: "Demand they surrender.", action: () => {
+                window.showMessage(`${target.name}: "Not a chance."`);
+            }},
+            { label: "Never mind.", action: () => {} }
+        ]);
+    } else {
+        window.showDialogue(target, "It doesn't seem interested in talking.", [
+            { label: "Never mind.", action: () => {} }
+        ]);
+    }
+}
+
+// "Oskar's Wager" — a friendly, non-lethal sparring match. Flips Oskar
+// hostile just long enough to fight through the real turn-based combat
+// engine, then the tick-watcher in worldTime.js ends it safely once he's
+// taken enough of a beating, before any real death-handling code could ever
+// see him drop to 0 HP.
+function startOskarDuel() {
+    const oskar = window.entities.find(e => e.name === 'Oskar Vinn');
+    if (!oskar) return;
+    window.oskarDuelActive = true;
+    oskar.side = 'enemy';
+    oskar.aiState = 'combat';
+    oskar.isNPC = false;
+    oskar.hasBeenSeenByPlayer = true;
+    window.wakeUp(oskar);
+    window.showMessage('Oskar grins and squares up. "Don\'t hold back!"');
+}
+
+function endOskarDuel() {
+    if (!window.oskarDuelActive) return;
+    window.oskarDuelActive = false;
+
+    const oskar = window.entities.find(e => e.name === 'Oskar Vinn');
+    if (oskar) {
+        oskar.side = 'neutral';
+        oskar.isNPC = true;
+        oskar.aiState = 'idle';
+        oskar.hp = oskar.maxHp;
+        oskar.timePoints = 0;
+        window.adjustReputation(oskar.reputation, 10, 15);
+    }
+
+    if (window.party && window.party[0]) window.party[0].gold = (window.party[0].gold || 0) + 10;
+    if (window.gainExp) window.gainExp(50);
+
+    window.isInCombat = false;
+    window.gamePhase = 'WAITING';
+    window.currentTurnEntity = null;
+
+    if (!window.questLog) window.questLog = [];
+    const existing = window.questLog.find(q => q.id === 'oskars_wager');
+    if (existing) existing.status = 'completed';
+    else window.questLog.push({
+        id: 'oskars_wager',
+        title: "Oskar's Wager",
+        giver: 'Oskar Vinn',
+        status: 'completed',
+        description: 'A friendly sparring match with Oskar Vinn.'
+    });
+
+    window.showMessage('Oskar raises a hand. "Alright, alright — you win! Not bad at all." (+10 gold)');
+    if (window.updateActionButtons) window.updateActionButtons();
+    window.drawMap();
+    window.renderEntities();
+}
+
+// THE TAVERN BRAWL: a bigger, sillier follow-up to Oskar's one-on-one
+// sparring match — the whole tavern piles in, 5-a-side. Garrick/Mira/Oskar
+// (already standing around the tavern floor from the shakedown scene) join
+// as allies exactly the way resolveShakedown's 'fight' branch already flips
+// them (side:'player', aiControlled:true — they fight on their own) so the
+// player + those three + Wren Talbot (a real party member, already
+// side:'player') makes five. Five hostile brawlers are spawned to match.
+// Everyone gets a chair to swing (see equipment.js's `improvised: true`) —
+// nobody in a bar fight is drawing a real sword — and a scatter of loose
+// chairs/bottles sits on the floor for whoever loses theirs mid-fight (see
+// breakImprovisedWeapon, gameEngine.js) to grab another.
+const TAVERN_BRAWL_OPEN_HEXES = [
+    { q: -3, r: -2 }, { q: -1, r: -2 }, { q: 1, r: -2 }, { q: 3, r: -2 }, { q: 0, r: -3 },
+    { q: -4, r: 0 }, { q: 4, r: 0 }, { q: -3, r: 2 }, { q: 3, r: 2 }, { q: 0, r: 3 },
+];
+
+function startTavernBrawl() {
+    if (window.tavernBrawlTriggered || window.isInCombat) return;
+    window.tavernBrawlTriggered = true;
+    window.tavernBrawlActive = true;
+
+    const allies = ['Garrick Holt', 'Mira Ashbrook', 'Oskar Vinn']
+        .map(name => window.entities.find(e => e.name === name))
+        .filter(Boolean);
+    allies.forEach(ally => {
+        ally.side = 'player';
+        ally.aiControlled = true;
+        ally.aiState = 'combat';
+        ally.isNPC = false;
+        ally.hasBeenSeenByPlayer = true;
+        if (!ally.equipped) ally.equipped = { weapon: null, offhand: null, armor: null, helmet: null };
+        if (!ally.equipped.weapon) window.equipToMonster(ally, 'chair');
+    });
+
+    const openHexes = [...TAVERN_BRAWL_OPEN_HEXES];
+    for (let i = 0; i < 5; i++) {
+        const hex = openHexes.find(h => !window.getEntityAtHex(h.q, h.r) && !window.getTerrainAt(h.q, h.r).impassable);
+        if (!hex) break;
+        openHexes.splice(openHexes.indexOf(hex), 1);
+        const brawler = window.buildNPC({
+            name: `Rowdy Brawler ${i + 1}`,
+            title: 'Rowdy Brawler',
+            race: 'human',
+            gender: i % 2 === 0 ? 'male' : 'female',
+            hex,
+            classLevels: ['fighter'],
+            skillPicks: ['health'],
+            equipment: ['chair'],
+            side: 'enemy',
+            voice: 'pc_1',
+            expValue: 20,
+        });
+        brawler.isNPC = false;
+        brawler.hasBeenSeenByPlayer = true;
+        brawler.aiState = 'combat';
+        window.entities.push(brawler);
+    }
+
+    // A few loose chairs/bottles on the floor — replacements for whoever's
+    // improvised weapon breaks mid-fight (see breakImprovisedWeapon), picked
+    // up the normal way any dropped item is (lootItems, gameEngine.js).
+    window.mapItems['2,0'] = ['bottle', 'bottle'];
+    window.mapItems['-2,0'] = ['chair', 'bottle'];
+    window.mapItems['0,-1'] = ['chair'];
+
+    const firstBrawler = window.entities.find(e => e.name === 'Rowdy Brawler 1');
+    if (firstBrawler) window.wakeUp(firstBrawler);
+
+    window.showMessage("Someone throws the first punch, and the whole tavern erupts into chaos!");
+    window.isInCombat = true;
+    if (window.updateActionButtons) window.updateActionButtons();
+    window.drawMap();
+    window.renderEntities();
+}
+window.startTavernBrawl = startTavernBrawl;
+
+function endTavernBrawl() {
+    if (!window.tavernBrawlActive) return;
+    window.tavernBrawlActive = false;
+
+    ['Garrick Holt', 'Mira Ashbrook', 'Oskar Vinn'].forEach(name => {
+        const ally = window.entities.find(e => e.name === name && e.alive);
+        if (ally) {
+            ally.side = 'neutral';
+            ally.isNPC = true;
+            ally.aiState = 'idle';
+            ally.aiControlled = false;
+            ally.timePoints = 0;
+        }
+    });
+
+    if (window.party && window.party[0]) window.party[0].gold = (window.party[0].gold || 0) + 30;
+    if (window.gainExp) window.gainExp(150);
+
+    window.isInCombat = false;
+    window.gamePhase = 'WAITING';
+    window.currentTurnEntity = null;
+
+    if (!window.questLog) window.questLog = [];
+    window.questLog.push({
+        id: 'tavern_brawl',
+        title: 'The Tavern Brawl',
+        giver: 'Oskar Vinn',
+        status: 'completed',
+        description: 'An all-out, five-a-side brawl at the Hollow Tankard.'
+    });
+
+    window.showMessage("The last brawler goes down amid the wreckage of chairs and broken bottles. Oskar whoops and claps you on the back. (+30 gold)");
+    if (window.updateActionButtons) window.updateActionButtons();
+    window.drawMap();
+    window.renderEntities();
+}
+window.endTavernBrawl = endTavernBrawl;
+
+// Fixed wilderness spot out along the west road (see campaign2World.js's
+// crossroads) where Tam went exploring. Checked from worldTime.js's tick —
+// once the player wanders within range, this resolves the encounter based
+// on how long it's been since the quest was offered: within 3 in-game days,
+// he's found alive but under attack; after that, only a corpse remains.
+window.campaign2TamEncounterHex = { q: -60, r: 26 };
+
+function triggerMissingChildEncounter() {
+    if (!window.questLog) return;
+    const quest = window.questLog.find(q => q.id === 'missing_child');
+    if (!quest || quest.status !== 'active' || quest.encounterState) return;
+
+    const daysPassed = (window.worldSeconds - (quest.offeredAt || 0)) / (24 * 3600);
+    const hex = window.campaign2TamEncounterHex;
+
+    if (daysPassed < 3) {
+        quest.encounterState = 'wolves';
+        const tam = window.buildNPC({ ...window.campaign2Tam, hex: { q: hex.q, r: hex.r - 1 }, classLevels: [], skillPicks: [], equipment: [], side: 'neutral' });
+        window.entities.push(tam);
+        [{ q: hex.q - 1, r: hex.r }, { q: hex.q + 1, r: hex.r }].forEach(wolfHex => {
+            const wolf = window.createMonster('wolf', wolfHex, null, null, 'enemy');
+            window.entities.push(wolf);
+            window.wakeUp(wolf);
+        });
+        window.showMessage("A child's scream, close by — and the snarl of wolves!");
+    } else {
+        quest.encounterState = 'corpse';
+        window.tileObjects[`${hex.q},${hex.r}`] = { type: 'corpse_marker', lightRadius: 0 };
+        const knowsNature = window.party && window.party.some(p => window.hasKnowledgeNature(p));
+        if (knowsNature) {
+            window.showMessage("You find Tam's body, wolf tracks all around — a pack got to him days ago.");
+        } else {
+            window.showMessage("You find Tam's body. Something got to him, out here alone.");
+        }
+    }
+
+    window.drawMap();
+    window.renderEntities();
+}
+window.triggerMissingChildEncounter = triggerMissingChildEncounter;
+
+// Old Mac's pasture wolves (see campaign2World.js's buildFarmstead, which
+// sets window.campaign2FarmPastureCenter). Triggered once, from proximity
+// (worldTime.js), while the quest is active. Wolves are tagged
+// farmQuestWolf so old_mac's turn-in check doesn't get confused by an
+// unrelated wilderness wolf pack wandering nearby.
+function triggerFarmWolfEncounter() {
+    if (!window.questLog || !window.campaign2FarmPastureCenter) return;
+    const quest = window.questLog.find(q => q.id === 'farm_wolves');
+    if (!quest || quest.status !== 'active' || quest.encounterState) return;
+
+    quest.encounterState = 'engaged';
+    // Wolves live at their den well outside the pasture now (see
+    // buildFarmstead's broken-fence/blood-trail breadcrumb), not waiting
+    // inside the fence — they spawn idle/wandering, same as any other
+    // wilderness pack, rather than instantly aggroing on the player.
+    const den = window.campaign2WolfDenCenter || window.campaign2FarmPastureCenter;
+    [{ q: den.q - 1, r: den.r - 1 }, { q: den.q + 1, r: den.r }, { q: den.q, r: den.r + 1 }].forEach(hex => {
+        const wolf = window.createMonster('wolf', hex, null, null, 'enemy');
+        wolf.farmQuestWolf = true;
+        wolf.aiState = 'idle';
+        window.entities.push(wolf);
+    });
+    window.showMessage("A broken fence rail, and blood spatters leading off toward the treeline...");
+    window.drawMap();
+    window.renderEntities();
+}
+window.triggerFarmWolfEncounter = triggerFarmWolfEncounter;
+
+// Reddale's "Missing Watch" quest — spawned immediately on accepting the
+// quest (unlike the proximity-triggered farm wolves, the search site is
+// already a deliberate walk from town, so there's no "wandered too close
+// without noticing" risk to guard against). Goblins tagged
+// reddaleQuestGoblin so the captain's turn-in check isn't confused by an
+// unrelated wandering goblin.
+function triggerReddaleMissingWatch() {
+    const site = window.campaign2ReddaleSearchSiteHex;
+    if (!site) return;
+    [{ q: site.q, r: site.r }, { q: site.q + 1, r: site.r - 1 }].forEach(hex => {
+        const goblin = window.createMonster('goblin', hex, null, null, 'enemy');
+        goblin.reddaleQuestGoblin = true;
+        goblin.aiState = 'idle';
+        window.entities.push(goblin);
+    });
+}
+window.triggerReddaleMissingWatch = triggerReddaleMissingWatch;
+
+function triggerEyesOnBorder() {
+    const site = window.campaign2ReddaleSearchSiteHex;
+    if (!site) return;
+    const scout = window.createMonster('orc', { q: site.q + 6, r: site.r + 2 }, null, null, 'enemy');
+    scout.eyesOnBorderTarget = true;
+    scout.aiState = 'idle';
+    window.entities.push(scout);
+}
+window.triggerEyesOnBorder = triggerEyesOnBorder;
+
+// Every building carved anywhere in the game (village houses, the palace's
+// rooms, embassies, farmsteads...) registers itself in window.interiorRegions
+// with a bounding box — reused here rather than hand-maintaining a separate
+// list of "town center" coordinates, so this stays correct as new buildings
+// get added anywhere (it's how the palace/curtain-wall wolf spawns got
+// caught: nothing special-cased Silverhart, it's just another building).
+function isNearAnyBuilding(hex, radius) {
+    const regions = window.interiorRegions || [];
+    for (const region of regions) {
+        if (region.minQ === undefined) continue;
+        const center = { q: (region.minQ + region.maxQ) / 2, r: (region.minR + region.maxR) / 2 };
+        if (window.distance(hex, center) < radius) return true;
+    }
+    return false;
+}
+window.isNearAnyBuilding = isNearAnyBuilding;
+
+// Every random-encounter spawn candidate (wolves, orc raiders, lich
+// hunters — see below) should be rejected here, not just the wilderness
+// wolf check this was originally written for: nothing should ever spawn
+// on top of a town, the capital, a star fort, or any other hand-placed
+// site. The one exception is a kingdom in genuinely dire straits — once
+// overall security craters, patrols/garrisons have thinned out enough
+// that monsters pushing right up to a settlement's own walls is the
+// point, not a bug. "Dire" is deliberately a hard floor (not a smooth
+// scale-in like the safeRadius/chance formulas above it) so it stays a
+// rare, readable state change rather than random spawns slowly creeping
+// closer as security merely dips below "good."
+const DIRE_SECURITY_THRESHOLD = 20;
+function isNearAnyBuildingUnlessDire(hex, radius) {
+    const kingdomSecurity = window.regions?.silverhart_kingdom?.security ?? 55;
+    if (kingdomSecurity < DIRE_SECURITY_THRESHOLD) return false;
+    return isNearAnyBuilding(hex, radius);
+}
+window.isNearAnyBuildingUnlessDire = isNearAnyBuildingUnlessDire;
+
+// Random wilderness encounters: out past the village/farmland (35+ hexes
+// from the village center), wandering risks a wolf pack — especially
+// heading west, toward the unnamed, skull-marked road. Rolled at most once
+// per ~2 in-game minutes of wilderness travel (accumulator, not per-tick
+// probability, so it isn't tied to real framerate).
+window.wildernessEncounterAccum = 0;
+// Shared by every wilderness spawn roll below (wolves, and now deer/wild
+// boar) — finds a hex outside the player's visual range so an encounter is
+// discovered by walking toward it, never popped into existence on top of
+// the party. Returns null if nothing clear/unseen turned up in the attempt
+// budget.
+function findUnseenWildernessSpot(playerEntity) {
+    for (let attempt = 0; attempt < 12; attempt++) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 10 + Math.floor(Math.random() * 6); // just past the ~30-hex daylight vision cap's edge cases and any nearer dark-vision viewers
+        const candidate = window.hexRound(
+            playerEntity.hex.q + Math.round(Math.cos(angle) * dist),
+            playerEntity.hex.r + Math.round(Math.sin(angle) * dist)
+        );
+        if (window.getEntityAtHex(candidate.q, candidate.r)) continue;
+        if (window.getTerrainAt(candidate.q, candidate.r).name === 'Water') continue;
+        if (window.isVisibleToPlayer(candidate)) continue;
+        if (window.isNearAnyBuildingUnlessDire(candidate, 30)) continue;
+        return candidate;
+    }
+    return null;
+}
+
+function checkWildernessEncounter(playerEntity, delta) {
+    if (!playerEntity || window.isInCombat) return;
+    // A safer Hollowmere pushes the "safe" radius outward too (patrols
+    // ranging further), not just how often encounters happen once past it.
+    const security = window.regions?.hollowmere?.security ?? 50;
+    const safeRadius = 25 + (security / 100) * 20; // 25 at 0 security, up to 45 at 100
+    if (window.distance(playerEntity.hex, { q: 0, r: 0 }) < safeRadius) return;
+
+    window.wildernessEncounterAccum += delta;
+    const checkInterval = 120; // seconds of in-game wilderness travel between rolls
+    if (window.wildernessEncounterAccum < checkInterval) return;
+    window.wildernessEncounterAccum = 0;
+
+    const cp = window.campaign2Landmarks.crossroads;
+    const headingWest = playerEntity.hex.q < cp.q - 20;
+    // Base chance responds to Hollowmere's security too: a safer village
+    // means rarer wolves nearby. West stays flavorfully more dangerous on
+    // top of that — whatever earned that skull on the signpost isn't part
+    // of this security system yet.
+    const maxChance = headingWest ? 0.5 : 0.2;
+    // wildernessThreatMult: worldPulse.js events (wolf resurgence, patrol
+    // sweeps) scale the ambient danger up or down for a few in-game days.
+    const chance = ((100 - security) / 100) * maxChance * (window.wildernessThreatMult || 1);
+    if (Math.random() >= chance) return;
+
+    const count = 1 + Math.floor(Math.random() * 2); // 1-2 wolves
+    let spawned = 0;
+    for (let n = 0; n < count; n++) {
+        const spot = findUnseenWildernessSpot(playerEntity);
+        if (!spot) continue;
+        const wolf = window.createMonster('wolf', spot, null, null, 'enemy');
+        wolf.aiState = 'idle';
+        wolf.isRandomEncounter = true; // eligible for corpse pruning once dead and far away — see pruneDistantEncounterCorpses
+        window.entities.push(wolf);
+        spawned++;
+    }
+    if (spawned > 0) {
+        window.showMessage('You sense something is out there...');
+        window.drawMap();
+        window.renderEntities();
+    }
+}
+window.checkWildernessEncounter = checkWildernessEncounter;
+
+// Primary-industry wildlife (deer, wild boar) — same "only simulate when
+// the player is near" cadence/gate as the wolf encounter above, but a
+// separate roll/accumulator: this isn't a threat check, it's ambient
+// huntable game, so it isn't scaled by Hollowmere's security or the west/
+// east danger split, and it's not blocked by the safeRadius wolves respect
+// (deer wander close to a safe village same as real ones do). A wild boar
+// is genuinely dangerous if provoked (side:'enemy', matching a weak wolf),
+// a deer is harmless (side:'neutral', same convention the farm's own Sheep
+// already uses for a killable-but-passive animal).
+window.wildlifeEncounterAccum = window.wildlifeEncounterAccum || 0;
+function checkWildlifeEncounter(playerEntity, delta) {
+    if (!playerEntity || window.isInCombat) return;
+    window.wildlifeEncounterAccum += delta;
+    const checkInterval = 90;
+    if (window.wildlifeEncounterAccum < checkInterval) return;
+    window.wildlifeEncounterAccum = 0;
+
+    if (Math.random() >= 0.35) return;
+    const isBoar = Math.random() < 0.4;
+    const spot = findUnseenWildernessSpot(playerEntity);
+    if (!spot) return;
+
+    const animal = window.createMonster(isBoar ? 'wild_boar' : 'deer', spot, null, null, isBoar ? 'enemy' : 'neutral');
+    animal.aiState = 'idle';
+    animal.isNPC = !isBoar; // matches Sheep's own neutral-and-passive convention
+    animal.isRandomEncounter = true;
+    window.entities.push(animal);
+    window.drawMap();
+    window.renderEntities();
+}
+window.checkWildlifeEncounter = checkWildlifeEncounter;
+
+// Corpse pruning: window.entities only ever grows (dead entities stay in the
+// array so their loot/body remains inspectable and turn-order/rendering code
+// doesn't need special-casing). Left unchecked over an hours-long session
+// this is exactly what makes pathfinding/AI scans slower the longer you
+// play. Named/pre-generated NPCs and monsters are finite in number and can
+// carry quest-relevant loot or story weight (a body as future evidence), so
+// they're never pruned. Random-encounter wildlife (wolves spawned by
+// checkWildernessEncounter/triggerRestAmbush/triggerSleepAmbush, tagged
+// isRandomEncounter) has neither concern and can regenerate indefinitely, so
+// once one is dead AND far enough behind the player that it can't be seen or
+// walked back to on a whim, it's spliced out for good. 2.2x the base vision
+// range (30 hexes) mirrors the load/unload hysteresis gap you'd want in a
+// chunk-streaming world (see the campaign2World.js comment on explored-hex
+// memory) — far enough that it won't get evicted right after the fight
+// ends, or re-spawn a duplicate if the player doubles back a short way.
+window.corpsePruneAccum = 0;
+function pruneDistantEncounterCorpses(playerEntity, delta) {
+    if (!playerEntity) return;
+    window.corpsePruneAccum += delta;
+    const checkInterval = 60; // in-game seconds between sweeps — this is a single O(entities) filter, far cheaper than a pathfind, but no need to run it every tick
+    if (window.corpsePruneAccum < checkInterval) return;
+    window.corpsePruneAccum = 0;
+
+    const pruneRadius = 66; // 2.2x base vision range (30)
+    window.entities = window.entities.filter(e => {
+        if (e.alive || !e.isRandomEncounter) return true;
+        return window.distance(playerEntity.hex, e.hex) <= pruneRadius;
+    });
+}
+window.pruneDistantEncounterCorpses = pruneDistantEncounterCorpses;
+
+// IMPORTANT CORRECTION: this used to also delete distant entries from
+// window.exploredHexes itself, on the theory that "forgetting" a
+// far-away hex's explored flag had no gameplay effect since it gets
+// re-added the moment the player is close enough to see it again. That
+// was wrong — exploredHexes is the permanent "have I ever seen this hex"
+// bit that drives the fog-of-war render (isHexExplored, hexMap.js:258):
+// unlike a scratch cache, players expect it to work like BG1's
+// black/never-seen vs. dimmed/seen-before-but-not-currently-visible
+// distinction, which never re-darkens a place you've already been. BG1
+// affords that permanently because its world is chunked into small,
+// separately-loaded areas — each area's explored bitmap is bounded by
+// that area's own fixed size regardless of how many areas the whole game
+// has, not because it forgets anything. That's the real fix for this
+// game's single seamless hex plane too (chunked bitset storage — see
+// TASKS.md's chunk-streaming/save-compression backlog items), not
+// deletion. So: window.exploredHexes is no longer touched here at all —
+// once seen, a hex stays revealed, forever, exactly like BG1.
+//
+// What's still safe to prune: window.lastSeenTimeMap, which is NOT a
+// fog-of-war flag — it's pure recency bookkeeping (see the guild
+// assassin's backtrack-detection read of it, gameEngine.js ~3070-3084,
+// which only ever cares about *recent* history). Old, far-away
+// timestamps there have no remaining gameplay use, so they're pruned to
+// keep that structure (and the save) from growing forever — the actual
+// permanent memory (exploredHexes) is untouched.
+window.explorationPruneAccum = 0;
+function pruneDistantExploredHexes(playerEntity, delta) {
+    if (!playerEntity || !window.lastSeenTimeMap) return;
+    window.explorationPruneAccum += delta;
+    const checkInterval = 60;
+    if (window.explorationPruneAccum < checkInterval) return;
+    window.explorationPruneAccum = 0;
+
+    const pruneRadius = 66; // 2.2x base vision range (30), same hysteresis gap as pruneDistantEncounterCorpses
+    for (const key in window.lastSeenTimeMap) {
+        const [q, r] = key.split(',').map(Number);
+        if (window.distance(playerEntity.hex, { q, r }) > pruneRadius) {
+            delete window.lastSeenTimeMap[key];
+        }
+    }
+}
+window.pruneDistantExploredHexes = pruneDistantExploredHexes;
+
+// Small orc raiding/scouting bands pressing in from the borderlands east of
+// Reddale — ambient pressure independent of "Eyes on the Border," reusing
+// the same accumulator/placement approach as the wolf encounters above
+// (never inside the player's visual range, rolled on a travel-time timer
+// rather than per-tick). Weighted east instead of west.
+window.orcRaiderEncounterAccum = 0;
+function checkOrcRaiderEncounter(playerEntity, delta) {
+    if (!playerEntity || window.isInCombat) return;
+    const security = window.regions?.hollowmere?.security ?? 50;
+    const safeRadius = 25 + (security / 100) * 20;
+    if (window.distance(playerEntity.hex, { q: 0, r: 0 }) < safeRadius) return;
+
+    window.orcRaiderEncounterAccum += delta;
+    const checkInterval = 180; // rarer than wolves - this should read as ambient pressure, not a gauntlet
+    if (window.orcRaiderEncounterAccum < checkInterval) return;
+    window.orcRaiderEncounterAccum = 0;
+
+    const cp = window.campaign2Landmarks.crossroads;
+    const headingEast = playerEntity.hex.q > cp.q + 20;
+    const maxChance = headingEast ? 0.25 : 0.05;
+    const chance = ((100 - security) / 100) * maxChance;
+    if (Math.random() >= chance) return;
+
+    const count = 2 + Math.floor(Math.random() * 2); // 2-3 orcs, a small raiding band
+    let spawned = 0;
+    for (let n = 0; n < count; n++) {
+        let spot = null;
+        for (let attempt = 0; attempt < 12 && !spot; attempt++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 10 + Math.floor(Math.random() * 6);
+            const candidate = window.hexRound(
+                playerEntity.hex.q + Math.round(Math.cos(angle) * dist),
+                playerEntity.hex.r + Math.round(Math.sin(angle) * dist)
+            );
+            if (window.getEntityAtHex(candidate.q, candidate.r)) continue;
+            if (window.getTerrainAt(candidate.q, candidate.r).name === 'Water') continue;
+            if (window.isVisibleToPlayer(candidate)) continue;
+            if (window.isNearAnyBuildingUnlessDire(candidate, 30)) continue;
+            spot = candidate;
+        }
+        if (!spot) continue;
+        const orc = window.createMonster('orc', spot, null, null, 'enemy');
+        orc.aiState = 'idle';
+        orc.behaviorType = 'patrol';
+        orc.orcRaiderBand = true;
+        orc.isRandomEncounter = true; // eligible for corpse pruning once dead and far away — see pruneDistantEncounterCorpses
+        window.entities.push(orc);
+        spawned++;
+    }
+    if (spawned > 0) {
+        window.showMessage('An orc raiding party is nearby...');
+        window.drawMap();
+        window.renderEntities();
+    }
+}
+window.checkOrcRaiderEncounter = checkOrcRaiderEncounter;
+
+// The kingdom notices what you've become: once playerIsLich, wandering
+// wilderness (same "well past the village" gating as orc raiders) risks
+// a hunter party sent after you. Escalates in both frequency and strength
+// with how long you've been a known lich (lichBecameKnownAt, set the same
+// moment playerIsLich is set — see readLichPhylacteryCoreNote,
+// campaign2World.js, and parleyWithEnemy's ally branch above) rather than
+// being a flat, forever-identical encounter.
+window.lichHunterEncounterAccum = 0;
+const LICH_HUNTER_TIERS = [
+    { minDays: 0,  label: 'a band of local militia',        classLevels: ['fighter'],           chance: 0.06 },
+    { minDays: 3,  label: 'a company of trained knights',   classLevels: ['fighter', 'fighter'], chance: 0.10 },
+    { minDays: 10, label: "a paladin order's strike team",  classLevels: ['fighter', 'fighter', 'paladin'], chance: 0.16 },
+];
+function lichHunterTierFor(daysKnown) {
+    let tier = LICH_HUNTER_TIERS[0];
+    for (const t of LICH_HUNTER_TIERS) if (daysKnown >= t.minDays) tier = t;
+    return tier;
+}
+window.lichHunterTierFor = lichHunterTierFor;
+
+function checkLichHunterEncounter(playerEntity, delta) {
+    if (!playerEntity || window.isInCombat || !window.playerIsLich) return;
+    const cp = window.campaign2Landmarks?.crossroads || { q: 0, r: 0 };
+    if (window.distance(playerEntity.hex, cp) < 35) return; // village/farmland range — same threshold random wilderness encounters use
+
+    window.lichHunterEncounterAccum += delta;
+    const checkInterval = 200;
+    if (window.lichHunterEncounterAccum < checkInterval) return;
+    window.lichHunterEncounterAccum = 0;
+
+    const daysKnown = ((window.worldSeconds - (window.lichBecameKnownAt || window.worldSeconds)) / (24 * 3600));
+    const tier = lichHunterTierFor(daysKnown);
+    if (Math.random() >= tier.chance) return;
+
+    const count = 2 + Math.floor(Math.random() * 2); // 2-3, same small-band scale as orc raiders
+    let spawned = 0;
+    for (let n = 0; n < count; n++) {
+        let spot = null;
+        for (let attempt = 0; attempt < 12 && !spot; attempt++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 8 + Math.floor(Math.random() * 5);
+            const candidate = window.hexRound(
+                playerEntity.hex.q + Math.round(Math.cos(angle) * dist),
+                playerEntity.hex.r + Math.round(Math.sin(angle) * dist)
+            );
+            if (window.getEntityAtHex(candidate.q, candidate.r)) continue;
+            if (window.getTerrainAt(candidate.q, candidate.r).name === 'Water') continue;
+            if (window.isVisibleToPlayer(candidate)) continue;
+            if (window.isNearAnyBuildingUnlessDire(candidate, 30)) continue;
+            spot = candidate;
+        }
+        if (!spot) continue;
+        const hunter = window.buildNPC({
+            name: `Silverhart Hunter`, race: 'human', gender: Math.random() < 0.5 ? 'male' : 'female',
+            classLevels: tier.classLevels, skillPicks: ['sword_hit', 'sword_dmg', 'health'],
+            equipment: ['sword', 'heavy_armor', 'wooden_shield'], hex: spot, side: 'enemy'
+        });
+        hunter.isNPC = false; // a fight, not a dialogue target — same convention as orc raiders
+        hunter.aiState = 'idle';
+        hunter.behaviorType = 'patrol';
+        hunter.lichHunterParty = true;
+        hunter.isRandomEncounter = true;
+        window.entities.push(hunter);
+        spawned++;
+    }
+    if (spawned > 0) {
+        window.showMessage(`Word has spread of what you've become. ${tier.label} moves against you.`);
+        window.drawMap();
+        window.renderEntities();
+    }
+}
+window.checkLichHunterEncounter = checkLichHunterEncounter;
+
+// --- Border War: the payoff of readGoblinScoutNote's foreshadowing (see
+// campaign2World.js comment there) — the Skarn-tooth goblins were scouting
+// for a larger orc force, now pressing on Northwatch. Same quest shape as
+// goblin_threat: one questLog entry with a `.resolution` field. First pass
+// ships one success branch (siege_broken); failure states are an explicit
+// follow-up (see the Border War plan). ---
+
+window.npcDialogueTrees.border_war_quartermaster = (npc) => {
+    const quest = (window.questLog || []).find(q => q.id === 'border_war');
+    if (quest) {
+        window.showDialogue(npc, "Northwatch needs every blade it can get. If you're headed that way, the commander will have use for you.", [
+            { label: "I'll head there.", action: () => {} }
+        ]);
+        return;
+    }
+    if (!window.goblinScoutNoteRead) {
+        window.showDialogue(npc, "Quartermaster's business, mostly — counting spears and grain sacks. Nothing that concerns you.", [
+            { label: "Fair enough.", action: () => {} }
+        ]);
+        return;
+    }
+    const goblinQuest = (window.questLog || []).find(q => q.id === 'goblin_threat');
+    const peacefulWithGoblins = ['goblin_diplomacy', 'goblin_alliance'].includes(goblinQuest?.resolution);
+    const openingLine = peacefulWithGoblins
+        ? "Word from the Skarn-tooth tribe you dealt with — the same one, oddly enough — says a real orc warband is massing near Northwatch Fort, east of Reddale. If they gave you a straight answer, take it seriously."
+        : "Reports from Northwatch Fort, east of Reddale — an orc warband's been probing the walls for weeks now, worse than any raiding party. Whatever those goblin scouts you dealt with were counting things for, this is it.";
+    window.showDialogue(npc, openingLine, [
+        { label: "I'll head to Northwatch.", action: () => {
+            window.questLog.push({
+                id: 'border_war', title: 'The Northwatch Line', giver: 'Quartermaster Rurik Voss',
+                status: 'active', description: 'Report to the garrison commander at Northwatch Fort, east of Reddale.',
+                resolution: null
+            });
+            window.showMessage('Quest started: The Northwatch Line.');
+        }},
+        { label: "Not my fight.", action: () => {} }
+    ]);
+};
+
+window.npcDialogueTrees.northwatch_commander = (npc) => {
+    const quest = (window.questLog || []).find(q => q.id === 'border_war');
+    if (quest?.status === 'completed') {
+        if (window.warState?.active && window.warState.playerSide === 'human') {
+            const activeMission = (window.questLog || []).find(q => q.isWarMission && q.status === 'active');
+            if (activeMission) {
+                window.showDialogue(npc, `Still on that ${activeMission.title.toLowerCase()}, I take it. Report back once it's done.`, [
+                    { label: "I'm on it.", action: () => {} }
+                ]);
+                return;
+            }
+            const options = Object.entries(window.WAR_MISSION_TYPES).map(([type, spec]) => ({
+                label: spec.label,
+                action: () => window.offerWarMission(type),
+            }));
+            options.push({ label: "Nothing right now.", action: () => {} });
+            window.showDialogue(npc, "That engine won't trouble this wall again — but the war isn't won. If you want to keep pressing the greenskins back, I've got work.", options);
+            return;
+        }
+        window.showDialogue(npc, "That engine won't trouble this wall again. Well fought.", [
+            { label: "Glad to help.", action: () => {} }
+        ]);
+        return;
+    }
+    if (window.borderWarSallyActive) {
+        window.showDialogue(npc, "Go — that engine won't wait for us to finish talking.", [
+            { label: "On it.", action: () => {} }
+        ]);
+        return;
+    }
+    window.showDialogue(npc, "You're the outside help Voss sent word of. Good — I can't spare a single soldier off this wall, not with that engine still battering it. But a small, elite party could slip out, hit the engine directly, and be back before the garrison even notices the gap. That's you.", [
+        { label: "We'll destroy it.", action: () => {
+            if (!quest) {
+                window.questLog.push({
+                    id: 'border_war', title: 'The Northwatch Line', giver: 'Commander Ysolde Hart',
+                    status: 'active', description: 'Destroy the siege engine battering Northwatch\'s wall.',
+                    resolution: null
+                });
+            }
+            window.startNorthwatchSally();
+        }},
+        { label: "Not yet.", action: () => {} }
+    ]);
+};
+
+// Triggered by the commander's dialogue — flips the ambient (neutral,
+// noAttack) siege engine placed at world-build time (buildNorthwatchFort,
+// campaign2World.js) into a real combat target and spawns its escort
+// skirmishers around it. The fight happens right at the fort on the open
+// map, same as every other Campaign 2 scripted encounter (farm wolves,
+// goblin camp, Ironvein raids) — no separate arena/teleport. Resolves via
+// checkCombatEnd's border_war branch (gameEngine.js) once all enemies are
+// dead.
+function startNorthwatchSally() {
+    const engine = window.campaign2NorthwatchSiegeEngine;
+    if (!engine || !engine.alive) return;
+    if (window.activateNorthwatchSiege) window.activateNorthwatchSiege();
+    window.borderWarSallyActive = true;
+    engine.side = 'enemy';
+    engine.noAttack = false;
+    engine.isNPC = false;
+    engine.aiState = 'idle';
+
+    const escortTypes = window.campaign2SiegeEscortTypes || ['orc', 'orc', 'goblin', 'goblin'];
+    escortTypes.forEach((type, i) => {
+        const angle = (i / escortTypes.length) * Math.PI * 2;
+        const hex = window.hexRound(
+            engine.hex.q + Math.round(Math.cos(angle) * 3),
+            engine.hex.r + Math.round(Math.sin(angle) * 3)
+        );
+        if (window.getEntityAtHex(hex.q, hex.r) || window.getTerrainAt(hex.q, hex.r).impassable) return;
+        const escort = window.createMonster(type, hex, null, null, 'enemy');
+        escort.aiState = 'idle';
+        window.entities.push(escort);
+    });
+
+    window.showMessage("You break from the fort and sprint for the siege engine — the escort turns to meet you!");
+    window.drawMap();
+    window.renderEntities();
+    if (window.updateTurnIndicator) window.updateTurnIndicator();
+}
+window.startNorthwatchSally = startNorthwatchSally;
+
+// The greenskin-side mirror of startNorthwatchSally: instead of flipping
+// the ambient siege engine/escorts hostile to the player, this flips them
+// to side:'neutral' with factionTag 'greenskin_assault' and the same
+// combatDirective shape Northwatch's own soldiers use (hostileTo the human
+// garrison, hostileToPlayer false until an unforgivable act) — the player
+// can walk among them, fight alongside them against the humans, and isn't
+// attacked by them. This is what makes the "destroy their siege equipment/
+// leader" unforgivable act (checkCombatEnd's border_war branch) and the
+// generalized attack-trigger (tryAttack, gameEngine.js) actually live,
+// rather than inert, for this path. Triggered by Chief Skarnub's
+// greenskin_spy quest offer.
+function joinGreenskinAssault() {
+    const engine = window.campaign2NorthwatchSiegeEngine;
+    if (!engine || !engine.alive) return;
+    if (window.activateNorthwatchSiege) window.activateNorthwatchSiege();
+
+    const region = window.campaign2NorthwatchFortRegion;
+    const fortInterior = region
+        ? new Set([...region.floorHexes, ...region.wallHexes].map(h => `${h.q},${h.r}`))
+        : new Set();
+    const assaultDirective = () => ({
+        hostileTo: 'northwatch_human',
+        priorities: [{ type: 'insideRegion', hexes: fortInterior }],
+    });
+
+    engine.side = 'neutral';
+    engine.factionTag = 'greenskin_assault';
+    engine.noAttack = false;
+    engine.isNPC = false;
+    engine.aiState = 'idle';
+    engine.combatDirective = assaultDirective();
+
+    // The catapult and its crew/guards (buildNorthwatchFort) are already
+    // tagged factionTag: 'greenskin_assault' from world-build — they're the
+    // same warband, just built side:'enemy' by default since most players
+    // never join them. Flip every one of them here too, not just the engine
+    // + newly-spawned escorts below, so the whole tagged warband actually
+    // becomes the player's non-hostile ally, symmetric with how attacking
+    // any one of them (checkGreenskinAssaultBetrayal) turns the whole tag
+    // hostile as a single unit.
+    window.entities.forEach(e => {
+        if (e.alive && e.factionTag === 'greenskin_assault' && e !== engine) {
+            e.side = 'neutral';
+            e.aiState = 'idle';
+            e.combatDirective = assaultDirective();
+        }
+    });
+
+    const escortTypes = window.campaign2SiegeEscortTypes || ['orc', 'orc', 'goblin', 'goblin'];
+    escortTypes.forEach((type, i) => {
+        const angle = (i / escortTypes.length) * Math.PI * 2;
+        const hex = window.hexRound(
+            engine.hex.q + Math.round(Math.cos(angle) * 3),
+            engine.hex.r + Math.round(Math.sin(angle) * 3)
+        );
+        if (window.getEntityAtHex(hex.q, hex.r) || window.getTerrainAt(hex.q, hex.r).impassable) return;
+        const escort = window.createMonster(type, hex, null, null, 'neutral');
+        escort.aiState = 'idle';
+        escort.factionTag = 'greenskin_assault';
+        escort.combatDirective = assaultDirective();
+        window.entities.push(escort);
+    });
+
+    window.playerAidingGreenskins = true;
+    window.showMessage("You fall in beside the warband — for now, they take you as one of their own.");
+    window.drawMap();
+    window.renderEntities();
+    if (window.updateTurnIndicator) window.updateTurnIndicator();
+}
+window.joinGreenskinAssault = joinGreenskinAssault;
+
+// THE REAL ASSAULT: until the catapult is spent (fired out or destroyed),
+// the besieging force does nothing but wait — no wandering, no probing, no
+// combat, regardless of which path the player took (matches the original
+// design: "this goes on until the catapult is destroyed, at which point the
+// greenskins go on their normal AI of attacking the castle"). The moment
+// it's gone, this spawns the real wave and flips real turn-based combat on.
+// Guarded by window.greenskinWaveSpawned (reset false per fort at world-gen,
+// campaign2World.js) so it only ever fires once regardless of how many
+// separate call sites notice the catapult is gone (the passive real-time
+// tick when the player never engages, and the turn-based GREENSKIN HOLD
+// check when they do) — see both call sites in gameEngine.js.
+function spawnGreenskinAssaultWave() {
+    if (window.greenskinWaveSpawned) return;
+    window.greenskinWaveSpawned = true;
+    const center = window.campaign2NorthwatchCenter;
+    if (!center) return;
+    const gateHex = window.campaign2NorthwatchGateHex || center;
+    if (window.spawnBrotherAlden) window.spawnBrotherAlden();
+    const attackerCount = 45;
+    const spawnRadius = 30;
+    for (let i = 0; i < attackerCount; i++) {
+        const type = i % 2 === 0 ? 'orc' : 'goblin';
+        const angle = (i / attackerCount) * Math.PI * 2;
+        const hex = window.hexRound(center.q + Math.cos(angle) * spawnRadius, center.r + Math.sin(angle) * spawnRadius);
+        if (window.getTerrainAt(hex.q, hex.r).impassable) continue;
+        const ent = window.createMonster(type, hex, null, null, 'enemy');
+        if (!ent) continue;
+        ent.name = `${ent.name} ${i + 1}`;
+        ent.factionTag = 'greenskin_assault';
+        // hostileTo: 'neutral' matches the catapult's own guards
+        // (campaign2World.js) — Northwatch's garrison is side:'neutral',
+        // hostileTo:'enemy'. siegeObjective gives an attacker with no
+        // memory of any defender yet somewhere real to head toward instead
+        // of idling (resolveNoVisibleTargetAI, gameEngine.js).
+        ent.combatDirective = { hostileTo: 'neutral', siegeObjective: { hex: gateHex } };
+        ent.aiControlled = true;
+        ent.aiState = 'combat';
+        ent.timePoints = 100 + Math.random() * 0.9;
+        window.entities.push(ent);
+    }
+
+    // BATTERING RAM + REAR SAPPER now spawn later and further out (see
+    // spawnBatteringRamAndSapper below), once wave 1 has been fighting a
+    // while — not at the same instant as the very first wave, right on
+    // top of the wall.
+    window.greenskinRamSapperSpawned = false;
+    window.greenskinWaveTurnsSinceSpawn = 0;
+
+    window.greenskinAssaultTriggered = true;
+    // COMBAT ONSET: this is a real, sudden scripted fight starting, not a
+    // gradual wander-into-view — everyone actually present (the player
+    // party, the garrison, the wave itself) needs the same "fight just
+    // started" reset wakeUp()'s own firstAlert transition already does for
+    // a normal two-sided encounter, widened to all three sides since this
+    // isn't a simple player-vs-enemy pairing. Without this, the player
+    // party kept whatever leftover (possibly negative) TP real-time
+    // exploration had left them at, instead of starting the fight at 100
+    // like everyone else, and stayed rendered mid-lerp between hexes if
+    // the wave triggered while they were still walking (snapVisuals below
+    // — same as "let any in-progress step finish, then hold" since hex
+    // itself already updated the instant the step began; only the visual
+    // interpolation lagged).
+    window.entities.forEach(e => {
+        if (!e.alive) return;
+        if (e.side === 'player' || e.side === 'neutral' || e.side === 'enemy') {
+            e.timePoints = 100;
+            e.destination = null;
+            e.moveCooldown = 0;
+        }
+        // Northwatch's whole garrison is built via buildNPC (npcBuilder.js),
+        // which always sets isNPC:true — fine for a dialogue-only NPC, but
+        // updateTurnIndicator (ui.js) excludes anyone with isNPC set, so the
+        // defenders never appeared in the initiative tracker even while
+        // actively fighting for their lives. Clear it the instant the real
+        // assault begins, same convention already used everywhere else a
+        // placed NPC becomes a genuine combatant (e.g. startNorthwatchSally's
+        // siege engine).
+        if (e.factionTag === 'northwatch_human') e.isNPC = false;
+    });
+    if (window.deconflictPartyStacking) window.deconflictPartyStacking();
+    if (window.snapVisuals) window.snapVisuals();
+    window.isInCombat = true; // the wave arriving is what starts real turn-based scheduling
+    window.showMessage('Horns sound in the distance — the greenskin host surges toward the walls!');
+    if (window.drawMap) window.drawMap();
+    if (window.renderEntities) window.renderEntities();
+    if (window.updateTurnIndicator) window.updateTurnIndicator();
+}
+window.spawnGreenskinAssaultWave = spawnGreenskinAssaultWave;
+
+// BATTERING RAM + REAR SAPPER: deliberately spawn later than wave 1 (see
+// window.greenskinWaveTurnsSinceSpawn, incremented once per wave-1 turn in
+// aiProcess's isBatteringRam/isSiegeSapper block, gameEngine.js) and well
+// outside the wall — same spawnRadius as wave 1 itself, marching in behind
+// it under the same combatDirective.siegeObjective movement every other
+// attacker already uses, rather than popping into existence already
+// standing at the gate. They only flip into their scripted battering
+// behavior once they've actually closed the distance (see the "arrived"
+// check in aiProcess).
+function spawnBatteringRamAndSapper() {
+    if (window.greenskinRamSapperSpawned) return;
+    window.greenskinRamSapperSpawned = true;
+    const center = window.campaign2NorthwatchCenter;
+    const gateHex = window.campaign2NorthwatchGateHex || center;
+    const region = window.campaign2NorthwatchFortRegion;
+    if (!center || !region?.wallHexes?.length) return;
+    const spawnRadius = 30;
+
+    const ramAngle = Math.PI / 2; // due south, same side as the gate
+    const ramHex = window.hexRound(center.q + Math.cos(ramAngle) * spawnRadius, center.r + Math.sin(ramAngle) * spawnRadius);
+    const ram = window.createMonster('siege_engine', ramHex, null, null, 'enemy');
+    if (ram) {
+        ram.name = 'Battering Ram';
+        ram.isBatteringRam = true;
+        ram.roundsRemaining = 5;
+        ram.hp = 60; ram.maxHp = 60; ram.canLoot = false;
+        ram.customImage = 'battering_ram';
+        ram.factionTag = 'greenskin_assault';
+        ram.combatDirective = { hostileTo: 'neutral', siegeObjective: { hex: gateHex } };
+        ram.aiControlled = true;
+        ram.aiState = 'combat';
+        ram.timePoints = 100;
+        window.entities.push(ram);
+        window.campaign2NorthwatchRam = ram;
+    }
+
+    // Rear wall: the wall hex furthest from the gate.
+    let rearHex = region.wallHexes[0];
+    let rearDist = window.distance(gateHex, rearHex);
+    region.wallHexes.forEach(h => {
+        const d = window.distance(gateHex, h);
+        if (d > rearDist) { rearDist = d; rearHex = h; }
+    });
+    const rearAngle = Math.atan2(rearHex.r - center.r, rearHex.q - center.q);
+    const sapperHex = window.hexRound(center.q + Math.cos(rearAngle) * spawnRadius, center.r + Math.sin(rearAngle) * spawnRadius);
+    const sapper = window.createMonster('goblin', sapperHex, null, null, 'enemy');
+    if (sapper) {
+        sapper.name = 'Sapper';
+        sapper.isSiegeSapper = true;
+        sapper.siegeTargetHex = { ...rearHex };
+        sapper.roundsRemaining = 5;
+        sapper.factionTag = 'greenskin_assault';
+        sapper.combatDirective = { hostileTo: 'neutral', siegeObjective: { hex: rearHex } };
+        sapper.aiControlled = true;
+        sapper.aiState = 'combat';
+        sapper.timePoints = 100;
+        window.entities.push(sapper);
+        window.campaign2NorthwatchSapper = sapper;
+    }
+
+    window.showMessage('A battering ram rolls into view, goblins hauling it toward the gate!');
+    if (window.drawMap) window.drawMap();
+    if (window.renderEntities) window.renderEntities();
+}
+window.spawnBatteringRamAndSapper = spawnBatteringRamAndSapper;
+
+// SECOND WAVE: once the ram and sapper have both run their course (breached
+// through, or been killed by defenders who weren't distracted enough — see
+// the isBatteringRam/isSiegeSapper aiProcess blocks in gameEngine.js, which
+// call this the instant the second of the two resolves), a real second
+// assault pours through whatever's actually open — the gate if the ram
+// broke it, the rear wall if the sapper's charge went off, or just the
+// existing wall ring if neither succeeded and this is simply reinforcements
+// pressing the point the first wave already made.
+function spawnSecondGreenskinWave() {
+    if (window.greenskinSecondWaveSpawned) return;
+    window.greenskinSecondWaveSpawned = true;
+    const center = window.campaign2NorthwatchCenter;
+    if (!center) return;
+    const gateHex = window.campaign2NorthwatchGateHex || center;
+    const attackerCount = 35;
+    const spawnRadius = 30;
+    for (let i = 0; i < attackerCount; i++) {
+        const type = i % 2 === 0 ? 'orc' : 'goblin';
+        const angle = (i / attackerCount) * Math.PI * 2;
+        const hex = window.hexRound(center.q + Math.cos(angle) * spawnRadius, center.r + Math.sin(angle) * spawnRadius);
+        if (window.getTerrainAt(hex.q, hex.r).impassable) continue;
+        const ent = window.createMonster(type, hex, null, null, 'enemy');
+        if (!ent) continue;
+        ent.name = `${ent.name} II-${i + 1}`;
+        ent.factionTag = 'greenskin_assault';
+        ent.combatDirective = { hostileTo: 'neutral', siegeObjective: { hex: gateHex } };
+        ent.aiControlled = true;
+        ent.aiState = 'combat';
+        ent.timePoints = 100 + Math.random() * 0.9;
+        window.entities.push(ent);
+    }
+    window.showMessage('A second horn call — the real assault begins!');
+    if (window.drawMap) window.drawMap();
+    if (window.renderEntities) window.renderEntities();
+}
+window.spawnSecondGreenskinWave = spawnSecondGreenskinWave;
+
+// THIRD WAVE: same shape as spawnSecondGreenskinWave, triggered once wave 2
+// is entirely wiped out (see the kill-hook in handleLethalDamage,
+// gameEngine.js) — the first two waves weren't enough to take the fort by
+// themselves, so a final, larger push presses whatever ground was already
+// won.
+function spawnThirdGreenskinWave() {
+    if (window.greenskinThirdWaveSpawned) return;
+    window.greenskinThirdWaveSpawned = true;
+    const center = window.campaign2NorthwatchCenter;
+    if (!center) return;
+    const gateHex = window.campaign2NorthwatchGateHex || center;
+    const attackerCount = 40;
+    const spawnRadius = 30;
+    for (let i = 0; i < attackerCount; i++) {
+        const type = i % 2 === 0 ? 'orc' : 'goblin';
+        const angle = (i / attackerCount) * Math.PI * 2;
+        const hex = window.hexRound(center.q + Math.cos(angle) * spawnRadius, center.r + Math.sin(angle) * spawnRadius);
+        if (window.getTerrainAt(hex.q, hex.r).impassable) continue;
+        const ent = window.createMonster(type, hex, null, null, 'enemy');
+        if (!ent) continue;
+        ent.name = `${ent.name} III-${i + 1}`;
+        ent.factionTag = 'greenskin_assault';
+        ent.combatDirective = { hostileTo: 'neutral', siegeObjective: { hex: gateHex } };
+        ent.aiControlled = true;
+        ent.aiState = 'combat';
+        ent.timePoints = 100 + Math.random() * 0.9;
+        window.entities.push(ent);
+    }
+    window.showMessage('A third horn call sounds — the greenskins throw everything they have left at the walls!');
+    if (window.drawMap) window.drawMap();
+    if (window.renderEntities) window.renderEntities();
+}
+window.spawnThirdGreenskinWave = spawnThirdGreenskinWave;
+
+// DEV/TEST CHEAT: reach all three border_war player-choice paths directly
+// from the Cheat menu, without playing through Voss/Hart's dialogue first —
+// teleports the party to Northwatch, makes sure the quest exists (so
+// checkCombatEnd's border_war branch has something to resolve), then
+// triggers the chosen path with the same functions the real dialogue
+// options call. 'stay' has no dedicated trigger of its own: it just
+// activates the siege's abstracted pressure simulation (activateNorthwatchSiege)
+// without flipping the catapult hostile or spawning escorts — the catapult's
+// own turn-based firing (isCatapult, aiProcess) only ever gets scheduled
+// once window.isInCombat is true, which currently requires the player to
+// actually engage someone, so a genuinely passive player won't see it fire;
+// the siegeState pressure tick is what actually progresses in that case.
+function cheatTestNorthwatchSiege(mode) {
+    if (window.teleportPartyToLocation) window.teleportPartyToLocation('Northwatch Fort');
+    if (!window.questLog) window.questLog = [];
+    let quest = window.questLog.find(q => q.id === 'border_war');
+    if (!quest) {
+        quest = {
+            id: 'border_war', title: 'The Northwatch Line', giver: 'Commander Ysolde Hart',
+            status: 'active', description: 'Destroy the siege engine battering Northwatch\'s wall.',
+            resolution: null
+        };
+        window.questLog.push(quest);
+    }
+    if (mode === 'sally') {
+        window.startNorthwatchSally();
+        window.showMessage('Cheat: Northwatch siege triggered — sally path (destroy the catapult yourself).');
+    } else if (mode === 'join') {
+        window.joinGreenskinAssault();
+        window.showMessage('Cheat: Northwatch siege triggered — joined the greenskin assault.');
+    } else {
+        if (window.activateNorthwatchSiege) window.activateNorthwatchSiege();
+        window.showMessage('Cheat: Northwatch siege triggered — staying passive in the fort (watch the siege pressure, not a literal catapult volley).');
+    }
+}
+window.cheatTestNorthwatchSiege = cheatTestNorthwatchSiege;
+
+// --- Companion attitude (BG3-style approval): a 0-100 meter per companion
+// name, moved by tagged actions and shown to the player as a toast message
+// every time it changes. Currently only Ser Aldric uses it, but the
+// mechanism is generic. ---
+window.companionAttitude = window.companionAttitude || {};
+
+function adjustCompanionAttitude(name, delta, reason) {
+    if (window.companionAttitude[name] === undefined) window.companionAttitude[name] = 50;
+    window.companionAttitude[name] = Math.max(0, Math.min(100, window.companionAttitude[name] + delta));
+    if (delta > 0) window.showMessage(`${name} approves. (${reason})`);
+    else if (delta < 0) window.showMessage(`${name} disapproves. (${reason})`);
+    if (window.companionAttitude[name] <= 0 && window.party.some(p => p.name === name)) {
+        window.handleCompanionDeparture(name);
+    }
+}
+window.adjustCompanionAttitude = adjustCompanionAttitude;
+
+function handleCompanionDeparture(name) {
+    window.party = window.party.filter(p => p.name !== name);
+    window.entities = window.entities.filter(e => e.name !== name);
+    window.showMessage(`${name} has left your party.`);
+    if (window.updatePartyTabs) window.updatePartyTabs();
+}
+window.handleCompanionDeparture = handleCompanionDeparture;
+
+// The lich-path fallout: everyone but Wren Talbot walks away the moment
+// you actually commit to lichdom (window.playerIsLich, set from either
+// readLichPhylacteryCoreNote's "bind it to yourself" or parleyWithEnemy's
+// "join you" against Ashgrave). Wren doesn't leave — she's the one
+// exception, and instead of departing she becomes a vampire, so a lich
+// playthrough isn't left with an empty party. Runs once (lichFalloutTriggered
+// guard) since either commitment path could otherwise fire it twice.
+function triggerLichCompanionFallout() {
+    if (window.lichFalloutTriggered) return;
+    window.lichFalloutTriggered = true;
+
+    const departing = window.party.slice(1).filter(p => p.name !== 'Wren Talbot');
+    departing.forEach(p => {
+        window.showMessage(`${p.name} looks at you like they've never seen you before. "I didn't sign up for this," they say, and mean it.`);
+        window.handleCompanionDeparture(p.name);
+    });
+
+    const wren = window.party.find(p => p.name === 'Wren Talbot');
+    if (wren) {
+        wren.isVampire = true;
+        wren.skills = wren.skills || {};
+        wren.skills.life_drain = (wren.skills.life_drain || 0) + 2;
+        const wrenEntity = window.entities.find(e => e.name === 'Wren Talbot');
+        if (wrenEntity) {
+            wrenEntity.isVampire = true;
+            wrenEntity.lifeDrainOnMeleeHit = (wrenEntity.lifeDrainOnMeleeHit || 0) + 4;
+        }
+        window.showMessage("\"Well,\" Wren says, studying her own too-sharp teeth in a puddle's reflection, \"I suppose someone has to keep you company. Guess I'm not getting any older from here.\" (Wren Talbot has become a vampire.)");
+    }
+}
+window.triggerLichCompanionFallout = triggerLichCompanionFallout;
+
+// Very slow attitude decay while the goblin problem sits unresolved and
+// Ser Aldric has already joined — "leaving due to inaction should be very
+// slow," not a hard timer. Checked from worldTime.js's tick.
+function tickCompanionPatience(deltaSeconds) {
+    const name = window.campaign2Paladin?.name;
+    if (!name || !window.party.some(p => p.name === name)) return;
+    const quest = (window.questLog || []).find(q => q.id === 'goblin_threat');
+    // Ceases entirely (not just slows) once the goblin problem has been
+    // dealt with — including "dealt with but the conversation to formalize
+    // it hasn't happened yet" (chiefAssassinated, pending Nix's succession
+    // dialogue). This isn't a deficit that needs to be earned back with
+    // other approval gains; it just stops.
+    if (!quest || quest.resolution || quest.chiefAssassinated) return;
+    const days = deltaSeconds / (24 * 3600);
+    const before = window.companionAttitude[name] ?? 50;
+    window.companionAttitude[name] = Math.max(0, before - 0.15 * days); // ~1 point per ~7 in-game days
+    if (window.companionAttitude[name] <= 0 && before > 0) {
+        window.handleCompanionDeparture(name);
+        window.showMessage(`${name} has run out of patience and left to deal with the goblins alone.`);
+    }
+}
+window.tickCompanionPatience = tickCompanionPatience;
+
+// A goblin player's mirror of the diplomacy/alliance resolutions a human
+// player can reach with the tribe (see marta_wynfield/chief_skarnub above) —
+// reporting on your own chief is a real betrayal, so it costs standing with
+// the tribe (and, via adjustReputation's cascade, a smaller hit with
+// orc_raiders too), not a free pass.
+function resolveGoblinSpyForHumans() {
+    if (!window.questLog) window.questLog = [];
+    const quest = window.questLog.find(q => q.id === 'goblin_spy_for_humans');
+    if (!quest || quest.status === 'completed') return;
+    quest.status = 'completed';
+    window.goblinVouchedByMarta = true;
+    window.adjustReputation(window.factions.silverhart_kingdom, 20, 20);
+    // Betraying your own kind's plans costs standing with whichever
+    // greenskin faction is actually yours — orc for an orc player, goblin
+    // for a goblin player (adjustReputation's own cascade then bleeds a
+    // dampened fraction of a goblin hit onto orc_raiders too either way).
+    const ownFaction = (window.isPlayerOrc && window.isPlayerOrc()) ? window.factions.orc_raiders : window.factions.goblin_tribe;
+    window.adjustReputation(ownFaction, -15, 15);
+    if (window.gainExp) window.gainExp(150);
+    window.showMessage('Elder Marta nods slowly. "Begrudgingly... you\'ve earned a little trust. Don\'t make me regret it." Quest complete: Prove Your Worth.');
+}
+window.resolveGoblinSpyForHumans = resolveGoblinSpyForHumans;
+
+// Converts the tied-up captive entity into a real party member — the
+// physical rescue, available any time the player reaches him (independent
+// of which resolution path, if any, is chosen for the tribe as a whole).
+function rescuePaladin() {
+    const name = window.campaign2Paladin.name;
+    if (window.party.some(p => p.name === name)) return; // already rescued
+    const captiveEnt = window.entities.find(e => e.name === name && e.tiedUp);
+    if (!captiveEnt) return;
+
+    const companion = window.createCharacterData('human', 'fighter', name, window.campaign2Paladin.gender, window.campaign2Paladin.voice);
+    const clericBonus = window.classData.cleric.bonus; // fold in the cleric class-level too (fighter + cleric)
+    for (const k in clericBonus) companion.attributes[k] = (companion.attributes[k] || 0) + clericBonus[k];
+
+    ['health', 'sword_hit', 'sword_dmg', 'sword_parry', 'learn_heal'].forEach(skillKey => {
+        const skill = window.skills[skillKey];
+        if (!skill) return;
+        if (companion.attributes[skill.tree] > 0) companion.attributes[skill.tree]--;
+        else if (companion.attributes.wildcard > 0) companion.attributes.wildcard--;
+        companion.skills[skillKey] = (companion.skills[skillKey] || 0) + 1;
+    });
+    if (companion.skills.health) {
+        const bonus = 10 * companion.skills.health;
+        companion.hp += bonus; companion.maxHp += bonus;
+    }
+    companion.inventory.push('wooden_shield');
+    companion.equipped.offhand = 'wooden_shield';
+    companion.dialogueId = 'companion_ser_aldric';
+
+    window.party.push(companion);
+    if (window.wireSharedInventory) window.wireSharedInventory(companion);
+    const ent = new window.Entity(companion.name, 'red', captiveEnt.hex, (companion.attributes.agility || 10) + 10);
+    ent.side = 'player';
+    Object.assign(ent, companion);
+    ent.hex = captiveEnt.hex;
+    ent.visualQ = ent.hex.q; ent.visualR = ent.hex.r;
+    ent.startQ = ent.hex.q; ent.startR = ent.hex.r;
+    ent.destination = null; ent.moveCooldown = 0;
+
+    window.entities = window.entities.filter(e => e !== captiveEnt);
+    window.entities.push(ent);
+
+    window.companionAttitude[name] = 60; // grateful, but still watching how this plays out
+    if (window.updatePartyTabs) window.updatePartyTabs();
+    window.showMessage(`${name} joins your party, freed at last.`);
+    window.drawMap();
+    window.renderEntities();
+}
+window.rescuePaladin = rescuePaladin;
+
+// Nix Sharpear: only offered once the goblin_threat quest resolves as
+// goblin_alliance (see chief_skarnub/nix_sharpear above) — the tribe's own
+// scout joining the player rather than a rescue, so this builds off
+// createCharacterData's 'goblin' race path directly (goblin is a real
+// playable race, unlike the elite_goblin monster template Nix spawned from)
+// instead of buildGoblinNPC/createMonster.
+function recruitGoblinCompanion() {
+    const name = window.campaign2GoblinLieutenant.name;
+    if (window.party.some(p => p.name === name)) return; // already joined
+    const nixEnt = window.entities.find(e => e.name === name);
+    if (!nixEnt) return;
+
+    const companion = window.createCharacterData('goblin', 'rogue', name, 'male', window.campaign2GoblinLieutenant.voice);
+    ['dagger_hit', 'dagger_dmg', 'stealth_rogue', 'stealth_agility'].forEach(skillKey => {
+        const skill = window.skills[skillKey];
+        if (!skill) return;
+        if (companion.attributes[skill.tree] > 0) companion.attributes[skill.tree]--;
+        else if (companion.attributes.wildcard > 0) companion.attributes.wildcard--;
+        companion.skills[skillKey] = (companion.skills[skillKey] || 0) + 1;
+    });
+    if (companion.skills.health) {
+        const bonus = 10 * companion.skills.health;
+        companion.hp += bonus; companion.maxHp += bonus;
+    }
+    companion.inventory.push('dagger', 'light_armor');
+    companion.equipped.weapon = 'dagger';
+    companion.equipped.armor = 'light_armor';
+    companion.factionId = 'goblin_tribe';
+    companion.dialogueId = 'companion_nix_sharpear';
+
+    window.party.push(companion);
+    if (window.wireSharedInventory) window.wireSharedInventory(companion);
+    const ent = new window.Entity(companion.name, '#5a7a3a', nixEnt.hex, (companion.attributes.agility || 10) + 10);
+    ent.side = 'player';
+    Object.assign(ent, companion);
+    ent.hex = nixEnt.hex;
+    ent.visualQ = ent.hex.q; ent.visualR = ent.hex.r;
+    ent.startQ = ent.hex.q; ent.startR = ent.hex.r;
+    ent.destination = null; ent.moveCooldown = 0;
+
+    window.entities = window.entities.filter(e => e !== nixEnt);
+    window.entities.push(ent);
+
+    window.companionAttitude[name] = 60;
+    if (window.updatePartyTabs) window.updatePartyTabs();
+    window.showMessage(`${name} joins your party, glad to be off road-watch.`);
+    window.drawMap();
+    window.renderEntities();
+}
+window.recruitGoblinCompanion = recruitGoblinCompanion;
+
+// Warlord Grukk Ironhide: the orc mirror of recruitGoblinCompanion — only
+// offered once orc_raiders' standing clears a high bar (see orc_warlord
+// above), built through createCharacterData's 'orc' race path the same way
+// (orc is a real playable race, unlike the plain 'orc' monster template he
+// spawned from).
+function recruitOrcCompanion() {
+    const name = window.campaign2OrcWarlord.name;
+    if (window.party.some(p => p.name === name)) return; // already joined
+    const warlordEnt = window.entities.find(e => e.name === name);
+    if (!warlordEnt) return;
+
+    const companion = window.createCharacterData('orc', 'fighter', name, 'male', window.campaign2OrcWarlord.voice);
+    ['axe_hit', 'axe_dmg', 'heavy_armor_training', 'orc_brute_strength'].forEach(skillKey => {
+        const skill = window.skills[skillKey];
+        if (!skill) return;
+        if (companion.attributes[skill.tree] > 0) companion.attributes[skill.tree]--;
+        else if (companion.attributes.wildcard > 0) companion.attributes.wildcard--;
+        companion.skills[skillKey] = (companion.skills[skillKey] || 0) + 1;
+    });
+    if (companion.skills.health) {
+        const bonus = 10 * companion.skills.health;
+        companion.hp += bonus; companion.maxHp += bonus;
+    }
+    companion.inventory.push('axe', 'heavy_armor');
+    companion.equipped.weapon = 'axe';
+    companion.equipped.armor = 'heavy_armor';
+    companion.factionId = 'orc_raiders';
+    companion.dialogueId = 'companion_orc_warlord';
+
+    window.party.push(companion);
+    if (window.wireSharedInventory) window.wireSharedInventory(companion);
+    const ent = new window.Entity(companion.name, '#7a3a1f', warlordEnt.hex, (companion.attributes.agility || 10) + 10);
+    ent.side = 'player';
+    Object.assign(ent, companion);
+    ent.hex = warlordEnt.hex;
+    ent.visualQ = ent.hex.q; ent.visualR = ent.hex.r;
+    ent.startQ = ent.hex.q; ent.startR = ent.hex.r;
+    ent.destination = null; ent.moveCooldown = 0;
+
+    window.entities = window.entities.filter(e => e !== warlordEnt);
+    window.entities.push(ent);
+
+    window.companionAttitude[name] = 60;
+    if (window.updatePartyTabs) window.updatePartyTabs();
+    window.showMessage(`${name} joins your party, glad to be off garrison duty.`);
+    window.drawMap();
+    window.renderEntities();
+}
+window.recruitOrcCompanion = recruitOrcCompanion;
+
+// --- Star Fort companion reward: whichever side the player ends up on when
+// the Northwatch siege resolves (win or lose — see resolveNorthwatchSiege in
+// gameEngine.js), that side sends someone to fight alongside the player from
+// then on. ---
+function grantStarFortCompanion(side) {
+    const spawnHex = window.campaign2NorthwatchGateHex || (window.party[0] ? window.entities.find(e => e.side === 'player')?.hex : null);
+    if (!spawnHex) return;
+
+    let name, race, cls, gender, customImage;
+    if (side === 'greenskin') {
+        name = 'Snik Fangtooth'; race = 'goblin'; cls = 'rogue'; gender = 'male'; customImage = 'goblin';
+    } else {
+        name = 'Brother Alden'; race = 'human'; cls = 'monk'; gender = 'male'; customImage = null;
+    }
+    if (window.party.some(p => p.name === name)) return; // already granted
+
+    const companion = window.createCharacterData(race, cls, name, gender, 'pc_1');
+    if (customImage) companion.customImage = customImage;
+
+    window.party.push(companion);
+    if (window.wireSharedInventory) window.wireSharedInventory(companion);
+    const ent = new window.Entity(companion.name, 'red', spawnHex, (companion.attributes.agility || 10) + 10);
+    ent.side = 'player';
+    Object.assign(ent, companion);
+    ent.hex = spawnHex;
+    ent.visualQ = ent.hex.q; ent.visualR = ent.hex.r;
+    ent.startQ = ent.hex.q; ent.startR = ent.hex.r;
+    ent.destination = null; ent.moveCooldown = 0;
+
+    window.entities.push(ent);
+    window.companionAttitude[name] = 60;
+    if (window.updatePartyTabs) window.updatePartyTabs();
+    window.showMessage(`${name} joins your party.`);
+    window.drawMap();
+    window.renderEntities();
+}
+window.grantStarFortCompanion = grantStarFortCompanion;
+
+// BROTHER ALDEN: fights in the compound during the real Northwatch assault
+// (spawned once wave 1 triggers, see spawnGreenskinAssaultWave above)
+// instead of being granted out of nowhere once the siege resolved.
+// Constrained to the keep interior/hexagon gaps alongside the commander
+// and the 6 hexagon-point archers, level-matched to the party via the same
+// applyClassLevelScaling the arena's humanoid roster already uses. If he
+// dies in the fight, resolveNorthwatchSiege (gameEngine.js) simply never
+// sets offersToJoin — no separate death handling needed, e.alive already
+// covers it, and the join dialogue (npcDialogueTrees.brother_alden below)
+// only ever fires for a survivor.
+function spawnBrotherAlden() {
+    if (window.entities.some(e => e.name === 'Brother Alden')) return;
+    const keepRegion = window.campaign2NorthwatchKeepRegion;
+    const center = window.campaign2NorthwatchCenter;
+    if (!center) return;
+    const spawnHex = keepRegion?.floorHexes?.[0] || { q: center.q, r: center.r + 1 };
+
+    const data = window.createCharacterData('human', 'monk', 'Brother Alden', 'male', 'pc_1');
+    const ent = new window.Entity(data.name, 'red', spawnHex, (data.attributes.agility || 10) + 10);
+    Object.assign(ent, data);
+    ent.hex = { ...spawnHex };
+    ent.visualQ = ent.hex.q; ent.visualR = ent.hex.r;
+    ent.startQ = ent.hex.q; ent.startR = ent.hex.r;
+    ent.destination = null; ent.moveCooldown = 0;
+    ent.side = 'neutral';
+    ent.factionTag = 'northwatch_human';
+    // false, not true: he's a real fight participant, not a dialogue-only
+    // NPC — updateTurnIndicator (ui.js) excludes anyone with isNPC set, same
+    // convention already used everywhere else a placed NPC becomes an
+    // actual combatant (e.g. startNorthwatchSally's siege engine, above).
+    ent.isNPC = false;
+    ent.aiState = 'idle';
+    ent.aiControlled = true;
+    ent.timePoints = 100;
+    ent.dialogueId = 'brother_alden';
+
+    if (window.party?.length) {
+        let avgPartyLevel = window.party.reduce((sum, c) => sum + c.level, 0) / window.party.length;
+        const bonusLevels = Math.max(0, Math.round(avgPartyLevel) - 1);
+        if (window.applyClassLevelScaling) window.applyClassLevelScaling(ent, bonusLevels);
+    }
+
+    const keepFloorAndGaps = keepRegion
+        ? new Set([...keepRegion.floorHexes, ...keepRegion.gapHexes].map(h => `${h.q},${h.r}`))
+        : new Set();
+    ent.combatDirective = {
+        hostileTo: 'enemy',
+        outnumberWeight: 2,
+        constraints: { stayWithinHexes: keepFloorAndGaps },
+        priorities: [{ type: 'insideRegion', hexes: keepFloorAndGaps }],
+    };
+
+    window.entities.push(ent);
+    if (window.drawMap) window.drawMap();
+    if (window.renderEntities) window.renderEntities();
+}
+window.spawnBrotherAlden = spawnBrotherAlden;
+
+window.npcDialogueTrees.brother_alden = (npc) => {
+    if (!npc.offersToJoin) {
+        window.showDialogue(npc, "Brother Alden gives you a brief nod, still watching the walls. \"Questions can wait — help however you can.\"");
+        return;
+    }
+    if (window.party.some(p => p.name === 'Brother Alden')) {
+        window.showDialogue(npc, "\"Glad to be fighting alongside you now.\"");
+        return;
+    }
+    window.showDialogue(npc, "Brother Alden lowers his guard, breathing hard but very much alive. \"Brother Alden, of the Silverhart monastery — posted here to help hold the wall. And hold it we did, thanks to you. I've nowhere pressing to be, and I don't much fancy more garrison duty after this. Would you have me along?\"", [
+        { label: "Join us, Brother Alden.", action: () => {
+            const companion = window.createCharacterData(npc.race, npc.class, npc.name, npc.gender, 'pc_1');
+            Object.assign(companion, {
+                level: npc.level, exp: npc.exp, hp: npc.hp, maxHp: npc.maxHp,
+                skills: npc.skills, equipped: npc.equipped, inventory: npc.inventory,
+                attributes: npc.attributes, classLevelsGranted: npc.classLevelsGranted,
+            });
+            window.party.push(companion);
+    if (window.wireSharedInventory) window.wireSharedInventory(companion);
+            npc.side = 'player';
+            npc.isNPC = false;
+            npc.aiControlled = false;
+            delete npc.combatDirective;
+            window.companionAttitude[npc.name] = 60;
+            if (window.updatePartyTabs) window.updatePartyTabs();
+            window.showMessage(`${npc.name} joins your party.`);
+        }},
+        { label: "Not this time.", action: () => {
+            window.showMessage(`${npc.name} nods and stays behind to help rebuild the garrison.`);
+        }}
+    ]);
+};
+
+// Converts a placeholder Entity (placed by buildSideQuestContent,
+// campaign2World.js) into a real party member — same shape as
+// rescuePaladin/grantStarFortCompanion above, repeated per companion rather
+// than shared, since each one's skill/equipment build is genuinely
+// different rather than parameterizable in a way worth the abstraction.
+function recruitReyna() {
+    const name = window.campaign2ArcherCompanion.name;
+    if (window.party.some(p => p.name === name)) return;
+    const placeholder = window.entities.find(e => e.name === name && e.isNPC);
+    if (!placeholder) return;
+
+    const companion = window.createCharacterData('human', 'fighter', name, 'female', 'pc_1');
+    ['health', 'bow_hit', 'bow_dmg', 'fastMovement'].forEach(skillKey => {
+        const skill = window.skills[skillKey];
+        if (!skill) return;
+        if (companion.attributes[skill.tree] > 0) companion.attributes[skill.tree]--;
+        else if (companion.attributes.wildcard > 0) companion.attributes.wildcard--;
+        companion.skills[skillKey] = (companion.skills[skillKey] || 0) + 1;
+    });
+    if (companion.skills.health) {
+        const bonus = 10 * companion.skills.health;
+        companion.hp += bonus; companion.maxHp += bonus;
+    }
+    companion.inventory.push('bow');
+    companion.equipped.weapon = 'bow';
+    finishRecruiting(companion, placeholder);
+}
+window.recruitReyna = recruitReyna;
+
+function recruitMirabel() {
+    const name = window.campaign2WizardCompanion.name;
+    if (window.party.some(p => p.name === name)) return;
+    const placeholder = window.entities.find(e => e.name === name && e.isNPC);
+    if (!placeholder) return;
+
+    const companion = window.createCharacterData('elf', 'wizard', name, 'female', 'pc_1');
+    ['health', 'arcane_mana', 'firebolt_hit', 'firebolt_dmg'].forEach(skillKey => {
+        const skill = window.skills[skillKey];
+        if (!skill) return;
+        if (companion.attributes[skill.tree] > 0) companion.attributes[skill.tree]--;
+        else if (companion.attributes.wildcard > 0) companion.attributes.wildcard--;
+        companion.skills[skillKey] = (companion.skills[skillKey] || 0) + 1;
+    });
+    if (companion.skills.health) {
+        const bonus = 10 * companion.skills.health;
+        companion.hp += bonus; companion.maxHp += bonus;
+    }
+    companion.createdSpells = [{ name: 'Firebolt', baseId: 'firebolt', school: 'arcane', type: 'damage', manaCost: 5, tpCost: 10, magnitude: 5, range: 8 }];
+    finishRecruiting(companion, placeholder);
+}
+window.recruitMirabel = recruitMirabel;
+
+function recruitFenn() {
+    const name = window.campaign2DruidCompanion.name;
+    if (window.party.some(p => p.name === name)) return;
+    const placeholder = window.entities.find(e => e.name === name && e.isNPC);
+    if (!placeholder) return;
+
+    const companion = window.createCharacterData('human', 'druid', name, 'male', 'pc_1');
+    ['health', 'barkskin_active', 'wild_shape_adaptation'].forEach(skillKey => {
+        const skill = window.skills[skillKey];
+        if (!skill) return;
+        if (companion.attributes[skill.tree] > 0) companion.attributes[skill.tree]--;
+        else if (companion.attributes.wildcard > 0) companion.attributes.wildcard--;
+        companion.skills[skillKey] = (companion.skills[skillKey] || 0) + 1;
+    });
+    if (companion.skills.health) {
+        const bonus = 10 * companion.skills.health;
+        companion.hp += bonus; companion.maxHp += bonus;
+    }
+    companion.inventory.push('club');
+    companion.equipped.weapon = 'club';
+    finishRecruiting(companion, placeholder);
+}
+window.recruitFenn = recruitFenn;
+
+// Shared tail end of recruitment: swap the placeholder Entity for a real
+// party-side one and register it everywhere the game expects a party member.
+function finishRecruiting(companion, placeholder) {
+    window.party.push(companion);
+    if (window.wireSharedInventory) window.wireSharedInventory(companion);
+    const ent = new window.Entity(companion.name, 'red', placeholder.hex, (companion.attributes.agility || 10) + 10);
+    ent.side = 'player';
+    Object.assign(ent, companion);
+    ent.hex = placeholder.hex;
+    ent.visualQ = ent.hex.q; ent.visualR = ent.hex.r;
+    ent.startQ = ent.hex.q; ent.startR = ent.hex.r;
+    ent.destination = null; ent.moveCooldown = 0;
+
+    window.entities = window.entities.filter(e => e !== placeholder);
+    window.entities.push(ent);
+    window.companionAttitude[companion.name] = 60;
+    if (window.updatePartyTabs) window.updatePartyTabs();
+    window.showMessage(`${companion.name} joins your party.`);
+    window.drawMap();
+    window.renderEntities();
+}
+window.finishRecruiting = finishRecruiting;
+
+// --- Goblin-reputation / diplomacy path: small favors for the chief raise
+// goblin_tribe standing (and cost the kingdom's), building toward a peaceful
+// departure once trust is high enough (see chief_skarnub's tree above). One
+// tier is a deliberate point of no return — helping the goblins move
+// against Hollowmere itself. ---
+function offerGoblinFavor(npc) {
+    const goblinRep = window.factions.goblin_tribe.standing;
+    const options = [
+        { label: "Scout the human village's patrols for you.", action: () => resolveGoblinFavor('scout') },
+        { label: "\"Borrow\" supplies from the farm to the south.", action: () => resolveGoblinFavor('steal') },
+        { label: "Help you raid the mining camp down the west road for its shinies.", action: () => resolveGoblinFavor('raid_mine') }
+    ];
+    if (goblinRep >= 25) {
+        options.push({ label: "Help you take the fight to Hollowmere itself.", action: () => resolveGoblinFavor('raid') });
+    }
+    options.push({ label: "Actually, never mind.", action: () => {} });
+    window.showDialogue(npc, "Plenty a human could do for us, if they've the stomach for it.", options);
+}
+window.offerGoblinFavor = offerGoblinFavor;
+
+function resolveGoblinFavor(kind) {
+    if (kind === 'scout') {
+        window.adjustReputation(window.factions.goblin_tribe, 10, 10);
+        window.adjustReputation(window.factions.silverhart_kingdom, -8, 10);
+        if (window.adjustRegionStat) window.adjustRegionStat('hollowmere', 'security', -4);
+        if (window.gainExp) window.gainExp(40);
+        if (window.adjustCompanionAttitude) window.adjustCompanionAttitude(window.campaign2Paladin.name, -8, "scouted your own people for the goblins");
+        window.showMessage("You pass word of Hollowmere's patrol routes to the goblins.");
+    } else if (kind === 'steal') {
+        window.adjustReputation(window.factions.goblin_tribe, 8, 10);
+        window.adjustReputation(window.factions.silverhart_kingdom, -5, 10);
+        if (window.adjustRegionStat) window.adjustRegionStat('hollowmere', 'prosperity', -5);
+        if (window.gainExp) window.gainExp(30);
+        if (window.adjustCompanionAttitude) window.adjustCompanionAttitude(window.campaign2Paladin.name, -5, "stole from decent folk to feed the goblins");
+        window.showMessage("You raid Old Mac's stores and bring the goods back to the tribe.");
+    } else if (kind === 'raid_mine') {
+        // Emberlode is right down the road from the camp — an obvious, much
+        // lower-stakes target than Hollowmere itself, but still a real
+        // betrayal of the people who live there. Marked distinctly from
+        // 'betrayal' (which is specifically the Hollowmere raid) so
+        // Emberlode's own dialogue can react to it without implying the
+        // player turned on the whole region.
+        window.adjustReputation(window.factions.goblin_tribe, 15, 15);
+        window.adjustReputation(window.factions.silverhart_kingdom, -15, 15);
+        if (window.adjustRegionStat) {
+            window.adjustRegionStat('emberlode', 'security', -20);
+            window.adjustRegionStat('emberlode', 'prosperity', -25);
+        }
+        window.emberlodeRaided = true;
+        if (window.party && window.party[0]) window.party[0].gold = (window.party[0].gold || 0) + 60;
+        if (window.gainExp) window.gainExp(50);
+        if (window.adjustCompanionAttitude) window.adjustCompanionAttitude(window.campaign2Paladin.name, -15, "helped goblins raid a mining camp for plunder");
+        window.showMessage("You lead a raiding party down the west road. Emberlode's strongbox and ore stores are picked clean before anyone can raise the alarm. (+60 gold)");
+    } else if (kind === 'raid') {
+        // The point of no return: helping the goblins move against
+        // Hollowmere itself. Severe on every axis.
+        window.adjustReputation(window.factions.goblin_tribe, 30, 20);
+        window.adjustReputation(window.factions.silverhart_kingdom, -60, 30);
+        if (window.adjustRegionStat) {
+            window.adjustRegionStat('hollowmere', 'security', -30);
+            window.adjustRegionStat('hollowmere', 'prosperity', -30);
+        }
+        if (!window.questLog) window.questLog = [];
+        let quest = window.questLog.find(q => q.id === 'goblin_threat');
+        if (!quest) { quest = { id: 'goblin_threat', title: 'The Skarn-tooth Tribe', giver: 'Elder Marta Wynfield', status: 'active', description: '' }; window.questLog.push(quest); }
+        quest.status = 'completed';
+        quest.resolution = 'betrayal';
+        const paladinName = window.campaign2Paladin.name;
+        window.companionAttitude[paladinName] = 0;
+        if (window.party.some(p => p.name === paladinName)) {
+            window.handleCompanionDeparture(paladinName);
+            window.showMessage(`${paladinName} looks at you with open contempt. "Then you're no better than they are." He leaves, and does not look back.`);
+        }
+        window.showMessage('You lead the goblins toward Hollowmere. Whatever happens next, there is no going back from this.');
+    }
+    window.drawMap();
+}
+window.resolveGoblinFavor = resolveGoblinFavor;
+
+// --- Assault resolution: watched from worldTime.js's tick rather than a
+// specific attack call site, so it fires regardless of exactly how the
+// chief died in open combat (spell, melee, ally kill, etc). ---
+function checkGoblinAssaultResolution() {
+    if (!window.questLog) return;
+    const quest = window.questLog.find(q => q.id === 'goblin_threat');
+    if (!quest || quest.resolution) return;
+    const chief = window.entities.find(e => e.name === 'Chief Skarnub');
+    if (!chief || chief.alive || chief.diedByAssassination) return; // assassination is handled by its own path
+
+    quest.status = 'completed';
+    quest.resolution = 'assault';
+    window.adjustReputation(window.factions.silverhart_kingdom, 20, 20);
+    window.adjustReputation(window.factions.goblin_tribe, -30, 20);
+    if (window.adjustRegionStat) window.adjustRegionStat('hollowmere', 'security', 15);
+    if (window.gainExp) window.gainExp(300);
+    window.rescuePaladin();
+    if (window.adjustCompanionAttitude) window.adjustCompanionAttitude(window.campaign2Paladin.name, 25, 'cleared the goblins out by force');
+    window.showMessage('With Chief Skarnub fallen and the camp broken, the Skarn-tooth threat to Hollowmere is over. Quest complete: The Skarn-tooth Tribe.');
+}
+window.checkGoblinAssaultResolution = checkGoblinAssaultResolution;
+
+// --- Stealth/assassination resolution: a stealthed player adjacent to the
+// still-unaware chief can end the whole camp's leadership in one stroke
+// (triggered from gameEngine.js's handleClick, ahead of normal talk/attack
+// handling). Opens a peaceful succession instead of a fight, via Nix's
+// dialogue tree above. ---
+function handleChiefAssassination(chief) {
+    chief.alive = false;
+    chief.diedByAssassination = true;
+    if (!window.questLog) window.questLog = [];
+    let quest = window.questLog.find(q => q.id === 'goblin_threat');
+    if (!quest) { quest = { id: 'goblin_threat', title: 'The Skarn-tooth Tribe', giver: 'Elder Marta Wynfield', status: 'active', description: '' }; window.questLog.push(quest); }
+    quest.chiefAssassinated = true;
+    window.showMessage("A single silent strike, and Chief Skarnub falls without a sound. The camp doesn't yet know its chief is dead.");
+    window.drawMap();
+    window.renderEntities();
+}
+window.handleChiefAssassination = handleChiefAssassination;
+
+function resolveGoblinSuccession() {
+    const quest = window.questLog.find(q => q.id === 'goblin_threat');
+    quest.status = 'completed';
+    quest.resolution = 'stealth_succession';
+    window.adjustReputation(window.factions.silverhart_kingdom, 15, 15);
+    window.adjustReputation(window.factions.goblin_tribe, 5, 10); // a clean, low-blood transition earns modest goodwill even from the tribe
+    if (window.adjustRegionStat) window.adjustRegionStat('hollowmere', 'security', 12);
+    if (window.gainExp) window.gainExp(250);
+    window.rescuePaladin();
+    if (window.adjustCompanionAttitude) window.adjustCompanionAttitude(window.campaign2Paladin.name, 20, "found a way to remove the goblins without a massacre");
+    window.showMessage("Under Nix's lead, the Skarn-tooth tribe breaks camp and leaves the area for good. Quest complete: The Skarn-tooth Tribe.");
+    window.drawMap();
+    window.renderEntities();
+}
+window.resolveGoblinSuccession = resolveGoblinSuccession;
+
+// --- Ore Road Reopened: escorting Emberlode's first wagon home after the
+// goblin_threat quest is resolved. A peaceful (diplomacy) resolution means
+// the tribe is actually gone and the road really is clear; the other
+// resolutions leave a few Skarn-tooth stragglers behind who didn't get the
+// word — a small ambush partway back, same pattern as the farm's wolves
+// (triggerFarmWolfEncounter). ---
+function startEmberlodeEscort() {
+    const quest = window.questLog && window.questLog.find(q => q.id === 'ore_road_reopened');
+    if (!quest || quest.status !== 'active') return;
+    quest.encounterState = 'departed';
+    window.showMessage("The wagon creaks into motion, wheels finding the ruts of the old road east.");
+
+    const goblinQuest = window.questLog.find(q => q.id === 'goblin_threat');
+    const peaceful = goblinQuest && goblinQuest.resolution === 'goblin_diplomacy';
+    if (peaceful) {
+        completeEmberlodeEscort();
+        return;
+    }
+
+    const ambushHex = window.campaign2EmberlodeAmbushHex;
+    [{ q: ambushHex.q - 1, r: ambushHex.r - 1 }, { q: ambushHex.q + 1, r: ambushHex.r }].forEach(hex => {
+        const goblin = window.createMonster('goblin', hex, null, null, 'enemy');
+        goblin.emberlodeAmbushGoblin = true;
+        window.entities.push(goblin);
+        window.wakeUp(goblin);
+    });
+    window.showMessage("Skarn-tooth stragglers burst from the brush — the tribe's gone, but not everyone got the message!");
+    window.drawMap();
+    window.renderEntities();
+}
+window.startEmberlodeEscort = startEmberlodeEscort;
+
+function completeEmberlodeEscort() {
+    const quest = window.questLog && window.questLog.find(q => q.id === 'ore_road_reopened');
+    if (!quest || quest.status === 'completed') return;
+    quest.status = 'completed';
+    if (window.gainExp) window.gainExp(60);
+    if (window.party && window.party[0]) window.party[0].gold = (window.party[0].gold || 0) + 40;
+    if (window.cascadeRegionStat) window.cascadeRegionStat('hollowmere', 'prosperity', 8);
+    if (window.adjustRegionStat) window.adjustRegionStat('emberlode', 'prosperity', 15);
+    window.showMessage("The wagon rolls safely into Hollowmere — Emberlode's ore is moving again. (+40 gold, quest complete: Ore Road Reopened)");
+}
+window.completeEmberlodeEscort = completeEmberlodeEscort;
+
+// Watched from worldTime.js's tick, same pattern as checkGoblinAssaultResolution.
+function checkEmberlodeEscortResolution() {
+    if (!window.questLog) return;
+    const quest = window.questLog.find(q => q.id === 'ore_road_reopened');
+    if (!quest || quest.status !== 'active' || quest.encounterState !== 'departed') return;
+    const ambushGoblinsAlive = window.entities.some(e => e.emberlodeAmbushGoblin && e.alive);
+    if (!ambushGoblinsAlive) completeEmberlodeEscort();
+}
+window.checkEmberlodeEscortResolution = checkEmberlodeEscortResolution;
+
+window.startHollowmereShakedown = startHollowmereShakedown;
+window.resolveShakedown = resolveShakedown;
+window.parleyWithEnemy = parleyWithEnemy;
+window.triggerHollowmereQuestOffer = triggerHollowmereQuestOffer;
+window.startOskarDuel = startOskarDuel;
+window.endOskarDuel = endOskarDuel;
+
+// --- The Emberwood Grove / "The Old Faith" — pays off the "someone less
+// tied to a throne" hook in Thessaly's tome (readWizardTowerTome,
+// campaign2World.js). Elder Nessa Wren is wary of outsiders; a single
+// trust-task (clear the feral den fouling the grove's spring) earns the
+// druids' faith — but she doesn't hand over the unicorn herself, only
+// points at the wilderness it wanders (unicorn_tracking below). Finding it
+// means reading its tracks (Knowledge: Nature — see isUnicornTrackVisible/
+// showUnicornTrackDetail, gameEngine.js) back to wherever it currently is,
+// then earning ITS trust directly (window.npcDialogueTrees.wild_unicorn) —
+// that final approach is what actually grants learn_unicorn_summon, never
+// purchasable with skill points (see skills.js). The unicorn itself is not
+// a party member: it only ever answers as the player's ONE permanent
+// Nature animal companion (see ui.js's dropdown gating and resolveSpell's
+// guard, gameEngine.js). ---
+window.npcDialogueTrees.elder_nessa_wren = (npc) => {
+    window.questLog = window.questLog || [];
+    const quest = window.questLog.find(q => q.id === 'druid_grove');
+    const trackingQuest = window.questLog.find(q => q.id === 'unicorn_tracking');
+
+    if (trackingQuest) {
+        const line = trackingQuest.status === 'completed'
+            ? "You've earned her trust, not mine — that was never mine to give. Go well."
+            : "She's out there, southwest of here, wherever her own path takes her. Read the ground and you'll find her — I can't walk it for you.";
+        window.showDialogue(npc, line, [{ label: "I understand.", action: () => {} }]);
+        return;
+    }
+
+    if (quest?.status === 'completed') {
+        window.showDialogue(npc, "The grove remembers a friend. Go well — and listen for hoofbeats, when you need them most.", [
+            { label: "Thank you, Elder.", action: () => {} }
+        ]);
+        return;
+    }
+
+    if (quest?.status === 'active') {
+        const denCleared = !window.entities.some(e => e.alive && e.isDruidGroveFeral);
+        if (!denCleared) {
+            window.showDialogue(npc, "The spring still runs foul. Something's denned upstream and won't be reasoned with — deal with it, and we'll talk.", [
+                { label: "I'll see to it.", action: () => {} }
+            ]);
+            return;
+        }
+        window.showDialogue(npc, "The water runs clear again — I felt it the moment the den broke. You've more respect for this place than most who wear a crown's colors.", [
+            {
+                label: "What now?",
+                action: () => {
+                    quest.status = 'completed';
+                    window.questLog.push({
+                        id: 'unicorn_tracking', title: 'The Silver Trail', giver: 'Elder Nessa Wren',
+                        status: 'active', description: "Track the wild unicorn to wherever it currently roams and earn its trust directly.", resolution: null
+                    });
+                    window.showDialogue(npc, "There's one who still runs wild and free, southwest of this grove — I won't pretend to know exactly where; she keeps her own paths. A keen eye reads the ground well enough to follow. Find her yourself. Whatever happens after that is between the two of you, not me.", [
+                        { label: "I understand.", action: () => {} }
+                    ]);
+                }
+            }
+        ]);
+        return;
+    }
+
+    window.showDialogue(npc, "Few find this place who aren't looking for it, and fewer still who should. What is it you want here?", [
+        {
+            label: "I'm looking for the unicorn the stories speak of.",
+            action: () => {
+                window.showDialogue(npc, "Stories. Always stories, never respect. Prove you've something more than curiosity — the spring below has run foul for a week now. Something's denned upstream of it and won't move on. Clear it, and we'll speak again.", [
+                    {
+                        label: "I'll clear the den.",
+                        action: () => {
+                            window.questLog.push({
+                                id: 'druid_grove', title: 'The Old Faith', giver: 'Elder Nessa Wren',
+                                status: 'active', description: "Clear the feral den fouling the Emberwood Grove's spring.", resolution: null
+                            });
+                            if (window.startDruidGroveTrial) window.startDruidGroveTrial();
+                        }
+                    },
+                    { label: "Not now.", action: () => {} }
+                ]);
+            }
+        },
+        { label: "Just passing through.", action: () => {} }
+    ]);
+};
+
+function startDruidGroveTrial() {
+    const den = window.campaign2DruidGroveDenHex;
+    if (!den) return;
+    for (let i = 0; i < 3; i++) {
+        const hex = { q: den.q + (i === 1 ? 1 : (i === 2 ? -1 : 0)), r: den.r + i };
+        if (window.getEntityAtHex(hex.q, hex.r) || window.getTerrainAt(hex.q, hex.r).impassable) continue;
+        const wolf = window.createMonster('wolf', hex, null, null, 'enemy');
+        wolf.name = 'Feral Wolf';
+        wolf.isDruidGroveFeral = true;
+        window.entities.push(wolf);
+    }
+    window.showMessage("You head upstream to root out whatever's fouling the spring.");
+    window.drawMap();
+    window.renderEntities();
+}
+window.startDruidGroveTrial = startDruidGroveTrial;
+
+// The final trust-trial: reached by actually tracking the wild unicorn down
+// (see spawnWildUnicorn/campaign2UnicornTrackHexes, campaign2World.js) and
+// clicking it — the same isNPC+talkToNPC path every other NPC uses. Only
+// resolves the unicorn_tracking quest if that quest is active; otherwise
+// it's just a flavor sighting (finding it before the druid ever pointed you
+// there shouldn't shortcut the quest, but shouldn't be a dead click either).
+window.npcDialogueTrees.wild_unicorn = (npc) => {
+    window.questLog = window.questLog || [];
+    const trackingQuest = window.questLog.find(q => q.id === 'unicorn_tracking');
+
+    if (!trackingQuest || trackingQuest.status !== 'active') {
+        window.showDialogue(npc, "A creature of old legend watches you a long moment, utterly still — then turns and is gone before you can take a single step closer.", [
+            { label: "...", action: () => {} }
+        ]);
+        return;
+    }
+
+    window.showDialogue(npc, "It doesn't flee. It watches you approach, head lowered, one measured step at a time — weighing you the way the grove itself seemed to.", [
+        {
+            label: "Approach slowly.",
+            action: () => {
+                trackingQuest.status = 'completed';
+                if (window.grantSkillRank) window.grantSkillRank(window.player, 'learn_unicorn_summon');
+                window.showDialogue(npc, "It closes the last of the distance itself and presses its brow briefly to your hand — then withdraws, watching, waiting to be called.", [
+                    { label: "I understand.", action: () => {} }
+                ]);
+            }
+        },
+        { label: "Not yet.", action: () => {} }
+    ]);
+};
+
+// --- Kragmoor / the Deepholds (see buildDwarvenKingdom, campaign2World.js).
+window.npcDialogueTrees.dwarf_king = (npc) => {
+    window.questLog = window.questLog || [];
+    const player = window.party[0];
+    const letterQuest = window.questLog.find(q => q.id === 'deepholds_letter');
+    const standing = window.factions?.dwarven_kingdom?.standing ?? 0;
+
+    if (letterQuest && letterQuest.status === 'active' && (player.inventory || []).includes('deepholds_sealed_letter')) {
+        window.showDialogue(npc, "A human, carrying Brokk's own seal. He always did trust a stranger's face over one of our own couriers on a bad road — can't say he's wrong, given how quiet the passes have gone.", [
+            {
+                label: "Here — from Ambassador Stonehammer.",
+                action: () => {
+                    player.inventory = player.inventory.filter(i => i !== 'deepholds_sealed_letter');
+                    letterQuest.status = 'completed';
+                    window.adjustReputation(window.factions.dwarven_kingdom, 20, 20);
+                    window.adjustReputation(window.factions.silverhart_kingdom, 5, 10);
+                    if (window.gainExp) window.gainExp(150);
+                    window.showMessage('Quest complete: A Word to the King. (+reputation with the Deepholds and Silverhart)');
+                }
+            }
+        ]);
+        return;
+    }
+
+    const infestationQuest = window.questLog.find(q => q.id === 'deepholds_infestation');
+    if (infestationQuest && infestationQuest.status === 'active') {
+        const stillAlive = window.entities.some(e => e.alive && e.deepholdsVermin);
+        if (!stillAlive) {
+            infestationQuest.status = 'completed';
+            window.adjustReputation(window.factions.dwarven_kingdom, 20, 20);
+            if (window.gainExp) window.gainExp(200);
+            // A shard of deep crystal from the reopened gallery — see
+            // deepcrystal_pendant's recipe in crafting.js. The King only
+            // parts with one of these for a debt this real.
+            window.party[0].inventory.push('deep_crystal');
+            // The vermin were guarding something, not just infesting it —
+            // see revealSunkenDeepPassage's own comment (campaign2World.js).
+            if (window.revealSunkenDeepPassage) window.revealSunkenDeepPassage();
+            window.showMessage('Quest complete: What Nests Below. (+reputation with the Deepholds, +1 Deep Crystal)');
+            window.showDialogue(npc, "The lower tunnels have gone quiet the right way, for once. The Deepholds don't forget a debt like that — take this, pulled from the same gallery you cleared. Dornik says it's grown deep enough to be worth something to the right hands.", [{ label: "Glad to help.", action: () => {} }]);
+            return;
+        }
+        window.showDialogue(npc, "Whatever's nesting in the lower tunnels is still down there, near as the foreman can tell. Mind yourself.", [{ label: "I'll deal with it.", action: () => {} }]);
+        return;
+    }
+
+    let opening;
+    if (standing >= 30) opening = "You've done right by the Deepholds more than once now. Speak freely in my hall.";
+    else if (standing <= -10) opening = "I know your name, and not from anything I'd call good. Mind your tongue in my hall.";
+    else opening = "Few surface-dwellers find their way this deep. State your business.";
+
+    const options = [];
+    if (!infestationQuest) {
+        options.push({
+            label: "The Foreman mentioned trouble in the lower tunnels.",
+            action: () => {
+                window.questLog.push({
+                    id: 'deepholds_infestation', title: 'What Nests Below', giver: 'King Balrik Deepholm', status: 'active',
+                    description: 'Clear whatever has nested in Kragmoor\'s lower tunnels.'
+                });
+                window.showMessage('Quest added: What Nests Below.');
+                window.showDialogue(npc, "Clear it out and the Deepholds won't forget it. Dornik can point you to the sealed gallery.", [{ label: "I'll see to it.", action: () => {} }]);
+            }
+        });
+    }
+    options.push({ label: "Tell me of the Deepholds.", action: () => window.showDialogue(npc, "One hold, one mountain, one king to answer for it — Kragmoor's all that's left since the old halls further north fell quiet a generation back. We don't spread thin a second time.", [{ label: "...", action: () => {} }]) });
+    options.push({ label: "Just passing through.", action: () => {} });
+    window.showDialogue(npc, opening, options);
+};
+
+window.npcDialogueTrees.deepholds_foreman = (npc) => {
+    window.questLog = window.questLog || [];
+    const infestationQuest = window.questLog.find(q => q.id === 'deepholds_infestation');
+    if (!infestationQuest) {
+        window.showDialogue(npc, "Third gallery's sealed off — something moved in a few weeks back, webbing thick as rope. Lost two crews before I called the retreat. Talk to the King if you're looking for real work.", [{ label: "I'll ask him.", action: () => {} }]);
+        return;
+    }
+    const stillAlive = window.entities.some(e => e.alive && e.deepholdsVermin);
+    if (stillAlive) {
+        window.showDialogue(npc, "Sealed gallery's due north of the hall, straight tunnel. Whatever's in there, it's still in there.", [{ label: "On my way.", action: () => {} }]);
+    } else {
+        window.showDialogue(npc, "Crews are already back at the vein. Whatever you did down there, it worked.", [{ label: "Good.", action: () => {} }]);
+    }
+};
+
+window.npcDialogueTrees.deepholds_trader = (npc) => {
+    const trusted = (window.factions?.dwarven_kingdom?.standing || 0) >= 10;
+    if (!trusted) {
+        window.showDialogue(npc, "The Vault doesn't open for strangers.", [{ label: "...", action: () => {} }]);
+        return;
+    }
+    window.showDialogue(npc, "Kragmoor steel, if you can afford it.", [
+        { label: "Let me see your wares.", action: () => window.openShop({ itemIds: window.campaign2DeepholdsTraderItems, mounts: false }) },
+        { label: "Just looking.", action: () => {} }
+    ]);
+};
+
+// Master Runesmith Thrain Emberhand — the whole runesmithing questline (see
+// crafting.js for the recipes/mechanics themselves). Two trust thresholds:
+// "The Forge Trusts a Stranger" unlocks having HIM craft for you (a real
+// gold premium, no skill needed); "The Forge Remembers Its Own" unlocks
+// teaching you the craft outright, gated far more easily for a dwarf PC
+// than anyone else — Kragmoor doesn't hide its own kind's birthright behind
+// the same wall it holds up for surface-dwellers.
+window.npcDialogueTrees.deepholds_runesmith = (npc) => {
+    window.questLog = window.questLog || [];
+    const player = window.party[0];
+    const standing = window.factions?.dwarven_kingdom?.standing ?? 0;
+    const isDwarf = player.race === 'dwarf';
+
+    const trustQuest = window.questLog.find(q => q.id === 'kragmoor_runesmith_trust');
+    const teachQuest = window.questLog.find(q => q.id === 'kragmoor_runesmith_teach');
+    const trusted = trustQuest && trustQuest.status === 'completed';
+    const taught = !!(player.skills && player.skills.runesmithing);
+
+    // Step 1: prove yourself worth the smith's attention at all — needs the
+    // Deepholds to already half-trust you (same standing bar as the
+    // Vault's trader) and a starmetal shard as real proof you can find one.
+    if (trustQuest && trustQuest.status === 'active') {
+        const hasOre = (player.inventory || []).includes('starmetal_ore');
+        if (hasOre) {
+            window.showDialogue(npc, "You actually found one. Most who claim it are lying, or dead before they can prove it.", [
+                {
+                    label: "Here — a starmetal shard.",
+                    action: () => {
+                        player.inventory.splice(player.inventory.indexOf('starmetal_ore'), 1);
+                        trustQuest.status = 'completed';
+                        window.adjustReputation(window.factions.dwarven_kingdom, 15, 15);
+                        window.showMessage('Quest complete: The Forge Trusts a Stranger. Thrain will craft for you now — for a price.');
+                        window.showDialogue(npc, "Bring me the makings and enough coin for my time, and I'll turn them into something worth carrying. That much, I owe anyone who proves themselves.", [{ label: "Good to know.", action: () => {} }]);
+                    }
+                },
+                { label: "Not yet.", action: () => {} }
+            ]);
+        } else {
+            window.showDialogue(npc, "A shard of starmetal, still. Rare enough that most smiths go a whole life without touching one.", [{ label: "I'll keep looking.", action: () => {} }]);
+        }
+        return;
+    }
+
+    if (!trustQuest) {
+        if (standing >= 10) {
+            window.questLog.push({
+                id: 'kragmoor_runesmith_trust', title: 'The Forge Trusts a Stranger', giver: 'Thrain Emberhand', status: 'active',
+                description: 'Bring Thrain a shard of starmetal ore to prove yourself before he\'ll craft for you.'
+            });
+            window.showMessage('Quest added: The Forge Trusts a Stranger.');
+            window.showDialogue(npc, "You've done right by the mountain — I've heard as much. But I don't work rune-forged steel for just anyone who walks in off the surface. Bring me a shard of starmetal, and I'll believe you're worth the trouble.", [{ label: "I'll find one.", action: () => {} }]);
+        } else {
+            window.showDialogue(npc, "The forge isn't a curiosity for tourists. Earn the mountain's trust first, then we'll talk.", [{ label: "Understood.", action: () => {} }]);
+        }
+        return;
+    }
+
+    // Step 2: learning the craft yourself, not just paying for it. A dwarf
+    // walks in already trusted by blood — no reputation gate beyond step 1,
+    // and only one shard asked for, not two.
+    if (teachQuest && teachQuest.status === 'active') {
+        const needed = isDwarf ? 1 : 2;
+        const have = (player.inventory || []).filter(i => i === 'starmetal_ore').length;
+        if (have >= needed) {
+            window.showDialogue(npc, isDwarf
+                ? "Kin asking for kin's craft. I'd have taught you the first day, if you'd asked."
+                : "Two shards, same as I asked. Fair's fair — I'll not pretend a surface-dweller earns this any cheaper than I'd charge my own cousin twice removed.", [
+                {
+                    label: `Here — ${needed}x starmetal shard${needed > 1 ? 's' : ''}.`,
+                    action: () => {
+                        let removed = 0;
+                        player.inventory = player.inventory.filter(i => { if (i === 'starmetal_ore' && removed < needed) { removed++; return false; } return true; });
+                        teachQuest.status = 'completed';
+                        window.grantSkillRank(player, 'runesmithing');
+                        window.adjustReputation(window.factions.dwarven_kingdom, 10, 10);
+                        window.showMessage('Quest complete: The Forge Remembers Its Own. You have learned Runesmithing.');
+                        window.showDialogue(npc, "Now the forge answers your own hand. Use it well.", [{ label: "My thanks.", action: () => {} }]);
+                    }
+                },
+                { label: "Not yet.", action: () => {} }
+            ]);
+        } else {
+            window.showDialogue(npc, `Still need ${needed - have} more shard${needed - have > 1 ? 's' : ''} of starmetal before I'll teach you anything.`, [{ label: "I'll keep looking.", action: () => {} }]);
+        }
+        return;
+    }
+
+    if (trusted && !taught && !teachQuest) {
+        const canOfferTeaching = isDwarf || standing >= 30;
+        if (canOfferTeaching) {
+            window.questLog.push({
+                id: 'kragmoor_runesmith_teach', title: 'The Forge Remembers Its Own', giver: 'Thrain Emberhand', status: 'active',
+                description: isDwarf
+                    ? 'Bring Thrain 1x starmetal ore — he\'ll teach a fellow dwarf the craft outright.'
+                    : 'Bring Thrain 2x starmetal ore to earn the runesmithing craft itself, not just his labor.'
+            });
+            window.showMessage('Quest added: The Forge Remembers Its Own.');
+            window.showDialogue(npc, isDwarf
+                ? "You're one of ours, whatever road brought you here — the craft's yours to learn if you want it. Bring me a shard of starmetal and I'll teach you myself, same as any apprentice."
+                : "You've more than proven your hands are steady and your word is good. I don't teach this to just anyone born outside the mountain, but... bring me two shards of starmetal, and I'll make an exception.", [{ label: "I'm listening.", action: () => {} }]);
+            return;
+        }
+    }
+
+    // Default: crafting-for-hire is available once trusted, regardless of
+    // race or whether the player has since learned the craft themselves.
+    const options = [];
+    if (trusted) {
+        options.push({
+            label: "Craft me something.",
+            action: () => {
+                const recipeOptions = Object.entries(window.CRAFTING_RECIPES).filter(([, recipe]) => recipe.requiredSkill === 'runesmithing').map(([id, recipe]) => ({
+                    label: `${recipe.name} (${Math.round(recipe.gold * (window.getSmithingFeeMult ? window.getSmithingFeeMult() : 1.5))}g + materials)`,
+                    action: () => window.craftWithSmith(id)
+                }));
+                recipeOptions.push({ label: "Never mind.", action: () => {} });
+                window.showDialogue(npc, "Bring me what it needs, and the coin to make it worth my time.", recipeOptions);
+            }
+        });
+    }
+    options.push({ label: "Tell me of the Runeforge.", action: () => window.showDialogue(npc, "Every hold has its forge-secrets. Ours is starmetal — fallen ore that hasn't forgotten the sky. Rare enough that most smiths never touch it twice in a life.", [{ label: "...", action: () => {} }]) });
+    options.push({ label: "Just passing through.", action: () => {} });
+    window.showDialogue(npc, trusted ? "Back again. What do you need from the forge?" : "The forge isn't a curiosity for tourists. Earn the mountain's trust first, then we'll talk.", options);
+};
+
+// Rowan Fletcher — a wandering hunter (see campaign2Hunter,
+// campaign2Content.js), the human kingdom's second bit of primary industry
+// alongside Old Mac's farm. Same wary/confident greeting split Garrick's own
+// dialogue already uses (region.security), the same worldPulse rumor-surfacing
+// convention, and a straightforward vendor role — buys the game_meat/hide the
+// player harvests from deer/wild boar corpses (checkWildlifeEncounter above)
+// at a small premium over their plain sellPrice, since he can move it on
+// faster than a general store would.
+window.npcDialogueTrees.hollowmere_hunter = (npc) => {
+    const security = window.regions?.hollowmere?.security ?? 50;
+    const wary = security < 30;
+
+    const newsOption = { label: "Any word on the roads?", action: () => {
+        const rumors = window.getRecentWorldRumors ? window.getRecentWorldRumors(2) : [];
+        const text = rumors.length
+            ? rumors.join("\n\n")
+            : "Nothing worth repeating. Tracks are thin lately — good for me, I suppose.";
+        window.showDialogue(npc, text, [{ label: "Thanks for the word.", action: () => {} }]);
+    }};
+
+    const sellOption = { label: "I've got game meat and hide to sell.", action: () => {
+        const inv = window.player.inventory || [];
+        const meatCount = inv.filter(i => i === 'game_meat').length;
+        const hideCount = inv.filter(i => i === 'hide').length;
+        if (meatCount === 0 && hideCount === 0) {
+            window.showDialogue(npc, "Nothing on you worth buying, looks like. Bring me meat or hide from something you've hunted.", [{ label: "Fair enough.", action: () => {} }]);
+            return;
+        }
+        const meatPrice = 5, hidePrice = 6; // a premium over game_meat's 3g / hide's 4g sellPrice, equipment.js
+        const earned = meatCount * meatPrice + hideCount * hidePrice;
+        window.player.inventory = inv.filter(i => i !== 'game_meat' && i !== 'hide');
+        window.player.gold = (window.player.gold || 0) + earned;
+        window.showDialogue(npc, `Good haul. That's ${meatCount}x meat and ${hideCount}x hide off your hands. (+${earned} gold)`, [{ label: "Pleasure doing business.", action: () => {} }]);
+    }};
+
+    const greeting = wary
+        ? "Careful out here — Hollowmere's had a rough stretch, and it shows in the wildlife too. Fewer deer, more of what hunts them."
+        : "Good hunting country, this — plenty of deer, the odd wild boar if you're careful. Yours if you can track it.";
+    window.showDialogue(npc, greeting, [sellOption, newsOption, { label: "Good hunting.", action: () => {} }]);
+};
+
+// Bowmaster Ellandrie — Sil'thandriel's own craft (leatherworking,
+// skills.js), mirroring deepholds_runesmith's structure above almost exactly:
+// a standing threshold to be trusted enough to have her craft for you at all,
+// then a further threshold (waived for an elf PC, same as the dwarf discount
+// above) to actually be taught the craft. Deliberately one step shorter than
+// Kragmoor's own two-quest chain (no separate "prove yourself" fetch quest) —
+// the Sylvan Court already tracks standing the same way Kragmoor does, so
+// reusing that number directly is enough, without inventing a parallel trust
+// gate that would just re-tell the same beat.
+window.npcDialogueTrees.sylvan_bowmaster = (npc) => {
+    window.questLog = window.questLog || [];
+    const player = window.party[0];
+    const standing = window.factions?.elven_realm?.standing ?? 0;
+    const isElf = player.race === 'elf';
+    const trusted = standing >= 10;
+    const taught = !!(player.skills && player.skills.leatherworking);
+    const teachQuest = window.questLog.find(q => q.id === 'sylvan_bowmaster_teach');
+
+    if (teachQuest && teachQuest.status === 'active') {
+        const needHide = isElf ? 1 : 2;
+        const needWood = isElf ? 1 : 2;
+        const haveHide = (player.inventory || []).filter(i => i === 'hide').length;
+        const haveWood = (player.inventory || []).filter(i => i === 'wood').length;
+        if (haveHide >= needHide && haveWood >= needWood) {
+            window.showDialogue(npc, isElf
+                ? "Kin asking for kin's craft. Sit — I'll show you properly, not just hand you a finished bow."
+                : "Hide and timber, same as I asked. You've the patience for this, I think, whatever wood you were born under.", [
+                {
+                    label: `Here — ${needHide}x hide, ${needWood}x wood.`,
+                    action: () => {
+                        let removedHide = 0, removedWood = 0;
+                        player.inventory = player.inventory.filter(i => {
+                            if (i === 'hide' && removedHide < needHide) { removedHide++; return false; }
+                            if (i === 'wood' && removedWood < needWood) { removedWood++; return false; }
+                            return true;
+                        });
+                        teachQuest.status = 'completed';
+                        window.grantSkillRank(player, 'leatherworking');
+                        window.adjustReputation(window.factions.elven_realm, 10, 10);
+                        window.showMessage('Quest complete: The Bow Remembers the Hand. You have learned Leatherworking.');
+                        window.showDialogue(npc, "The craft's yours now. Mind the grain of the wood, and the hide won't fight you.", [{ label: "My thanks.", action: () => {} }]);
+                    }
+                },
+                { label: "Not yet.", action: () => {} }
+            ]);
+        } else {
+            window.showDialogue(npc, `Still need ${Math.max(0, needHide - haveHide)} more hide and ${Math.max(0, needWood - haveWood)} more wood before I'll teach you anything.`, [{ label: "I'll gather more.", action: () => {} }]);
+        }
+        return;
+    }
+
+    if (trusted && !taught && !teachQuest) {
+        const canOfferTeaching = isElf || standing >= 30;
+        if (canOfferTeaching) {
+            window.questLog.push({
+                id: 'sylvan_bowmaster_teach', title: 'The Bow Remembers the Hand', giver: 'Bowmaster Ellandrie', status: 'active',
+                description: isElf
+                    ? 'Bring Ellandrie 1x hide and 1x wood — she\'ll teach a fellow elf the craft outright.'
+                    : 'Bring Ellandrie 2x hide and 2x wood to earn the leatherworking craft itself, not just her labor.'
+            });
+            window.showMessage('Quest added: The Bow Remembers the Hand.');
+            window.showDialogue(npc, isElf
+                ? "One of our own, asking for the craft — I'd have taught you the first day, if you'd asked. Bring me a hide and a length of wood, and it's yours."
+                : "You've shown the Court more patience than most who wander through. I don't teach this to just anyone born outside the canopy, but bring me two hides and two lengths of wood, and I'll make an exception.", [{ label: "I'm listening.", action: () => {} }]);
+            return;
+        }
+    }
+
+    const options = [];
+    if (trusted) {
+        options.push({
+            label: "Make me something.",
+            action: () => {
+                const recipeOptions = Object.entries(window.CRAFTING_RECIPES).filter(([, recipe]) => recipe.requiredSkill === 'leatherworking').map(([id, recipe]) => ({
+                    label: `${recipe.name} (${Math.round(recipe.gold * (window.getSmithingFeeMult ? window.getSmithingFeeMult() : 1.5))}g + materials)`,
+                    action: () => window.craftWithSmith(id)
+                }));
+                recipeOptions.push({ label: "Never mind.", action: () => {} });
+                window.showDialogue(npc, "Bring me the makings, and I'll turn them into something worth carrying.", recipeOptions);
+            }
+        });
+    }
+    options.push({ label: "Tell me of the craft.", action: () => window.showDialogue(npc, "Every hunter brings me hide sooner or later. What I make of it — a bow that doesn't creak, armor that doesn't stiffen in the rain — that part isn't taught to strangers lightly.", [{ label: "...", action: () => {} }]) });
+    options.push({ label: "Just passing through.", action: () => {} });
+    window.showDialogue(npc, trusted ? "Back again. What do you need?" : "The Court's craft isn't a curiosity for tourists. Earn our trust first, then we'll talk.", options);
+};
+
+// The traveling caravan (checkCaravanSpawn, worldPulse.js) — any member can
+// be talked to for the same options, since window._activeCaravan tracks the
+// job/raid state once for the whole group rather than per-NPC. Two opposite
+// ways to profit from it: hire on as a guard (a real but delayed risk — see
+// checkCaravanAmbush) and get paid once it reaches the far end safely, or
+// rob it outright for an immediate windfall at the cost of the crown's
+// reputation and the local barony's security (see raidCaravan).
+window.npcDialogueTrees.caravan_merchant = (npc) => {
+    const caravan = window._activeCaravan;
+    if (!caravan || caravan.raided) {
+        window.showDialogue(npc, "We'd best keep moving.", [{ label: "Safe travels.", action: () => {} }]);
+        return;
+    }
+
+    const options = [];
+    if (!caravan.hiredGuard) {
+        options.push({
+            label: "I'll guard you the rest of the way, for a fee.",
+            action: () => {
+                caravan.hiredGuard = true;
+                caravan.ambushed = false;
+                caravan.ambushAt = (window.worldSeconds || 0) + 600 + Math.random() * 1800; // 10-40 in-game minutes out
+                window.showDialogue(npc, "Much obliged. Keep your eyes on the tree line — the roads haven't been kind lately.", [{ label: "I'll manage.", action: () => {} }]);
+            }
+        });
+    } else {
+        options.push({ label: "Just keeping watch.", action: () => {} });
+    }
+    options.push({
+        label: "Hand over the strongbox. Now.",
+        action: () => window.raidCaravan()
+    });
+    options.push({ label: "Safe travels.", action: () => {} });
+
+    const greeting = caravan.hiredGuard
+        ? "Glad to have another blade watching the road with us."
+        : "Trade goods, nothing more. Interested in buying, or just passing?";
+    window.showDialogue(npc, greeting, options);
+};

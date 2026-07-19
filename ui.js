@@ -5,13 +5,53 @@ window.selectCharacterByName = selectCharacterByName;
 window.addJerry = addJerry;
 window.requestReaction = requestReaction;
 
+// --- Party formation (used by the group-move click handler in gameEngine.js) ---
+// 'close' keeps each follower's current relative position to the leader (the
+// original behavior — no reshuffling, whatever spacing they're already in).
+// 'line'/'wedge' assign a fixed offset by the follower's stable party order
+// instead, so the arrangement stays consistent across moves.
+window.partyFormation = window.partyFormation || 'close';
+
+function getFormationOffset(entity, leader) {
+    if (window.partyFormation === 'close' || !window.party) {
+        return { q: entity.hex.q - leader.hex.q, r: entity.hex.r - leader.hex.r };
+    }
+    const followers = window.party
+        .map(p => window.entities.find(e => e.name === p.name))
+        .filter(e => e && e.alive && e.side === 'player' && e !== leader && !e.rider);
+    const idx = followers.indexOf(entity);
+    if (idx === -1) return { q: entity.hex.q - leader.hex.q, r: entity.hex.r - leader.hex.r };
+
+    if (window.partyFormation === 'line') {
+        return { q: 0, r: idx + 1 }; // single file, south of the leader
+    }
+    if (window.partyFormation === 'wedge') {
+        const side = idx % 2 === 0 ? 1 : -1;
+        const rank = Math.floor(idx / 2) + 1;
+        return { q: side * rank, r: rank }; // alternating behind-and-out-to-the-side
+    }
+    return { q: entity.hex.q - leader.hex.q, r: entity.hex.r - leader.hex.r };
+}
+window.getFormationOffset = getFormationOffset;
+
+function cyclePartyFormation() {
+    const order = ['close', 'line', 'wedge'];
+    const idx = order.indexOf(window.partyFormation || 'close');
+    window.partyFormation = order[(idx + 1) % order.length];
+    const btn = document.getElementById('party-formation-btn');
+    if (btn) btn.innerText = `Formation: ${window.partyFormation}`;
+}
+window.cyclePartyFormation = cyclePartyFormation;
+
 function updatePartyTabs() {
     const partyDiv = document.getElementById("party-selection");
     if (!partyDiv) return;
     partyDiv.innerHTML = '';
 
-    // All living friendly entities
-    const friendlies = window.entities.filter(e => e.alive && e.side === 'player');
+    // Real party members, pets/summons/mounts — never temporary combat allies
+    // (e.g. Garrick/Mira/Oskar during the Hollowmere shakedown fight, who are
+    // side:'player' + aiControlled but never join window.party).
+    const friendlies = window.entities.filter(e => e.alive && e.side === 'player' && !e.aiControlled);
 
     friendlies.forEach((ent, index) => {
         const btn = document.createElement("button");
@@ -22,9 +62,35 @@ function updatePartyTabs() {
             btn.style.border = "2px solid #ffeb3b";
             btn.style.backgroundColor = "#555";
         }
-        btn.onclick = () => window.selectCharacterByName(ent.name);
+        const selectAction = () => window.selectCharacterByName(ent.name);
+        btn.onclick = selectAction;
+        // onclick alone can be unreliable on touch devices for buttons that
+        // don't already have a native tap-friendly affordance — same fix
+        // already used elsewhere in this UI (e.g. the old info-mode toggle).
+        btn.ontouchstart = (e) => { e.preventDefault(); selectAction(); };
         partyDiv.appendChild(btn);
+
+        // A dedicated "Talk" button for companions with real personality
+        // dialogue (dialogueId set at recruitment) — clicking their map
+        // sprite switches who you control instead of opening dialogue, so
+        // this is the only way to hear what they have to say outside combat.
+        if (index > 0 && ent.dialogueId && window.npcDialogueTrees?.[ent.dialogueId] && !window.isInCombat) {
+            const talkBtn = document.createElement("button");
+            talkBtn.innerText = `Talk`;
+            talkBtn.title = `Talk to ${ent.name}`;
+            talkBtn.style.fontSize = "0.7em";
+            talkBtn.style.padding = "2px 4px";
+            talkBtn.style.marginLeft = "2px";
+            const talkAction = () => window.talkToNPC(ent);
+            talkBtn.onclick = talkAction;
+            talkBtn.ontouchstart = (e) => { e.preventDefault(); talkAction(); };
+            partyDiv.appendChild(talkBtn);
+        }
     });
+
+    if (friendlies.length > 1 && window.showTutorialTip) {
+        window.showTutorialTip('multi_character', "You've got more than one character now (party member, summon, or mount) — click their name in this bar to switch who you're controlling.");
+    }
 }
 
 function selectCharacterByName(name) {
@@ -65,6 +131,7 @@ function addJerry() {
     
     const jerry = window.createCharacterData(randRace, randCls, `Jerry ${window.party.length}`, randGender);
     window.party.push(jerry);
+    if (window.wireSharedInventory) window.wireSharedInventory(jerry);
     
     const playerEntity = window.entities.find(e => e.side === 'player');
     if (!playerEntity) {
@@ -108,8 +175,31 @@ function toggleRest() {
             showMessage("Cannot rest while enemies are nearby!");
             return;
         }
+        if (window.isPlayerIndoors && window.isPlayerIndoors() && window.isBuildingOccupied && window.isBuildingOccupied()) {
+            showMessage("You can't rest here — someone lives here.");
+            return;
+        }
+        window._restSafe = false;
         window.isResting = true;
         showMessage("Resting until restored...");
+        if (window.showTutorialTip) window.showTutorialTip('resting', "Resting fast-forwards time to recover HP/TP/mana. Out in the wilderness it isn't fully safe — you rest without armor on and there's a chance of being caught out, worse in less secure regions. Towns, inns, and empty buildings are safer.");
+
+        // One ambush roll per rest attempt — a big enough party (3+) always
+        // keeps a watch rotation going and cancels it entirely, no toggle
+        // needed. An inn room is handled separately by restAtInn (always safe).
+        const inArenaLobby = window.currentCampaign === "1";
+        const partySize = window.entities.filter(e => e.alive && e.side === 'player' && !e.aiControlled && !e.rider).length;
+        const hasGuardShift = partySize >= 3;
+        if (!hasGuardShift && !window.isInArena && !inArenaLobby) {
+            const indoors = window.isPlayerIndoors && window.isPlayerIndoors();
+            const chance = indoors ? 0.10 : (window.getWildernessAmbushChance ? window.getWildernessAmbushChance() : 0.2);
+            if (Math.random() < chance) {
+                const delay = 800 + Math.random() * 2200;
+                setTimeout(() => {
+                    if (window.isResting && window.triggerRestAmbush) window.triggerRestAmbush(indoors ? 'door' : 'wilderness');
+                }, delay);
+            }
+        }
     } else {
         window.isResting = false;
         showMessage("Stopped resting.");
@@ -133,6 +223,26 @@ function updateRestButton() {
     }
 }
 
+// Real-time-only "fast forward" — triples both the world clock and
+// real-time movement speed together (tick()'s !inCombat branch already
+// drives both off the same scaledDt, so one multiplier covers both). Has no
+// effect in combat (that branch runs at a fixed 1x regardless), and turns
+// itself back off the moment combat starts so the player doesn't get
+// surprised by a fight playing out at 3x.
+function toggleTimeSpeed() {
+    window.timeSpeedMultiplier = (window.timeSpeedMultiplier === 3) ? 1 : 3;
+    updateTimeSpeedButton();
+}
+function updateTimeSpeedButton() {
+    const btn = document.getElementById("time-speed-btn");
+    if (!btn) return;
+    const active = window.timeSpeedMultiplier === 3;
+    btn.innerText = active ? "Speed: 3x" : "Speed: 1x";
+    btn.style.backgroundColor = active ? "#00acc1" : "#00838f";
+}
+window.toggleTimeSpeed = toggleTimeSpeed;
+window.updateTimeSpeedButton = updateTimeSpeedButton;
+
 function toggleSleep() {
     if (!window.isSleeping) {
         const enemySeen = window.entities.some(e => e.alive && e.side === 'enemy' && window.isVisibleToPlayer(e.hex));
@@ -140,17 +250,45 @@ function toggleSleep() {
             showMessage("Cannot sleep while enemies are nearby!");
             return;
         }
+        if (window.isPlayerIndoors && window.isPlayerIndoors() && window.isBuildingOccupied && window.isBuildingOccupied()) {
+            showMessage("You can't sleep here — someone lives here.");
+            return;
+        }
         window.isSleeping = true;
-        
+
         // Initialize sleep timer for all player entities if needed (only if they don't have time left)
-        window.entities.forEach(e => {
-            if (e.side === 'player' && e.name !== 'Wolf' && e.name !== 'Horse') {
-                if (!e.sleepRemainingSeconds || e.sleepRemainingSeconds <= 0) {
-                    e.sleepRemainingSeconds = 8 * 3600; // 8 hours
-                }
+        const sentientAllies = window.entities.filter(e => e.side === 'player' && e.alive && !e.rider && e.name !== 'Wolf' && e.name !== 'Horse');
+        sentientAllies.forEach(e => {
+            if (!e.sleepRemainingSeconds || e.sleepRemainingSeconds <= 0) {
+                e.sleepRemainingSeconds = 10 * 3600; // 10 hours
             }
+            e.onGuard = false;
         });
-        showMessage("Going to sleep...");
+
+        // 3+ people can rotate a watch — one keeps armor on and stays alert
+        // all night, so an ambush only catches the others off-guard. Below
+        // that, everyone actually sleeps and everyone's vulnerable.
+        if (sentientAllies.length >= 3) {
+            const guard = sentientAllies[Math.floor(Math.random() * sentientAllies.length)];
+            guard.onGuard = true;
+            showMessage(`You make camp for the night. ${guard.name} takes first watch while the others sleep.`);
+        } else {
+            showMessage("You make camp for the night and settle in to sleep.");
+        }
+
+        // One ambush roll for the night, same idea as resting — skipped
+        // entirely in the arena (no wandering encounters there).
+        const inArenaLobby = window.currentCampaign === "1";
+        if (!window.isInArena && !inArenaLobby) {
+            const indoors = window.isPlayerIndoors && window.isPlayerIndoors();
+            const chance = indoors ? 0.10 : (window.getWildernessAmbushChance ? window.getWildernessAmbushChance() : 0.2);
+            if (Math.random() < chance) {
+                const delay = 1500 + Math.random() * 3000;
+                setTimeout(() => {
+                    if (window.isSleeping && window.triggerSleepAmbush) window.triggerSleepAmbush(indoors ? 'door' : 'wilderness');
+                }, delay);
+            }
+        }
     } else {
         window.isSleeping = false;
         showMessage("Woke up.");
@@ -266,7 +404,8 @@ function showCharacterScreen() {
 
     const treesToShow = new Set();
     const hasWildcard = availablePoints.wildcard > 0;
-    const standardTrees = ['arcane', 'divine', 'nature', 'strength', 'endurance', 'agility', 'weapons'];
+    const hasAnyPoints = Object.values(availablePoints).some(v => (v || 0) > 0);
+    const standardTrees = ['arcane', 'divine', 'nature', 'strength', 'endurance', 'agility', 'weapons', 'misc'];
 
     if (window.showAllSkillsMode) {
         Object.keys(skillTrees).forEach(t => {
@@ -274,8 +413,11 @@ function showCharacterScreen() {
         });
     } else {
         for (const tree in availablePoints) {
-            if (tree === 'wildcard') continue; 
-            if (availablePoints[tree] > 0 || (hasWildcard && standardTrees.includes(tree))) {
+            if (tree === 'wildcard') continue;
+            // 'misc' is visible whenever ANY pool has a spare point (see
+            // resolveMiscSkillPool above) — every other standard tree still
+            // only shows up for its own points or a wildcard point.
+            if (availablePoints[tree] > 0 || (hasWildcard && standardTrees.includes(tree)) || (tree === 'misc' && hasAnyPoints)) {
                 treesToShow.add(tree);
             }
         }
@@ -332,7 +474,11 @@ function showCharacterScreen() {
                 const hasPoints = (availablePoints[tree] || 0) > 0;
                 const hasWildcardPoints = (availablePoints.wildcard || 0) > 0;
                 const canUseWildcard = hasWildcardPoints && standardTrees.includes(tree);
-                const canLearn = (hasPoints || canUseWildcard) && !isMaxed && prereqMet;
+                // A misc skill can be funded by ANY pool with a spare point
+                // (see resolveMiscSkillPool above), not just its own tree or
+                // wildcard.
+                const canUseAnyPool = tree === 'misc' && Object.values(availablePoints).some(v => (v || 0) > 0);
+                const canLearn = (hasPoints || canUseWildcard || canUseAnyPool) && !isMaxed && prereqMet;
                 const buttonLabel = maxRanks === 1 ? 'Learn' : `+1 Rank (${currentRanks})`;
                 
                 if (window.showAllSkillsMode || prereqMet || currentRanks > 0) {
@@ -356,7 +502,24 @@ function showCharacterScreen() {
     });
 }
 
-function learnSkill(skillKey) {
+// misc-tree skills (smithing, cooking, lockpicking, persuasion, etc. — see
+// skills.js's own comment on the 'misc' tree) are funded by ANY attribute
+// pool with a spare point, not just their own tree or wildcard — the whole
+// point of a "everything else" tree is that nothing funds it directly, so
+// requiring a dedicated misc point would make it permanently empty. When
+// more than one pool has a point free, `forcedPool` (set once the player
+// picks one from the chooser dialog below) resolves which one actually
+// pays for it; on the first call it's undefined and, if the choice is
+// ambiguous, this returns early having shown that chooser instead of
+// spending anything yet.
+function resolveMiscSkillPool(player, forcedPool) {
+    if (forcedPool) return (player.attributes[forcedPool] || 0) > 0 ? forcedPool : null;
+    const pools = Object.keys(player.attributes || {}).filter(k => (player.attributes[k] || 0) > 0);
+    if (pools.length <= 1) return pools[0] || null;
+    return { choose: pools }; // ambiguous — caller must ask
+}
+
+function learnSkill(skillKey, forcedPool) {
     const skill = window.skills[skillKey];
     const player = window.player;
     if (!skill || !player) {
@@ -364,7 +527,7 @@ function learnSkill(skillKey) {
         return;
     }
 
-    const standardTrees = ['arcane', 'divine', 'nature', 'strength', 'endurance', 'agility', 'weapons'];
+    const standardTrees = ['arcane', 'divine', 'nature', 'strength', 'endurance', 'agility', 'weapons', 'misc'];
     const isStandard = standardTrees.includes(skill.tree);
 
     const currentRanks = player.skills[skillKey] || 0;
@@ -380,12 +543,29 @@ function learnSkill(skillKey) {
         }
     }
 
-    if (player.attributes[skill.tree] > 0) {
-        player.attributes[skill.tree]--;
-    } else if (player.attributes.wildcard > 0 && isStandard) {
-        player.attributes.wildcard--;
+    const rankCost = 1; // every rank costs a flat 1 point, regardless of how many ranks you already have
+    if (skill.tree === 'misc') {
+        const resolved = resolveMiscSkillPool(player, forcedPool);
+        if (resolved && resolved.choose) {
+            const options = resolved.choose.map(pool => ({
+                label: `${pool.charAt(0).toUpperCase() + pool.slice(1)} (${player.attributes[pool]})`,
+                action: () => window.learnSkill(skillKey, pool)
+            }));
+            window.showDialogue({ name: 'Spend a Skill Point' },
+                `You have unspent points in more than one pool. Which should fund ${skill.name}?`, options);
+            return;
+        }
+        if (!resolved) {
+            showMessage(`You don't have enough points to learn this skill (needs ${rankCost}).`);
+            return;
+        }
+        player.attributes[resolved] -= rankCost;
+    } else if ((player.attributes[skill.tree] || 0) >= rankCost) {
+        player.attributes[skill.tree] -= rankCost;
+    } else if (player.attributes.wildcard >= rankCost && isStandard) {
+        player.attributes.wildcard -= rankCost;
     } else {
-        showMessage("You don't have points to learn this skill.");
+        showMessage(`You don't have enough points to learn this skill (needs ${rankCost}).`);
         return;
     }
 
@@ -470,7 +650,19 @@ function cancelAllMoveOrders() {
     window.renderEntities();
 }
 
-function showMessage(msg) { 
+// Combat messages (a hit/miss/death line per attack) fire constantly —
+// a long fight among many combatants can push this into the thousands.
+// Unbounded appendChild here left the log DOM growing forever, and every
+// call's scrollHeight read forces a synchronous reflow proportional to
+// that ever-growing node count: confirmed directly as the cause of a
+// long combat sim getting steadily slower over its own lifetime (fast at
+// first, crawling after thousands of messages) rather than the AI logic
+// itself being expensive. Capping the log to the most recent entries
+// keeps every future append (and its reflow) cheap regardless of how
+// long the fight runs — matches how the panel is actually used, since
+// nobody scrolls back through thousands of old combat lines anyway.
+const MESSAGE_LOG_MAX_ENTRIES = 200;
+function showMessage(msg) {
     console.log(msg);
     const logDiv = document.getElementById("message-log");
     if (logDiv) {
@@ -478,6 +670,9 @@ function showMessage(msg) {
         p.style.marginBottom = "2px";
         p.innerText = `> ${msg}`;
         logDiv.appendChild(p);
+        while (logDiv.childNodes.length > MESSAGE_LOG_MAX_ENTRIES) {
+            logDiv.removeChild(logDiv.firstChild);
+        }
         requestAnimationFrame(() => {
             logDiv.scrollTop = logDiv.scrollHeight;
         });
@@ -501,11 +696,11 @@ function updateActionButtons() {
     // Fallback to window.player if no entity found
     if (!player) player = window.player;
     
-    if (player && player.side === "player") {
-        const charData = window.player; 
+    if (player && player.side === "player" && !player.aiControlled) {
+        const charData = window.player;
         const isCasting = player.castCooldown > 0;
-        
-        const isSentientAlly = player.side === 'player' && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(player.name);
+
+        const isSentientAlly = player.side === 'player' && !player.aiControlled && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(player.name);
         
         // Ensure sentient logic uses the current resolved player entity
         if (isSentientAlly) {
@@ -513,7 +708,8 @@ function updateActionButtons() {
                 window.updatePlayerUI();
             } else if (window.playerAction.type === 'spell') {
                 window.clearHighlights();
-                highlightValidTargets(player, window.playerAction.spell);
+                const actionSpell = window.playerAction.spell || (charData?.createdSpells || [])[window.playerAction.index];
+                if (actionSpell) highlightValidTargets(player, actionSpell);
             }
             window.drawMap();
             window.renderEntities();
@@ -534,6 +730,49 @@ function updateActionButtons() {
             buttonsDiv.appendChild(offhandBtn);
         }
 
+        if (window.playerIsLich) {
+            const raiseBtn = document.createElement('button');
+            raiseBtn.innerText = "Raise Undead";
+            raiseBtn.style.backgroundColor = "#4a4a3a";
+            raiseBtn.disabled = isCasting;
+            const raiseAction = () => {
+                window.playerAction = { type: 'raise_undead' };
+                showMessage("Click an adjacent corpse (or your own horse) to raise it.");
+                updateActionButtons();
+            };
+            raiseBtn.onclick = raiseAction;
+            raiseBtn.ontouchstart = (e) => { e.preventDefault(); raiseAction(); };
+            buttonsDiv.appendChild(raiseBtn);
+        }
+
+        if (inCombat) {
+            const forceAttackBtn = document.createElement('button');
+            forceAttackBtn.innerText = "Attack Target";
+            forceAttackBtn.style.backgroundColor = "#c62828";
+            forceAttackBtn.disabled = isCasting;
+            const forceAttackAction = () => {
+                window.playerAction = { type: 'force_attack' };
+                showMessage("Attack ready — click any target, including a neutral or friendly one.");
+                updateActionButtons();
+            };
+            forceAttackBtn.onclick = forceAttackAction;
+            forceAttackBtn.ontouchstart = (e) => { e.preventDefault(); forceAttackAction(); };
+            buttonsDiv.appendChild(forceAttackBtn);
+
+            const parleyBtn = document.createElement('button');
+            parleyBtn.innerText = "Parley";
+            parleyBtn.style.backgroundColor = "#6d4c41";
+            parleyBtn.disabled = isCasting;
+            const parleyAction = () => {
+                window.playerAction = { type: 'parley' };
+                showMessage("Click a hostile within range to talk instead of fight.");
+                updateActionButtons();
+            };
+            parleyBtn.onclick = parleyAction;
+            parleyBtn.ontouchstart = (e) => { e.preventDefault(); parleyAction(); };
+            buttonsDiv.appendChild(parleyBtn);
+        }
+
         if (player.hex) {
             const coord = `${player.hex.q},${player.hex.r}`;
             if (window.mapItems[coord] && window.mapItems[coord].length > 0) {
@@ -545,6 +784,7 @@ function updateActionButtons() {
                 lootBtn.onclick = () => { window.lootItems(player); };
                 lootBtn.ontouchstart = (e) => { e.preventDefault(); window.lootItems(player); };
                 buttonsDiv.appendChild(lootBtn);
+                if (window.showTutorialTip) window.showTutorialTip('loot_button', "Standing over something lootable — a Loot Hex button has appeared below. Click it to pick everything up.");
             }
         }
 
@@ -715,6 +955,8 @@ function updateActionButtons() {
                     } else if (skillKey === 'dagger_throw') {
                         const eq = charData.equipped.weapon;
                         if (eq !== 'dagger') weaponReqMet = false;
+                    } else if (skillKey === 'pickpocket') {
+                        if (!charData.isStealthed) weaponReqMet = false;
                     }
                     
                     if (weaponReqMet) {
@@ -723,6 +965,7 @@ function updateActionButtons() {
                         let label = skill.name;
                         if (skillKey.endsWith('_feint')) label = `${skillKey.split('_')[0].toUpperCase()} Feint`;
                         button.innerText = label;
+                        button.title = skill.description || label;
                         button.disabled = isCasting;
                         button.onclick = () => {
                             window.playerAction = { type: 'skill', id: skillKey };
@@ -740,6 +983,8 @@ function updateActionButtons() {
                 const button = document.createElement('button');
                 button.id = `spell-btn-${index}`;
                 button.innerText = spell.name;
+                const spellInfo = `${spell.name}: ${spell.school || ''} ${spell.type || ''}, range ${spell.range}, ${spell.tpCost} TP / ${spell.manaCost} mana.`.replace(/\s+/g, ' ').trim();
+                button.title = spellInfo;
                 button.disabled = isCasting || (player.timePoints < spell.tpCost);
                 button.onclick = () => {
                     window.playerAction = { type: 'spell', index: index, targets: [] };
@@ -761,7 +1006,20 @@ function showSpellScreen() {
         contentDiv.innerHTML = '<p>You know no base spells. Learn them from your character screen.</p>';
         return;
     }
+    if (window.showTutorialTip) window.showTutorialTip('spell_builder', "Pick a base spell, then adjust range/magnitude/targets with the sliders — mana and TP cost update live. Once it looks right, hit Save to add it to your action bar.");
+    let bloodMagicHtml = '';
+    if (player.skills?.blood_magic) {
+        bloodMagicHtml = `
+            <div class="form-group" style="margin-bottom: 15px;">
+                <button onclick="window.toggleBloodMagic(window.player); window.showSpellScreen();">
+                    Blood Magic: ${player.bloodMagicActive ? 'ON' : 'OFF'}
+                </button>
+                <span style="font-size: 0.8em; color: #aaa;"> While on, casting past empty mana draws the rest from your own HP (2 HP per missing mana).</span>
+            </div>
+        `;
+    }
     let html = `
+        ${bloodMagicHtml}
         <div class="spell-form">
             <div class="form-group">
                 <label>Base Spell:</label>
@@ -799,6 +1057,11 @@ function updateSpellPreview() {
             if (animalId === 'boar' && (!player.skills?.learn_boar_summon)) return;
             if (animalId === 'tiger' && (!player.skills?.learn_tiger_summon)) return;
             if (animalId === 'eagle' && (!player.skills?.learn_eagle_summon)) return;
+            // Unicorn is never an ordinary temporary summon — only listed at
+            // the exact moment it could actually be cast: the druid-granted
+            // skill, the permanent-companion passive, and no existing
+            // companion yet (matches resolveSpell's own guard, gameEngine.js).
+            if (animalId === 'unicorn' && (!player.skills?.learn_unicorn_summon || !player.skills?.animal_companion || player.animalCompanion)) return;
             optionsHtml += `<option value="${animalId}">${window.monsterTemplates[animalId].name}</option>`;
         });
         html += `
@@ -807,6 +1070,19 @@ function updateSpellPreview() {
                 <select id="spell-animal-select" onchange="window.renderSpellStats()">
                     ${optionsHtml}
                 </select>
+            </div>
+        `;
+    }
+    if (baseId === 'calm_animal') {
+        html += `
+            <div class="form-group">
+                <label>Calm Mode:</label>
+                <select id="spell-calm-mode-select" onchange="window.renderSpellStats()">
+                    <option value="stay">Stay (holds position, can't move)</option>
+                    <option value="come">Come (moves toward you)</option>
+                    <option value="chase">Chase (moves away from you)</option>
+                </select>
+                <span style="font-size: 0.8em; color: #aaa;">Only affects animals (wolf, horse, bear, etc.) or a rider mounted on one — not Unicorns or dragons.</span>
             </div>
         `;
     }
@@ -831,7 +1107,39 @@ function updateSpellPreview() {
         </div>
     `;
     const expandRanks = player.skills[`${base.school}_expand`] || 0;
-    if (expandRanks > 0 && base.baseRadius !== undefined) {
+    const burstCapable = !!options.burst && (base.type === 'damage' || base.type === 'heal');
+    if (burstCapable) {
+        html += `
+            <div class="form-group">
+                <label><input type="checkbox" id="spell-burst-toggle" onchange="window.renderSpellStats()"> Burst (area, centered on a clicked point instead of a single target) — +8 Mana</label>
+            </div>
+        `;
+    }
+    // SUBTLE SPELL (skills.js's subtle_spell, rogue tree): the rogue-side
+    // half of a rogue/caster multiclass — never available for damage
+    // spells (a Firebolt is not subtle), universal across schools since
+    // it's about HOW you cast, not WHAT.
+    const subtleCapable = !!player.skills?.subtle_spell && base.type !== 'damage';
+    if (subtleCapable) {
+        html += `
+            <div class="form-group">
+                <label><input type="checkbox" id="spell-subtle-toggle" onchange="window.renderSpellStats()"> Subtle (doesn't break stealth when cast) — +6 Mana, +5 TP</label>
+            </div>
+        `;
+    }
+    // TOUCH (skills.js's <school>_touch): the opposite of the Range Bonus
+    // dial above — caps range at 1 (adjacent) for a discount instead of
+    // paying more to reach further. Only offered when there's actually
+    // range to give up (a spell already at range 1 has nothing to trade).
+    const touchCapable = !!options.touch && (base.baseRange || 1) > 1;
+    if (touchCapable) {
+        html += `
+            <div class="form-group">
+                <label><input type="checkbox" id="spell-touch-toggle" onchange="window.renderSpellStats()"> Touch (range 1, adjacent only) — -3 Mana</label>
+            </div>
+        `;
+    }
+    if ((expandRanks > 0 && base.baseRadius !== undefined) || burstCapable) {
         html += `
             <div class="form-group">
                 <label>Radius Bonus (Max: +${expandRanks}):</label>
@@ -875,12 +1183,27 @@ function renderSpellStats() {
     const radBonus = radBonusInput ? (parseInt(radBonusInput.value) || 0) : 0;
     const targetBonusInput = document.getElementById("spell-targets-bonus");
     const targetBonus = targetBonusInput ? (parseInt(targetBonusInput.value) || 0) : 0;
+    const burstToggle = document.getElementById("spell-burst-toggle");
+    const burst = burstToggle ? burstToggle.checked : false;
+    const subtleToggle = document.getElementById("spell-subtle-toggle");
+    const subtle = subtleToggle ? subtleToggle.checked : false;
+    const touchToggle = document.getElementById("spell-touch-toggle");
+    const touch = touchToggle ? touchToggle.checked : false;
+    const calmModeSelect = document.getElementById("spell-calm-mode-select");
+    const calmMode = calmModeSelect ? calmModeSelect.value : undefined;
 
     let manaCost = base.baseMana;
     let tpCost = 10;
     let magnitude = base.baseMagnitude * (1 + magBonus);
-    let range = (base.baseRange || 1) + rangeBonus;
-    let radius = (base.baseRadius || 0) + radBonus;
+    // TOUCH (skills.js's <school>_touch): caps range at 1 regardless of
+    // any Range Bonus dialed in above — the two are mutually exclusive by
+    // construction (Touch always wins when checked).
+    let range = touch ? 1 : ((base.baseRange || 1) + rangeBonus);
+    // BURST (skills.js's <school>_burst): converts a single-target
+    // damage/heal spell into an area burst centered on a clicked point,
+    // radius 1 baseline + the same radius dial other AOE spells use.
+    let radius = burst ? (1 + radBonus) : ((base.baseRadius || 0) + radBonus);
+    let effectiveType = burst ? (base.type === 'heal' ? 'aoe_heal' : 'aoe_damage') : base.type;
     let extraTargets = targetBonus;
 
     let defaultName = base.name;
@@ -899,12 +1222,15 @@ function renderSpellStats() {
     if (speed === 'quickened') { tpCost = 5; manaCost += Math.max(0, 5 - effSpeed); }
     if (speed === 'slowed') { tpCost = 20; manaCost -= 4; }
     
-    manaCost += Math.max(0, rangeBonus - effRange);
+    if (touch) manaCost -= 3; else manaCost += Math.max(0, rangeBonus - effRange);
     manaCost += (magBonus * Math.max(0, 5 - effMag));
     manaCost += (radBonus * 10);
     manaCost += (targetBonus * 15);
+    if (burst) manaCost += 8;
+    if (subtle) { manaCost += 6; tpCost += 5; }
+    manaCost = Math.max(1, manaCost);
 
-    const coreManaCost = base.baseMana + (magBonus * Math.max(0, 5 - effMag)) + (radBonus * 10) + (targetBonus * 15);
+    const coreManaCost = base.baseMana + (touch ? -3 : Math.max(0, rangeBonus - effRange)) + (magBonus * Math.max(0, 5 - effMag)) + (radBonus * 10) + (targetBonus * 15) + (burst ? 8 : 0) + (subtle ? 6 : 0);
 
     const cap = player.manaCaps[base.school] || 10;
     const overCap = manaCost > cap;
@@ -914,8 +1240,11 @@ function renderSpellStats() {
         <p><strong>TP Cost:</strong> ${tpCost}</p>
         <p><strong>Magnitude:</strong> ${magnitude}</p>
         <p><strong>Range:</strong> ${range}</p>
-        ${base.baseRadius !== undefined ? `<p><strong>Radius:</strong> ${radius}</p>` : ''}
+        ${(base.baseRadius !== undefined || burst) ? `<p><strong>Radius:</strong> ${radius}</p>` : ''}
         ${extraTargets > 0 ? `<p><strong>Extra Targets:</strong> ${extraTargets}</p>` : ''}
+        ${burst ? `<p><strong>Burst:</strong> centered on a clicked point, not a single target</p>` : ''}
+        ${subtle ? `<p><strong>Subtle:</strong> won't break stealth when cast</p>` : ''}
+        ${touch ? `<p><strong>Touch:</strong> adjacent only</p>` : ''}
     `;
     const display = document.getElementById("spell-stats-display");
     if (display) display.innerHTML = statsHtml;
@@ -943,7 +1272,7 @@ function renderSpellStats() {
         if (display) display.innerHTML = statsHtml;
     }
 
-    window.currentSpellCalc = { name: defaultName, school: base.school, manaCost, coreManaCost, tpCost, magnitude, range, radius, extraTargets, type: base.type, baseId, animalId };
+    window.currentSpellCalc = { name: defaultName, school: base.school, manaCost, coreManaCost, tpCost, magnitude, range, radius, extraTargets, type: effectiveType, baseId, animalId, calmMode, debuffType: base.debuffType, subtle, touch };
 }
 
 function createSpell() {
@@ -966,13 +1295,21 @@ function showInventoryScreen() {
     contentDiv.innerHTML = '';
     if (!player) { contentDiv.innerHTML = '<p>Character not initialized.</p>'; return; }
     let html = `<h3>Gold: ${player.gold || 0}</h3><h3>Equipped</h3>`;
-    const slots = [{ label: 'Weapon', key: 'weapon' }, { label: 'Off-hand', key: 'offhand' }, { label: 'Armor/Barding', key: 'armor' }, { label: 'Helmet', key: 'helmet' }, { label: 'Accessory', key: 'accessory' }];
+    const slots = [{ label: 'Weapon', key: 'weapon' }, { label: 'Off-hand', key: 'offhand' }, { label: 'Armor/Barding', key: 'armor' }, { label: 'Helmet', key: 'helmet' }, { label: 'Accessory', key: 'accessory' }, { label: 'Clothes', key: 'clothes' }];
     slots.forEach(slot => {
         const itemId = player.equipped[slot.key];
         const item = itemId ? window.items[itemId] : null;
         const itemName = item ? item.name : 'None';
         html += `<div style="margin-bottom: 5px;"><strong>${slot.label}:</strong> ${itemName} ${itemId ? `<button onclick="window.unequipItem('${slot.key}')" style="font-size: 0.8em; margin-left: 10px;">Unequip</button>` : ''}</div>`;
     });
+    // Only matters when both an armor and a clothes item are equipped at
+    // once — otherwise whichever's actually equipped just shows (see
+    // showClothes in drawPlayerCharacter, gameEngine.js).
+    const mode = window.clothingDisplayMode === 'clothes' ? 'clothes' : 'armor';
+    html += `<div style="margin-bottom: 10px;"><strong>Always show:</strong>
+        <button onclick="window.setClothingDisplayMode('armor')" style="${mode === 'armor' ? 'font-weight:bold;text-decoration:underline;' : ''}">Armor</button>
+        <button onclick="window.setClothingDisplayMode('clothes')" style="margin-left:5px;${mode === 'clothes' ? 'font-weight:bold;text-decoration:underline;' : ''}">Clothes</button>
+    </div>`;
     html += '<h3>Backpack</h3>';
     if (player.inventory.length === 0) html += '<p>Empty</p>';
     else {
@@ -992,6 +1329,7 @@ function showInventoryScreen() {
             if (player.equipped.armor === itemId) equipCount++;
             if (player.equipped.helmet === itemId) equipCount++;
             if (player.equipped.accessory === itemId) equipCount++;
+            if (player.equipped.clothes === itemId) equipCount++;
 
             const available = count - equipCount;
             const canBeOffhand = item.canOffhand || item.type === 'shield';
@@ -1006,20 +1344,62 @@ function showInventoryScreen() {
                 ${available > 0 && (item.type !== 'consumable' && item.type !== 'shield') ? `<button onclick="window.equipItem('${itemId}')">Equip</button>` : ''}
                 ${showOffhandBtn ? `<button onclick="window.equipItem('${itemId}', true)" style="margin-left:5px;">Equip Off-hand</button>` : ''}
                 ${item.type === 'consumable' && available > 0 ? `<button onclick="window.drinkPotion('${itemId}')">Drink</button>` : ''}
+                ${item.type === 'food' && available > 0 ? `<button onclick="window.eatFood('${itemId}')">Eat</button>` : ''}
             </div>`;
         });
     }
     contentDiv.innerHTML = html;
 }
 
+// Held items (weapons/shields/accessories/helmets) cost a flat second to
+// swap; armor takes longer the heavier it is, and swapping between two
+// armor tiers takes as long as the slower of the two changes (you're both
+// taking the old piece off and getting the new one on).
+const ARMOR_SWAP_SECONDS = { light_armor: 2, medium_armor: 4, heavy_armor: 6 };
+function getEquipLockSeconds(oldItemId, newItemId) {
+    const oldSec = oldItemId && ARMOR_SWAP_SECONDS[oldItemId] || (oldItemId ? 1 : 0);
+    const newSec = newItemId && ARMOR_SWAP_SECONDS[newItemId] || (newItemId ? 1 : 0);
+    return Math.max(oldSec, newSec);
+}
+// Applies the lock: outside combat this briefly stops the character's
+// real-time movement (checked in autoMoveProcess); in combat, equipping is
+// still gated to that character's own turn, so there's nothing to "pause".
+function applyEquipLock(playerEntity, seconds) {
+    if (!window.isInCombat && seconds > 0) {
+        playerEntity.actionLockedUntil = performance.now() + seconds * 1000;
+    }
+}
+
+// "Always show: Armor / Clothes" toggle — only matters when both an armor
+// and a clothes item are equipped at once (see showClothes in
+// drawPlayerCharacter, gameEngine.js).
+function setClothingDisplayMode(mode) {
+    window.clothingDisplayMode = mode === 'clothes' ? 'clothes' : 'armor';
+    showInventoryScreen();
+    window.renderEntities();
+}
+window.setClothingDisplayMode = setClothingDisplayMode;
+
 function unequipItem(slot) {
     const player = window.player;
     const playerEntity = window.entities.find(e => e.name === player.name);
     if (!playerEntity) return;
-    if (window.gamePhase !== 'PLAYER_TURN' || window.currentTurnEntity !== playerEntity) { showMessage("It must be this character's turn to change equipment."); return; }
-    if (playerEntity.timePoints < 1) { showMessage("Not enough Time Points to change equipment."); return; }
+    if (slot === 'clothes') {
+        player.equipped.clothes = null;
+        syncPlayerEntity();
+        showInventoryScreen();
+        showCharacter();
+        window.renderEntities();
+        return;
+    }
+    if (window.isInCombat) {
+        if (window.gamePhase !== 'PLAYER_TURN' || window.currentTurnEntity !== playerEntity) { showMessage("It must be this character's turn to change equipment."); return; }
+        if (playerEntity.timePoints < 1) { showMessage("Not enough Time Points to change equipment."); return; }
+    }
+    const removedItem = player.equipped[slot];
     player.equipped[slot] = null;
-    playerEntity.timePoints -= 1;
+    if (window.isInCombat) playerEntity.timePoints -= 1;
+    else applyEquipLock(playerEntity, getEquipLockSeconds(removedItem, null));
     syncPlayerEntity();
     showInventoryScreen();
     showCharacter();
@@ -1060,15 +1440,33 @@ function equipItem(itemId, isOffhand = false) {
     const item = window.items[itemId];
     const playerEntity = window.entities.find(e => e.name === player.name);
     if (!playerEntity) return;
-    if (window.gamePhase !== 'PLAYER_TURN' || window.currentTurnEntity !== playerEntity) { showMessage("It must be this character's turn to change equipment."); return; }
-    if (playerEntity.timePoints < 1) { showMessage("Not enough Time Points to change equipment."); return; }
-    
+
+    // Cosmetic only — no combat-turn gate, no TP cost, no equip lock,
+    // unlike every other slot below.
+    if (item.type === 'clothes') {
+        player.equipped.clothes = itemId;
+        syncPlayerEntity();
+        showInventoryScreen();
+        showCharacter();
+        window.renderEntities();
+        return;
+    }
+
+    if (window.isInCombat) {
+        if (window.gamePhase !== 'PLAYER_TURN' || window.currentTurnEntity !== playerEntity) { showMessage("It must be this character's turn to change equipment."); return; }
+        if (playerEntity.timePoints < 1) { showMessage("Not enough Time Points to change equipment."); return; }
+    }
+
+    let oldItemForLock = null;
     if (item.type === 'accessory') {
+        oldItemForLock = player.equipped.accessory;
         player.equipped.accessory = itemId;
     } else if (item.type === 'weapon') {
+        oldItemForLock = isOffhand ? player.equipped.offhand : player.equipped.weapon;
         if (isOffhand) player.equipped.offhand = itemId;
         else { player.equipped.weapon = itemId; if (item.hands === 2) player.equipped.offhand = null; }
     } else if (item.type === 'shield') {
+        oldItemForLock = player.equipped.offhand;
         const weaponId = player.equipped.weapon;
         const weapon = weaponId ? window.items[weaponId] : null;
         if (weapon && weapon.hands === 2) player.equipped.weapon = null;
@@ -1076,14 +1474,23 @@ function equipItem(itemId, isOffhand = false) {
     } else if (item.type === 'armor') {
         const reqMap = { 'light_armor': 'light_armor_training', 'medium_armor': 'medium_armor_training', 'heavy_armor': 'heavy_armor_training' };
         const reqSkill = reqMap[itemId];
-        if (reqSkill && (!player.skills[reqSkill] || player.skills[reqSkill] === 0)) { showMessage(`You need ${window.skills[reqSkill].name} to equip this.`); return; }
+        if (reqSkill && (!player.skills[reqSkill] || player.skills[reqSkill] === 0)) {
+            showMessage(`You need ${window.skills[reqSkill].name} to equip this. Learn it from your character screen's skill tree, if you have a free skill point.`);
+            return;
+        }
+        oldItemForLock = player.equipped.armor;
         player.equipped.armor = itemId;
-    } else if (item.type === 'helmet') player.equipped.helmet = itemId;
-    playerEntity.timePoints -= 1;
+    } else if (item.type === 'helmet') {
+        oldItemForLock = player.equipped.helmet;
+        player.equipped.helmet = itemId;
+    }
+    if (window.isInCombat) playerEntity.timePoints -= 1;
+    else applyEquipLock(playerEntity, getEquipLockSeconds(oldItemForLock, itemId));
     syncPlayerEntity();
     showInventoryScreen();
     showCharacter();
     window.updatePlayerUI();
+    if (window.showTutorialTip) window.showTutorialTip('equip_item', "Equipping swaps this into the character's slot immediately — attack range, armor, and appearance all update right away. Some items briefly lock the slot from being swapped again.");
 }
 
 function syncPlayerEntity() {
@@ -1113,6 +1520,12 @@ function syncPlayerEntity() {
 
 function gainExp(amt) {
     window.player.exp += amt;
+    // In the arena, window.player can be a standalone Entity clone rather
+    // than the actual window.party record (see setupArenaLobby), so the
+    // character sheet (which reads the party record) would otherwise never
+    // see this gain. Keep the two in sync regardless of which one XP landed on.
+    const partyChar = window.party.find(p => p.name === window.player.name);
+    if (partyChar && partyChar !== window.player) partyChar.exp = window.player.exp;
     window.showMessage(`Gained ${amt} experience.`);
     if (document.getElementById("character-screen-modal").style.display === "block") showCharacterScreen();
 }
@@ -1122,10 +1535,115 @@ function applyLevelUp(char, cls) {
     char.level += 1;
     const cb = window.classData[cls].bonus;
     for (let key in cb) char.attributes[key] = (char.attributes[key] || 0) + cb[key];
-    
+
     const rb = window.raceData[char.race].bonus;
     for (let key in rb) char.attributes[key] = (char.attributes[key] || 0) + rb[key];
+
+    if (!char.classLevels) char.classLevels = {}; // characters/saves predating this tracking start with no history
+    char.classLevels[cls] = (char.classLevels[cls] || 0) + 1;
 }
+
+/** True if `char` has taken at least one level in `cls` (character creation counts as a level). */
+function hasClassLevel(char, cls) {
+    return !!(char.classLevels && char.classLevels[cls] > 0);
+}
+window.hasClassLevel = hasClassLevel;
+
+/** True if the selected character or anyone in the active party is `race` — used by NPCs whose dialogue reacts to who's standing in front of them. */
+function partyHasRace(race) {
+    return !!(window.party || []).some(p => p.race === race);
+}
+window.partyHasRace = partyHasRace;
+
+/** Highest total level anyone in the active party has taken in `cls` — used by
+ * NPCs whose dialogue reacts to how invested the party is in a class (e.g. the
+ * Thieves' Guild noticing a heavily-rogue party), not just whether anyone has
+ * a single level in it (that's what hasClassLevel/partyHasRace are for). */
+function getPartyMaxClassLevel(cls) {
+    return Math.max(0, ...(window.party || []).map(p => (p.classLevels && p.classLevels[cls]) || 0));
+}
+window.getPartyMaxClassLevel = getPartyMaxClassLevel;
+
+// Retrainer NPC (silverhart_retrainer, campaign2Dialogue.js): resets every
+// normally-purchased skill back into spendable attribute points, recomputed
+// fresh from race + classLevels rather than incrementally refunded — this is
+// what lets it work without ever having tracked which tree/wildcard a given
+// rank was paid from. Left untouched: lich-tree skills (never funded by the
+// pool to begin with), monster-only skills, quest-granted skills flagged
+// questGrantedOnly (e.g. the druid unicorn bond), and any ranks recorded in
+// freeSkillRanks (e.g. Easy mode's free Health rank at creation).
+function resolveRespec(char) {
+    const preserved = {}; // skillKey -> rank, for anything respec doesn't touch
+    const freeFloors = char.freeSkillRanks || {};
+
+    for (const key in char.skills) {
+        const rank = char.skills[key];
+        if (!rank) continue;
+        const skill = window.skills[key];
+        if (!skill) { preserved[key] = rank; continue; } // unknown skill def — leave it alone rather than silently drop it
+        if (skill.tree === 'lich' || skill.tree === 'monster_skills' || skill.questGrantedOnly) {
+            preserved[key] = rank;
+        } else if (freeFloors[key]) {
+            preserved[key] = Math.min(rank, freeFloors[key]);
+        }
+    }
+
+    // Reset derived combat stats to the same baseline createCharacterData
+    // starts from, then replay only the preserved skills' apply() so their
+    // effects (extra HP, spell unlocks, etc.) survive the reset.
+    Object.assign(char, {
+        hp: 10, maxHp: 10, currentMana: 0, maxMana: 0, baseDamage: 1,
+        toHitMelee: 0, toHitRanged: 0, toHitSpell: 0, passiveDodge: 0,
+        parriesRemaining: 3, offhandAttackAvailable: false,
+        manaCaps: { arcane: 10, divine: 10, nature: 10 },
+        maxSpellSlots: 8,
+        unlockedBaseSpells: [], unlockedCastingOptions: {}, createdSpells: [],
+        baseReduction: 0, lifeDrainOnMeleeHit: 0, witheringTouchStacks: 0,
+        commandsUndead: false, hasSoulAnchor: false,
+    });
+    char.skills = {};
+    for (const key in preserved) {
+        const skill = window.skills[key];
+        char.skills[key] = preserved[key];
+        if (skill?.apply) for (let i = 0; i < preserved[key]; i++) skill.apply(char);
+    }
+
+    // Recompute the full attribute pool from scratch: race bonus applies
+    // once per level (creation counts as level 1), class bonus applies once
+    // per level taken in that class — see applyLevelUp for why this is an
+    // exact match for how the pool was built up in the first place.
+    const rb = window.raceData[char.race].bonus;
+    const allAttrs = new Set(Object.keys(char.attributes || {}));
+    Object.keys(rb).forEach(k => allAttrs.add(k));
+    for (const cls in (char.classLevels || {})) {
+        const cb = window.classData[cls]?.bonus;
+        if (cb) Object.keys(cb).forEach(k => allAttrs.add(k));
+    }
+    const newAttributes = {};
+    allAttrs.forEach(k => newAttributes[k] = 0);
+    Object.keys(rb).forEach(k => newAttributes[k] += (rb[k] || 0) * char.level);
+    for (const cls in (char.classLevels || {})) {
+        const cb = window.classData[cls]?.bonus;
+        if (!cb) continue;
+        const count = char.classLevels[cls];
+        Object.keys(cb).forEach(k => newAttributes[k] += (cb[k] || 0) * count);
+    }
+    // Roguelike arena boons (Campaign 1) are a flat one-time attribute bonus
+    // outside the class/level system entirely — preserve them across respec.
+    const roguelikeBonuses = window.roguelikeData?.permanentSkillBonuses || {};
+    Object.keys(roguelikeBonuses).forEach(tree => {
+        newAttributes[tree] = (newAttributes[tree] || 0) + roguelikeBonuses[tree];
+    });
+    char.attributes = newAttributes;
+    char.hp = char.maxHp; // full heal, matches "walk out of the retrainer's shop ready to go"
+
+    const partyChar = window.party?.find(p => p.name === char.name);
+    if (partyChar && partyChar !== char) Object.assign(partyChar, char);
+    const ent = window.entities?.find(e => e.name === char.name);
+    if (ent) Object.assign(ent, char);
+    if (window.showCharacter) window.showCharacter();
+}
+window.resolveRespec = resolveRespec;
 
 function doLevelUp() {
     if (window.player.level >= (window.currentLevelCap || 50)) {
@@ -1194,9 +1712,17 @@ function updateTurnIndicator() {
     const indicatorBar = document.getElementById('turn-indicator-bar');
     if (!indicatorBar) return;
     indicatorBar.innerHTML = '';
+    // Outside combat, timePoints drift continuously per-entity (they double as
+    // a pacing multiplier for regen/poison/etc, not just initiative), so
+    // sorting by it here made the bar visually reshuffle every refresh with
+    // no real turn order to justify it. Only sort by initiative once there's
+    // an actual turn order to show; otherwise keep filter-preserved (stable)
+    // order.
     const sortedEntities = [...window.entities]
-        .filter(e => e.alive && (e.side === 'player' || e.hasBeenSeenByPlayer) && !e.rider && !e.isNPC)
-        .sort((a, b) => b.timePoints - a.timePoints);
+        .filter(e => e.alive && (e.side === 'player' || e.hasBeenSeenByPlayer) && !e.rider && !e.isNPC);
+    if (window.isInCombat) {
+        sortedEntities.sort((a, b) => b.timePoints - a.timePoints);
+    }
 
     sortedEntities.forEach(entity => {
         const itemDiv = document.createElement('div');
@@ -1215,7 +1741,10 @@ function updateTurnIndicator() {
             img.style.left = "-100%"; img.style.top = "-50%";
             img.style.zIndex = "5";
         };
-        if (entity.side === 'player' && entity.name !== 'Wolf' && entity.name !== 'Horse') {
+        // Named bosses built on race:'human'/'elf'/'dwarf' (see the boss-spawn
+        // code in gameEngine.js) go through the same layered portrait as
+        // real party members, not just side:'player' entities.
+        if ((entity.side === 'player' || entity.race) && entity.name !== 'Wolf' && entity.name !== 'Horse') {
                             if (entity.race === 'human') {
                                 const sizePct = entity.gender === 'male' ? 90 : 80;
                                 const offsetPct = (100 - sizePct) / 2;
@@ -1268,6 +1797,13 @@ function updateTurnIndicator() {
                                 } else if (entity.race === 'dwarf') {
                                     baseImg.src = entity.gender === 'male' ? 'images/dwarfmale.png' : 'images/dwarffemale.png';
                                     scalingFactor = 0.8;
+                                } else if (entity.race === 'orc') {
+                                    // No dedicated layered orc body art — reuse the
+                                    // same flat orc.png the monster template uses
+                                    // (gameEngine.js's drawPlayerCharacter does the
+                                    // same for the main map) rather than falling
+                                    // through to the elf portrait below.
+                                    baseImg.src = 'images/orc.png';
                                 } else {
                                     baseImg.src = 'images/elf.png';
                                 }
@@ -1341,27 +1877,43 @@ function updateTurnIndicator() {
                 const shieldImg = document.createElement('img');
                 shieldImg.src = 'images/shield.png';
                 shieldImg.classList.add('portrait-layer');
-                if (entity.race === 'human') {
-                    const sizePct = entity.gender === 'male' ? 90 : 80;
-                    const offsetPct = (100 - sizePct) / 2;
-                    shieldImg.style.width = `${sizePct}%`; 
-                    shieldImg.style.height = `${sizePct}%`; 
-                    shieldImg.style.left = `${offsetPct}%`; 
-                    shieldImg.style.top = `${offsetPct}%`;
-                }
+                // The shield is a hand-held item, not another full-body
+                // layer — sizing it like the body/armor layers made it
+                // balloon to cover almost the whole portrait (previously
+                // only guarded for race === 'human', so every other race —
+                // elf, dwarf, orc — kept the un-scaled, portrait-filling
+                // default). Scale it down the same way drawPlayerCharacter's
+                // shieldSizeMult does relative to the body, and nudge it
+                // toward the off-hand instead of dead-center, for every race.
+                const bodySizePct = entity.race === 'dwarf' ? 80 : (entity.gender === 'male' ? 90 : 80);
+                const bodyOffsetPct = (100 - bodySizePct) / 2;
+                const shieldPct = bodySizePct * 0.42;
+                shieldImg.style.width = `${shieldPct}%`;
+                shieldImg.style.height = `${shieldPct}%`;
+                shieldImg.style.left = `${bodyOffsetPct + bodySizePct * 0.08}%`;
+                shieldImg.style.top = `${bodyOffsetPct + bodySizePct * 0.20}%`;
                 portraitDiv.appendChild(shieldImg);
             }
         } else {
             const img = document.createElement('img');
-            if (entity.name === 'Orc') img.src = 'images/orc.png';
-            else if (entity.name === 'Wolf') img.src = 'images/wolf.png';
-            else if (entity.name === 'Horse') { img.src = 'images/horse.png'; applyHorseScaling(img); }
-            else if (entity.name === 'Skeleton') img.src = 'images/skeleton.svg';
-            else if (entity.name === 'Zombie') img.src = 'images/zombie.svg';
-            else if (entity.name === 'Imp') img.src = 'images/imp.svg';
-            else if (entity.name === 'Boar') img.src = 'images/boar.png';
-            else if (entity.name === 'Tiger') img.src = 'images/tiger.png';
-            else if (entity.name === 'Eagle') {
+            // Renamed bosses (Grishnak, Krog, etc.) carry spriteBase (their
+            // underlying monster type) since e.name no longer matches a
+            // generic monster name once the boss-spawn code renames them.
+            const key = entity.name === 'Orc' || entity.name === 'Wolf' || entity.name === 'Horse' ||
+                entity.name === 'Skeleton' || entity.name === 'Zombie' || entity.name === 'Imp' ||
+                entity.name === 'Boar' || entity.name === 'Tiger' || entity.name === 'Eagle' || entity.name === 'Troll'
+                ? entity.name
+                : ({ orc: 'Orc', wolf: 'Wolf', troll: 'Troll', skeleton: 'Skeleton', zombie: 'Zombie', imp: 'Imp', boar: 'Boar', tiger: 'Tiger' }[entity.spriteBase] || entity.name);
+            if (key === 'Orc') img.src = 'images/orc.png';
+            else if (key === 'Wolf') img.src = 'images/wolf.png';
+            else if (key === 'Horse') { img.src = 'images/horse.png'; applyHorseScaling(img); }
+            else if (key === 'Skeleton') img.src = 'images/skeleton.svg';
+            else if (key === 'Zombie') img.src = 'images/zombie.svg';
+            else if (key === 'Imp') img.src = 'images/imp.svg';
+            else if (key === 'Boar') img.src = 'images/boar.png';
+            else if (key === 'Tiger') img.src = 'images/tiger.png';
+            else if (key === 'Troll') img.src = 'images/troll.png';
+            else if (key === 'Eagle') {
                 img.src = entity.isFlying ? 'images/eagleflying.png' : 'images/eagle.png';
             }
             else img.src = 'images/goblin.png';
@@ -1375,7 +1927,12 @@ function updateTurnIndicator() {
         const infoDiv = document.createElement('div');
         infoDiv.classList.add('turn-indicator-info');
         const dcTag = entity.disconnected ? ' <span style="color:#f44336;font-size:0.8em">(offline)</span>' : '';
-        let infoHtml = `<p><strong>${entity.name.split(' ')[0]}</strong>${dcTag}</p><p>HP: ${Math.ceil(entity.hp)}/${entity.maxHp} ${window.isInCombat ? `| TP: ${Math.floor(entity.timePoints)}` : ''}</p>`;
+        // Full name for real party members/companions (e.g. "Brother
+        // Alden", not just "Brother") — first-word-only stays for
+        // monster-side entities, where it's trimming a numbered suffix
+        // like "Orc 5" down to the species name, not a real name.
+        const displayName = entity.side === 'player' ? entity.name : entity.name.split(' ')[0];
+        let infoHtml = `<p><strong>${displayName}</strong>${dcTag}</p><p>HP: ${Math.ceil(entity.hp)}/${entity.maxHp} ${window.isInCombat ? `| TP: ${Math.floor(entity.timePoints)}` : ''}</p>`;
         if (entity.maxMana > 0 || entity.currentMana > 0) infoHtml += `<p>MP: ${Math.floor(entity.currentMana)}/${entity.maxMana || 0}</p>`;
         if (entity.riding) {
             const m = entity.riding;
@@ -1520,6 +2077,14 @@ window.showDisconnectedPlayerPanel = showDisconnectedPlayerPanel;
 function requestReaction(entity, options, callback, customMsg = null) {
     // Disconnected player: auto-pass all reactions
     if (entity.disconnected) { callback(null); return; }
+    // ROOT CAUSE FIX: never open a reaction modal for someone who can't
+    // actually decide anything — already dead, or downed/unconscious. Without
+    // this, an entity that dropped to 0 HP (or was killed by something else
+    // processed earlier in the same real-time batch) earlier in the very
+    // same tick could still be offered a reaction moments later, and a dead
+    // or unconscious character was never going to click a button — that's
+    // the "stuck waiting on a corpse" failure mode, not just a timing race.
+    if (!entity.alive || entity.unconscious) { callback(null); return; }
     const isSentientAlly = entity.side === 'player' && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(entity.name);
     if (!isSentientAlly) {
         if (options.length > 0 && Math.random() < 0.7) callback(options[0].id);
@@ -1532,17 +2097,36 @@ function requestReaction(entity, options, callback, customMsg = null) {
     const optDiv = document.getElementById("reaction-options");
     desc.innerText = customMsg || "An event has occurred! Choose a reaction:";
     optDiv.innerHTML = '';
+
+    let resolved = false;
+    const resolve = (choiceId) => {
+        if (resolved) return;
+        resolved = true;
+        clearInterval(livenessWatcher);
+        modal.style.display = "none";
+        window.isPausedForReaction = false;
+        callback(choiceId);
+    };
+
+    // Belt-and-braces: if the reactor dies or goes unconscious by some other
+    // means while this modal is genuinely open (rather than merely never
+    // clicked), stop waiting on them immediately instead of leaning on the
+    // much slower generic stuck-flag watchdog in gameEngine.js's tick().
+    const livenessWatcher = setInterval(() => {
+        if (!entity.alive || entity.unconscious) resolve(null);
+    }, 300);
+
     options.forEach(opt => {
         const btn = document.createElement("button");
         btn.innerText = `${opt.name} (${opt.tpCost} TP)`;
         btn.style.marginRight = "10px";
-        btn.onclick = () => { modal.style.display = "none"; window.isPausedForReaction = false; callback(opt.id); };
+        btn.onclick = () => resolve(opt.id);
         optDiv.appendChild(btn);
     });
     const noneBtn = document.createElement("button");
     noneBtn.innerText = "None";
     noneBtn.style.backgroundColor = "#777";
-    noneBtn.onclick = () => { modal.style.display = "none"; window.isPausedForReaction = false; callback(null); };
+    noneBtn.onclick = () => resolve(null);
     optDiv.appendChild(noneBtn);
     modal.style.display = "block";
 }
@@ -1559,22 +2143,38 @@ function showDialogue(npc, message, options = []) {
     msg.innerText = message;
     optDiv.innerHTML = '';
 
-    // Create a mini portrait
+    // Create a mini portrait. NPCs with real equipment use the same layered
+    // body-part renderer as their map sprite, so gear shown in conversation
+    // matches their stat block. Unique customImage NPCs (e.g. arena cast)
+    // keep their flat art.
     portrait.innerHTML = '';
-    const baseImg = document.createElement('img');
-    if (npc.customImage && window.gameVisuals[npc.customImage]?.complete) {
-        baseImg.src = window.gameVisuals[npc.customImage].src;
-    } else if (npc.race === 'human') {
-        baseImg.src = npc.gender === 'male' ? 'images/humanmale.png' : 'images/humanfemale.png';
-    } else if (npc.race === 'elf') {
-        baseImg.src = npc.gender === 'male' ? 'images/elfmale.png' : 'images/elffemale.png';
-    } else if (npc.race === 'dwarf') {
-        baseImg.src = npc.gender === 'male' ? 'images/dwarfmale.png' : 'images/dwarffemale.png';
+    if (!npc.customImage && npc.equipped && window.drawPlayerCharacter && window.CHAR_CONFIG?.[`${npc.race}_${npc.gender}`]) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 100;
+        canvas.height = 100;
+        canvas.classList.add('portrait-layer');
+        portrait.appendChild(canvas);
+        const ctx = canvas.getContext('2d');
+        const hs = window.hexSize || 40;
+        const cfg = window.CHAR_CONFIG[`${npc.race}_${npc.gender}`];
+        const z = (100 * 0.65) / (cfg.bodyH * hs);
+        window.drawPlayerCharacter(ctx, npc, 50, 65, z, 0);
     } else {
-        baseImg.src = 'images/elf.png';
+        const baseImg = document.createElement('img');
+        if (npc.customImage && window.gameVisuals[npc.customImage]?.complete) {
+            baseImg.src = window.gameVisuals[npc.customImage].src;
+        } else if (npc.race === 'human') {
+            baseImg.src = npc.gender === 'male' ? 'images/humanmale.png' : 'images/humanfemale.png';
+        } else if (npc.race === 'elf') {
+            baseImg.src = npc.gender === 'male' ? 'images/elfmale.png' : 'images/elffemale.png';
+        } else if (npc.race === 'dwarf') {
+            baseImg.src = npc.gender === 'male' ? 'images/dwarfmale.png' : 'images/dwarffemale.png';
+        } else {
+            baseImg.src = 'images/elf.png';
+        }
+        baseImg.classList.add('portrait-layer');
+        portrait.appendChild(baseImg);
     }
-    baseImg.classList.add('portrait-layer');
-    portrait.appendChild(baseImg);
 
     if (options.length === 0) {
         options.push({ label: "Goodbye", action: () => {} });
@@ -1596,13 +2196,26 @@ function showDialogue(npc, message, options = []) {
     modal.style.display = "block";
 }
 
-function openShop() {
+// options (all optional):
+//   itemIds: array of item ids to restrict the buy list to (default: every
+//            item in window.items that has a buyPrice — the roguelike's
+//            unlimited general-goods behavior)
+//   stock:   a mutable { itemId: remainingCount } object shared across calls
+//            (e.g. window.hollowmereStoreStock) — decremented on purchase,
+//            hidden once it hits 0. Omit for unlimited stock.
+//   mounts:  whether to offer the Horse/Boar mounts (default true)
+function openShop(options) {
+    options = options || {};
+    const restrictedIds = options.itemIds || null;
+    const stock = options.stock || null;
+    const showMounts = options.mounts !== false;
+
     const modal = document.getElementById("shop-modal");
     const buyList = document.getElementById("shop-buy-list");
     const sellList = document.getElementById("shop-sell-list");
     const goldDisplay = document.getElementById("shop-player-gold");
 
-    const player = window.party ? window.party[0] : null; 
+    const player = window.party ? window.party[0] : null;
     if (!player) {
         showMessage("You need a character to trade!");
         return;
@@ -1611,26 +2224,40 @@ function openShop() {
 
     buyList.innerHTML = '';
     for (const id in window.items) {
+        if (restrictedIds && !restrictedIds.includes(id)) continue;
         const item = window.items[id];
         if (item.buyPrice === undefined) continue;
+        if (stock && (stock[id] === undefined || stock[id] <= 0)) continue;
+
+        // Appraiser (skills.js): a passive 5%/rank buy-price discount,
+        // capped at 15% — applied here so it's live everywhere openShop is
+        // used (every merchant in the game), not just one shop's own code.
+        const discountMult = window.getAppraiserDiscountMult ? window.getAppraiserDiscountMult() : 1;
+        const price = Math.max(1, Math.round(item.buyPrice * discountMult));
+
         const div = document.createElement("div");
         div.style.display = "flex";
         div.style.justifyContent = "space-between";
         div.style.marginBottom = "5px";
-        div.innerHTML = `<span>${item.name} (${item.buyPrice}g)</span>`;
+        const stockLabel = stock ? ` [${stock[id]} left]` : '';
+        const priceLabel = price < item.buyPrice ? `<s>${item.buyPrice}</s> ${price}g` : `${price}g`;
+        div.innerHTML = `<span>${item.name} (${priceLabel})${stockLabel}</span>`;
         const btn = document.createElement("button");
         btn.innerText = "Buy";
         btn.style.fontSize = "0.8em";
-        btn.disabled = player.gold < item.buyPrice;
+        btn.disabled = player.gold < price;
         btn.onclick = () => {
-            player.gold -= item.buyPrice;
+            player.gold -= price;
             player.inventory.push(id);
-            openShop(); // Refresh
+            if (stock) stock[id]--;
+            openShop(options); // Refresh
+            if (window.showTutorialTip) window.showTutorialTip('acquired_item', "New gear sits in your Inventory until you equip it — open the Inventory screen and click Equip on it to actually use it.");
         };
         div.appendChild(btn);
         buyList.appendChild(div);
     }
 
+    if (showMounts) {
     // Add Horse to shop
     const horseDiv = document.createElement("div");
     horseDiv.style.display = "flex";
@@ -1656,10 +2283,44 @@ function openShop() {
         } else {
             window.showMessage("No space for a horse!");
         }
-        openShop(); // Refresh
+        openShop(options); // Refresh
     };
     horseDiv.appendChild(buyHorseBtn);
     buyList.appendChild(horseDiv);
+
+    // Skeleton Horse — a straightforward gold-bought mount here (the arena
+    // shop, unlike Campaign 2, has no lich-path/raise-the-dead concept to
+    // gate this behind), reusing the same HORSE_COAT_PRESETS.skeleton
+    // recolor Campaign 2's Bone Trader/raiseSkeletonHorse mechanic uses.
+    const skeletonHorseDiv = document.createElement("div");
+    skeletonHorseDiv.style.display = "flex";
+    skeletonHorseDiv.style.justifyContent = "space-between";
+    skeletonHorseDiv.style.marginBottom = "5px";
+    skeletonHorseDiv.innerHTML = `<span>Skeleton Horse (100g)</span>`;
+    const buySkeletonHorseBtn = document.createElement("button");
+    buySkeletonHorseBtn.innerText = "Buy";
+    buySkeletonHorseBtn.style.fontSize = "0.8em";
+    buySkeletonHorseBtn.disabled = player.gold < 100;
+    buySkeletonHorseBtn.onclick = () => {
+        player.gold -= 100;
+        const pEnt = window.entities.find(e => e.name === player.name);
+        const neighbors = window.getNeighbors(pEnt.hex.q, pEnt.hex.r);
+        const h = neighbors.find(n => !window.entities.some(e => e.alive && e.getAllHexes().some(oh => oh.q === n.q && oh.r === n.r)) && window.getTerrainAt(n.q, n.r).name !== 'Water');
+        if (h) {
+            const horse = window.createMonster('horse', h, null, null, 'player');
+            horse.coatPreset = 'skeleton';
+            horse.undead = true;
+            window.entities.push(horse);
+            window.drawMap();
+            window.renderEntities();
+            window.showMessage("Skeleton Horse purchased and joined the party!");
+        } else {
+            window.showMessage("No space for a horse!");
+        }
+        openShop(options); // Refresh
+    };
+    skeletonHorseDiv.appendChild(buySkeletonHorseBtn);
+    buyList.appendChild(skeletonHorseDiv);
 
     // Add Boar to shop
     const boarDiv = document.createElement("div");
@@ -1685,10 +2346,11 @@ function openShop() {
         } else {
             window.showMessage("No space for a boar!");
         }
-        openShop();
+        openShop(options);
     };
     boarDiv.appendChild(buyBoarBtn);
     buyList.appendChild(boarDiv);
+    }
 
     sellList.innerHTML = '';
     const inventory = player.inventory || [];
@@ -1698,7 +2360,12 @@ function openShop() {
     for (const id in counts) {
         const item = window.items[id];
         if (!item) continue;
-        const sellPrice = Math.floor((item.buyPrice || 0) * 0.5);
+        // Gathered raw materials (food/resource items) aren't buyable, so they
+        // carry an explicit sellPrice instead of half a buyPrice. The 0.5
+        // baseline shifts with difficulty: easier to fence goods on Easy,
+        // harsher fencing penalty on Hard.
+        const sellFraction = window.difficultyMode === 'easy' ? 0.7 : (window.difficultyMode === 'hard' ? 0.35 : 0.5);
+        const sellPrice = item.sellPrice ? Math.floor(item.sellPrice * (sellFraction / 0.5)) : Math.floor((item.buyPrice || 0) * sellFraction);
         if (sellPrice <= 0) continue;
 
         const div = document.createElement("div");
@@ -1713,7 +2380,7 @@ function openShop() {
             player.gold += sellPrice;
             const idx = player.inventory.indexOf(id);
             if (idx > -1) player.inventory.splice(idx, 1);
-            openShop(); // Refresh
+            openShop(options); // Refresh
         };
         div.appendChild(btn);
         sellList.appendChild(div);
@@ -1868,6 +2535,48 @@ window.updateAudioSetting = function(type, value) {
     }
 };
 
+// ALLEGIANCE OUTLINE MODE: 'combat' (default) | 'always' | 'never'.
+// A player-level preference (not game-save state), so it lives in
+// localStorage and survives across save files the same way audio would
+// if that were persisted.
+window.allegianceOutlineMode = localStorage.getItem('rpg_allegiance_outline_mode') || 'combat';
+window.setAllegianceOutlineMode = function(mode) {
+    window.allegianceOutlineMode = mode;
+    localStorage.setItem('rpg_allegiance_outline_mode', mode);
+};
+
+// TUTORIAL MODE: explains a mechanic the first time it happens, then
+// remembers it via a set of seen-ids in localStorage so it never repeats.
+// window.showTutorialTip(id, text) is the hook other systems call.
+window.tutorialModeEnabled = localStorage.getItem('rpg_tutorial_enabled') !== 'false';
+try {
+    window.tutorialSeen = JSON.parse(localStorage.getItem('rpg_tutorial_seen') || '{}');
+} catch (e) {
+    window.tutorialSeen = {};
+}
+window.setTutorialModeEnabled = function(enabled) {
+    window.tutorialModeEnabled = enabled;
+    localStorage.setItem('rpg_tutorial_enabled', enabled ? 'true' : 'false');
+};
+window.resetTutorialMemory = function() {
+    window.tutorialSeen = {};
+    localStorage.removeItem('rpg_tutorial_seen');
+    window.showMessage('Tutorial memory reset — tips will explain things again.');
+};
+window.showTutorialTip = function(id, text) {
+    if (!window.tutorialModeEnabled || window.tutorialSeen[id]) return;
+    window.tutorialSeen[id] = true;
+    localStorage.setItem('rpg_tutorial_seen', JSON.stringify(window.tutorialSeen));
+    window.showMessage(`Tip: ${text}`);
+};
+window.initSettingsUI = function() {
+    const modeSelect = document.getElementById('allegiance-outline-mode');
+    if (modeSelect) modeSelect.value = window.allegianceOutlineMode;
+    const tutCheck = document.getElementById('tutorial-mode-toggle');
+    if (tutCheck) tutCheck.checked = window.tutorialModeEnabled;
+    if (window.syncGraphicsSettingsUI) window.syncGraphicsSettingsUI();
+};
+
 function updateMusicState() {
     if (!window.audioEnabled) return;
 
@@ -1881,6 +2590,14 @@ function updateMusicState() {
                    (inventoryModal && inventoryModal.style.display === "block") ||
                    (settingsModal && settingsModal.style.display === "block") ||
                    (document.getElementById("characterCreator").style.display === "block");
+
+    // ROADMAP E2: Campaign 2 never uses the arena title theme at all — its
+    // own living director (musicDirector.js) keeps playing under a menu,
+    // just ducked, instead of getting swapped out for a hard cut.
+    if (window.currentCampaign === "2") {
+        if (window.setMusicDirectorDucked) window.setMusicDirectorDucked(inMenu);
+        return;
+    }
 
     if (inMenu) {
         window.playMusic('title');
@@ -1961,8 +2678,10 @@ function highlightValidTargets(caster, spell) {
                 if (dist <= range) {
                     let valid = false;
                     if (type === 'damage') valid = (e.side !== caster.side && e.side !== 'neutral');
+                    else if (type === 'buff' && spell.baseId === 'wild_fury') valid = (e === caster || e === caster.animalCompanion);
                     else if (type === 'heal' || type === 'buff') valid = (e.side === caster.side);
                     else if (type === 'dispel') valid = true;
+                    else if (type === 'debuff' && spell.baseId === 'calm_animal') valid = !!window.resolveCalmAnimalTarget(e);
                     
                     if (valid) {
                         window.highlightedHexes.push({ q: e.hex.q, r: e.hex.r, type: 'attack' });
@@ -1970,8 +2689,10 @@ function highlightValidTargets(caster, spell) {
                 }
             }
         });
-        // AOE Debuffs can also target empty hexes
-        if (type === 'aoe_debuff') {
+        // AOE spells (debuffs, and burst-mode damage/heal) can also target
+        // empty hexes — the burst is centered on the clicked point, not
+        // necessarily on an occupant.
+        if (type === 'aoe_debuff' || type === 'aoe_damage' || type === 'aoe_heal') {
             for (let q = -range; q <= range; q++) {
                 for (let r = Math.max(-range, -q - range); r <= Math.min(range, -q + range); r++) {
                     const h = { q: caster.hex.q + q, r: caster.hex.r + r };

@@ -5,12 +5,38 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("DOM Content Loaded - Preloading assets and setting up listeners");
     preloadAssets();
 
+    // Re-apply a persisted non-Auto frame-rate choice (graphicsSettings.js)
+    // now that gameEngine.js's _setManualRenderInterval hook actually
+    // exists — graphicsSettings.js itself loads before gameEngine.js, so it
+    // only reads the saved preference into window.frameRateMode, it can't
+    // act on it yet.
+    if (window.frameRateMode && window.frameRateMode !== 'auto' && window.setFrameRateMode) {
+        window.setFrameRateMode(window.frameRateMode);
+    }
+
     const createCharacterButton = document.getElementById("createCharacterButton");
     if (createCharacterButton) {
         createCharacterButton.addEventListener("click", window.startGame);
+        // onclick/click alone has been unreliable on iOS Safari for this
+        // exact button — same touch-hardening already applied to the party
+        // tabs elsewhere in this UI. preventDefault stops the click that
+        // would otherwise follow touchend from firing startGame twice.
+        createCharacterButton.addEventListener("touchend", (e) => {
+            e.preventDefault();
+            window.startGame();
+        }, { passive: false });
     }
 
     // Asset Preloading Logic
+    //
+    // Three tiers, loaded strictly in order, instead of one flat "everything
+    // after the arena floor tiles" list — a fresh page load has nothing
+    // rendered yet, so *what the player sees in the first few seconds* (the
+    // tavern's opening room, the arena lobby, and whatever race/gender the
+    // character creator is currently showing) should win the race against
+    // the other ~70 sprites (every monster, every other race/gender combo,
+    // every piece of world furniture) that won't be on screen for minutes,
+    // if ever, in a given playthrough.
     async function preloadAssets() {
         const priorityImages = [
             {key: 'floor1', src: 'images/arenaHexFloor1.png'},
@@ -18,48 +44,67 @@ document.addEventListener("DOMContentLoaded", () => {
             {key: 'floor3', src: 'images/arenaHexFloor3.png'},
             {key: 'floor4', src: 'images/arenaHexFloor4.png'}
         ];
-        
-        const otherImages = [
+
+        // The exact race/gender combo tags used everywhere else in this
+        // file (APPEARANCE_BASE_SRC keys, CHAR_CONFIG) — reused here so
+        // there's one single source of truth for "which two images does
+        // this race/gender combo need."
+        const raceGenderImages = {
+            human_female: [{key: 'humanBase', src: 'images/humanfemale.png'}, {key: 'humanHair', src: 'images/humanfemalehair.png'}],
+            human_male: [{key: 'humanMaleBase', src: 'images/humanmale.png'}, {key: 'humanMaleHair', src: 'images/humanmalehair.png'}],
+            elf_female: [{key: 'elfFemaleBase', src: 'images/elffemale.png'}, {key: 'elfFemaleHair', src: 'images/elffemalehair.png'}],
+            elf_male: [{key: 'elfMaleBase', src: 'images/elfmale.png'}, {key: 'elfMaleHair', src: 'images/elfmalehair.png'}],
+            dwarf_female: [{key: 'dwarfFemaleBase', src: 'images/dwarffemale.png'}, {key: 'dwarfFemaleHair', src: 'images/dwarffemalehair.png'}],
+            dwarf_male: [{key: 'dwarfMaleBase', src: 'images/dwarfmale.png'}, {key: 'dwarfMaleHair', src: 'images/dwarfmalehair.png'}],
+        };
+
+        // Everything visible in the Hollowmere tavern's starting room
+        // (where every campaign begins — see setupVillageScene's tavern
+        // furniture in campaign2World.js) and the Campaign 1 arena lobby,
+        // both seen within seconds of clicking "Create Character."
+        const earlyRoomImages = [
+            {key: 'wood_floor', src: 'images/wood_floor.svg'},
+            {key: 'table', src: 'images/table.svg'},
+            {key: 'bench', src: 'images/bench.svg'},
+            {key: 'fireplace', src: 'images/fireplace.svg'},
+            {key: 'door_open', src: 'images/door_open.svg'},
+            {key: 'door_closed', src: 'images/door_closed.svg'},
+            {key: 'swordIcon', src: 'images/sword.png'},
+            {key: 'shield', src: 'images/shield.png'},
+            {key: 'nasal_helm', src: 'images/nasalHelm.png'},
+            {key: 'arenaannouncer', src: 'images/arenaannouncer.png'},
+            {key: 'arenamercenary', src: 'images/arenamercenary.png'},
+            {key: 'arenashopkeeper', src: 'images/arenashopkeeper.png'},
+        ];
+
+        const restImages = [
             {key: 'playerBase', src: 'images/elf.png'},
             {key: 'leatherArmor', src: 'images/elfleatherarmour.png'},
             {key: 'chainArmor', src: 'images/elfchainarmour.png'},
             {key: 'monsterDefault', src: 'images/goblin.png'},
             {key: 'orcBase', src: 'images/orc.png'},
-            {key: 'swordIcon', src: 'images/sword.png'},
-            {key: 'humanBase', src: 'images/humanfemale.png'},
-            {key: 'humanHair', src: 'images/humanfemalehair.png'},
-            {key: 'humanMaleHair', src: 'images/humanmalehair.png'},
             {key: 'humanLight', src: 'images/humanlightarmour.png'},
             {key: 'humanMedium', src: 'images/humanmediumarmour.png'},
             {key: 'humanHeavy', src: 'images/humanheavyarmour.png'},
             {key: 'horse', src: 'images/horse.png'},
-            {key: 'nasal_helm', src: 'images/nasalHelm.png'},
-            {key: 'humanMaleBase', src: 'images/humanmale.png'},
-            {key: 'elfMaleBase', src: 'images/elfmale.png'},
-            {key: 'elfMaleHair', src: 'images/elfmalehair.png'},
-            {key: 'elfFemaleBase', src: 'images/elffemale.png'},
-            {key: 'elfFemaleHair', src: 'images/elffemalehair.png'},
-            {key: 'dwarfMaleBase', src: 'images/dwarfmale.png'},
-            {key: 'dwarfMaleHair', src: 'images/dwarfmalehair.png'},
-            {key: 'dwarfFemaleBase', src: 'images/dwarffemale.png'},
-            {key: 'dwarfFemaleHair', src: 'images/dwarffemalehair.png'},
-            {key: 'shield', src: 'images/shield.png'},
             {key: 'skeleton', src: 'images/skeleton.svg'},
             {key: 'zombie', src: 'images/zombie.svg'},
             {key: 'imp', src: 'images/imp.svg'},
+            {key: 'elite_goblin', src: 'images/elite_goblin.svg'},
+            {key: 'harpy', src: 'images/harpy.svg'},
+            {key: 'wraith', src: 'images/wraith.svg'},
+            {key: 'basilisk', src: 'images/basilisk.svg'},
+            {key: 'minotaur', src: 'images/minotaur.png'},
+            {key: 'revenantBase', src: 'images/revenant.svg'},
             {key: 'wolf', src: 'images/wolf.png'},
             {key: 'torch_lit', src: 'images/torch_lit.svg'},
-            {key: 'fireplace', src: 'images/fireplace.svg'},
             {key: 'axe', src: 'images/axe.png'},
             {key: 'troll', src: 'images/troll.png'},
             {key: 'spear', src: 'images/spear.png'},
-            {key: 'club', src: 'images/club.png'},
+            {key: 'club', src: 'images/club.svg'},
             {key: 'spiderweb', src: 'images/spiderweb.png'},
             {key: 'spider1', src: 'images/spider1.png'},
             {key: 'spider2', src: 'images/spider2.png'},
-            {key: 'arenaannouncer', src: 'images/arenaannouncer.png'},
-            {key: 'arenamercenary', src: 'images/arenamercenary.png'},
-            {key: 'arenashopkeeper', src: 'images/arenashopkeeper.png'},
             {key: 'grishnak', src: 'images/Grishnak.png'},
             {key: 'overlay_blood', src: 'images/overlay blood.png'},
             {key: 'overlay_skull', src: 'images/overlay skull.png'},
@@ -69,12 +114,33 @@ document.addEventListener("DOMContentLoaded", () => {
             {key: 'tiger', src: 'images/tiger.png'},
             {key: 'eagle', src: 'images/eagle.png'},
             {key: 'eagleflying', src: 'images/eagleflying.png'},
-            {key: 'foliage', src: 'images/foliage.png'}
+            {key: 'foliage', src: 'images/foliage.png'},
+            {key: 'bed', src: 'images/bed.svg'},
+            {key: 'throne', src: 'images/throne.svg'},
+            {key: 'apple', src: 'images/apple.svg'},
+            {key: 'path', src: 'images/path.svg'},
+            {key: 'signpost', src: 'images/signpost.svg'},
+            {key: 'fountain', src: 'images/fountain.svg'},
+            {key: 'locket', src: 'images/locket.svg'},
+            {key: 'gate_arch', src: 'images/gate_arch.svg'},
+            {key: 'altar_unholy', src: 'images/altar_unholy.svg'},
+            {key: 'ladder', src: 'images/ladder.svg'},
+            {key: 'watchtower', src: 'images/watchtower.svg'},
+            {key: 'corpse_marker', src: 'images/corpse_marker.svg'},
+            {key: 'fence_h', src: 'images/fence_h.svg'},
+            {key: 'fence_v', src: 'images/fence_v.svg'},
+            {key: 'dirt', src: 'images/dirt.svg'},
+            {key: 'hut', src: 'images/hut.svg'},
+            {key: 'hut_large', src: 'images/hut_large.svg'},
+            {key: 'journal', src: 'images/journal.svg'}
         ];
 
         window.gameVisuals = {};
+        const _loadedKeys = new Set();
 
         function load(asset) {
+            if (_loadedKeys.has(asset.key)) return Promise.resolve(); // already loaded (or in flight) via an earlier tier / a race-select change
+            _loadedKeys.add(asset.key);
             return new Promise((resolve) => {
                 const img = new Image();
                 img.onload = () => { window.gameVisuals[asset.key] = img; resolve(); };
@@ -83,12 +149,39 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         }
 
-        // Priority load
-        await Promise.all(priorityImages.map(load));
+        // Re-prioritizable on demand: if the player changes race/gender in
+        // the character creator mid-load, that combo's two images jump the
+        // queue immediately rather than waiting for their turn in
+        // raceGenderImages/restImages further down.
+        function loadRaceGender(race, gender) {
+            const images = raceGenderImages[`${race}_${gender}`];
+            if (!images) return Promise.resolve();
+            return Promise.all(images.map(load));
+        }
+        window._preloadRaceGender = loadRaceGender;
+
+        function currentRaceGender() {
+            const raceSelect = document.getElementById('race-select');
+            const genderSelect = document.getElementById('gender-select');
+            return { race: raceSelect?.value || 'human', gender: genderSelect?.value || 'female' };
+        }
+
+        // Priority load: arena floor tiles, this room's furniture/NPCs, and
+        // whichever race/gender the creator defaults to (or is already set
+        // to, if this runs after the DOM's initial state is established).
+        await Promise.all([
+            ...priorityImages.map(load),
+            ...earlyRoomImages.map(load),
+            loadRaceGender(currentRaceGender().race, currentRaceGender().gender),
+        ]);
         console.log("Priority assets loaded");
-        
-        // Background load
-        await Promise.all(otherImages.map(load));
+        if (window.updateAppearancePreview) window.updateAppearancePreview(); // sprites just finished loading — refresh the (until-now-blank) preview
+
+        // Background load: every other race/gender combo, then everything else.
+        await Promise.all([
+            ...Object.entries(raceGenderImages).flatMap(([key, images]) => images.map(load)),
+            ...restImages.map(load),
+        ]);
         console.log("All assets loaded");
 
         // Audio pre-fetch (minimal)
@@ -97,8 +190,64 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    // If the player changes race/gender while background assets are still
+    // loading, jump that combo to the front of the queue instead of waiting
+    // for its turn — keeps "whatever the character creator is currently set
+    // to make" accurate even after the initial preload snapshot.
+    ['race-select', 'gender-select'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('change', () => {
+            const raceSelect = document.getElementById('race-select');
+            const genderSelect = document.getElementById('gender-select');
+            if (window._preloadRaceGender && raceSelect && genderSelect) {
+                window._preloadRaceGender(raceSelect.value, genderSelect.value);
+            }
+        });
+    });
+
+    // Menu/Cheat dropdowns rely on CSS :hover, which is unreliable on
+    // trackpads/touch — also toggle them on click, closing any other open
+    // dropdown and closing when the click lands outside of one entirely.
+    function handleMenuDropdownToggle(e) {
+        // A <select> (or its <option>s) inside a dropdown-content needs the
+        // dropdown to stay open while its own native picker is up — closing
+        // the container mid-tap (especially on mobile, where the picker is
+        // tied to the select's live DOM/visibility state) can abort the
+        // picker before it ever opens. Interacting with the teleport-cheat
+        // location select is exactly this case.
+        if (e.target.tagName === 'SELECT' || e.target.tagName === 'OPTION') return;
+        const clickedDropbtn = e.target.classList && e.target.classList.contains('dropbtn');
+        document.querySelectorAll('.dropdown-content.show').forEach(dc => {
+            if (!clickedDropbtn || dc !== e.target.nextElementSibling) dc.classList.remove('show');
+        });
+        if (clickedDropbtn) {
+            const content = e.target.nextElementSibling;
+            if (content) {
+                content.classList.toggle('show');
+                if (content.classList.contains('show')) clampDropdownToViewport(content);
+            }
+        }
+    }
+
+    // .dropdown-content has no explicit left/right, so it inherits whatever
+    // static position its trigger button ends up at in the wrapped #top-menu
+    // button row — on a narrow phone screen the Cheat button can land near
+    // the right edge, and the dropdown (widened further by the teleport
+    // select+button) then spills straight off-screen. Clamp it back on
+    // screen after it opens, rather than trying to predict button position
+    // in CSS (which has no reliable "distance from viewport edge" query).
+    function clampDropdownToViewport(content) {
+        content.style.left = '';
+        const rect = content.getBoundingClientRect();
+        const overflowRight = rect.right - window.innerWidth;
+        if (overflowRight > 0) {
+            content.style.left = `-${Math.ceil(overflowRight) + 8}px`;
+        }
+    }
+    window.addEventListener('click', handleMenuDropdownToggle);
+
     // Global click listener for ANY button click in the window
-    window.addEventListener('click', (e) => {
+    function handleGlobalButtonAction(e) {
         const btnId = e.target.id;
         if (btnId) console.log("Window clicked element ID:", btnId);
 
@@ -138,11 +287,29 @@ document.addEventListener("DOMContentLoaded", () => {
                 modal.style.display = "block";
                 window.renderWorldMap();
             }
+        } else if (btnId === "quest-log-btn") {
+            const modal = document.getElementById("quest-log-modal");
+            if (modal) {
+                modal.style.display = "block";
+                window.renderQuestLog();
+            }
+        } else if (btnId === "roster-btn") {
+            if (window.isInCombat) {
+                window.showMessage("Can't manage the roster mid-fight.");
+            } else {
+                const modal = document.getElementById("roster-modal");
+                if (modal) {
+                    modal.style.display = "block";
+                    window.renderRoster();
+                }
+            }
         } else if (btnId === "move-group-btn") {
             window.groupMoveMode = !window.groupMoveMode;
             const btn = document.getElementById("move-group-btn");
             btn.innerText = `Move Group: ${window.groupMoveMode ? 'ON' : 'OFF'}`;
             btn.style.backgroundColor = window.groupMoveMode ? '#ff9800' : '#795548';
+        } else if (btnId === "party-formation-btn") {
+            window.cyclePartyFormation();
         } else if (btnId === "load-btn-initial") {
             const modal = document.getElementById("load-game-modal");
             if (modal) {
@@ -159,12 +326,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 document.getElementById("save-name-input").value = `${charName}_${i}`;
                 modal.style.display = "block";
             }
-        } else if (btnId === "load-menu-btn") {
+        } else if (btnId === "load-menu-btn" || btnId === "game-over-load-btn") {
+            document.getElementById("game-over-modal").style.display = "none";
             const modal = document.getElementById("load-game-modal");
             if (modal) {
                 window.updateSaveList();
                 modal.style.display = "block";
             }
+        } else if (btnId === "game-over-menu-btn") {
+            document.getElementById("game-over-modal").style.display = "none";
+            window.gameOver = false;
+            location.reload();
         } else if (btnId === "confirm-save-btn") {
             const saveName = document.getElementById("save-name-input").value || "ManualSave";
             window.saveGame(saveName);
@@ -178,6 +350,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (modal) {
                 modal.style.display = "block";
                 if (window.updateMusicState) window.updateMusicState();
+                if (window.initSettingsUI) window.initSettingsUI();
             }
         } else if (btnId === "host-game-btn") {
             if (window.createRoom) window.createRoom();
@@ -213,6 +386,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
             window.party.push(merc);
+            if (window.wireSharedInventory) window.wireSharedInventory(merc);
             
             // Spawn next to player
             const pEnt = window.entities.find(e => e.name === mainChar.name);
@@ -258,31 +432,54 @@ document.addEventListener("DOMContentLoaded", () => {
             window.toggleFlyCheat();
         } else if (btnId === "cheat-max-skills-btn") {
             window.cheatMaxSkills();
+        } else if (btnId === "cheat-max-all-skills-btn") {
+            if (window.cheatMaxAllSkills) window.cheatMaxAllSkills();
+        } else if (btnId === "cheat-explore-everything-btn") {
+            if (window.cheatExploreEverything) window.cheatExploreEverything();
+        } else if (btnId === "cheat-siege-sally-btn") {
+            if (window.cheatTestNorthwatchSiege) window.cheatTestNorthwatchSiege('sally');
+        } else if (btnId === "cheat-siege-stay-btn") {
+            if (window.cheatTestNorthwatchSiege) window.cheatTestNorthwatchSiege('stay');
+        } else if (btnId === "cheat-siege-join-btn") {
+            if (window.cheatTestNorthwatchSiege) window.cheatTestNorthwatchSiege('join');
+        } else if (e.target.classList && e.target.classList.contains('cheat-teleport-dest-btn')) {
+            const dest = e.target.dataset.teleportDest;
+            if (dest && window.teleportPartyToLocation) window.teleportPartyToLocation(dest);
         } else if (btnId === "cancel-moves-btn") {
             window.cancelAllMoveOrders();
         } else if (btnId === "rest-btn") {
             window.toggleRest();
         } else if (btnId === "sleep-btn") {
             window.toggleSleep();
+        } else if (btnId === "time-speed-btn") {
+            window.toggleTimeSpeed();
+        } else if (btnId === "controller-mode-btn") {
+            if (window.toggleControllerMode) window.toggleControllerMode();
         }
-    });
+    }
+    window.addEventListener('click', handleGlobalButtonAction);
 
     // Modal Close Logic
-    window.addEventListener('click', (e) => {
+    function handleModalCloseClick(e) {
         const isCloseBtn = e.target.classList.contains('close-btn');
         const isModalOverlay = e.target.classList.contains('modal');
-        
+
         if (isCloseBtn || isModalOverlay) {
             const modal = isCloseBtn ? e.target.closest(".modal") : e.target;
             if (modal) {
                 if (modal.id === "end-run-modal" && isModalOverlay) return;
-                
+                // Dialogue choices (e.g. "which side do I back in this fight?")
+                // must be picked explicitly — clicking the backdrop or the X
+                // used to silently dismiss the prompt with no way to bring it
+                // back, leaving whatever the choice was meant to gate unresolved.
+                if (modal.id === "dialogue-modal") return;
+
                 modal.style.display = "none";
                 window.isPausedForReaction = false;
                 window.lastModalClosedTime = Date.now(); // Track for ghost click prevention
-                
+
                 if (window.updateMusicState) window.updateMusicState();
-                
+
                 if (modal.id === "character-screen-modal" && window.isInitialCharacterScreen) {
                     window.isInitialCharacterScreen = false;
                     console.log("Initial character screen closed - Starting Core");
@@ -290,7 +487,40 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             }
         }
-    });
+    }
+    window.addEventListener('click', handleModalCloseClick);
+
+    // iOS Safari: a synthetic 'click' delegated all the way up to window can
+    // be unreliable, especially for buttons that only became visible a
+    // moment earlier via a class toggle (the dropdown menu) — same
+    // touch-hardening already applied to the party tabs elsewhere in this
+    // UI. Fire the same three handlers directly off touchend for anything
+    // these actually act on (id'd buttons, dropdown buttons, modal
+    // close/overlay), and suppress the resulting synthetic click so the
+    // action doesn't run twice. Scoped to exactly the ids/classes these
+    // three handlers switch on — NOT "any element with an id" (that
+    // swallowed the touch on other id'd controls with their own separate
+    // click listeners, e.g. createCharacterButton and campaign-select,
+    // breaking character creation on touch devices entirely).
+    const GLOBAL_BUTTON_ACTION_IDS = new Set([
+        'create-room-btn', 'join-room-btn', 'leave-room-btn', 'character-screen-btn', 'spell-menu-btn',
+        'inventory-btn', 'world-map-btn', 'quest-log-btn', 'roster-btn', 'move-group-btn', 'party-formation-btn',
+        'load-btn-initial', 'save-menu-btn', 'load-menu-btn', 'game-over-load-btn', 'game-over-menu-btn',
+        'confirm-save-btn', 'quick-save-btn', 'quick-load-btn', 'settings-menu-btn', 'host-game-btn',
+        'confirm-hire-btn', 'cancel-hire-btn', 'close-shop-modal', 'cheat-jerry-btn', 'cheat-horse-btn',
+        'cheat-all-equip-btn', 'cheat-fly-btn', 'cheat-max-skills-btn', 'cancel-moves-btn', 'rest-btn',
+        'sleep-btn', 'time-speed-btn', 'controller-mode-btn'
+    ]);
+    window.addEventListener('touchend', (e) => {
+        const t = e.target;
+        const actionable = GLOBAL_BUTTON_ACTION_IDS.has(t.id) ||
+            (t.classList && (t.classList.contains('dropbtn') || t.classList.contains('close-btn') || t.classList.contains('modal') || t.classList.contains('cheat-teleport-dest-btn')));
+        if (!actionable) return;
+        e.preventDefault();
+        handleMenuDropdownToggle(e);
+        handleGlobalButtonAction(e);
+        handleModalCloseClick(e);
+    }, { passive: false });
 
     window.initHexMap();
     if (window.initWorldMapEvents) window.initWorldMapEvents();
@@ -341,6 +571,7 @@ window.updateRoguelikePreview = function() {
         } else {
             if (optionsDiv) optionsDiv.style.display = "none";
             if (ironmanCheck) {
+                if (ironmanCheck.disabled) ironmanCheck.checked = false; // was forced on for Arena — don't leak that into other campaigns
                 ironmanCheck.disabled = false;
             }
         }
@@ -418,6 +649,87 @@ window.updateRoguelikePreview = function() {
     
     window.updateRoguelikePreview();
 
+    // Live preview of the chosen race/gender/clothing-color combo — color
+    // only, never shape/race (see spriteRecolor.js for the recolor itself).
+    // Self-contained (doesn't depend on window.gameVisuals/CHAR_CONFIG,
+    // which aren't populated until startGameCore runs after character
+    // creation) — loads base body sprites directly the first time they're
+    // needed and caches them.
+    const APPEARANCE_BASE_SRC = {
+        human_female: 'images/humanfemale.png', human_male: 'images/humanmale.png',
+        elf_female: 'images/elffemale.png', elf_male: 'images/elfmale.png',
+        dwarf_female: 'images/dwarffemale.png', dwarf_male: 'images/dwarfmale.png'
+    };
+    const APPEARANCE_HAIR_SRC = {
+        human_female: 'images/humanfemalehair.png', human_male: 'images/humanmalehair.png',
+        elf_female: 'images/elffemalehair.png', elf_male: 'images/elfmalehair.png',
+        dwarf_female: 'images/dwarffemalehair.png', dwarf_male: 'images/dwarfmalehair.png'
+    };
+    const _appearancePreviewImages = {};
+    function loadAppearancePreviewImage(src) {
+        let img = _appearancePreviewImages[src];
+        if (!img) {
+            img = new Image();
+            img.onload = () => window.updateAppearancePreview();
+            img.src = src;
+            _appearancePreviewImages[src] = img;
+        }
+        return img;
+    }
+    window.updateAppearancePreview = function() {
+        const canvas = document.getElementById("appearance-preview-canvas");
+        const shirtSlider = document.getElementById("shirt-hue-slider");
+        const pantsSlider = document.getElementById("pants-hue-slider");
+        const hairSlider = document.getElementById("hair-hue-slider");
+        const skinSlider = document.getElementById("skin-hue-slider");
+        const raceSelect = document.getElementById("race-select");
+        const genderSelect = document.getElementById("gender-select");
+        if (!canvas || !shirtSlider || !pantsSlider || !hairSlider || !skinSlider || !raceSelect || !genderSelect || !window.getRecoloredSprite) return;
+
+        const key = `${raceSelect.value}_${genderSelect.value}`;
+        const bodySrc = APPEARANCE_BASE_SRC[key];
+        const hairSrc = APPEARANCE_HAIR_SRC[key];
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (!bodySrc) return;
+
+        const bodyImg = loadAppearancePreviewImage(bodySrc);
+        if (!bodyImg.complete || !bodyImg.naturalWidth) return; // redraws via onload once loaded
+
+        const tintedBody = window.getRecoloredSprite(bodyImg, {
+            shirtHue: parseInt(shirtSlider.value, 10),
+            pantsHue: parseInt(pantsSlider.value, 10),
+            skinHue: parseInt(skinSlider.value, 10)
+        });
+        const scale = Math.min(canvas.width / bodyImg.naturalWidth, canvas.height / bodyImg.naturalHeight);
+        const w = bodyImg.naturalWidth * scale, h = bodyImg.naturalHeight * scale;
+        const drawX = (canvas.width - w) / 2, drawY = (canvas.height - h) / 2;
+        ctx.drawImage(tintedBody, drawX, drawY, w, h);
+
+        if (hairSrc && window.getRecoloredHairSprite) {
+            const hairImg = loadAppearancePreviewImage(hairSrc);
+            if (hairImg.complete && hairImg.naturalWidth) {
+                const tintedHair = window.getRecoloredHairSprite(hairImg, parseInt(hairSlider.value, 10));
+                // Some hairstyles (e.g. human_male, dwarf_female) are a small
+                // "cap" meant to be drawn at a fraction of body size near the
+                // top of the head, not stretched over the whole body — same
+                // convention as drawPlayerCharacter's hair.type === 'small'.
+                // Skipping this made the preview render those as a full-body
+                // hair overlay, comically oversized.
+                const hairCfg = window.CHAR_CONFIG?.[key]?.hair;
+                if (hairCfg && hairCfg.type === 'small') {
+                    const hW = w * hairCfg.wFrac;
+                    const hH = h * hairCfg.hFrac;
+                    const topFrac = hairCfg.topFrac !== undefined ? hairCfg.topFrac : 0.2;
+                    ctx.drawImage(tintedHair, drawX + w / 2 - hW / 2, drawY + topFrac * h - hH / 2, hW, hH);
+                } else {
+                    ctx.drawImage(tintedHair, drawX, drawY + (hairCfg?.yRaw || 0), w, h);
+                }
+            }
+        }
+    };
+    window.updateAppearancePreview();
+
     window.updateSelectionPreview = function() {
         const race = document.getElementById("race-select").value;
         const cls = document.getElementById("class-select").value;
@@ -434,7 +746,7 @@ window.updateRoguelikePreview = function() {
         html += `</p>`;
 
         html += `<p style="margin: 0;"><strong>${cls.charAt(0).toUpperCase() + cls.slice(1)}:</strong> `;
-        html += Object.entries(cb).map(([k, v]) => `+${v} ${k.charAt(0).toUpperCase() + k.slice(1)}`).join(", ");
+        html += Object.entries(cb).filter(([, v]) => v !== 0).map(([k, v]) => `+${v} ${k.charAt(0).toUpperCase() + k.slice(1)}`).join(", ");
         html += `</p>`;
 
         preview.innerHTML = html;
@@ -464,6 +776,77 @@ window.toggleFlyCheat = function() {
     window.renderEntities();
     window.updateTurnIndicator();
     if (window.updateActionButtons) window.updateActionButtons();
+};
+
+// Cheat: teleport the whole (non-combat-ally) party to any named location
+// this campaign has actually built. Each entry is a getter, not a static
+// hex, since these building centers (campaign2MillbrookCenter etc.) aren't
+// assigned until setupVillageScene finishes running at game start.
+window.campaign2TeleportLocations = {
+    'Hollowmere (Village)': () => window.campaign2Landmarks?.crossroads,
+    'Millbrook (Village)': () => window.campaign2MillbrookCenter,
+    'Silverhart (Capital)': () => window.campaign2PalaceGateExteriorHex,
+    'Reddale (Town)': () => window.campaign2ReddaleGuardhouseCenter,
+    'Emberlode (Mining Village)': () => window.campaign2EmberlodeCenter,
+    "Old Mac's Farmstead": () => window.campaign2FarmHouseCenter,
+    'Goblin Stronghold': () => window.campaign2GoblinCampCenter,
+    'Abandoned House': () => window.campaign2AbandonedHouseCenter,
+    'Northwatch Fort': () => window.campaign2NorthwatchGateHex,
+    'Ridgehold Fort': () => window.campaign2RidgeholdFortRegion?.doorHex,
+};
+
+window.teleportPartyToLocation = function(locationName) {
+    const getHex = window.campaign2TeleportLocations[locationName];
+    const hex = getHex && getHex();
+    if (!hex || hex.q === undefined) {
+        window.showMessage(`Cheat: "${locationName}" isn't built yet.`);
+        return;
+    }
+    // Real party members/mounts only — never temporary combat allies, who
+    // should stay wherever the fight they belong to left them.
+    const friendlies = window.entities.filter(e => e.alive && e.side === 'player' && !e.aiControlled);
+    // Land every party member on the same KIND of ground as the anchor hex
+    // itself, not just any neighbor of it — Northwatch's gate teleport
+    // target sits on the Climbable Wall ring, but a plain getNeighbors()
+    // spread doesn't care about terrain, so a follower (e.g. a companion
+    // like Wren, regardless of whatever formation was active before this
+    // teleport) could land one hex off the wall on ordinary ground while
+    // the leader stood right on it — reads as "they spawned outside the
+    // wall." BFS outward from the anchor, only accepting hexes that share
+    // its elevated/non-elevated classification, so the whole party ends up
+    // together on the wall (or together on the ground) regardless of
+    // formation.
+    const anchorTerrain = window.getTerrainAt ? window.getTerrainAt(hex.q, hex.r) : {};
+    const wantElevated = !!anchorTerrain.elevated;
+    const seen = new Set([`${hex.q},${hex.r}`]);
+    const spots = [hex];
+    let frontier = [hex];
+    while (spots.length < friendlies.length && frontier.length > 0 && window.getNeighbors) {
+        const next = [];
+        frontier.forEach(h => {
+            window.getNeighbors(h.q, h.r).forEach(n => {
+                const key = `${n.q},${n.r}`;
+                if (seen.has(key)) return;
+                seen.add(key);
+                const t = window.getTerrainAt(n.q, n.r);
+                if (t.impassable) return;
+                if (wantElevated && !t.elevated) return;
+                spots.push(n);
+                next.push(n);
+            });
+        });
+        frontier = next;
+    }
+    friendlies.forEach((f, i) => {
+        const dest = spots[i] || hex;
+        f.hex = { q: dest.q, r: dest.r };
+        f.destination = null;
+    });
+    window.cameraFollowEnabled = true;
+    if (window.centerCameraOn) window.centerCameraOn(hex);
+    if (window.drawMap) window.drawMap();
+    if (window.renderEntities) window.renderEntities();
+    window.showMessage(`Cheat: teleported to ${locationName}.`);
 };
 
 window.testVoice = function(voiceId) {
@@ -520,8 +903,24 @@ window.startGame = function() {
   let name = document.getElementById("character-name").value;
   if (!name) name = window.getRandomName(race, gender);
 
+  const difficultySelect = document.getElementById("difficulty-select");
+  window.difficultyMode = difficultySelect ? difficultySelect.value : 'normal';
+
   window.initializePlayer(race, cls, gender, campaign, voice);
   window.party[0].name = name; // Update with generated name if needed
+
+  // Player's chosen shirt/pants/hair/skin colors (see the character
+  // creator's sliders) — set explicitly so drawPlayerCharacter uses them
+  // instead of the name-derived defaults every other character gets
+  // (see spriteRecolor.js).
+  const shirtSlider = document.getElementById("shirt-hue-slider");
+  const pantsSlider = document.getElementById("pants-hue-slider");
+  const hairSlider = document.getElementById("hair-hue-slider");
+  const skinSlider = document.getElementById("skin-hue-slider");
+  if (shirtSlider) window.party[0].shirtHue = parseInt(shirtSlider.value, 10);
+  if (pantsSlider) window.party[0].pantsHue = parseInt(pantsSlider.value, 10);
+  if (hairSlider) window.party[0].hairHue = parseInt(hairSlider.value, 10);
+  if (skinSlider) window.party[0].skinHue = parseInt(skinSlider.value, 10);
   
   window.ironmanMode = document.getElementById("ironman-check").checked;
 
