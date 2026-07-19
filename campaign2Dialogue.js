@@ -373,6 +373,60 @@ window.npcDialogueTrees = {
                 : "I don't know you. Whatever you're after, you won't find it from me.", [{ label: "Fair enough.", action: () => {} }]);
             return;
         }
+        // "The Sunken Cache" — an optional side job, independent of the
+        // guildmaster's own linear initiation/favor/blood-price/big-score
+        // rungs above. Offered by the fence instead of Corvin so it can't
+        // interfere with that chain's own strict return-per-rung gating.
+        const cacheQuest = (window.questLog || []).find(q => q.id === 'guild_sunken_cache');
+        const cacheConfig = () => ({
+            questId: 'guild_sunken_cache', guardName: 'Rook Talvane',
+            evidenceKey: 'guild_cache_prize', itemId: 'guild_cache_prize',
+            evidenceFlavor: "a heavy strongbox stuffed with the Guild's stolen coin and ledgers",
+            factionSpiedOn: 'thieves_guild', failStandingHit: -10,
+            objectiveText: "Recover the Guild's cache from the sea-cave smugglers — sneak past Rook Talvane, or cut straight through him.",
+            onSuccess: () => {
+                const q = window.questLog.find(q => q.id === 'guild_sunken_cache');
+                if (q) q.status = 'completed';
+                if (window.adjustReputation) window.adjustReputation(window.factions.thieves_guild, 20, 20);
+                window.party[0].gold = (window.party[0].gold || 0) + 60;
+                if (window.gainExp) window.gainExp(150);
+                window.showMessage("The cache is back where it belongs. (+60 gold, +Thieves' Guild standing)");
+            }
+        });
+        if (!cacheQuest) {
+            window.showDialogue(npc, "There's a job, if you're feeling bold. A crew calling themselves free of the Guild is squatting some old sea-caves out past the western road, sitting on a stash that's rightfully ours. Rook Talvane runs it. Get it back — quietly if you can manage it, or through the front door if you can't. Either way, it comes back to us.", [
+                {
+                    label: "I'll handle it.", action: () => {
+                        window.questLog.push({
+                            id: 'guild_sunken_cache', title: "The Sunken Cache", giver: 'the fence', status: 'active',
+                            description: "Recover the Guild's stolen cache from Rook Talvane's smugglers, hidden in the sea-caves west of Silverhart — sneak in or fight your way through, whichever suits you."
+                        });
+                        if (window.startStealthMission) window.startStealthMission(cacheConfig());
+                    }
+                },
+                { label: "Not interested.", action: () => {} }
+            ]);
+            return;
+        }
+        if (cacheQuest.status === 'active') {
+            window.showDialogue(npc, "Sea-caves west of the road. Rook Talvane and whatever's left of his crew. You'll know it when you smell the brine.", [
+                { label: "Working on it.", action: () => {} }
+            ]);
+            return;
+        }
+        if (cacheQuest.status === 'failed') {
+            window.showDialogue(npc, "Blew it once already, did you? Rook's crew will be jumpy now. Still owe us that cache.", [
+                { label: "I'll go back.", action: () => { cacheQuest.status = 'active'; if (window.startStealthMission) window.startStealthMission(cacheConfig()); } }
+            ]);
+            return;
+        }
+        if (cacheQuest.status === 'completed') {
+            window.showDialogue(npc, "That cache put a lot of smiles on faces that don't smile easy. Good work.", [
+                { label: "Glad to help.", action: () => {} }
+            ]);
+            return;
+        }
+
         const member = standing >= 50;
         window.showDialogue(npc, member
             ? (hasHeavyRogue

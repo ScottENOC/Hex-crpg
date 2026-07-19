@@ -2998,6 +2998,66 @@ window.readWizardCorruptionLedger = function() {
 // crimson_court quest in campaign2Dialogue.js's high_cleric handler). Placed
 // a little off the beaten path, same "journal/readId" click-to-read plumbing
 // as every other note in this world.
+// The Sunken Cache: a rival smuggler crew's sea-cave hideout, out past the
+// western road — the Thieves' Guild's own missing stash (see
+// thieves_guild_fence, campaign2Dialogue.js, "The Sunken Cache" quest). Two
+// basement floors below the cave mouth, same layered-floor system as the
+// palace's gallery/loft/tower (carveFloorRoom, window.multiStoryBuildings,
+// terrain.js) — floors -1/-2 here instead of 1/2, which the floor-aware
+// lookups handle identically (only 0 is ever treated as "no floor data").
+// Two ways through, both already fully generic systems, nothing bespoke:
+// stay stealthed past Rook Talvane (the tracked guard,
+// startStealthMission/checkStealthMissionStatus, espionageQuests.js) for
+// subterfuge, or just fight through him and his crew — "kick in the door"
+// falls straight out of ordinary combat, since a dead/fled guard simply
+// stops being checked for detection.
+function buildThievesCoveCaves(westRoadEnd) {
+    const entranceCenter = { q: westRoadEnd.q - 22, r: westRoadEnd.r + 18 };
+    const entranceDoor = { q: entranceCenter.q - 3, r: entranceCenter.r };
+    const entranceRegion = carveFlatRoom(entranceCenter.q, entranceCenter.r, 3, 3, entranceDoor, 'Cave Floor');
+    window.interiorRegions.push(entranceRegion);
+    window.campaign2SunkenCaveCenter = entranceCenter;
+
+    const rook = window.createMonster('bandit', { q: entranceCenter.q, r: entranceCenter.r - 1 }, null, null, 'enemy');
+    rook.name = 'Rook Talvane';
+    window.entities.push(rook);
+
+    const caveBuilding = { minQ: entranceRegion.minQ, maxQ: entranceRegion.maxQ, minR: entranceRegion.minR, maxR: entranceRegion.maxR, floors: [] };
+    window.multiStoryBuildings.push(caveBuilding);
+
+    // Ground -> den: the stairwell shaft is the same (q,r) on every floor it
+    // connects, so the two halves of each staircase share a hex.
+    const stairToDen = { q: entranceCenter.q, r: entranceCenter.r + 1 };
+    window.tileObjects[`${stairToDen.q},${stairToDen.r}`] = { type: 'stair_down', toFloor: -1 };
+
+    carveFloorRoom(caveBuilding, -1, entranceCenter.q, entranceCenter.r, 3, 3, null, 'Cave Floor');
+    const den = caveBuilding.floors[-1];
+    den.tileObjects[`${stairToDen.q},${stairToDen.r}`] = { type: 'stair_up', toFloor: 0 };
+    [{ q: -1, r: -1 }, { q: 1, r: -1 }].forEach(off => {
+        const guard = window.createMonster('bandit', { q: entranceCenter.q + off.q, r: entranceCenter.r + off.r }, null, null, 'enemy');
+        window.entities.push(guard);
+    });
+    den.tileObjects[`${entranceCenter.q},${entranceCenter.r - 1}`] = { type: 'journal', readId: 'sunken_cave_ledger', lightRadius: 0 };
+
+    // Den -> vault: a second, separate stairwell shaft.
+    const stairToVault = { q: entranceCenter.q, r: entranceCenter.r - 1 - 1 }; // one hex past the ledger, clear of it
+    // Placing this after the ledger line above so the ledger's own hex
+    // (entranceCenter.r - 1) is already spoken for and this picks a
+    // different one.
+    den.tileObjects[`${stairToVault.q},${stairToVault.r}`] = { type: 'stair_down', toFloor: -2 };
+
+    carveFloorRoom(caveBuilding, -2, entranceCenter.q, entranceCenter.r, 3, 3, null, 'Cave Floor');
+    const vault = caveBuilding.floors[-2];
+    vault.tileObjects[`${stairToVault.q},${stairToVault.r}`] = { type: 'stair_up', toFloor: -1 };
+    vault.tileObjects[`${entranceCenter.q + 1},${entranceCenter.r}`] = { type: 'evidence', evidenceKey: 'guild_cache_prize', itemId: 'guild_cache_prize', lightRadius: 0 };
+}
+window.buildThievesCoveCaves = buildThievesCoveCaves;
+
+window.readSunkenCaveLedger = function() {
+    window.showDialogue({ name: "Smuggler's Ledger", customImage: 'journal' },
+        "A tally of \"independent\" runs sold out from under the Guild's nose — names blotted out, but the numbers are plain enough. Rook's been skimming for months.");
+};
+
 function buildVampireGrave(westRoadEnd) {
     const q = westRoadEnd.q - 4, r = westRoadEnd.r + 6;
     window.tileObjects[`${q},${r}`] = { type: 'journal', readId: 'vampire_grave', lightRadius: 0 };
@@ -3553,6 +3613,7 @@ function setupVillageScene(forLoadOnly = false) {
     buildReddale(eastRoadEnd);
     buildVampireGrave(westRoadEnd);
     buildDruidGrove(westRoadEnd);
+    buildThievesCoveCaves(westRoadEnd);
     spawnWildUnicorn();
     buildNorthwatchFort(northwatchTurnHex);
     buildRidgeholdFort(borderRoadEnd);

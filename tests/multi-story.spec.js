@@ -187,3 +187,100 @@ test.describe('Multi-story buildings: floor-aware LOS and pathfinding', () => {
         expect(result.pathFound).toBe(true);
     });
 });
+
+test.describe('The Sunken Cache: wilderness cave with two basement floors', () => {
+    test.beforeEach(async ({ page }) => { await createCharacter(page); });
+
+    test('the cave is registered with a den (-1) and a vault (-2), both distinct from the entrance', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const center = window.campaign2SunkenCaveCenter;
+            const b = window.getMultiStoryBuildingAt(center);
+            return { found: !!b, hasDen: !!(b && b.floors[-1]), hasVault: !!(b && b.floors[-2]) };
+        });
+        expect(result.found).toBe(true);
+        expect(result.hasDen).toBe(true);
+        expect(result.hasVault).toBe(true);
+    });
+
+    test('Rook Talvane guards the entrance and additional bandits guard the den', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const rookAlive = window.entities.some(e => e.name === 'Rook Talvane' && e.alive && e.side === 'enemy');
+            const banditCount = window.entities.filter(e => e.alive && e.side === 'enemy' && e.name === 'Bandit').length;
+            return { rookAlive, banditCount };
+        });
+        expect(result.rookAlive).toBe(true);
+        expect(result.banditCount).toBeGreaterThanOrEqual(2); // the 2 plain den guards (Rook's own name is overridden)
+    });
+
+    test('descending both staircases in sequence reaches the vault floor', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const player = window.entities.find(e => e.side === 'player' && !e.rider);
+            const center = window.campaign2SunkenCaveCenter;
+            player.floor = 0;
+
+            player.hex = { q: center.q, r: center.r + 1 }; // ground -> den stair
+            window.checkStairTransitions();
+            const afterFirst = player.floor;
+
+            player.hex = { q: center.q, r: center.r - 2 }; // den -> vault stair
+            window.checkStairTransitions();
+            const afterSecond = player.floor;
+
+            return { afterFirst, afterSecond };
+        });
+        expect(result.afterFirst).toBe(-1);
+        expect(result.afterSecond).toBe(-2);
+    });
+
+    test('the vault\'s evidence is reachable via the floor-aware tile-object interaction path', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const center = window.campaign2SunkenCaveCenter;
+            const b = window.getMultiStoryBuildingAt(center);
+            const vaultKey = `${center.q + 1},${center.r}`;
+            const obj = window.getTileObjectAtFloor(center.q + 1, center.r, -2);
+            return { isEvidence: obj && obj.type === 'evidence', key: obj?.evidenceKey };
+        });
+        expect(result.isEvidence).toBe(true);
+        expect(result.key).toBe('guild_cache_prize');
+    });
+
+    test('the fence offers "The Sunken Cache" and starting it registers a tracked stealth mission', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            window.factions.thieves_guild.standing = 25;
+            window.questLog = (window.questLog || []).filter(q => q.id !== 'guild_sunken_cache');
+            window.activeStealthMission = null;
+
+            window.questLog.push({ id: 'guild_sunken_cache', title: 'The Sunken Cache', giver: 'the fence', status: 'active' });
+            window.startStealthMission({
+                questId: 'guild_sunken_cache', guardName: 'Rook Talvane',
+                evidenceKey: 'guild_cache_prize', itemId: 'guild_cache_prize',
+                factionSpiedOn: 'thieves_guild', failStandingHit: -10,
+                objectiveText: 'test'
+            });
+            return { mission: window.activeStealthMission?.guardName };
+        });
+        expect(result.mission).toBe('Rook Talvane');
+    });
+
+    test('a guard on a different floor than the player never triggers stealth-mission detection', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const player = window.entities.find(e => e.side === 'player' && !e.rider);
+            const rook = window.entities.find(e => e.name === 'Rook Talvane');
+            const center = window.campaign2SunkenCaveCenter;
+
+            player.floor = -1;
+            player.hex = { q: center.q, r: center.r };
+            rook.floor = 0; // stays at the entrance
+            rook.hex = { q: center.q, r: center.r };
+            rook.isStealthed = false;
+
+            window.activeStealthMission = { questId: 'guild_sunken_cache', guardName: 'Rook Talvane', factionSpiedOn: 'thieves_guild', failStandingHit: -10 };
+            window.questLog = window.questLog || [];
+            const before = window.questLog.find(q => q.id === 'guild_sunken_cache');
+            if (before) before.status = 'active';
+            window.checkStealthMissionStatus();
+            return { missionStillActive: !!window.activeStealthMission };
+        });
+        expect(result.missionStillActive).toBe(true);
+    });
+});

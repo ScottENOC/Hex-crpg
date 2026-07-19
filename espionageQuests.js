@@ -59,6 +59,16 @@ function checkStealthMissionStatus() {
     // way — no detection check at all for this specific mission.
     if (guard.bribed) return;
 
+    // Multi-story buildings (window.multiStoryBuildings, terrain.js): canSee
+    // has no floor concept at all — it's a flat {q,r} check, so a guard on
+    // one floor and the player on another directly below/above them would
+    // otherwise register as right next to each other. Only relevant once a
+    // mission's guard and its target building have floors (the sea-cave
+    // hideout's Rook Talvane); every earlier mission's guard/player pair is
+    // always on floor 0, so (guard.floor||0) === (player.floor||0) there
+    // unconditionally and this is a no-op.
+    if ((guard.floor || 0) !== (player.floor || 0)) return;
+
     if (window.canSee(guard, player)) {
         failStealthMission(`${guard.name} spotted you.`);
     }
@@ -70,9 +80,13 @@ window.checkStealthMissionStatus = checkStealthMissionStatus;
 // matches whichever mission is currently active — walking up to the wrong
 // building's documents (or with no mission running at all) just gives
 // flavor text, not a free item.
-function searchEvidence(q, r) {
-    const key = `${q},${r}`;
-    const obj = window.tileObjects[key];
+function searchEvidence(q, r, floor) {
+    // Multi-story buildings: an upper/basement floor's evidence lives in
+    // its own tileObjects dict, not the ground-floor one — see
+    // interactWithTileObject's call site (gameEngine.js), which passes the
+    // searching entity's own floor. Falls straight back to the plain dict
+    // at floor 0 (every mission built before multi-story buildings existed).
+    const obj = floor ? window.getTileObjectAtFloor(q, r, floor) : window.tileObjects[`${q},${r}`];
     if (!obj) return;
 
     const mission = window.activeStealthMission;

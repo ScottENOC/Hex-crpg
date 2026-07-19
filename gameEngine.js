@@ -3642,7 +3642,13 @@ function takeTurn(entity) {
 // immediate adjacent click (handleClick) and once the player arrives at a
 // tile object they clicked on from farther away (see pendingInteractHex).
 function interactWithTileObject(q, r, player) {
-    const doorObj = window.tileObjects && window.tileObjects[`${q},${r}`];
+    // Multi-story buildings: a hex on an upper/basement floor (the palace's
+    // gallery/loft/tower, the sea-cave den/vault) has its own tileObjects,
+    // not the ground-floor dict — same floor-aware lookup used everywhere
+    // else (checkStairTransitions, drawMap). Falls straight back to the
+    // plain dict at floor 0, which is every hex outside a registered
+    // multi-story building.
+    const doorObj = window.getTileObjectAtFloor(q, r, player?.floor || 0);
     if (!doorObj) return;
     if (doorObj.type === 'door_open' || doorObj.type === 'door_closed') {
         if (window.toggleDoor) window.toggleDoor(q, r, player);
@@ -3664,6 +3670,7 @@ function interactWithTileObject(q, r, player) {
         if (doorObj.readId === 'lich_phylactery_core' && window.readLichPhylacteryCoreNote) { window.readLichPhylacteryCoreNote(); return; }
         if (doorObj.readId === 'deepholds_mine_ledger' && window.readDeepholdsMineLedger) { window.readDeepholdsMineLedger(); return; }
         if (doorObj.readId === 'silverhart_bounty_board' && window.readSilverhartBountyBoard) { window.readSilverhartBountyBoard(); return; }
+        if (doorObj.readId === 'sunken_cave_ledger' && window.readSunkenCaveLedger) { window.readSunkenCaveLedger(); return; }
         if (window.readAbandonedHouseJournal) window.readAbandonedHouseJournal();
         return;
     }
@@ -3676,7 +3683,7 @@ function interactWithTileObject(q, r, player) {
     if (doorObj.type === 'herb_patch' && window.harvestHerbPatch) { window.harvestHerbPatch(q, r); return; }
     if (doorObj.type === 'fishing_spot' && window.harvestFishingSpot) { window.harvestFishingSpot(q, r); return; }
     if (doorObj.type === 'corpse' && window.harvestCorpse) { window.harvestCorpse(q, r); return; }
-    if (doorObj.type === 'evidence' && window.searchEvidence) { window.searchEvidence(q, r); return; }
+    if (doorObj.type === 'evidence' && window.searchEvidence) { window.searchEvidence(q, r, player?.floor || 0); return; }
     if (doorObj.type === 'gate_lever' && window.pullNorthwatchGateLever) { window.pullNorthwatchGateLever(); return; }
     if (doorObj.type === 'unicorn_track' && window.showUnicornTrackDetail) { window.showUnicornTrackDetail(doorObj, q, r); return; }
     if (doorObj.type === 'rune_forge' && window.openRuneForge) { window.openRuneForge(); return; }
