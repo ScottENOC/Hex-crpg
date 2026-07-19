@@ -29,14 +29,18 @@ function ensureWildernessResourceNode(q, r) {
     if (terrain.name === 'Rocky Outcrop' && roll < 0.05) {
         const oreRoll = window.pseudoRandom(q * 5.1 + 7, r * 7.3 + 11);
         let oreType = 'ore_iron';
-        // Starmetal: a needle in the haystack even among the already-rare
-        // gem rolls above it — see crafting.js's starforged_blade recipe.
-        if (oreRoll > 0.999) oreType = 'starmetal_ore';
-        else if (oreRoll > 0.97) oreType = 'gem_blue';
-        else if (oreRoll > 0.94) oreType = 'gem_red';
-        else if (oreRoll > 0.90) oreType = 'gem_green';
-        else if (oreRoll > 0.80) oreType = 'ore_gold';
-        else if (oreRoll > 0.65) oreType = 'ore_silver';
+        // The real rare-material economy lives in the deeps now (Kragmoor's
+        // Sunken Deep, the Sunken Cache's vault, dragon kills) — surface
+        // outcrops are for iron and, on a good day, silver. Gold/gems/
+        // starmetal are still findable up here, but only barely; anything
+        // worth building a recipe around should feel like it came from
+        // somewhere dangerous, not a lucky roadside outcrop.
+        if (oreRoll > 0.9995) oreType = 'starmetal_ore';
+        else if (oreRoll > 0.994) oreType = 'gem_blue';
+        else if (oreRoll > 0.988) oreType = 'gem_red';
+        else if (oreRoll > 0.980) oreType = 'gem_green';
+        else if (oreRoll > 0.95) oreType = 'ore_gold';
+        else if (oreRoll > 0.80) oreType = 'ore_silver';
         window.tileObjects[key] = { type: 'ore_node', oreType, depleted: false };
     } else if (terrain.name === 'Rocky Outcrop' && roll >= 0.05 && roll < 0.12) {
         // Plain quarriable stone — distinct from the rarer ore veins above,

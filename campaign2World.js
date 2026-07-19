@@ -1188,6 +1188,11 @@ function buildDwarvenKingdom(anchor) {
     horror.name = 'The Ember-Wreathed Horror';
     horror.hp = 160; horror.maxHp = 160;
     horror.floor = -5;
+    // The deeps are where the real rare materials are now (surface ore
+    // rolls were tightened to match — see resources.js) — the one thing
+    // sealed with this creature for generations is worth more than the
+    // entire rest of Kragmoor's mine put together.
+    horror.inventory.push('starmetal_ore', 'starmetal_ore', 'deep_crystal');
     window.entities.push(horror);
 
     setWorldMapMarker(gateCenter, { t: 'M', f: 'K', o: 'd', p: 2, n: 'Kragmoor' });
