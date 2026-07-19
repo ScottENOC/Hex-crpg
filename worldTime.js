@@ -142,6 +142,11 @@ function updateTime(delta) {
         // Ambient character personality lines (see characterBanter.js).
         if (window.checkCharacterBanter) window.checkCharacterBanter(delta);
 
+        // Ambient NPC-to-NPC chatter: ordinary world NPCs talking to each
+        // other, no player click involved (see checkAmbientNpcChatter,
+        // characterBanter.js).
+        if (window.checkAmbientNpcChatter) window.checkAmbientNpcChatter(delta);
+
         // Reddale espionage side-quests: fails the active stealth mission
         // (if any) the moment its guard actually sees the player — see
         // espionageQuests.js.

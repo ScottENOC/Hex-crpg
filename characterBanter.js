@@ -255,6 +255,80 @@ function spawnSpeechBubble(speakerName, text, durationMs = 3200) {
 }
 window.spawnSpeechBubble = spawnSpeechBubble;
 
+// Ambient NPC-to-NPC chatter: unlike the named party-banter lines above,
+// this fires between any two ordinary world NPCs standing near each other —
+// townsfolk, guards, patrons — with no player click and no fixed identity,
+// just background flavor that makes a village read as inhabited rather than
+// a row of silent shop-keeper statues. Reuses collectPartyHexes/
+// isDormantAmbientNpc (gameEngine.js) so it only ever considers NPCs already
+// within the player's active simulation radius — the same "don't do work
+// for what nobody's around to see" gate the rest of the ambient-NPC systems
+// already use.
+window.ambientChatterAccum = 0;
+window.ambientChatterCooldowns = window.ambientChatterCooldowns || {}; // pairKey -> worldSeconds last fired
+
+// Generic two/three-line exchanges — deliberately unattributed (no speaker
+// field) since the speaking pair is picked at random each time; text stays
+// plot-agnostic small talk so it never contradicts a specific NPC's actual
+// situation.
+window.ambientChatterExchanges = [
+    { lines: ["Cold one today, isn't it?", "Aye, feels like snow's coming early this year."] },
+    { lines: ["Any word from the caravan?", "Nothing yet. Should be through by week's end, if the roads hold."] },
+    { lines: ["Busy day, is it?", "Busier than usual, truth be told. Can't complain, though."] },
+    { lines: ["Heard anything worth repeating?", "Only rumors. Nothing I'd wager coin on."] },
+    { lines: ["Mind if I ask you something?", "Go on, then.", "...Never mind. Forget I asked."] },
+    { lines: ["Sleep well?", "Well enough. The nights are quieter than they used to be, at least."] },
+    { lines: ["That traveler's been through here a lot lately.", "Can't say I blame them — not much else out this way."] },
+    { lines: ["Rain's coming, mark my words.", "You said that yesterday.", "And I'll say it again tomorrow, if I'm wrong."] },
+];
+
+function pairKey(a, b) {
+    return [a.name, b.name].sort().join('|');
+}
+
+// Checked on its own slower cadence than the named-banter loop above (every
+// ~8s of accumulated real time) since scanning entity pairs is a little more
+// work than the fixed-list scan checkCharacterBanter does.
+function checkAmbientNpcChatter(delta) {
+    window.ambientChatterAccum += delta;
+    if (window.ambientChatterAccum < 8) return;
+    window.ambientChatterAccum = 0;
+
+    if (window.isInCombat) return;
+
+    const partyHexes = window.collectPartyHexes ? window.collectPartyHexes() : [];
+    const candidates = window.entities.filter(e =>
+        e.alive && e.isNPC && e.side === 'neutral' && !e.rider && !e.noAttack &&
+        (!window.isDormantAmbientNpc || !window.isDormantAmbientNpc(e, partyHexes))
+    );
+    if (candidates.length < 2) return;
+
+    const eligiblePairs = [];
+    for (let i = 0; i < candidates.length; i++) {
+        for (let j = i + 1; j < candidates.length; j++) {
+            const a = candidates[i], b = candidates[j];
+            if (window.distance(a.hex, b.hex) > 2) continue;
+            const key = pairKey(a, b);
+            const last = window.ambientChatterCooldowns[key];
+            if (last && (window.worldSeconds - last) < 90) continue; // same pair won't chat again for 90s
+            eligiblePairs.push([a, b]);
+        }
+    }
+    if (eligiblePairs.length === 0) return;
+
+    const [a, b] = eligiblePairs[Math.floor(Math.random() * eligiblePairs.length)];
+    const exchange = window.ambientChatterExchanges[Math.floor(Math.random() * window.ambientChatterExchanges.length)];
+    exchange.lines.forEach((text, i) => {
+        setTimeout(() => {
+            const speaker = i % 2 === 0 ? a : b;
+            if (!speaker.alive) return; // one of them may have died mid-exchange
+            if (window.spawnSpeechBubble) window.spawnSpeechBubble(speaker.name, text);
+        }, i * 2500);
+    });
+    window.ambientChatterCooldowns[pairKey(a, b)] = window.worldSeconds;
+}
+window.checkAmbientNpcChatter = checkAmbientNpcChatter;
+
 function renderSpeechBubbles(ctx, hexToPixel, zoom) {
     const now = performance.now();
     window.speechBubbles = window.speechBubbles.filter(b => now - b.start < b.duration);
