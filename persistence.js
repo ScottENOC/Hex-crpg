@@ -68,13 +68,119 @@ function diffEntityAgainstNpcBaseline(entity) {
     return diff;
 }
 
+// Bumped whenever a save's *shape* changes in a way old data can't just
+// fall through `!== undefined ? saved : default` for — a field renamed, a
+// structure restructured, something that needs an actual one-time
+// transform. SAVE_MIGRATIONS below runs, in order, every migration whose
+// key is > the save's own saveVersion, each mutating gameState in place
+// before loadGame reads any of it. A save with no saveVersion at all
+// (everything written before this existed) is treated as version 0, so
+// every migration ever added runs against it.
+const SAVE_VERSION = 1;
+const SAVE_MIGRATIONS = {
+    // Example shape for the next one that's actually needed:
+    // 2: (gameState) => { gameState.someRenamedField = gameState.someOldField; },
+};
+function runSaveMigrations(gameState) {
+    const from = gameState.saveVersion || 0;
+    Object.keys(SAVE_MIGRATIONS)
+        .map(Number)
+        .filter(v => v > from)
+        .sort((a, b) => a - b)
+        .forEach(v => { try { SAVE_MIGRATIONS[v](gameState); } catch (e) { console.error(`Save migration ${v} failed`, e); } });
+    gameState.saveVersion = SAVE_VERSION;
+}
+
+// Plain flag/value fields that just need "save whatever's on window, restore
+// it (or a default if the save predates the field entirely)" — no ordering
+// dependency on other restore steps, no cross-referencing another entity, no
+// special data-structure conversion. This is the single source of truth for
+// that whole category: adding a new such field to a future feature means
+// adding ONE line here, not one line in buildGameStateObject AND a matching
+// line in loadGame that's easy to forget (see the buy_field/tavern-brawl
+// flags this list backfills below — both were added to the game without
+// ever being added here, so saving/loading mid-feature silently reset them).
+// Anything with real restore logic (entities, terrain/tileObjects diffing,
+// the camera, turn state, the regional NPC baron, party/player themselves)
+// stays hand-written in buildGameStateObject/loadGame instead — this list is
+// deliberately only for fields where a generic `!== undefined ? : default`
+// is the entire restore logic.
+const SIMPLE_PERSISTED_FIELDS = [
+    { key: 'lastSeenTimeMap', default: {} },
+    { key: 'ironmanMode', default: false },
+    { key: 'difficultyMode', default: 'normal' },
+    { key: 'mapItems', default: {} },
+    { key: 'isInArena', default: false },
+    { key: 'indoorLightMult', default: 1.0 },
+    { key: 'worldSeconds', default: 0 },
+    { key: 'activeSpells', default: [] },
+    { key: 'interiorRegions', default: [] },
+    { key: 'hollowmereEventFired', default: false },
+    { key: 'hollowmereFightTriggered', default: false },
+    { key: 'hollowmereVictoryBonusGiven', default: false },
+    { key: 'hollowmereSoldiersWaitingOutside', default: false },
+    { key: 'hollowmereQuestOfferFired', default: false },
+    { key: 'borderWarSallyActive', default: false },
+    { key: 'campaign2AbandonedHouseTriggered', default: false },
+    { key: 'campaign2PlayerCottageBuilt', default: false },
+    { key: 'campaign2PlayerCottageUpgraded', default: false },
+    { key: 'campaign2AbandonedHouseRenovated', default: false },
+    { key: 'campaign2SilverhartManorGranted', default: false },
+    { key: 'campaign2SilverhartManorFortified', default: false },
+    { key: 'clothingDisplayMode', default: 'armor' },
+    { key: 'goblinScoutNoteRead', default: false },
+    { key: 'goblinVouchedByMarta', default: false },
+    { key: 'emberlodeRaided', default: false },
+    { key: 'questLog', default: [] },
+    { key: 'benchedCompanions', default: [] },
+    { key: 'worldMapNotes', default: {} },
+    { key: 'activeStealthMission', default: null },
+    { key: 'guildAssassinTriggered', default: false },
+    // The Stardew-style homestead (buyPlayerField/getFieldBoundaryHexes/
+    // placeFieldFence/buyFieldLamb/plantAppleTree, campaign2World.js) — the
+    // fences/sheep/trees themselves ride along on the existing
+    // tileObjects/entities diffing, but the "have I bought the field, and
+    // where are its bounds" bookkeeping needs its own slot or buy_field
+    // looks available again (and isFieldFullyFenced/plantAppleTree stop
+    // working) the moment a save is reloaded.
+    { key: 'campaign2PlayerFieldBought', default: false },
+    { key: 'campaign2PlayerField', default: null },
+    // The Tavern Brawl (startTavernBrawl/endTavernBrawl, campaign2Dialogue.js)
+    // — without these, reloading mid-brawl would both let the "whole tavern"
+    // offer fire again (tavernBrawlTriggered resets) and strand Garrick/Mira/
+    // Oskar permanently aiControlled (tavernBrawlActive resets, so
+    // checkCombatEnd's dispatch to endTavernBrawl never fires for that fight).
+    { key: 'tavernBrawlActive', default: false },
+    { key: 'tavernBrawlTriggered', default: false },
+];
+
+// Same idea as SIMPLE_PERSISTED_FIELDS, but for fields that must NOT be
+// clobbered with a default when the save predates them — these are seeded
+// with real starting data by world-gen (startGameCore, called from loadGame
+// itself before this runs) and only need overwriting when the save actually
+// has a value for them. windowKey covers the couple of cases where the
+// window global's name doesn't match the saved field name.
+const PRESENT_ONLY_PERSISTED_FIELDS = [
+    { key: 'ironbondArc' },
+    { key: 'lichHuntState' },
+    { key: 'factions' },
+    { key: 'regions' },
+    { key: 'worldEvents' },
+    { key: 'wildernessThreatMult' },
+    { key: 'banditCampLowSecurityAccum', windowKey: '_banditCampLowSecurityAccum' },
+    { key: 'activeBanditCamp', windowKey: '_activeBanditCamp' },
+    { key: 'companionAttitude' },
+    { key: 'firedBanterIds' },
+];
+
 // Extracted from saveGame so B3's exportSaveCode (below) can build the exact
 // same gameState object without duplicating this ~65-line list, and without
 // touching saveGame's own localStorage-writing behavior at all.
 function buildGameStateObject(saveName) {
     const isCampaign2WithBaseline = window.currentCampaign === '2' && window._campaign2TerrainBaseline;
 
-    return {
+    const gameState = {
+        saveVersion: SAVE_VERSION,
         player: window.player,
         party: window.party,
         currentCampaign: window.currentCampaign,
@@ -83,55 +189,14 @@ function buildGameStateObject(saveName) {
             ? diffAgainstBaseline(window.overrideTerrain, window._campaign2TerrainBaseline)
             : window.overrideTerrain,
         exploredHexes: Array.from(window.exploredHexes),
-        lastSeenTimeMap: window.lastSeenTimeMap || {},
-        ironmanMode: window.ironmanMode || false,
-        difficultyMode: window.difficultyMode || 'normal',
-        mapItems: window.mapItems,
         gamePhase: window.gamePhase,
         currentTurnIndex: window.entities.indexOf(window.currentTurnEntity),
         camera: { x: window.cameraX, y: window.cameraY, zoom: window.cameraZoom },
 
-        // Global States
-        isInArena: window.isInArena,
-        indoorLightMult: window.indoorLightMult,
-        worldSeconds: window.worldSeconds,
         tileObjects: isCampaign2WithBaseline
             ? diffAgainstBaseline(window.tileObjects, window._campaign2TileObjectsBaseline)
             : window.tileObjects,
-        activeSpells: window.activeSpells,
         roguelikeData: window.roguelikeData,
-        ironbondArc: window.ironbondArc,
-        lichHuntState: window.lichHuntState,
-        factions: window.factions,
-        regions: window.regions,
-        worldEvents: window.worldEvents,
-        wildernessThreatMult: window.wildernessThreatMult,
-        banditCampLowSecurityAccum: window._banditCampLowSecurityAccum,
-        activeBanditCamp: window._activeBanditCamp,
-        companionAttitude: window.companionAttitude,
-        firedBanterIds: window.firedBanterIds,
-        interiorRegions: window.interiorRegions,
-        hollowmereEventFired: window.hollowmereEventFired,
-        hollowmereFightTriggered: window.hollowmereFightTriggered,
-        hollowmereVictoryBonusGiven: window.hollowmereVictoryBonusGiven,
-        hollowmereSoldiersWaitingOutside: window.hollowmereSoldiersWaitingOutside,
-        hollowmereQuestOfferFired: window.hollowmereQuestOfferFired,
-        borderWarSallyActive: window.borderWarSallyActive,
-        campaign2AbandonedHouseTriggered: window.campaign2AbandonedHouseTriggered,
-        campaign2PlayerCottageBuilt: window.campaign2PlayerCottageBuilt,
-        campaign2PlayerCottageUpgraded: window.campaign2PlayerCottageUpgraded,
-        campaign2AbandonedHouseRenovated: window.campaign2AbandonedHouseRenovated,
-        campaign2SilverhartManorGranted: window.campaign2SilverhartManorGranted,
-        campaign2SilverhartManorFortified: window.campaign2SilverhartManorFortified,
-        clothingDisplayMode: window.clothingDisplayMode,
-        goblinScoutNoteRead: window.goblinScoutNoteRead,
-        goblinVouchedByMarta: window.goblinVouchedByMarta,
-        emberlodeRaided: window.emberlodeRaided,
-        questLog: window.questLog,
-        benchedCompanions: window.benchedCompanions || [],
-        worldMapNotes: window.worldMapNotes,
-        activeStealthMission: window.activeStealthMission || null,
-        guildAssassinTriggered: window.guildAssassinTriggered || false,
         // The baron is a reputation-only NPC not placed in window.entities
         // (never rendered/AI-processed), so he needs his own save/load slot.
         regionalNPCBaron: window.regionalNPCs?.baron || null,
@@ -140,7 +205,36 @@ function buildGameStateObject(saveName) {
         saveDate: new Date().toISOString(),
         saveName: saveName
     };
+
+    SIMPLE_PERSISTED_FIELDS.forEach(({ key }) => { gameState[key] = window[key]; });
+    PRESENT_ONLY_PERSISTED_FIELDS.forEach(({ key, windowKey }) => { gameState[key] = window[windowKey || key]; });
+
+    return gameState;
 }
+
+// True if `e` is a browser's "storage quota exceeded" signal — the name is
+// standard, but the numeric code differs by (mostly older) browser, so both
+// are checked. Isolated into its own function so the retry logic below
+// reads as "on quota exhaustion, do X" rather than an inline multi-clause
+// condition.
+function isQuotaExceededError(e) {
+    return e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014);
+}
+
+// Deletes the single oldest save (by its recorded date, excluding the slot
+// currently being written to and the metadata index itself) to make room.
+// Returns false once there's nothing left to free — the caller's retry loop
+// stops there rather than looping forever.
+function freeOldestSaveSlot(excludeKey) {
+    const metadata = JSON.parse(localStorage.getItem('rpg_save_metadata') || "[]");
+    const candidates = metadata.filter(m => m.key !== excludeKey).sort((a, b) => new Date(a.date) - new Date(b.date));
+    if (candidates.length === 0) return false;
+    const oldest = candidates[0];
+    localStorage.removeItem(oldest.key);
+    localStorage.setItem('rpg_save_metadata', JSON.stringify(metadata.filter(m => m.key !== oldest.key)));
+    return true;
+}
+window.freeOldestSaveSlot = freeOldestSaveSlot;
 
 function saveGame(saveName = "rpg_save_game") {
     if (!window.player) {
@@ -164,14 +258,31 @@ function saveGame(saveName = "rpg_save_game") {
             localStorage.setItem('rpg_save_metadata', JSON.stringify(newMetadata));
         }
 
-        localStorage.setItem(key, JSON.stringify(gameState));
-        
+        const serialized = JSON.stringify(gameState);
+        // Quota exhaustion (a real risk — the entity/tileObjects diffing
+        // keeps individual saves small, but nothing previously stopped many
+        // separate named saves from piling up over a long playthrough): free
+        // the oldest save and retry, up to a handful of times, before giving
+        // up with the plain error message this always showed.
+        let freedAnySlot = false;
+        for (let attempt = 0; ; attempt++) {
+            try {
+                localStorage.setItem(key, serialized);
+                break;
+            } catch (quotaErr) {
+                if (!isQuotaExceededError(quotaErr) || attempt >= 5 || !freeOldestSaveSlot(key)) throw quotaErr;
+                freedAnySlot = true;
+            }
+        }
+
         let metadata = JSON.parse(localStorage.getItem('rpg_save_metadata') || "[]");
         metadata = metadata.filter(m => m.key !== key);
         metadata.push({ key: key, name: displayName, date: gameState.saveDate, ironman: window.ironmanMode });
         localStorage.setItem('rpg_save_metadata', JSON.stringify(metadata));
 
-        window.showMessage(`Game saved as "${displayName}"!`);
+        window.showMessage(freedAnySlot
+            ? `Game saved as "${displayName}"! (freed space by clearing an older save)`
+            : `Game saved as "${displayName}"!`);
 
         if (window.ironmanMode && !saveName.includes("AutoSave")) {
             alert("Iron Man Save: Returning to title screen.");
@@ -193,6 +304,7 @@ function loadGame(saveName = "rpg_save_game") {
 
     try {
         const gameState = JSON.parse(savedData);
+        runSaveMigrations(gameState);
 
         // 1. Restore Player, Party, and Campaign Data — set early, before
         // startGameCore(true) below, since it needs window.currentCampaign/
@@ -230,50 +342,22 @@ function loadGame(saveName = "rpg_save_game") {
         }
 
         window.exploredHexes = new Set(gameState.exploredHexes || []);
-        window.lastSeenTimeMap = gameState.lastSeenTimeMap || {};
-        window.ironmanMode = gameState.ironmanMode || false;
-        window.difficultyMode = gameState.difficultyMode || 'normal';
-        window.mapItems = gameState.mapItems || {};
 
-        // Restore Global States
-        window.isInArena = gameState.isInArena || false;
-        window.indoorLightMult = (gameState.indoorLightMult !== undefined) ? gameState.indoorLightMult : 1.0;
-        window.worldSeconds = gameState.worldSeconds || 0;
-        window.activeSpells = gameState.activeSpells || [];
+        // Every plain flag/value field in SIMPLE_PERSISTED_FIELDS — see its
+        // own comment above for what qualifies. `!== undefined` (not `||`)
+        // so a legitimately-falsy saved value (worldSeconds: 0, an empty
+        // string, etc.) is never mistaken for "this save predates the field."
+        SIMPLE_PERSISTED_FIELDS.forEach(({ key, default: def }) => {
+            window[key] = (gameState[key] !== undefined) ? gameState[key] : def;
+        });
+        // Fields that must NOT be clobbered with a default when absent —
+        // see PRESENT_ONLY_PERSISTED_FIELDS' own comment above.
+        PRESENT_ONLY_PERSISTED_FIELDS.forEach(({ key, windowKey }) => {
+            if (gameState[key] !== undefined) window[windowKey || key] = gameState[key];
+        });
+
         window.roguelikeData = gameState.roguelikeData || { fightsCompleted: 0, mercenaryGraveyard: [], bossesDefeated: [] };
         if (!window.roguelikeData.bossesDefeated) window.roguelikeData.bossesDefeated = [];
-        if (gameState.ironbondArc) window.ironbondArc = gameState.ironbondArc;
-        if (gameState.lichHuntState) window.lichHuntState = gameState.lichHuntState;
-        if (gameState.factions) window.factions = gameState.factions;
-        if (gameState.regions) window.regions = gameState.regions;
-        if (gameState.worldEvents) window.worldEvents = gameState.worldEvents;
-        if (gameState.wildernessThreatMult !== undefined) window.wildernessThreatMult = gameState.wildernessThreatMult;
-        if (gameState.banditCampLowSecurityAccum !== undefined) window._banditCampLowSecurityAccum = gameState.banditCampLowSecurityAccum;
-        if (gameState.activeBanditCamp) window._activeBanditCamp = gameState.activeBanditCamp;
-        if (gameState.companionAttitude) window.companionAttitude = gameState.companionAttitude;
-        if (gameState.firedBanterIds) window.firedBanterIds = gameState.firedBanterIds;
-        window.interiorRegions = gameState.interiorRegions || [];
-        window.hollowmereEventFired = gameState.hollowmereEventFired || false;
-        window.hollowmereFightTriggered = gameState.hollowmereFightTriggered || false;
-        window.hollowmereVictoryBonusGiven = gameState.hollowmereVictoryBonusGiven || false;
-        window.hollowmereSoldiersWaitingOutside = gameState.hollowmereSoldiersWaitingOutside || false;
-        window.hollowmereQuestOfferFired = gameState.hollowmereQuestOfferFired || false;
-        window.borderWarSallyActive = gameState.borderWarSallyActive || false;
-        window.campaign2AbandonedHouseTriggered = gameState.campaign2AbandonedHouseTriggered || false;
-        window.campaign2PlayerCottageBuilt = gameState.campaign2PlayerCottageBuilt || false;
-        window.campaign2PlayerCottageUpgraded = gameState.campaign2PlayerCottageUpgraded || false;
-        window.campaign2AbandonedHouseRenovated = gameState.campaign2AbandonedHouseRenovated || false;
-        window.campaign2SilverhartManorGranted = gameState.campaign2SilverhartManorGranted || false;
-        window.campaign2SilverhartManorFortified = gameState.campaign2SilverhartManorFortified || false;
-        window.clothingDisplayMode = gameState.clothingDisplayMode || 'armor';
-        window.goblinScoutNoteRead = gameState.goblinScoutNoteRead || false;
-        window.goblinVouchedByMarta = gameState.goblinVouchedByMarta || false;
-        window.emberlodeRaided = gameState.emberlodeRaided || false;
-        window.questLog = gameState.questLog || [];
-        window.benchedCompanions = gameState.benchedCompanions || [];
-        window.worldMapNotes = gameState.worldMapNotes || {};
-        window.activeStealthMission = gameState.activeStealthMission || null;
-        window.guildAssassinTriggered = gameState.guildAssassinTriggered || false;
         // Always false on load, regardless of what was saved — loading a
         // save is exactly how the player is meant to recover from Game Over.
         window.gameOver = false;

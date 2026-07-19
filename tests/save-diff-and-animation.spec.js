@@ -97,6 +97,183 @@ test.describe('Campaign 2 save/load: diff against the deterministic baseline', (
     });
 });
 
+test.describe('SIMPLE_PERSISTED_FIELDS/PRESENT_ONLY_PERSISTED_FIELDS round-trip', () => {
+    test.beforeEach(async ({ page }) => {
+        await createCharacter(page);
+    });
+
+    // Guards against exactly the bug this list was built to prevent: a new
+    // window.* flag added to a feature but never wired into persistence.js,
+    // so it silently resets on save/load. Setting each field to a
+    // non-default value, saving, mutating it again, then loading should
+    // always bring back the *saved* value, not the post-save mutation.
+    test('every SIMPLE_PERSISTED_FIELDS entry survives a save/load cycle, including the homestead and tavern-brawl flags', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            window.campaign2PlayerFieldBought = true;
+            window.campaign2PlayerField = { minQ: 1, maxQ: 2, minR: 3, maxR: 4 };
+            window.tavernBrawlActive = true;
+            window.tavernBrawlTriggered = true;
+            window.worldSeconds = 12345;
+            window.questLog = [{ id: 'test_quest', status: 'active' }];
+
+            window.saveGame('persist_fields_test');
+
+            // Mutate again post-save — load should override these back to
+            // the saved snapshot, not leave them as-is.
+            window.campaign2PlayerFieldBought = false;
+            window.campaign2PlayerField = null;
+            window.tavernBrawlActive = false;
+            window.tavernBrawlTriggered = false;
+            window.worldSeconds = 0;
+            window.questLog = [];
+
+            window.loadGame('persist_fields_test');
+            localStorage.removeItem('rpg_save_persist_fields_test');
+
+            return {
+                campaign2PlayerFieldBought: window.campaign2PlayerFieldBought,
+                campaign2PlayerField: window.campaign2PlayerField,
+                tavernBrawlActive: window.tavernBrawlActive,
+                tavernBrawlTriggered: window.tavernBrawlTriggered,
+                worldSeconds: window.worldSeconds,
+                questLog: window.questLog,
+            };
+        });
+        expect(result.campaign2PlayerFieldBought).toBe(true);
+        expect(result.campaign2PlayerField).toEqual({ minQ: 1, maxQ: 2, minR: 3, maxR: 4 });
+        expect(result.tavernBrawlActive).toBe(true);
+        expect(result.tavernBrawlTriggered).toBe(true);
+        expect(result.worldSeconds).toBe(12345);
+        expect(result.questLog).toEqual([{ id: 'test_quest', status: 'active' }]);
+    });
+
+    test('a save with no saveVersion at all (pre-versioning data) still loads, treated as version 0', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            window.saveGame('legacy_shape_test');
+            const key = 'rpg_save_legacy_shape_test';
+            const raw = JSON.parse(localStorage.getItem(key));
+            delete raw.saveVersion; // simulate a save written before saveVersion existed
+            localStorage.setItem(key, JSON.stringify(raw));
+
+            window.loadGame('legacy_shape_test');
+            const loadedOk = !!window.player;
+            localStorage.removeItem(key);
+            return { loadedOk };
+        });
+        expect(result.loadedOk).toBe(true);
+    });
+
+    test('saveGame stamps the current SAVE_VERSION, and loadGame normalizes it back to that on load', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            window.saveGame('version_test');
+            const saved = JSON.parse(localStorage.getItem('rpg_save_version_test'));
+            localStorage.removeItem('rpg_save_version_test');
+            return { savedVersion: saved.saveVersion };
+        });
+        expect(result.savedVersion).toBeGreaterThanOrEqual(1);
+    });
+
+    test('factions (a PRESENT_ONLY field) is not clobbered back to a fresh default when the save genuinely has a value', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            window.factions.silverhart_kingdom.standing = 77;
+            window.saveGame('present_only_test');
+            window.factions.silverhart_kingdom.standing = 0;
+            window.loadGame('present_only_test');
+            localStorage.removeItem('rpg_save_present_only_test');
+            return window.factions.silverhart_kingdom.standing;
+        });
+        expect(result).toBe(77);
+    });
+});
+
+test.describe('save quota exhaustion recovery', () => {
+    test.beforeEach(async ({ page }) => {
+        await createCharacter(page);
+    });
+
+    test('freeOldestSaveSlot deletes the oldest save by date and its metadata entry, keeping newer ones', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            localStorage.setItem('rpg_save_metadata', JSON.stringify([
+                { key: 'rpg_save_old_one', name: 'Old One', date: '2020-01-01T00:00:00.000Z' },
+                { key: 'rpg_save_newer_one', name: 'Newer One', date: '2024-01-01T00:00:00.000Z' },
+            ]));
+            localStorage.setItem('rpg_save_old_one', '{}');
+            localStorage.setItem('rpg_save_newer_one', '{}');
+
+            const freed = window.freeOldestSaveSlot('rpg_save_unrelated_current_key');
+
+            const metadataAfter = JSON.parse(localStorage.getItem('rpg_save_metadata'));
+            const result = {
+                freed,
+                oldOneGone: localStorage.getItem('rpg_save_old_one') === null,
+                newerOneStillThere: localStorage.getItem('rpg_save_newer_one') !== null,
+                metadataStillHasNewer: metadataAfter.some(m => m.key === 'rpg_save_newer_one'),
+                metadataDroppedOld: !metadataAfter.some(m => m.key === 'rpg_save_old_one'),
+            };
+            localStorage.removeItem('rpg_save_newer_one');
+            localStorage.removeItem('rpg_save_metadata');
+            return result;
+        });
+        expect(result.freed).toBe(true);
+        expect(result.oldOneGone).toBe(true);
+        expect(result.newerOneStillThere).toBe(true);
+        expect(result.metadataStillHasNewer).toBe(true);
+        expect(result.metadataDroppedOld).toBe(true);
+    });
+
+    test('freeOldestSaveSlot returns false when there is nothing left to free (never deletes the slot being written)', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            localStorage.setItem('rpg_save_metadata', JSON.stringify([
+                { key: 'rpg_save_only_one', name: 'Only One', date: '2024-01-01T00:00:00.000Z' },
+            ]));
+            const freed = window.freeOldestSaveSlot('rpg_save_only_one'); // the only save IS the one being written
+            localStorage.removeItem('rpg_save_metadata');
+            return freed;
+        });
+        expect(result).toBe(false);
+    });
+
+    test('saveGame recovers from a simulated QuotaExceededError by freeing an older save and retrying', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            localStorage.setItem('rpg_save_metadata', JSON.stringify([
+                { key: 'rpg_save_ancient_test', name: 'Ancient Test', date: '2019-01-01T00:00:00.000Z' },
+            ]));
+            localStorage.setItem('rpg_save_ancient_test', '{}');
+
+            const origSetItem = Storage.prototype.setItem;
+            let failedOnce = false;
+            Storage.prototype.setItem = function (key, value) {
+                if (key === 'rpg_save_quota_test' && !failedOnce) {
+                    failedOnce = true;
+                    const err = new Error('simulated');
+                    err.name = 'QuotaExceededError';
+                    throw err;
+                }
+                return origSetItem.call(this, key, value);
+            };
+
+            let messageShown = null;
+            const origShowMessage = window.showMessage;
+            window.showMessage = (msg) => { messageShown = msg; };
+
+            window.saveGame('quota_test');
+
+            Storage.prototype.setItem = origSetItem;
+            window.showMessage = origShowMessage;
+
+            const saved = localStorage.getItem('rpg_save_quota_test');
+            const ancientStillThere = localStorage.getItem('rpg_save_ancient_test') !== null;
+            localStorage.removeItem('rpg_save_quota_test');
+            localStorage.removeItem('rpg_save_metadata');
+            return { failedOnce, saved: !!saved, ancientStillThere, messageShown };
+        });
+        expect(result.failedOnce).toBe(true);
+        expect(result.saved).toBe(true); // the retry succeeded
+        expect(result.ancientStillThere).toBe(false); // freed to make room
+        expect(result.messageShown).toContain('freed space');
+    });
+});
+
 test.describe('animated-tile scaffolding', () => {
     test.beforeEach(async ({ page }) => {
         await createCharacter(page);
