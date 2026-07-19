@@ -373,6 +373,37 @@ window.npcDialogueTrees = {
                 : "I don't know you. Whatever you're after, you won't find it from me.", [{ label: "Fair enough.", action: () => {} }]);
             return;
         }
+        const member = standing >= 50;
+
+        // Side offers (tunnel reveal, the Sunken Cache) are additional
+        // OPTIONS on the normal shop menu below, never a replacement for
+        // it — an earlier version returned early for these instead, which
+        // meant a player who hadn't yet touched either one couldn't reach
+        // the shop at all above standing 20. Neither of these interrupts
+        // the base "Show me what you've got." option.
+        const options = [
+            { label: "Show me what you've got.", action: () => window.openShop({ itemIds: member ? window.campaign2ThievesGuildFenceMemberItems : window.campaign2ThievesGuildFenceItems, mounts: false }) },
+        ];
+
+        // The tunnel network reveal — genuinely trusted members only.
+        // Unlocks both hidden doors outright (revealTunnelEntrances,
+        // campaign2World.js) rather than making the player go find them by
+        // touch.
+        if (standing >= 40 && !window.tunnelEntrancesRevealedByGuild) {
+            options.push({
+                label: "Anything else I should know?",
+                action: () => window.showDialogue(npc, "You've earned enough trust for this: the Guild's had its own way in and out of this city for longer than the Crown's known. One door behind the general goods store, another right under the Chancellor's own council chamber — dug decades back, never sealed. Use them if you ever need to move quiet.", [
+                    {
+                        label: "Show me.", action: () => {
+                            if (window.revealTunnelEntrances) window.revealTunnelEntrances();
+                            window.showMessage("Both hidden doors unlock at your touch — the Guild's word was good.");
+                        }
+                    },
+                    { label: "I'll pass, for now.", action: () => {} }
+                ])
+            });
+        }
+
         // "The Sunken Cache" — an optional side job, independent of the
         // guildmaster's own linear initiation/favor/blood-price/big-score
         // rungs above. Offered by the fence instead of Corvin so it can't
@@ -394,48 +425,43 @@ window.npcDialogueTrees = {
             }
         });
         if (!cacheQuest) {
-            window.showDialogue(npc, "There's a job, if you're feeling bold. A crew calling themselves free of the Guild is squatting some old sea-caves out past the western road, sitting on a stash that's rightfully ours. Rook Talvane runs it. Get it back — quietly if you can manage it, or through the front door if you can't. Either way, it comes back to us.", [
-                {
-                    label: "I'll handle it.", action: () => {
-                        window.questLog.push({
-                            id: 'guild_sunken_cache', title: "The Sunken Cache", giver: 'the fence', status: 'active',
-                            description: "Recover the Guild's stolen cache from Rook Talvane's smugglers, hidden in the sea-caves west of Silverhart — sneak in or fight your way through, whichever suits you."
-                        });
-                        if (window.startStealthMission) window.startStealthMission(cacheConfig());
-                    }
-                },
-                { label: "Not interested.", action: () => {} }
-            ]);
-            return;
-        }
-        if (cacheQuest.status === 'active') {
-            window.showDialogue(npc, "Sea-caves west of the road. Rook Talvane and whatever's left of his crew. You'll know it when you smell the brine.", [
-                { label: "Working on it.", action: () => {} }
-            ]);
-            return;
-        }
-        if (cacheQuest.status === 'failed') {
-            window.showDialogue(npc, "Blew it once already, did you? Rook's crew will be jumpy now. Still owe us that cache.", [
-                { label: "I'll go back.", action: () => { cacheQuest.status = 'active'; if (window.startStealthMission) window.startStealthMission(cacheConfig()); } }
-            ]);
-            return;
-        }
-        if (cacheQuest.status === 'completed') {
-            window.showDialogue(npc, "That cache put a lot of smiles on faces that don't smile easy. Good work.", [
-                { label: "Glad to help.", action: () => {} }
-            ]);
-            return;
+            options.push({
+                label: "Got any special work?",
+                action: () => window.showDialogue(npc, "There's a job, if you're feeling bold. A crew calling themselves free of the Guild is squatting some old sea-caves out past the western road, sitting on a stash that's rightfully ours. Rook Talvane runs it. Get it back — quietly if you can manage it, or through the front door if you can't. Either way, it comes back to us.", [
+                    {
+                        label: "I'll handle it.", action: () => {
+                            window.questLog.push({
+                                id: 'guild_sunken_cache', title: "The Sunken Cache", giver: 'the fence', status: 'active',
+                                description: "Recover the Guild's stolen cache from Rook Talvane's smugglers, hidden in the sea-caves west of Silverhart — sneak in or fight your way through, whichever suits you."
+                            });
+                            if (window.startStealthMission) window.startStealthMission(cacheConfig());
+                        }
+                    },
+                    { label: "Not interested.", action: () => {} }
+                ])
+            });
+        } else if (cacheQuest.status === 'active') {
+            options.push({
+                label: "About that cache...",
+                action: () => window.showDialogue(npc, "Sea-caves west of the road. Rook Talvane and whatever's left of his crew. You'll know it when you smell the brine.", [
+                    { label: "Working on it.", action: () => {} }
+                ])
+            });
+        } else if (cacheQuest.status === 'failed') {
+            options.push({
+                label: "About that cache...",
+                action: () => window.showDialogue(npc, "Blew it once already, did you? Rook's crew will be jumpy now. Still owe us that cache.", [
+                    { label: "I'll go back.", action: () => { cacheQuest.status = 'active'; if (window.startStealthMission) window.startStealthMission(cacheConfig()); } }
+                ])
+            });
         }
 
-        const member = standing >= 50;
+        options.push({ label: "Just passing through.", action: () => {} });
         window.showDialogue(npc, member
             ? (hasHeavyRogue
                 ? "Corvin vouches for you now, and honestly, he didn't need to sell me on it — anyone can see you've done this before. Good, that means you actually get to see what I keep in the back."
                 : "Corvin vouches for you now. Good — that means you actually get to see what I keep in the back.")
-            : "Keep your voice down. I don't ask where coin comes from, and you don't ask where my stock comes from.", [
-            { label: "Show me what you've got.", action: () => window.openShop({ itemIds: member ? window.campaign2ThievesGuildFenceMemberItems : window.campaign2ThievesGuildFenceItems, mounts: false }) },
-            { label: "Just passing through.", action: () => {} }
-        ]);
+            : "Keep your voice down. I don't ask where coin comes from, and you don't ask where my stock comes from.", options);
     },
     thieves_guildmaster: (npc) => {
         const standing = window.factions?.thieves_guild?.standing ?? 0;
@@ -2542,6 +2568,28 @@ window.npcDialogueTrees = {
                     { label: "Hand it over.", action: () => window.resolveWizardVendetta('queen') },
                     { label: "On second thought, no.", action: () => {} }
                 ])
+            });
+        }
+
+        // Reporting the Chancellor's own tunnel — only offered for finding
+        // it independently (chancellorTunnelDiscoveredByPlayer, set by
+        // searchSecretPassage, campaign2World.js), not for being handed the
+        // knowledge by the Guild that dug it; see revealTunnelEntrances's
+        // own comment for why those two flags are kept separate.
+        if (window.chancellorTunnelDiscoveredByPlayer && !window.chancellorTunnelReportedToQueen) {
+            options.push({
+                label: "Your Majesty, I must tell you something about your Chancellor.",
+                action: () => {
+                    window.chancellorTunnelReportedToQueen = true;
+                    const hex = window.campaign2TunnelPalaceHex;
+                    if (hex) delete window.tileObjects[`${hex.q},${hex.r}`];
+                    if (window.adjustReputation) window.adjustReputation(window.factions.silverhart_kingdom, 15, 15);
+                    if (window.adjustReputation) window.adjustReputation(window.factions.thieves_guild, -20, 20);
+                    window.showMessage("The Queen's guards seal the passage before nightfall. (+Silverhart Kingdom standing, -Thieves' Guild standing)");
+                    window.showDialogue(npc, "A tunnel — into MY council chamber? Guards! Seal it, brick by brick if you must, and find out who dug it. You've done the crown a real service, coming to me with this instead of using it yourself.", [
+                        { label: "Just doing my part, Your Majesty.", action: () => {} }
+                    ]);
+                }
             });
         }
 

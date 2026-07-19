@@ -1937,6 +1937,25 @@ function buildSilverhartPalace(roadEnd) {
     if (window.campaign2PalaceChancellor) {
         window.entities.push(window.buildNPC({ ...window.campaign2PalaceChancellor, hex: { q: councilCenter.q, r: councilCenter.r - 1 } }));
     }
+
+    // Thieves' Guild tunnel network: a hidden passage into the Chancellor's
+    // own council chamber. Undiscovered by default — a spot check
+    // (searchSecretPassage, gameEngine.js) or the Guild's own reveal
+    // (thieves_guild_fence, campaign2Dialogue.js, once trusted) turns it
+    // into a real stair down to the tunnel's own tiny floor -9 stub
+    // (window.multiStoryBuildings). The network itself is three of these
+    // small stubs (here, the city, and the sea-cave den — see
+    // buildThievesCoveCaves) tied together by a travel menu
+    // (tunnel_junction) rather than one long corridor physically painted
+    // across the whole map. Finding this one independently (not via the
+    // Guild) opens a "tell the Queen" option (silverhart_queen).
+    const tunnelPalaceHex = { q: councilCenter.q - 3, r: councilCenter.r + 2 };
+    window.tileObjects[`${tunnelPalaceHex.q},${tunnelPalaceHex.r}`] = { type: 'secret_passage', discovered: false, nodeId: 'palace' };
+    const tunnelPalaceBuilding = { minQ: tunnelPalaceHex.q, maxQ: tunnelPalaceHex.q, minR: tunnelPalaceHex.r, maxR: tunnelPalaceHex.r, floors: [] };
+    window.multiStoryBuildings.push(tunnelPalaceBuilding);
+    carveFloorRoom(tunnelPalaceBuilding, -9, tunnelPalaceHex.q, tunnelPalaceHex.r, 1, 1, null, 'Cave Floor');
+    tunnelPalaceBuilding.floors[-9].tileObjects[`${tunnelPalaceHex.q},${tunnelPalaceHex.r}`] = { type: 'tunnel_junction', nodeId: 'palace' };
+    window.campaign2TunnelPalaceHex = tunnelPalaceHex;
     // "The Big Score" (thieves_guildmaster) capstone heist target — the
     // Chancellor's own strongbox, tucked in the council chamber's far
     // corner, away from the table/bench/Chancellor's own hex.
@@ -2283,6 +2302,18 @@ function buildSilverhartPalace(roadEnd) {
     // back corner of the general goods store, away from the door and the
     // shopkeeper's own hex (see thieves_guildmaster, campaign2Dialogue.js).
     window.tileObjects[`${generalGoodsCenter.q - 2},${generalGoodsCenter.r - 1}`] = { type: 'evidence', evidenceKey: 'guild_initiation_prize', lightRadius: 0 };
+
+    // Thieves' Guild tunnel network, city end — see tunnelPalaceHex's own
+    // comment above (buildSilverhartPalace) for the full design. A locked
+    // back room behind the general goods store, opposite corner from the
+    // strongbox and the door.
+    const tunnelCityHex = { q: generalGoodsCenter.q + 2, r: generalGoodsCenter.r + 1 };
+    window.tileObjects[`${tunnelCityHex.q},${tunnelCityHex.r}`] = { type: 'secret_passage', discovered: false, nodeId: 'city' };
+    const tunnelCityBuilding = { minQ: tunnelCityHex.q, maxQ: tunnelCityHex.q, minR: tunnelCityHex.r, maxR: tunnelCityHex.r, floors: [] };
+    window.multiStoryBuildings.push(tunnelCityBuilding);
+    carveFloorRoom(tunnelCityBuilding, -9, tunnelCityHex.q, tunnelCityHex.r, 1, 1, null, 'Cave Floor');
+    tunnelCityBuilding.floors[-9].tileObjects[`${tunnelCityHex.q},${tunnelCityHex.r}`] = { type: 'tunnel_junction', nodeId: 'city' };
+    window.campaign2TunnelCityHex = tunnelCityHex;
 
     const clothierCenter = { q: merchantFarQ + 3, r: throneCenter.r - 6 };
     const clothierDoor = { q: clothierCenter.q - 3, r: clothierCenter.r };
@@ -3050,6 +3081,14 @@ function buildThievesCoveCaves(westRoadEnd) {
     const vault = caveBuilding.floors[-2];
     vault.tileObjects[`${stairToVault.q},${stairToVault.r}`] = { type: 'stair_up', toFloor: -1 };
     vault.tileObjects[`${entranceCenter.q + 1},${entranceCenter.r}`] = { type: 'evidence', evidenceKey: 'guild_cache_prize', itemId: 'guild_cache_prize', lightRadius: 0 };
+
+    // Thieves' Guild tunnel network, wilderness end — see tunnelPalaceHex's
+    // comment (buildSilverhartPalace) for the full design. Already the
+    // Guild's own territory, so this end needs no discovery/reveal gating
+    // at all — the stair down from the den is simply always there.
+    den.tileObjects[`${entranceCenter.q},${entranceCenter.r}`] = { type: 'stair_down', toFloor: -9 };
+    carveFloorRoom(caveBuilding, -9, entranceCenter.q, entranceCenter.r, 1, 1, null, 'Cave Floor');
+    caveBuilding.floors[-9].tileObjects[`${entranceCenter.q},${entranceCenter.r}`] = { type: 'tunnel_junction', nodeId: 'wilderness' };
 }
 window.buildThievesCoveCaves = buildThievesCoveCaves;
 
@@ -3057,6 +3096,89 @@ window.readSunkenCaveLedger = function() {
     window.showDialogue({ name: "Smuggler's Ledger", customImage: 'journal' },
         "A tally of \"independent\" runs sold out from under the Guild's nose — names blotted out, but the numbers are plain enough. Rook's been skimming for months.");
 };
+
+// --- Thieves' Guild tunnel network -----------------------------------------
+// Three hidden nodes (palace, city, wilderness/cave — see their own build-
+// time comments above) tied together by a travel menu rather than one long
+// corridor physically painted across the whole map. Two of the three
+// (palace/city) start as an undiscovered 'secret_passage' tileObject;
+// finding one converts it into a real stair down to the tunnel's own tiny
+// floor -9 stub, after which it behaves exactly like any other staircase.
+const SECRET_PASSAGE_SPOT_CHANCE = 0.35;
+
+function searchSecretPassage(q, r, floor) {
+    const obj = window.getTileObjectAtFloor(q, r, floor);
+    if (!obj || obj.type !== 'secret_passage') return;
+    if (obj.discovered) return; // already converted to a stair elsewhere
+
+    if (Math.random() >= SECRET_PASSAGE_SPOT_CHANCE) {
+        window.showMessage("Just old stone and plaster here, as far as you can tell. Might be worth another look.");
+        return;
+    }
+    revealSingleTunnelEntrance(obj, q, r, floor);
+    window.showMessage("A section of wall gives way at your touch — a hidden passage, dug some time ago and never sealed.");
+    if (obj.nodeId === 'palace') window.chancellorTunnelDiscoveredByPlayer = true;
+}
+window.searchSecretPassage = searchSecretPassage;
+
+// Converts one still-hidden secret_passage into a working stair down to
+// floor -9, in place — shared by both the player's own spot check above and
+// the Guild's wholesale reveal (thieves_guild_fence, campaign2Dialogue.js).
+function revealSingleTunnelEntrance(obj, q, r, floor) {
+    if (obj.discovered) return;
+    obj.discovered = true;
+    obj.type = 'stair_down';
+    obj.toFloor = -9;
+}
+window.revealSingleTunnelEntrance = revealSingleTunnelEntrance;
+
+// The Guild's own reveal: once trusted enough, they'll unlock both hidden
+// doors and tell the player exactly where they are — no spot check needed.
+// Deliberately does NOT set chancellorTunnelDiscoveredByPlayer: the "tell
+// the Queen" option (silverhart_queen) is only ever offered for finding the
+// palace passage independently, not for being handed the knowledge by the
+// very Guild that dug it.
+function revealTunnelEntrances() {
+    if (window.campaign2TunnelPalaceHex) {
+        const hex = window.campaign2TunnelPalaceHex;
+        const obj = window.tileObjects[`${hex.q},${hex.r}`];
+        if (obj) revealSingleTunnelEntrance(obj, hex.q, hex.r, 0);
+    }
+    if (window.campaign2TunnelCityHex) {
+        const hex = window.campaign2TunnelCityHex;
+        const obj = window.tileObjects[`${hex.q},${hex.r}`];
+        if (obj) revealSingleTunnelEntrance(obj, hex.q, hex.r, 0);
+    }
+    window.tunnelEntrancesRevealedByGuild = true;
+}
+window.revealTunnelEntrances = revealTunnelEntrances;
+
+// Stepping onto a tunnel_junction offers travel to the network's other
+// nodes — the "tunnel system" is three small stubs tied together this way
+// rather than one long corridor physically painted across the whole map.
+const TUNNEL_NODES = {
+    palace: { label: "the passage beneath the council chamber", hex: () => window.campaign2TunnelPalaceHex },
+    city: { label: "the passage behind the general goods store", hex: () => window.campaign2TunnelCityHex },
+    wilderness: { label: "the sea-cave den", hex: () => window.campaign2SunkenCaveCenter },
+};
+function openTunnelJunction(player) {
+    const here = window.getTileObjectAtFloor(player.hex.q, player.hex.r, player.floor);
+    if (!here || here.type !== 'tunnel_junction') return;
+    const options = Object.entries(TUNNEL_NODES)
+        .filter(([id]) => id !== here.nodeId)
+        .map(([id, node]) => ({
+            label: `Go to ${node.label}.`,
+            action: () => {
+                const hex = node.hex();
+                if (!hex) return;
+                player.hex = { q: hex.q, r: hex.r };
+                player.floor = -9;
+            }
+        }));
+    options.push({ label: "Never mind.", action: () => {} });
+    window.showDialogue({ name: "Tunnel Junction", customImage: 'journal' }, "Old brick, worn smooth by years of foot traffic. Passages lead off in more than one direction.", options);
+}
+window.openTunnelJunction = openTunnelJunction;
 
 function buildVampireGrave(westRoadEnd) {
     const q = westRoadEnd.q - 4, r = westRoadEnd.r + 6;

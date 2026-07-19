@@ -5,7 +5,7 @@
 // campaign2World.js) ever get an entry, so every other building/hex on the
 // map should be provably unaffected.
 const { test, expect } = require('@playwright/test');
-const { createCharacter } = require('./helpers');
+const { createCharacter, clickDialogueOption } = require('./helpers');
 
 test.describe('Multi-story buildings: zoning', () => {
     test.beforeEach(async ({ page }) => { await createCharacter(page); });
@@ -282,5 +282,159 @@ test.describe('The Sunken Cache: wilderness cave with two basement floors', () =
             return { missionStillActive: !!window.activeStealthMission };
         });
         expect(result.missionStillActive).toBe(true);
+    });
+});
+
+test.describe('Thieves\' Guild tunnel network', () => {
+    test.beforeEach(async ({ page }) => { await createCharacter(page); });
+
+    test('palace and city nodes start as undiscovered secret passages, each with its own floor -9 junction', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const palaceHex = window.campaign2TunnelPalaceHex;
+            const cityHex = window.campaign2TunnelCityHex;
+            const palaceObj = window.tileObjects[`${palaceHex.q},${palaceHex.r}`];
+            const cityObj = window.tileObjects[`${cityHex.q},${cityHex.r}`];
+            const palaceBuilding = window.getMultiStoryBuildingAt(palaceHex);
+            const cityBuilding = window.getMultiStoryBuildingAt(cityHex);
+            return {
+                palaceType: palaceObj.type, palaceDiscovered: palaceObj.discovered,
+                cityType: cityObj.type, cityDiscovered: cityObj.discovered,
+                palaceJunction: palaceBuilding?.floors[-9]?.tileObjects[`${palaceHex.q},${palaceHex.r}`]?.type,
+                cityJunction: cityBuilding?.floors[-9]?.tileObjects[`${cityHex.q},${cityHex.r}`]?.type,
+            };
+        });
+        expect(result.palaceType).toBe('secret_passage');
+        expect(result.palaceDiscovered).toBe(false);
+        expect(result.cityType).toBe('secret_passage');
+        expect(result.cityDiscovered).toBe(false);
+        expect(result.palaceJunction).toBe('tunnel_junction');
+        expect(result.cityJunction).toBe('tunnel_junction');
+    });
+
+    test('the wilderness node (via the cave den) is always a working stair, no discovery needed', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const center = window.campaign2SunkenCaveCenter;
+            const denObj = window.getTileObjectAtFloor(center.q, center.r, -1);
+            return { type: denObj?.type, toFloor: denObj?.toFloor };
+        });
+        expect(result.type).toBe('stair_down');
+        expect(result.toFloor).toBe(-9);
+    });
+
+    test('a successful spot check reveals the palace passage and flags it for the Queen; a repeat check is a no-op', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const hex = window.campaign2TunnelPalaceHex;
+            window.chancellorTunnelDiscoveredByPlayer = false;
+            const origRandom = Math.random;
+            Math.random = () => 0; // guaranteed success
+            window.searchSecretPassage(hex.q, hex.r, 0);
+            const afterFirst = { ...window.tileObjects[`${hex.q},${hex.r}`] };
+            const discoveredFlag = window.chancellorTunnelDiscoveredByPlayer;
+
+            Math.random = () => 0.999; // would fail, but already discovered — must be a no-op either way
+            window.searchSecretPassage(hex.q, hex.r, 0);
+            const afterSecond = { ...window.tileObjects[`${hex.q},${hex.r}`] };
+            Math.random = origRandom;
+            return { afterFirst, discoveredFlag, afterSecond };
+        });
+        expect(result.afterFirst.type).toBe('stair_down');
+        expect(result.afterFirst.toFloor).toBe(-9);
+        expect(result.discoveredFlag).toBe(true);
+        expect(result.afterSecond.type).toBe('stair_down'); // unchanged, still revealed
+    });
+
+    test('a failed spot check leaves the passage hidden and does not set the Queen-report flag', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const hex = window.campaign2TunnelCityHex; // city node — not tied to the Queen flag at all
+            window.chancellorTunnelDiscoveredByPlayer = false;
+            const origRandom = Math.random;
+            Math.random = () => 0.999; // guaranteed failure
+            window.searchSecretPassage(hex.q, hex.r, 0);
+            Math.random = origRandom;
+            const obj = window.tileObjects[`${hex.q},${hex.r}`];
+            return { type: obj.type, discovered: obj.discovered, chancellorFlag: window.chancellorTunnelDiscoveredByPlayer };
+        });
+        expect(result.type).toBe('secret_passage');
+        expect(result.discovered).toBe(false);
+        expect(result.chancellorFlag).toBe(false);
+    });
+
+    test('revealTunnelEntrances unlocks both hidden doors without setting the Queen-report flag', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            window.chancellorTunnelDiscoveredByPlayer = false;
+            window.revealTunnelEntrances();
+            const palaceHex = window.campaign2TunnelPalaceHex;
+            const cityHex = window.campaign2TunnelCityHex;
+            return {
+                palaceType: window.tileObjects[`${palaceHex.q},${palaceHex.r}`].type,
+                cityType: window.tileObjects[`${cityHex.q},${cityHex.r}`].type,
+                chancellorFlag: window.chancellorTunnelDiscoveredByPlayer,
+                revealedFlag: window.tunnelEntrancesRevealedByGuild,
+            };
+        });
+        expect(result.palaceType).toBe('stair_down');
+        expect(result.cityType).toBe('stair_down');
+        expect(result.chancellorFlag).toBe(false);
+        expect(result.revealedFlag).toBe(true);
+    });
+
+    test('the fence offers to reveal the tunnels once trusted, and "Show me" unlocks them', async ({ page }) => {
+        await page.evaluate(() => {
+            window.factions.thieves_guild.standing = 45;
+            window.tunnelEntrancesRevealedByGuild = false;
+            const fence = window.entities.find(e => e.name === 'Tessa Nightshade');
+            window.npcDialogueTrees['thieves_guild_fence'](fence);
+        });
+        await clickDialogueOption(page, 'Anything else I should know?');
+        await clickDialogueOption(page, 'Show me.');
+        const result = await page.evaluate(() => {
+            const hex = window.campaign2TunnelPalaceHex;
+            return { revealed: window.tunnelEntrancesRevealedByGuild, palaceType: window.tileObjects[`${hex.q},${hex.r}`].type };
+        });
+        expect(result.revealed).toBe(true);
+        expect(result.palaceType).toBe('stair_down');
+    });
+
+    test('a tunnel junction offers travel to the other two nodes, and picking one moves the player there', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const player = window.entities.find(e => e.side === 'player' && !e.rider);
+            const caveCenter = window.campaign2SunkenCaveCenter;
+            player.floor = -9;
+            player.hex = { q: caveCenter.q, r: caveCenter.r };
+            window.openTunnelJunction(player);
+            return true;
+        });
+        expect(result).toBe(true);
+        const dialogueText = await page.locator('#dialogue-modal').innerText();
+        expect(dialogueText).not.toContain('sea-cave den'); // own node excluded from the travel list
+        await clickDialogueOption(page, 'council chamber');
+        const after = await page.evaluate(() => {
+            const player = window.entities.find(e => e.side === 'player' && !e.rider);
+            const palaceHex = window.campaign2TunnelPalaceHex;
+            return { floor: player.floor, atPalaceHex: player.hex.q === palaceHex.q && player.hex.r === palaceHex.r };
+        });
+        expect(after.floor).toBe(-9);
+        expect(after.atPalaceHex).toBe(true);
+    });
+
+    test('reporting the palace tunnel to the Queen requires independent discovery, adjusts reputation, and seals the passage', async ({ page }) => {
+        await page.evaluate(() => {
+            window.chancellorTunnelDiscoveredByPlayer = true;
+            window.chancellorTunnelReportedToQueen = false;
+            const queen = window.entities.find(e => e.name === window.campaign2QueenEntityName);
+            window.npcDialogueTrees['silverhart_queen'](queen);
+        });
+        await clickDialogueOption(page, "I must tell you something about your Chancellor");
+        const result = await page.evaluate(() => {
+            const hex = window.campaign2TunnelPalaceHex;
+            return {
+                reported: window.chancellorTunnelReportedToQueen,
+                kingdomStanding: window.factions.silverhart_kingdom.standing,
+                guildStanding: window.factions.thieves_guild.standing,
+                passageSealed: window.tileObjects[`${hex.q},${hex.r}`] === undefined,
+            };
+        });
+        expect(result.reported).toBe(true);
+        expect(result.passageSealed).toBe(true);
     });
 });
