@@ -5912,3 +5912,43 @@ window.npcDialogueTrees.sylvan_bowmaster = (npc) => {
     options.push({ label: "Just passing through.", action: () => {} });
     window.showDialogue(npc, trusted ? "Back again. What do you need?" : "The Court's craft isn't a curiosity for tourists. Earn our trust first, then we'll talk.", options);
 };
+
+// The traveling caravan (checkCaravanSpawn, worldPulse.js) — any member can
+// be talked to for the same options, since window._activeCaravan tracks the
+// job/raid state once for the whole group rather than per-NPC. Two opposite
+// ways to profit from it: hire on as a guard (a real but delayed risk — see
+// checkCaravanAmbush) and get paid once it reaches the far end safely, or
+// rob it outright for an immediate windfall at the cost of the crown's
+// reputation and the local barony's security (see raidCaravan).
+window.npcDialogueTrees.caravan_merchant = (npc) => {
+    const caravan = window._activeCaravan;
+    if (!caravan || caravan.raided) {
+        window.showDialogue(npc, "We'd best keep moving.", [{ label: "Safe travels.", action: () => {} }]);
+        return;
+    }
+
+    const options = [];
+    if (!caravan.hiredGuard) {
+        options.push({
+            label: "I'll guard you the rest of the way, for a fee.",
+            action: () => {
+                caravan.hiredGuard = true;
+                caravan.ambushed = false;
+                caravan.ambushAt = (window.worldSeconds || 0) + 600 + Math.random() * 1800; // 10-40 in-game minutes out
+                window.showDialogue(npc, "Much obliged. Keep your eyes on the tree line — the roads haven't been kind lately.", [{ label: "I'll manage.", action: () => {} }]);
+            }
+        });
+    } else {
+        options.push({ label: "Just keeping watch.", action: () => {} });
+    }
+    options.push({
+        label: "Hand over the strongbox. Now.",
+        action: () => window.raidCaravan()
+    });
+    options.push({ label: "Safe travels.", action: () => {} });
+
+    const greeting = caravan.hiredGuard
+        ? "Glad to have another blade watching the road with us."
+        : "Trade goods, nothing more. Interested in buying, or just passing?";
+    window.showDialogue(npc, greeting, options);
+};

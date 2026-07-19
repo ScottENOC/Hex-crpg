@@ -140,3 +140,108 @@ test.describe('A1: physical caravans', () => {
         expect(result.campCleared).toBe(true);
     });
 });
+
+test.describe('D3: hiring on as a caravan guard, or raiding the caravan instead', () => {
+    test.beforeEach(async ({ page }) => {
+        await createCharacter(page);
+        await page.evaluate(() => {
+            const player = window.entities.find(e => e.side === 'player' && !e.rider);
+            player.hex = { q: window.campaign2Landmarks.crossroads.q, r: window.campaign2Landmarks.crossroads.r };
+            window._pendingCaravanArrival = true;
+            window._activeCaravan = null;
+            window.checkCaravanSpawn();
+        });
+    });
+
+    test('every caravan member gets the caravan_merchant dialogueId', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const members = window.entities.filter(e => window._activeCaravan.memberIds.includes(e.id));
+            return members.every(e => e.dialogueId === 'caravan_merchant');
+        });
+        expect(result).toBe(true);
+    });
+
+    test('hiring on schedules a future ambush and pays a completion reward once the crossing is done', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const repBefore = window.factions.silverhart_kingdom.standing;
+            const goldBefore = window.player.gold;
+            window._activeCaravan.hiredGuard = true;
+            window._activeCaravan.ambushAt = window.worldSeconds + 1000;
+            const ids = window._activeCaravan.memberIds;
+            window.entities.forEach(e => { if (ids.includes(e.id)) e.destination = null; }); // simulate safe arrival
+            window.checkCaravanDespawn();
+            return {
+                goldGain: window.player.gold - goldBefore,
+                repGain: window.factions.silverhart_kingdom.standing - repBefore,
+                despawned: window._activeCaravan === null,
+            };
+        });
+        expect(result.goldGain).toBe(50);
+        expect(result.repGain).toBeGreaterThan(0);
+        expect(result.despawned).toBe(true);
+    });
+
+    test('the ambush only fires once the scheduled time has passed, and only if hired', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const banditsBefore = window.entities.filter(e => e.name === 'Bandit').length;
+            window._activeCaravan.hiredGuard = false;
+            window.worldSeconds = 999999;
+            window.checkCaravanAmbush(); // not hired — nothing happens
+            const countNotHired = window.entities.filter(e => e.name === 'Bandit').length;
+
+            window._activeCaravan.hiredGuard = true;
+            window._activeCaravan.ambushAt = window.worldSeconds + 10000; // still in the future
+            window.checkCaravanAmbush();
+            const countTooEarly = window.entities.filter(e => e.name === 'Bandit').length;
+
+            window._activeCaravan.ambushAt = window.worldSeconds - 1; // due
+            window.checkCaravanAmbush();
+            const countAfterAmbush = window.entities.filter(e => e.name === 'Bandit').length;
+
+            window.checkCaravanAmbush(); // idempotent — already ambushed once
+            const countAfterSecondCall = window.entities.filter(e => e.name === 'Bandit').length;
+
+            return { banditsBefore, countNotHired, countTooEarly, countAfterAmbush, countAfterSecondCall, ambushed: window._activeCaravan.ambushed };
+        });
+        expect(result.countNotHired).toBe(result.banditsBefore);
+        expect(result.countTooEarly).toBe(result.banditsBefore);
+        expect(result.countAfterAmbush).toBeGreaterThanOrEqual(result.banditsBefore + 2);
+        expect(result.countAfterSecondCall).toBe(result.countAfterAmbush);
+        expect(result.ambushed).toBe(true);
+    });
+
+    test('raiding the caravan grants gold immediately, turns members hostile, and costs kingdom reputation', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const goldBefore = window.player.gold;
+            const repBefore = window.factions.silverhart_kingdom.standing;
+            const secBefore = window.regions.aldervale.security;
+            window.raidCaravan();
+            const members = window.entities.filter(e => window._activeCaravan.memberIds.includes(e.id));
+            return {
+                goldGain: window.player.gold - goldBefore,
+                repChange: window.factions.silverhart_kingdom.standing - repBefore,
+                secChange: window.regions.aldervale.security - secBefore,
+                allEnemy: members.every(e => e.side === 'enemy'),
+                raided: window._activeCaravan.raided,
+            };
+        });
+        expect(result.goldGain).toBeGreaterThanOrEqual(40);
+        expect(result.repChange).toBeLessThan(0);
+        expect(result.secChange).toBeLessThan(0);
+        expect(result.allEnemy).toBe(true);
+        expect(result.raided).toBe(true);
+    });
+
+    test('a raided caravan pays no guard reward even if it was hired first', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            window._activeCaravan.hiredGuard = true;
+            window.raidCaravan();
+            const goldBefore = window.player.gold;
+            const ids = window._activeCaravan.memberIds;
+            window.entities.forEach(e => { if (ids.includes(e.id)) e.destination = null; });
+            window.checkCaravanDespawn();
+            return { goldGain: window.player.gold - goldBefore };
+        });
+        expect(result.goldGain).toBe(0);
+    });
+});

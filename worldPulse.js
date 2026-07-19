@@ -264,7 +264,7 @@ function checkCaravanSpawn() {
         const npc = window.buildNPC({
             name: role.name, title: 'Traveling South', race: 'human', gender: i % 2 === 0 ? 'male' : 'female',
             hex: { q: cp.q, r: startR - i }, side: 'neutral', factionId: 'silverhart_kingdom', color: role.color,
-            dialogueId: role.dialogueId
+            dialogueId: 'caravan_merchant'
         });
         npc.prefersRoads = true;
         npc.isCaravanMember = true;
@@ -272,7 +272,10 @@ function checkCaravanSpawn() {
         window.entities.push(npc);
         memberIds.push(npc.id);
     });
-    window._activeCaravan = { memberIds };
+    // hiredGuard/ambushAt/ambushed/rewardPaid/raided: see talkToNPC's
+    // 'caravan_merchant' dialogue (campaign2Dialogue.js), checkCaravanAmbush,
+    // and raidCaravan below.
+    window._activeCaravan = { memberIds, hiredGuard: false, raided: false };
 }
 
 // Checked every tickWorldPulse call: has the caravan finished crossing (every
@@ -281,15 +284,76 @@ function checkCaravanSpawn() {
 // it doesn't just stand at the map edge forever.
 function checkCaravanDespawn() {
     if (!window._activeCaravan) return;
-    const members = window.entities.filter(e => window._activeCaravan.memberIds.includes(e.id));
+    const caravan = window._activeCaravan;
+    const members = window.entities.filter(e => caravan.memberIds.includes(e.id));
     const allDone = members.every(e => !e.alive || !e.destination);
     if (!allDone) return;
+    // Pay the hired-guard fee once the crossing's actually done — win or
+    // lose the ambush along the way, surviving members making it to the far
+    // end is what the merchants are paying for.
+    if (caravan.hiredGuard && !caravan.raided && members.some(e => e.alive)) {
+        const reward = 50;
+        window.player.gold = (window.player.gold || 0) + reward;
+        if (window.adjustReputation && window.factions?.silverhart_kingdom) {
+            window.adjustReputation(window.factions.silverhart_kingdom, 5, 5);
+        }
+        if (window.showMessage) window.showMessage(`The merchants pay you ${reward} gold for seeing them through safely.`);
+    }
     // Drop every surviving caravan member once the crossing's done; a dead
     // one stays behind as a body, same convention as random wilderness
     // encounters (see pruneDistantEncounterCorpses, campaign2Dialogue.js).
-    window.entities = window.entities.filter(e => !(window._activeCaravan.memberIds.includes(e.id) && e.alive));
+    window.entities = window.entities.filter(e => !(caravan.memberIds.includes(e.id) && e.alive));
     window._activeCaravan = null;
 }
+
+// D3: hiring on as a caravan guard (see the 'caravan_merchant' dialogue,
+// campaign2Dialogue.js) carries a real risk — once hired, a single ambush
+// roll is scheduled for sometime later in the crossing. Bandits spawn near
+// the caravan's current position and, being 'enemy' side, engage the player
+// directly (the same default targeting every other bandit already uses —
+// see the opponentSide resolution in gameEngine.js's tryAttack/AI code).
+function checkCaravanAmbush() {
+    const caravan = window._activeCaravan;
+    if (!caravan || !caravan.hiredGuard || caravan.ambushed || caravan.raided) return;
+    if ((window.worldSeconds || 0) < (caravan.ambushAt || Infinity)) return;
+    caravan.ambushed = true;
+    const members = window.entities.filter(e => caravan.memberIds.includes(e.id) && e.alive);
+    const anchor = members[0]?.hex;
+    if (!anchor) return;
+    const count = 2 + Math.floor(Math.random() * 2); // 2-3 brigands
+    for (let i = 0; i < count; i++) {
+        const hex = { q: anchor.q + (i % 2 === 0 ? 1 : -1), r: anchor.r + Math.floor(i / 2) + 1 };
+        const bandit = window.createMonster('bandit', hex, null, null, 'enemy');
+        bandit.isRandomEncounter = true;
+        window.entities.push(bandit);
+    }
+    if (window.recordWorldEvent) window.recordWorldEvent('caravan_ambushed', "Brigands hit the caravan on the road south — the guard held them off, from what folk say.", 'aldervale');
+    if (window.drawMap) window.drawMap();
+    if (window.renderEntities) window.renderEntities();
+}
+window.checkCaravanAmbush = checkCaravanAmbush;
+
+// D3: robbing the caravan yourself instead of guarding it — instant coin,
+// but it's a crime against the crown's own trade, and it turns the caravan
+// hostile (the guard fights back using the same 'enemy' targeting every
+// other hostile entity already uses).
+function raidCaravan() {
+    const caravan = window._activeCaravan;
+    if (!caravan || caravan.raided) return;
+    caravan.raided = true;
+    const members = window.entities.filter(e => caravan.memberIds.includes(e.id) && e.alive);
+    members.forEach(e => { e.side = 'enemy'; });
+    const loot = 40 + Math.floor(Math.random() * 60);
+    window.player.gold = (window.player.gold || 0) + loot;
+    if (window.showMessage) window.showMessage(`You seize ${loot} gold from the caravan's strongbox before the guard can react!`);
+    if (window.adjustReputation && window.factions?.silverhart_kingdom) {
+        window.adjustReputation(window.factions.silverhart_kingdom, -15, 15);
+    }
+    window.adjustRegionStat?.('aldervale', 'security', -2);
+    window.adjustRegionStat?.('aldervale', 'prosperity', -1);
+    if (window.recordWorldEvent) window.recordWorldEvent('caravan_raided', "Word is a caravan was robbed in broad daylight on the crossroads road.", 'aldervale');
+}
+window.raidCaravan = raidCaravan;
 
 // D2: guards react to nearby world events. A bandit_activity event puts
 // every patrol-behaviorType entity "on alert" for a day — a temporary
@@ -333,6 +397,7 @@ function tickWorldPulse(deltaSeconds) {
     checkBanditCampSeeding(deltaSeconds);
     checkCaravanDespawn();
     checkCaravanSpawn();
+    checkCaravanAmbush();
 
     // Expire the guard alert once its day is up (the event that started it
     // already applied the bonus at the moment it fired; this only ever
