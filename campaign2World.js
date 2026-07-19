@@ -1225,6 +1225,16 @@ window.readSunkenDeepWarning = function() {
 // the road network for the same reason as Kragmoor: it needs to land
 // inside a specific reserved worldMap.js region, not wherever an existing
 // road happens to end.
+// Sil'thandriel is a real treehouse city now, not a ground clearing: the
+// forest floor stays open (an arrival clearing + the herb patches, since a
+// healer's garden has to actually touch soil), but the city itself lives up
+// in the canopy across two heights, connected by rope-bridge walkways —
+// same layered-floor system as Kragmoor's descent (carveFloorRoom,
+// window.multiStoryBuildings, terrain.js), just climbing instead of
+// digging. Floor 1 (Lower Canopy): the Silverleaf Archive and the Sickbed
+// lodge, bridged to each other. Floor 2 (Upper Canopy, highest and most
+// prestigious): the Court of the Silver Leaf itself, reached by a second
+// stair up from the lower canopy.
 function buildElvenCapital(anchor) {
     const CANOPY_RADIUS = 18;
     for (let dq = -CANOPY_RADIUS; dq <= CANOPY_RADIUS; dq++) {
@@ -1240,67 +1250,80 @@ function buildElvenCapital(anchor) {
                 // 0.55) than ordinary wilderness forest.
                 if (window.pseudoRandom(hex.q * 1.7 + 3, hex.r * 2.1 + 9) < 0.7) window.setTerrainAt(hex.q, hex.r, 'Foliage');
             }
-            // dist < 9 stays Grass — the court's own open clearings.
+            // dist < 9 stays Grass — the arrival clearing at the tree's own base.
         }
     }
 
-    // The Court of the Silver Leaf: an open throne pavilion at the heart of
-    // the clearing, not tucked behind a gate — still carved as a real
-    // building (Wood Floor + wall ring) since there's no separate "outdoor
-    // pavilion" terrain concept yet.
+    // The arrival clearing and the great tree itself, at ground level —
+    // everyone reaches Sil'thandriel by walking in under the canopy first.
+    const anchorCenter = { q: anchor.q, r: anchor.r };
+    const treeStairHex = { q: anchorCenter.q, r: anchorCenter.r - 2 };
+    window.tileObjects[`${treeStairHex.q},${treeStairHex.r}`] = { type: 'stair_up', toFloor: 1 };
+    window.campaign2SilthandrielTreeStairHex = treeStairHex;
+
+    // A short approach path north from the tree's own base, out past the
+    // treeline toward the crossroads — enough for connectAllRoadNetworks
+    // (hexMap.js) to bridge this into the rest of the road network with
+    // its own connector.
+    for (let i = 1; i <= CANOPY_RADIUS + 4; i++) window.setTerrainAt(anchorCenter.q, anchorCenter.r - 5 - i, 'Path');
+
+    const silCapitalBuilding = { minQ: anchor.q - CANOPY_RADIUS, maxQ: anchor.q + CANOPY_RADIUS, minR: anchor.r - CANOPY_RADIUS, maxR: anchor.r + CANOPY_RADIUS, floors: [] };
+    window.multiStoryBuildings.push(silCapitalBuilding);
+    window.campaign2SilthandrielBuilding = silCapitalBuilding;
+
+    // Lower Canopy (1): the Archive and the Sickbed, bridged together.
+    const archiveCenter = { q: anchor.q - 12, r: anchor.r + 2 };
+    const lodgeCenter = { q: anchor.q + 12, r: anchor.r + 2 };
+    carveFloorRoom(silCapitalBuilding, 1, archiveCenter.q, archiveCenter.r, 3, 2, null, 'Wood Floor');
+    carveFloorRoom(silCapitalBuilding, 1, lodgeCenter.q, lodgeCenter.r, 3, 2, null, 'Wood Floor');
+    const lowerCanopy = silCapitalBuilding.floors[1];
+    lowerCanopy.tileObjects[`${treeStairHex.q},${treeStairHex.r}`] = { type: 'stair_down', toFloor: 0 };
+    paintFloorCorridor(silCapitalBuilding, 1, treeStairHex, archiveCenter, 'Wood Floor');
+    paintFloorCorridor(silCapitalBuilding, 1, archiveCenter, lodgeCenter, 'Wood Floor'); // the rope bridge between the two lower platforms
+    window.campaign2ElvenLodgeCenter = lodgeCenter;
+
+    if (window.campaign2ElfArchivist) {
+        const archivist = window.buildNPC({ ...window.campaign2ElfArchivist, hex: { q: archiveCenter.q, r: archiveCenter.r + 1 } });
+        archivist.floor = 1;
+        window.entities.push(archivist);
+    }
+    lowerCanopy.tileObjects[`${lodgeCenter.q},${lodgeCenter.r - 2}`] = { type: 'herb_patch', hasHerbs: true };
+    lowerCanopy.tileObjects[`${lodgeCenter.q + 1},${lodgeCenter.r - 2}`] = { type: 'herb_patch', hasHerbs: true };
+    if (window.campaign2ElfHealer) {
+        const healer = window.buildNPC({ ...window.campaign2ElfHealer, hex: { q: lodgeCenter.q, r: lodgeCenter.r + 1 } });
+        healer.floor = 1;
+        window.entities.push(healer);
+    }
+
+    // Lower Canopy -> Upper Canopy: a second climb, up from the Archive's
+    // own platform — reaching the Court means visiting the Loremaster's
+    // level first.
+    const upperStairHex = { q: archiveCenter.q, r: archiveCenter.r - 1 };
+    lowerCanopy.tileObjects[`${upperStairHex.q},${upperStairHex.r}`] = { type: 'stair_up', toFloor: 2 };
+
+    // Upper Canopy (2): the Court of the Silver Leaf — the highest, most
+    // prestigious platform in the city, an open throne pavilion rather than
+    // a walled hall.
     const courtCenter = { q: anchor.q, r: anchor.r };
-    // The door (and approach path) face NORTH, toward the crossroads — the
-    // capital sits well south of it (see the elfAnchor displacement in
-    // setupVillageScene), so the surface approach needs to head back that
-    // way, not further out into the forest.
-    const courtDoor = { q: courtCenter.q, r: courtCenter.r - 5 };
-    const courtRegion = carveFlatRoom(courtCenter.q, courtCenter.r, 6, 4, courtDoor, 'Wood Floor');
-    window.interiorRegions.push(courtRegion);
-    window.tileObjects[`${courtCenter.q},${courtCenter.r + 2}`] = { type: 'throne' };
+    carveFloorRoom(silCapitalBuilding, 2, courtCenter.q, courtCenter.r, 6, 4, null, 'Wood Floor');
+    const upperCanopy = silCapitalBuilding.floors[2];
+    upperCanopy.tileObjects[`${upperStairHex.q},${upperStairHex.r}`] = { type: 'stair_down', toFloor: 1 };
+    paintFloorCorridor(silCapitalBuilding, 2, upperStairHex, courtCenter, 'Wood Floor');
+    upperCanopy.tileObjects[`${courtCenter.q},${courtCenter.r + 2}`] = { type: 'throne' };
     window.campaign2ElvenCourtCenter = courtCenter;
 
     if (window.campaign2ElfQueen) {
-        window.entities.push(window.buildNPC({ ...window.campaign2ElfQueen, hex: { q: courtCenter.q, r: courtCenter.r + 1 } }));
+        const queen = window.buildNPC({ ...window.campaign2ElfQueen, hex: { q: courtCenter.q, r: courtCenter.r + 1 } });
+        queen.floor = 2;
+        window.entities.push(queen);
     }
     (window.campaign2ElfGuards || []).forEach((spec, i) => {
         const pos = [{ q: courtCenter.q - 3, r: courtCenter.r - 2 }, { q: courtCenter.q + 3, r: courtCenter.r - 2 }][i];
         if (!pos) return;
-        window.entities.push(window.buildNPC({ ...spec, hex: pos }));
+        const guard = window.buildNPC({ ...spec, hex: pos });
+        guard.floor = 2;
+        window.entities.push(guard);
     });
-
-    // A short approach path north from the court's own door, out past the
-    // treeline toward the crossroads — enough for connectAllRoadNetworks
-    // (hexMap.js) to bridge this into the rest of the road network with
-    // its own connector.
-    for (let i = 1; i <= CANOPY_RADIUS + 4; i++) window.setTerrainAt(courtDoor.q, courtDoor.r - i, 'Path');
-
-    // The Silverleaf Archive: Loremaster Faelan's small study.
-    const archiveCenter = { q: anchor.q - 12, r: anchor.r + 2 };
-    const archiveDoor = { q: archiveCenter.q + 3, r: archiveCenter.r };
-    const archiveRegion = carveFlatRoom(archiveCenter.q, archiveCenter.r, 3, 2, archiveDoor, 'Wood Floor');
-    window.interiorRegions.push(archiveRegion);
-    for (let q = archiveDoor.q + 1; q < courtCenter.q - 6; q++) window.setTerrainAt(q, courtCenter.r + 2, 'Path');
-    if (window.campaign2ElfArchivist) {
-        window.entities.push(window.buildNPC({ ...window.campaign2ElfArchivist, hex: { q: archiveCenter.q, r: archiveCenter.r + 1 } }));
-    }
-
-    // The Sickbed: Healer Sylwen's lodge, with her own herb patches (the
-    // same tileObject the druid grove's quest already uses).
-    const lodgeCenter = { q: anchor.q + 12, r: anchor.r + 2 };
-    const lodgeDoor = { q: lodgeCenter.q - 3, r: lodgeCenter.r };
-    const lodgeRegion = carveFlatRoom(lodgeCenter.q, lodgeCenter.r, 3, 2, lodgeDoor, 'Wood Floor');
-    window.interiorRegions.push(lodgeRegion);
-    for (let q = courtCenter.q + 6; q < lodgeDoor.q; q++) window.setTerrainAt(q, courtCenter.r + 2, 'Path');
-    window.tileObjects[`${lodgeCenter.q},${lodgeCenter.r - 2}`] = { type: 'herb_patch', hasHerbs: true };
-    window.tileObjects[`${lodgeCenter.q + 1},${lodgeCenter.r - 2}`] = { type: 'herb_patch', hasHerbs: true };
-    window.campaign2ElvenLodgeCenter = lodgeCenter;
-    if (window.campaign2ElfHealer) {
-        window.entities.push(window.buildNPC({ ...window.campaign2ElfHealer, hex: { q: lodgeCenter.q, r: lodgeCenter.r + 1 } }));
-    }
-
-    sealRoom(courtRegion);
-    sealRoom(archiveRegion);
-    sealRoom(lodgeRegion);
 
     setWorldMapMarker(anchor, { t: 'F', f: 'K', o: 'e', p: 2, n: "Sil'thandriel" });
 }
@@ -4180,6 +4203,40 @@ function buildEmberlode(roadEnd) {
     window.interiorRegions.push(mineRegion);
     window.tileObjects[`${mineCenter.q},${mineCenter.r}`] = { type: 'journal', lightRadius: 0, readId: 'emberlode_ledger' };
     for (let r = mineDoor.r + 1; r < roadEnd.r; r++) window.setTerrainAt(roadEnd.q, r, 'Path');
+    window.campaign2EmberlodeMineCenter = mineCenter;
+
+    // The mine actually has depth now, same layered-floor system as
+    // Kragmoor's descent and Sil'thandriel's climb (carveFloorRoom,
+    // window.multiStoryBuildings, terrain.js): the entrance tunnel stays
+    // ground level (this is a real village, not a hidden dungeon — the
+    // foreman and miner still just walk to work), but the ore itself is a
+    // level down (the Working Vein, -1) with a richer, half-abandoned seam
+    // further below that (-2) — left alone since the road troubles started,
+    // and not entirely empty anymore.
+    const emberlodeMineBuilding = { minQ: mineRegion.minQ, maxQ: mineRegion.maxQ, minR: mineRegion.minR, maxR: mineRegion.maxR, floors: [] };
+    window.multiStoryBuildings.push(emberlodeMineBuilding);
+    window.campaign2EmberlodeMineBuilding = emberlodeMineBuilding;
+
+    const mineStairHex = { q: mineCenter.q, r: mineCenter.r - 1 }; // clear of the ledger journal at mineCenter
+    window.tileObjects[`${mineStairHex.q},${mineStairHex.r}`] = { type: 'stair_down', toFloor: -1 };
+
+    carveFloorRoom(emberlodeMineBuilding, -1, mineCenter.q, mineCenter.r, 3, 2, null, 'Cave Floor');
+    const workingVein = emberlodeMineBuilding.floors[-1];
+    workingVein.tileObjects[`${mineStairHex.q},${mineStairHex.r}`] = { type: 'stair_up', toFloor: 0 };
+    workingVein.tileObjects[`${mineCenter.q},${mineCenter.r}`] = { type: 'ore_node', oreType: 'ore_gold', depleted: false };
+
+    const seamStairHex = { q: mineCenter.q, r: mineCenter.r + 1 };
+    workingVein.tileObjects[`${seamStairHex.q},${seamStairHex.r}`] = { type: 'stair_down', toFloor: -2 };
+
+    carveFloorRoom(emberlodeMineBuilding, -2, mineCenter.q, mineCenter.r, 3, 2, null, 'Cave Floor');
+    const oldSeam = emberlodeMineBuilding.floors[-2];
+    oldSeam.tileObjects[`${seamStairHex.q},${seamStairHex.r}`] = { type: 'stair_up', toFloor: -1 };
+    oldSeam.tileObjects[`${mineCenter.q},${mineCenter.r}`] = { type: 'ore_node', oreType: 'gem_blue', depleted: false };
+    [{ q: -1, r: 0 }, { q: 1, r: 0 }].forEach(off => {
+        const spider = window.createMonster('spider', { q: mineCenter.q + off.q, r: mineCenter.r + off.r }, null, null, 'enemy');
+        spider.floor = -2;
+        window.entities.push(spider);
+    });
 
     window.campaign2EmberlodeCenter = center;
     window.campaign2EmberlodeAmbushHex = { q: roadEnd.q + 15, r: roadEnd.r }; // partway back toward Hollowmere

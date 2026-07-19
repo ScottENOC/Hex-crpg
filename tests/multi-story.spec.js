@@ -572,3 +572,113 @@ test.describe('Kragmoor (dwarf capital): a genuinely descending mountain hold', 
         expect(result).toBe(-5);
     });
 });
+
+test.describe("Sil'thandriel (elf capital): a treehouse city, not a ground clearing", () => {
+    test.beforeEach(async ({ page }) => { await createCharacter(page); });
+
+    test('the city has two canopy levels sharing the treeline\'s footprint', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const b = window.campaign2SilthandrielBuilding;
+            return { found: !!b, hasLowerCanopy: !!(b && b.floors[1]), hasUpperCanopy: !!(b && b.floors[2]) };
+        });
+        expect(result.found).toBe(true);
+        expect(result.hasLowerCanopy).toBe(true);
+        expect(result.hasUpperCanopy).toBe(true);
+    });
+
+    test('the Queen and her guards live on the Upper Canopy (2), the archivist and healer on the Lower Canopy (1)', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const queen = window.entities.find(e => e.name === window.campaign2ElfQueen?.name);
+            const guardFloors = (window.campaign2ElfGuards || []).map(g => window.entities.find(e => e.name === g.name)?.floor);
+            const archivist = window.entities.find(e => e.name === window.campaign2ElfArchivist?.name);
+            const healer = window.entities.find(e => e.name === window.campaign2ElfHealer?.name);
+            return { queenFloor: queen?.floor, guardFloors, archivistFloor: archivist?.floor, healerFloor: healer?.floor };
+        });
+        expect(result.queenFloor).toBe(2);
+        expect(result.guardFloors.every(f => f === 2)).toBe(true);
+        expect(result.archivistFloor).toBe(1);
+        expect(result.healerFloor).toBe(1);
+    });
+
+    test('climbing the great tree, then the second stair, reaches the Court on floor 2', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const player = window.entities.find(e => e.side === 'player' && !e.rider);
+            const b = window.campaign2SilthandrielBuilding;
+
+            const steps = [];
+            let floor = 0;
+
+            // Step 1: the great tree's own stair, ground -> Lower Canopy.
+            const treeHex = window.campaign2SilthandrielTreeStairHex;
+            player.hex = { q: treeHex.q, r: treeHex.r };
+            player.floor = 0;
+            window.checkStairTransitions();
+            floor = player.floor;
+            steps.push(floor);
+
+            // Step 2: the Lower Canopy's own stair up to the Court.
+            const lowerCanopy = b.floors[1];
+            const key = Object.entries(lowerCanopy.tileObjects).find(([, o]) => o.type === 'stair_up')?.[0];
+            const [q, r] = key.split(',').map(Number);
+            player.hex = { q, r };
+            window.checkStairTransitions();
+            floor = player.floor;
+            steps.push(floor);
+
+            return steps;
+        });
+        expect(result).toEqual([1, 2]);
+    });
+});
+
+test.describe("Emberlode's gold mine: two levels below the entrance tunnel", () => {
+    test.beforeEach(async ({ page }) => { await createCharacter(page); });
+
+    test('the entrance stays ground level (the ledger is still findable there); the ore is a level down, a richer seam below that', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const center = window.campaign2EmberlodeMineCenter;
+            const b = window.campaign2EmberlodeMineBuilding;
+            return {
+                found: !!b,
+                groundLedger: window.tileObjects[`${center.q},${center.r}`]?.type,
+                hasWorkingVein: !!b.floors[-1],
+                hasOldSeam: !!b.floors[-2],
+                veinOre: window.getTileObjectAtFloor(center.q, center.r, -1)?.type,
+                seamOre: window.getTileObjectAtFloor(center.q, center.r, -2)?.type,
+            };
+        });
+        expect(result.found).toBe(true);
+        expect(result.groundLedger).toBe('journal');
+        expect(result.hasWorkingVein).toBe(true);
+        expect(result.hasOldSeam).toBe(true);
+        expect(result.veinOre).toBe('ore_node');
+        expect(result.seamOre).toBe('ore_node');
+    });
+
+    test('the Old Seam (-2) has moved in some spiders since the road troubles started', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            return window.entities.filter(e => e.alive && e.side === 'enemy' && e.name === 'Spider' && e.floor === -2).length;
+        });
+        expect(result).toBeGreaterThan(0);
+    });
+
+    test('descending both stairwells in sequence reaches the Old Seam', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const player = window.entities.find(e => e.side === 'player' && !e.rider);
+            const center = window.campaign2EmberlodeMineCenter;
+            player.floor = 0;
+
+            player.hex = { q: center.q, r: center.r - 1 }; // ground -> Working Vein
+            window.checkStairTransitions();
+            const afterFirst = player.floor;
+
+            player.hex = { q: center.q, r: center.r + 1 }; // Working Vein -> Old Seam
+            window.checkStairTransitions();
+            const afterSecond = player.floor;
+
+            return { afterFirst, afterSecond };
+        });
+        expect(result.afterFirst).toBe(-1);
+        expect(result.afterSecond).toBe(-2);
+    });
+});

@@ -22,26 +22,29 @@ test.describe("Sil'thandriel: forest canopy, not a walled perimeter", () => {
         expect(result.treeline).toBe('Foliage');
     });
 
-    test('the Court of the Silver Leaf is real Wood Floor with a throne', async ({ page }) => {
+    test('the Court of the Silver Leaf is real Wood Floor with a throne, up in the Upper Canopy (floor 2)', async ({ page }) => {
         await createCharacter(page, { campaign: '2' });
         const result = await page.evaluate(() => {
             const court = window.campaign2ElvenCourtCenter;
+            // Sil'thandriel is a treehouse city now (see buildElvenCapital's
+            // own redesign comment, campaign2World.js) — the Court lives on
+            // floor 2, not the forest floor.
             return {
-                floor: window.getTerrainAt(court.q, court.r).name,
-                throne: window.tileObjects[`${court.q},${court.r + 2}`]?.type,
+                floor: window.getTerrainAtFloor(court.q, court.r, 2).name,
+                throne: window.getTileObjectAtFloor(court.q, court.r + 2, 2)?.type,
             };
         });
         expect(result.floor).toBe('Wood Floor');
         expect(result.throne).toBe('throne');
     });
 
-    test('the Sickbed lodge has herb patches for Healer Sylwen\'s quest', async ({ page }) => {
+    test('the Sickbed lodge has herb patches for Healer Sylwen\'s quest, on the Lower Canopy (floor 1)', async ({ page }) => {
         await createCharacter(page, { campaign: '2' });
         const result = await page.evaluate(() => {
             const lodge = window.campaign2ElvenLodgeCenter;
             return {
-                a: window.tileObjects[`${lodge.q},${lodge.r - 2}`]?.type,
-                b: window.tileObjects[`${lodge.q + 1},${lodge.r - 2}`]?.type,
+                a: window.getTileObjectAtFloor(lodge.q, lodge.r - 2, 1)?.type,
+                b: window.getTileObjectAtFloor(lodge.q + 1, lodge.r - 2, 1)?.type,
             };
         });
         expect(result.a).toBe('herb_patch');
