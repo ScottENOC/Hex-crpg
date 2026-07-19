@@ -3996,6 +3996,28 @@ window.isNearAnyBuildingUnlessDire = isNearAnyBuildingUnlessDire;
 // per ~2 in-game minutes of wilderness travel (accumulator, not per-tick
 // probability, so it isn't tied to real framerate).
 window.wildernessEncounterAccum = 0;
+// Shared by every wilderness spawn roll below (wolves, and now deer/wild
+// boar) — finds a hex outside the player's visual range so an encounter is
+// discovered by walking toward it, never popped into existence on top of
+// the party. Returns null if nothing clear/unseen turned up in the attempt
+// budget.
+function findUnseenWildernessSpot(playerEntity) {
+    for (let attempt = 0; attempt < 12; attempt++) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 10 + Math.floor(Math.random() * 6); // just past the ~30-hex daylight vision cap's edge cases and any nearer dark-vision viewers
+        const candidate = window.hexRound(
+            playerEntity.hex.q + Math.round(Math.cos(angle) * dist),
+            playerEntity.hex.r + Math.round(Math.sin(angle) * dist)
+        );
+        if (window.getEntityAtHex(candidate.q, candidate.r)) continue;
+        if (window.getTerrainAt(candidate.q, candidate.r).name === 'Water') continue;
+        if (window.isVisibleToPlayer(candidate)) continue;
+        if (window.isNearAnyBuildingUnlessDire(candidate, 30)) continue;
+        return candidate;
+    }
+    return null;
+}
+
 function checkWildernessEncounter(playerEntity, delta) {
     if (!playerEntity || window.isInCombat) return;
     // A safer Hollowmere pushes the "safe" radius outward too (patrols
@@ -4022,27 +4044,9 @@ function checkWildernessEncounter(playerEntity, delta) {
     if (Math.random() >= chance) return;
 
     const count = 1 + Math.floor(Math.random() * 2); // 1-2 wolves
-    // Never spawn inside the player's visual range — encounters should be
-    // discovered by walking toward them (or by a wolf stalking in), not by
-    // popping into existence on top of the party. Try a handful of random
-    // directions/distances just outside vision and settle for the first
-    // clear, unseen hex each wolf finds.
     let spawned = 0;
     for (let n = 0; n < count; n++) {
-        let spot = null;
-        for (let attempt = 0; attempt < 12 && !spot; attempt++) {
-            const angle = Math.random() * Math.PI * 2;
-            const dist = 10 + Math.floor(Math.random() * 6); // just past the ~30-hex daylight vision cap's edge cases and any nearer dark-vision viewers
-            const candidate = window.hexRound(
-                playerEntity.hex.q + Math.round(Math.cos(angle) * dist),
-                playerEntity.hex.r + Math.round(Math.sin(angle) * dist)
-            );
-            if (window.getEntityAtHex(candidate.q, candidate.r)) continue;
-            if (window.getTerrainAt(candidate.q, candidate.r).name === 'Water') continue;
-            if (window.isVisibleToPlayer(candidate)) continue;
-            if (window.isNearAnyBuildingUnlessDire(candidate, 30)) continue;
-            spot = candidate;
-        }
+        const spot = findUnseenWildernessSpot(playerEntity);
         if (!spot) continue;
         const wolf = window.createMonster('wolf', spot, null, null, 'enemy');
         wolf.aiState = 'idle';
@@ -4057,6 +4061,38 @@ function checkWildernessEncounter(playerEntity, delta) {
     }
 }
 window.checkWildernessEncounter = checkWildernessEncounter;
+
+// Primary-industry wildlife (deer, wild boar) — same "only simulate when
+// the player is near" cadence/gate as the wolf encounter above, but a
+// separate roll/accumulator: this isn't a threat check, it's ambient
+// huntable game, so it isn't scaled by Hollowmere's security or the west/
+// east danger split, and it's not blocked by the safeRadius wolves respect
+// (deer wander close to a safe village same as real ones do). A wild boar
+// is genuinely dangerous if provoked (side:'enemy', matching a weak wolf),
+// a deer is harmless (side:'neutral', same convention the farm's own Sheep
+// already uses for a killable-but-passive animal).
+window.wildlifeEncounterAccum = window.wildlifeEncounterAccum || 0;
+function checkWildlifeEncounter(playerEntity, delta) {
+    if (!playerEntity || window.isInCombat) return;
+    window.wildlifeEncounterAccum += delta;
+    const checkInterval = 90;
+    if (window.wildlifeEncounterAccum < checkInterval) return;
+    window.wildlifeEncounterAccum = 0;
+
+    if (Math.random() >= 0.35) return;
+    const isBoar = Math.random() < 0.4;
+    const spot = findUnseenWildernessSpot(playerEntity);
+    if (!spot) return;
+
+    const animal = window.createMonster(isBoar ? 'wild_boar' : 'deer', spot, null, null, isBoar ? 'enemy' : 'neutral');
+    animal.aiState = 'idle';
+    animal.isNPC = !isBoar; // matches Sheep's own neutral-and-passive convention
+    animal.isRandomEncounter = true;
+    window.entities.push(animal);
+    window.drawMap();
+    window.renderEntities();
+}
+window.checkWildlifeEncounter = checkWildlifeEncounter;
 
 // Corpse pruning: window.entities only ever grows (dead entities stay in the
 // array so their loot/body remains inspectable and turn-order/rendering code
@@ -5735,8 +5771,8 @@ window.npcDialogueTrees.deepholds_runesmith = (npc) => {
         options.push({
             label: "Craft me something.",
             action: () => {
-                const recipeOptions = Object.entries(window.CRAFTING_RECIPES).map(([id, recipe]) => ({
-                    label: `${recipe.name} (${Math.round(recipe.gold * 1.5)}g + materials)`,
+                const recipeOptions = Object.entries(window.CRAFTING_RECIPES).filter(([, recipe]) => recipe.requiredSkill === 'runesmithing').map(([id, recipe]) => ({
+                    label: `${recipe.name} (${Math.round(recipe.gold * (window.getSmithingFeeMult ? window.getSmithingFeeMult() : 1.5))}g + materials)`,
                     action: () => window.craftWithSmith(id)
                 }));
                 recipeOptions.push({ label: "Never mind.", action: () => {} });
@@ -5747,4 +5783,132 @@ window.npcDialogueTrees.deepholds_runesmith = (npc) => {
     options.push({ label: "Tell me of the Runeforge.", action: () => window.showDialogue(npc, "Every hold has its forge-secrets. Ours is starmetal — fallen ore that hasn't forgotten the sky. Rare enough that most smiths never touch it twice in a life.", [{ label: "...", action: () => {} }]) });
     options.push({ label: "Just passing through.", action: () => {} });
     window.showDialogue(npc, trusted ? "Back again. What do you need from the forge?" : "The forge isn't a curiosity for tourists. Earn the mountain's trust first, then we'll talk.", options);
+};
+
+// Rowan Fletcher — a wandering hunter (see campaign2Hunter,
+// campaign2Content.js), the human kingdom's second bit of primary industry
+// alongside Old Mac's farm. Same wary/confident greeting split Garrick's own
+// dialogue already uses (region.security), the same worldPulse rumor-surfacing
+// convention, and a straightforward vendor role — buys the game_meat/hide the
+// player harvests from deer/wild boar corpses (checkWildlifeEncounter above)
+// at a small premium over their plain sellPrice, since he can move it on
+// faster than a general store would.
+window.npcDialogueTrees.hollowmere_hunter = (npc) => {
+    const security = window.regions?.hollowmere?.security ?? 50;
+    const wary = security < 30;
+
+    const newsOption = { label: "Any word on the roads?", action: () => {
+        const rumors = window.getRecentWorldRumors ? window.getRecentWorldRumors(2) : [];
+        const text = rumors.length
+            ? rumors.join("\n\n")
+            : "Nothing worth repeating. Tracks are thin lately — good for me, I suppose.";
+        window.showDialogue(npc, text, [{ label: "Thanks for the word.", action: () => {} }]);
+    }};
+
+    const sellOption = { label: "I've got game meat and hide to sell.", action: () => {
+        const inv = window.player.inventory || [];
+        const meatCount = inv.filter(i => i === 'game_meat').length;
+        const hideCount = inv.filter(i => i === 'hide').length;
+        if (meatCount === 0 && hideCount === 0) {
+            window.showDialogue(npc, "Nothing on you worth buying, looks like. Bring me meat or hide from something you've hunted.", [{ label: "Fair enough.", action: () => {} }]);
+            return;
+        }
+        const meatPrice = 5, hidePrice = 6; // a premium over game_meat's 3g / hide's 4g sellPrice, equipment.js
+        const earned = meatCount * meatPrice + hideCount * hidePrice;
+        window.player.inventory = inv.filter(i => i !== 'game_meat' && i !== 'hide');
+        window.player.gold = (window.player.gold || 0) + earned;
+        window.showDialogue(npc, `Good haul. That's ${meatCount}x meat and ${hideCount}x hide off your hands. (+${earned} gold)`, [{ label: "Pleasure doing business.", action: () => {} }]);
+    }};
+
+    const greeting = wary
+        ? "Careful out here — Hollowmere's had a rough stretch, and it shows in the wildlife too. Fewer deer, more of what hunts them."
+        : "Good hunting country, this — plenty of deer, the odd wild boar if you're careful. Yours if you can track it.";
+    window.showDialogue(npc, greeting, [sellOption, newsOption, { label: "Good hunting.", action: () => {} }]);
+};
+
+// Bowmaster Ellandrie — Sil'thandriel's own craft (leatherworking,
+// skills.js), mirroring deepholds_runesmith's structure above almost exactly:
+// a standing threshold to be trusted enough to have her craft for you at all,
+// then a further threshold (waived for an elf PC, same as the dwarf discount
+// above) to actually be taught the craft. Deliberately one step shorter than
+// Kragmoor's own two-quest chain (no separate "prove yourself" fetch quest) —
+// the Sylvan Court already tracks standing the same way Kragmoor does, so
+// reusing that number directly is enough, without inventing a parallel trust
+// gate that would just re-tell the same beat.
+window.npcDialogueTrees.sylvan_bowmaster = (npc) => {
+    window.questLog = window.questLog || [];
+    const player = window.party[0];
+    const standing = window.factions?.elven_realm?.standing ?? 0;
+    const isElf = player.race === 'elf';
+    const trusted = standing >= 10;
+    const taught = !!(player.skills && player.skills.leatherworking);
+    const teachQuest = window.questLog.find(q => q.id === 'sylvan_bowmaster_teach');
+
+    if (teachQuest && teachQuest.status === 'active') {
+        const needHide = isElf ? 1 : 2;
+        const needWood = isElf ? 1 : 2;
+        const haveHide = (player.inventory || []).filter(i => i === 'hide').length;
+        const haveWood = (player.inventory || []).filter(i => i === 'wood').length;
+        if (haveHide >= needHide && haveWood >= needWood) {
+            window.showDialogue(npc, isElf
+                ? "Kin asking for kin's craft. Sit — I'll show you properly, not just hand you a finished bow."
+                : "Hide and timber, same as I asked. You've the patience for this, I think, whatever wood you were born under.", [
+                {
+                    label: `Here — ${needHide}x hide, ${needWood}x wood.`,
+                    action: () => {
+                        let removedHide = 0, removedWood = 0;
+                        player.inventory = player.inventory.filter(i => {
+                            if (i === 'hide' && removedHide < needHide) { removedHide++; return false; }
+                            if (i === 'wood' && removedWood < needWood) { removedWood++; return false; }
+                            return true;
+                        });
+                        teachQuest.status = 'completed';
+                        window.grantSkillRank(player, 'leatherworking');
+                        window.adjustReputation(window.factions.elven_realm, 10, 10);
+                        window.showMessage('Quest complete: The Bow Remembers the Hand. You have learned Leatherworking.');
+                        window.showDialogue(npc, "The craft's yours now. Mind the grain of the wood, and the hide won't fight you.", [{ label: "My thanks.", action: () => {} }]);
+                    }
+                },
+                { label: "Not yet.", action: () => {} }
+            ]);
+        } else {
+            window.showDialogue(npc, `Still need ${Math.max(0, needHide - haveHide)} more hide and ${Math.max(0, needWood - haveWood)} more wood before I'll teach you anything.`, [{ label: "I'll gather more.", action: () => {} }]);
+        }
+        return;
+    }
+
+    if (trusted && !taught && !teachQuest) {
+        const canOfferTeaching = isElf || standing >= 30;
+        if (canOfferTeaching) {
+            window.questLog.push({
+                id: 'sylvan_bowmaster_teach', title: 'The Bow Remembers the Hand', giver: 'Bowmaster Ellandrie', status: 'active',
+                description: isElf
+                    ? 'Bring Ellandrie 1x hide and 1x wood — she\'ll teach a fellow elf the craft outright.'
+                    : 'Bring Ellandrie 2x hide and 2x wood to earn the leatherworking craft itself, not just her labor.'
+            });
+            window.showMessage('Quest added: The Bow Remembers the Hand.');
+            window.showDialogue(npc, isElf
+                ? "One of our own, asking for the craft — I'd have taught you the first day, if you'd asked. Bring me a hide and a length of wood, and it's yours."
+                : "You've shown the Court more patience than most who wander through. I don't teach this to just anyone born outside the canopy, but bring me two hides and two lengths of wood, and I'll make an exception.", [{ label: "I'm listening.", action: () => {} }]);
+            return;
+        }
+    }
+
+    const options = [];
+    if (trusted) {
+        options.push({
+            label: "Make me something.",
+            action: () => {
+                const recipeOptions = Object.entries(window.CRAFTING_RECIPES).filter(([, recipe]) => recipe.requiredSkill === 'leatherworking').map(([id, recipe]) => ({
+                    label: `${recipe.name} (${Math.round(recipe.gold * (window.getSmithingFeeMult ? window.getSmithingFeeMult() : 1.5))}g + materials)`,
+                    action: () => window.craftWithSmith(id)
+                }));
+                recipeOptions.push({ label: "Never mind.", action: () => {} });
+                window.showDialogue(npc, "Bring me the makings, and I'll turn them into something worth carrying.", recipeOptions);
+            }
+        });
+    }
+    options.push({ label: "Tell me of the craft.", action: () => window.showDialogue(npc, "Every hunter brings me hide sooner or later. What I make of it — a bow that doesn't creak, armor that doesn't stiffen in the rain — that part isn't taught to strangers lightly.", [{ label: "...", action: () => {} }]) });
+    options.push({ label: "Just passing through.", action: () => {} });
+    window.showDialogue(npc, trusted ? "Back again. What do you need?" : "The Court's craft isn't a curiosity for tourists. Earn our trust first, then we'll talk.", options);
 };

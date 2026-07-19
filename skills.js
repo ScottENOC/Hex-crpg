@@ -1897,6 +1897,20 @@ Object.assign(skills, {
         apply: (player) => {
             player.canRunesmith = true;
         }
+    },
+    // Sil'thandriel's own craft — same "quest-granted only, invisible until
+    // then" convention as runesmithing above (grantSkillRank from the
+    // sylvan_bowmaster questline, campaign2Dialogue.js), just built from
+    // hide/wood instead of rare ore. Same reasoning applies to the "apply
+    // just flags, the recipes carry the effects" design.
+    'leatherworking': {
+        name: 'Leatherworking',
+        description: "The Sylvan Court's craft: lets you work tanned hide and timber into bows and armor yourself, without paying a bowmaster to do it for you.",
+        tree: 'leatherworker',
+        maxRanks: 1,
+        apply: (player) => {
+            player.canLeatherwork = true;
+        }
     }
 });
 
@@ -1931,7 +1945,7 @@ Object.assign(skills, {
     'appraiser': {
         name: 'Appraiser',
         description: "A sharp eye for what things are actually worth — every shop's buy prices are reduced 5% per rank (capped at 15%).",
-        tree: 'social',
+        tree: 'misc',
         maxRanks: 3,
         apply: (player) => {}
     },
@@ -1955,42 +1969,62 @@ Object.assign(skills, {
     'persuasion': {
         name: 'Persuasion',
         description: 'A modest, bounded discount (5%/rank, capped 15%) on the cost of anything you offer someone to win their cooperation. Never unlocks an outcome by itself — you still need something they actually want.',
-        tree: 'social',
+        tree: 'misc',
         maxRanks: 3,
         apply: (player) => {}
     },
     'insight': {
         name: 'Insight',
         description: "Reads people accurately — reveals what an NPC actually wants (and flags when they're bluffing) without having to guess and risk the consequences.",
-        tree: 'social',
+        tree: 'misc',
         maxRanks: 3,
         apply: (player) => {}
     },
     'intimidation': {
         name: 'Intimidation',
         description: 'An alternative to paying someone off: lean on them instead. Trades your reputation for not having to give anything up.',
-        tree: 'social',
+        tree: 'misc',
         maxRanks: 2,
         apply: (player) => {}
     },
     'lockpicking': {
         name: 'Lockpicking',
         description: 'Skill at opening locks without the key.',
-        tree: 'practical',
+        tree: 'misc',
         maxRanks: 3,
         apply: (player) => {}
     },
     'survival': {
         name: 'Survival',
         description: 'Reduces the chance of being ambushed while resting in the wilderness.',
-        tree: 'practical',
+        tree: 'misc',
         maxRanks: 2,
         apply: (player) => {}
     },
     'appraisal': {
         name: 'Appraisal',
         description: 'A bounded improvement to shop prices, and reveals a bit more about an item than the eye alone would tell you.',
-        tree: 'practical',
+        tree: 'misc',
+        maxRanks: 2,
+        apply: (player) => {}
+    },
+    // Formerly split across 'social'/'practical' — consolidated into one
+    // 'misc' tree (see learnSkill, ui.js): no race/class ever grants a
+    // dedicated point in it, same as before, but a misc skill can now be
+    // funded by ANY pool with a spare point, not just wildcard — a player
+    // with unspent points in several different trees is asked which one to
+    // spend when the choice is ambiguous.
+    'smithing': {
+        name: 'Smithing',
+        description: "A working knowledge of the forge, short of a real smith's training — knocks a little off what any smith charges you for labor (10%/rank, capped at 30%), whether it's Runeforged steel or an ordinary repair.",
+        tree: 'misc',
+        maxRanks: 3,
+        apply: (player) => {}
+    },
+    'cooking': {
+        name: 'Cooking',
+        description: 'Makes gathered food actually worth carrying — each rank adds 2 hours to how long a meal keeps you Well Fed.',
+        tree: 'misc',
         maxRanks: 2,
         apply: (player) => {}
     }

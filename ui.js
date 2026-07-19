@@ -404,7 +404,8 @@ function showCharacterScreen() {
 
     const treesToShow = new Set();
     const hasWildcard = availablePoints.wildcard > 0;
-    const standardTrees = ['arcane', 'divine', 'nature', 'strength', 'endurance', 'agility', 'weapons', 'social', 'practical'];
+    const hasAnyPoints = Object.values(availablePoints).some(v => (v || 0) > 0);
+    const standardTrees = ['arcane', 'divine', 'nature', 'strength', 'endurance', 'agility', 'weapons', 'misc'];
 
     if (window.showAllSkillsMode) {
         Object.keys(skillTrees).forEach(t => {
@@ -412,8 +413,11 @@ function showCharacterScreen() {
         });
     } else {
         for (const tree in availablePoints) {
-            if (tree === 'wildcard') continue; 
-            if (availablePoints[tree] > 0 || (hasWildcard && standardTrees.includes(tree))) {
+            if (tree === 'wildcard') continue;
+            // 'misc' is visible whenever ANY pool has a spare point (see
+            // resolveMiscSkillPool above) — every other standard tree still
+            // only shows up for its own points or a wildcard point.
+            if (availablePoints[tree] > 0 || (hasWildcard && standardTrees.includes(tree)) || (tree === 'misc' && hasAnyPoints)) {
                 treesToShow.add(tree);
             }
         }
@@ -470,7 +474,11 @@ function showCharacterScreen() {
                 const hasPoints = (availablePoints[tree] || 0) > 0;
                 const hasWildcardPoints = (availablePoints.wildcard || 0) > 0;
                 const canUseWildcard = hasWildcardPoints && standardTrees.includes(tree);
-                const canLearn = (hasPoints || canUseWildcard) && !isMaxed && prereqMet;
+                // A misc skill can be funded by ANY pool with a spare point
+                // (see resolveMiscSkillPool above), not just its own tree or
+                // wildcard.
+                const canUseAnyPool = tree === 'misc' && Object.values(availablePoints).some(v => (v || 0) > 0);
+                const canLearn = (hasPoints || canUseWildcard || canUseAnyPool) && !isMaxed && prereqMet;
                 const buttonLabel = maxRanks === 1 ? 'Learn' : `+1 Rank (${currentRanks})`;
                 
                 if (window.showAllSkillsMode || prereqMet || currentRanks > 0) {
@@ -494,7 +502,24 @@ function showCharacterScreen() {
     });
 }
 
-function learnSkill(skillKey) {
+// misc-tree skills (smithing, cooking, lockpicking, persuasion, etc. — see
+// skills.js's own comment on the 'misc' tree) are funded by ANY attribute
+// pool with a spare point, not just their own tree or wildcard — the whole
+// point of a "everything else" tree is that nothing funds it directly, so
+// requiring a dedicated misc point would make it permanently empty. When
+// more than one pool has a point free, `forcedPool` (set once the player
+// picks one from the chooser dialog below) resolves which one actually
+// pays for it; on the first call it's undefined and, if the choice is
+// ambiguous, this returns early having shown that chooser instead of
+// spending anything yet.
+function resolveMiscSkillPool(player, forcedPool) {
+    if (forcedPool) return (player.attributes[forcedPool] || 0) > 0 ? forcedPool : null;
+    const pools = Object.keys(player.attributes || {}).filter(k => (player.attributes[k] || 0) > 0);
+    if (pools.length <= 1) return pools[0] || null;
+    return { choose: pools }; // ambiguous — caller must ask
+}
+
+function learnSkill(skillKey, forcedPool) {
     const skill = window.skills[skillKey];
     const player = window.player;
     if (!skill || !player) {
@@ -502,7 +527,7 @@ function learnSkill(skillKey) {
         return;
     }
 
-    const standardTrees = ['arcane', 'divine', 'nature', 'strength', 'endurance', 'agility', 'weapons', 'social', 'practical'];
+    const standardTrees = ['arcane', 'divine', 'nature', 'strength', 'endurance', 'agility', 'weapons', 'misc'];
     const isStandard = standardTrees.includes(skill.tree);
 
     const currentRanks = player.skills[skillKey] || 0;
@@ -519,7 +544,23 @@ function learnSkill(skillKey) {
     }
 
     const rankCost = 1; // every rank costs a flat 1 point, regardless of how many ranks you already have
-    if ((player.attributes[skill.tree] || 0) >= rankCost) {
+    if (skill.tree === 'misc') {
+        const resolved = resolveMiscSkillPool(player, forcedPool);
+        if (resolved && resolved.choose) {
+            const options = resolved.choose.map(pool => ({
+                label: `${pool.charAt(0).toUpperCase() + pool.slice(1)} (${player.attributes[pool]})`,
+                action: () => window.learnSkill(skillKey, pool)
+            }));
+            window.showDialogue({ name: 'Spend a Skill Point' },
+                `You have unspent points in more than one pool. Which should fund ${skill.name}?`, options);
+            return;
+        }
+        if (!resolved) {
+            showMessage(`You don't have enough points to learn this skill (needs ${rankCost}).`);
+            return;
+        }
+        player.attributes[resolved] -= rankCost;
+    } else if ((player.attributes[skill.tree] || 0) >= rankCost) {
         player.attributes[skill.tree] -= rankCost;
     } else if (player.attributes.wildcard >= rankCost && isStandard) {
         player.attributes.wildcard -= rankCost;

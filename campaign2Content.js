@@ -121,6 +121,27 @@ window.campaign2GuildInvestigator = {
     dialogueId: 'guild_investigator'
 };
 
+// Rowan Fletcher — a wandering hunter along Hollowmere's wilderness roads,
+// the human kingdom's second bit of primary industry alongside Old Mac's
+// farm (see buildHollowmereHunter, campaign2World.js, and the deer/wild_boar
+// wilderness spawns, checkWildernessEncounter, campaign2Dialogue.js).
+// Doubles as a vendor (buys game_meat/hide off the player at a fair price)
+// and a source of both flavor and real information: the same security-tier
+// gate Garrick's own wary greeting already uses, plus a "news" option
+// surfacing worldPulse rumors like Garrick/Corran Vale.
+window.campaign2Hunter = {
+    name: 'Rowan Fletcher',
+    title: 'Hunter',
+    race: 'human', gender: 'male',
+    classLevels: ['fighter'],
+    skillPicks: ['bow_hit'],
+    equipment: ['bow', 'light_armor'],
+    side: 'neutral',
+    factionId: 'silverhart_kingdom',
+    color: '#5a6a3a',
+    dialogueId: 'hollowmere_hunter'
+};
+
 // Old Mac, out at the farmstead the south road leads to (past the border of
 // this world hex). Placed by buildFarmstead() in campaign2World.js.
 window.campaign2OldMac = {
@@ -928,6 +949,17 @@ window.campaign2ElfHealer = {
     classLevels: ['druid'], skillPicks: [], equipment: [],
     side: 'neutral', factionId: 'elven_realm', color: '#3a7a4a',
     dialogueId: 'elf_healer'
+};
+
+// Sil'thandriel's own craft (leatherworking, skills.js): bows and hide armor
+// worked from hunted game instead of ore/gems — see the sylvan_bowmaster
+// questline, campaign2Dialogue.js, mirroring Kragmoor's Runesmith structure.
+window.campaign2ElfBowmaster = {
+    name: 'Bowmaster Ellandrie', title: 'Warden of the Silver Bow',
+    race: 'elf', gender: 'female',
+    classLevels: ['fighter'], skillPicks: ['bow_hit'], equipment: ['bow', 'light_armor'],
+    side: 'neutral', factionId: 'elven_realm', color: '#5a7a3a',
+    dialogueId: 'sylvan_bowmaster'
 };
 
 // --- Silverhart Commons: a tavern + market square north of the palace —

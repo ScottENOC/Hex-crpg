@@ -1294,6 +1294,11 @@ function buildElvenCapital(anchor) {
         healer.floor = 1;
         window.entities.push(healer);
     }
+    if (window.campaign2ElfBowmaster) {
+        const bowmaster = window.buildNPC({ ...window.campaign2ElfBowmaster, hex: { q: lodgeCenter.q - 1, r: lodgeCenter.r + 1 } });
+        bowmaster.floor = 1;
+        window.entities.push(bowmaster);
+    }
 
     // Lower Canopy -> Upper Canopy: a second climb, up from the Archive's
     // own platform — reaching the Court means visiting the Loremaster's
@@ -3930,6 +3935,15 @@ function setupVillageScene(forLoadOnly = false) {
     for (let r = 7; r <= CP.r - 1; r++) window.setTerrainAt(CP.q, r, 'Path'); // village ring -> crossroads
     window.setTerrainAt(CP.q, CP.r, 'Path');
     window.tileObjects[`${CP.q},${CP.r}`] = { type: 'signpost', lightRadius: 0 };
+
+    // Rowan Fletcher — a wandering hunter working the wilderness just past
+    // the crossroads (see campaign2Hunter, campaign2Content.js). No
+    // behaviorType set, so the same default idle-wander every unscheduled
+    // neutral NPC already gets (aiProcess's dispatch-by-behaviorType,
+    // gameEngine.js) reads as roaming rather than a fixed sentry.
+    if (window.campaign2Hunter) {
+        window.entities.push(window.buildNPC({ ...window.campaign2Hunter, hex: { q: CP.q + 4, r: CP.r + 2 } }));
+    }
 
     // Where applyRegionDressing (below) places its prosperity-linked
     // beggar/peddler — a couple of hexes off the signpost itself, on the

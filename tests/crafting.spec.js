@@ -5,7 +5,11 @@ test.describe('Crafting: rare materials, recipes, bounded-accuracy check', () =>
     test('the three runeforged items exist, are recipe-gated, and never exceed a mundane item\'s own tier', async ({ page }) => {
         await createCharacter(page);
         const result = await page.evaluate(() => {
-            const recipes = window.CRAFTING_RECIPES;
+            // Scoped to runesmithing's own recipes — leatherworking's own
+            // recipes (Sil'thandriel's craft, see primary-industry.spec.js)
+            // now share the same CRAFTING_RECIPES dict, but this test is
+            // specifically about the three original runeforged items.
+            const recipes = Object.fromEntries(Object.entries(window.CRAFTING_RECIPES).filter(([, r]) => r.requiredSkill === 'runesmithing'));
             const checks = Object.entries(recipes).map(([id, r]) => {
                 const item = window.items[r.resultItemId];
                 const materialsExist = Object.keys(r.materials).every(m => !!window.items[m]);

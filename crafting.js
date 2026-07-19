@@ -19,19 +19,38 @@ const CRAFTING_RECIPES = {
         name: 'Starforged Blade',
         resultItemId: 'starforged_blade',
         materials: { starmetal_ore: 2 },
-        gold: 150
+        gold: 150,
+        requiredSkill: 'runesmithing'
     },
     dragonscale_mail: {
         name: 'Dragonscale Mail',
         resultItemId: 'dragonscale_mail',
         materials: { dragon_scale: 3 },
-        gold: 200
+        gold: 200,
+        requiredSkill: 'runesmithing'
     },
     deepcrystal_pendant: {
         name: 'Deep Crystal Pendant',
         resultItemId: 'deepcrystal_pendant',
         materials: { deep_crystal: 1, gem_blue: 1 },
-        gold: 120
+        gold: 120,
+        requiredSkill: 'runesmithing'
+    },
+    // Leatherworking (Sil'thandriel's own craft — see sylvan_bowmaster,
+    // campaign2Dialogue.js, and the leatherworking skill, skills.js).
+    hunting_bow: {
+        name: 'Hunting Bow',
+        resultItemId: 'hunting_bow',
+        materials: { hide: 1, wood: 2 },
+        gold: 40,
+        requiredSkill: 'leatherworking'
+    },
+    reinforced_leather_armor: {
+        name: 'Reinforced Leather Armor',
+        resultItemId: 'reinforced_leather_armor',
+        materials: { hide: 3, wood: 1 },
+        gold: 50,
+        requiredSkill: 'leatherworking'
     }
 };
 window.CRAFTING_RECIPES = CRAFTING_RECIPES;
@@ -61,14 +80,16 @@ function consumeMaterials(recipe) {
     });
 }
 
-// Self-craft at a rune forge — requires the player to actually hold the
-// runesmithing skill (grantRunesmithing, campaign2Dialogue.js), the payoff
-// for finishing that questline yourself instead of always paying a smith.
+// Self-craft — requires the player to actually hold the recipe's own
+// requiredSkill (granted by that craft's questline: grantRunesmithing or
+// the sylvan_bowmaster leatherworking quest, both in campaign2Dialogue.js),
+// the payoff for learning the craft yourself instead of always paying
+// someone who already knows it.
 function craftAtForge(recipeId) {
     const recipe = CRAFTING_RECIPES[recipeId];
     if (!recipe) return false;
-    if (!window.player.skills || !window.player.skills.runesmithing) {
-        window.showMessage("You don't know the craft yourself. Find a smith who does, or learn it.");
+    if (!window.player.skills || !window.player.skills[recipe.requiredSkill]) {
+        window.showMessage("You don't know the craft yourself. Find someone who does, or learn it.");
         return false;
     }
     if (!canAffordRecipe(recipe, recipe.gold)) {
@@ -84,10 +105,19 @@ function craftAtForge(recipeId) {
 }
 window.craftAtForge = craftAtForge;
 
+// Smithing (misc tree, skills.js): 10%/rank off any smith's labor
+// multiplier, capped at 3 ranks — a party-wide max like every other bounded
+// discount in the game (getAppraiserDiscountMult, partyInventory.js).
+function getSmithingFeeMult() {
+    const ranks = Math.max(0, ...(window.party || []).map(p => p.skills?.smithing || 0), 0);
+    return 1.5 - Math.min(3, ranks) * 0.1;
+}
+window.getSmithingFeeMult = getSmithingFeeMult;
+
 // Paying an NPC smith who already knows the craft — no skill required of
 // the player, but the smith charges a real premium (feeMultiplier) on top
 // of the same rare materials for the labor and knowledge.
-function craftWithSmith(recipeId, feeMultiplier = 1.5) {
+function craftWithSmith(recipeId, feeMultiplier = window.getSmithingFeeMult ? window.getSmithingFeeMult() : 1.5) {
     const recipe = CRAFTING_RECIPES[recipeId];
     if (!recipe) return false;
     const fee = Math.round(recipe.gold * feeMultiplier);
@@ -106,14 +136,17 @@ window.craftWithSmith = craftWithSmith;
 
 // Interacting with the rune_forge tileObject in Kragmoor (see
 // buildDwarvenKingdom, campaign2World.js) — self-craft only, gated by
-// window.craftAtForge's own runesmithing-skill check.
+// window.craftAtForge's own runesmithing-skill check. Filtered to
+// runesmithing's own recipes so a rune forge never offers a leatherworking
+// recipe (or vice versa) just because both live in the same CRAFTING_RECIPES
+// dict.
 function openRuneForge() {
     const forgeNpc = { name: 'The Rune Forge' };
     if (!window.player.skills || !window.player.skills.runesmithing) {
         window.showDialogue(forgeNpc, "Cold stone and old tools — whatever this forge once made, you don't know the craft to wake it yourself.", [{ label: "Leave it.", action: () => {} }]);
         return;
     }
-    const options = Object.entries(CRAFTING_RECIPES).map(([id, recipe]) => ({
+    const options = Object.entries(CRAFTING_RECIPES).filter(([, recipe]) => recipe.requiredSkill === 'runesmithing').map(([id, recipe]) => ({
         label: `${recipe.name} (${materialsDescription(recipe)}, ${recipe.gold}g)`,
         action: () => craftAtForge(id)
     }));

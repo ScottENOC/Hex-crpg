@@ -200,8 +200,13 @@ function eatFood(itemId) {
     const idx = window.player.inventory.indexOf(itemId);
     if (idx === -1) return;
     window.player.inventory.splice(idx, 1);
-    window.player.wellFedUntil = Math.max(window.player.wellFedUntil || 0, window.worldSeconds) + 4 * 3600;
-    window.showMessage(`You eat the ${item.name}. Well Fed for the next few hours.`);
+    // Cooking (misc tree, skills.js): +2h per rank on top of the base 4h,
+    // same party-wide max-rank convention as every other bounded skill
+    // bonus (getAppraiserDiscountMult, partyInventory.js).
+    const cookingRanks = Math.max(0, ...(window.party || []).map(p => p.skills?.cooking || 0), 0);
+    const wellFedHours = 4 + Math.min(2, cookingRanks) * 2;
+    window.player.wellFedUntil = Math.max(window.player.wellFedUntil || 0, window.worldSeconds) + wellFedHours * 3600;
+    window.showMessage(`You eat the ${item.name}. Well Fed for the next ${wellFedHours} hours.`);
     if (window.showInventoryScreen) window.showInventoryScreen();
 }
 window.eatFood = eatFood;

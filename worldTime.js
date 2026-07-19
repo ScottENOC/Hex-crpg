@@ -102,6 +102,12 @@ function updateTime(delta) {
             window.checkWildernessEncounter(p, delta);
         }
 
+        // Primary-industry wildlife (deer/wild boar) — see checkWildlifeEncounter,
+        // campaign2Dialogue.js.
+        if (window.checkWildlifeEncounter && p) {
+            window.checkWildlifeEncounter(p, delta);
+        }
+
         // Sweep dead random-encounter wildlife the player has left far behind
         // (see pruneDistantEncounterCorpses, campaign2Dialogue.js) — keeps
         // window.entities from growing unbounded over a long session.

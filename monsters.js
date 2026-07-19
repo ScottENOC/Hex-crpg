@@ -107,6 +107,39 @@ const monsterTemplates = {
         },
         defaultEquipment: []
     },
+    // Ambient wildlife (primary industry: hunted for game_meat/hide via the
+    // existing leaveCorpse/harvestCorpse cycle, resources.js) — spawned
+    // alongside wolves by checkWildernessEncounter (campaign2Dialogue.js),
+    // same "only simulate when the player is near" gate the wolf spawns
+    // already use. Distinct from the tamable/rideable 'boar' template above
+    // (that one's a mount, this one's genuinely wild).
+    'deer': {
+        name: 'Deer',
+        color: '#a1795a',
+        hp: 4,
+        expValue: 10,
+        canLoot: false,
+        tags: ['animal'],
+        behaviorType: 'wander',
+        skills: { 'fastMovement': 1 },
+        defaultEquipment: []
+    },
+    'wild_boar': {
+        name: 'Wild Boar',
+        color: '#6b4a35',
+        hp: 14,
+        expValue: 60,
+        canLoot: false,
+        tags: ['animal'],
+        behaviorType: 'wander',
+        skills: {
+            'health': 1,
+            'unarmed_hit': 1,
+            'unarmed_dmg': 1,
+            'furious_charge': 1
+        },
+        defaultEquipment: []
+    },
     'horse': {
         name: 'Horse',
         color: '#8b4513', 

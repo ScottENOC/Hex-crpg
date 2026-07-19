@@ -118,6 +118,13 @@ const items = {
     'dragonscale_mail': { id: 'dragonscale_mail', name: "Dragonscale Mail", type: 'armor', reduction: 2, auraTag: 'dragon', auraRadius: 8, description: "Scaled from Ashveil's own hide. It never quite loses the smell of embers, and hums faintly around anything else with dragon blood." },
     'deepcrystal_pendant': { id: 'deepcrystal_pendant', name: "Deep Crystal Pendant", type: 'accessory', skills: { 'parley_bonus': 1 }, description: "Kragmoor's emissaries swear a shard of deep crystal lends clarity to the tongue — whether that's magic or just dwarven stubbornness is anyone's guess." },
 
+    // Leatherworking (see skills.js, crafting.js) — Sil'thandriel's own
+    // craft, same "recipe-gated, never sold outright, never exceeds a
+    // mundane item's own tier" convention as the runeforged block above,
+    // just built from hide/wood instead of rare ore/gems.
+    'hunting_bow': { id: 'hunting_bow', name: "Hunting Bow", type: 'weapon', subType: 'ranged', damage: 2, range: 15, hands: 2, skills: { 'silent_step': 1 }, description: "Tanned hide grip over a springy stave — quieter to draw than anything a smith would sell you." },
+    'reinforced_leather_armor': { id: 'reinforced_leather_armor', name: "Reinforced Leather Armor", type: 'armor', reduction: 2, description: "Boiled and layered hide, worked supple instead of stiff — as much stopping power as a smith's steel, none of the weight." },
+
     // Quest items — no buyPrice, so they never show up in the shop.
     'elder_locket': { id: 'elder_locket', name: 'Tarnished Locket', type: 'quest_item' },
     'phylactery_shard': { id: 'phylactery_shard', name: 'Phylactery Shard', type: 'quest_item', description: 'A cold, faintly warm shard of blackened bone and glass. It wants to be whole again.' },
