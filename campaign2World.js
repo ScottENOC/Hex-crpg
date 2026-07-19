@@ -1007,16 +1007,43 @@ function buildOrcStronghold(roadEnd) {
 // block (see setWorldMapMarker below) — the ambassador at Silverhart's
 // court (dwarven_ambassador, campaign2Dialogue.js) predates this kingdom's
 // construction; that quest thread now actually leads somewhere real.
+// Straight q-then-r dogleg corridor between two centers on the same
+// registered floor — the floor-scoped equivalent of the straight
+// window.setTerrainAt corridor lines used everywhere else in this file
+// (e.g. the gate's own surface approach below), just written into a
+// building's floors[N] dict via setTerrainAtFloor instead of the global map.
+function paintFloorCorridor(building, floorN, from, to, floorType) {
+    const r = from.r;
+    const step = to.q > from.q ? 1 : -1;
+    for (let q = from.q; q !== to.q; q += step) window.setTerrainAtFloor(q, r, floorN, floorType);
+    const qStep = to.r > from.r ? 1 : -1;
+    for (let rr = from.r; rr !== to.r; rr += qStep) window.setTerrainAtFloor(to.q, rr, floorN, floorType);
+    window.setTerrainAtFloor(to.q, to.r, floorN, floorType);
+}
+
+// Kragmoor, the Deepholds' one city-and-mine: a real Moria-style hold, now
+// genuinely descending — the Gate Hall sits at the surface (floor 0, where
+// the approach road actually arrives), and everything else drops away
+// underneath it one level at a time (Great Hall -1, Vault+Runeforge -2, the
+// Deep Mine -3, the Lower Tunnels -4 at the very bottom) rather than all
+// living on one flat sprawl behind the gate. Same layered-floor system as
+// the palace's gallery/loft/tower and the Sunken Cache's basements
+// (carveFloorRoom, window.multiStoryBuildings, terrain.js) — each level
+// shares the whole massif's footprint, connected by a single stairwell
+// shaft per transition rather than a lateral corridor.
 function buildDwarvenKingdom(anchor) {
     const MASSIF_RADIUS = 25;
     hexDisk(anchor.q, anchor.r, MASSIF_RADIUS).forEach(h => window.setTerrainAt(h.q, h.r, 'Wall'));
 
     // Gate Hall: just inside the mountain's south face, where the surface
-    // approach road actually arrives.
+    // approach road actually arrives. Stays real ground-floor terrain (not
+    // floor-scoped) — it's the one room anyone reaches before ever using a
+    // stair, same as the throne room's ground floor in the palace.
     const gateCenter = { q: anchor.q, r: anchor.r + 18 };
     const gateDoor = { q: gateCenter.q, r: gateCenter.r + 3 };
     const gateRegion = carveFlatRoom(gateCenter.q, gateCenter.r, 4, 3, gateDoor, 'Cave Floor');
     window.interiorRegions.push(gateRegion);
+    sealRoom(gateRegion);
 
     // A short surface approach + a Path stub right at the gate — enough for
     // connectAllRoadNetworks (hexMap.js) to bridge this into the rest of the
@@ -1024,88 +1051,115 @@ function buildDwarvenKingdom(anchor) {
     // settlement's road.
     for (let i = 1; i <= 12; i++) window.setTerrainAt(gateDoor.q, gateDoor.r + i, 'Path');
 
-    // Great Hall: the throne room, deeper in.
-    const hallCenter = { q: anchor.q, r: anchor.r };
-    const hallDoor = { q: hallCenter.q, r: hallCenter.r + 5 };
-    const hallRegion = carveFlatRoom(hallCenter.q, hallCenter.r, 6, 4, hallDoor, 'Cave Floor');
-    window.interiorRegions.push(hallRegion);
-    for (let r = gateCenter.r - 3; r > hallDoor.r; r--) window.setTerrainAt(hallCenter.q, r, 'Cave Floor');
+    const kragmoorBuilding = {
+        minQ: anchor.q - MASSIF_RADIUS, maxQ: anchor.q + MASSIF_RADIUS,
+        minR: anchor.r - MASSIF_RADIUS, maxR: anchor.r + MASSIF_RADIUS,
+        floors: []
+    };
+    window.multiStoryBuildings.push(kragmoorBuilding);
+    window.campaign2DeepholdsBuilding = kragmoorBuilding;
 
-    window.tileObjects[`${hallCenter.q},${hallCenter.r - 3}`] = { type: 'throne' };
-    window.tileObjects[`${hallCenter.q - 3},${hallCenter.r}`] = { type: 'fireplace', lightRadius: 6 };
-    window.tileObjects[`${hallCenter.q + 3},${hallCenter.r}`] = { type: 'fireplace', lightRadius: 6 };
+    // Floor 0 -> -1: the descent from the Gate Hall.
+    const gateStairHex = { q: gateCenter.q, r: gateCenter.r - 2 };
+    window.tileObjects[`${gateStairHex.q},${gateStairHex.r}`] = { type: 'stair_down', toFloor: -1 };
+
+    // Great Hall (-1): the throne room, deeper in.
+    const hallCenter = { q: anchor.q, r: anchor.r };
+    carveFloorRoom(kragmoorBuilding, -1, hallCenter.q, hallCenter.r, 6, 4, null, 'Cave Floor');
+    const hallFloor = kragmoorBuilding.floors[-1];
+    hallFloor.tileObjects[`${gateStairHex.q},${gateStairHex.r}`] = { type: 'stair_up', toFloor: 0 };
+    paintFloorCorridor(kragmoorBuilding, -1, gateStairHex, { q: hallCenter.q, r: hallCenter.r + 3 }, 'Cave Floor');
+
+    hallFloor.tileObjects[`${hallCenter.q},${hallCenter.r - 3}`] = { type: 'throne' };
+    hallFloor.tileObjects[`${hallCenter.q - 3},${hallCenter.r}`] = { type: 'fireplace', lightRadius: 6 };
+    hallFloor.tileObjects[`${hallCenter.q + 3},${hallCenter.r}`] = { type: 'fireplace', lightRadius: 6 };
     window.campaign2DeepholdsHallCenter = hallCenter;
 
     if (window.campaign2DwarfKing) {
-        window.entities.push(window.buildNPC({ ...window.campaign2DwarfKing, hex: { q: hallCenter.q, r: hallCenter.r - 1 } }));
+        const king = window.buildNPC({ ...window.campaign2DwarfKing, hex: { q: hallCenter.q, r: hallCenter.r - 1 } });
+        king.floor = -1;
+        window.entities.push(king);
     }
     (window.campaign2DwarfGuards || []).forEach((spec, i) => {
         const pos = [{ q: hallCenter.q - 2, r: hallCenter.r + 2 }, { q: hallCenter.q + 2, r: hallCenter.r + 2 }][i];
         if (!pos) return;
-        window.entities.push(window.buildNPC({ ...spec, hex: pos }));
+        const guard = window.buildNPC({ ...spec, hex: pos });
+        guard.floor = -1;
+        window.entities.push(guard);
     });
 
-    // The Deep Mine: the real ore vein — a foreman/journal ledger, same
-    // shape as Emberlode's own mine room.
-    const mineCenter = { q: anchor.q + 16, r: anchor.r - 4 };
-    const mineDoor = { q: mineCenter.q - 4, r: mineCenter.r };
-    const mineRegion = carveFlatRoom(mineCenter.q, mineCenter.r, 4, 3, mineDoor, 'Cave Floor');
-    window.interiorRegions.push(mineRegion);
-    for (let q = hallCenter.q + 6; q < mineDoor.q; q++) window.setTerrainAt(q, hallCenter.r - 2, 'Cave Floor');
-    window.tileObjects[`${mineCenter.q},${mineCenter.r}`] = { type: 'journal', readId: 'deepholds_mine_ledger', lightRadius: 0 };
+    // Floor -1 -> -2: a second stairwell down from the Great Hall's own
+    // center, opposite the throne, to the Vault/Runeforge level.
+    const hallStairHex = { q: hallCenter.q, r: hallCenter.r };
+    hallFloor.tileObjects[`${hallStairHex.q},${hallStairHex.r}`] = { type: 'stair_down', toFloor: -2 };
+
+    // Vault + Runeforge (-2): the kingdom's treasury and its runesmithing
+    // hall, side by side a level below the throne room — a landing at the
+    // shaft, a corridor west to the Vault, a further corridor on to the
+    // Runeforge at the far end.
+    const vaultCenter = { q: anchor.q - 10, r: anchor.r };
+    const runeforgeCenter = { q: anchor.q - 18, r: anchor.r };
+    carveFloorRoom(kragmoorBuilding, -2, vaultCenter.q, vaultCenter.r, 3, 3, null, 'Cave Floor');
+    carveFloorRoom(kragmoorBuilding, -2, runeforgeCenter.q, runeforgeCenter.r, 3, 3, null, 'Cave Floor');
+    const vaultFloor = kragmoorBuilding.floors[-2];
+    vaultFloor.tileObjects[`${hallStairHex.q},${hallStairHex.r}`] = { type: 'stair_up', toFloor: -1 };
+    paintFloorCorridor(kragmoorBuilding, -2, hallStairHex, vaultCenter, 'Cave Floor');
+    paintFloorCorridor(kragmoorBuilding, -2, vaultCenter, runeforgeCenter, 'Cave Floor');
+
+    if (window.campaign2DwarfTrader) {
+        const trader = window.buildNPC({ ...window.campaign2DwarfTrader, hex: { q: vaultCenter.q, r: vaultCenter.r + 1 } });
+        trader.floor = -2;
+        window.entities.push(trader);
+    }
+    window.campaign2DeepholdsRuneforgeCenter = runeforgeCenter;
+    vaultFloor.tileObjects[`${runeforgeCenter.q},${runeforgeCenter.r}`] = { type: 'rune_forge', lightRadius: 4 };
+    if (window.campaign2DwarfRunesmith) {
+        const runesmith = window.buildNPC({ ...window.campaign2DwarfRunesmith, hex: { q: runeforgeCenter.q, r: runeforgeCenter.r + 1 } });
+        runesmith.floor = -2;
+        window.entities.push(runesmith);
+    }
+
+    // Floor -2 -> -3: a third stairwell, at the Runeforge's own far end —
+    // reaching the Deep Mine means walking the whole treasury/forge level
+    // first.
+    const runeforgeStairHex = { q: runeforgeCenter.q, r: runeforgeCenter.r - 1 }; // clear of the rune_forge object (at runeforgeCenter) and the runesmith NPC (at r+1)
+    vaultFloor.tileObjects[`${runeforgeStairHex.q},${runeforgeStairHex.r}`] = { type: 'stair_down', toFloor: -3 };
+
+    // The Deep Mine (-3): the real ore vein — a foreman/journal ledger,
+    // same shape as Emberlode's own mine room.
+    const mineCenter = { q: anchor.q - 18, r: anchor.r + 10 };
+    carveFloorRoom(kragmoorBuilding, -3, mineCenter.q, mineCenter.r, 4, 3, null, 'Cave Floor');
+    const mineFloor = kragmoorBuilding.floors[-3];
+    mineFloor.tileObjects[`${runeforgeStairHex.q},${runeforgeStairHex.r}`] = { type: 'stair_up', toFloor: -2 };
+    paintFloorCorridor(kragmoorBuilding, -3, runeforgeStairHex, mineCenter, 'Cave Floor');
+    mineFloor.tileObjects[`${mineCenter.q},${mineCenter.r}`] = { type: 'journal', readId: 'deepholds_mine_ledger', lightRadius: 0 };
     if (window.campaign2DwarfForeman) {
-        window.entities.push(window.buildNPC({ ...window.campaign2DwarfForeman, hex: { q: mineCenter.q, r: mineCenter.r + 1 } }));
+        const foreman = window.buildNPC({ ...window.campaign2DwarfForeman, hex: { q: mineCenter.q, r: mineCenter.r + 1 } });
+        foreman.floor = -3;
+        window.entities.push(foreman);
     }
     window.campaign2DeepholdsMineCenter = mineCenter;
 
-    // The Vault: the kingdom's own trader.
-    const vaultCenter = { q: anchor.q - 16, r: anchor.r - 4 };
-    const vaultDoor = { q: vaultCenter.q + 4, r: vaultCenter.r };
-    const vaultRegion = carveFlatRoom(vaultCenter.q, vaultCenter.r, 3, 3, vaultDoor, 'Cave Floor');
-    window.interiorRegions.push(vaultRegion);
-    for (let q = vaultDoor.q + 1; q < hallCenter.q - 6; q++) window.setTerrainAt(q, hallCenter.r - 2, 'Cave Floor');
-    if (window.campaign2DwarfTrader) {
-        window.entities.push(window.buildNPC({ ...window.campaign2DwarfTrader, hex: { q: vaultCenter.q, r: vaultCenter.r + 1 } }));
-    }
+    // Floor -3 -> -4: the last stairwell, at the mine's own working face —
+    // the deepest, darkest level, where the vermin infestation has gone
+    // quiet (see resolveDeepholdsInfestation, campaign2Dialogue.js). A dead
+    // end; nothing descends further than this.
+    const mineStairHex = { q: mineCenter.q, r: mineCenter.r - 1 }; // clear of the ledger journal (at mineCenter) and the foreman NPC (at r+1)
+    mineFloor.tileObjects[`${mineStairHex.q},${mineStairHex.r}`] = { type: 'stair_down', toFloor: -4 };
 
-    // The Lower Tunnels: gone quiet, something's nesting down there — the
-    // side quest (see resolveDeepholdsInfestation, campaign2Dialogue.js).
-    const tunnelCenter = { q: anchor.q, r: anchor.r - 16 };
-    const tunnelDoor = { q: tunnelCenter.q, r: tunnelCenter.r + 4 };
-    const tunnelRegion = carveFlatRoom(tunnelCenter.q, tunnelCenter.r, 4, 3, tunnelDoor, 'Cave Floor');
-    window.interiorRegions.push(tunnelRegion);
-    for (let r = hallCenter.r - 5; r > tunnelDoor.r; r--) window.setTerrainAt(hallCenter.q, r, 'Cave Floor');
+    const tunnelCenter = { q: anchor.q - 18, r: anchor.r + 20 };
+    carveFloorRoom(kragmoorBuilding, -4, tunnelCenter.q, tunnelCenter.r, 4, 3, null, 'Cave Floor');
+    const tunnelFloor = kragmoorBuilding.floors[-4];
+    tunnelFloor.tileObjects[`${mineStairHex.q},${mineStairHex.r}`] = { type: 'stair_up', toFloor: -3 };
+    paintFloorCorridor(kragmoorBuilding, -4, mineStairHex, tunnelCenter, 'Cave Floor');
     window.campaign2DeepholdsTunnelCenter = tunnelCenter;
     (window.campaign2DeepholdsVermin || []).forEach((spec, i) => {
         const m = window.createMonster(spec.monsterType, { q: tunnelCenter.q + (i - 1), r: tunnelCenter.r }, spec.customSkills || null, spec.customEquipment || null, 'enemy');
         m.name = spec.name;
         m.deepholdsVermin = true;
+        m.floor = -4;
         window.entities.push(m);
     });
-
-    // The Runeforge: Kragmoor's own runesmithing questline (see
-    // grantRunesmithing/npcDialogueTrees.deepholds_runesmith,
-    // campaign2Dialogue.js, and crafting.js for the recipes themselves).
-    // South-west of the hall, its own short spur off the gate's main
-    // north-south spine (the same corridor the mine/vault already lean on)
-    // rather than a second connector into the hall itself.
-    const runeforgeCenter = { q: anchor.q - 16, r: anchor.r + 8 };
-    const runeforgeDoor = { q: runeforgeCenter.q + 4, r: runeforgeCenter.r };
-    const runeforgeRegion = carveFlatRoom(runeforgeCenter.q, runeforgeCenter.r, 3, 3, runeforgeDoor, 'Cave Floor');
-    window.interiorRegions.push(runeforgeRegion);
-    for (let q = runeforgeDoor.q + 1; q < hallCenter.q; q++) window.setTerrainAt(q, runeforgeCenter.r, 'Cave Floor');
-    window.tileObjects[`${runeforgeCenter.q},${runeforgeCenter.r}`] = { type: 'rune_forge', lightRadius: 4 };
-    window.campaign2DeepholdsRuneforgeCenter = runeforgeCenter;
-    if (window.campaign2DwarfRunesmith) {
-        window.entities.push(window.buildNPC({ ...window.campaign2DwarfRunesmith, hex: { q: runeforgeCenter.q, r: runeforgeCenter.r + 1 } }));
-    }
-
-    sealRoom(gateRegion);
-    sealRoom(hallRegion);
-    sealRoom(mineRegion);
-    sealRoom(vaultRegion);
-    sealRoom(tunnelRegion);
-    sealRoom(runeforgeRegion);
 
     setWorldMapMarker(gateCenter, { t: 'M', f: 'K', o: 'd', p: 2, n: 'Kragmoor' });
 }

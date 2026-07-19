@@ -82,7 +82,9 @@ test.describe('Crafting: rare materials, recipes, bounded-accuracy check', () =>
         await createCharacter(page);
         const result = await page.evaluate(() => {
             const center = window.campaign2DeepholdsRuneforgeCenter;
-            const forgeObj = center && window.tileObjects[`${center.q},${center.r}`];
+            // The Runeforge now lives 2 levels down (floor -2, see
+            // buildDwarvenKingdom's descending redesign, campaign2World.js).
+            const forgeObj = center && window.getTileObjectAtFloor(center.q, center.r, -2);
             const npc = window.entities.find(e => e.name === 'Thrain Emberhand');
             return { hasCenter: !!center, forgeType: forgeObj && forgeObj.type, hasNpc: !!npc, dialogueId: npc && npc.dialogueId };
         });

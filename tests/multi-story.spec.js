@@ -438,3 +438,88 @@ test.describe('Thieves\' Guild tunnel network', () => {
         expect(result.passageSealed).toBe(true);
     });
 });
+
+test.describe('Kragmoor (dwarf capital): a genuinely descending mountain hold', () => {
+    test.beforeEach(async ({ page }) => { await createCharacter(page); });
+
+    test('the Deepholds building has four basement levels sharing the massif\'s footprint', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const b = window.campaign2DeepholdsBuilding;
+            return {
+                found: !!b,
+                hasHall: !!(b && b.floors[-1]),
+                hasVault: !!(b && b.floors[-2]),
+                hasMine: !!(b && b.floors[-3]),
+                hasTunnels: !!(b && b.floors[-4]),
+            };
+        });
+        expect(result.found).toBe(true);
+        expect(result.hasHall).toBe(true);
+        expect(result.hasVault).toBe(true);
+        expect(result.hasMine).toBe(true);
+        expect(result.hasTunnels).toBe(true);
+    });
+
+    test('the King and his guards live on the Great Hall level (-1), not the surface', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const king = window.entities.find(e => e.name === window.campaign2DwarfKing?.name);
+            const guardsOnFloor = window.entities.filter(e => window.campaign2DwarfGuards?.some(g => g.name === e.name)).map(e => e.floor);
+            return { kingFloor: king?.floor, guardsOnFloor };
+        });
+        expect(result.kingFloor).toBe(-1);
+        expect(result.guardsOnFloor.every(f => f === -1)).toBe(true);
+    });
+
+    test('the trader/runesmith live on the Vault+Runeforge level (-2), the foreman on the Deep Mine level (-3), and the vermin on the Lower Tunnels level (-4)', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const trader = window.entities.find(e => e.name === window.campaign2DwarfTrader?.name);
+            const runesmith = window.entities.find(e => e.name === window.campaign2DwarfRunesmith?.name);
+            const foreman = window.entities.find(e => e.name === window.campaign2DwarfForeman?.name);
+            const vermin = window.entities.filter(e => e.deepholdsVermin);
+            return {
+                traderFloor: trader?.floor, runesmithFloor: runesmith?.floor,
+                foremanFloor: foreman?.floor,
+                verminFloors: vermin.map(v => v.floor),
+            };
+        });
+        expect(result.traderFloor).toBe(-2);
+        expect(result.runesmithFloor).toBe(-2);
+        expect(result.foremanFloor).toBe(-3);
+        expect(result.verminFloors.length).toBeGreaterThan(0);
+        expect(result.verminFloors.every(f => f === -4)).toBe(true);
+    });
+
+    test('descending all four stairwells in sequence reaches the Lower Tunnels', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const player = window.entities.find(e => e.side === 'player' && !e.rider);
+            player.floor = 0;
+
+            // Walk the actual stair chain via the tileObjects themselves,
+            // rather than hardcoding hexes independently of the world-build
+            // code, so this test breaks (loudly) if the layout ever moves.
+            function findStair(floor, type) {
+                if (!floor) {
+                    return Object.entries(window.tileObjects).find(([, o]) => o.type === type && o.toFloor === -1)?.[0];
+                }
+                const b = window.campaign2DeepholdsBuilding;
+                const f = b.floors[floor];
+                return Object.entries(f.tileObjects).find(([, o]) => o.type === type)?.[0];
+            }
+
+            const steps = [];
+            let floor = 0;
+            for (let i = 0; i < 4; i++) {
+                const key = findStair(floor, 'stair_down');
+                if (!key) break;
+                const [q, r] = key.split(',').map(Number);
+                player.hex = { q, r };
+                player.floor = floor;
+                window.checkStairTransitions();
+                floor = player.floor;
+                steps.push(floor);
+            }
+            return steps;
+        });
+        expect(result).toEqual([-1, -2, -3, -4]);
+    });
+});

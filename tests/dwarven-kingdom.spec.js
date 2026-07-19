@@ -24,9 +24,13 @@ test.describe('Kragmoor: a real mountain carve, not a walled perimeter', () => {
         await createCharacter(page, { campaign: '2' });
         const result = await page.evaluate(() => {
             const hall = window.campaign2DeepholdsHallCenter;
+            // The Great Hall now lives a level below the Gate Hall (floor
+            // -1, see buildDwarvenKingdom's descending redesign) —
+            // floor-aware lookups (getTerrainAtFloor/getTileObjectAtFloor,
+            // terrain.js) instead of the plain ground-floor ones.
             return {
-                floor: window.getTerrainAt(hall.q, hall.r).name,
-                throne: window.tileObjects[`${hall.q},${hall.r - 3}`]?.type,
+                floor: window.getTerrainAtFloor(hall.q, hall.r, -1).name,
+                throne: window.getTileObjectAtFloor(hall.q, hall.r - 3, -1)?.type,
             };
         });
         expect(result.floor).toBe('Cave Floor');
@@ -37,7 +41,8 @@ test.describe('Kragmoor: a real mountain carve, not a walled perimeter', () => {
         await createCharacter(page, { campaign: '2' });
         const result = await page.evaluate(() => {
             const mine = window.campaign2DeepholdsMineCenter;
-            return window.tileObjects[`${mine.q},${mine.r}`];
+            // The Deep Mine now lives 3 levels down (floor -3).
+            return window.getTileObjectAtFloor(mine.q, mine.r, -3);
         });
         expect(result.type).toBe('journal');
         expect(result.readId).toBe('deepholds_mine_ledger');
