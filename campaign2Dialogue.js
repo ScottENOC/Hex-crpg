@@ -311,6 +311,13 @@ window.npcDialogueTrees = {
             window.showDialogue(npc, "Out. Now. Before you frighten the other customers.", [{ label: "...", action: () => {} }]);
             return;
         }
+        // Shop hours (see isShopOpen/getNpcSchedules, gameEngine.js) — closed
+        // overnight, same as Mirelle physically sleeping in the room instead
+        // of standing at the counter all night.
+        if (window.isShopOpen && !window.isShopOpen('Mirelle Sondhe')) {
+            window.showDialogue(npc, "Mm? Oh — we're closed for the night. Come back after sunrise.", [{ label: "Sorry to wake you.", action: () => {} }]);
+            return;
+        }
         window.showDialogue(npc, "Something for court, or something plainer for the road? Either way, it's all just for show — doesn't stop a blade any better than what you're already wearing.", [
             { label: "Let me see what you have.", action: () => window.openShop({ itemIds: window.campaign2ClothierItems, mounts: false }) },
             { label: "Not today.", action: () => {} }
@@ -319,6 +326,10 @@ window.npcDialogueTrees = {
     silverhart_magic_dealer: (npc) => {
         if (window.isShunnedByHumanCommerce && window.isShunnedByHumanCommerce()) {
             window.showDialogue(npc, "Not to you. Not for any price.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+        if (window.isShopOpen && !window.isShopOpen('Corvin Ashe')) {
+            window.showDialogue(npc, "Shop's closed. Wares like these don't sell themselves at all hours — try again in the morning.", [{ label: "Fair enough.", action: () => {} }]);
             return;
         }
         window.showDialogue(npc, "Every piece here is genuine, and priced like it. Careful browsing — some of these will empty a purse fast.", [
@@ -728,6 +739,10 @@ window.npcDialogueTrees = {
         }
         if (window.isShunnedByHumanCommerce && window.isShunnedByHumanCommerce()) {
             window.showDialogue(npc, "I've heard what you've become. Take your coin somewhere else.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+        if (window.isShopOpen && !window.isShopOpen('Wick Hallow')) {
+            window.showDialogue(npc, "Store's shut for the night — I'm asleep back here. Come by after sunrise.", [{ label: "Sorry to bother you.", action: () => {} }]);
             return;
         }
         const storeOptions = [
@@ -1326,6 +1341,10 @@ window.npcDialogueTrees = {
     reddale_blacksmith: (npc) => {
         if (window.isShunnedByHumanCommerce && window.isShunnedByHumanCommerce()) {
             window.showDialogue(npc, "I don't sell to your kind. Move along.", [{ label: "...", action: () => {} }]);
+            return;
+        }
+        if (window.isShopOpen && !window.isShopOpen('Torvald Anvik')) {
+            window.showDialogue(npc, "Forge's cold and I'm off for the night. Come back with the sun.", [{ label: "Alright.", action: () => {} }]);
             return;
         }
         window.showDialogue(npc, "Reddale's a waypoint, not a city — but the road wears down blades and armor same as anywhere. I keep enough stock to fix you up without a trip back to Hollowmere.", [

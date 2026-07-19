@@ -2607,14 +2607,24 @@ function buildSilverhartPalace(roadEnd) {
     const clothierDoor = { q: clothierCenter.q - 3, r: clothierCenter.r };
     window.interiorRegions.push(carveFlatRoom(clothierCenter.q, clothierCenter.r, 3, 2, clothierDoor, 'Wood Floor'));
     if (window.campaign2Clothier) {
-        window.entities.push(window.buildNPC({ ...window.campaign2Clothier, hex: { q: clothierCenter.q, r: clothierCenter.r + 1 } }));
+        window.campaign2ClothierCounterHex = { q: clothierCenter.q, r: clothierCenter.r + 1 };
+        // No separate house — Mirelle sleeps above her own shop (a bed in the
+        // same small room, opposite the counter), same "shop opens/closes,
+        // shopkeeper never actually leaves the building" idea as Wick
+        // Hallow's general store (see getNpcSchedules, gameEngine.js).
+        window.campaign2ClothierBedHex = { q: clothierCenter.q, r: clothierCenter.r - 1 };
+        window.tileObjects[`${window.campaign2ClothierBedHex.q},${window.campaign2ClothierBedHex.r}`] = { type: 'bed' };
+        window.entities.push(window.buildNPC({ ...window.campaign2Clothier, hex: window.campaign2ClothierCounterHex }));
     }
 
     const magicShopCenter = { q: merchantFarQ + 3, r: throneCenter.r + 6 };
     const magicShopDoor = { q: magicShopCenter.q - 3, r: magicShopCenter.r };
     window.interiorRegions.push(carveFlatRoom(magicShopCenter.q, magicShopCenter.r, 3, 2, magicShopDoor, 'Wood Floor'));
     if (window.campaign2MagicDealer) {
-        window.entities.push(window.buildNPC({ ...window.campaign2MagicDealer, hex: { q: magicShopCenter.q, r: magicShopCenter.r + 1 } }));
+        window.campaign2MagicDealerCounterHex = { q: magicShopCenter.q, r: magicShopCenter.r + 1 };
+        window.campaign2MagicDealerBedHex = { q: magicShopCenter.q, r: magicShopCenter.r - 1 };
+        window.tileObjects[`${window.campaign2MagicDealerBedHex.q},${window.campaign2MagicDealerBedHex.r}`] = { type: 'bed' };
+        window.entities.push(window.buildNPC({ ...window.campaign2MagicDealer, hex: window.campaign2MagicDealerCounterHex }));
     }
     fillEnclosedPockets(merchantFarQ - 5, merchantNearQ + 5, throneCenter.r - DISTRICT_SPAN - 2, throneCenter.r + DISTRICT_SPAN + 2);
     // Re-stamp the two streets: a building's own wall ring can land right on
@@ -4569,7 +4579,12 @@ function buildReddale(roadEnd) {
     for (let r = roadEnd.r + 1; r < smithyCenter.r; r++) window.setTerrainAt(roadEnd.q - 4, r, 'Path');
     window.campaign2ReddaleSmithyCenter = smithyCenter;
     if (window.campaign2ReddaleBlacksmith) {
-        window.entities.push(window.buildNPC({ ...window.campaign2ReddaleBlacksmith, hex: { q: smithyCenter.q, r: smithyCenter.r + 1 } }));
+        window.campaign2BlacksmithCounterHex = { q: smithyCenter.q, r: smithyCenter.r + 1 };
+        // Torvald sleeps in the smithy itself, same "no separate house"
+        // pattern as Silverhart's clothier/magic dealer above.
+        window.campaign2BlacksmithBedHex = { q: smithyCenter.q - 1, r: smithyCenter.r };
+        window.tileObjects[`${window.campaign2BlacksmithBedHex.q},${window.campaign2BlacksmithBedHex.r}`] = { type: 'bed' };
+        window.entities.push(window.buildNPC({ ...window.campaign2ReddaleBlacksmith, hex: window.campaign2BlacksmithCounterHex }));
     }
 
     // One world-hex east of Hollowmere [6][6].

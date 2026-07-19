@@ -432,8 +432,35 @@ function getNpcSchedules() {
         ],
         'Wick Hallow': [
             { start: 0, end: 7, hex: { q: 3, r: 19 } },    // bed corner in the back of the store
-            { start: 7, end: 24, hex: { q: 0, r: 18 } },   // behind the counter
+            { start: 7, end: 24, hex: { q: 0, r: 18 }, shop: true },   // behind the counter
         ],
+        // Silverhart's Merchant Quarter shopkeepers and Reddale's blacksmith
+        // sleep right above their own shop (a bed tucked into the same small
+        // room, see the bed tileObjects placed alongside their counter hex in
+        // buildSilverhartCapital/buildReddale, campaign2World.js) rather than
+        // owning a separate house elsewhere — the `shop: true` tag on the
+        // counter block is what isShopOpen (below) checks.
+        ...(window.campaign2ClothierBedHex ? {
+            'Mirelle Sondhe': [
+                { start: 0, end: 7, hex: window.campaign2ClothierBedHex },
+                { start: 7, end: 21, hex: window.campaign2ClothierCounterHex, shop: true },
+                { start: 21, end: 24, hex: window.campaign2ClothierBedHex },
+            ],
+        } : {}),
+        ...(window.campaign2MagicDealerBedHex ? {
+            'Corvin Ashe': [
+                { start: 0, end: 8, hex: window.campaign2MagicDealerBedHex },
+                { start: 8, end: 20, hex: window.campaign2MagicDealerCounterHex, shop: true },
+                { start: 20, end: 24, hex: window.campaign2MagicDealerBedHex },
+            ],
+        } : {}),
+        ...(window.campaign2BlacksmithBedHex ? {
+            'Torvald Anvik': [
+                { start: 0, end: 7, hex: window.campaign2BlacksmithBedHex },
+                { start: 7, end: 20, hex: window.campaign2BlacksmithCounterHex, shop: true },
+                { start: 20, end: 24, hex: window.campaign2BlacksmithBedHex },
+            ],
+        } : {}),
         'Mira Ashbrook': [
             { start: 0, end: 9, hex: { q: 12, r: 9 } },     // home
             { start: 9, end: 23, hex: { q: 2, r: -2 } },   // her usual tavern spot
@@ -492,6 +519,22 @@ function updateNpcSchedules() {
     });
 }
 window.updateNpcSchedules = updateNpcSchedules;
+
+// Shops other than the tavern keep hours: true only while the named
+// shopkeeper's current schedule block (getNpcSchedules above) is tagged
+// `shop: true` — the block they stand at the counter for. A shopkeeper with
+// no schedule at all (most of the game's merchants, unchanged) is always
+// open, same as before this existed — only NPCs deliberately given a
+// schedule take on real opening hours. Called from each gated shop's own
+// dialogue (campaign2Dialogue.js) before offering "Let me see your wares."
+function isShopOpen(npcName) {
+    const blocks = getNpcSchedules()[npcName];
+    if (!blocks) return true;
+    const hour = window.getCurrentHour ? window.getCurrentHour() : 12;
+    const block = blocks.find(b => hour >= b.start && hour < b.end);
+    return !!block?.shop;
+}
+window.isShopOpen = isShopOpen;
 
 
 // Innkeeper-hosted rest: always safe (no ambush roll) for a flat 1 gold.
