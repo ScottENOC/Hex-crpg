@@ -3781,6 +3781,23 @@ function checkPendingInteractArrival(entity) {
     }
 }
 
+// Same arrival pattern as checkPendingInteractArrival, for a field-fence/
+// plant-apple click made from outside adjacency range (see the homestead
+// field click handling above).
+function checkPendingFieldActionArrival(entity) {
+    if (!window.pendingFieldActionHex || entity.side !== 'player') return;
+    const target = window.pendingFieldActionHex;
+    if (window.distance(entity.hex, target) <= 1) {
+        window.pendingFieldActionHex = null;
+        const field = window.campaign2PlayerField;
+        if (window.isFieldBoundaryHex && window.isFieldBoundaryHex(target.q, target.r)) {
+            if (window.placeFieldFence) window.placeFieldFence(target.q, target.r);
+        } else if (field && target.q > field.minQ && target.q < field.maxQ && target.r > field.minR && target.r < field.maxR) {
+            if (window.plantAppleTree) window.plantAppleTree(target.q, target.r);
+        }
+    }
+}
+
 function autoMoveProcess(entity) {
     if (window.isPausedForReaction) {
         setTimeout(() => autoMoveProcess(entity), 20);
@@ -3827,6 +3844,7 @@ function autoMoveProcess(entity) {
     if (entity.hex.q === entity.destination.q && entity.hex.r === entity.destination.r) {
         entity.destination = null;
         checkPendingInteractArrival(entity);
+        checkPendingFieldActionArrival(entity);
         finalizePlayerAction(entity, true);
         return;
     }
@@ -3879,6 +3897,7 @@ function autoMoveProcess(entity) {
         if (entity.hex.q === entity.destination.q && entity.hex.r === entity.destination.r) {
             entity.destination = null;
             checkPendingInteractArrival(entity);
+            checkPendingFieldActionArrival(entity);
         }
 
         // Same reasoning as the out-of-combat real-time step above — without
@@ -5901,6 +5920,29 @@ function handleClick(e){
             window.showMessage(`${player.name} walks over to take a closer look.`);
             finalizePlayerAction(player, actionHandled);
             return;
+        }
+    }
+
+    // HOMESTEAD FIELD — clicking a bare (no tileObject) hex on the player's
+    // fenced-field boundary places a fence segment; clicking a bare interior
+    // hex plants a carried apple. Only meaningful once the field is bought
+    // (see buyPlayerField, campaign2World.js), so this is a cheap no-op
+    // everywhere else on the map.
+    if (!doorObj && !window.isInCombat && window.campaign2PlayerFieldBought) {
+        const field = window.campaign2PlayerField;
+        const onBoundary = window.isFieldBoundaryHex && window.isFieldBoundaryHex(clickedHex.q, clickedHex.r);
+        const inInterior = field && clickedHex.q > field.minQ && clickedHex.q < field.maxQ && clickedHex.r > field.minR && clickedHex.r < field.maxR;
+        if (onBoundary || inInterior) {
+            if (window.distance(player.hex, clickedHex) <= 1) {
+                if (onBoundary && window.placeFieldFence) { window.placeFieldFence(clickedHex.q, clickedHex.r); return; }
+                if (inInterior && window.plantAppleTree) { window.plantAppleTree(clickedHex.q, clickedHex.r); return; }
+            } else {
+                window.pendingFieldActionHex = { q: clickedHex.q, r: clickedHex.r };
+                player.destination = clickedHex;
+                window.showMessage(`${player.name} walks over to the field.`);
+                finalizePlayerAction(player, actionHandled);
+                return;
+            }
         }
     }
 

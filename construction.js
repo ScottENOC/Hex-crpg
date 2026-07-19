@@ -9,6 +9,17 @@
 // added here, not a new system.
 
 window.buildOrders = {
+    // Gold-only (cost: null, same convention goldCost: null already uses for
+    // "materials only" orders below) — buying land is a coin transaction,
+    // not something wood and stone substitute for.
+    buy_field: {
+        name: 'Buy the adjoining field',
+        cost: null,
+        goldCost: 50,
+        isAvailable: () => window.campaign2PlayerCottageBuilt && !window.campaign2PlayerFieldBought,
+        isDone: () => !!window.campaign2PlayerFieldBought,
+        apply: () => window.buyPlayerField && window.buyPlayerField(),
+    },
     upgrade_cottage: {
         name: 'Expand the cottage into a proper country house',
         cost: { wood: 6, stone: 6 },
@@ -47,6 +58,7 @@ function countInventory(itemId) {
 }
 
 function canAffordResources(order) {
+    if (!order.cost) return false; // gold-only order, no materials path
     return Object.entries(order.cost).every(([item, amt]) => countInventory(item) >= amt);
 }
 window.canAffordResources = canAffordResources;
@@ -67,6 +79,7 @@ function fulfillBuildOrder(orderId, useGold) {
         if (!canAffordGold(order)) { window.showMessage("You don't have enough gold for that."); return false; }
         window.party[0].gold -= order.goldCost;
     } else {
+        if (!order.cost) { window.showMessage("This one has to be paid in gold."); return false; }
         if (!canAffordResources(order)) { window.showMessage("You don't have enough wood and stone for that yet."); return false; }
         Object.entries(order.cost).forEach(([item, amt]) => {
             let removed = 0;
@@ -82,6 +95,7 @@ function fulfillBuildOrder(orderId, useGold) {
 window.fulfillBuildOrder = fulfillBuildOrder;
 
 function costLabel(order) {
+    if (!order.cost) return '';
     const parts = Object.entries(order.cost).map(([item, amt]) => `${amt}x ${window.items[item]?.name || item}`);
     return parts.join(', ');
 }

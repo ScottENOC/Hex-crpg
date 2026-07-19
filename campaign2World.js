@@ -1531,6 +1531,140 @@ function upgradePlayerCottage() {
 }
 window.upgradePlayerCottage = upgradePlayerCottage;
 
+// Stardew-style homestead: a fenceable field bought from the builder (see
+// construction.js's buy_field order), fenced hex-by-hex with wood the player
+// already gathers (harvestTimberTree), stocked with a bought lamb (Wick
+// Hallow's general store) once enclosed, and grown with apple trees planted
+// from carried fruit. Reuses only mechanics that already exist elsewhere —
+// fence_h/fence_v tileObjects (see the farm pasture above), the Sheep entity
+// template (see the wolf-quest flock above), and fruit_tree's own
+// harvest/regrow cycle (resources.js).
+function buyPlayerField() {
+    if (!window.campaign2PlayerCottageBuilt || window.campaign2PlayerFieldBought) return;
+    const plot = window.campaign2PlayerCottagePlot;
+    if (!plot) return;
+    // East of the cottage, clear of the builder NPC (plot.q - 2) and the
+    // upgraded cottage's own footprint (plot.q-1..+1, per carveBuilding 3x3).
+    const field = { minQ: plot.q + 3, maxQ: plot.q + 7, minR: plot.r - 2, maxR: plot.r + 2 };
+    window.campaign2PlayerField = field;
+    window.campaign2PlayerFieldBought = true;
+    window.showMessage("The deed is yours — the field east of your cottage is ready to be fenced in.");
+}
+window.buyPlayerField = buyPlayerField;
+
+// Perimeter hexes of the field, each tagged with the fence orientation that
+// belongs there (corners default to 'h') — the exact set of hexes the player
+// can click to place a fence segment.
+function getFieldBoundaryHexes() {
+    const field = window.campaign2PlayerField;
+    if (!field) return [];
+    const { minQ, maxQ, minR, maxR } = field;
+    const hexes = [];
+    for (let q = minQ; q <= maxQ; q++) {
+        hexes.push({ q, r: minR, orientation: 'h' });
+        hexes.push({ q, r: maxR, orientation: 'h' });
+    }
+    for (let r = minR + 1; r < maxR; r++) {
+        hexes.push({ q: minQ, r, orientation: 'v' });
+        hexes.push({ q: maxQ, r, orientation: 'v' });
+    }
+    return hexes;
+}
+window.getFieldBoundaryHexes = getFieldBoundaryHexes;
+
+function isFieldBoundaryHex(q, r) {
+    return getFieldBoundaryHexes().some(h => h.q === q && h.r === r);
+}
+window.isFieldBoundaryHex = isFieldBoundaryHex;
+
+function isFieldFullyFenced() {
+    const hexes = getFieldBoundaryHexes();
+    if (hexes.length === 0) return false;
+    return hexes.every(h => {
+        const obj = window.tileObjects[`${h.q},${h.r}`];
+        return obj && (obj.type === 'fence_h' || obj.type === 'fence_v');
+    });
+}
+window.isFieldFullyFenced = isFieldFullyFenced;
+
+// Click handler for an empty field-boundary hex (see the interactableTypes
+// check in gameEngine.js's map-click handler). 1 wood per segment — the same
+// 'wood' item harvestTimberTree already gives the player.
+function placeFieldFence(q, r) {
+    if (!window.campaign2PlayerFieldBought) return;
+    const boundary = getFieldBoundaryHexes().find(h => h.q === q && h.r === r);
+    if (!boundary) return;
+    const existing = window.tileObjects[`${q},${r}`];
+    if (existing && (existing.type === 'fence_h' || existing.type === 'fence_v')) return;
+    if (!window.player.inventory.includes('wood')) {
+        window.showMessage("You need a piece of wood to fence this in.");
+        return;
+    }
+    const idx = window.player.inventory.indexOf('wood');
+    window.player.inventory.splice(idx, 1);
+    window.tileObjects[`${q},${r}`] = { type: boundary.orientation === 'h' ? 'fence_h' : 'fence_v', lightRadius: 0 };
+    window.showMessage("You set the fence post and rail in place.");
+    if (isFieldFullyFenced()) {
+        window.showMessage("The field is fully fenced — it's ready for livestock.");
+    }
+    if (window.drawMap) window.drawMap();
+    if (window.renderEntities) window.renderEntities();
+}
+window.placeFieldFence = placeFieldFence;
+
+// Called from Wick Hallow's dialogue (see general_store in
+// campaign2Dialogue.js). Spawns a tame Sheep — same template as the wolf-
+// quest flock's own sheep (campaign2World.js, farm section above) — inside
+// the fenced field, at the first open interior hex found.
+function buyFieldLamb() {
+    if (!window.campaign2PlayerFieldBought) { window.showMessage("You'll need a field to put it in first."); return; }
+    if (!isFieldFullyFenced()) { window.showMessage("Better finish fencing the field before you bring an animal home to it."); return; }
+    const field = window.campaign2PlayerField;
+    for (let q = field.minQ + 1; q < field.maxQ; q++) {
+        for (let r = field.minR + 1; r < field.maxR; r++) {
+            if (window.tileObjects[`${q},${r}`]) continue;
+            if (window.entities.some(e => e.hex.q === q && e.hex.r === r)) continue;
+            const sheep = new window.Entity('Lamb', '#f5f5f0', { q, r }, 10);
+            sheep.hp = 3;
+            sheep.maxHp = 3;
+            sheep.side = 'neutral';
+            sheep.isNPC = true;
+            sheep.customImage = 'sheep';
+            sheep.tags = ['animal'];
+            sheep.dialogueId = 'farm_sheep';
+            window.entities.push(sheep);
+            window.showMessage("A lamb trots into your field, already at home behind the new fence.");
+            if (window.renderEntities) window.renderEntities();
+            return;
+        }
+    }
+    window.showMessage("There's no open ground left in the field for another animal.");
+}
+window.buyFieldLamb = buyFieldLamb;
+
+// Click handler for planting an apple tree on an empty interior field hex
+// (see interactWithTileObject's field_marker dispatch is unnecessary here —
+// planting happens on bare ground, so it's checked in the same click handler
+// as fencing). Consumes one carried apple; the new tree uses fruit_tree's
+// existing harvest/regrow cycle (resources.js's harvestFruitTree) unchanged.
+function plantAppleTree(q, r) {
+    if (!window.campaign2PlayerFieldBought) return;
+    const field = window.campaign2PlayerField;
+    if (q <= field.minQ || q >= field.maxQ || r <= field.minR || r >= field.maxR) return;
+    if (window.tileObjects[`${q},${r}`]) return;
+    if (!window.player.inventory.includes('fruit')) {
+        window.showMessage("You need an apple to plant.");
+        return;
+    }
+    const idx = window.player.inventory.indexOf('fruit');
+    window.player.inventory.splice(idx, 1);
+    window.tileObjects[`${q},${r}`] = { type: 'fruit_tree', hasFruit: true, regrowAt: 0 };
+    window.showMessage("You plant the apple's seeds. Give it time and this'll be a proper tree.");
+    if (window.drawMap) window.drawMap();
+    if (window.renderEntities) window.renderEntities();
+}
+window.plantAppleTree = plantAppleTree;
+
 // A small house standing alone partway up the north road — the first
 // breadcrumb toward a much larger plot arc (a necromancer working toward
 // lichdom). The residents were taken, not killed here; skeletons left

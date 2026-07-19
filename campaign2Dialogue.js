@@ -202,10 +202,19 @@ window.npcDialogueTrees = {
             return;
         }
         const options = orders.map(([id, order]) => ({
-            label: order.goldCost != null
-                ? `${order.name} (${window.buildOrderCostLabel(order)}, or ${order.goldCost} gold)`
-                : `${order.name} (${window.buildOrderCostLabel(order)} — materials only)`,
+            label: order.cost == null
+                ? `${order.name} (${order.goldCost} gold)`
+                : order.goldCost != null
+                    ? `${order.name} (${window.buildOrderCostLabel(order)}, or ${order.goldCost} gold)`
+                    : `${order.name} (${window.buildOrderCostLabel(order)} — materials only)`,
             action: () => {
+                if (order.cost == null) {
+                    // Gold-only order (e.g. buying land) — nothing to gather, so
+                    // skip straight to the purchase instead of a materials-vs-
+                    // gold sub-menu with no materials option in it.
+                    if (window.fulfillBuildOrder(id, true)) window.showMessage("The work is done.");
+                    return;
+                }
                 const subOptions = [
                     { label: `Pay with materials (${window.buildOrderCostLabel(order)})`, action: () => {
                         if (window.fulfillBuildOrder(id, false)) window.showMessage("The work is done.");
@@ -713,8 +722,23 @@ window.npcDialogueTrees = {
             window.showDialogue(npc, "I've heard what you've become. Take your coin somewhere else.", [{ label: "...", action: () => {} }]);
             return;
         }
-        window.showDialogue(npc, "Welcome to Hallow's Goods. Soldier-grade gear, fair prices — what's left of my stock, anyway.", [
+        const storeOptions = [
             { label: "Let me see your wares.", action: () => window.openShop({ itemIds: window.hollowmereStoreItems, stock: window.hollowmereStoreStock, mounts: false }) },
+        ];
+        // Only worth offering once there's a fenced field to put the animal
+        // in — see buyFieldLamb/isFieldFullyFenced, campaign2World.js.
+        if (window.campaign2PlayerFieldBought && window.isFieldFullyFenced && window.isFieldFullyFenced()) {
+            storeOptions.push({
+                label: "I'd like to buy a lamb. (20 gold)",
+                action: () => {
+                    if ((window.party[0].gold || 0) < 20) { window.showMessage("You don't have enough gold."); return; }
+                    window.party[0].gold -= 20;
+                    if (window.buyFieldLamb) window.buyFieldLamb();
+                }
+            });
+        }
+        window.showDialogue(npc, "Welcome to Hallow's Goods. Soldier-grade gear, fair prices — what's left of my stock, anyway.", [
+            ...storeOptions,
             {
                 label: "Heard you've had some trouble.",
                 action: () => {
