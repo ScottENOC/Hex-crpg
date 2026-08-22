@@ -272,7 +272,10 @@ window.ambientChatterCooldowns = window.ambientChatterCooldowns || {}; // pairKe
 // plot-agnostic small talk so it never contradicts a specific NPC's actual
 // situation.
 window.ambientChatterExchanges = [
-    { lines: ["Cold one today, isn't it?", "Aye, feels like snow's coming early this year."] },
+    // Weather flavor gated to the seasons it actually makes sense in — see
+    // isAmbientExchangeEligible below. "Snow's coming early" implies it's
+    // not full winter yet, but is at least plausible; spring/summer are not.
+    { lines: ["Cold one today, isn't it?", "Aye, feels like snow's coming early this year."], season: ['autumn', 'winter'] },
     { lines: ["Any word from the caravan?", "Nothing yet. Should be through by week's end, if the roads hold."] },
     { lines: ["Busy day, is it?", "Busier than usual, truth be told. Can't complain, though."] },
     { lines: ["Heard anything worth repeating?", "Only rumors. Nothing I'd wager coin on."] },
@@ -286,12 +289,34 @@ function pairKey(a, b) {
     return [a.name, b.name].sort().join('|');
 }
 
+// Optional per-exchange gates so ambient flavor text never contradicts the
+// current world state. `season` is a whitelist of getCurrentSeason()
+// (worldTime.js) results; `hourRange` is a [startHour, endHour) window
+// against getCurrentHour(), wrapping past midnight if start > end (e.g.
+// [22, 6] for "late night"). Either/both may be omitted — an exchange with
+// neither set is always eligible, same as before this existed.
+function isAmbientExchangeEligible(exchange) {
+    if (exchange.season) {
+        const season = window.getCurrentSeason ? window.getCurrentSeason() : null;
+        if (season && !exchange.season.includes(season)) return false;
+    }
+    if (exchange.hourRange) {
+        const hour = window.getCurrentHour ? window.getCurrentHour() : 12;
+        const [start, end] = exchange.hourRange;
+        const inRange = start <= end ? (hour >= start && hour < end) : (hour >= start || hour < end);
+        if (!inRange) return false;
+    }
+    return true;
+}
+
 // Checked on its own slower cadence than the named-banter loop above (every
-// ~8s of accumulated real time) since scanning entity pairs is a little more
-// work than the fixed-list scan checkCharacterBanter does.
+// ~16s of accumulated real time — doubled from the original 8s, which made
+// ambient chatter fire almost back-to-back in any crowded area, halving
+// overall frequency) since scanning entity pairs is a little more work than
+// the fixed-list scan checkCharacterBanter does.
 function checkAmbientNpcChatter(delta) {
     window.ambientChatterAccum += delta;
-    if (window.ambientChatterAccum < 8) return;
+    if (window.ambientChatterAccum < 16) return;
     window.ambientChatterAccum = 0;
 
     if (window.isInCombat) return;
@@ -317,7 +342,9 @@ function checkAmbientNpcChatter(delta) {
     if (eligiblePairs.length === 0) return;
 
     const [a, b] = eligiblePairs[Math.floor(Math.random() * eligiblePairs.length)];
-    const exchange = window.ambientChatterExchanges[Math.floor(Math.random() * window.ambientChatterExchanges.length)];
+    const eligibleExchanges = window.ambientChatterExchanges.filter(isAmbientExchangeEligible);
+    if (eligibleExchanges.length === 0) return; // e.g. every weather-flavored line is out of season right now
+    const exchange = eligibleExchanges[Math.floor(Math.random() * eligibleExchanges.length)];
     exchange.lines.forEach((text, i) => {
         setTimeout(() => {
             const speaker = i % 2 === 0 ? a : b;
@@ -329,9 +356,38 @@ function checkAmbientNpcChatter(delta) {
 }
 window.checkAmbientNpcChatter = checkAmbientNpcChatter;
 
+// Axis-aligned overlap test used by the box-placement pass in
+// renderSpeechBubbles below.
+function rectsOverlap(a, b) {
+    return a.x < b.x + b.width && a.x + a.width > b.x &&
+           a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
+// Per-NPC bubble border colour, keyed off the entity's own shirtHue
+// (already rolled per-name for the sprite recolor — see gameEngine.js/
+// campaign2World.js's showClothes branch and spriteRecolor.js) so a
+// character's bubble matches their own outfit with no extra data to
+// maintain. Same lazy-init fallback used at those call sites, for the rare
+// case a name-only NPC's hue hasn't been rolled yet the first time they talk.
+function getSpeechBubbleColor(ent) {
+    if (ent.shirtHue === undefined && window.pickClothingHue) {
+        ent.shirtHue = window.pickClothingHue((ent.name || 'x') + '_shirt');
+        ent.clothingSatMult = 0.85;
+    }
+    return ent.shirtHue !== undefined ? `hsl(${ent.shirtHue}, 70%, 65%)` : '#fff';
+}
+
 function renderSpeechBubbles(ctx, hexToPixel, zoom) {
     const now = performance.now();
     window.speechBubbles = window.speechBubbles.filter(b => now - b.start < b.duration);
+
+    // Boxes already placed this frame (oldest bubble first). A new bubble
+    // that would overlap one of these gets nudged straight up until it
+    // clears them, rather than drawing on top. Recomputed fresh every
+    // frame from each bubble's natural anchored position, so a bubble
+    // snaps back down as soon as whatever it was avoiding expires.
+    const placedRects = [];
+
     window.speechBubbles.forEach(b => {
         const ent = window.entities && window.entities.find(e => e.name === b.speakerName && e.alive);
         if (!ent || !ent.hex) return;
@@ -362,10 +418,24 @@ function renderSpeechBubbles(ctx, hexToPixel, zoom) {
         const boxWidth = Math.min(maxTextWidth, Math.max(...lines.map(l => ctx.measureText(l).width))) + padding * 2;
         const boxHeight = lines.length * lineHeight + padding * 2;
         const boxX = x - boxWidth / 2;
-        const boxY = y - 45 * zoom - boxHeight;
+        let boxY = y - 45 * zoom - boxHeight;
+
+        // Stack upward one box-height at a time until clear of anything
+        // already placed this frame. Capped at 6 attempts so a very dense
+        // NPC cluster degrades back to overlapping rather than stacking
+        // bubbles off the top of the screen.
+        const stackGap = 4 * zoom;
+        let attempts = 0;
+        while (attempts < 6 && placedRects.some(r => rectsOverlap({ x: boxX, y: boxY, width: boxWidth, height: boxHeight }, r))) {
+            boxY -= (boxHeight + stackGap);
+            attempts++;
+        }
+        placedRects.push({ x: boxX, y: boxY, width: boxWidth, height: boxHeight });
+
+        const borderColor = getSpeechBubbleColor(ent);
 
         ctx.fillStyle = 'rgba(20,20,20,0.85)';
-        ctx.strokeStyle = '#fff';
+        ctx.strokeStyle = borderColor;
         ctx.lineWidth = 1;
         ctx.beginPath();
         if (ctx.roundRect) ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 6 * zoom);
@@ -373,13 +443,16 @@ function renderSpeechBubbles(ctx, hexToPixel, zoom) {
         ctx.fill();
         ctx.stroke();
 
-        // Speech-bubble tail pointing down at the speaker.
+        // Speech-bubble tail pointing down from the box's own bottom edge —
+        // still reads as attached to the box when a stacked bubble has been
+        // nudged up above its speaker rather than sitting right on them.
         ctx.beginPath();
         ctx.moveTo(x - 6 * zoom, boxY + boxHeight);
         ctx.lineTo(x + 6 * zoom, boxY + boxHeight);
         ctx.lineTo(x, boxY + boxHeight + 8 * zoom);
         ctx.closePath();
         ctx.fill();
+        ctx.stroke();
 
         ctx.fillStyle = '#fff';
         lines.forEach((line, i) => ctx.fillText(line, x, boxY + padding + (i + 1) * lineHeight - 4 * zoom));
