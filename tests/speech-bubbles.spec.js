@@ -49,7 +49,7 @@ test.describe('ambient NPC-to-NPC chatter (no player click involved)', () => {
             window.ambientChatterCooldowns = {};
             window.ambientChatterAccum = 0;
             window.isInCombat = false;
-            window.checkAmbientNpcChatter(9); // one tick over the 8s threshold
+            window.checkAmbientNpcChatter(17); // one tick over the 16s threshold
 
             return new Promise(resolve => {
                 setTimeout(() => {
@@ -74,7 +74,7 @@ test.describe('ambient NPC-to-NPC chatter (no player click involved)', () => {
             window.ambientChatterCooldowns = {};
             window.ambientChatterAccum = 0;
             window.isInCombat = true;
-            window.checkAmbientNpcChatter(9);
+            window.checkAmbientNpcChatter(17);
 
             return new Promise(resolve => {
                 setTimeout(() => {
@@ -99,12 +99,12 @@ test.describe('ambient NPC-to-NPC chatter (no player click involved)', () => {
             window.ambientChatterCooldowns = {};
             window.ambientChatterAccum = 0;
             window.isInCombat = false;
-            window.checkAmbientNpcChatter(9);
+            window.checkAmbientNpcChatter(17);
             const key = ['Cooldown Villager A', 'Cooldown Villager B'].sort().join('|');
             const firedAt = window.ambientChatterCooldowns[key];
 
             window.ambientChatterAccum = 0;
-            window.checkAmbientNpcChatter(9); // immediately again — should be blocked by the 90s cooldown
+            window.checkAmbientNpcChatter(17); // immediately again — should be blocked by the 90s cooldown
             const stillSameTimestamp = window.ambientChatterCooldowns[key] === firedAt;
 
             return { firedAt: !!firedAt, stillSameTimestamp };
@@ -127,7 +127,7 @@ test.describe('ambient NPC-to-NPC chatter (no player click involved)', () => {
             window.ambientChatterCooldowns = {};
             window.ambientChatterAccum = 0;
             window.isInCombat = false;
-            window.checkAmbientNpcChatter(9);
+            window.checkAmbientNpcChatter(17);
 
             return new Promise(resolve => {
                 setTimeout(() => {
