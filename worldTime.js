@@ -256,6 +256,28 @@ function getCurrentHour() {
 }
 window.getCurrentHour = getCurrentHour;
 
+// Coarse 4-way season bucket ('winter'|'spring'|'summer'|'autumn') for
+// gating content — e.g. characterBanter.js's ambientChatterExchanges weather
+// lines — that would read as wrong outside a specific part of the year.
+// Uses the exact same solstice/equinox positions as getSeasonalLeafTint
+// just below (mo=11 winter trough, mo=5 summer peak; equinoxes fall at
+// mo=2 and mo=8), so a line gated by season and the foliage color never
+// disagree with each other. See that function's comment for why
+// MONTH_NAMES themselves are NOT the source of truth here — at world
+// start (worldSeconds=0, mo=0/"Dawnfrost") this currently returns
+// 'winter' (one month past the mo=11 trough), not 'spring', despite the
+// name's springlike sound — the quirky calendar-naming issue already
+// flagged below, just showing up in a new place.
+function getCurrentSeason() {
+    const totalD = Math.floor(window.worldSeconds / 86400);
+    const mo = Math.floor(totalD / 30) % 12;
+    if (mo === 11 || mo === 0 || mo === 1) return 'winter';
+    if (mo <= 4) return 'spring';
+    if (mo <= 7) return 'summer';
+    return 'autumn'; // mo 8, 9, 10
+}
+window.getCurrentSeason = getCurrentSeason;
+
 // Season, for foliage color — derived from the *same* solstice positions
 // getLightLevel's day-length formula already uses (mo=5 is the longest-day
 // summer peak, mo=11 is the shortest-day winter trough), not from the month
