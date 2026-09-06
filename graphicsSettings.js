@@ -208,6 +208,19 @@ document.addEventListener('DOMContentLoaded', () => {
             wantsMap = false;
             wantsEntities = false;
             const t0 = performance.now();
+            const zoom = window.cameraZoom || 1;
+            const savedFoliageDetail = window.foliageDetail;
+            const savedFloatingTexts = window.renderFloatingTexts;
+            const savedProjectiles = window.renderProjectiles;
+
+            // Zoom LOD: below 0.55x seasonal foliage recolouring is invisible
+            // at phone scale; below 0.35x floating text/projectiles are too
+            // small to read. Core terrain and all entities are still drawn.
+            if (zoom < 0.55) window.foliageDetail = 'simple';
+            if (zoom < 0.35) {
+                window.renderFloatingTexts = null;
+                window.renderProjectiles = null;
+            }
 
             // originalDrawMap calls window.renderEntities; temporarily expose
             // the original renderer so that one real frame stays internally
@@ -218,6 +231,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 else if (doEntities) originalRenderEntities();
             } finally {
                 window.renderEntities = queuedRenderEntities;
+                window.foliageDetail = savedFoliageDetail;
+                window.renderFloatingTexts = savedFloatingTexts;
+                window.renderProjectiles = savedProjectiles;
             }
 
             const dt = performance.now() - t0;
@@ -243,22 +259,6 @@ document.addEventListener('DOMContentLoaded', () => {
         window.renderEntities = queuedRenderEntities;
         window.requestGameRender = queuedDrawMap;
         window.__renderCoalescerInstalled = true;
-    }
-
-    // Cheap zoom LOD. Below 0.55x there is no useful phone-screen benefit
-    // from doing seasonal foliage recolours; below 0.35x combat text and
-    // projectile animation are too small to read, so they can be skipped.
-    // Core terrain/entities remain fully present, so this does not alter game
-    // information or collision/visibility rules.
-    if (window.drawMap && !window.__zoomLodInstalled) {
-        const queuedDraw = window.drawMap;
-        window.drawMap = function() {
-            const zoom = window.cameraZoom || 1;
-            if (zoom < 0.55) window.__performanceForceSimpleFoliage = true;
-            else window.__performanceForceSimpleFoliage = false;
-            return queuedDraw();
-        };
-        window.__zoomLodInstalled = true;
     }
 
     // Optional diagnostic overlay. Enable from console with
