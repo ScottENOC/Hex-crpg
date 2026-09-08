@@ -11,7 +11,7 @@ window.audioSettings = {
 const tracks = {
     title: new Audio('audio/Title.wav'),
     constant: new Audio('audio/Constant.wav'),
-    lobby: new Audio('audio/Arena lobby.wav'),
+    lobby: new Audio('audio/Arena lobby.m4a'),
     preBattle: new Audio('audio/Arena pre battle.wav'),
     battle: new Audio('audio/Arena battle.wav'),
     sting: new Audio('audio/Arena battle sting.wav'),
