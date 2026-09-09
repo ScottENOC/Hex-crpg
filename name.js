@@ -34,7 +34,7 @@ window.generateName = window.getRandomName;
 (() => {
     if (!document.querySelector('script[data-facing-system]')) {
         const facing = document.createElement('script');
-        facing.src = 'facingSystem.js?v=3';
+        facing.src = 'facingSystem.js?v=4';
         facing.dataset.facingSystem = 'true';
         facing.async = false;
         document.head.appendChild(facing);

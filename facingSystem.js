@@ -282,11 +282,15 @@
     }
 
     function scheduleInstall() {
-        let attempts = 0;
+        // facingSystem.js is loaded while the character creator is visible,
+        // but startGameCore does not create mapCtx until the player actually
+        // starts/loads a game. The old 5-second retry cap meant spending more
+        // than five seconds in character creation permanently disabled the map
+        // facing renderer for that page load. Keep the tiny installer poll
+        // alive until the map and character rig genuinely exist, then stop.
         const timer = setInterval(() => {
-            attempts++;
             updateFacingFromMovement();
-            if (installRendererFacing() || installed || attempts >= 100) clearInterval(timer);
+            if (installRendererFacing() || installed) clearInterval(timer);
         }, 50);
     }
 
