@@ -28,14 +28,23 @@ window.getRandomName = function(race, gender) {
 
 window.generateName = window.getRandomName;
 
-// Directional character presentation is intentionally a separate module.
-// characterRig.js is already bootstrapped by graphicsSettings.js; this loader
-// ensures facingSystem.js is actually executed by the live page as well.
+// Directional character presentation is intentionally split into a map-facing
+// module and a UI bridge. characterRig.js is already bootstrapped by
+// graphicsSettings.js; these two modules wait for their own dependencies.
 (() => {
-    if (document.querySelector('script[data-facing-system]')) return;
-    const script = document.createElement('script');
-    script.src = 'facingSystem.js?v=2';
-    script.dataset.facingSystem = 'true';
-    script.async = false;
-    document.head.appendChild(script);
+    if (!document.querySelector('script[data-facing-system]')) {
+        const facing = document.createElement('script');
+        facing.src = 'facingSystem.js?v=3';
+        facing.dataset.facingSystem = 'true';
+        facing.async = false;
+        document.head.appendChild(facing);
+    }
+
+    if (!document.querySelector('script[data-directional-character-ui]')) {
+        const ui = document.createElement('script');
+        ui.src = 'directionalCharacterUI.js?v=1';
+        ui.dataset.directionalCharacterUi = 'true';
+        ui.async = false;
+        document.head.appendChild(ui);
+    }
 })();
