@@ -34,7 +34,7 @@ window.generateName = window.getRandomName;
 (() => {
     if (!document.querySelector('script[data-facing-system]')) {
         const facing = document.createElement('script');
-        facing.src = 'facingSystem.js?v=4';
+        facing.src = 'facingSystem.js?v=5';
         facing.dataset.facingSystem = 'true';
         facing.async = false;
         document.head.appendChild(facing);
@@ -42,17 +42,9 @@ window.generateName = window.getRandomName;
 
     if (!document.querySelector('script[data-directional-character-ui]')) {
         const ui = document.createElement('script');
-        ui.src = 'directionalCharacterUI.js?v=1';
+        ui.src = 'directionalCharacterUI.js?v=2';
         ui.dataset.directionalCharacterUi = 'true';
         ui.async = false;
         document.head.appendChild(ui);
-    }
-
-    if (!document.querySelector('script[data-human-female-map-polish]')) {
-        const polish = document.createElement('script');
-        polish.src = 'humanFemaleMapPolish.js?v=1';
-        polish.dataset.humanFemaleMapPolish = 'true';
-        polish.async = false;
-        document.head.appendChild(polish);
     }
 })();
