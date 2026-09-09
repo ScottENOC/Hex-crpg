@@ -221,7 +221,7 @@ setInterval(() => {
 
 window.playDialogue = function(key) {
     if (!window.audioEnabled) return;
-    const audio = new Audio(`audio/dialogue/${key}.wav`);
+    const audio = new Audio(`audio/dialogue/${key}.m4a`);
     audio.volume = window.audioSettings.master * window.audioSettings.dialogue;
     safePlay(audio, `dialogue/${key}`);
 };
