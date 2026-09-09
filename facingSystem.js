@@ -225,9 +225,6 @@
         const hasHelmet = !!active.entity.equipped?.helmet;
         const mirror = facing === 'left';
 
-        // Keep the tactical sprite at the same natural body proportion that
-        // already looks right in the initiative tracker, without mutating the
-        // shared layout object used by character creation and portraits.
         const artWidth = dh * HUMAN_FEMALE_RENDER_ASPECT;
         const bounds = {
             left: dx + (dw - artWidth) / 2,
@@ -238,9 +235,6 @@
         const cx = bounds.left + bounds.width / 2;
 
         return withFacingContext(active.entity, facing, () => {
-            // Seed the existing equipment rig with a transparent in-memory
-            // canvas. This preserves armour/weapon anchors while completely
-            // removing humanfemale.png from the tactical rendering path.
             if (RIG_SEED_CANVAS) riggedDrawImage(RIG_SEED_CANVAS, dx, dy, dw, dh);
 
             ctx.save();
@@ -263,8 +257,6 @@
 
     function applyDirectionalLayer(ctx, active, facing, draw) {
         return withFacingContext(active.entity, facing, () => {
-            // Human female now has real direction-specific body geometry and
-            // rig anchors, so it must not receive the old fake profile squash.
             if (active.key === 'human_female') return draw();
             return applyLegacyFacingTransform(ctx, active, facing, draw);
         });
@@ -277,6 +269,14 @@
         let active = null;
 
         ctx.drawImage = function(img, ...args) {
+            // The legacy human-female hair sprite is a full-body-sized overlay
+            // drawn ~3px above the body. Its dimensions are therefore a perfect
+            // match for detectBodyKey(), which previously caused it to be
+            // mistaken for a second human-female body and replaced with a
+            // second copy of the new directional person. Discard it here,
+            // before body detection, so only the new directional hair renders.
+            if (img && img === window.gameVisuals?.humanHair) return;
+
             if (args.length === 4) {
                 const [dx, dy, dw, dh] = args;
                 const key = detectBodyKey(dw, dh);
@@ -303,10 +303,6 @@
     }
 
     function scheduleInstall() {
-        // facingSystem.js is loaded while the character creator is visible,
-        // but startGameCore does not create mapCtx until the player actually
-        // starts/loads a game. Keep the installer poll alive until the map and
-        // character rig genuinely exist, then stop.
         const timer = setInterval(() => {
             updateFacingFromMovement();
             if (installRendererFacing() || installed) clearInterval(timer);
