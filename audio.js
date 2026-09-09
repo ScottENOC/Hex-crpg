@@ -35,6 +35,64 @@ tracks.preBattle.loop = true;
 tracks.battle.loop = true;
 tracks.deathTheme.loop = true;
 
+// iOS Safari/WKWebView requires HTMLMediaElement.play() to be initiated by a
+// real user gesture before later game-driven play() calls are reliably
+// allowed. Chrome desktop is much more permissive, which can hide this bug.
+// Unlock every long-lived track when the player first enables audio. The
+// unlock play is muted and immediately paused/reset, so it is inaudible.
+let audioTracksUnlocked = false;
+function unlockAudioTracks() {
+    if (audioTracksUnlocked) return;
+    audioTracksUnlocked = true;
+
+    for (const [name, audio] of Object.entries(tracks)) {
+        const wasMuted = audio.muted;
+        const oldVolume = audio.volume;
+        audio.muted = true;
+        audio.volume = 0;
+        try {
+            const p = audio.play();
+            if (p && typeof p.then === 'function') {
+                p.then(() => {
+                    audio.pause();
+                    try { audio.currentTime = 0; } catch (_) {}
+                    audio.muted = wasMuted;
+                    audio.volume = oldVolume;
+                }).catch(err => {
+                    audio.muted = wasMuted;
+                    audio.volume = oldVolume;
+                    console.warn(`Audio unlock failed for ${name}:`, err);
+                    audioTracksUnlocked = false;
+                });
+            } else {
+                audio.pause();
+                try { audio.currentTime = 0; } catch (_) {}
+                audio.muted = wasMuted;
+                audio.volume = oldVolume;
+            }
+        } catch (err) {
+            audio.muted = wasMuted;
+            audio.volume = oldVolume;
+            audioTracksUnlocked = false;
+            console.warn(`Audio unlock threw for ${name}:`, err);
+        }
+    }
+}
+window.unlockAudioTracks = unlockAudioTracks;
+
+function safePlay(audio, label) {
+    try {
+        const p = audio.play();
+        if (p && typeof p.catch === 'function') {
+            p.catch(err => console.error(`Failed to play audio: ${label}`, err));
+        }
+        return p;
+    } catch (err) {
+        console.error(`Failed to play audio: ${label}`, err);
+        return null;
+    }
+}
+
 window.setAudioEnabled = function(enabled) {
     window.audioEnabled = enabled;
     if (!enabled) {
@@ -43,9 +101,11 @@ window.setAudioEnabled = function(enabled) {
             tracks[key].volume = 0;
         }
     } else {
-        // Start constant track if enabled
+        // This function is normally called directly from the player's mute
+        // checkbox tap/click, so perform the iOS unlock synchronously here.
+        unlockAudioTracks();
         window.updateVolumes();
-        tracks.constant.play();
+        safePlay(tracks.constant, 'constant');
     }
 };
 
@@ -63,9 +123,14 @@ window.updateVolumes = function() {
 
 window.playMusic = function(trackName, fadeUp = 0.8, fadeDown = 0.6) {
     if (!window.audioEnabled) return;
+    const track = tracks[trackName];
+    if (!track) {
+        console.error(`Unknown music track: ${trackName}`);
+        return;
+    }
     
     // If already playing, don't restart
-    if (!tracks[trackName].paused && tracks[trackName].volume > 0.01) return;
+    if (!track.paused && track.volume > 0.01) return;
 
     // Fade out everything else except constant
     for (const key in tracks) {
@@ -74,7 +139,7 @@ window.playMusic = function(trackName, fadeUp = 0.8, fadeDown = 0.6) {
         }
     }
 
-    fadeIn(tracks[trackName], fadeUp);
+    fadeIn(track, fadeUp, trackName);
 };
 
 window.playSting = function(stingName = 'sting') {
@@ -82,14 +147,14 @@ window.playSting = function(stingName = 'sting') {
     const s = tracks[stingName] || tracks['sting'];
     s.currentTime = 0;
     s.volume = window.audioSettings.master * window.audioSettings.effects;
-    s.play();
+    safePlay(s, stingName);
 };
 
-function fadeIn(audio, duration) {
+function fadeIn(audio, duration, label = 'music') {
     if (!window.audioEnabled) return;
     const targetVol = window.audioSettings.master * window.audioSettings.music;
     audio.volume = 0;
-    audio.play();
+    safePlay(audio, label);
     
     const steps = 20;
     const interval = (duration * 1000) / steps;
@@ -142,7 +207,7 @@ window.playDialogue = function(key) {
     if (!window.audioEnabled) return;
     const audio = new Audio(`audio/dialogue/${key}.wav`);
     audio.volume = window.audioSettings.master * window.audioSettings.dialogue;
-    audio.play().catch(e => console.error(`Failed to play dialogue audio: ${key}`, e));
+    safePlay(audio, `dialogue/${key}`);
 };
 
 window.playParrySound = function() {
@@ -150,5 +215,5 @@ window.playParrySound = function() {
     const sound = Math.random() < 0.5 ? 'parry' : 'parry2';
     const audio = new Audio(`audio/effects/${sound}.wav`);
     audio.volume = window.audioSettings.master * window.audioSettings.effects;
-    audio.play().catch(e => console.error(`Failed to play parry sound: ${sound}`, e));
+    safePlay(audio, `effects/${sound}`);
 };
