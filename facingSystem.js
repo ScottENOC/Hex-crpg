@@ -2,12 +2,9 @@
 // Four-direction facing foundation for humanoid characters.
 //
 // Facing is real entity state (`up`, `down`, `left`, `right`) derived from
-// movement in flat-top axial hex space. The current art is predominantly
-// front-facing, so left/right use a mirrored, slightly compressed profile
-// fallback while up/down retain the existing art until dedicated directional
-// sprites are supplied. Because the transform is applied around the whole
-// character draw stack, the unified attachment rig (weapons, shield, helmet,
-// armour) follows the facing automatically.
+// movement in flat-top axial hex space. Human female now has real directional
+// body + hair assets. Other humanoids retain the legacy transform fallback
+// until their own directional art is added.
 
 (() => {
     'use strict';
@@ -16,14 +13,74 @@
     const previousHex = new WeakMap();
     let installed = false;
 
+    const HUMAN_FEMALE_ASSET_PATHS = {
+        body: {
+            front: 'images/characters/human_female/body_front.png',
+            side: 'images/characters/human_female/body_side.png',
+            back: 'images/characters/human_female/body_back.png',
+        },
+        hair: {
+            brown_1: {
+                front: 'images/characters/human_female/hair_brown_1_front.png',
+                side: 'images/characters/human_female/hair_brown_1_side.png',
+                back: 'images/characters/human_female/hair_brown_1_back.png',
+            },
+        },
+    };
+
+    // The generated source PNGs deliberately have transparent padding. These
+    // normalized crop boxes isolate the visible asset while leaving the files
+    // themselves untouched in GitHub. Destination boxes are relative to the
+    // legacy body rectangle, so the new art remains the same in-game stature.
+    const HUMAN_FEMALE_LAYOUT = {
+        front: {
+            bodyCrop: { x:0.350, y:0.088, w:0.297, h:0.823 },
+            bodyDest: { x:0.000, y:0.000, w:1.000, h:1.000 },
+            hairCrop: { x:0.312, y:0.221, w:0.382, h:0.387 },
+            hairDest: { x:0.220, y:-0.015, w:0.560, h:0.370 },
+        },
+        side: {
+            bodyCrop: { x:0.431, y:0.092, w:0.148, h:0.822 },
+            bodyDest: { x:0.250, y:0.000, w:0.500, h:1.000 },
+            hairCrop: { x:0.303, y:0.250, w:0.403, h:0.431 },
+            hairDest: { x:0.305, y:-0.010, w:0.390, h:0.405 },
+        },
+        back: {
+            bodyCrop: { x:0.350, y:0.085, w:0.299, h:0.826 },
+            bodyDest: { x:0.000, y:0.000, w:1.000, h:1.000 },
+            hairCrop: { x:0.338, y:0.203, w:0.323, h:0.344 },
+            hairDest: { x:0.220, y:-0.005, w:0.560, h:0.375 },
+        },
+    };
+
+    function loadImage(src) {
+        if (typeof Image === 'undefined') return null;
+        const img = new Image();
+        img.src = src;
+        return img;
+    }
+
+    const HUMAN_FEMALE_ASSETS = {
+        body: Object.fromEntries(Object.entries(HUMAN_FEMALE_ASSET_PATHS.body).map(([k, src]) => [k, loadImage(src)])),
+        hair: {
+            brown_1: Object.fromEntries(Object.entries(HUMAN_FEMALE_ASSET_PATHS.hair.brown_1).map(([k, src]) => [k, loadImage(src)])),
+        },
+    };
+
+    function facingToView(facing) {
+        if (facing === 'up') return 'back';
+        if (facing === 'left' || facing === 'right') return 'side';
+        return 'front';
+    }
+
+    function imageReady(img) {
+        return !!img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0;
+    }
+
     function facingFromHexDelta(dq, dr) {
         if (!dq && !dr) return null;
-        // Same flat-top axial projection as hexMap.hexToPixel, with constants
-        // omitted because only direction matters.
         const dx = 1.5 * dq;
         const dy = Math.sqrt(3) * (dr + dq / 2);
-        // Hex diagonals are intentionally read as left/right because their
-        // horizontal screen displacement is larger than their vertical one.
         if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? 'right' : 'left';
         return dy >= 0 ? 'down' : 'up';
     }
@@ -32,8 +89,6 @@
         if (!entity || !VALID_FACINGS.has(facing)) return false;
         if (entity.facing === facing) return false;
         entity.facing = facing;
-        // Rider/mount pairs occupy the same path and should not visually argue
-        // about which way they are travelling.
         if (entity.riding && entity.riding.facing !== facing) entity.riding.facing = facing;
         if (entity.rider && entity.rider.facing !== facing) entity.rider.facing = facing;
         return true;
@@ -107,7 +162,19 @@
         return facing === 'left' || facing === 'right' ? 0.78 : 1;
     }
 
-    function applyFacingTransform(ctx, body, facing, draw) {
+    function withFacingContext(entity, facing, draw) {
+        const prevFacing = window.__activeCharacterFacing;
+        const prevEntity = window.__activeCharacterEntity;
+        window.__activeCharacterFacing = facing;
+        window.__activeCharacterEntity = entity;
+        try { return draw(); }
+        finally {
+            window.__activeCharacterFacing = prevFacing;
+            window.__activeCharacterEntity = prevEntity;
+        }
+    }
+
+    function applyLegacyFacingTransform(ctx, body, facing, draw) {
         if (!body || !VALID_FACINGS.has(facing) || facing === 'down' || facing === 'up') {
             draw();
             return;
@@ -121,11 +188,72 @@
         try { draw(); } finally { ctx.restore(); }
     }
 
+    function drawCropped(nativeDraw, img, crop, dest, bounds) {
+        const sx = crop.x * img.naturalWidth;
+        const sy = crop.y * img.naturalHeight;
+        const sw = crop.w * img.naturalWidth;
+        const sh = crop.h * img.naturalHeight;
+        const dx = bounds.left + dest.x * bounds.width;
+        const dy = bounds.top + dest.y * bounds.height;
+        const dw = dest.w * bounds.width;
+        const dh = dest.h * bounds.height;
+        nativeDraw(img, sx, sy, sw, sh, dx, dy, dw, dh);
+    }
+
+    function drawHumanFemaleBody(ctx, riggedDrawImage, originalImg, active, facing, args) {
+        const [dx, dy, dw, dh] = args;
+        const view = facingToView(facing);
+        const layout = HUMAN_FEMALE_LAYOUT[view];
+        const bodyImg = HUMAN_FEMALE_ASSETS.body[view];
+        if (!layout || !imageReady(bodyImg)) return false;
+
+        const hairStyle = active.entity.hairStyle || 'brown_1';
+        const hairImg = HUMAN_FEMALE_ASSETS.hair[hairStyle]?.[view];
+        const hasHelmet = !!active.entity.equipped?.helmet;
+        const mirror = facing === 'left';
+        const bounds = { left:dx, top:dy, width:dw, height:dh };
+        const cx = dx + dw / 2;
+
+        return withFacingContext(active.entity, facing, () => {
+            // Invisible legacy body pass tells characterRig.js that this is a
+            // new stack and preserves all existing equipment interception.
+            ctx.save();
+            ctx.globalAlpha = 0;
+            riggedDrawImage(originalImg, dx, dy, dw, dh);
+            ctx.restore();
+
+            ctx.save();
+            if (mirror) {
+                ctx.translate(cx, 0);
+                ctx.scale(-1, 1);
+                ctx.translate(-cx, 0);
+            }
+            try {
+                drawCropped(riggedDrawImage, bodyImg, layout.bodyCrop, layout.bodyDest, bounds);
+                if (!hasHelmet && imageReady(hairImg)) {
+                    drawCropped(riggedDrawImage, hairImg, layout.hairCrop, layout.hairDest, bounds);
+                }
+            } finally {
+                ctx.restore();
+            }
+            return true;
+        });
+    }
+
+    function applyDirectionalLayer(ctx, active, facing, draw) {
+        return withFacingContext(active.entity, facing, () => {
+            // Human female now has real direction-specific body geometry and
+            // rig anchors, so it must not receive the old fake profile squash.
+            if (active.key === 'human_female') return draw();
+            return applyLegacyFacingTransform(ctx, active, facing, draw);
+        });
+    }
+
     function installRendererFacing() {
         if (installed || !window.mapCtx || !window.CHAR_CONFIG || !window.__characterRigInstalled) return false;
         const ctx = window.mapCtx;
         const riggedDrawImage = ctx.drawImage.bind(ctx);
-        let active = null; // { entity, key, left, top, width, height }
+        let active = null;
 
         ctx.drawImage = function(img, ...args) {
             if (args.length === 4) {
@@ -133,12 +261,16 @@
                 const key = detectBodyKey(dw, dh);
                 if (key) {
                     const entity = findEntityForBody(key, dx + dw/2, dy + dh/2, dh);
-                    if (entity) active = { entity, key, left:dx, top:dy, width:dw, height:dh };
+                    if (entity) {
+                        active = { entity, key, left:dx, top:dy, width:dw, height:dh };
+                        const facing = VALID_FACINGS.has(entity.facing) ? entity.facing : 'down';
+                        if (key === 'human_female' && drawHumanFemaleBody(ctx, riggedDrawImage, img, active, facing, args)) return;
+                    }
                 }
 
                 if (active && isLikelyCharacterLayer(args, active)) {
                     const facing = VALID_FACINGS.has(active.entity.facing) ? active.entity.facing : 'down';
-                    return applyFacingTransform(ctx, active, facing, () => riggedDrawImage(img, ...args));
+                    return applyDirectionalLayer(ctx, active, facing, () => riggedDrawImage(img, ...args));
                 }
             }
             return riggedDrawImage(img, ...args);
@@ -158,11 +290,13 @@
         }, 50);
     }
 
-    // Keep facing state current even after renderer installation. Movement is
-    // hex-step based, so 20 Hz is ample and far cheaper than per-frame scans.
     setInterval(updateFacingFromMovement, 50);
 
     window.FACING_DIRECTIONS = ['up','down','left','right'];
+    window.HUMAN_FEMALE_ASSET_PATHS = HUMAN_FEMALE_ASSET_PATHS;
+    window.HUMAN_FEMALE_DIRECTIONAL_ASSETS = HUMAN_FEMALE_ASSETS;
+    window.HUMAN_FEMALE_DIRECTIONAL_LAYOUT = HUMAN_FEMALE_LAYOUT;
+    window.facingToSpriteView = facingToView;
     window.facingFromHexDelta = facingFromHexDelta;
     window.setEntityFacing = setEntityFacing;
     window.updateFacingFromMovement = updateFacingFromMovement;
