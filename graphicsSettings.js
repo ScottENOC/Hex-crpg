@@ -288,3 +288,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (new URLSearchParams(location.search).get('perf') === '1') setPerformanceOverlay(true);
     } catch (_) {}
 });
+
+// Deformable character/equipment rig. Keep this as a separate module rather
+// than growing the performance settings file; it waits until window.load and
+// installs only after gameEngine has exported CHAR_CONFIG and mapCtx.
+(() => {
+    if (document.querySelector('script[data-character-rig]')) return;
+    const script = document.createElement('script');
+    script.src = 'characterRig.js?v=1';
+    script.dataset.characterRig = 'true';
+    script.async = false;
+    document.head.appendChild(script);
+})();
