@@ -2,7 +2,7 @@
 const { test, expect } = require('@playwright/test');
 const { createCharacter } = require('./helpers');
 
-test.describe('character armour rig', () => {
+test.describe('character equipment rig', () => {
     test.beforeEach(async ({ page }) => {
         await createCharacter(page);
         await page.waitForFunction(() => window.__characterRigInstalled === true);
@@ -48,6 +48,38 @@ test.describe('character armour rig', () => {
         expect(result.dwarfWaist).toBeGreaterThan(result.elfWaist);
         expect(result.dwarfShoulders).toBeGreaterThan(result.dwarfWaist);
         expect(result.elfShoulders).toBeGreaterThan(result.elfWaist);
+    });
+
+    test('rigid gear scale follows character height, not width', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const human = window.getRigHeightScale('human_male');
+            const dwarf = window.getRigHeightScale('dwarf_male');
+            const elf = window.getRigHeightScale('elf_male');
+            const dwarfFemale = window.getRigHeightScale('dwarf_female');
+            const humanFemale = window.getRigHeightScale('human_female');
+            return {
+                human, dwarf, elf, dwarfFemale, humanFemale,
+                dwarfSword: window.computeRigidGearSize('dwarf_male', 100),
+                humanSword: window.computeRigidGearSize('human_male', 100),
+                elfSword: window.computeRigidGearSize('elf_male', 100),
+            };
+        });
+
+        expect(result.human).toBeCloseTo(1, 6);
+        expect(result.dwarf).toBeLessThan(result.human);
+        expect(result.elf).toBeGreaterThan(result.human);
+        // Same bodyH means the same rigid gear scale even if body widths differ.
+        expect(result.dwarfFemale).toBeCloseTo(result.humanFemale, 6);
+        expect(result.dwarfSword).toBeLessThan(result.humanSword);
+        expect(result.elfSword).toBeGreaterThan(result.humanSword);
+    });
+
+    test('item-specific size survives stature scaling', async ({ page }) => {
+        const result = await page.evaluate(() => ({
+            sword: window.computeRigidGearSize('dwarf_male', 100, 1),
+            dagger: window.computeRigidGearSize('dwarf_male', 100, 0.75),
+        }));
+        expect(result.dagger).toBeCloseTo(result.sword * 0.75, 6);
     });
 
     test('the four-triangle warp draws without throwing on a canvas source', async ({ page }) => {
