@@ -41,6 +41,11 @@ class Entity {
     this.stealthScore = 0; // Calculated when stealthing
     this.unconscious = false; // Player-side "downed" state — still alive:true, just can't act (see gameEngine.js handleLethalDamage)
     this.lastMoveTime = 0; // To track movement penalties
+
+    // Presentation direction. Movement updates this to up/down/left/right;
+    // down matches the legacy front-facing art, so old saves/entities have a
+    // safe visual default until they take their first step.
+    this.facing = 'down';
     
     // NEW SYSTEM STATS
     this.forcedMoveResistance = 0; // % chance to resist shove/trip
@@ -118,3 +123,15 @@ window.Entity = Entity;
 window.Enemy = Enemy;
 window.entities = entities;
 window.currentTurnEntity = currentTurnEntity;
+
+// Facing is kept separate from entity/gameplay logic. Load the presentation
+// module here because entities.js is already an early, stable script in every
+// game mode; the module itself waits until map/character rendering is ready.
+(() => {
+    if (document.querySelector('script[data-facing-system]')) return;
+    const script = document.createElement('script');
+    script.src = 'facingSystem.js?v=1';
+    script.dataset.facingSystem = 'true';
+    script.async = false;
+    document.head.appendChild(script);
+})();
