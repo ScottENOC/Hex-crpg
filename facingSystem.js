@@ -11,6 +11,7 @@
 
     const VALID_FACINGS = new Set(['up', 'down', 'left', 'right']);
     const previousHex = new WeakMap();
+    const HUMAN_FEMALE_RENDER_ASPECT = 0.48;
     let installed = false;
 
     const HUMAN_FEMALE_ASSET_PATHS = {
@@ -30,8 +31,8 @@
 
     // The generated source PNGs deliberately have transparent padding. These
     // normalized crop boxes isolate the visible asset while leaving the files
-    // themselves untouched in GitHub. Destination boxes are relative to the
-    // legacy body rectangle, so the new art remains the same in-game stature.
+    // themselves untouched in GitHub. The layout itself stays neutral/shared;
+    // each rendering surface chooses its own outer bounds.
     const HUMAN_FEMALE_LAYOUT = {
         front: {
             bodyCrop: { x:0.350, y:0.088, w:0.297, h:0.823 },
@@ -66,6 +67,18 @@
             brown_1: Object.fromEntries(Object.entries(HUMAN_FEMALE_ASSET_PATHS.hair.brown_1).map(([k, src]) => [k, loadImage(src)])),
         },
     };
+
+    // A transparent, in-memory draw target used only to initialise the existing
+    // equipment rig's body context. Crucially this is NOT the obsolete human
+    // female sprite, so the legacy body artwork is no longer part of the map
+    // rendering path at all.
+    const RIG_SEED_CANVAS = (() => {
+        if (typeof document === 'undefined') return null;
+        const canvas = document.createElement('canvas');
+        canvas.width = 1;
+        canvas.height = 1;
+        return canvas;
+    })();
 
     function facingToView(facing) {
         if (facing === 'up') return 'back';
@@ -200,7 +213,7 @@
         nativeDraw(img, sx, sy, sw, sh, dx, dy, dw, dh);
     }
 
-    function drawHumanFemaleBody(ctx, riggedDrawImage, originalImg, active, facing, args) {
+    function drawHumanFemaleBody(ctx, riggedDrawImage, active, facing, args) {
         const [dx, dy, dw, dh] = args;
         const view = facingToView(facing);
         const layout = HUMAN_FEMALE_LAYOUT[view];
@@ -208,19 +221,27 @@
         if (!layout || !imageReady(bodyImg)) return false;
 
         const hairStyle = active.entity.hairStyle || 'brown_1';
-        const hairImg = HUMAN_FEMALE_ASSETS.hair[hairStyle]?.[view];
+        const hairImg = HUMAN_FEMALE_ASSETS.hair[hairStyle]?.[view] || HUMAN_FEMALE_ASSETS.hair.brown_1?.[view];
         const hasHelmet = !!active.entity.equipped?.helmet;
         const mirror = facing === 'left';
-        const bounds = { left:dx, top:dy, width:dw, height:dh };
-        const cx = dx + dw / 2;
+
+        // Keep the tactical sprite at the same natural body proportion that
+        // already looks right in the initiative tracker, without mutating the
+        // shared layout object used by character creation and portraits.
+        const artWidth = dh * HUMAN_FEMALE_RENDER_ASPECT;
+        const bounds = {
+            left: dx + (dw - artWidth) / 2,
+            top: dy,
+            width: artWidth,
+            height: dh,
+        };
+        const cx = bounds.left + bounds.width / 2;
 
         return withFacingContext(active.entity, facing, () => {
-            // Invisible legacy body pass tells characterRig.js that this is a
-            // new stack and preserves all existing equipment interception.
-            ctx.save();
-            ctx.globalAlpha = 0;
-            riggedDrawImage(originalImg, dx, dy, dw, dh);
-            ctx.restore();
+            // Seed the existing equipment rig with a transparent in-memory
+            // canvas. This preserves armour/weapon anchors while completely
+            // removing humanfemale.png from the tactical rendering path.
+            if (RIG_SEED_CANVAS) riggedDrawImage(RIG_SEED_CANVAS, dx, dy, dw, dh);
 
             ctx.save();
             if (mirror) {
@@ -264,7 +285,7 @@
                     if (entity) {
                         active = { entity, key, left:dx, top:dy, width:dw, height:dh };
                         const facing = VALID_FACINGS.has(entity.facing) ? entity.facing : 'down';
-                        if (key === 'human_female' && drawHumanFemaleBody(ctx, riggedDrawImage, img, active, facing, args)) return;
+                        if (key === 'human_female' && drawHumanFemaleBody(ctx, riggedDrawImage, active, facing, args)) return;
                     }
                 }
 
@@ -284,10 +305,8 @@
     function scheduleInstall() {
         // facingSystem.js is loaded while the character creator is visible,
         // but startGameCore does not create mapCtx until the player actually
-        // starts/loads a game. The old 5-second retry cap meant spending more
-        // than five seconds in character creation permanently disabled the map
-        // facing renderer for that page load. Keep the tiny installer poll
-        // alive until the map and character rig genuinely exist, then stop.
+        // starts/loads a game. Keep the installer poll alive until the map and
+        // character rig genuinely exist, then stop.
         const timer = setInterval(() => {
             updateFacingFromMovement();
             if (installRendererFacing() || installed) clearInterval(timer);
@@ -297,6 +316,7 @@
     setInterval(updateFacingFromMovement, 50);
 
     window.FACING_DIRECTIONS = ['up','down','left','right'];
+    window.HUMAN_FEMALE_RENDER_ASPECT = HUMAN_FEMALE_RENDER_ASPECT;
     window.HUMAN_FEMALE_ASSET_PATHS = HUMAN_FEMALE_ASSET_PATHS;
     window.HUMAN_FEMALE_DIRECTIONAL_ASSETS = HUMAN_FEMALE_ASSETS;
     window.HUMAN_FEMALE_DIRECTIONAL_LAYOUT = HUMAN_FEMALE_LAYOUT;
