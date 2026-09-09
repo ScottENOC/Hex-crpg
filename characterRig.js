@@ -34,11 +34,6 @@
         skeleton_female:{ shoulderL:0.10, shoulderR:0.90, waistL:0.21, waistR:0.79, hemL:0.14, hemR:0.86, waistY:0.55 },
     };
 
-    // Defaults cover any future humanoid CHAR_CONFIG entry automatically.
-    // Existing hand positions are imported below so this change does not throw
-    // away the tuning already done per race/gender. Shoulder/back points are
-    // expressed in body-normalised coordinates and become the canonical base
-    // for cloaks/quivers/pauldrons and, later, directional poses.
     const ATTACHMENT_DEFAULTS = {
         headTop:       { x:0.50, y:0.04 },
         headCentre:    { x:0.50, y:0.16 },
@@ -50,9 +45,32 @@
         forearm:       { x:0.65, y:0.43 },
     };
 
-    // Grip coordinates are fractions of the rendered item's square. These are
-    // deliberately artwork concepts, not body concepts. A later directional
-    // sprite can provide facing-specific grip metadata without changing bodies.
+    // Initial anchor tuning for the first real directional body set. These are
+    // normalized to the legacy body rectangle, not the source PNG canvas.
+    // Left uses the side set mirrored in X, so only three views are authored.
+    const DIRECTIONAL_ATTACHMENT_RIGS = {
+        human_female: {
+            front: {
+                headTop:{x:0.50,y:0.03}, headCentre:{x:0.50,y:0.15},
+                shoulderLeft:{x:0.36,y:0.25}, shoulderRight:{x:0.64,y:0.25},
+                back:{x:0.50,y:0.34}, mainHand:{x:0.27,y:0.61},
+                offHand:{x:0.73,y:0.61}, forearm:{x:0.68,y:0.49},
+            },
+            side: {
+                headTop:{x:0.50,y:0.03}, headCentre:{x:0.53,y:0.15},
+                shoulderLeft:{x:0.46,y:0.25}, shoulderRight:{x:0.56,y:0.25},
+                back:{x:0.43,y:0.34}, mainHand:{x:0.53,y:0.62},
+                offHand:{x:0.49,y:0.58}, forearm:{x:0.50,y:0.47},
+            },
+            back: {
+                headTop:{x:0.50,y:0.03}, headCentre:{x:0.50,y:0.15},
+                shoulderLeft:{x:0.64,y:0.25}, shoulderRight:{x:0.36,y:0.25},
+                back:{x:0.50,y:0.30}, mainHand:{x:0.73,y:0.61},
+                offHand:{x:0.27,y:0.61}, forearm:{x:0.32,y:0.49},
+            },
+        },
+    };
+
     const ITEM_GRIPS = {
         sword:  { x:0.50, y:0.92 },
         axe:    { x:0.50, y:0.82 },
@@ -65,7 +83,7 @@
 
     const goldArmourImages = new WeakSet();
     const goldHelmetImages = new WeakSet();
-    let activeBody = null; // { key, left, top, width, height, weaponCount }
+    let activeBody = null;
 
     function isBaseArmourImage(img) {
         const g = window.gameVisuals;
@@ -106,22 +124,12 @@
         const armor = ARMOUR_RIGS[key];
         const rig = {};
         for (const [name, point] of Object.entries(ATTACHMENT_DEFAULTS)) rig[name] = { ...point };
-
-        // Preserve the existing hand tuning as the starting point.
         if (cfg.mainHand) rig.mainHand = { x:cfg.mainHand.x, y:cfg.mainHand.y };
         if (cfg.offHand) rig.offHand = { x:cfg.offHand.x, y:cfg.offHand.y };
-
-        // The armour mesh already describes relative breadth well. Pull the
-        // shoulder anchors inward from its outer edges so they represent the
-        // actual shoulder joint rather than the edge of a pauldron/garment.
         if (armor) {
             rig.shoulderLeft.x = armor.shoulderL + (0.5 - armor.shoulderL) * 0.32;
             rig.shoulderRight.x = armor.shoulderR - (armor.shoulderR - 0.5) * 0.32;
         }
-
-        // Existing helmet x/y offsets are measured in hex-size units. Convert
-        // them into body-normalised coordinates so the old visual tuning is
-        // retained while becoming a named anchor.
         if (cfg.helm && cfg.bodyW && cfg.bodyH) {
             rig.headTop = {
                 x: 0.5 + (cfg.helm.xOff || 0) / cfg.bodyW,
@@ -147,9 +155,25 @@
         return cfg.attachments;
     }
 
+    function facingToView(facing) {
+        if (facing === 'up') return 'back';
+        if (facing === 'left' || facing === 'right') return 'side';
+        return 'front';
+    }
+
+    function getDirectionalAttachmentPoint(key, name) {
+        const facing = window.__activeCharacterFacing;
+        const views = DIRECTIONAL_ATTACHMENT_RIGS[key];
+        if (!views || !facing) return null;
+        const view = facingToView(facing);
+        const raw = views[view]?.[name];
+        if (!raw) return null;
+        return facing === 'left' ? { x:1-raw.x, y:raw.y } : raw;
+    }
+
     function getAttachmentPoint(key, name, bounds) {
         const rig = getAttachmentRig(key);
-        const point = rig?.[name];
+        const point = getDirectionalAttachmentPoint(key, name) || rig?.[name];
         if (!point || !bounds) return null;
         return {
             x: bounds.left + point.x * bounds.width,
@@ -254,8 +278,6 @@
             wrapped.__characterRigWrapped=true; window.getGoldTintedSprite=wrapped;
         }
 
-        // Build/attach named rigs immediately so debug tools/tests and future
-        // animation code can query them even before a character is rendered.
         for(const key of Object.keys(window.CHAR_CONFIG)){
             const cfg=window.CHAR_CONFIG[key];
             if(ARMOUR_RIGS[key]&&cfg.armour)cfg.armour.mesh={...ARMOUR_RIGS[key]};
@@ -269,7 +291,6 @@
                 const weaponKind=weaponKindForImage(img);
                 const bodyKey=detectBodyKey(dw,dh);
 
-                // A non-equipment body-sized draw starts a new character stack.
                 if(bodyKey&&!isArmourImage(img)&&!isHelmetImage(img)&&!weaponKind&&!isShieldImage(img)){
                     activeBody={key:bodyKey,left:dx,top:dy,width:dw,height:dh,weaponCount:0};
                 }
@@ -282,8 +303,6 @@
                 if(activeBody&&isHelmetImage(img)){
                     const anchor=getAttachmentPoint(activeBody.key,'headTop',activeBody);
                     if(anchor){
-                        // Helmet artwork remains fitted by its existing body-sized
-                        // dimensions; only its attachment is now named/canonical.
                         dx=anchor.x-dw*ITEM_GRIPS.helmet.x;
                         dy=anchor.y-dh*ITEM_GRIPS.helmet.y;
                         nativeDrawImage(img,dx,dy,dw,dh); drawAttachmentDebug(ctx); return;
@@ -325,6 +344,7 @@
 
     window.ARMOUR_RIGS=ARMOUR_RIGS;
     window.ATTACHMENT_DEFAULTS=ATTACHMENT_DEFAULTS;
+    window.DIRECTIONAL_ATTACHMENT_RIGS=DIRECTIONAL_ATTACHMENT_RIGS;
     window.ITEM_GRIPS=ITEM_GRIPS;
     window.computeArmourMeshPoints=computeMeshPoints;
     window.drawWarpedArmour=drawWarpedArmour;
