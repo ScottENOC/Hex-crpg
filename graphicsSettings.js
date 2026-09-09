@@ -72,3 +72,219 @@ function syncGraphicsSettingsUI() {
     if (fd) fd.value = window.foliageDetail;
 }
 window.syncGraphicsSettingsUI = syncGraphicsSettingsUI;
+
+// ---------------------------------------------------------------------------
+// Mobile performance layer
+// ---------------------------------------------------------------------------
+// Kept here because this file loads before gameEngine/main, while the setup
+// itself runs after DOMContentLoaded when every global renderer/entity helper
+// exists. This lets old call sites keep calling drawMap()/renderEntities()
+// without each gesture/tick being able to force several invisible renders
+// between two physical display refreshes.
+document.addEventListener('DOMContentLoaded', () => {
+    // Cache Entity#getAllHexes while an entity has not moved. This removes a
+    // large amount of tiny array/object allocation from dense render scans.
+    if (window.Entity && !window.Entity.prototype.__perfCachedHexes) {
+        const originalGetAllHexes = window.Entity.prototype.getAllHexes;
+        window.Entity.prototype.getAllHexes = function() {
+            if (!this.hex) return [];
+            const extras = this.extraHexes || [];
+            let sig = `${this.hex.q},${this.hex.r}`;
+            for (let i = 0; i < extras.length; i++) sig += `|${extras[i].q},${extras[i].r}`;
+            if (this.__perfHexSig === sig && this.__perfHexCache) return this.__perfHexCache;
+            const result = originalGetAllHexes.call(this);
+            this.__perfHexSig = sig;
+            this.__perfHexCache = result;
+            return result;
+        };
+        window.Entity.prototype.__perfCachedHexes = true;
+    }
+
+    // Spatial index for getEntityAtHex. Entity.hex is wrapped so both
+    // `entity.hex = {q,r}` and direct `entity.hex.q = ...` movement invalidate
+    // the index. New entities are wrapped lazily when they first appear.
+    let entityIndex = new Map();
+    let entityIndexDirty = true;
+    let indexedEntityCount = -1;
+    const wrappedEntities = new WeakSet();
+
+    function markEntityIndexDirty() { entityIndexDirty = true; }
+    window.invalidateEntitySpatialIndex = markEntityIndexDirty;
+
+    function wrapHexObject(value) {
+        const raw = value || { q: 0, r: 0 };
+        if (raw && raw.__perfHexProxy) return raw;
+        const proxy = new Proxy(raw, {
+            set(target, prop, val) {
+                if ((prop === 'q' || prop === 'r') && target[prop] !== val) entityIndexDirty = true;
+                target[prop] = val;
+                return true;
+            }
+        });
+        try { Object.defineProperty(proxy, '__perfHexProxy', { value: true, enumerable: false }); } catch (_) {}
+        return proxy;
+    }
+
+    function wrapEntity(entity) {
+        if (!entity || wrappedEntities.has(entity)) return;
+        let hexValue = wrapHexObject(entity.hex);
+        try {
+            Object.defineProperty(entity, 'hex', {
+                configurable: true,
+                enumerable: true,
+                get() { return hexValue; },
+                set(v) { hexValue = wrapHexObject(v); entityIndexDirty = true; }
+            });
+            wrappedEntities.add(entity);
+        } catch (_) {
+            // A non-configurable foreign/network entity can still participate;
+            // it just causes conservative index rebuilds via entity count.
+        }
+    }
+
+    function rebuildEntityIndex() {
+        const entities = window.entities || [];
+        entityIndex = new Map();
+        for (const entity of entities) {
+            wrapEntity(entity);
+            if (!entity || !entity.alive || !entity.hex) continue;
+            const occupied = entity.getAllHexes ? entity.getAllHexes() : [entity.hex];
+            for (const h of occupied) {
+                const key = `${h.q},${h.r}`;
+                let bucket = entityIndex.get(key);
+                if (!bucket) entityIndex.set(key, bucket = []);
+                bucket.push(entity);
+            }
+        }
+        indexedEntityCount = entities.length;
+        entityIndexDirty = false;
+    }
+
+    function ensureEntityIndex() {
+        const entities = window.entities || [];
+        if (entityIndexDirty || indexedEntityCount !== entities.length) rebuildEntityIndex();
+        return entityIndex;
+    }
+    window.rebuildEntitySpatialIndex = rebuildEntityIndex;
+    window.getEntitiesAtHexFast = (q, r) => ensureEntityIndex().get(`${q},${r}`) || [];
+
+    // Classic-script global function declarations are reflected on window,
+    // so replacing the property also upgrades existing gameEngine/hexMap call
+    // sites without having to rewrite every caller.
+    if (window.getEntityAtHex && !window.getEntityAtHex.__spatialIndexed) {
+        const fastGetEntityAtHex = function(q, r) {
+            const bucket = ensureEntityIndex().get(`${q},${r}`);
+            if (!bucket) return undefined;
+            for (const e of bucket) if (e.alive) return e;
+            return undefined;
+        };
+        fastGetEntityAtHex.__spatialIndexed = true;
+        window.getEntityAtHex = fastGetEntityAtHex;
+    }
+
+    // Coalesce redraw requests onto requestAnimationFrame. On iOS, touchmove
+    // and pinch events can arrive multiple times between display refreshes;
+    // rendering every intermediate state burns CPU for frames the user never
+    // sees. A drawMap request dominates a renderEntities-only request because
+    // drawMap already invokes renderEntities internally.
+    if (window.drawMap && window.renderEntities && !window.__renderCoalescerInstalled) {
+        const originalDrawMap = window.drawMap;
+        const originalRenderEntities = window.renderEntities;
+        let rafPending = false;
+        let wantsMap = false;
+        let wantsEntities = false;
+        const stats = window.performanceRenderStats = {
+            requests: 0,
+            frames: 0,
+            coalesced: 0,
+            lastFrameMs: 0,
+            avgFrameMs: 0
+        };
+
+        function flushRender() {
+            rafPending = false;
+            const doMap = wantsMap;
+            const doEntities = wantsEntities;
+            wantsMap = false;
+            wantsEntities = false;
+            const t0 = performance.now();
+            const zoom = window.cameraZoom || 1;
+            const savedFoliageDetail = window.foliageDetail;
+            const savedFloatingTexts = window.renderFloatingTexts;
+            const savedProjectiles = window.renderProjectiles;
+
+            // Zoom LOD: below 0.55x seasonal foliage recolouring is invisible
+            // at phone scale; below 0.35x floating text/projectiles are too
+            // small to read. Core terrain and all entities are still drawn.
+            if (zoom < 0.55) window.foliageDetail = 'simple';
+            if (zoom < 0.35) {
+                window.renderFloatingTexts = null;
+                window.renderProjectiles = null;
+            }
+
+            // originalDrawMap calls window.renderEntities; temporarily expose
+            // the original renderer so that one real frame stays internally
+            // consistent rather than scheduling a second RAF from inside it.
+            window.renderEntities = originalRenderEntities;
+            try {
+                if (doMap) originalDrawMap();
+                else if (doEntities) originalRenderEntities();
+            } finally {
+                window.renderEntities = queuedRenderEntities;
+                window.foliageDetail = savedFoliageDetail;
+                window.renderFloatingTexts = savedFloatingTexts;
+                window.renderProjectiles = savedProjectiles;
+            }
+
+            const dt = performance.now() - t0;
+            stats.frames++;
+            stats.lastFrameMs = dt;
+            stats.avgFrameMs += (dt - stats.avgFrameMs) / Math.min(stats.frames, 120);
+            rebuildEntityIndex(); // fresh for game logic/rendering after movement this frame
+        }
+
+        function queue() {
+            stats.requests++;
+            if (rafPending) {
+                stats.coalesced++;
+                return;
+            }
+            rafPending = true;
+            requestAnimationFrame(flushRender);
+        }
+        function queuedDrawMap() { wantsMap = true; queue(); }
+        function queuedRenderEntities() { wantsEntities = true; queue(); }
+
+        window.drawMap = queuedDrawMap;
+        window.renderEntities = queuedRenderEntities;
+        window.requestGameRender = queuedDrawMap;
+        window.__renderCoalescerInstalled = true;
+    }
+
+    // Optional diagnostic overlay. Enable from console with
+    // setPerformanceOverlay(true), or add ?perf=1 to the URL.
+    let perfOverlay = null;
+    function setPerformanceOverlay(enabled) {
+        if (!enabled) {
+            if (perfOverlay) perfOverlay.remove();
+            perfOverlay = null;
+            return;
+        }
+        if (!perfOverlay) {
+            perfOverlay = document.createElement('div');
+            perfOverlay.style.cssText = 'position:fixed;right:6px;bottom:6px;z-index:99999;background:rgba(0,0,0,.72);color:#9ef;font:11px monospace;padding:6px;border-radius:4px;pointer-events:none;white-space:pre;';
+            document.body.appendChild(perfOverlay);
+        }
+        const update = () => {
+            if (!perfOverlay) return;
+            const s = window.performanceRenderStats || {};
+            perfOverlay.textContent = `entities ${(window.entities || []).length}\nzoom ${(window.cameraZoom || 1).toFixed(2)}\nframe ${(s.lastFrameMs || 0).toFixed(1)} ms\navg ${(s.avgFrameMs || 0).toFixed(1)} ms\ncoalesced ${s.coalesced || 0}`;
+            requestAnimationFrame(update);
+        };
+        requestAnimationFrame(update);
+    }
+    window.setPerformanceOverlay = setPerformanceOverlay;
+    try {
+        if (new URLSearchParams(location.search).get('perf') === '1') setPerformanceOverlay(true);
+    } catch (_) {}
+});
