@@ -9,15 +9,15 @@ window.audioSettings = {
 };
 
 const tracks = {
-    title: new Audio('audio/Title.wav'),
-    constant: new Audio('audio/Constant.wav'),
+    title: new Audio('audio/Title.m4a'),
+    constant: new Audio('audio/Constant.m4a'),
     lobby: new Audio('audio/Arena lobby.m4a'),
-    preBattle: new Audio('audio/Arena pre battle.wav'),
-    battle: new Audio('audio/Arena battle.wav'),
-    sting: new Audio('audio/Arena battle sting.wav'),
-    teleportSting: new Audio('audio/Arenalobby2arena.wav'),
-    deathSting: new Audio('audio/Arena death sting.wav'),
-    deathTheme: new Audio('audio/Arena death.wav'),
+    preBattle: new Audio('audio/Arena pre battle.m4a'),
+    battle: new Audio('audio/Arena battle.m4a'),
+    sting: new Audio('audio/Arena battle sting.m4a'),
+    teleportSting: new Audio('audio/Arenalobby2arena.m4a'),
+    deathSting: new Audio('audio/Arena death sting.m4a'),
+    deathTheme: new Audio('audio/Arena death.m4a'),
     // ROADMAP E4: a one-shot brass hit on combat start in Campaign 2,
     // layered over musicDirector.js's own combat ramp rather than
     // replacing it (see gameEngine.js's isInCombat transition). Missing
