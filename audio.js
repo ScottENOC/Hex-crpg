@@ -203,6 +203,22 @@ window.stopAllMusic = function(duration = 0.8) {
 // Aliases for compatibility
 window.playArenaMusic = (type, fade) => window.playMusic(type, fade);
 
+// setupArenaLobby() currently fades out all music while rebuilding the lobby
+// but does not explicitly start the lobby theme afterwards. Keep this tiny
+// state guard here so both initial arena-lobby entry and post-fight returns
+// recover the intended music. We only restart once the old fade-out has
+// actually paused the track, avoiding a fight between fade-in/fade-out timers.
+setInterval(() => {
+    const shouldPlayLobby = window.audioEnabled &&
+        window.currentCampaign === '1' &&
+        !window.isInArena &&
+        !window.isInCombat;
+
+    if (shouldPlayLobby && tracks.lobby.paused) {
+        window.playMusic('lobby', 0.8, 0.6);
+    }
+}, 500);
+
 window.playDialogue = function(key) {
     if (!window.audioEnabled) return;
     const audio = new Audio(`audio/dialogue/${key}.wav`);
