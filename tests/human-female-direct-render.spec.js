@@ -20,7 +20,7 @@ test('human female uses neutral shared layout and map-only 0.48 aspect', async (
 });
 
 test('map replacement seeds equipment rig without drawing legacy female body', async ({ page }) => {
-  const facingSource = await (await page.request.get(`${ROOT}/facingSystem.js?v=5`)).text();
+  const facingSource = await (await page.request.get(`${ROOT}/facingSystem.js?v=6`)).text();
   const nameSource = await (await page.request.get(`${ROOT}/name.js`)).text();
 
   expect(facingSource).toContain('const RIG_SEED_CANVAS');
@@ -29,4 +29,15 @@ test('map replacement seeds equipment rig without drawing legacy female body', a
   expect(facingSource).not.toContain('riggedDrawImage(originalImg');
   expect(facingSource).not.toContain('ctx.globalAlpha = 0');
   expect(nameSource).not.toContain('humanFemaleMapPolish.js');
+});
+
+test('legacy full-body female hair is discarded before body detection', async ({ page }) => {
+  const facingSource = await (await page.request.get(`${ROOT}/facingSystem.js?v=6`)).text();
+  const suppression = 'if (img && img === window.gameVisuals?.humanHair) return;';
+  const suppressionIndex = facingSource.indexOf(suppression);
+  const bodyDetectionIndex = facingSource.indexOf('if (args.length === 4)', suppressionIndex);
+
+  expect(suppressionIndex).toBeGreaterThan(-1);
+  expect(bodyDetectionIndex).toBeGreaterThan(suppressionIndex);
+  expect(facingSource).toContain('mistaken for a second human-female body');
 });
