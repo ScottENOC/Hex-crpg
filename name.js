@@ -29,8 +29,8 @@ window.getRandomName = function(race, gender) {
 window.generateName = window.getRandomName;
 
 // Directional character presentation is intentionally split into a map-facing
-// module and a UI bridge. characterRig.js is already bootstrapped by
-// graphicsSettings.js; these two modules wait for their own dependencies.
+// module and UI helpers. characterRig.js is already bootstrapped by
+// graphicsSettings.js; these modules wait for their own dependencies.
 (() => {
     if (!document.querySelector('script[data-facing-system]')) {
         const facing = document.createElement('script');
@@ -46,5 +46,13 @@ window.generateName = window.getRandomName;
         ui.dataset.directionalCharacterUi = 'true';
         ui.async = false;
         document.head.appendChild(ui);
+    }
+
+    if (!document.querySelector('script[data-human-female-map-polish]')) {
+        const polish = document.createElement('script');
+        polish.src = 'humanFemaleMapPolish.js?v=1';
+        polish.dataset.humanFemaleMapPolish = 'true';
+        polish.async = false;
+        document.head.appendChild(polish);
     }
 })();
