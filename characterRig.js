@@ -102,10 +102,8 @@
         const sWL = {x:0,  y:sy}, sWR = {x:iw, y:sy};
         const sBL = {x:0,  y:ih}, sBR = {x:iw, y:ih};
 
-        // Upper strip (shoulder -> waist), two triangles.
         drawTriangle(ctx, nativeDrawImage, img, sTL, sTR, sWR, p.shoulderL, p.shoulderR, p.waistR);
         drawTriangle(ctx, nativeDrawImage, img, sTL, sWR, sWL, p.shoulderL, p.waistR, p.waistL);
-        // Lower strip (waist -> hem), two triangles.
         drawTriangle(ctx, nativeDrawImage, img, sWL, sWR, sBR, p.waistL, p.waistR, p.hemR);
         drawTriangle(ctx, nativeDrawImage, img, sWL, sBR, sBL, p.waistL, p.hemR, p.hemL);
 
@@ -145,13 +143,11 @@
     }
 
     function install() {
-        if (window.__characterRigInstalled || !window.mapCtx) return;
+        if (window.__characterRigInstalled) return true;
+        if (!window.mapCtx || !window.CHAR_CONFIG) return false;
         const ctx = window.mapCtx;
         const nativeDrawImage = ctx.drawImage.bind(ctx);
 
-        // Preserve gold-tinted armour identification. Gold sprites are cached
-        // canvases rather than the original Image objects, so identity against
-        // gameVisuals alone is insufficient after tinting.
         if (window.getGoldTintedSprite && !window.getGoldTintedSprite.__characterRigWrapped) {
             const originalGold = window.getGoldTintedSprite;
             const wrapped = function(img, ...rest) {
@@ -166,8 +162,6 @@
         }
 
         ctx.drawImage = function(img, ...args) {
-            // Only intercept the 5-argument overload used by the existing
-            // armour block: drawImage(img, dx, dy, dw, dh).
             if (args.length === 4 && isArmourImage(img) && (window.cameraZoom || 1) >= 0.55) {
                 const [dx, dy, dw, dh] = args;
                 const key = matchRaceRig(dw, dh);
@@ -180,14 +174,21 @@
             nativeDrawImage(img, ...args);
         };
 
-        // Attach the new mesh data to the existing character config too. This
-        // makes the rig visible to debug tooling and gives future directional
-        // sprites/helmets/weapons one canonical place to query body anchors.
         for (const [key, rig] of Object.entries(ARMOUR_RIGS)) {
             if (window.CHAR_CONFIG?.[key]?.armour) window.CHAR_CONFIG[key].armour.mesh = { ...rig };
         }
 
         window.__characterRigInstalled = true;
+        return true;
+    }
+
+    function scheduleInstall() {
+        if (install()) return;
+        let attempts = 0;
+        const timer = setInterval(() => {
+            attempts++;
+            if (install() || attempts >= 50) clearInterval(timer);
+        }, 100);
     }
 
     window.ARMOUR_RIGS = ARMOUR_RIGS;
@@ -195,6 +196,6 @@
     window.drawWarpedArmour = drawWarpedArmour;
     window.installCharacterRig = install;
 
-    if (document.readyState === 'complete') install();
-    else window.addEventListener('load', install, { once:true });
+    if (document.readyState === 'complete') scheduleInstall();
+    else window.addEventListener('load', scheduleInstall, { once:true });
 })();
