@@ -2,12 +2,9 @@
 // Four-direction facing foundation for humanoid characters.
 //
 // Facing is real entity state (`up`, `down`, `left`, `right`) derived from
-// movement in flat-top axial hex space. The current art is predominantly
-// front-facing, so left/right use a mirrored, slightly compressed profile
-// fallback while up/down retain the existing art until dedicated directional
-// sprites are supplied. Because the transform is applied around the whole
-// character draw stack, the unified attachment rig (weapons, shield, helmet,
-// armour) follows the facing automatically.
+// movement in flat-top axial hex space. Human female now has real directional
+// body + hair assets. Other humanoids retain the legacy transform fallback
+// until their own directional art is added.
 
 (() => {
     'use strict';
@@ -15,6 +12,45 @@
     const VALID_FACINGS = new Set(['up', 'down', 'left', 'right']);
     const previousHex = new WeakMap();
     let installed = false;
+
+    const HUMAN_FEMALE_ASSET_PATHS = {
+        body: {
+            front: 'images/characters/human_female/body_front.png',
+            side: 'images/characters/human_female/body_side.png',
+            back: 'images/characters/human_female/body_back.png',
+        },
+        hair: {
+            brown_1: {
+                front: 'images/characters/human_female/hair_brown_1_front.png',
+                side: 'images/characters/human_female/hair_brown_1_side.png',
+                back: 'images/characters/human_female/hair_brown_1_back.png',
+            },
+        },
+    };
+
+    function loadImage(src) {
+        if (typeof Image === 'undefined') return null;
+        const img = new Image();
+        img.src = src;
+        return img;
+    }
+
+    const HUMAN_FEMALE_ASSETS = {
+        body: Object.fromEntries(Object.entries(HUMAN_FEMALE_ASSET_PATHS.body).map(([k, src]) => [k, loadImage(src)])),
+        hair: {
+            brown_1: Object.fromEntries(Object.entries(HUMAN_FEMALE_ASSET_PATHS.hair.brown_1).map(([k, src]) => [k, loadImage(src)])),
+        },
+    };
+
+    function facingToView(facing) {
+        if (facing === 'up') return 'back';
+        if (facing === 'left' || facing === 'right') return 'side';
+        return 'front';
+    }
+
+    function imageReady(img) {
+        return !!img && img.complete && img.naturalWidth > 0;
+    }
 
     function facingFromHexDelta(dq, dr) {
         if (!dq && !dr) return null;
@@ -107,7 +143,19 @@
         return facing === 'left' || facing === 'right' ? 0.78 : 1;
     }
 
-    function applyFacingTransform(ctx, body, facing, draw) {
+    function withFacingContext(entity, facing, draw) {
+        const prevFacing = window.__activeCharacterFacing;
+        const prevEntity = window.__activeCharacterEntity;
+        window.__activeCharacterFacing = facing;
+        window.__activeCharacterEntity = entity;
+        try { return draw(); }
+        finally {
+            window.__activeCharacterFacing = prevFacing;
+            window.__activeCharacterEntity = prevEntity;
+        }
+    }
+
+    function applyLegacyFacingTransform(ctx, body, facing, draw) {
         if (!body || !VALID_FACINGS.has(facing) || facing === 'down' || facing === 'up') {
             draw();
             return;
@@ -119,6 +167,45 @@
         ctx.scale(sx, 1);
         ctx.translate(-cx, 0);
         try { draw(); } finally { ctx.restore(); }
+    }
+
+    function drawHumanFemaleBody(ctx, riggedDrawImage, active, facing, args) {
+        const [dx, dy, dw, dh] = args;
+        const view = facingToView(facing);
+        const bodyImg = HUMAN_FEMALE_ASSETS.body[view];
+        if (!imageReady(bodyImg)) return false;
+
+        const hairStyle = active.entity.hairStyle || 'brown_1';
+        const hairImg = HUMAN_FEMALE_ASSETS.hair[hairStyle]?.[view];
+        const hasHelmet = !!active.entity.equipped?.helmet;
+        const mirror = facing === 'left';
+        const cx = dx + dw / 2;
+
+        return withFacingContext(active.entity, facing, () => {
+            ctx.save();
+            if (mirror) {
+                ctx.translate(cx, 0);
+                ctx.scale(-1, 1);
+                ctx.translate(-cx, 0);
+            }
+            try {
+                riggedDrawImage(bodyImg, dx, dy, dw, dh);
+                if (!hasHelmet && imageReady(hairImg)) riggedDrawImage(hairImg, dx, dy, dw, dh);
+            } finally {
+                ctx.restore();
+            }
+            return true;
+        });
+    }
+
+    function applyDirectionalLayer(ctx, active, facing, draw) {
+        return withFacingContext(active.entity, facing, () => {
+            // Human female has real directional art and facing-aware anchors;
+            // do not apply the old fake side-profile squash. Left/right body
+            // mirroring happens on the actual body draw above.
+            if (active.key === 'human_female') return draw();
+            return applyLegacyFacingTransform(ctx, active, facing, draw);
+        });
     }
 
     function installRendererFacing() {
@@ -133,12 +220,16 @@
                 const key = detectBodyKey(dw, dh);
                 if (key) {
                     const entity = findEntityForBody(key, dx + dw/2, dy + dh/2, dh);
-                    if (entity) active = { entity, key, left:dx, top:dy, width:dw, height:dh };
+                    if (entity) {
+                        active = { entity, key, left:dx, top:dy, width:dw, height:dh };
+                        const facing = VALID_FACINGS.has(entity.facing) ? entity.facing : 'down';
+                        if (key === 'human_female' && drawHumanFemaleBody(ctx, riggedDrawImage, active, facing, args)) return;
+                    }
                 }
 
                 if (active && isLikelyCharacterLayer(args, active)) {
                     const facing = VALID_FACINGS.has(active.entity.facing) ? active.entity.facing : 'down';
-                    return applyFacingTransform(ctx, active, facing, () => riggedDrawImage(img, ...args));
+                    return applyDirectionalLayer(ctx, active, facing, () => riggedDrawImage(img, ...args));
                 }
             }
             return riggedDrawImage(img, ...args);
@@ -163,6 +254,9 @@
     setInterval(updateFacingFromMovement, 50);
 
     window.FACING_DIRECTIONS = ['up','down','left','right'];
+    window.HUMAN_FEMALE_ASSET_PATHS = HUMAN_FEMALE_ASSET_PATHS;
+    window.HUMAN_FEMALE_DIRECTIONAL_ASSETS = HUMAN_FEMALE_ASSETS;
+    window.facingToSpriteView = facingToView;
     window.facingFromHexDelta = facingFromHexDelta;
     window.setEntityFacing = setEntityFacing;
     window.updateFacingFromMovement = updateFacingFromMovement;
