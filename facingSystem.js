@@ -89,23 +89,6 @@
         return !!img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0;
     }
 
-    function imageSource(img) {
-        return String(img?.currentSrc || img?.src || '');
-    }
-
-    function sourceEndsWith(img, filename) {
-        const src = imageSource(img).split(/[?#]/, 1)[0].toLowerCase();
-        return src.endsWith(`/${filename.toLowerCase()}`) || src === filename.toLowerCase();
-    }
-
-    function isLegacyHumanFemaleBody(img) {
-        return !!img && (img === window.gameVisuals?.humanBase || sourceEndsWith(img, 'humanfemale.png'));
-    }
-
-    function isLegacyHumanFemaleHair(img) {
-        return !!img && (img === window.gameVisuals?.humanHair || sourceEndsWith(img, 'humanfemalehair.png'));
-    }
-
     function facingFromHexDelta(dq, dr) {
         if (!dq && !dr) return null;
         const dx = 1.5 * dq;
@@ -185,6 +168,21 @@
         const padY = body.height * 0.70;
         return cx >= body.left - padX && cx <= body.left + body.width + padX
             && cy >= body.top - padY && cy <= body.top + body.height + padY;
+    }
+
+    function isLegacyFullHairDraw(args, active) {
+        if (!active || active.key !== 'human_female' || active.femaleLayerStage !== 'await_hair' || args.length !== 4) return false;
+        const [dx, dy, dw, dh] = args;
+        const cfg = window.CHAR_CONFIG?.human_female;
+        const hc = cfg?.hair;
+        if (hc?.type !== 'full') return false;
+        const z = window.cameraZoom || 1;
+        const expectedY = active.top + (hc.yRaw || 0) * z;
+        const tolerance = Math.max(0.75, z * 0.75);
+        return Math.abs(dx - active.left) <= tolerance
+            && Math.abs(dy - expectedY) <= tolerance
+            && Math.abs(dw - active.width) <= tolerance
+            && Math.abs(dh - active.height) <= tolerance;
     }
 
     function sideProfileScale(facing) {
@@ -285,33 +283,38 @@
         let active = null;
 
         ctx.drawImage = function(img, ...args) {
-            // Human-female is deliberately asset-identified, not dimension-
-            // identified. The old hair layer has the same full-body dimensions
-            // and a ~3 px Y offset, so treating any matching rectangle as a body
-            // converts body + hair into two complete directional characters.
-            if (isLegacyHumanFemaleHair(img)) return;
-
-            if (args.length === 4 && isLegacyHumanFemaleBody(img)) {
-                const [dx, dy, dw, dh] = args;
-                const entity = findEntityForBody('human_female', dx + dw/2, dy + dh/2, dh);
-                if (entity) {
-                    active = { entity, key:'human_female', left:dx, top:dy, width:dw, height:dh };
-                    const facing = VALID_FACINGS.has(entity.facing) ? entity.facing : 'down';
-                    if (drawHumanFemaleBody(ctx, riggedDrawImage, active, facing, args)) return;
-                }
-                // If the directional asset is not ready yet, preserve the old
-                // body rather than making the character vanish during startup.
-                return riggedDrawImage(img, ...args);
-            }
+            // Raw legacy hair can still appear during startup before recolouring.
+            if (img && img === window.gameVisuals?.humanHair) return;
 
             if (args.length === 4) {
                 const [dx, dy, dw, dh] = args;
                 const key = detectBodyKey(dw, dh);
-                // Human female no longer participates in the dimension-based
-                // body detector. Only the actual legacy base body may establish
-                // a human-female render, preventing other same-sized layers from
-                // becoming a second person.
-                if (key && key !== 'human_female') {
+
+                if (key === 'human_female') {
+                    const entity = findEntityForBody(key, dx + dw/2, dy + dh/2, dh);
+                    if (entity) {
+                        // drawPlayerCharacter recolours both legacy female body
+                        // and full-body hair into canvases before drawing them.
+                        // Object identity therefore cannot distinguish them. The
+                        // renderer does, however, emit that full-hair layer next,
+                        // at CHAR_CONFIG.hair.yRaw (-3px * zoom). Consume that
+                        // one compatibility draw rather than treating it as a
+                        // second body. Later same-sized layers (e.g. armour) are
+                        // left to the equipment rig normally.
+                        if (active?.entity === entity && isLegacyFullHairDraw(args, active)) {
+                            active.femaleLayerStage = 'after_hair';
+                            return;
+                        }
+
+                        if (active?.entity !== entity) {
+                            active = { entity, key, left:dx, top:dy, width:dw, height:dh, femaleLayerStage:'await_hair' };
+                            const facing = VALID_FACINGS.has(entity.facing) ? entity.facing : 'down';
+                            if (drawHumanFemaleBody(ctx, riggedDrawImage, active, facing, args)) return;
+                        }
+                        // Same entity but not the known legacy hair draw: this
+                        // is equipment/another character layer, not a new body.
+                    }
+                } else if (key) {
                     const entity = findEntityForBody(key, dx + dw/2, dy + dh/2, dh);
                     if (entity) {
                         active = { entity, key, left:dx, top:dy, width:dw, height:dh };
