@@ -17,12 +17,32 @@ function isLegacyHair(src) {
     return /\/images\/humanfemalehair\.png(?:[?#]|$)/.test(src);
 }
 
-function isFemaleCharacterAsset(src) {
-    return isDirectionalBody(src) || isDirectionalHair(src) || isLegacyBody(src) || isLegacyHair(src);
+function destinationFromCall(args) {
+    if (args.length === 8) return { x:args[4], y:args[5], w:args[6], h:args[7] };
+    if (args.length === 4) return { x:args[0], y:args[1], w:args[2], h:args[3] };
+    if (args.length === 2) return { x:args[0], y:args[1], w:null, h:null };
+    return null;
+}
+
+function nearDuplicateBodies(bodies) {
+    const duplicates = [];
+    for (let i = 0; i < bodies.length; i += 1) {
+        for (let j = i + 1; j < bodies.length; j += 1) {
+            const a = bodies[i].dest;
+            const b = bodies[j].dest;
+            if (!a || !b || !Number.isFinite(a.w) || !Number.isFinite(a.h) || !Number.isFinite(b.w) || !Number.isFinite(b.h)) continue;
+            const sizeMatch = Math.abs(a.w - b.w) <= Math.max(1, a.w * 0.05)
+                && Math.abs(a.h - b.h) <= Math.max(1, a.h * 0.05);
+            const closeX = Math.abs(a.x - b.x) <= Math.max(3, a.w * 0.20);
+            const closeY = Math.abs(a.y - b.y) <= Math.max(4, a.h * 0.12);
+            if (sizeMatch && closeX && closeY) duplicates.push([bodies[i], bodies[j]]);
+        }
+    }
+    return duplicates;
 }
 
 test.describe('human female tactical-map render path', () => {
-    test('draws one directional body and no legacy body/hair per map frame', async ({ page }) => {
+    test('does not double-draw a directional body and never draws legacy female art', async ({ page }) => {
         // Instrument before app code. Each map clear starts a new observable frame;
         // drawImage calls captured/bound by renderer wrappers still pass through here.
         await page.addInitScript(() => {
@@ -39,11 +59,11 @@ test.describe('human female tactical-map render path', () => {
             CanvasRenderingContext2D.prototype.drawImage = function(image, ...args) {
                 if (this === window.mapCtx) {
                     const src = String(image?.currentSrc || image?.src || '');
-                    window.__tacticalDrawImageCalls.push({
-                        src,
-                        frame: window.__tacticalFrameId,
-                        argCount: args.length + 1,
-                    });
+                    let dest = null;
+                    if (args.length === 8) dest = { x:args[4], y:args[5], w:args[6], h:args[7] };
+                    else if (args.length === 4) dest = { x:args[0], y:args[1], w:args[2], h:args[3] };
+                    else if (args.length === 2) dest = { x:args[0], y:args[1], w:null, h:null };
+                    window.__tacticalDrawImageCalls.push({ src, dest, frame:window.__tacticalFrameId });
                 }
                 return nativeDrawImage.call(this, image, ...args);
             };
@@ -54,38 +74,35 @@ test.describe('human female tactical-map render path', () => {
             const assets = window.HUMAN_FEMALE_DIRECTIONAL_ASSETS;
             return window.__facingRendererInstalled === true
                 && assets?.body?.front?.complete
-                && assets.body.front.naturalWidth > 0
-                && assets?.hair?.brown_1?.front?.complete
-                && assets.hair.brown_1.front.naturalWidth > 0;
+                && assets.body.front.naturalWidth > 0;
         });
 
-        await page.waitForFunction(() => (window.__tacticalDrawImageCalls || []).some(call => {
-            const src = call.src || '';
-            return src.includes('/images/characters/human_female/body_')
-                || /\/images\/humanfemale\.png(?:[?#]|$)/.test(src);
-        }));
+        await page.waitForFunction(() => (window.__tacticalDrawImageCalls || []).some(call =>
+            (call.src || '').includes('/images/characters/human_female/body_')));
 
         const calls = await page.evaluate(() => window.__tacticalDrawImageCalls.slice());
-        const femaleCalls = calls.filter(call => {
-            const src = call.src || '';
-            return src.includes('/images/characters/human_female/body_')
-                || src.includes('/images/characters/human_female/hair_')
-                || /\/images\/humanfemale(?:hair)?\.png(?:[?#]|$)/.test(src);
-        });
-        const latestFrame = Math.max(...femaleCalls.map(call => call.frame));
-        const frameSources = femaleCalls.filter(call => call.frame === latestFrame).map(call => call.src);
+        const directionalBodies = calls.filter(call => isDirectionalBody(call.src || ''));
+        const latestFrame = Math.max(...directionalBodies.map(call => call.frame));
+        const frameCalls = calls.filter(call => call.frame === latestFrame);
+        const bodies = frameCalls.filter(call => isDirectionalBody(call.src || ''));
+        const hair = frameCalls.filter(call => isDirectionalHair(call.src || ''));
+        const legacyBody = frameCalls.filter(call => isLegacyBody(call.src || ''));
+        const legacyHair = frameCalls.filter(call => isLegacyHair(call.src || ''));
+        const duplicates = nearDuplicateBodies(bodies);
 
-        const directionalBodies = frameSources.filter(isDirectionalBody);
-        const directionalHair = frameSources.filter(isDirectionalHair);
-        const legacyBody = frameSources.filter(isLegacyBody);
-        const legacyHair = frameSources.filter(isLegacyHair);
+        console.log('HUMAN_FEMALE_TACTICAL_FRAME', JSON.stringify({
+            latestFrame,
+            bodies,
+            hairCount:hair.length,
+            legacyBodyCount:legacyBody.length,
+            legacyHairCount:legacyHair.length,
+            duplicatePairs:duplicates,
+        }));
 
-        console.log('HUMAN_FEMALE_TACTICAL_FRAME', JSON.stringify({ latestFrame, frameSources }));
-
-        expect(frameSources.some(isFemaleCharacterAsset)).toBe(true);
-        expect(directionalBodies, `frame ${latestFrame} sources: ${JSON.stringify(frameSources)}`).toHaveLength(1);
-        expect(directionalHair, `frame ${latestFrame} sources: ${JSON.stringify(frameSources)}`).toHaveLength(1);
-        expect(legacyBody, `frame ${latestFrame} sources: ${JSON.stringify(frameSources)}`).toHaveLength(0);
-        expect(legacyHair, `frame ${latestFrame} sources: ${JSON.stringify(frameSources)}`).toHaveLength(0);
+        expect(bodies.length).toBeGreaterThan(0);
+        expect(hair.length).toBe(bodies.length);
+        expect(legacyBody).toHaveLength(0);
+        expect(legacyHair).toHaveLength(0);
+        expect(duplicates, `near-duplicate body rectangles in frame ${latestFrame}: ${JSON.stringify(duplicates)}`).toHaveLength(0);
     });
 });
