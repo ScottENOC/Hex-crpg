@@ -11,8 +11,8 @@ function isDirectionalHair(src) {
 
 test.describe('human female tactical-map render path', () => {
     test('draws one directional body and no legacy body/hair in a fresh browser', async ({ page }) => {
-        // Install before app code so even drawImage functions captured/bound by
-        // renderer wrappers remain observable here.
+        // Instrument the canvas prototype before any app code loads so drawImage
+        // functions captured/bound by renderer wrappers remain observable here.
         await page.addInitScript(() => {
             const nativeDrawImage = CanvasRenderingContext2D.prototype.drawImage;
             window.__tacticalDrawImageCalls = [];
