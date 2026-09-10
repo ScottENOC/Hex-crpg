@@ -29,10 +29,6 @@
         },
     };
 
-    // The generated source PNGs deliberately have transparent padding. These
-    // normalized crop boxes isolate the visible asset while leaving the files
-    // themselves untouched in GitHub. The layout itself stays neutral/shared;
-    // each rendering surface chooses its own outer bounds.
     const HUMAN_FEMALE_LAYOUT = {
         front: {
             bodyCrop: { x:0.350, y:0.088, w:0.297, h:0.823 },
@@ -68,9 +64,6 @@
         },
     };
 
-    // Compatibility bridge for the current equipment rig. It establishes the
-    // rig's body bounds without ever drawing the obsolete human-female art.
-    // This can disappear once characterRig exposes an explicit render context.
     const RIG_SEED_CANVAS = (() => {
         if (typeof document === 'undefined') return null;
         const canvas = document.createElement('canvas');
@@ -227,6 +220,63 @@
         nativeDraw(img, sx, sy, sw, sh, dx, dy, dw, dh);
     }
 
+    function weaponSpec(id) {
+        const g = window.gameVisuals;
+        if (!id || !g || window.items?.[id]?.type !== 'weapon') return null;
+        if (id === 'sword' || id === 'sword_arrow_deflection') return { img:g.swordIcon, kind:'sword', scale:1 };
+        if (id === 'axe') return { img:g.axe, kind:'axe', scale:1 };
+        if (id === 'spear') return { img:g.spear, kind:'spear', scale:1 };
+        if (id === 'club') return { img:g.club, kind:'club', scale:1 };
+        if (id === 'bow') return { img:g.bow, kind:'bow', scale:1 };
+        if (id === 'dagger') return { img:g.swordIcon, kind:'sword', scale:0.75 };
+        return null;
+    }
+
+    function sideWeaponAnchor(active, facing, hand) {
+        const cfgPoint = hand === 'mainHand' ? { x:0.62, y:0.62 } : { x:0.42, y:0.58 };
+        const x = facing === 'left' ? 1 - cfgPoint.x : cfgPoint.x;
+        return {
+            x: active.left + x * active.width,
+            y: active.top + cfgPoint.y * active.height,
+        };
+    }
+
+    function drawSideWeapon(ctx, active, facing, hand) {
+        const id = hand === 'mainHand' ? active.entity.equipped?.weapon : active.entity.equipped?.offhand;
+        const spec = weaponSpec(id);
+        if (!spec?.img?.complete) return false;
+        const hs = window.hexSize || 1;
+        const z = window.cameraZoom || 1;
+        const basePixel = hs * z;
+        const size = window.computeRigidGearSize
+            ? window.computeRigidGearSize(active.key, basePixel, spec.scale)
+            : basePixel * spec.scale;
+        const grip = window.ITEM_GRIPS?.[spec.kind] || { x:0.5, y:0.5 };
+        const anchor = sideWeaponAnchor(active, facing, hand);
+        const x = anchor.x - grip.x * size;
+        const y = anchor.y - grip.y * size;
+        const rawDraw = CanvasRenderingContext2D.prototype.drawImage;
+        ctx.save();
+        try {
+            if (facing === 'left') {
+                ctx.translate(x + size, y);
+                ctx.scale(-1, 1);
+                rawDraw.call(ctx, spec.img, 0, 0, size, size);
+            } else {
+                rawDraw.call(ctx, spec.img, x, y, size, size);
+            }
+        } finally {
+            ctx.restore();
+        }
+        return true;
+    }
+
+    function farHandForFacing(facing) {
+        if (facing === 'right') return 'offHand';
+        if (facing === 'left') return 'mainHand';
+        return null;
+    }
+
     function drawHumanFemaleBody(ctx, riggedDrawImage, active, facing, args) {
         const [dx, dy, dw, dh] = args;
         const view = facingToView(facing);
@@ -250,6 +300,12 @@
 
         return withFacingContext(active.entity, facing, () => {
             if (RIG_SEED_CANVAS) riggedDrawImage(RIG_SEED_CANVAS, dx, dy, dw, dh);
+
+            // On side views the far-side hand must genuinely sit behind the
+            // character. gameEngine emits weapons after the body, so pre-draw
+            // that one hand now and suppress its later legacy draw.
+            const farHand = farHandForFacing(facing);
+            if (farHand) drawSideWeapon(ctx, active, facing, farHand);
 
             ctx.save();
             if (mirror) {
@@ -276,6 +332,11 @@
         });
     }
 
+    function weaponImage(img) {
+        const g = window.gameVisuals;
+        return !!g && (img === g.swordIcon || img === g.axe || img === g.spear || img === g.club || img === g.bow);
+    }
+
     function installRendererFacing() {
         if (installed || !window.mapCtx || !window.CHAR_CONFIG || !window.__characterRigInstalled) return false;
         const ctx = window.mapCtx;
@@ -283,18 +344,26 @@
         const riggedClearRect = ctx.clearRect.bind(ctx);
         let active = null;
 
-        // `active` describes the character currently being layered during one
-        // tactical-map frame. Keeping it across frames caused the first female
-        // body draw of the next frame to be mistaken for equipment on the same
-        // entity, allowing the obsolete sprite to overwrite directional art.
         ctx.clearRect = function(...args) {
             active = null;
             return riggedClearRect(...args);
         };
 
         ctx.drawImage = function(img, ...args) {
-            // Raw legacy hair can still appear during startup before recolouring.
             if (img && img === window.gameVisuals?.humanHair) return;
+
+            // Human-female side-facing weapons are handled here instead of by
+            // the legacy rig pass so their anchors, mirroring and depth order
+            // are tied directly to facing.
+            if (active?.key === 'human_female' && args.length === 4 && weaponImage(img)) {
+                const facing = VALID_FACINGS.has(active.entity.facing) ? active.entity.facing : 'down';
+                if (facing === 'left' || facing === 'right') {
+                    const hand = active.weaponDrawCount++ === 0 ? 'mainHand' : 'offHand';
+                    if (hand === farHandForFacing(facing)) return;
+                    drawSideWeapon(ctx, active, facing, hand);
+                    return;
+                }
+            }
 
             if (args.length === 4) {
                 const [dx, dy, dw, dh] = args;
@@ -303,32 +372,20 @@
                 if (key === 'human_female') {
                     const entity = findEntityForBody(key, dx + dw/2, dy + dh/2, dh);
                     if (entity) {
-                        // drawPlayerCharacter recolours both legacy female body
-                        // and full-body hair into canvases before drawing them.
-                        // Object identity therefore cannot distinguish them. The
-                        // renderer does, however, emit that full-hair layer next,
-                        // at CHAR_CONFIG.hair.yRaw (-3px * zoom). Consume that
-                        // one compatibility draw rather than treating it as a
-                        // second body. Later same-sized layers (e.g. armour) are
-                        // left to the equipment rig normally.
                         if (active?.entity === entity && isLegacyFullHairDraw(args, active)) {
                             active.femaleLayerStage = 'after_hair';
                             return;
                         }
 
                         if (active?.entity !== entity) {
-                            active = { entity, key, left:dx, top:dy, width:dw, height:dh, femaleLayerStage:'await_hair' };
+                            active = { entity, key, left:dx, top:dy, width:dw, height:dh, femaleLayerStage:'await_hair', weaponDrawCount:0 };
                             const facing = VALID_FACINGS.has(entity.facing) ? entity.facing : 'down';
                             if (drawHumanFemaleBody(ctx, riggedDrawImage, active, facing, args)) return;
                         }
-                        // Same entity but not the known legacy hair draw: this
-                        // is equipment/another character layer, not a new body.
                     }
                 } else if (key) {
                     const entity = findEntityForBody(key, dx + dw/2, dy + dh/2, dh);
-                    if (entity) {
-                        active = { entity, key, left:dx, top:dy, width:dw, height:dh };
-                    }
+                    if (entity) active = { entity, key, left:dx, top:dy, width:dw, height:dh };
                 }
 
                 if (active && isLikelyCharacterLayer(args, active)) {
