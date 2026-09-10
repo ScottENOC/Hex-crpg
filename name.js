@@ -28,13 +28,30 @@ window.getRandomName = function(race, gender) {
 
 window.generateName = window.getRandomName;
 
+// Build token for dynamically loaded presentation modules. Changing this value
+// gives every deployment a new URL, avoiding stale Safari/GitHub Pages script
+// cache entries without having to maintain separate per-file version numbers.
+const PRESENTATION_BUILD = '20260910-1015-a70c263';
+const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
+window.PRESENTATION_BUILD = PRESENTATION_BUILD;
+
+// Install a lightweight network-first service worker. updateViaCache:'none'
+// ensures the browser checks the worker script itself rather than trusting an
+// old HTTP cache entry. Once controlling the page, the worker revalidates
+// HTML/JS/CSS from the network on every request.
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register(`sw.js?build=${encodeURIComponent(PRESENTATION_BUILD)}`, {
+        updateViaCache: 'none'
+    }).catch(err => console.warn('Service worker registration failed:', err));
+}
+
 // Directional character presentation is intentionally split into a map-facing
 // module and UI helpers. characterRig.js is already bootstrapped by
 // graphicsSettings.js; these modules wait for their own dependencies.
 (() => {
     if (!document.querySelector('script[data-facing-system]')) {
         const facing = document.createElement('script');
-        facing.src = 'facingSystem.js?v=6';
+        facing.src = freshScriptUrl('facingSystem.js');
         facing.dataset.facingSystem = 'true';
         facing.async = false;
         document.head.appendChild(facing);
@@ -42,7 +59,7 @@ window.generateName = window.getRandomName;
 
     if (!document.querySelector('script[data-directional-character-ui]')) {
         const ui = document.createElement('script');
-        ui.src = 'directionalCharacterUI.js?v=2';
+        ui.src = freshScriptUrl('directionalCharacterUI.js');
         ui.dataset.directionalCharacterUi = 'true';
         ui.async = false;
         document.head.appendChild(ui);
