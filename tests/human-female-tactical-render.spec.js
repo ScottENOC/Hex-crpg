@@ -17,13 +17,6 @@ function isLegacyHair(src) {
     return /\/images\/humanfemalehair\.png(?:[?#]|$)/.test(src);
 }
 
-function destinationFromCall(args) {
-    if (args.length === 8) return { x:args[4], y:args[5], w:args[6], h:args[7] };
-    if (args.length === 4) return { x:args[0], y:args[1], w:args[2], h:args[3] };
-    if (args.length === 2) return { x:args[0], y:args[1], w:null, h:null };
-    return null;
-}
-
 function nearDuplicateBodies(bodies) {
     const duplicates = [];
     for (let i = 0; i < bodies.length; i += 1) {
@@ -43,8 +36,8 @@ function nearDuplicateBodies(bodies) {
 
 test.describe('human female tactical-map render path', () => {
     test('does not double-draw a directional body and never draws legacy female art', async ({ page }) => {
-        // Instrument before app code. Each map clear starts a new observable frame;
-        // drawImage calls captured/bound by renderer wrappers still pass through here.
+        // Instrument before app code so all final canvas draws remain observable,
+        // including drawImage functions captured/bound by renderer wrappers.
         await page.addInitScript(() => {
             const nativeDrawImage = CanvasRenderingContext2D.prototype.drawImage;
             const nativeClearRect = CanvasRenderingContext2D.prototype.clearRect;
@@ -77,19 +70,43 @@ test.describe('human female tactical-map render path', () => {
                 && assets.body.front.naturalWidth > 0;
         });
 
+        // Observe the inputs to the fully-installed map drawImage chain as well
+        // as the final prototype draws. This pinpoints which legacy layer, if any,
+        // is causing a second directional replacement and records its call site.
+        await page.evaluate(() => {
+            const ctx = window.mapCtx;
+            const downstream = ctx.drawImage.bind(ctx);
+            window.__outerMapDraws = [];
+            ctx.drawImage = function(image, ...args) {
+                const src = String(image?.currentSrc || image?.src || '');
+                let dest = null;
+                if (args.length === 8) dest = { x:args[4], y:args[5], w:args[6], h:args[7] };
+                else if (args.length === 4) dest = { x:args[0], y:args[1], w:args[2], h:args[3] };
+                if (/humanfemale(?:hair)?\.png(?:[?#]|$)/.test(src)) {
+                    window.__outerMapDraws.push({ src, dest, stack:new Error('legacy female draw').stack });
+                }
+                return downstream(image, ...args);
+            };
+            window.__tacticalDrawImageCalls.length = 0;
+        });
+
         await page.waitForFunction(() => (window.__tacticalDrawImageCalls || []).some(call =>
             (call.src || '').includes('/images/characters/human_female/body_')));
 
-        const calls = await page.evaluate(() => window.__tacticalDrawImageCalls.slice());
-        const directionalBodies = calls.filter(call => isDirectionalBody(call.src || ''));
+        const observed = await page.evaluate(() => ({
+            calls: window.__tacticalDrawImageCalls.slice(),
+            outer: window.__outerMapDraws.slice(),
+        }));
+        const directionalBodies = observed.calls.filter(call => isDirectionalBody(call.src || ''));
         const latestFrame = Math.max(...directionalBodies.map(call => call.frame));
-        const frameCalls = calls.filter(call => call.frame === latestFrame);
+        const frameCalls = observed.calls.filter(call => call.frame === latestFrame);
         const bodies = frameCalls.filter(call => isDirectionalBody(call.src || ''));
         const hair = frameCalls.filter(call => isDirectionalHair(call.src || ''));
         const legacyBody = frameCalls.filter(call => isLegacyBody(call.src || ''));
         const legacyHair = frameCalls.filter(call => isLegacyHair(call.src || ''));
         const duplicates = nearDuplicateBodies(bodies);
 
+        console.log('HUMAN_FEMALE_RENDER_INPUTS', JSON.stringify(observed.outer));
         console.log('HUMAN_FEMALE_TACTICAL_FRAME', JSON.stringify({
             latestFrame,
             bodies,
