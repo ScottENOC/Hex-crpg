@@ -1,0 +1,20 @@
+name: Side Weapon Render Diagnostic
+
+on:
+  push:
+    branches:
+      - fix/directional-weapon-layering
+
+jobs:
+  side-weapons:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test tests/human-female-side-weapons.spec.js tests/human-female-tactical-render.spec.js --reporter=line
