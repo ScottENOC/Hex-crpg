@@ -1,0 +1,23 @@
+name: Human Female Tactical Render Diagnostic
+
+on:
+  push:
+    branches:
+      - fix/human-female-explicit-render-context
+
+jobs:
+  tactical-render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run tactical render regression
+        run: npx playwright test tests/human-female-tactical-render.spec.js --reporter=line

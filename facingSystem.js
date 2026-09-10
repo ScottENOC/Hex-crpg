@@ -68,10 +68,9 @@
         },
     };
 
-    // A transparent, in-memory draw target used only to initialise the existing
-    // equipment rig's body context. Crucially this is NOT the obsolete human
-    // female sprite, so the legacy body artwork is no longer part of the map
-    // rendering path at all.
+    // Compatibility bridge for the current equipment rig. It establishes the
+    // rig's body bounds without ever drawing the obsolete human-female art.
+    // This can disappear once characterRig exposes an explicit render context.
     const RIG_SEED_CANVAS = (() => {
         if (typeof document === 'undefined') return null;
         const canvas = document.createElement('canvas');
@@ -169,6 +168,21 @@
         const padY = body.height * 0.70;
         return cx >= body.left - padX && cx <= body.left + body.width + padX
             && cy >= body.top - padY && cy <= body.top + body.height + padY;
+    }
+
+    function isLegacyFullHairDraw(args, active) {
+        if (!active || active.key !== 'human_female' || active.femaleLayerStage !== 'await_hair' || args.length !== 4) return false;
+        const [dx, dy, dw, dh] = args;
+        const cfg = window.CHAR_CONFIG?.human_female;
+        const hc = cfg?.hair;
+        if (hc?.type !== 'full') return false;
+        const z = window.cameraZoom || 1;
+        const expectedY = active.top + (hc.yRaw || 0) * z;
+        const tolerance = Math.max(0.75, z * 0.75);
+        return Math.abs(dx - active.left) <= tolerance
+            && Math.abs(dy - expectedY) <= tolerance
+            && Math.abs(dw - active.width) <= tolerance
+            && Math.abs(dh - active.height) <= tolerance;
     }
 
     function sideProfileScale(facing) {
@@ -269,23 +283,41 @@
         let active = null;
 
         ctx.drawImage = function(img, ...args) {
-            // The legacy human-female hair sprite is a full-body-sized overlay
-            // drawn ~3px above the body. Its dimensions are therefore a perfect
-            // match for detectBodyKey(), which previously caused it to be
-            // mistaken for a second human-female body and replaced with a
-            // second copy of the new directional person. Discard it here,
-            // before body detection, so only the new directional hair renders.
+            // Raw legacy hair can still appear during startup before recolouring.
             if (img && img === window.gameVisuals?.humanHair) return;
 
             if (args.length === 4) {
                 const [dx, dy, dw, dh] = args;
                 const key = detectBodyKey(dw, dh);
-                if (key) {
+
+                if (key === 'human_female') {
+                    const entity = findEntityForBody(key, dx + dw/2, dy + dh/2, dh);
+                    if (entity) {
+                        // drawPlayerCharacter recolours both legacy female body
+                        // and full-body hair into canvases before drawing them.
+                        // Object identity therefore cannot distinguish them. The
+                        // renderer does, however, emit that full-hair layer next,
+                        // at CHAR_CONFIG.hair.yRaw (-3px * zoom). Consume that
+                        // one compatibility draw rather than treating it as a
+                        // second body. Later same-sized layers (e.g. armour) are
+                        // left to the equipment rig normally.
+                        if (active?.entity === entity && isLegacyFullHairDraw(args, active)) {
+                            active.femaleLayerStage = 'after_hair';
+                            return;
+                        }
+
+                        if (active?.entity !== entity) {
+                            active = { entity, key, left:dx, top:dy, width:dw, height:dh, femaleLayerStage:'await_hair' };
+                            const facing = VALID_FACINGS.has(entity.facing) ? entity.facing : 'down';
+                            if (drawHumanFemaleBody(ctx, riggedDrawImage, active, facing, args)) return;
+                        }
+                        // Same entity but not the known legacy hair draw: this
+                        // is equipment/another character layer, not a new body.
+                    }
+                } else if (key) {
                     const entity = findEntityForBody(key, dx + dw/2, dy + dh/2, dh);
                     if (entity) {
                         active = { entity, key, left:dx, top:dy, width:dw, height:dh };
-                        const facing = VALID_FACINGS.has(entity.facing) ? entity.facing : 'down';
-                        if (key === 'human_female' && drawHumanFemaleBody(ctx, riggedDrawImage, active, facing, args)) return;
                     }
                 }
 
