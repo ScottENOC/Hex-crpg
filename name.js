@@ -31,7 +31,7 @@ window.generateName = window.getRandomName;
 // Build token for dynamically loaded presentation modules. Changing this value
 // gives every deployment a new URL, avoiding stale Safari/GitHub Pages script
 // cache entries without having to maintain separate per-file version numbers.
-const PRESENTATION_BUILD = '20260910-1015-a70c263';
+const PRESENTATION_BUILD = '20260910-1923-sidehair';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
 
@@ -55,6 +55,14 @@ if ('serviceWorker' in navigator) {
         facing.dataset.facingSystem = 'true';
         facing.async = false;
         document.head.appendChild(facing);
+    }
+
+    if (!document.querySelector('script[data-directional-hair-tuning]')) {
+        const tuning = document.createElement('script');
+        tuning.src = freshScriptUrl('directionalHairTuning.js');
+        tuning.dataset.directionalHairTuning = 'true';
+        tuning.async = false;
+        document.head.appendChild(tuning);
     }
 
     if (!document.querySelector('script[data-directional-character-ui]')) {
