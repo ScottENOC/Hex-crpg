@@ -280,7 +280,17 @@
         if (installed || !window.mapCtx || !window.CHAR_CONFIG || !window.__characterRigInstalled) return false;
         const ctx = window.mapCtx;
         const riggedDrawImage = ctx.drawImage.bind(ctx);
+        const riggedClearRect = ctx.clearRect.bind(ctx);
         let active = null;
+
+        // `active` describes the character currently being layered during one
+        // tactical-map frame. Keeping it across frames caused the first female
+        // body draw of the next frame to be mistaken for equipment on the same
+        // entity, allowing the obsolete sprite to overwrite directional art.
+        ctx.clearRect = function(...args) {
+            active = null;
+            return riggedClearRect(...args);
+        };
 
         ctx.drawImage = function(img, ...args) {
             // Raw legacy hair can still appear during startup before recolouring.
