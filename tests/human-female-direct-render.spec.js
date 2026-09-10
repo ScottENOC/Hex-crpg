@@ -37,7 +37,10 @@ test('legacy full-body female hair is discarded before body detection', async ({
   const suppressionIndex = facingSource.indexOf(suppression);
   const bodyDetectionIndex = facingSource.indexOf('if (args.length === 4)', suppressionIndex);
 
+  // This is intentionally a source-order contract: the obsolete full-body
+  // hair sprite must be rejected before a same-size image can enter body
+  // detection and be interpreted as another directional character. Do not
+  // couple the regression test to explanatory comment wording.
   expect(suppressionIndex).toBeGreaterThan(-1);
   expect(bodyDetectionIndex).toBeGreaterThan(suppressionIndex);
-  expect(facingSource).toContain('mistaken for a second human-female body');
 });
