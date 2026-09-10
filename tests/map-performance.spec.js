@@ -30,7 +30,21 @@ test.describe('map rendering performance at extreme zoom', () => {
     });
 
     test('drawMap + renderEntities stays fast even zoomed all the way out across a heavily-explored world', async ({ page }) => {
-        const ms = await page.evaluate(() => {
+        const ms = await page.evaluate(async () => {
+            // drawMap is requestAnimationFrame-coalesced by graphicsSettings.js.
+            // Measure the real inner render cost recorded by that coalescer,
+            // rather than the near-zero cost of merely queueing a frame.
+            const drawAndMeasure = () => new Promise(resolve => {
+                const before = window.performanceRenderStats?.frames || 0;
+                window.drawMap();
+                const wait = () => {
+                    const stats = window.performanceRenderStats;
+                    if (stats && stats.frames > before) return resolve(stats.lastFrameMs);
+                    requestAnimationFrame(wait);
+                };
+                requestAnimationFrame(wait);
+            });
+
             // Simulate a large amount of prior exploration (the worst case
             // for hex count, since drawMap renders explored-but-not-visible
             // hexes too, not just what's immediately in sight).
@@ -40,12 +54,8 @@ test.describe('map rendering performance at extreme zoom', () => {
                 }
             }
             window.cameraZoom = 0.15;
-            window.drawMap(); // warm the tile cache
-            window.renderEntities();
-            const t0 = performance.now();
-            window.drawMap();
-            window.renderEntities();
-            return performance.now() - t0;
+            await drawAndMeasure(); // warm the tile/terrain caches
+            return await drawAndMeasure();
         });
         // Comfortably fast (was ~190ms/5fps at the old 0.05 floor with this
         // much explored terrain); generous margin for CI variance.
@@ -53,23 +63,30 @@ test.describe('map rendering performance at extreme zoom', () => {
     });
 
     test('the hex tile cache makes a second draw at the same zoom meaningfully cheaper than the first', async ({ page }) => {
-        const result = await page.evaluate(() => {
+        const result = await page.evaluate(async () => {
+            const drawAndMeasure = () => new Promise(resolve => {
+                const before = window.performanceRenderStats?.frames || 0;
+                window.drawMap();
+                const wait = () => {
+                    const stats = window.performanceRenderStats;
+                    if (stats && stats.frames > before) return resolve(stats.lastFrameMs);
+                    requestAnimationFrame(wait);
+                };
+                requestAnimationFrame(wait);
+            });
+
             for (let q = -400; q <= 400; q += 3) {
                 for (let r = -400; r <= 400; r += 3) {
                     window.exploredHexes.add(`${q},${r}`);
                 }
             }
             window.cameraZoom = 0.15;
-            const t0 = performance.now();
-            window.drawMap();
-            const firstMs = performance.now() - t0;
-
-            const t1 = performance.now();
-            window.drawMap();
-            const secondMs = performance.now() - t1;
-
+            if (window.invalidateTerrainBuffer) window.invalidateTerrainBuffer();
+            const firstMs = await drawAndMeasure();
+            const secondMs = await drawAndMeasure();
             return { firstMs, secondMs };
         });
+        expect(result.firstMs).toBeGreaterThan(0);
         expect(result.secondMs).toBeLessThan(result.firstMs);
     });
 
@@ -125,25 +142,34 @@ test.describe('map rendering performance at extreme zoom', () => {
     // still" — a small in-buffer pan should cost meaningfully less than the
     // first draw that had to build the buffer from scratch.
     test('small camera pans within the terrain buffer slack are cheaper than the draw that built it', async ({ page }) => {
-        const result = await page.evaluate(() => {
+        const result = await page.evaluate(async () => {
+            const drawAndMeasure = () => new Promise(resolve => {
+                const before = window.performanceRenderStats?.frames || 0;
+                window.drawMap();
+                const wait = () => {
+                    const stats = window.performanceRenderStats;
+                    if (stats && stats.frames > before) return resolve(stats.lastFrameMs);
+                    requestAnimationFrame(wait);
+                };
+                requestAnimationFrame(wait);
+            });
+
             for (let q = -200; q <= 200; q += 2) {
                 for (let r = -200; r <= 200; r += 2) {
                     window.exploredHexes.add(`${q},${r}`);
                 }
             }
             window.cameraZoom = 1.0;
-            const t0 = performance.now();
-            window.drawMap(); // builds the terrain buffer from scratch
-            const firstMs = performance.now() - t0;
+            if (window.invalidateTerrainBuffer) window.invalidateTerrainBuffer();
+            const firstMs = await drawAndMeasure(); // builds the terrain buffer from scratch
 
             window.cameraX += 5; // small pan, well within the buffer's slack margin
             window.cameraY += 5;
-            const t1 = performance.now();
-            window.drawMap(); // should just blit the existing buffer
-            const secondMs = performance.now() - t1;
+            const secondMs = await drawAndMeasure(); // should just blit the existing buffer
 
             return { firstMs, secondMs };
         });
+        expect(result.firstMs).toBeGreaterThan(0);
         expect(result.secondMs).toBeLessThan(result.firstMs);
     });
 
