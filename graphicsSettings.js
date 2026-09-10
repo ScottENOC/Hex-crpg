@@ -106,6 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let entityIndex = new Map();
     let entityIndexDirty = true;
     let indexedEntityCount = -1;
+    let indexedEntitiesRef = null;
     const wrappedEntities = new WeakSet();
 
     function markEntityIndexDirty() { entityIndexDirty = true; }
@@ -138,7 +139,7 @@ document.addEventListener('DOMContentLoaded', () => {
             wrappedEntities.add(entity);
         } catch (_) {
             // A non-configurable foreign/network entity can still participate;
-            // it just causes conservative index rebuilds via entity count.
+            // it just causes conservative index rebuilds via entity count/reference.
         }
     }
 
@@ -157,12 +158,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         indexedEntityCount = entities.length;
+        indexedEntitiesRef = entities;
         entityIndexDirty = false;
     }
 
     function ensureEntityIndex() {
         const entities = window.entities || [];
-        if (entityIndexDirty || indexedEntityCount !== entities.length) rebuildEntityIndex();
+        // Length catches ordinary push/pop. Reference catches replacement with
+        // a filtered/copied array of the same length, which otherwise leaves
+        // stale occupants in the spatial index until something moves.
+        if (entityIndexDirty || indexedEntityCount !== entities.length || indexedEntitiesRef !== entities) rebuildEntityIndex();
         return entityIndex;
     }
     window.rebuildEntitySpatialIndex = rebuildEntityIndex;
