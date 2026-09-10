@@ -245,7 +245,9 @@ document.addEventListener('DOMContentLoaded', () => {
             stats.frames++;
             stats.lastFrameMs = dt;
             stats.avgFrameMs += (dt - stats.avgFrameMs) / Math.min(stats.frames, 120);
-            rebuildEntityIndex(); // fresh for game logic/rendering after movement this frame
+            // Entity hex proxies already mark the spatial index dirty when
+            // something actually moves. Rebuild lazily on the next lookup
+            // instead of doing O(entities) index work after every visual frame.
         }
 
         function queue() {
