@@ -68,10 +68,9 @@
         },
     };
 
-    // A transparent, in-memory draw target used only to initialise the existing
-    // equipment rig's body context. Crucially this is NOT the obsolete human
-    // female sprite, so the legacy body artwork is no longer part of the map
-    // rendering path at all.
+    // Compatibility bridge for the current equipment rig. It establishes the
+    // rig's body bounds without ever drawing the obsolete human-female art.
+    // This can disappear once characterRig exposes an explicit render context.
     const RIG_SEED_CANVAS = (() => {
         if (typeof document === 'undefined') return null;
         const canvas = document.createElement('canvas');
@@ -88,6 +87,23 @@
 
     function imageReady(img) {
         return !!img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0;
+    }
+
+    function imageSource(img) {
+        return String(img?.currentSrc || img?.src || '');
+    }
+
+    function sourceEndsWith(img, filename) {
+        const src = imageSource(img).split(/[?#]/, 1)[0].toLowerCase();
+        return src.endsWith(`/${filename.toLowerCase()}`) || src === filename.toLowerCase();
+    }
+
+    function isLegacyHumanFemaleBody(img) {
+        return !!img && (img === window.gameVisuals?.humanBase || sourceEndsWith(img, 'humanfemale.png'));
+    }
+
+    function isLegacyHumanFemaleHair(img) {
+        return !!img && (img === window.gameVisuals?.humanHair || sourceEndsWith(img, 'humanfemalehair.png'));
     }
 
     function facingFromHexDelta(dq, dr) {
@@ -269,23 +285,36 @@
         let active = null;
 
         ctx.drawImage = function(img, ...args) {
-            // The legacy human-female hair sprite is a full-body-sized overlay
-            // drawn ~3px above the body. Its dimensions are therefore a perfect
-            // match for detectBodyKey(), which previously caused it to be
-            // mistaken for a second human-female body and replaced with a
-            // second copy of the new directional person. Discard it here,
-            // before body detection, so only the new directional hair renders.
-            if (img && img === window.gameVisuals?.humanHair) return;
+            // Human-female is deliberately asset-identified, not dimension-
+            // identified. The old hair layer has the same full-body dimensions
+            // and a ~3 px Y offset, so treating any matching rectangle as a body
+            // converts body + hair into two complete directional characters.
+            if (isLegacyHumanFemaleHair(img)) return;
+
+            if (args.length === 4 && isLegacyHumanFemaleBody(img)) {
+                const [dx, dy, dw, dh] = args;
+                const entity = findEntityForBody('human_female', dx + dw/2, dy + dh/2, dh);
+                if (entity) {
+                    active = { entity, key:'human_female', left:dx, top:dy, width:dw, height:dh };
+                    const facing = VALID_FACINGS.has(entity.facing) ? entity.facing : 'down';
+                    if (drawHumanFemaleBody(ctx, riggedDrawImage, active, facing, args)) return;
+                }
+                // If the directional asset is not ready yet, preserve the old
+                // body rather than making the character vanish during startup.
+                return riggedDrawImage(img, ...args);
+            }
 
             if (args.length === 4) {
                 const [dx, dy, dw, dh] = args;
                 const key = detectBodyKey(dw, dh);
-                if (key) {
+                // Human female no longer participates in the dimension-based
+                // body detector. Only the actual legacy base body may establish
+                // a human-female render, preventing other same-sized layers from
+                // becoming a second person.
+                if (key && key !== 'human_female') {
                     const entity = findEntityForBody(key, dx + dw/2, dy + dh/2, dh);
                     if (entity) {
                         active = { entity, key, left:dx, top:dy, width:dw, height:dh };
-                        const facing = VALID_FACINGS.has(entity.facing) ? entity.facing : 'down';
-                        if (key === 'human_female' && drawHumanFemaleBody(ctx, riggedDrawImage, active, facing, args)) return;
                     }
                 }
 
