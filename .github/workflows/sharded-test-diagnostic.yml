@@ -1,0 +1,24 @@
+name: Sharded Test Diagnostic
+
+on:
+  push:
+    branches:
+      - fix/weapon-anchor-tuning
+
+jobs:
+  shard:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test --reporter=line --max-failures=1 --shard=${{ matrix.shard }}/4
