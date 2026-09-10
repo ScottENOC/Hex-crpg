@@ -85,7 +85,7 @@ test.describe('B1: graphics options', () => {
     });
 
     test('foliage detail "simple" skips the seasonal-tint recolor pass', async ({ page }) => {
-        const result = await page.evaluate(() => {
+        const result = await page.evaluate(async () => {
             // Plant a real Forest hex and force the terrain buffer to
             // rebuild over it, counting getRecoloredHairSprite calls (the
             // expensive recolor renderTerrainPass gates on foliageDetail).
@@ -99,15 +99,24 @@ test.describe('B1: graphics options', () => {
             const real = window.getRecoloredHairSprite;
             window.getRecoloredHairSprite = (...a) => { calls++; return real(...a); };
 
+            // drawMap is intentionally requestAnimationFrame-coalesced by the
+            // mobile performance layer, so wait for the queued render to
+            // actually execute before reading the instrumentation counter.
+            const waitForQueuedRender = () => new Promise(resolve =>
+                requestAnimationFrame(() => requestAnimationFrame(resolve))
+            );
+
             window.setFoliageDetail('simple');
             window.invalidateTerrainBuffer();
             window.drawMap();
+            await waitForQueuedRender();
             const simpleCalls = calls;
 
             calls = 0;
             window.setFoliageDetail('full');
             window.invalidateTerrainBuffer();
             window.drawMap();
+            await waitForQueuedRender();
             const fullCalls = calls;
 
             window.getRecoloredHairSprite = real;
