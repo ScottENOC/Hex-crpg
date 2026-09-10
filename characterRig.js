@@ -59,8 +59,20 @@
             side: {
                 headTop:{x:0.50,y:0.03}, headCentre:{x:0.53,y:0.15},
                 shoulderLeft:{x:0.46,y:0.25}, shoulderRight:{x:0.56,y:0.25},
-                back:{x:0.43,y:0.34}, mainHand:{x:0.53,y:0.62},
-                offHand:{x:0.49,y:0.58}, forearm:{x:0.50,y:0.47},
+                back:{x:0.43,y:0.34}, mainHand:{x:0.62,y:0.62},
+                offHand:{x:0.52,y:0.58}, forearm:{x:0.56,y:0.47},
+            },
+            right: {
+                headTop:{x:0.50,y:0.03}, headCentre:{x:0.53,y:0.15},
+                shoulderLeft:{x:0.46,y:0.25}, shoulderRight:{x:0.56,y:0.25},
+                back:{x:0.43,y:0.34}, mainHand:{x:0.62,y:0.62},
+                offHand:{x:0.52,y:0.58}, forearm:{x:0.56,y:0.47},
+            },
+            left: {
+                headTop:{x:0.50,y:0.03}, headCentre:{x:0.47,y:0.15},
+                shoulderLeft:{x:0.44,y:0.25}, shoulderRight:{x:0.54,y:0.25},
+                back:{x:0.57,y:0.34}, mainHand:{x:0.38,y:0.62},
+                offHand:{x:0.48,y:0.58}, forearm:{x:0.44,y:0.47},
             },
             back: {
                 headTop:{x:0.50,y:0.03}, headCentre:{x:0.50,y:0.15},
@@ -166,8 +178,9 @@
         const views = DIRECTIONAL_ATTACHMENT_RIGS[key];
         if (!views || !facing) return null;
         const view = facingToView(facing);
-        const raw = views[view]?.[name];
+        const raw = views[facing]?.[name] || views[view]?.[name];
         if (!raw) return null;
+        if (views[facing]) return raw;
         return facing === 'left' ? { x:1-raw.x, y:raw.y } : raw;
     }
 
@@ -187,6 +200,42 @@
             y: anchor.y - grip.y * size,
             size,
         };
+    }
+
+    function attachmentIsBehindBody(key, anchorName) {
+        if (!DIRECTIONAL_ATTACHMENT_RIGS[key]) return false;
+        const facing = window.__activeCharacterFacing;
+        if (facing === 'right') return anchorName === 'mainHand';
+        if (facing === 'left') return anchorName === 'offHand' || anchorName === 'forearm';
+        return false;
+    }
+
+    function drawRigidAttachment(ctx, nativeDrawImage, img, pos, key, anchorName) {
+        const facing = window.__activeCharacterFacing;
+        const mirror = facing === 'left' && !!DIRECTIONAL_ATTACHMENT_RIGS[key];
+        const behind = attachmentIsBehindBody(key, anchorName) && activeBody;
+        ctx.save();
+        try {
+            if (behind) {
+                const x0 = activeBody.left + activeBody.width * 0.34;
+                const y0 = activeBody.top + activeBody.height * 0.18;
+                const w = activeBody.width * 0.32;
+                const h = activeBody.height * 0.72;
+                ctx.beginPath();
+                ctx.rect(-100000, -100000, 200000, 200000);
+                ctx.rect(x0, y0, w, h);
+                ctx.clip('evenodd');
+            }
+            if (mirror) {
+                const cx = pos.x + pos.size / 2;
+                ctx.translate(cx, 0);
+                ctx.scale(-1, 1);
+                ctx.translate(-cx, 0);
+            }
+            nativeDrawImage(img, pos.x, pos.y, pos.size, pos.size);
+        } finally {
+            ctx.restore();
+        }
     }
 
     function detectBodyKey(dw, dh) {
@@ -327,7 +376,7 @@
                     const anchor=getAttachmentPoint(key,anchorName,activeBody);
                     if(anchor){
                         const pos=positionSquareByGrip(anchor,size,grip);
-                        nativeDrawImage(img,pos.x,pos.y,pos.size,pos.size); drawAttachmentDebug(ctx); return;
+                        drawRigidAttachment(ctx,nativeDrawImage,img,pos,key,anchorName); drawAttachmentDebug(ctx); return;
                     }
                 }
             }
