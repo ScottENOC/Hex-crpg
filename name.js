@@ -31,7 +31,7 @@ window.generateName = window.getRandomName;
 // Build token for dynamically loaded presentation/performance modules. Changing
 // this value gives every deployment a new URL, avoiding stale Safari/GitHub
 // Pages script cache entries without separate per-file version numbers.
-const PRESENTATION_BUILD = '20260911-render-perf';
+const PRESENTATION_BUILD = '20260911-hair-appearance';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
 
@@ -48,6 +48,17 @@ if ('serviceWorker' in navigator) {
         perf.dataset.renderPerfTuning = 'true';
         perf.async = false;
         document.head.appendChild(perf);
+    }
+
+    // Install the appearance bridge before the directional renderer captures
+    // canvas drawImage. It polls for the older static recolour/creator modules
+    // that are parsed later in index.html.
+    if (!document.querySelector('script[data-hair-appearance]')) {
+        const hair = document.createElement('script');
+        hair.src = freshScriptUrl('hairAppearance.js');
+        hair.dataset.hairAppearance = 'true';
+        hair.async = false;
+        document.head.appendChild(hair);
     }
 
     if (!document.querySelector('script[data-facing-system]')) {
