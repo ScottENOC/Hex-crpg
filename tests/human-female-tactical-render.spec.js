@@ -56,7 +56,12 @@ test.describe('human female tactical-map render path', () => {
                     if (args.length === 8) dest = { x:args[4], y:args[5], w:args[6], h:args[7] };
                     else if (args.length === 4) dest = { x:args[0], y:args[1], w:args[2], h:args[3] };
                     else if (args.length === 2) dest = { x:args[0], y:args[1], w:null, h:null };
-                    window.__tacticalDrawImageCalls.push({ src, dest, frame:window.__tacticalFrameId });
+                    window.__tacticalDrawImageCalls.push({
+                        src,
+                        tintedDirectionalHair: image?.__testDirectionalHair === true,
+                        dest,
+                        frame:window.__tacticalFrameId
+                    });
                 }
                 return nativeDrawImage.call(this, image, ...args);
             };
@@ -70,10 +75,22 @@ test.describe('human female tactical-map render path', () => {
                 && assets.body.front.naturalWidth > 0;
         });
 
-        // Observe the inputs to the fully-installed map drawImage chain as well
-        // as the final prototype draws. This pinpoints which legacy layer, if any,
-        // is causing a second directional replacement and records its call site.
+        // Directional hair is now recoloured into an offscreen canvas before
+        // the final map draw. Mark canvases returned by the real tint function
+        // so this regression test observes the rendered hair layer rather than
+        // incorrectly assuming every final draw remains an HTMLImageElement.
         await page.evaluate(() => {
+            const tint = window.getRecoloredHairSprite;
+            if (typeof tint === 'function' && !tint.__tacticalHairTestMarker) {
+                const markedTint = function(...args) {
+                    const result = tint.apply(this, args);
+                    if (result instanceof HTMLCanvasElement) result.__testDirectionalHair = true;
+                    return result;
+                };
+                markedTint.__tacticalHairTestMarker = true;
+                window.getRecoloredHairSprite = markedTint;
+            }
+
             const ctx = window.mapCtx;
             const downstream = ctx.drawImage.bind(ctx);
             window.__outerMapDraws = [];
@@ -101,7 +118,7 @@ test.describe('human female tactical-map render path', () => {
         const latestFrame = Math.max(...directionalBodies.map(call => call.frame));
         const frameCalls = observed.calls.filter(call => call.frame === latestFrame);
         const bodies = frameCalls.filter(call => isDirectionalBody(call.src || ''));
-        const hair = frameCalls.filter(call => isDirectionalHair(call.src || ''));
+        const hair = frameCalls.filter(call => isDirectionalHair(call.src || '') || call.tintedDirectionalHair);
         const legacyBody = frameCalls.filter(call => isLegacyBody(call.src || ''));
         const legacyHair = frameCalls.filter(call => isLegacyHair(call.src || ''));
         const duplicates = nearDuplicateBodies(bodies);

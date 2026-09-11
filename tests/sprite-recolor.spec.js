@@ -22,7 +22,7 @@ test.describe('sprite recolor', () => {
             }),
         }));
         expect(result.sameTwice).toBe(true);
-        expect(result.differsAcrossNames).toBeGreaterThan(1); // not all four collide to the same hue
+        expect(result.differsAcrossNames).toBeGreaterThan(1);
         expect(result.inRange).toBe(true);
     });
 
@@ -31,9 +31,6 @@ test.describe('sprite recolor', () => {
             const img = window.gameVisuals.humanMaleBase;
             const canvas = window.getRecoloredSprite(img, { shirtHue: 200, pantsHue: 90 });
             const ctx = canvas.getContext('2d');
-
-            // Torso (shirt band, ~L 0.43-0.45) and legs (pants band, ~L 0.17-0.18),
-            // sampled down the center column; face near the top.
             const torso = ctx.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height * 0.45), 1, 1).data;
             const legs = ctx.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height * 0.63), 1, 1).data;
             const face = ctx.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height * 0.12), 1, 1).data;
@@ -54,9 +51,7 @@ test.describe('sprite recolor', () => {
         });
         expect(result.torso[0] !== result.origTorso[0] || result.torso[1] !== result.origTorso[1] || result.torso[2] !== result.origTorso[2]).toBe(true);
         expect(result.legs[0] !== result.origLegs[0] || result.legs[1] !== result.origLegs[1] || result.legs[2] !== result.origLegs[2]).toBe(true);
-        // Shirt and pants should end up as visibly different colors from each other.
         expect(result.torso.slice(0, 3).join(',')).not.toBe(result.legs.slice(0, 3).join(','));
-        // Face untouched when only shirtHue/pantsHue are given (no skinHue).
         expect(result.face[0]).toBe(result.origFace[0]);
         expect(result.face[1]).toBe(result.origFace[1]);
         expect(result.face[2]).toBe(result.origFace[2]);
@@ -68,13 +63,11 @@ test.describe('sprite recolor', () => {
             const canvas = window.getRecoloredSprite(img, { skinHue: 250 });
             const ctx = canvas.getContext('2d');
             const face = ctx.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height * 0.12), 1, 1).data;
-
             const origCtx = document.createElement('canvas').getContext('2d');
             origCtx.canvas.width = img.naturalWidth;
             origCtx.canvas.height = img.naturalHeight;
             origCtx.drawImage(img, 0, 0);
             const origFace = origCtx.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height * 0.12), 1, 1).data;
-
             return { face: Array.from(face), origFace: Array.from(origFace) };
         });
         expect(result.face[0] !== result.origFace[0] || result.face[1] !== result.origFace[1] || result.face[2] !== result.origFace[2]).toBe(true);
@@ -98,17 +91,12 @@ test.describe('sprite recolor', () => {
             const origCtx = canvas.getContext('2d');
             origCtx.drawImage(img, 0, 0);
             const orig = origCtx.getImageData(0, 0, canvas.width, canvas.height).data;
-
-            // Find the first opaque pixel to compare before/after.
             let idx = -1;
             for (let i = 0; i < orig.length; i += 4) { if (orig[i + 3] >= 50) { idx = i; break; } }
-
             const tinted = window.getRecoloredHairSprite(img, 300);
             const tintedCtx = tinted.getContext('2d');
             const tintedData = tintedCtx.getImageData(0, 0, canvas.width, canvas.height).data;
-
             const again = window.getRecoloredHairSprite(img, 300);
-
             return {
                 foundOpaquePixel: idx >= 0,
                 changed: idx >= 0 && (orig[idx] !== tintedData[idx] || orig[idx + 1] !== tintedData[idx + 1] || orig[idx + 2] !== tintedData[idx + 2]),
@@ -144,25 +132,34 @@ test.describe('sprite recolor', () => {
         expect(result.hairHue).toBe(result.expectedHairHue);
         expect(result.hairLightMult).toBe(result.expectedHairLightMult);
         expect(result.skinHue).toBe(result.expectedSkin);
-        // Defaults are muted (natural palette), unlike an explicit player choice.
         expect(result.clothingSatMult).toBeLessThan(1);
-        // Salting per band means shirt/pants/hair shouldn't all collapse to the same hue.
         expect(new Set([result.shirtHue, result.pantsHue, result.hairHue]).size).toBeGreaterThan(1);
     });
 
-    test('pickHairPreset and pickClothingHue are deterministic and only draw from the natural palettes', async ({ page }) => {
+    test('pickHairPreset is deterministic and stays inside continuous natural family ranges', async ({ page }) => {
         const result = await page.evaluate(() => {
             const names = ['Alice', 'Bob', 'Carol', 'Dave', 'Eve', 'Frank', 'Grace', 'Heidi'];
-            const hairHues = names.map(n => window.pickHairPreset(n + '_hair').hue);
+            const presets = names.map(n => window.pickHairPreset(n + '_hair'));
+            const defs = Object.fromEntries(window.NATURAL_HAIR_FAMILIES.map(f => [f.id, f]));
+            const hairAllValid = presets.every(p => {
+                const f = defs[p.family];
+                const c = p.color;
+                return !!f && !!c
+                    && c.hue >= f.hue[0] && c.hue <= f.hue[1]
+                    && c.saturation >= f.saturation[0] && c.saturation <= f.saturation[1]
+                    && c.lightness >= f.lightness[0] && c.lightness <= f.lightness[1];
+            });
             const clothingHues = names.map(n => window.pickClothingHue(n + '_shirt'));
             return {
-                hairSame: window.pickHairPreset('Alice_hair').hue === window.pickHairPreset('Alice_hair').hue,
-                hairAllValid: hairHues.every(h => [25, 45, 30, 12].includes(h)),
+                hairSame: JSON.stringify(window.pickHairPreset('Alice_hair')) === JSON.stringify(window.pickHairPreset('Alice_hair')),
+                hairAllValid,
+                variedHair: new Set(presets.map(p => p.hue.toFixed(4))).size > 1,
                 clothingAllValid: clothingHues.every(h => [25, 40, 95, 150, 210, 350, 45].includes(h)),
             };
         });
         expect(result.hairSame).toBe(true);
         expect(result.hairAllValid).toBe(true);
+        expect(result.variedHair).toBe(true);
         expect(result.clothingAllValid).toBe(true);
     });
 
@@ -174,7 +171,7 @@ test.describe('sprite recolor', () => {
             window.hexSize = 40;
             window.drawPlayerCharacter(ctx, { name: 'PartyMemberOne', race: 'human', gender: 'male', equipped: {} }, 100, 100, 1.2, 0);
             window.drawPlayerCharacter(ctx, { name: 'PartyMemberTwo', race: 'human', gender: 'male', equipped: {} }, 300, 100, 1.2, 0);
-            const p1 = ctx.getImageData(100, 130, 1, 1).data; // roughly torso height
+            const p1 = ctx.getImageData(100, 130, 1, 1).data;
             const p2 = ctx.getImageData(300, 130, 1, 1).data;
             return Array.from(p1).join(',') !== Array.from(p2).join(',');
         });
