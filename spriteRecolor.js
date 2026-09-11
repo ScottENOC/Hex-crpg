@@ -110,20 +110,28 @@ function getRecoloredSprite(img, hues) {
 }
 window.getRecoloredSprite = getRecoloredSprite;
 
-// Hair overlay sprites are transparent except for the strands, so every
-// opaque pixel can be recoloured. lightMult/satMult preserve the artwork's
-// own per-pixel shading while allowing effectively continuous colour choices.
 function getRecoloredHairSprite(img, targetHue, lightMult = 1, satMult = 1) {
     if (!img || !img.complete || !img.naturalWidth || targetHue === undefined) return img;
+
+    // The old creator only passed hue. While it is visible, transparently add
+    // the new saturation/brightness dimensions so every old body preview gets
+    // the full colour picker without rewriting main.js's preview renderer.
+    const creator = document.getElementById('characterCreator');
+    const hueSlider = document.getElementById('hair-hue-slider');
+    if (lightMult === 1 && satMult === 1 && creator && creator.style.display !== 'none' && hueSlider
+        && Number(hueSlider.value) === Number(targetHue) && document.getElementById('hair-saturation-slider')) {
+        const params = hairColorToRenderParams(creatorHairColor());
+        lightMult = params.lightMult;
+        satMult = params.satMult;
+    }
+
     const cacheKey = `${img.src}::hair:${targetHue}:${lightMult}:${satMult}`;
     if (_recolorCache[cacheKey]) return _recolorCache[cacheKey];
-
     const canvas = document.createElement('canvas');
     canvas.width = img.naturalWidth;
     canvas.height = img.naturalHeight;
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     ctx.drawImage(img, 0, 0);
-
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
     for (let i = 0; i < data.length; i += 4) {
@@ -135,7 +143,6 @@ function getRecoloredHairSprite(img, targetHue, lightMult = 1, satMult = 1) {
         data[i] = r2; data[i + 1] = g2; data[i + 2] = b2;
     }
     ctx.putImageData(imageData, 0, 0);
-
     _recolorCache[cacheKey] = canvas;
     return canvas;
 }
@@ -147,24 +154,20 @@ function getGoldTintedSprite(img) {
     if (!img || !img.complete || !img.naturalWidth) return img;
     const cacheKey = `${img.src}::gold`;
     if (_recolorCache[cacheKey]) return _recolorCache[cacheKey];
-
     const canvas = document.createElement('canvas');
     canvas.width = img.naturalWidth;
     canvas.height = img.naturalHeight;
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     ctx.drawImage(img, 0, 0);
-
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
     for (let i = 0; i < data.length; i += 4) {
         if (data[i + 3] < 50) continue;
         const [, , l] = rgbToHsl(data[i], data[i + 1], data[i + 2]);
-        const l2 = Math.max(0.15, Math.min(0.85, l));
-        const [r2, g2, b2] = hslToRgb(GOLD_HUE, GOLD_SATURATION, l2);
+        const [r2, g2, b2] = hslToRgb(GOLD_HUE, GOLD_SATURATION, Math.max(0.15, Math.min(0.85, l)));
         data[i] = r2; data[i + 1] = g2; data[i + 2] = b2;
     }
     ctx.putImageData(imageData, 0, 0);
-
     _recolorCache[cacheKey] = canvas;
     return canvas;
 }
@@ -192,25 +195,20 @@ function unitFromSeed(seed, salt) {
     x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
     return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
 }
-function rangeFromSeed(seed, salt, min, max) {
-    return min + (max - min) * unitFromSeed(seed, salt);
-}
+function rangeFromSeed(seed, salt, min, max) { return min + (max - min) * unitFromSeed(seed, salt); }
 function clamp01(v) { return Math.max(0, Math.min(1, Number(v) || 0)); }
 function normalizeHue(v) { return ((Number(v) || 0) % 360 + 360) % 360; }
 
 function hexColorToHue(hex) {
     if (!hex) return 0;
     const m = hex.replace('#', '');
-    const r = parseInt(m.substring(0, 2), 16);
-    const g = parseInt(m.substring(2, 4), 16);
-    const b = parseInt(m.substring(4, 6), 16);
-    return rgbToHsl(r, g, b)[0];
+    return rgbToHsl(parseInt(m.substring(0, 2), 16), parseInt(m.substring(2, 4), 16), parseInt(m.substring(4, 6), 16))[0];
 }
 window.hexColorToHue = hexColorToHue;
 
-// Hair style is now appearance state, independent from race/gender. The
-// current art library has one shared logical style; body-specific asset keys
-// remain an implementation detail until more directional styles are added.
+// Style identity is now independent appearance data. Existing body-specific
+// asset names are only compatibility details; phase B can add more style IDs
+// without changing race/gender or colour state.
 const HAIR_STYLES = {
     classic_1: { id:'classic_1', label:'Classic', directionalAssetKey:'brown_1' },
 };
@@ -218,21 +216,8 @@ const DEFAULT_HAIR_STYLE = 'classic_1';
 window.HAIR_STYLES = HAIR_STYLES;
 window.DEFAULT_HAIR_STYLE = DEFAULT_HAIR_STYLE;
 
-// Source hair art is approximately a medium-dark saturated brown. Canonical
-// appearance stores absolute HSL; these baselines convert it to the legacy
-// multiplicative tint API while retaining strand highlights/shadows.
 const SOURCE_HAIR_SATURATION = 0.62;
 const SOURCE_HAIR_LIGHTNESS = 0.28;
-function hairColorToRenderParams(color) {
-    const c = normalizeHairColor(color);
-    return {
-        hue: c.hue,
-        satMult: Math.max(0, Math.min(2.5, c.saturation / SOURCE_HAIR_SATURATION)),
-        lightMult: Math.max(0.12, Math.min(3.2, c.lightness / SOURCE_HAIR_LIGHTNESS)),
-    };
-}
-window.hairColorToRenderParams = hairColorToRenderParams;
-
 function normalizeHairColor(color, fallback = { hue:25, saturation:0.62, lightness:0.28 }) {
     if (typeof color === 'number') return { hue:normalizeHue(color), saturation:fallback.saturation, lightness:fallback.lightness };
     const src = color || fallback;
@@ -245,9 +230,16 @@ function normalizeHairColor(color, fallback = { hue:25, saturation:0.62, lightne
 }
 window.normalizeHairColor = normalizeHairColor;
 
-// Continuous natural colour families. These are weighted families, not a
-// fixed palette: every character gets deterministic continuous H/S/L values
-// within the chosen range, so two brown-haired NPCs need not share a colour.
+function hairColorToRenderParams(color) {
+    const c = normalizeHairColor(color);
+    return {
+        hue: c.hue,
+        satMult: Math.max(0, Math.min(2.5, c.saturation / SOURCE_HAIR_SATURATION)),
+        lightMult: Math.max(0.12, Math.min(3.2, c.lightness / SOURCE_HAIR_LIGHTNESS)),
+    };
+}
+window.hairColorToRenderParams = hairColorToRenderParams;
+
 const NATURAL_HAIR_FAMILIES = [
     { id:'brown', weight:46, hue:[18,35], saturation:[0.34,0.78], lightness:[0.10,0.38] },
     { id:'blond', weight:25, hue:[38,58], saturation:[0.22,0.68], lightness:[0.43,0.76] },
@@ -287,20 +279,14 @@ function ensureCharacterAppearance(entity, options = {}) {
     if (!entity) return null;
     entity.appearance = entity.appearance || {};
     const appearance = entity.appearance;
-    if (!appearance.hairStyle) {
-        appearance.hairStyle = entity.hairStyle && entity.hairStyle !== 'brown_1' ? entity.hairStyle : DEFAULT_HAIR_STYLE;
-    }
+    if (!appearance.hairStyle) appearance.hairStyle = entity.hairStyle && entity.hairStyle !== 'brown_1' ? entity.hairStyle : DEFAULT_HAIR_STYLE;
     if (!HAIR_STYLES[appearance.hairStyle]) appearance.hairStyle = DEFAULT_HAIR_STYLE;
-
     if (!appearance.hairColor) {
         const legacy = legacyHairColor(entity);
         appearance.hairColor = normalizeHairColor(legacy || options.hairColor || generateNaturalHairColor(`${entity.name || 'x'}|${entity.race || ''}|${entity.gender || ''}`));
-    } else {
-        appearance.hairColor = normalizeHairColor(appearance.hairColor);
-    }
+    } else appearance.hairColor = normalizeHairColor(appearance.hairColor);
 
     const params = hairColorToRenderParams(appearance.hairColor);
-    // Compatibility fields keep the untouched legacy renderer working.
     entity.hairHue = params.hue;
     entity.hairLightMult = params.lightMult;
     entity.hairSatMult = params.satMult;
@@ -308,7 +294,6 @@ function ensureCharacterAppearance(entity, options = {}) {
     return appearance;
 }
 window.ensureCharacterAppearance = ensureCharacterAppearance;
-
 function setCharacterHairColor(entity, color) {
     if (!entity) return null;
     entity.appearance = entity.appearance || {};
@@ -316,7 +301,6 @@ function setCharacterHairColor(entity, color) {
     return ensureCharacterAppearance(entity);
 }
 window.setCharacterHairColor = setCharacterHairColor;
-
 function setCharacterHairStyle(entity, styleId) {
     if (!entity) return null;
     entity.appearance = entity.appearance || {};
@@ -324,15 +308,11 @@ function setCharacterHairStyle(entity, styleId) {
     return ensureCharacterAppearance(entity);
 }
 window.setCharacterHairStyle = setCharacterHairStyle;
-
-function getCharacterHairColor(entity) {
-    return ensureCharacterAppearance(entity)?.hairColor || normalizeHairColor(null);
-}
+function getCharacterHairColor(entity) { return ensureCharacterAppearance(entity)?.hairColor || normalizeHairColor(null); }
 window.getCharacterHairColor = getCharacterHairColor;
 
-// Backwards-compatible API used by gameEngine.js. It now returns a continuous
-// natural colour converted to the old render multipliers rather than one of
-// four discrete presets.
+// Existing gameEngine.js callers keep working, but now receive deterministic
+// continuous colour within a natural family rather than one of four presets.
 function pickHairPreset(seedStr) {
     const color = generateNaturalHairColor(seedStr);
     const params = hairColorToRenderParams(color);
@@ -358,13 +338,13 @@ function pickClothingHue(seedStr) { return pickFromPalette(seedStr, CLOTHING_PAL
 window.pickClothingHue = pickClothingHue;
 
 function creatorHairColor() {
-    const hue = Number(document.getElementById('hair-hue-slider')?.value ?? 25);
-    const saturation = Number(document.getElementById('hair-saturation-slider')?.value ?? 62) / 100;
-    const lightness = Number(document.getElementById('hair-lightness-slider')?.value ?? 28) / 100;
-    return normalizeHairColor({ hue, saturation, lightness });
+    return normalizeHairColor({
+        hue: Number(document.getElementById('hair-hue-slider')?.value ?? 25),
+        saturation: Number(document.getElementById('hair-saturation-slider')?.value ?? 62) / 100,
+        lightness: Number(document.getElementById('hair-lightness-slider')?.value ?? 28) / 100,
+    });
 }
 window.getCreatorHairColor = creatorHairColor;
-
 function updateCreatorHairSwatch() {
     const swatch = document.getElementById('hair-color-swatch');
     if (!swatch) return;
@@ -377,14 +357,9 @@ function injectHairControls() {
     if (!hueSlider || document.getElementById('hair-saturation-slider')) return false;
     const hueLabel = document.querySelector('label[for="hair-hue-slider"]');
     if (hueLabel) hueLabel.textContent = 'Hair Hue';
-
     const makeLabel = (forId, text) => {
-        const label = document.createElement('label');
-        label.htmlFor = forId;
-        label.textContent = text;
-        label.style.fontWeight = 'normal';
-        label.style.fontSize = '0.85em';
-        return label;
+        const label = document.createElement('label'); label.htmlFor = forId; label.textContent = text;
+        label.style.fontWeight = 'normal'; label.style.fontSize = '0.85em'; return label;
     };
     const makeSlider = (id, value) => {
         const input = document.createElement('input');
@@ -401,14 +376,14 @@ function injectHairControls() {
     const lightLabel = makeLabel('hair-lightness-slider', 'Hair Brightness');
     const light = makeSlider('hair-lightness-slider', 28);
     const swatch = document.createElement('div');
-    swatch.id = 'hair-color-swatch';
-    swatch.title = 'Current hair colour';
+    swatch.id = 'hair-color-swatch'; swatch.title = 'Current hair colour';
     swatch.style.cssText = 'height:18px;border:1px solid #777;border-radius:4px;margin-top:-2px;';
     hueSlider.insertAdjacentElement('afterend', swatch);
     swatch.insertAdjacentElement('beforebegin', light);
     light.insertAdjacentElement('beforebegin', lightLabel);
     lightLabel.insertAdjacentElement('beforebegin', sat);
     sat.insertAdjacentElement('beforebegin', satLabel);
+    hueSlider.addEventListener('input', updateCreatorHairSwatch);
     updateCreatorHairSwatch();
     return true;
 }
@@ -432,29 +407,6 @@ function installPlayerAppearanceCapture() {
     return true;
 }
 
-function installPreviewColourBridge() {
-    const current = window.updateAppearancePreview;
-    if (typeof current !== 'function' || current.__sharedHairColourPreview) return false;
-    const wrapped = function() {
-        updateCreatorHairSwatch();
-        const originalTint = window.getRecoloredHairSprite;
-        const c = creatorHairColor();
-        const p = hairColorToRenderParams(c);
-        // Legacy preview passes hue only. Supply the extra continuous colour
-        // dimensions without requiring main.js to know the new appearance model.
-        window.getRecoloredHairSprite = function(img, hue, lightMult, satMult) {
-            if (lightMult === undefined && satMult === undefined) return originalTint(img, hue, p.lightMult, p.satMult);
-            return originalTint(img, hue, lightMult, satMult);
-        };
-        try { return current.apply(this, arguments); }
-        finally { window.getRecoloredHairSprite = originalTint; }
-    };
-    wrapped.__sharedHairColourPreview = true;
-    wrapped.__legacyAppearancePreview = current;
-    window.updateAppearancePreview = wrapped;
-    return true;
-}
-
 function turnIndicatorEntityForCanvas(canvas) {
     const item = canvas?.closest?.('.turn-indicator-item');
     const bar = item?.parentElement;
@@ -464,17 +416,14 @@ function turnIndicatorEntityForCanvas(canvas) {
     if (window.isInCombat) entities.sort((a, b) => b.timePoints - a.timePoints);
     return entities[index] || null;
 }
-
 function entityForDirectionalHairCanvas(canvas) {
     if (window.__activeCharacterEntity) return window.__activeCharacterEntity;
     if (canvas?.id === 'appearance-preview-canvas') return { name:'Creator', race:'human', gender:'female', side:'player', appearance:{ hairStyle:DEFAULT_HAIR_STYLE, hairColor:creatorHairColor() } };
-    const turnEntity = turnIndicatorEntityForCanvas(canvas);
-    if (turnEntity) return turnEntity;
-    return window.player || null;
+    return turnIndicatorEntityForCanvas(canvas) || window.player || null;
 }
 
 // Install before graphicsSettings/characterRig capture drawImage. Directional
-// female art currently draws the raw hair PNG directly; intercept just those
+// female art currently draws the raw hair PNG directly; intercept only those
 // PNGs and substitute the same cached tint used by the legacy renderer.
 (function installDirectionalHairTintBridge() {
     if (typeof CanvasRenderingContext2D === 'undefined') return;
@@ -486,7 +435,7 @@ function entityForDirectionalHairCanvas(canvas) {
         if (/\/images\/characters\/human_female\/hair_[^/]+_(?:front|side|back)\.png(?:\?|$)/.test(src)) {
             const entity = entityForDirectionalHairCanvas(this.canvas);
             if (entity) {
-                const appearance = ensureCharacterAppearance(entity, { hairColor: creatorHairColor() });
+                const appearance = ensureCharacterAppearance(entity, { hairColor:creatorHairColor() });
                 const params = hairColorToRenderParams(appearance.hairColor);
                 img = getRecoloredHairSprite(img, params.hue, params.lightMult, params.satMult);
             }
@@ -501,7 +450,6 @@ function entityForDirectionalHairCanvas(canvas) {
 function installAppearanceUi() {
     injectHairControls();
     installPlayerAppearanceCapture();
-    installPreviewColourBridge();
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installAppearanceUi, { once:true });
 else installAppearanceUi();
