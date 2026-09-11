@@ -86,18 +86,28 @@ test.describe('B1: graphics options', () => {
 
     test('foliage detail "simple" skips the seasonal-tint recolor pass', async ({ page }) => {
         const result = await page.evaluate(async () => {
-            // Plant a real Forest hex and force the terrain buffer to
-            // rebuild over it, counting getRecoloredHairSprite calls (the
-            // expensive recolor renderTerrainPass gates on foliageDetail).
+            // Plant a real Forest hex and force the terrain buffer to rebuild
+            // over it. The shared hair-appearance system now also uses
+            // getRecoloredHairSprite for character hair, so count only calls
+            // whose source image is one of the foliage overlay sprites. This
+            // keeps the regression focused on renderTerrainPass itself.
             const spot = { q: 0, r: -20 }; // clear of the village/tavern footprint, well within default vision range
             window.setTerrainAt(spot.q, spot.r, 'Forest');
             window.exploredHexes.add(`${spot.q},${spot.r}`);
             if (window.centerCameraOn) window.centerCameraOn(spot);
             window.cameraZoom = 1;
 
+            const foliageImages = new Set([
+                window.gameVisuals.bush_small,
+                window.gameVisuals.bush_large,
+                window.gameVisuals.tree_small,
+            ]);
             let calls = 0;
             const real = window.getRecoloredHairSprite;
-            window.getRecoloredHairSprite = (...a) => { calls++; return real(...a); };
+            window.getRecoloredHairSprite = (...a) => {
+                if (foliageImages.has(a[0])) calls++;
+                return real(...a);
+            };
 
             // drawMap is intentionally requestAnimationFrame-coalesced by the
             // mobile performance layer, so wait for the queued render to
