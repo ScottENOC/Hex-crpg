@@ -6,7 +6,7 @@
 // don't exist until after game start).
 const { test, expect } = require('@playwright/test');
 
-const SLIDER_IDS = ['shirt-hue-slider', 'pants-hue-slider', 'hair-hue-slider', 'skin-hue-slider'];
+const SLIDER_IDS = ['shirt-hue-slider', 'pants-hue-slider', 'hair-hue-slider', 'skin-tone-slider'];
 
 test.describe('character creator appearance sliders', () => {
     test.beforeEach(async ({ page }) => {
@@ -26,10 +26,10 @@ test.describe('character creator appearance sliders', () => {
             expect(max).toBeLessThanOrEqual(359);
             expect(max).toBeGreaterThan(min);
         }
-        // Players may deliberately choose fantasy colours. NPC defaults are
-        // constrained separately by pickNaturalSkinTone.
-        expect(await page.locator('#skin-hue-slider').getAttribute('min')).toBe('0');
-        expect(await page.locator('#skin-hue-slider').getAttribute('max')).toBe('359');
+        expect(await page.locator('#skin-tone-slider').getAttribute('min')).toBe('0');
+        expect(await page.locator('#skin-tone-slider').getAttribute('max')).toBe('100');
+        await expect(page.locator('#fantasy-skin-check')).toBeAttached();
+        await expect(page.locator('#fantasy-skin-controls')).toBeHidden();
         await expect(page.locator('#hair-style-select')).toBeAttached();
         await expect(page.locator('#body-type-select')).toBeAttached();
     });
@@ -104,7 +104,7 @@ test.describe('character creator appearance sliders', () => {
         await page.fill('#shirt-hue-slider', '220');
         await page.fill('#pants-hue-slider', '10');
         await page.fill('#hair-hue-slider', '300');
-        await page.fill('#skin-hue-slider', '15');
+        await page.fill('#skin-tone-slider', '60');
         for (const id of SLIDER_IDS) await page.dispatchEvent(`#${id}`, 'input');
 
         await page.click('#createCharacterButton');
@@ -119,7 +119,27 @@ test.describe('character creator appearance sliders', () => {
                 entity: ent && { shirt: ent.shirtHue, pants: ent.pantsHue, hair: ent.hairHue, skin: ent.skinHue },
             };
         });
-        expect(result.party).toEqual({ shirt: 220, pants: 10, hair: 300, skin: 15 });
-        expect(result.entity).toEqual({ shirt: 220, pants: 10, hair: 300, skin: 15 });
+        const expected = await page.evaluate(() => window.naturalSkinToneFromSlider(60));
+        expect(result.party).toEqual({ shirt: 220, pants: 10, hair: 300, skin: expected.hue });
+        expect(result.entity).toEqual({ shirt: 220, pants: 10, hair: 300, skin: expected.hue });
+    });
+
+    test('natural tones are the default and fantasy mode retains the full hue wheel', async ({ page }) => {
+        const natural = await page.evaluate(() => {
+            const light = window.naturalSkinToneFromSlider(0);
+            const middle = window.naturalSkinToneFromSlider(50);
+            const dark = window.naturalSkinToneFromSlider(100);
+            return { light, middle, dark, selected:window.getPlayerSkinToneFromControls() };
+        });
+        expect(natural.light.lightness).toBeGreaterThan(natural.middle.lightness);
+        expect(natural.middle.lightness).toBeGreaterThan(natural.dark.lightness);
+        expect(natural.selected.hue).toBeGreaterThanOrEqual(16);
+        expect(natural.selected.hue).toBeLessThanOrEqual(30);
+
+        await page.check('#fantasy-skin-check');
+        await page.fill('#skin-hue-slider', '220');
+        const fantasy = await page.evaluate(() => window.getPlayerSkinToneFromControls());
+        expect(fantasy).toEqual({ hue:220 });
+        await expect(page.locator('#fantasy-skin-controls')).toBeVisible();
     });
 });

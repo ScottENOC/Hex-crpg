@@ -676,12 +676,17 @@ window.updateRoguelikePreview = function() {
         }
         return img;
     }
+    window.updateSkinToneControlMode = function() {
+        const fantasy = !!document.getElementById('fantasy-skin-check')?.checked;
+        const controls = document.getElementById('fantasy-skin-controls');
+        if (controls) controls.hidden = !fantasy;
+    };
     window.updateAppearancePreview = function() {
         const canvas = document.getElementById("appearance-preview-canvas");
         const shirtSlider = document.getElementById("shirt-hue-slider");
         const pantsSlider = document.getElementById("pants-hue-slider");
         const hairSlider = document.getElementById("hair-hue-slider");
-        const skinSlider = document.getElementById("skin-hue-slider");
+        const skinSlider = document.getElementById("skin-tone-slider");
         const raceSelect = document.getElementById("race-select");
         const genderSelect = document.getElementById("gender-select");
         if (!canvas || !shirtSlider || !pantsSlider || !hairSlider || !skinSlider || !raceSelect || !genderSelect || !window.getRecoloredSprite) return;
@@ -696,10 +701,11 @@ window.updateRoguelikePreview = function() {
         const bodyImg = loadAppearancePreviewImage(bodySrc);
         if (!bodyImg.complete || !bodyImg.naturalWidth) return; // redraws via onload once loaded
 
-        const tintedBody = window.getRecoloredSprite(bodyImg, {
+        const skinTone = window.getPlayerSkinToneFromControls ? window.getPlayerSkinToneFromControls() : { hue:20 };
+        const skinBody = window.getRecoloredSkinSprite ? window.getRecoloredSkinSprite(bodyImg, skinTone) : bodyImg;
+        const tintedBody = window.getRecoloredSprite(skinBody, {
             shirtHue: parseInt(shirtSlider.value, 10),
-            pantsHue: parseInt(pantsSlider.value, 10),
-            skinHue: parseInt(skinSlider.value, 10)
+            pantsHue: parseInt(pantsSlider.value, 10)
         });
         const scale = Math.min(canvas.width / bodyImg.naturalWidth, canvas.height / bodyImg.naturalHeight);
         const w = bodyImg.naturalWidth * scale, h = bodyImg.naturalHeight * scale;
@@ -916,13 +922,18 @@ window.startGame = function() {
   const shirtSlider = document.getElementById("shirt-hue-slider");
   const pantsSlider = document.getElementById("pants-hue-slider");
   const hairSlider = document.getElementById("hair-hue-slider");
-  const skinSlider = document.getElementById("skin-hue-slider");
+  const skinSlider = document.getElementById("skin-tone-slider");
   const hairStyleSelect = document.getElementById("hair-style-select");
   const bodyTypeSelect = document.getElementById("body-type-select");
   if (shirtSlider) window.party[0].shirtHue = parseInt(shirtSlider.value, 10);
   if (pantsSlider) window.party[0].pantsHue = parseInt(pantsSlider.value, 10);
   if (hairSlider) window.party[0].hairHue = parseInt(hairSlider.value, 10);
-  if (skinSlider) window.party[0].skinHue = parseInt(skinSlider.value, 10);
+  if (skinSlider) {
+      const skinTone = window.getPlayerSkinToneFromControls ? window.getPlayerSkinToneFromControls() : { hue:20 };
+      window.party[0].skinHue = skinTone.hue;
+      window.party[0].skinSaturation = skinTone.saturation;
+      window.party[0].skinLightness = skinTone.lightness;
+  }
   if (hairStyleSelect) window.party[0].hairStyle = hairStyleSelect.value;
   if (bodyTypeSelect) window.party[0].bodyType = bodyTypeSelect.value;
   

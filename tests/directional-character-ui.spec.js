@@ -92,11 +92,13 @@ test.describe('directional human female UI integration', () => {
             return {
                 count:images.length,
                 allReady:images.every(img => img.naturalWidth === 1254 && img.naturalHeight === 1254),
-                playerSkinRange:[document.getElementById('skin-hue-slider').min, document.getElementById('skin-hue-slider').max],
+                playerSkinRange:[document.getElementById('skin-tone-slider').min, document.getElementById('skin-tone-slider').max],
+                fantasySkinRange:[document.getElementById('skin-hue-slider').min, document.getElementById('skin-hue-slider').max],
             };
         });
         expect(result.count).toBe(12);
         expect(result.allReady).toBe(true);
-        expect(result.playerSkinRange).toEqual(['0','359']);
+        expect(result.playerSkinRange).toEqual(['0','100']);
+        expect(result.fantasySkinRange).toEqual(['0','359']);
     });
 });

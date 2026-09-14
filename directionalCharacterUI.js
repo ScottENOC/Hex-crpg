@@ -129,10 +129,13 @@
                 hairStyle:document.getElementById('hair-style-select')?.value || 'brown_1',
                 bodyType:document.getElementById('body-type-select')?.value || 'average',
                 hairHue:Number(document.getElementById('hair-hue-slider')?.value || 25),
-                skinHue:Number(document.getElementById('skin-hue-slider')?.value || 20),
                 shirtHue:Number(document.getElementById('shirt-hue-slider')?.value || 30),
                 pantsHue:Number(document.getElementById('pants-hue-slider')?.value || 220),
             };
+            const skinTone = window.getPlayerSkinToneFromControls ? window.getPlayerSkinToneFromControls() : { hue:20 };
+            previewEntity.skinHue = skinTone.hue;
+            previewEntity.skinSaturation = skinTone.saturation;
+            previewEntity.skinLightness = skinTone.lightness;
             if (!directionalAssetsReady(previewEntity, 'front')) {
                 return creatorLegacy.apply(this, arguments);
             }

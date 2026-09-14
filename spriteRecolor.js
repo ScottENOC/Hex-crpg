@@ -309,6 +309,36 @@ const NATURAL_SKIN_PALETTE = [
     { hue:17, saturation:0.48, lightness:0.35, weight:14 },
 ];
 
+// A continuous light-to-dark ramp for the player-facing natural-tone slider.
+// Hue shifts subtly warmer through the range while saturation and lightness
+// do the work that a raw rainbow hue slider cannot.
+const PLAYER_NATURAL_SKIN_STOPS = [
+    { hue:30, saturation:0.28, lightness:0.84 },
+    { hue:27, saturation:0.36, lightness:0.75 },
+    { hue:24, saturation:0.43, lightness:0.64 },
+    { hue:21, saturation:0.49, lightness:0.53 },
+    { hue:18, saturation:0.52, lightness:0.42 },
+    { hue:16, saturation:0.47, lightness:0.31 },
+];
+
+function naturalSkinToneFromSlider(value) {
+    const position = Math.max(0, Math.min(100, Number(value) || 0)) / 100 * (PLAYER_NATURAL_SKIN_STOPS.length - 1);
+    const lower = Math.floor(position);
+    const upper = Math.min(PLAYER_NATURAL_SKIN_STOPS.length - 1, lower + 1);
+    const mix = position - lower;
+    const a = PLAYER_NATURAL_SKIN_STOPS[lower], b = PLAYER_NATURAL_SKIN_STOPS[upper];
+    const lerp = (x, y) => x + (y - x) * mix;
+    return { hue:lerp(a.hue, b.hue), saturation:lerp(a.saturation, b.saturation), lightness:lerp(a.lightness, b.lightness) };
+}
+window.naturalSkinToneFromSlider = naturalSkinToneFromSlider;
+
+function getPlayerSkinToneFromControls() {
+    const fantasy = !!document.getElementById('fantasy-skin-check')?.checked;
+    if (fantasy) return { hue:Number(document.getElementById('skin-hue-slider')?.value || 200) };
+    return naturalSkinToneFromSlider(document.getElementById('skin-tone-slider')?.value || 45);
+}
+window.getPlayerSkinToneFromControls = getPlayerSkinToneFromControls;
+
 // Picks a weighted entry from `palette`, deterministic per seed string
 // (reuses hashStringToHue's hash but rescrambles it so palette picks don't
 // correlate 1:1 with the raw hue hash used elsewhere).
