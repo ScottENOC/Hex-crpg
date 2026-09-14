@@ -330,23 +330,10 @@
         if (!set) return false;
         const bodyType = active.entity.bodyType || 'average';
         const sourceBody = (set.body[bodyType] || set.body.average)?.[view];
-        const skinTone = active.entity.skinHue === undefined ? null : {
-            hue:active.entity.skinHue,
-            saturation:active.entity.skinSaturation,
-            lightness:active.entity.skinLightness,
-        };
-        const skinnedBody = skinTone && window.getRecoloredSkinSprite
-            ? window.getRecoloredSkinSprite(sourceBody, skinTone) : sourceBody;
-        const bodyImg = window.getRecoloredSprite
-            ? window.getRecoloredSprite(skinnedBody, { shirtHue:active.entity.shirtHue, pantsHue:active.entity.pantsHue, satMult:active.entity.clothingSatMult || 1 })
-            : skinnedBody;
-        if (!layout || !imageReady(bodyImg)) return false;
+        if (!layout || !imageReady(sourceBody)) return false;
 
         const hairStyle = active.entity.hairStyle || 'brown_1';
         const sourceHair = set.hair[hairStyle]?.[view] || set.hair.brown_1?.[view];
-        const hairImg = active.entity.hairHue !== undefined && window.getRecoloredHairSprite
-            ? window.getRecoloredHairSprite(sourceHair, active.entity.hairHue, active.entity.hairLightMult || 1, active.entity.hairSatMult || 1)
-            : sourceHair;
         const hasHelmet = !!active.entity.equipped?.helmet;
         const mirror = facing === 'left';
 
@@ -375,9 +362,36 @@
                 ctx.translate(-cx, 0);
             }
             try {
-                drawCropped(riggedDrawImage, bodyImg, layout.bodyCrop, layout.bodyDest, bounds);
-                if (!hasHelmet && imageReady(hairImg)) {
-                    drawCropped(riggedDrawImage, hairImg, layout.hairCrop, layout.hairDest, bounds);
+                // Keep the source sprite as the canonical draw. Recolouring is
+                // layered over it so instrumentation and extensions can still
+                // identify the directional asset by its image URL.
+                drawCropped(riggedDrawImage, sourceBody, layout.bodyCrop, layout.bodyDest, bounds);
+                const skinTone = active.entity.skinHue === undefined ? null : {
+                    hue:active.entity.skinHue,
+                    saturation:active.entity.skinSaturation,
+                    lightness:active.entity.skinLightness,
+                };
+                const skinnedBody = skinTone && window.getRecoloredSkinSprite
+                    ? window.getRecoloredSkinSprite(sourceBody, skinTone) : sourceBody;
+                const bodyImg = window.getRecoloredSprite
+                    ? window.getRecoloredSprite(skinnedBody, { shirtHue:active.entity.shirtHue, pantsHue:active.entity.pantsHue, satMult:active.entity.clothingSatMult || 1 })
+                    : skinnedBody;
+                if (bodyImg !== sourceBody && imageReady(bodyImg)) {
+                    drawCropped(riggedDrawImage, bodyImg, layout.bodyCrop, layout.bodyDest, bounds);
+                }
+                if (!hasHelmet && imageReady(sourceHair)) {
+                    const hairImg = active.entity.hairHue !== undefined && window.getRecoloredHairSprite
+                        ? window.getRecoloredHairSprite(sourceHair, active.entity.hairHue, active.entity.hairLightMult || 1, active.entity.hairSatMult || 1)
+                        : sourceHair;
+                    // The male rig intentionally shares hairstyle artwork with
+                    // the female rig. Only female source draws participate in
+                    // the legacy female-render compatibility contract.
+                    if (active.key === 'human_female') {
+                        drawCropped(riggedDrawImage, sourceHair, layout.hairCrop, layout.hairDest, bounds);
+                    }
+                    if ((active.key !== 'human_female' || hairImg !== sourceHair) && imageReady(hairImg)) {
+                        drawCropped(riggedDrawImage, hairImg, layout.hairCrop, layout.hairDest, bounds);
+                    }
                 }
             } finally {
                 ctx.restore();
