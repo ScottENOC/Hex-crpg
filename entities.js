@@ -130,7 +130,8 @@ window.currentTurnEntity = currentTurnEntity;
 (() => {
     if (document.querySelector('script[data-facing-system]')) return;
     const script = document.createElement('script');
-    script.src = 'facingSystem.js?v=1';
+    const build = window.PRESENTATION_BUILD || '20260914-directional-humans';
+    script.src = `facingSystem.js?build=${encodeURIComponent(build)}`;
     script.dataset.facingSystem = 'true';
     script.async = false;
     document.head.appendChild(script);
