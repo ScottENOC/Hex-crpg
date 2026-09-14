@@ -12,12 +12,16 @@
     let turnObserver = null;
     let turnRenderQueued = false;
 
-    function isHumanFemale(entity) {
-        return !!entity && entity.race === 'human' && entity.gender === 'female';
+    function directionalKey(entity) {
+        return entity?.race && entity?.gender ? `${entity.race}_${entity.gender}` : null;
+    }
+
+    function isDirectionalEntity(entity) {
+        return !!window.DIRECTIONAL_CHARACTER_ASSETS?.[directionalKey(entity)];
     }
 
     function imageReady(img) {
-        return !!img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0;
+        return !!img && ((img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) || (img.width > 0 && img.height > 0));
     }
 
     function facingToView(facing) {
@@ -27,17 +31,19 @@
         return 'front';
     }
 
-    function directionalAssetsReady(view = 'front') {
-        const assets = window.HUMAN_FEMALE_DIRECTIONAL_ASSETS;
-        const layout = window.HUMAN_FEMALE_DIRECTIONAL_LAYOUT;
-        return !!assets && !!layout?.[view] && imageReady(assets.body?.[view]);
+    function directionalAssetsReady(entity, view = 'front') {
+        const assets = window.DIRECTIONAL_CHARACTER_ASSETS?.[directionalKey(entity)];
+        const layout = window.DIRECTIONAL_CHARACTER_LAYOUT;
+        const bodyType = entity?.bodyType || 'average';
+        return !!assets && !!layout?.[view] && imageReady((assets.body?.[bodyType] || assets.body?.average)?.[view]);
     }
 
     function drawCropped(ctx, img, crop, dest, bounds) {
-        const sx = crop.x * img.naturalWidth;
-        const sy = crop.y * img.naturalHeight;
-        const sw = crop.w * img.naturalWidth;
-        const sh = crop.h * img.naturalHeight;
+        const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+        const sx = crop.x * iw;
+        const sy = crop.y * ih;
+        const sw = crop.w * iw;
+        const sh = crop.h * ih;
         const dx = bounds.left + dest.x * bounds.width;
         const dy = bounds.top + dest.y * bounds.height;
         const dw = dest.w * bounds.width;
@@ -45,16 +51,27 @@
         ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
     }
 
-    function drawHumanFemaleDirectionalBase(ctx, entity, bounds, facing = 'down') {
+    function drawDirectionalCharacterBase(ctx, entity, bounds, facing = 'down') {
         if (!ctx || !bounds) return false;
         const view = facingToView(facing);
-        if (!directionalAssetsReady(view)) return false;
+        if (!directionalAssetsReady(entity, view)) return false;
 
-        const assets = window.HUMAN_FEMALE_DIRECTIONAL_ASSETS;
-        const layout = window.HUMAN_FEMALE_DIRECTIONAL_LAYOUT[view];
-        const bodyImg = assets.body[view];
+        const assets = window.DIRECTIONAL_CHARACTER_ASSETS[directionalKey(entity)];
+        const layout = window.DIRECTIONAL_CHARACTER_LAYOUT[view];
+        const sourceBody = (assets.body[entity?.bodyType || 'average'] || assets.body.average)[view];
+        const skinTone = entity?.skinHue === undefined ? null : {
+            hue:entity.skinHue, saturation:entity.skinSaturation, lightness:entity.skinLightness,
+        };
+        const skinnedBody = skinTone && window.getRecoloredSkinSprite
+            ? window.getRecoloredSkinSprite(sourceBody, skinTone) : sourceBody;
+        const bodyImg = window.getRecoloredSprite
+            ? window.getRecoloredSprite(skinnedBody, { shirtHue:entity?.shirtHue, pantsHue:entity?.pantsHue, satMult:entity?.clothingSatMult || 1 })
+            : skinnedBody;
         const hairStyle = entity?.hairStyle || 'brown_1';
-        const hairImg = assets.hair?.[hairStyle]?.[view] || assets.hair?.brown_1?.[view];
+        const sourceHair = assets.hair?.[hairStyle]?.[view] || assets.hair?.brown_1?.[view];
+        const hairImg = entity?.hairHue !== undefined && window.getRecoloredCharacterHairSprite
+            ? window.getRecoloredCharacterHairSprite(sourceHair, entity.hairHue, entity.hairLightMult || 1, entity.hairSatMult || 1)
+            : sourceHair;
         const hasHelmet = !!entity?.equipped?.helmet;
         const mirror = facing === 'left';
         const cx = bounds.left + bounds.width / 2;
@@ -107,7 +124,16 @@
         const wrapped = function() {
             const race = document.getElementById('race-select')?.value;
             const gender = document.getElementById('gender-select')?.value;
-            if (race !== 'human' || gender !== 'female' || !directionalAssetsReady('front')) {
+            const previewEntity = {
+                race, gender, equipped:{},
+                hairStyle:document.getElementById('hair-style-select')?.value || 'brown_1',
+                bodyType:document.getElementById('body-type-select')?.value || 'average',
+                hairHue:Number(document.getElementById('hair-hue-slider')?.value || 25),
+                skinHue:Number(document.getElementById('skin-hue-slider')?.value || 20),
+                shirtHue:Number(document.getElementById('shirt-hue-slider')?.value || 30),
+                pantsHue:Number(document.getElementById('pants-hue-slider')?.value || 220),
+            };
+            if (!directionalAssetsReady(previewEntity, 'front')) {
                 return creatorLegacy.apply(this, arguments);
             }
 
@@ -125,7 +151,7 @@
                 width,
                 height,
             };
-            drawHumanFemaleDirectionalBase(ctx, { race:'human', gender:'female', equipped:{} }, bounds, 'down');
+            drawDirectionalCharacterBase(ctx, previewEntity, bounds, 'down');
         };
         wrapped.__directionalHumanFemalePreview = true;
         wrapped.__legacyPreview = creatorLegacy;
@@ -154,12 +180,11 @@
         const height = 92;
         const width = height * 0.48;
         const bounds = { left:(100-width)/2, top:4, width, height };
-        drawHumanFemaleDirectionalBase(ctx, entity, bounds, 'down');
+        drawDirectionalCharacterBase(ctx, entity, bounds, 'down');
     }
 
     function renderDirectionalTurnPortraits() {
         turnRenderQueued = false;
-        if (!directionalAssetsReady('front')) return;
         const bar = document.getElementById('turn-indicator-bar');
         if (!bar) return;
         const entities = sortedTurnEntities();
@@ -167,7 +192,7 @@
 
         items.forEach((item, index) => {
             const entity = entities[index];
-            if (!isHumanFemale(entity)) return;
+            if (!isDirectionalEntity(entity) || !directionalAssetsReady(entity, 'front')) return;
             const portrait = item.querySelector('.turn-indicator-portrait');
             if (!portrait) return;
 
@@ -219,11 +244,11 @@
         externalDrawLegacy = current;
 
         const wrapped = function(ctx, entity, x, y, z, flyOff) {
-            if (!isHumanFemale(entity) || ctx === window.mapCtx || !directionalAssetsReady(facingToView(entity.facing || 'down'))) {
+            if (!isDirectionalEntity(entity) || ctx === window.mapCtx || !directionalAssetsReady(entity, facingToView(entity.facing || 'down'))) {
                 return externalDrawLegacy.apply(this, arguments);
             }
 
-            const cfg = window.CHAR_CONFIG?.human_female;
+            const cfg = window.CHAR_CONFIG?.[directionalKey(entity)];
             if (!cfg || !ctx) return externalDrawLegacy.apply(this, arguments);
             const expectedW = cfg.bodyW * (window.hexSize || 1) * z;
             const expectedH = cfg.bodyH * (window.hexSize || 1) * z;
@@ -241,7 +266,7 @@
                         const originalDrawMethod = ctx.drawImage;
                         ctx.drawImage = priorDraw;
                         try {
-                            drawHumanFemaleDirectionalBase(ctx, entity, { left:dx, top:dy, width:dw, height:dh }, entity.facing || 'down');
+                            drawDirectionalCharacterBase(ctx, entity, { left:dx, top:dy, width:dw, height:dh }, entity.facing || 'down');
                         } finally {
                             ctx.drawImage = originalDrawMethod;
                         }
@@ -270,7 +295,8 @@
         installExternalDrawPlayerCharacterOverride();
     }
 
-    window.drawHumanFemaleDirectionalBase = drawHumanFemaleDirectionalBase;
+    window.drawDirectionalCharacterBase = drawDirectionalCharacterBase;
+    window.drawHumanFemaleDirectionalBase = drawDirectionalCharacterBase;
     window.refreshDirectionalTurnPortraits = renderDirectionalTurnPortraits;
     window.__directionalCharacterUIInstalled = true;
 

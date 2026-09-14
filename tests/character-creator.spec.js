@@ -26,10 +26,12 @@ test.describe('character creator appearance sliders', () => {
             expect(max).toBeLessThanOrEqual(359);
             expect(max).toBeGreaterThan(min);
         }
-        // Skin tone is deliberately kept to a believable tan/brown range,
-        // not the full hue wheel clothing/hair get.
-        expect(await page.locator('#skin-hue-slider').getAttribute('min')).toBe('5');
-        expect(await page.locator('#skin-hue-slider').getAttribute('max')).toBe('45');
+        // Players may deliberately choose fantasy colours. NPC defaults are
+        // constrained separately by pickNaturalSkinTone.
+        expect(await page.locator('#skin-hue-slider').getAttribute('min')).toBe('0');
+        expect(await page.locator('#skin-hue-slider').getAttribute('max')).toBe('359');
+        await expect(page.locator('#hair-style-select')).toBeAttached();
+        await expect(page.locator('#body-type-select')).toBeAttached();
     });
 
     test('moving the shirt slider redraws the preview with different pixels', async ({ page }) => {

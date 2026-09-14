@@ -14,11 +14,19 @@
     const HUMAN_FEMALE_RENDER_ASPECT = 0.48;
     let installed = false;
 
-    const HUMAN_FEMALE_ASSET_PATHS = {
+    const DIRECTIONAL_CHARACTER_PATHS = {
+      human_female: {
         body: {
-            front: 'images/characters/human_female/body_front.png',
-            side: 'images/characters/human_female/body_side.png',
-            back: 'images/characters/human_female/body_back.png',
+            average: {
+                front: 'images/characters/human_female/body_front.png',
+                side: 'images/characters/human_female/body_side.png',
+                back: 'images/characters/human_female/body_back.png',
+            },
+            broad: {
+                front: 'images/characters/human_female/body_broad_front.png',
+                side: 'images/characters/human_female/body_broad_side.png',
+                back: 'images/characters/human_female/body_broad_back.png',
+            },
         },
         hair: {
             brown_1: {
@@ -26,7 +34,33 @@
                 side: 'images/characters/human_female/hair_brown_1_side.png',
                 back: 'images/characters/human_female/hair_brown_1_back.png',
             },
+            braid: {
+                front: 'images/characters/human_female/hair_braid_front.png',
+                side: 'images/characters/human_female/hair_braid_side.png',
+                back: 'images/characters/human_female/hair_braid_back.png',
+            },
+            curly: {
+                front: 'images/characters/human_female/hair_curly_front.png',
+                side: 'images/characters/human_female/hair_curly_side.png',
+                back: 'images/characters/human_female/hair_curly_back.png',
+            },
         },
+      },
+      human_male: {
+        body: { average: {
+            front: 'images/characters/human_male/body_front.png',
+            side: 'images/characters/human_male/body_side.png',
+            back: 'images/characters/human_male/body_back.png',
+        }},
+        // Hair is deliberately shared: styles are character choices, not genders.
+        hair: null,
+      },
+    };
+    DIRECTIONAL_CHARACTER_PATHS.human_male.hair = DIRECTIONAL_CHARACTER_PATHS.human_female.hair;
+    const HUMAN_FEMALE_ASSET_PATHS = {
+        body: DIRECTIONAL_CHARACTER_PATHS.human_female.body.average,
+        bodyTypes: DIRECTIONAL_CHARACTER_PATHS.human_female.body,
+        hair: DIRECTIONAL_CHARACTER_PATHS.human_female.hair,
     };
 
     const HUMAN_FEMALE_LAYOUT = {
@@ -57,11 +91,21 @@
         return img;
     }
 
+    function loadDirectionalSet(paths) {
+        return {
+            body: Object.fromEntries(Object.entries(paths.body).map(([type, views]) =>
+                [type, Object.fromEntries(Object.entries(views).map(([view, src]) => [view, loadImage(src)]))])),
+            hair: Object.fromEntries(Object.entries(paths.hair).map(([style, views]) =>
+                [style, Object.fromEntries(Object.entries(views).map(([view, src]) => [view, loadImage(src)]))])),
+        };
+    }
+    const DIRECTIONAL_CHARACTER_ASSETS = Object.fromEntries(Object.entries(DIRECTIONAL_CHARACTER_PATHS)
+        .map(([key, paths]) => [key, loadDirectionalSet(paths)]));
+    // Compatibility alias for UI/tests written for the first directional set.
     const HUMAN_FEMALE_ASSETS = {
-        body: Object.fromEntries(Object.entries(HUMAN_FEMALE_ASSET_PATHS.body).map(([k, src]) => [k, loadImage(src)])),
-        hair: {
-            brown_1: Object.fromEntries(Object.entries(HUMAN_FEMALE_ASSET_PATHS.hair.brown_1).map(([k, src]) => [k, loadImage(src)])),
-        },
+        body: DIRECTIONAL_CHARACTER_ASSETS.human_female.body.average,
+        bodyTypes: DIRECTIONAL_CHARACTER_ASSETS.human_female.body,
+        hair: DIRECTIONAL_CHARACTER_ASSETS.human_female.hair,
     };
 
     const RIG_SEED_CANVAS = (() => {
@@ -79,7 +123,7 @@
     }
 
     function imageReady(img) {
-        return !!img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0;
+        return !!img && ((img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) || (img.width > 0 && img.height > 0));
     }
 
     function facingFromHexDelta(dq, dr) {
@@ -209,10 +253,11 @@
     }
 
     function drawCropped(nativeDraw, img, crop, dest, bounds) {
-        const sx = crop.x * img.naturalWidth;
-        const sy = crop.y * img.naturalHeight;
-        const sw = crop.w * img.naturalWidth;
-        const sh = crop.h * img.naturalHeight;
+        const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+        const sx = crop.x * iw;
+        const sy = crop.y * ih;
+        const sw = crop.w * iw;
+        const sh = crop.h * ih;
         const dx = bounds.left + dest.x * bounds.width;
         const dy = bounds.top + dest.y * bounds.height;
         const dw = dest.w * bounds.width;
@@ -277,15 +322,18 @@
         return null;
     }
 
-    function drawHumanFemaleBody(ctx, riggedDrawImage, active, facing, args) {
+    function drawDirectionalBody(ctx, riggedDrawImage, active, facing, args) {
         const [dx, dy, dw, dh] = args;
         const view = facingToView(facing);
         const layout = HUMAN_FEMALE_LAYOUT[view];
-        const bodyImg = HUMAN_FEMALE_ASSETS.body[view];
-        if (!layout || !imageReady(bodyImg)) return false;
+        const set = DIRECTIONAL_CHARACTER_ASSETS[active.key];
+        if (!set) return false;
+        const bodyType = active.entity.bodyType || 'average';
+        const sourceBody = (set.body[bodyType] || set.body.average)?.[view];
+        if (!layout || !imageReady(sourceBody)) return false;
 
         const hairStyle = active.entity.hairStyle || 'brown_1';
-        const hairImg = HUMAN_FEMALE_ASSETS.hair[hairStyle]?.[view] || HUMAN_FEMALE_ASSETS.hair.brown_1?.[view];
+        const sourceHair = set.hair[hairStyle]?.[view] || set.hair.brown_1?.[view];
         const hasHelmet = !!active.entity.equipped?.helmet;
         const mirror = facing === 'left';
 
@@ -314,9 +362,36 @@
                 ctx.translate(-cx, 0);
             }
             try {
-                drawCropped(riggedDrawImage, bodyImg, layout.bodyCrop, layout.bodyDest, bounds);
-                if (!hasHelmet && imageReady(hairImg)) {
-                    drawCropped(riggedDrawImage, hairImg, layout.hairCrop, layout.hairDest, bounds);
+                // Keep the source sprite as the canonical draw. Recolouring is
+                // layered over it so instrumentation and extensions can still
+                // identify the directional asset by its image URL.
+                drawCropped(riggedDrawImage, sourceBody, layout.bodyCrop, layout.bodyDest, bounds);
+                const skinTone = active.entity.skinHue === undefined ? null : {
+                    hue:active.entity.skinHue,
+                    saturation:active.entity.skinSaturation,
+                    lightness:active.entity.skinLightness,
+                };
+                const skinnedBody = skinTone && window.getRecoloredSkinSprite
+                    ? window.getRecoloredSkinSprite(sourceBody, skinTone) : sourceBody;
+                const bodyImg = window.getRecoloredSprite
+                    ? window.getRecoloredSprite(skinnedBody, { shirtHue:active.entity.shirtHue, pantsHue:active.entity.pantsHue, satMult:active.entity.clothingSatMult || 1 })
+                    : skinnedBody;
+                if (bodyImg !== sourceBody && imageReady(bodyImg)) {
+                    drawCropped(riggedDrawImage, bodyImg, layout.bodyCrop, layout.bodyDest, bounds);
+                }
+                if (!hasHelmet && imageReady(sourceHair)) {
+                    const hairImg = active.entity.hairHue !== undefined && window.getRecoloredCharacterHairSprite
+                        ? window.getRecoloredCharacterHairSprite(sourceHair, active.entity.hairHue, active.entity.hairLightMult || 1, active.entity.hairSatMult || 1)
+                        : sourceHair;
+                    // The male rig intentionally shares hairstyle artwork with
+                    // the female rig. Only female source draws participate in
+                    // the legacy female-render compatibility contract.
+                    if (active.key === 'human_female') {
+                        drawCropped(riggedDrawImage, sourceHair, layout.hairCrop, layout.hairDest, bounds);
+                    }
+                    if ((active.key !== 'human_female' || hairImg !== sourceHair) && imageReady(hairImg)) {
+                        drawCropped(riggedDrawImage, hairImg, layout.hairCrop, layout.hairDest, bounds);
+                    }
                 }
             } finally {
                 ctx.restore();
@@ -327,7 +402,7 @@
 
     function applyDirectionalLayer(ctx, active, facing, draw) {
         return withFacingContext(active.entity, facing, () => {
-            if (active.key === 'human_female') return draw();
+            if (DIRECTIONAL_CHARACTER_ASSETS[active.key]) return draw();
             return applyLegacyFacingTransform(ctx, active, facing, draw);
         });
     }
@@ -355,7 +430,7 @@
             // Human-female side-facing weapons are handled here instead of by
             // the legacy rig pass so their anchors, mirroring and depth order
             // are tied directly to facing.
-            if (active?.key === 'human_female' && args.length === 4 && weaponImage(img)) {
+            if (active && DIRECTIONAL_CHARACTER_ASSETS[active.key] && args.length === 4 && weaponImage(img)) {
                 const facing = VALID_FACINGS.has(active.entity.facing) ? active.entity.facing : 'down';
                 if (facing === 'left' || facing === 'right') {
                     const hand = active.weaponDrawCount++ === 0 ? 'mainHand' : 'offHand';
@@ -369,7 +444,7 @@
                 const [dx, dy, dw, dh] = args;
                 const key = detectBodyKey(dw, dh);
 
-                if (key === 'human_female') {
+                if (key && DIRECTIONAL_CHARACTER_ASSETS[key]) {
                     const entity = findEntityForBody(key, dx + dw/2, dy + dh/2, dh);
                     if (entity) {
                         if (active?.entity === entity && isLegacyFullHairDraw(args, active)) {
@@ -380,7 +455,7 @@
                         if (active?.entity !== entity) {
                             active = { entity, key, left:dx, top:dy, width:dw, height:dh, femaleLayerStage:'await_hair', weaponDrawCount:0 };
                             const facing = VALID_FACINGS.has(entity.facing) ? entity.facing : 'down';
-                            if (drawHumanFemaleBody(ctx, riggedDrawImage, active, facing, args)) return;
+                            if (drawDirectionalBody(ctx, riggedDrawImage, active, facing, args)) return;
                         }
                     }
                 } else if (key) {
@@ -415,6 +490,10 @@
     window.HUMAN_FEMALE_ASSET_PATHS = HUMAN_FEMALE_ASSET_PATHS;
     window.HUMAN_FEMALE_DIRECTIONAL_ASSETS = HUMAN_FEMALE_ASSETS;
     window.HUMAN_FEMALE_DIRECTIONAL_LAYOUT = HUMAN_FEMALE_LAYOUT;
+    window.DIRECTIONAL_CHARACTER_PATHS = DIRECTIONAL_CHARACTER_PATHS;
+    window.DIRECTIONAL_CHARACTER_ASSETS = DIRECTIONAL_CHARACTER_ASSETS;
+    window.DIRECTIONAL_CHARACTER_LAYOUT = HUMAN_FEMALE_LAYOUT;
+    window.drawDirectionalCharacterBody = drawDirectionalBody;
     window.facingToSpriteView = facingToView;
     window.facingFromHexDelta = facingFromHexDelta;
     window.setEntityFacing = setEntityFacing;

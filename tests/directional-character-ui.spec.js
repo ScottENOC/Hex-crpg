@@ -75,4 +75,28 @@ test.describe('directional human female UI integration', () => {
         });
         expect(result).toBe(true);
     });
+
+    test('directional registry includes human male plus all new female variants', async ({ page }) => {
+        const result = await page.evaluate(async () => {
+            const all = window.DIRECTIONAL_CHARACTER_ASSETS;
+            const images = [
+                ...Object.values(all.human_male.body.average),
+                ...Object.values(all.human_female.body.broad),
+                ...Object.values(all.human_female.hair.braid),
+                ...Object.values(all.human_female.hair.curly),
+            ];
+            await Promise.all(images.map(img => img.complete ? Promise.resolve() : new Promise(resolve => {
+                img.addEventListener('load', resolve, { once:true });
+                img.addEventListener('error', resolve, { once:true });
+            })));
+            return {
+                count:images.length,
+                allReady:images.every(img => img.naturalWidth === 1254 && img.naturalHeight === 1254),
+                playerSkinRange:[document.getElementById('skin-hue-slider').min, document.getElementById('skin-hue-slider').max],
+            };
+        });
+        expect(result.count).toBe(12);
+        expect(result.allReady).toBe(true);
+        expect(result.playerSkinRange).toEqual(['0','359']);
+    });
 });
