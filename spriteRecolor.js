@@ -14,6 +14,13 @@
 // black outline strokes), and skin (face, forearms, hands) sits at L=0.55+.
 
 const _recolorCache = {};
+const _recolorSourceIds = new WeakMap();
+let _nextRecolorSourceId = 1;
+function recolorSourceKey(img) {
+    if (img.src) return img.src;
+    if (!_recolorSourceIds.has(img)) _recolorSourceIds.set(img, _nextRecolorSourceId++);
+    return `canvas-${_recolorSourceIds.get(img)}`;
+}
 
 function hslToRgb(h, s, l) {
     h = ((h % 360) + 360) % 360 / 360;
@@ -66,6 +73,12 @@ const SHIRT_BAND = [0.36, 0.50];
 const PANTS_BAND = [0.12, 0.36];
 const SKIN_BAND_MIN = 0.55;
 
+function sourceReady(img) {
+    return !!img && ((img.complete && img.naturalWidth) || (img.width && img.height));
+}
+function sourceWidth(img) { return img.naturalWidth || img.width; }
+function sourceHeight(img) { return img.naturalHeight || img.height; }
+
 // Returns a canvas with shirt/pants/skin recolored per the given hues.
 // `hues` is `{ shirtHue, pantsHue, skinHue, satMult }` — any of the three
 // hues may be omitted to leave that band untouched. `satMult` (default 1)
@@ -74,16 +87,16 @@ const SKIN_BAND_MIN = 0.55;
 // slider choice, which is passed through at full saturation. Falls back to
 // the original image if it isn't loaded yet.
 function getRecoloredSprite(img, hues) {
-    if (!img || !img.complete || !img.naturalWidth) return img;
+    if (!sourceReady(img)) return img;
     const { shirtHue, pantsHue, skinHue, satMult = 1 } = hues || {};
     if (shirtHue === undefined && pantsHue === undefined && skinHue === undefined) return img;
 
-    const cacheKey = `${img.src}::s${shirtHue ?? 'x'}:p${pantsHue ?? 'x'}:k${skinHue ?? 'x'}:m${satMult}`;
+    const cacheKey = `${recolorSourceKey(img)}::s${shirtHue ?? 'x'}:p${pantsHue ?? 'x'}:k${skinHue ?? 'x'}:m${satMult}`;
     if (_recolorCache[cacheKey]) return _recolorCache[cacheKey];
 
     const canvas = document.createElement('canvas');
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
+    canvas.width = sourceWidth(img);
+    canvas.height = sourceHeight(img);
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     ctx.drawImage(img, 0, 0);
 
@@ -127,6 +140,41 @@ function getRecoloredSprite(img, hues) {
     return canvas;
 }
 window.getRecoloredSprite = getRecoloredSprite;
+
+// Skin is a distinct recolour pass, with a chroma-aware mask so pale tunics
+// and other bright equipment are not mistaken for skin. `tone` may be a raw
+// hue (player hue wheel) or { hue, saturation, lightness }. Lightness changes
+// are relative to each source pixel, preserving the authored shading.
+function getRecoloredSkinSprite(img, tone) {
+    if (!sourceReady(img) || tone === undefined || tone === null) return img;
+    const spec = typeof tone === 'number' ? { hue:tone } : tone;
+    if (!Number.isFinite(spec.hue)) return img;
+    const targetSat = Number.isFinite(spec.saturation) ? spec.saturation : null;
+    const targetLight = Number.isFinite(spec.lightness) ? spec.lightness : null;
+    const cacheKey = `${recolorSourceKey(img)}::skin-only:${spec.hue}:${targetSat ?? 'source'}:${targetLight ?? 'source'}`;
+    if (_recolorCache[cacheKey]) return _recolorCache[cacheKey];
+
+    const canvas = document.createElement('canvas');
+    canvas.width = sourceWidth(img); canvas.height = sourceHeight(img);
+    const ctx = canvas.getContext('2d', { willReadFrequently:true });
+    ctx.drawImage(img, 0, 0);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    for (let i=0; i<data.length; i+=4) {
+        if (data[i+3] < 50) continue;
+        const [h,s,l] = rgbToHsl(data[i], data[i+1], data[i+2]);
+        const sourceSkin = h >= 5 && h <= 55 && s >= 0.18 && l >= 0.24 && l <= 0.92;
+        if (!sourceSkin) continue;
+        const s2 = targetSat === null ? s : Math.max(0, Math.min(1, targetSat * (0.65 + s * 0.5)));
+        const l2 = targetLight === null ? l : Math.max(0.08, Math.min(0.95, targetLight + (l - 0.68)));
+        const [r2,g2,b2] = hslToRgb(spec.hue, s2, l2);
+        data[i]=r2; data[i+1]=g2; data[i+2]=b2;
+    }
+    ctx.putImageData(imageData, 0, 0);
+    _recolorCache[cacheKey] = canvas;
+    return canvas;
+}
+window.getRecoloredSkinSprite = getRecoloredSkinSprite;
 
 // Hair overlay sprites (e.g. images/humanmalehair.png) are almost entirely
 // transparent except the hair strands themselves, so — unlike the body —
@@ -250,6 +298,13 @@ const CLOTHING_PALETTE = [
     { hue: 350, weight: 10 }, // muted rust red
     { hue: 45,  weight: 12 }  // mustard/gold
 ];
+const NATURAL_SKIN_PALETTE = [
+    { hue:28, saturation:0.34, lightness:0.78, weight:18 },
+    { hue:25, saturation:0.42, lightness:0.68, weight:24 },
+    { hue:22, saturation:0.48, lightness:0.57, weight:24 },
+    { hue:19, saturation:0.52, lightness:0.46, weight:20 },
+    { hue:17, saturation:0.48, lightness:0.35, weight:14 },
+];
 
 // Picks a weighted entry from `palette`, deterministic per seed string
 // (reuses hashStringToHue's hash but rescrambles it so palette picks don't
@@ -270,3 +325,5 @@ window.pickHairPreset = pickHairPreset;
 
 function pickClothingHue(seedStr) { return pickFromPalette(seedStr, CLOTHING_PALETTE).hue; }
 window.pickClothingHue = pickClothingHue;
+function pickNaturalSkinTone(seedStr) { return { ...pickFromPalette(seedStr, NATURAL_SKIN_PALETTE) }; }
+window.pickNaturalSkinTone = pickNaturalSkinTone;

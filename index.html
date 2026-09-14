@@ -178,13 +178,24 @@
                         <label for="hair-hue-slider" style="font-weight: normal; font-size: 0.85em;">Hair Color</label>
                         <input type="range" id="hair-hue-slider" min="0" max="359" value="25"
                                oninput="if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
+                        <label for="hair-style-select" style="font-weight: normal; font-size: 0.85em;">Hair Style</label>
+                        <select id="hair-style-select" onchange="if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
+                            <option value="brown_1">Shoulder length</option>
+                            <option value="braid">Long braid</option>
+                            <option value="curly">Short curls</option>
+                        </select>
+                        <label for="body-type-select" style="font-weight: normal; font-size: 0.85em;">Body Type</label>
+                        <select id="body-type-select" onchange="if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
+                            <option value="average">Average</option>
+                            <option value="broad">Broad</option>
+                        </select>
                         <label for="skin-hue-slider" style="font-weight: normal; font-size: 0.85em;">Skin Tone</label>
-                        <input type="range" id="skin-hue-slider" min="5" max="45" value="20"
+                        <input type="range" id="skin-hue-slider" min="0" max="359" value="20"
                                oninput="if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
                     </div>
                     <canvas id="appearance-preview-canvas" width="70" height="90" style="background:#222; border:1px solid #444; border-radius:4px; flex-shrink:0;"></canvas>
                 </div>
-                <small style="color: #aaa; display: block; margin-top: 3px;">Color only — no shape or race changes.</small>
+                <small style="color: #aaa; display: block; margin-top: 3px;">Player colours are unrestricted; ordinary NPC skin tones remain natural.</small>
             </div>
             <div class="form-group">
                 <label for="class-select">Class:</label>
@@ -617,51 +628,51 @@
          changed file just because the server sent a new Last-Modified/ETag
          — bump this number on every deploy that changes any .js file, or
          returning players get served stale code until they clear site data. -->
-    <script src="data.js?v=4"></script>
-    <script src="name.js?v=4"></script>
-    <script src="dialogue.js?v=4"></script>
-    <script src="questLog.js?v=4"></script>
-    <script src="roster.js?v=4"></script>
-    <script src="worldTime.js?v=4"></script>
-    <script src="world_map_data.js?v=4"></script>
-    <script src="worldMap.js?v=4"></script>
-    <script src="characterCreation.js?v=4"></script>
-    <script src="spriteRecolor.js?v=4"></script>
-    <script src="hexMap.js?v=4"></script>
-    <script src="graphicsSettings.js?v=4"></script>
-    <script src="terrain.js?v=4"></script>
-    <script src="entities.js?v=4"></script>
-    <script src="monsters.js?v=4"></script>
-    <script src="equipment.js?v=4"></script>
-    <script src="spells.js?v=4"></script>
-    <script src="skills.js?v=4"></script>
-    <script src="spellPlanner.js?v=4"></script>
-    <script src="leverage.js?v=4"></script>
-    <script src="factions.js?v=4"></script>
-    <script src="ironbondArc.js?v=4"></script>
-    <script src="lichHunt.js?v=4"></script>
-    <script src="regions.js?v=4"></script>
-    <script src="worldPulse.js?v=4"></script>
-    <script src="resources.js?v=4"></script>
-    <script src="secrets.js?v=4"></script>
-    <script src="partyInventory.js?v=4"></script>
-    <script src="crafting.js?v=4"></script>
-    <script src="construction.js?v=4"></script>
-    <script src="stable.js?v=4"></script>
-    <script src="combatFX.js?v=4"></script>
-    <script src="espionageQuests.js?v=4"></script>
-    <script src="characterBanter.js?v=4"></script>
-    <script src="campaign2Content.js?v=4"></script>
-    <script src="npcBuilder.js?v=4"></script>
-    <script src="campaign2World.js?v=4"></script>
-    <script src="campaign2Dialogue.js?v=4"></script>
-    <script src="persistence.js?v=4"></script>
-    <script src="audio.js?v=4"></script>
-    <script src="musicDirector.js?v=4"></script>
-    <script src="network.js?v=4"></script>
-    <script src="ui.js?v=4"></script>
-    <script src="gameEngine.js?v=4"></script>
-    <script src="controller.js?v=4"></script>
-    <script src="main.js?v=4"></script>
+    <script src="data.js?v=5"></script>
+    <script src="name.js?v=5"></script>
+    <script src="dialogue.js?v=5"></script>
+    <script src="questLog.js?v=5"></script>
+    <script src="roster.js?v=5"></script>
+    <script src="worldTime.js?v=5"></script>
+    <script src="world_map_data.js?v=5"></script>
+    <script src="worldMap.js?v=5"></script>
+    <script src="characterCreation.js?v=5"></script>
+    <script src="spriteRecolor.js?v=5"></script>
+    <script src="hexMap.js?v=5"></script>
+    <script src="graphicsSettings.js?v=5"></script>
+    <script src="terrain.js?v=5"></script>
+    <script src="entities.js?v=5"></script>
+    <script src="monsters.js?v=5"></script>
+    <script src="equipment.js?v=5"></script>
+    <script src="spells.js?v=5"></script>
+    <script src="skills.js?v=5"></script>
+    <script src="spellPlanner.js?v=5"></script>
+    <script src="leverage.js?v=5"></script>
+    <script src="factions.js?v=5"></script>
+    <script src="ironbondArc.js?v=5"></script>
+    <script src="lichHunt.js?v=5"></script>
+    <script src="regions.js?v=5"></script>
+    <script src="worldPulse.js?v=5"></script>
+    <script src="resources.js?v=5"></script>
+    <script src="secrets.js?v=5"></script>
+    <script src="partyInventory.js?v=5"></script>
+    <script src="crafting.js?v=5"></script>
+    <script src="construction.js?v=5"></script>
+    <script src="stable.js?v=5"></script>
+    <script src="combatFX.js?v=5"></script>
+    <script src="espionageQuests.js?v=5"></script>
+    <script src="characterBanter.js?v=5"></script>
+    <script src="campaign2Content.js?v=5"></script>
+    <script src="npcBuilder.js?v=5"></script>
+    <script src="campaign2World.js?v=5"></script>
+    <script src="campaign2Dialogue.js?v=5"></script>
+    <script src="persistence.js?v=5"></script>
+    <script src="audio.js?v=5"></script>
+    <script src="musicDirector.js?v=5"></script>
+    <script src="network.js?v=5"></script>
+    <script src="ui.js?v=5"></script>
+    <script src="gameEngine.js?v=5"></script>
+    <script src="controller.js?v=5"></script>
+    <script src="main.js?v=5"></script>
 </body>
 </html>

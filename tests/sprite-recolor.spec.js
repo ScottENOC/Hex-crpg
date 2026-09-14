@@ -131,19 +131,22 @@ test.describe('sprite recolor', () => {
             const expectedHairPreset = window.pickHairPreset('Testcharacter_hair');
             return {
                 shirtHue: ent.shirtHue, pantsHue: ent.pantsHue, hairHue: ent.hairHue, skinHue: ent.skinHue,
+                skinSaturation: ent.skinSaturation, skinLightness: ent.skinLightness,
                 clothingSatMult: ent.clothingSatMult, hairLightMult: ent.hairLightMult, hairSatMult: ent.hairSatMult,
                 expectedShirt: window.pickClothingHue('Testcharacter_shirt'),
                 expectedPants: window.pickClothingHue('Testcharacter_pants'),
                 expectedHairHue: expectedHairPreset.hue,
                 expectedHairLightMult: expectedHairPreset.lightMult,
-                expectedSkin: 5 + window.hashStringToHue('Testcharacter_skin') % 40,
+                expectedSkin: window.pickNaturalSkinTone('Testcharacter_skin'),
             };
         });
         expect(result.shirtHue).toBe(result.expectedShirt);
         expect(result.pantsHue).toBe(result.expectedPants);
         expect(result.hairHue).toBe(result.expectedHairHue);
         expect(result.hairLightMult).toBe(result.expectedHairLightMult);
-        expect(result.skinHue).toBe(result.expectedSkin);
+        expect(result.skinHue).toBe(result.expectedSkin.hue);
+        expect(result.skinSaturation).toBe(result.expectedSkin.saturation);
+        expect(result.skinLightness).toBe(result.expectedSkin.lightness);
         // Defaults are muted (natural palette), unlike an explicit player choice.
         expect(result.clothingSatMult).toBeLessThan(1);
         // Salting per band means shirt/pants/hair shouldn't all collapse to the same hue.
@@ -166,6 +169,20 @@ test.describe('sprite recolor', () => {
         expect(result.clothingAllValid).toBe(true);
     });
 
+    test('NPC skin presets are deterministic natural pigments and never blue', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const tones = ['A','B','C','D','E','F','G','H'].map(n => window.pickNaturalSkinTone(n));
+            return { tones, repeated:window.pickNaturalSkinTone('A') };
+        });
+        expect(result.tones[0]).toEqual(result.repeated);
+        for (const tone of result.tones) {
+            expect(tone.hue).toBeGreaterThanOrEqual(15);
+            expect(tone.hue).toBeLessThanOrEqual(30);
+            expect(tone.saturation).toBeGreaterThan(0);
+            expect(tone.lightness).toBeGreaterThan(0.2);
+        }
+    });
+
     test('two different party members render with visibly different shirt colors', async ({ page }) => {
         const differs = await page.evaluate(() => {
             const canvas = document.createElement('canvas');
@@ -174,9 +191,14 @@ test.describe('sprite recolor', () => {
             window.hexSize = 40;
             window.drawPlayerCharacter(ctx, { name: 'PartyMemberOne', race: 'human', gender: 'male', equipped: {} }, 100, 100, 1.2, 0);
             window.drawPlayerCharacter(ctx, { name: 'PartyMemberTwo', race: 'human', gender: 'male', equipped: {} }, 300, 100, 1.2, 0);
-            const p1 = ctx.getImageData(100, 130, 1, 1).data; // roughly torso height
-            const p2 = ctx.getImageData(300, 130, 1, 1).data;
-            return Array.from(p1).join(',') !== Array.from(p2).join(',');
+            const p1 = ctx.getImageData(50, 20, 100, 160).data;
+            const p2 = ctx.getImageData(250, 20, 100, 160).data;
+            let opaque = 0, changed = 0;
+            for (let i=0; i<p1.length; i+=4) {
+                if (p1[i+3] || p2[i+3]) opaque++;
+                if (p1[i] !== p2[i] || p1[i+1] !== p2[i+1] || p1[i+2] !== p2[i+2]) changed++;
+            }
+            return opaque > 0 && changed > 0;
         });
         expect(differs).toBe(true);
     });

@@ -917,10 +917,14 @@ window.startGame = function() {
   const pantsSlider = document.getElementById("pants-hue-slider");
   const hairSlider = document.getElementById("hair-hue-slider");
   const skinSlider = document.getElementById("skin-hue-slider");
+  const hairStyleSelect = document.getElementById("hair-style-select");
+  const bodyTypeSelect = document.getElementById("body-type-select");
   if (shirtSlider) window.party[0].shirtHue = parseInt(shirtSlider.value, 10);
   if (pantsSlider) window.party[0].pantsHue = parseInt(pantsSlider.value, 10);
   if (hairSlider) window.party[0].hairHue = parseInt(hairSlider.value, 10);
   if (skinSlider) window.party[0].skinHue = parseInt(skinSlider.value, 10);
+  if (hairStyleSelect) window.party[0].hairStyle = hairStyleSelect.value;
+  if (bodyTypeSelect) window.party[0].bodyType = bodyTypeSelect.value;
   
   window.ironmanMode = document.getElementById("ironman-check").checked;
 

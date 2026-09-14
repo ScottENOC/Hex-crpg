@@ -1888,11 +1888,24 @@ function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
     if (baseImg?.complete) {
         if (e.shirtHue === undefined && window.pickClothingHue) { e.shirtHue = window.pickClothingHue((e.name || 'x') + '_shirt'); e.clothingSatMult = 0.85; }
         if (e.pantsHue === undefined && window.pickClothingHue) { e.pantsHue = window.pickClothingHue((e.name || 'x') + '_pants'); e.clothingSatMult = 0.85; }
-        if (e.skinHue === undefined && window.hashStringToHue) e.skinHue = 5 + window.hashStringToHue((e.name || 'x') + '_skin') % 40;
+        if (e.skinHue === undefined && window.pickNaturalSkinTone) {
+            const tone = window.pickNaturalSkinTone((e.name || 'x') + '_skin');
+            e.skinHue = tone.hue; e.skinSaturation = tone.saturation; e.skinLightness = tone.lightness;
+        }
+        if (e.race === 'human' && e.hairStyle === undefined && window.hashStringToHue) {
+            const styles = ['brown_1', 'braid', 'curly'];
+            e.hairStyle = styles[window.hashStringToHue((e.name || 'x') + '_hair_style') % styles.length];
+        }
+        if (e.race === 'human' && e.gender === 'female' && e.bodyType === undefined && window.hashStringToHue) {
+            e.bodyType = window.hashStringToHue((e.name || 'x') + '_body') % 4 === 0 ? 'broad' : 'average';
+        }
         const shirtHue = showClothes ? clothesPreset.shirtHue : e.shirtHue;
         const pantsHue = showClothes ? clothesPreset.pantsHue : e.pantsHue;
         const satMult = showClothes ? (clothesPreset.satMult !== undefined ? clothesPreset.satMult : 1) : e.clothingSatMult;
-        const bodyImg = window.getRecoloredSprite ? window.getRecoloredSprite(baseImg, { shirtHue, pantsHue, skinHue: e.skinHue, satMult }) : baseImg;
+        const skinImg = window.getRecoloredSkinSprite
+            ? window.getRecoloredSkinSprite(baseImg, { hue:e.skinHue, saturation:e.skinSaturation, lightness:e.skinLightness })
+            : baseImg;
+        const bodyImg = window.getRecoloredSprite ? window.getRecoloredSprite(skinImg, { shirtHue, pantsHue, satMult }) : skinImg;
         ctx.drawImage(bodyImg || baseImg, left, top, bW, bH);
     }
 

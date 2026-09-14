@@ -4176,7 +4176,10 @@ function setupVillageScene(forLoadOnly = false) {
             // "changed" cosmetic diff before it's ever been rendered once.
             if (e.shirtHue === undefined && window.pickClothingHue) { e.shirtHue = window.pickClothingHue((e.name || 'x') + '_shirt'); e.clothingSatMult = 0.85; }
             if (e.pantsHue === undefined && window.pickClothingHue) { e.pantsHue = window.pickClothingHue((e.name || 'x') + '_pants'); e.clothingSatMult = 0.85; }
-            if (e.skinHue === undefined && window.hashStringToHue) e.skinHue = 5 + window.hashStringToHue((e.name || 'x') + '_skin') % 40;
+            if (e.skinHue === undefined && window.pickNaturalSkinTone) {
+                const tone = window.pickNaturalSkinTone((e.name || 'x') + '_skin');
+                e.skinHue = tone.hue; e.skinSaturation = tone.saturation; e.skinLightness = tone.lightness;
+            }
             if (e.hairHue === undefined && window.pickHairPreset) {
                 const preset = window.pickHairPreset((e.name || 'x') + '_hair');
                 e.hairHue = preset.hue; e.hairLightMult = preset.lightMult; e.hairSatMult = preset.satMult;
