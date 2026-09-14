@@ -69,8 +69,8 @@
             : skinnedBody;
         const hairStyle = entity?.hairStyle || 'brown_1';
         const sourceHair = assets.hair?.[hairStyle]?.[view] || assets.hair?.brown_1?.[view];
-        const hairImg = entity?.hairHue !== undefined && window.getRecoloredHairSprite
-            ? window.getRecoloredHairSprite(sourceHair, entity.hairHue, entity.hairLightMult || 1, entity.hairSatMult || 1)
+        const hairImg = entity?.hairHue !== undefined && window.getRecoloredCharacterHairSprite
+            ? window.getRecoloredCharacterHairSprite(sourceHair, entity.hairHue, entity.hairLightMult || 1, entity.hairSatMult || 1)
             : sourceHair;
         const hasHelmet = !!entity?.equipped?.helmet;
         const mirror = facing === 'left';

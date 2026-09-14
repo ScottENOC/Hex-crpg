@@ -380,8 +380,8 @@
                     drawCropped(riggedDrawImage, bodyImg, layout.bodyCrop, layout.bodyDest, bounds);
                 }
                 if (!hasHelmet && imageReady(sourceHair)) {
-                    const hairImg = active.entity.hairHue !== undefined && window.getRecoloredHairSprite
-                        ? window.getRecoloredHairSprite(sourceHair, active.entity.hairHue, active.entity.hairLightMult || 1, active.entity.hairSatMult || 1)
+                    const hairImg = active.entity.hairHue !== undefined && window.getRecoloredCharacterHairSprite
+                        ? window.getRecoloredCharacterHairSprite(sourceHair, active.entity.hairHue, active.entity.hairLightMult || 1, active.entity.hairSatMult || 1)
                         : sourceHair;
                     // The male rig intentionally shares hairstyle artwork with
                     // the female rig. Only female source draws participate in

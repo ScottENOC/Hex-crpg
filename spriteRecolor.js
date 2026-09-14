@@ -211,6 +211,9 @@ function getRecoloredHairSprite(img, targetHue, lightMult = 1, satMult = 1) {
     return canvas;
 }
 window.getRecoloredHairSprite = getRecoloredHairSprite;
+// Character rendering uses a distinct public entry point so terrain foliage
+// instrumentation can measure seasonal leaf tinting without counting actors.
+window.getRecoloredCharacterHairSprite = getRecoloredHairSprite;
 
 // A dedicated gold-metal tint for equipment (armor/helm) art. The source
 // armor/helm images are near-grayscale steel, so getRecoloredHairSprite's
