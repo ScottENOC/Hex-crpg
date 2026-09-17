@@ -23,11 +23,12 @@ test.describe('human male tactical-map render path', () => {
         const result = await page.evaluate(() => ({
             draws:window.__maleMapDraws.slice(),
             facingSrc:document.querySelector('script[data-facing-system]')?.src || '',
+            runtimeBuild:window.PRESENTATION_BUILD,
         }));
         const draws = result.draws;
         expect(draws.some(src => src.includes('/images/characters/human_male/body_'))).toBe(true);
         expect(draws.some(src => /\/images\/humanmale\.png(?:[?#]|$)/.test(src))).toBe(false);
-        expect(result.facingSrc).toContain('build=20260914-directional-humans');
+        expect(new URL(result.facingSrc).searchParams.get('build')).toBe(result.runtimeBuild);
 
         const views = await page.evaluate(async () => {
             const player = window.entities.find(e => e.side === 'player' && e.race === 'human' && e.gender === 'male');
