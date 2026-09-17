@@ -31,9 +31,54 @@ window.generateName = window.getRandomName;
 // Build token for dynamically loaded presentation/performance modules. Changing
 // this value gives every deployment a new URL, avoiding stale Safari/GitHub
 // Pages script cache entries without separate per-file version numbers.
-const PRESENTATION_BUILD = '20260914-directional-humans';
+const PRESENTATION_BUILD = '20260917-home-screen-refresh';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
+
+// iOS Home Screen web apps can resume an old in-memory document for days,
+// bypassing normal navigation and service-worker update checks. Compare this
+// running document with a no-cache copy of index.html whenever the app becomes
+// visible (and periodically while it remains open). A new build gets one clean
+// reload with the build token in the document URL, which also defeats Safari's
+// standalone-page cache.
+let appBuildCheckInFlight = null;
+window.checkForAppUpdate = function({ reload = true } = {}) {
+    if (appBuildCheckInFlight) return appBuildCheckInFlight;
+    appBuildCheckInFlight = (async () => {
+        try {
+            const response = await fetch(`index.html?app-update-check=${Date.now()}`, { cache:'no-store' });
+            if (!response.ok) return false;
+            const html = await response.text();
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            const remoteBuild = doc.querySelector('meta[name="app-build"]')?.content;
+            if (!remoteBuild || remoteBuild === PRESENTATION_BUILD) return false;
+            if (reload) {
+                if ('caches' in window) {
+                    const keys = await caches.keys();
+                    await Promise.all(keys.map(key => caches.delete(key)));
+                }
+                const target = new URL(window.location.href);
+                target.searchParams.set('build', remoteBuild);
+                window.location.replace(target.href);
+            }
+            return true;
+        } catch (err) {
+            console.warn('App update check failed', err);
+            return false;
+        } finally {
+            appBuildCheckInFlight = null;
+        }
+    })();
+    return appBuildCheckInFlight;
+};
+
+setTimeout(() => window.checkForAppUpdate(), 15000);
+setInterval(() => {
+    if (document.visibilityState === 'visible') window.checkForAppUpdate();
+}, 5 * 60 * 1000);
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') window.checkForAppUpdate();
+});
 
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register(`sw.js?build=${encodeURIComponent(PRESENTATION_BUILD)}`, {
