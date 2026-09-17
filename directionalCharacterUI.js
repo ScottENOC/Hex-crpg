@@ -170,11 +170,13 @@
         return list;
     }
 
-    function isLegacyHumanFemalePortraitImage(img) {
+    function isLegacyDirectionalHumanPortraitImage(img) {
         if (!(img instanceof HTMLImageElement)) return false;
         const src = img.getAttribute('src') || '';
         return src.endsWith('images/humanfemale.png') || src.endsWith('images/humanfemalehair.png')
-            || src.endsWith('/images/humanfemale.png') || src.endsWith('/images/humanfemalehair.png');
+            || src.endsWith('/images/humanfemale.png') || src.endsWith('/images/humanfemalehair.png')
+            || src.endsWith('images/humanmale.png') || src.endsWith('images/humanmalehair.png')
+            || src.endsWith('/images/humanmale.png') || src.endsWith('/images/humanmalehair.png');
     }
 
     function drawTurnPortraitCanvas(canvas, entity) {
@@ -195,12 +197,12 @@
 
         items.forEach((item, index) => {
             const entity = entities[index];
-            if (!isDirectionalEntity(entity) || !directionalAssetsReady(entity, 'front')) return;
+            if (!isDirectionalEntity(entity)) return;
             const portrait = item.querySelector('.turn-indicator-portrait');
             if (!portrait) return;
 
             portrait.querySelectorAll('img.portrait-layer').forEach(img => {
-                if (isLegacyHumanFemalePortraitImage(img)) img.remove();
+                if (isLegacyDirectionalHumanPortraitImage(img)) img.remove();
             });
 
             let canvas = portrait.querySelector('canvas[data-directional-human-female="true"]');
@@ -216,7 +218,10 @@
                 canvas.style.top = '0';
                 portrait.insertBefore(canvas, portrait.firstChild);
             }
-            drawTurnPortraitCanvas(canvas, entity);
+            // Remove the obsolete layers immediately. The canvas can stay
+            // blank for the short interval before the directional body loads;
+            // facingSystem refreshes it from the image load event.
+            if (directionalAssetsReady(entity, 'front')) drawTurnPortraitCanvas(canvas, entity);
         });
     }
 

@@ -87,6 +87,15 @@
     function loadImage(src) {
         if (typeof Image === 'undefined') return null;
         const img = new Image();
+        img.addEventListener('load', () => {
+            // A directional character may have been deliberately left blank
+            // while this image was loading. Paint it as soon as the authored
+            // asset is ready instead of waiting for the next game tick.
+            if (typeof window.drawMap === 'function') window.drawMap();
+            if (typeof window.refreshDirectionalTurnPortraits === 'function') {
+                window.refreshDirectionalTurnPortraits();
+            }
+        });
         img.src = src;
         return img;
     }
@@ -400,6 +409,13 @@
         });
     }
 
+    function directionalBodyReady(active, facing) {
+        const view = facingToView(facing);
+        const set = DIRECTIONAL_CHARACTER_ASSETS[active?.key];
+        const bodyType = active?.entity?.bodyType || 'average';
+        return imageReady((set?.body?.[bodyType] || set?.body?.average)?.[view]);
+    }
+
     function applyDirectionalLayer(ctx, active, facing, draw) {
         return withFacingContext(active.entity, facing, () => {
             if (DIRECTIONAL_CHARACTER_ASSETS[active.key]) return draw();
@@ -456,6 +472,9 @@
                             active = { entity, key, left:dx, top:dy, width:dw, height:dh, femaleLayerStage:'await_hair', weaponDrawCount:0 };
                             const facing = VALID_FACINGS.has(entity.facing) ? entity.facing : 'down';
                             if (drawDirectionalBody(ctx, riggedDrawImage, active, facing, args)) return;
+                            // Never flash the obsolete flat body while its
+                            // directional replacement is still downloading.
+                            return;
                         }
                     }
                 } else if (key) {
@@ -465,6 +484,12 @@
 
                 if (active && isLikelyCharacterLayer(args, active)) {
                     const facing = VALID_FACINGS.has(active.entity.facing) ? active.entity.facing : 'down';
+                    // Suppress legacy hair/equipment as well while the new
+                    // body is pending; otherwise they float by themselves for
+                    // a frame and the old male hair remains visibly layered.
+                    if (DIRECTIONAL_CHARACTER_ASSETS[active.key] && !directionalBodyReady(active, facing)) return;
+                    if (DIRECTIONAL_CHARACTER_ASSETS[active.key]
+                        && (img === window.gameVisuals?.humanHair || img === window.gameVisuals?.humanMaleHair)) return;
                     return applyDirectionalLayer(ctx, active, facing, () => riggedDrawImage(img, ...args));
                 }
             }
@@ -477,6 +502,8 @@
     }
 
     function scheduleInstall() {
+        updateFacingFromMovement();
+        if (installRendererFacing()) return;
         const timer = setInterval(() => {
             updateFacingFromMovement();
             if (installRendererFacing() || installed) clearInterval(timer);
