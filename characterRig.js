@@ -334,7 +334,12 @@
             nativeDrawImage(img,...args);
         };
 
-        window.__characterRigInstalled=true; return true;
+        window.__characterRigInstalled=true;
+        // facingSystem depends on this wrapper. Install it in the same turn so
+        // no map frame can slip through the legacy-only renderer between the
+        // two independently loaded presentation modules.
+        if(typeof window.installFacingRenderer==='function')window.installFacingRenderer();
+        return true;
     }
 
     function scheduleInstall(){

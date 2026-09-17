@@ -8,11 +8,9 @@ test.describe('Home Screen build refresh', () => {
             runtime:window.PRESENTATION_BUILD,
             hasCheck:typeof window.checkForAppUpdate === 'function',
         }));
-        expect(current).toEqual({
-            meta:'20260917-home-screen-refresh',
-            runtime:'20260917-home-screen-refresh',
-            hasCheck:true,
-        });
+        expect(current.hasCheck).toBe(true);
+        expect(current.meta).toBe(current.runtime);
+        expect(current.runtime).toMatch(/^\d{8}-[a-z0-9-]+$/);
 
         await page.route('**/index.html?app-update-check=*', route => route.fulfill({
             status:200,

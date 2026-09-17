@@ -52,6 +52,29 @@ test.describe('directional human female UI integration', () => {
         expect(result.hasDirectionalCanvas).toBe(true);
     });
 
+    test('initiative portrait removes legacy male body and hair layers', async ({ page }) => {
+        const result = await page.evaluate(async () => {
+            const male = window.entities.find(e => e.race === 'human' && e.gender === 'male' && e.side === 'player');
+            if (!male) return { missing:true };
+            window.updateTurnIndicator();
+            await new Promise(resolve => setTimeout(resolve, 50));
+            const items = [...document.querySelectorAll('#turn-indicator-bar .turn-indicator-item')];
+            const entities = [...window.entities]
+                .filter(e => e.alive && (e.side === 'player' || e.hasBeenSeenByPlayer) && !e.rider && !e.isNPC);
+            if (window.isInCombat) entities.sort((a,b) => b.timePoints-a.timePoints);
+            const portrait = items[entities.indexOf(male)]?.querySelector('.turn-indicator-portrait');
+            return {
+                legacy:[...(portrait?.querySelectorAll('img') || [])]
+                    .map(img => img.getAttribute('src') || '')
+                    .filter(src => src.endsWith('images/humanmale.png') || src.endsWith('images/humanmalehair.png')),
+                hasDirectionalCanvas:!!portrait?.querySelector('canvas[data-directional-human-female="true"]'),
+            };
+        });
+        expect(result.missing).not.toBe(true);
+        expect(result.legacy).toEqual([]);
+        expect(result.hasDirectionalCanvas).toBe(true);
+    });
+
     test('map renderer suppresses obsolete legacy female hair layer', async ({ page }) => {
         const result = await page.evaluate(async () => {
             for (let i=0; i<100 && !window.mapCtx?.__directionalLegacyHumanFemaleHairSuppressed; i++) {
