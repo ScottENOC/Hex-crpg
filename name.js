@@ -31,7 +31,7 @@ window.generateName = window.getRandomName;
 // Build token for dynamically loaded presentation/performance modules. Changing
 // this value gives every deployment a new URL, avoiding stale Safari/GitHub
 // Pages script cache entries without separate per-file version numbers.
-const PRESENTATION_BUILD = '20260917-directional-no-legacy-flash';
+const PRESENTATION_BUILD = '20260920-directional-orc';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
 
