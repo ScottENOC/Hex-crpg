@@ -6,7 +6,39 @@
 // window.Enemy instance instead of a plain party-data object, and is meant
 // for hand-authored, static NPC rosters rather than the character creator UI.
 
-function buildNPC({ name, title, race, gender, hex, classLevels, skillPicks, equipment, side, factionId, color, voice, dialogueId, expValue, gold }) {
+const DIRECTIONAL_NPC_ART = {
+    npc_town_guard: {
+        down:  { key: 'npcTownGuardFront', src: 'images/characters/npc_town_guard/body_front.svg' },
+        up:    { key: 'npcTownGuardBack', src: 'images/characters/npc_town_guard/body_back.svg' },
+        right: { key: 'npcTownGuardRight', src: 'images/characters/npc_town_guard/body_side.svg' },
+        left:  { key: 'npcTownGuardLeft', src: 'images/characters/npc_town_guard/body_side_left.svg' },
+    },
+};
+
+function ensureDirectionalNpcImages() {
+    if (!window.gameVisuals || typeof Image === 'undefined') return false;
+    Object.values(DIRECTIONAL_NPC_ART).forEach(views => {
+        Object.values(views).forEach(({ key, src }) => {
+            if (window.gameVisuals[key]) return;
+            const img = new Image();
+            img.src = src;
+            img.addEventListener('load', () => window.drawMap?.());
+            window.gameVisuals[key] = img;
+        });
+    });
+    return true;
+}
+
+function syncDirectionalNpcArt(ent) {
+    if (!ent?.directionalArtKey) return;
+    const art = DIRECTIONAL_NPC_ART[ent.directionalArtKey];
+    if (!art) return;
+    const facing = ['up', 'down', 'left', 'right'].includes(ent.facing) ? ent.facing : 'down';
+    const view = art[facing] || art.down;
+    ent.customImage = view.key;
+}
+
+function buildNPC({ name, title, race, gender, hex, classLevels, skillPicks, equipment, side, factionId, color, voice, dialogueId, expValue, gold, directionalArtKey }) {
     const ent = new window.Enemy(name, color || 'white', hex, 10, 10, expValue || 0);
     ent.title = title;
     ent.gold = gold || 0;
@@ -18,6 +50,12 @@ function buildNPC({ name, title, race, gender, hex, classLevels, skillPicks, equ
     ent.voice = voice || 'pc_1';
     ent.factionId = factionId || null;
     ent.dialogueId = dialogueId || null;
+
+    // Named directional NPC artwork is opt-in. The ordinary Reddale watchman
+    // is the first user of it; matching the semantic title keeps the content
+    // roster simple while avoiding accidental reskins of every entity whose AI
+    // happens to use patrol behaviour (stewards, soldiers, etc.).
+    ent.directionalArtKey = directionalArtKey || (title === 'Town Guard' ? 'npc_town_guard' : null);
 
     const playerRace = window.party && window.party[0] ? window.party[0].race : race;
     ent.reputation = {
@@ -67,7 +105,24 @@ function buildNPC({ name, title, race, gender, hex, classLevels, skillPicks, equ
     ent.inventory = [];
     (equipment || []).forEach(itemId => window.equipToMonster(ent, itemId));
 
+    ensureDirectionalNpcImages();
+    syncDirectionalNpcArt(ent);
     return ent;
 }
 
+// Keep customImage aligned with facing. This is intentionally tiny: only NPCs
+// that opt into authored directional art are touched, and customImage sends
+// them through the existing monster/custom-image draw path so their baked-in
+// armour, shield and weapon are not double-rendered by the humanoid equipment
+// layers. Facing itself is still owned by facingSystem.js.
+setInterval(() => {
+    ensureDirectionalNpcImages();
+    for (const ent of window.entities || []) {
+        if (ent?.directionalArtKey) syncDirectionalNpcArt(ent);
+    }
+}, 100);
+
+window.DIRECTIONAL_NPC_ART = DIRECTIONAL_NPC_ART;
+window.ensureDirectionalNpcImages = ensureDirectionalNpcImages;
+window.syncDirectionalNpcArt = syncDirectionalNpcArt;
 window.buildNPC = buildNPC;
