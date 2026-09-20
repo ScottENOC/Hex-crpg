@@ -126,4 +126,12 @@ if ('serviceWorker' in navigator) {
         ui.async = false;
         document.head.appendChild(ui);
     }
+
+    if (!document.querySelector('script[data-race-skin-palettes]')) {
+        const palettes = document.createElement('script');
+        palettes.src = freshScriptUrl('raceSkinPalettes.js');
+        palettes.dataset.raceSkinPalettes = 'true';
+        palettes.async = false;
+        document.head.appendChild(palettes);
+    }
 })();
