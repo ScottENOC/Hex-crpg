@@ -19,6 +19,12 @@ const DIRECTIONAL_NPC_ART = {
         right: { key: 'npcGoblinRight', src: 'images/characters/npc_goblin/body_side.svg' },
         left:  { key: 'npcGoblinLeft', src: 'images/characters/npc_goblin/body_side_left.svg' },
     },
+    npc_orc: {
+        down:  { key: 'npcOrcFront', src: 'images/characters/npc_orc/body_front.svg' },
+        up:    { key: 'npcOrcBack', src: 'images/characters/npc_orc/body_back.svg' },
+        right: { key: 'npcOrcRight', src: 'images/characters/npc_orc/body_side.svg' },
+        left:  { key: 'npcOrcLeft', src: 'images/characters/npc_orc/body_side_left.svg' },
+    },
 };
 
 function ensureDirectionalNpcImages() {
@@ -116,15 +122,15 @@ function buildNPC({ name, title, race, gender, hex, classLevels, skillPicks, equ
     return ent;
 }
 
-// Keep customImage aligned with facing. Standard (non-elite) Goblins are the
-// first monster family to opt in: they are created through createMonster rather
-// than buildNPC, so the lightweight name check attaches their directional key
-// when they first appear. Elite/named goblins keep their existing distinct art.
+// Keep customImage aligned with facing. Standard (non-elite) Goblins and Orcs
+// opt in by their untouched template names. Named bosses/hand-authored NPCs are
+// deliberately not matched here, so their existing art remains authoritative.
 setInterval(() => {
     ensureDirectionalNpcImages();
     for (const ent of window.entities || []) {
         if (!ent) continue;
         if (!ent.directionalArtKey && ent.name === 'Goblin') ent.directionalArtKey = 'npc_goblin';
+        if (!ent.directionalArtKey && ent.name === 'Orc') ent.directionalArtKey = 'npc_orc';
         if (ent.directionalArtKey) syncDirectionalNpcArt(ent);
     }
 }, 100);
