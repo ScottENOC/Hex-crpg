@@ -1,0 +1,1 @@
+Directional town guard art: front, side and back PNGs.
