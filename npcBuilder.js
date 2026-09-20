@@ -13,6 +13,12 @@ const DIRECTIONAL_NPC_ART = {
         right: { key: 'npcTownGuardRight', src: 'images/characters/npc_town_guard/body_side.svg' },
         left:  { key: 'npcTownGuardLeft', src: 'images/characters/npc_town_guard/body_side_left.svg' },
     },
+    npc_goblin: {
+        down:  { key: 'npcGoblinFront', src: 'images/characters/npc_goblin/body_front.svg' },
+        up:    { key: 'npcGoblinBack', src: 'images/characters/npc_goblin/body_back.svg' },
+        right: { key: 'npcGoblinRight', src: 'images/characters/npc_goblin/body_side.svg' },
+        left:  { key: 'npcGoblinLeft', src: 'images/characters/npc_goblin/body_side_left.svg' },
+    },
 };
 
 function ensureDirectionalNpcImages() {
@@ -110,15 +116,16 @@ function buildNPC({ name, title, race, gender, hex, classLevels, skillPicks, equ
     return ent;
 }
 
-// Keep customImage aligned with facing. This is intentionally tiny: only NPCs
-// that opt into authored directional art are touched, and customImage sends
-// them through the existing monster/custom-image draw path so their baked-in
-// armour, shield and weapon are not double-rendered by the humanoid equipment
-// layers. Facing itself is still owned by facingSystem.js.
+// Keep customImage aligned with facing. Standard (non-elite) Goblins are the
+// first monster family to opt in: they are created through createMonster rather
+// than buildNPC, so the lightweight name check attaches their directional key
+// when they first appear. Elite/named goblins keep their existing distinct art.
 setInterval(() => {
     ensureDirectionalNpcImages();
     for (const ent of window.entities || []) {
-        if (ent?.directionalArtKey) syncDirectionalNpcArt(ent);
+        if (!ent) continue;
+        if (!ent.directionalArtKey && ent.name === 'Goblin') ent.directionalArtKey = 'npc_goblin';
+        if (ent.directionalArtKey) syncDirectionalNpcArt(ent);
     }
 }, 100);
 
