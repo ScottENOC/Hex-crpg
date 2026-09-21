@@ -4,6 +4,20 @@
 (() => {
     'use strict';
 
+    // The routine scheduler is intentionally loaded from this already-small,
+    // early presentation/performance bootstrap rather than adding another
+    // heavyweight dependency to gameEngine.js. It owns no rendering state;
+    // this just guarantees the event-driven civilian clock is available in
+    // every normal game mode without changing the legacy script order.
+    if (!document.querySelector('script[data-npc-routine-scheduler]')) {
+        const scheduler = document.createElement('script');
+        const build = window.PRESENTATION_BUILD || 'npc-routines-v1';
+        scheduler.src = `npcRoutineScheduler.js?build=${encodeURIComponent(build)}`;
+        scheduler.dataset.npcRoutineScheduler = 'true';
+        scheduler.async = false;
+        document.head.appendChild(scheduler);
+    }
+
     function installVisibilityBounds() {
         const original = window.isVisibleToPlayer;
         if (typeof original !== 'function' || original.__wideZoomBounds) return false;
