@@ -9,13 +9,25 @@
     // heavyweight dependency to gameEngine.js. It owns no rendering state;
     // this just guarantees the event-driven civilian clock is available in
     // every normal game mode without changing the legacy script order.
+    const build = window.PRESENTATION_BUILD || 'npc-routines-v1';
     if (!document.querySelector('script[data-npc-routine-scheduler]')) {
         const scheduler = document.createElement('script');
-        const build = window.PRESENTATION_BUILD || 'npc-routines-v1';
         scheduler.src = `npcRoutineScheduler.js?build=${encodeURIComponent(build)}`;
         scheduler.dataset.npcRoutineScheduler = 'true';
         scheduler.async = false;
         document.head.appendChild(scheduler);
+    }
+
+    // Bridge the existing Campaign 2 named timetables onto the scheduler.
+    // Dynamic scripts with async=false execute in insertion order, so this is
+    // evaluated after npcRoutineScheduler.js; it then waits for gameEngine.js's
+    // classic global updateNpcSchedules/getNpcSchedules bindings before install.
+    if (!document.querySelector('script[data-event-driven-npc-schedules]')) {
+        const bridge = document.createElement('script');
+        bridge.src = `eventDrivenNpcSchedules.js?build=${encodeURIComponent(build)}`;
+        bridge.dataset.eventDrivenNpcSchedules = 'true';
+        bridge.async = false;
+        document.head.appendChild(bridge);
     }
 
     function installVisibilityBounds() {
