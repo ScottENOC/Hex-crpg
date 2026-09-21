@@ -37,6 +37,119 @@
     PALETTES.dwarf = PALETTES.human;
     window.PLAYER_SKIN_PALETTES = PALETTES;
 
+    const PLAYABLE_GREEN_SKIN_DIRECTIONAL_PATHS = {
+        orc_female: {
+            front: 'images/characters/orc_female/body_front.png',
+            side: 'images/characters/orc_female/body_side.png',
+            back: 'images/characters/orc_female/body_back.png',
+        },
+        goblin_male: {
+            front: 'images/characters/goblin_male/body_front.png',
+            side: 'images/characters/goblin_male/body_side.png',
+            back: 'images/characters/goblin_male/body_back.png',
+        },
+    };
+    window.PLAYABLE_GREEN_SKIN_DIRECTIONAL_PATHS = PLAYABLE_GREEN_SKIN_DIRECTIONAL_PATHS;
+
+    // facingSystem's authored human assets use source crop windows. These
+    // greenskin PNGs are intentionally simple one-character transparent
+    // cutouts, so pack each alpha-bounded figure into the same source crop
+    // geometry at runtime. This lets the mature directional/equipment renderer
+    // use them without special-casing its draw path.
+    const DIRECTIONAL_SOURCE_CROPS = {
+        front: { x:0.350, y:0.088, w:0.297, h:0.823 },
+        side:  { x:0.431, y:0.092, w:0.148, h:0.822 },
+        back:  { x:0.350, y:0.085, w:0.299, h:0.826 },
+    };
+
+    function makePackedDirectionalBody(src, view) {
+        const output = document.createElement('canvas');
+        output.width = 0;
+        output.height = 0;
+        // Canvas does not normally expose src, but the race-aware skin wrapper
+        // deliberately reads it to identify the source race. Keeping the
+        // authored path here preserves that contract after packing.
+        output.src = src;
+        output.__directionalSourceView = view;
+
+        const img = new Image();
+        img.onload = () => {
+            const probe = document.createElement('canvas');
+            probe.width = img.naturalWidth;
+            probe.height = img.naturalHeight;
+            const pctx = probe.getContext('2d', { willReadFrequently:true });
+            pctx.drawImage(img, 0, 0);
+            const pixels = pctx.getImageData(0, 0, probe.width, probe.height).data;
+            let minX = probe.width, minY = probe.height, maxX = -1, maxY = -1;
+            for (let y=0; y<probe.height; y++) {
+                for (let x=0; x<probe.width; x++) {
+                    if (pixels[(y*probe.width+x)*4+3] < 8) continue;
+                    if (x < minX) minX = x;
+                    if (y < minY) minY = y;
+                    if (x > maxX) maxX = x;
+                    if (y > maxY) maxY = y;
+                }
+            }
+
+            output.width = 256;
+            output.height = 256;
+            output.src = src;
+            output.__directionalSourceView = view;
+            const ctx = output.getContext('2d');
+            const crop = DIRECTIONAL_SOURCE_CROPS[view];
+            const tx = crop.x * output.width;
+            const ty = crop.y * output.height;
+            const tw = crop.w * output.width;
+            const th = crop.h * output.height;
+
+            if (maxX >= minX && maxY >= minY) {
+                const sw = maxX - minX + 1;
+                const sh = maxY - minY + 1;
+                const scale = Math.min(tw / sw, th / sh);
+                const dw = sw * scale;
+                const dh = sh * scale;
+                const dx = tx + (tw - dw) / 2;
+                const dy = ty + (th - dh) / 2;
+                ctx.drawImage(img, minX, minY, sw, sh, dx, dy, dw, dh);
+            }
+            output.__directionalReady = true;
+            window.drawMap?.();
+            window.refreshDirectionalTurnPortraits?.();
+        };
+        img.src = src;
+        return output;
+    }
+
+    function registerPlayableGreenskinDirectionalArt() {
+        const pathRegistry = window.DIRECTIONAL_CHARACTER_PATHS;
+        const assetRegistry = window.DIRECTIONAL_CHARACTER_ASSETS;
+        if (!pathRegistry || !assetRegistry) return false;
+
+        for (const [key, views] of Object.entries(PLAYABLE_GREEN_SKIN_DIRECTIONAL_PATHS)) {
+            pathRegistry[key] = {
+                body: { average: { ...views } },
+                // These first-pass PC bodies carry their authored hair in the
+                // body art. Leave hair empty so the human overlay is not drawn
+                // a second time. Dedicated detachable hair can replace this in
+                // a later asset pass without changing the renderer contract.
+                hair: {},
+            };
+            if (!assetRegistry[key]) {
+                assetRegistry[key] = {
+                    body: { average: {
+                        front: makePackedDirectionalBody(views.front, 'front'),
+                        side: makePackedDirectionalBody(views.side, 'side'),
+                        back: makePackedDirectionalBody(views.back, 'back'),
+                    } },
+                    hair: {},
+                };
+            }
+        }
+        window.__playableGreenskinDirectionalArtRegistered = true;
+        return true;
+    }
+    window.registerPlayableGreenskinDirectionalArt = registerPlayableGreenskinDirectionalArt;
+
     function interpolateStops(stops, value) {
         const position = Math.max(0, Math.min(100, Number(value) || 0)) / 100 * (stops.length - 1);
         const lower = Math.floor(position);
@@ -127,9 +240,9 @@
         for (let i=0; i<data.length; i+=4) {
             if (data[i+3] < 50) continue;
             const [h0,s0,l0] = rgbToHsl(data[i],data[i+1],data[i+2]);
-            // The legacy orc/goblin body sprites have green skin and mostly
-            // brown/neutral clothing. Restrict this pass to green/cyan source
-            // pixels so equipment/clothing continues through its own renderer.
+            // Orc/goblin body art uses green/cyan skin and mostly brown/neutral
+            // clothing. Restrict this pass to green/cyan source pixels so
+            // equipment/clothing continues through its own renderer.
             const sourceSkin = h0 >= 55 && h0 <= 190 && s0 >= 0.12 && l0 >= 0.12 && l0 <= 0.88;
             if (!sourceSkin) continue;
             const sat = Number.isFinite(tone.saturation) ? Math.max(0, Math.min(1, tone.saturation * (0.70 + s0*0.45))) : s0;
@@ -148,8 +261,12 @@
         if (!original || original.__raceAwareSkinWrapper) return !!original;
         const wrapped = function(img, tone) {
             const src = String(img?.src || '').toLowerCase();
-            if (src.includes('/orc.png') || src.endsWith('orc.png')) return recolorGreenskinSprite(img,tone,'orc');
-            if (src.includes('/goblin.png') || src.endsWith('goblin.png')) return recolorGreenskinSprite(img,tone,'goblin');
+            if (src.includes('/orc.png') || src.endsWith('orc.png') || src.includes('/characters/orc_')) {
+                return recolorGreenskinSprite(img,tone,'orc');
+            }
+            if (src.includes('/goblin.png') || src.endsWith('goblin.png') || src.includes('/characters/goblin_')) {
+                return recolorGreenskinSprite(img,tone,'goblin');
+            }
             return original(img,tone);
         };
         wrapped.__raceAwareSkinWrapper = true;
@@ -197,7 +314,10 @@
             if (!canvas) return;
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0,0,canvas.width,canvas.height);
-            const img = load(race === 'orc' ? 'images/orc.png' : 'images/goblin.png');
+            const gender = document.getElementById('gender-select')?.value || 'female';
+            const directionalKey = `${race}_${gender}`;
+            const authoredFront = PLAYABLE_GREEN_SKIN_DIRECTIONAL_PATHS[directionalKey]?.front;
+            const img = load(authoredFront || (race === 'orc' ? 'images/orc.png' : 'images/goblin.png'));
             if (!img.complete || !img.naturalWidth) return;
             const tone = getPlayerSkinToneFromControls();
             const body = recolorGreenskinSprite(img,tone,race);
@@ -211,6 +331,7 @@
     }
 
     function install() {
+        registerPlayableGreenskinDirectionalArt();
         installSkinRecolorWrapper();
         installCreatorPreviewWrapper();
         const raceSelect = document.getElementById('race-select');
@@ -226,13 +347,16 @@
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
     else install();
-    // spriteRecolor.js and main.js are static scripts that may execute after
-    // this dynamically-loaded module. Retry briefly so our wrappers install
-    // once their public functions exist, without introducing a load-order race.
+    // spriteRecolor.js/main.js/facingSystem.js are static or dynamically-loaded
+    // scripts that may execute after this module. Retry briefly so the palette,
+    // recolour and directional registrations converge regardless of load order.
     let tries = 0;
     const timer = setInterval(() => {
         install();
         tries++;
-        if ((window.getRecoloredSkinSprite?.__raceAwareSkinWrapper && window.updateAppearancePreview?.__greenskinPreviewWrapper) || tries > 100) clearInterval(timer);
+        const ready = window.getRecoloredSkinSprite?.__raceAwareSkinWrapper
+            && window.updateAppearancePreview?.__greenskinPreviewWrapper
+            && window.__playableGreenskinDirectionalArtRegistered;
+        if (ready || tries > 100) clearInterval(timer);
     }, 50);
 })();
