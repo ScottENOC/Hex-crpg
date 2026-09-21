@@ -3,9 +3,10 @@
 //
 // getNpcSchedules() remains the authoritative content definition (and therefore
 // shop hours/dialogue semantics do not change). The old updateNpcSchedules()
-// caller is replaced at the global binding with this constant-cost bridge:
-// registration scans the small named schedule roster once, then only scheduled
-// block-boundary events move NPCs. No per-step scan of the civilian population.
+// caller is replaced at the global binding with this event-driven bridge:
+// registration scans the small named schedule roster once, then ordinary
+// progression is driven by block-boundary heap events. Large explicit clock
+// jumps reconcile only the named schedule registry, never the full entity list.
 (() => {
     'use strict';
 
@@ -13,11 +14,13 @@
     const ACTIVE_RADIUS = 45;
     const REFRESH_INTERVAL_SECONDS = 60;
     const EPSILON_SECONDS = 0.001;
+    const CLOCK_JUMP_RECONCILE_SECONDS = 5;
 
     const bindings = new Map(); // npc name -> { entityId, signature }
     let installed = false;
     let registryBuilt = false;
     let lastRefreshAt = -Infinity;
+    let lastUpdateAt = null;
     let registryBuilds = 0;
     let transitionCount = 0;
     let lastOriginal = null;
@@ -175,12 +178,44 @@
         scheduleNext(name, entity, blocks, at);
     }
 
+    function reconcileBoundSchedules(at) {
+        if (typeof window.getNpcSchedules !== 'function') return 0;
+        const schedules = window.getNpcSchedules() || {};
+        let reconciled = 0;
+        for (const [name, binding] of bindings) {
+            const blocks = schedules[name];
+            if (!blocks?.length) continue;
+            const entity = (window.entities || []).find(e => e?.alive && e.id === binding.entityId);
+            if (!entity) continue;
+            const block = currentBlock(blocks, at);
+            if (!block) continue;
+            syncStateToBlock(entity, block, name);
+            reconciled++;
+        }
+        return reconciled;
+    }
+
     function updateEventDrivenNpcSchedules() {
         if (window.currentCampaign !== '2' || window.isInCombat) return;
-        // This is called by the existing game loop, but after initialisation it
-        // is constant-cost except for a tiny once-per-minute named-roster refresh
-        // to pick up schedules whose landmarks/content were created late.
+        const at = nowSeconds();
+        const s = scheduler();
+
+        // Normal progression stays O(events due): the heap top tells us whether
+        // anything needs work. Calling it here also makes schedule transitions
+        // deterministic with the game clock rather than waiting for a 250 ms
+        // wall-clock timer to notice the same world-time change.
+        if (s) s.processDueEvents(at, { maxEvents: s.DEFAULT_EVENT_BUDGET });
         refreshRegistry(false);
+
+        // Tests, sleep/fast-forward and debug tools can move worldSeconds by
+        // hours in a single assignment, including backwards. A heap can catch
+        // forward events, but it cannot infer the correct state after a rewind.
+        // Reconcile only the small named schedule registry on such jumps; never
+        // restore the old per-step scan across window.entities.
+        if (lastUpdateAt === null || Math.abs(at - lastUpdateAt) > CLOCK_JUMP_RECONCILE_SECONDS) {
+            reconcileBoundSchedules(at);
+        }
+        lastUpdateAt = at;
     }
 
     function transitionNow(name, at = nowSeconds()) {
@@ -220,6 +255,7 @@
         transitionNow,
         currentBlock,
         nextTransitionAt,
+        reconcileBoundSchedules,
         get stats() {
             return {
                 installed,
@@ -228,6 +264,7 @@
                 registryBuilds,
                 transitionCount,
                 lastRefreshAt,
+                lastUpdateAt,
             };
         },
         get bindings() { return new Map(bindings); },
