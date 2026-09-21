@@ -105,9 +105,13 @@ test.describe('event-driven named NPC schedules', () => {
   test('shop hours remain timetable-driven rather than position-driven', async ({ page }) => {
     const result = await page.evaluate(() => {
       const original = window.worldSeconds;
-      window.worldSeconds = 8 * 3600;
+      // Match the established shop-hours regression: Wick is closed at 03:00
+      // and open at 14:00. This test is about preserving those timetable
+      // semantics after schedule movement becomes event-driven, not inventing
+      // a new closing hour.
+      window.worldSeconds = 14 * 3600;
       const open = window.isShopOpen('Wick Hallow');
-      window.worldSeconds = 22 * 3600;
+      window.worldSeconds = 3 * 3600;
       const closed = window.isShopOpen('Wick Hallow');
       window.worldSeconds = original;
       return { open, closed };
