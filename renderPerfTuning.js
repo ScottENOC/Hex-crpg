@@ -4,18 +4,67 @@
 (() => {
     'use strict';
 
+    // directionalCharacterUI.js and raceSkinPalettes.js both decorate the
+    // character-creator preview after main.js publishes it. They initialise on
+    // different polling cadences, so without coordination they can alternately
+    // wrap one another. The directional wrapper keeps its legacy callback in a
+    // module variable, and repeated wrapping can therefore create a call cycle.
+    // Intercept assignments while this early bootstrap is alive and propagate
+    // the other decorator's marker onto the new outer wrapper. Each module then
+    // sees its feature already present and stops wrapping after one composition.
+    function installAppearancePreviewWrapperCoordinator() {
+        const existingDescriptor = Object.getOwnPropertyDescriptor(window, 'updateAppearancePreview');
+        if (existingDescriptor && !existingDescriptor.configurable) return false;
+        let current = existingDescriptor?.get
+            ? existingDescriptor.get.call(window)
+            : window.updateAppearancePreview;
+
+        Object.defineProperty(window, 'updateAppearancePreview', {
+            configurable: true,
+            enumerable: true,
+            get() { return current; },
+            set(next) {
+                if (typeof next === 'function') {
+                    const previous = current;
+                    if (next.__directionalHumanFemalePreview && next.__legacyPreview?.__greenskinPreviewWrapper) {
+                        next.__greenskinPreviewWrapper = true;
+                    }
+                    if (next.__greenskinPreviewWrapper && previous?.__directionalHumanFemalePreview) {
+                        next.__directionalHumanFemalePreview = true;
+                    }
+                }
+                current = next;
+            },
+        });
+        window.__appearancePreviewWrapperCoordinatorInstalled = true;
+        return true;
+    }
+    installAppearancePreviewWrapperCoordinator();
+
     // The routine scheduler is intentionally loaded from this already-small,
     // early presentation/performance bootstrap rather than adding another
     // heavyweight dependency to gameEngine.js. It owns no rendering state;
     // this just guarantees the event-driven civilian clock is available in
     // every normal game mode without changing the legacy script order.
+    const build = window.PRESENTATION_BUILD || 'npc-routines-v1';
     if (!document.querySelector('script[data-npc-routine-scheduler]')) {
         const scheduler = document.createElement('script');
-        const build = window.PRESENTATION_BUILD || 'npc-routines-v1';
         scheduler.src = `npcRoutineScheduler.js?build=${encodeURIComponent(build)}`;
         scheduler.dataset.npcRoutineScheduler = 'true';
         scheduler.async = false;
         document.head.appendChild(scheduler);
+    }
+
+    // Bridge the existing Campaign 2 named timetables onto the scheduler.
+    // Dynamic scripts with async=false execute in insertion order, so this is
+    // evaluated after npcRoutineScheduler.js; it then waits for gameEngine.js's
+    // classic global updateNpcSchedules/getNpcSchedules bindings before install.
+    if (!document.querySelector('script[data-event-driven-npc-schedules]')) {
+        const bridge = document.createElement('script');
+        bridge.src = `eventDrivenNpcSchedules.js?build=${encodeURIComponent(build)}`;
+        bridge.dataset.eventDrivenNpcSchedules = 'true';
+        bridge.async = false;
+        document.head.appendChild(bridge);
     }
 
     function installVisibilityBounds() {
