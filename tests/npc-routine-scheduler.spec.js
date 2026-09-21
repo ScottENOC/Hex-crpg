@@ -37,12 +37,12 @@ test.describe('event-driven NPC routine scheduler', () => {
         departedAt: 100, arrivesAt: 200, arrivalActivity: 'working'
       });
       const halfway = s.getAbstractLocation('smith', 150);
-      const before = s.getState('smith');
+      const beforeLevel = s.getState('smith').simulationLevel;
       const processed = s.processDueEvents(200);
       const after = s.getState('smith');
       return {
         halfway,
-        beforeLevel: before.simulationLevel,
+        beforeLevel,
         processed: processed.processed,
         after: { node: after.currentNode, activity: after.activity, travel: after.travel, level: after.simulationLevel }
       };
@@ -87,14 +87,12 @@ test.describe('event-driven NPC routine scheduler', () => {
       const other = s.deterministicRange('Mara', 'wake-offset', -1800, 1800);
       s.registerNpc('Gregor', { currentNode: 'house-12', activity: 'sleeping', metadata: { occupation: 'smith' } });
       s.promoteNpc('Gregor', 'combat');
-      const promoted = s.getState('Gregor');
+      const promotedState = s.getState('Gregor');
+      const promoted = { level: promotedState.simulationLevel, node: promotedState.currentNode, occupation: promotedState.metadata.occupation };
       s.demoteNpc('Gregor', 'abstract');
-      const demoted = s.getState('Gregor');
-      return {
-        a, b, other,
-        promoted: { level: promoted.simulationLevel, node: promoted.currentNode, occupation: promoted.metadata.occupation },
-        demoted: { level: demoted.simulationLevel, node: demoted.currentNode, occupation: demoted.metadata.occupation }
-      };
+      const demotedState = s.getState('Gregor');
+      const demoted = { level: demotedState.simulationLevel, node: demotedState.currentNode, occupation: demotedState.metadata.occupation };
+      return { a, b, other, promoted, demoted };
     });
 
     expect(result.a).toBe(result.b);
