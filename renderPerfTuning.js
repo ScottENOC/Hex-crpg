@@ -4,6 +4,43 @@
 (() => {
     'use strict';
 
+    // directionalCharacterUI.js and raceSkinPalettes.js both decorate the
+    // character-creator preview after main.js publishes it. They initialise on
+    // different polling cadences, so without coordination they can alternately
+    // wrap one another. The directional wrapper keeps its legacy callback in a
+    // module variable, and repeated wrapping can therefore create a call cycle.
+    // Intercept assignments while this early bootstrap is alive and propagate
+    // the other decorator's marker onto the new outer wrapper. Each module then
+    // sees its feature already present and stops wrapping after one composition.
+    function installAppearancePreviewWrapperCoordinator() {
+        const existingDescriptor = Object.getOwnPropertyDescriptor(window, 'updateAppearancePreview');
+        if (existingDescriptor && !existingDescriptor.configurable) return false;
+        let current = existingDescriptor?.get
+            ? existingDescriptor.get.call(window)
+            : window.updateAppearancePreview;
+
+        Object.defineProperty(window, 'updateAppearancePreview', {
+            configurable: true,
+            enumerable: true,
+            get() { return current; },
+            set(next) {
+                if (typeof next === 'function') {
+                    const previous = current;
+                    if (next.__directionalHumanFemalePreview && next.__legacyPreview?.__greenskinPreviewWrapper) {
+                        next.__greenskinPreviewWrapper = true;
+                    }
+                    if (next.__greenskinPreviewWrapper && previous?.__directionalHumanFemalePreview) {
+                        next.__directionalHumanFemalePreview = true;
+                    }
+                }
+                current = next;
+            },
+        });
+        window.__appearancePreviewWrapperCoordinatorInstalled = true;
+        return true;
+    }
+    installAppearancePreviewWrapperCoordinator();
+
     // The routine scheduler is intentionally loaded from this already-small,
     // early presentation/performance bootstrap rather than adding another
     // heavyweight dependency to gameEngine.js. It owns no rendering state;
