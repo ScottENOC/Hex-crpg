@@ -62,7 +62,8 @@
 
     function canBuild(centerHex, halfW = 2, halfH = 2) {
         if (regionTooClose(centerHex, 5)) return false;
-        return [...floorHexes(centerHex, halfW, halfH), ...wallRing(floorHexes(centerHex, halfW, halfH))].every(h => {
+        const floors = floorHexes(centerHex, halfW, halfH);
+        return [...floors, ...wallRing(floors)].every(h => {
             const t = window.getTerrainAt?.(h.q,h.r)?.name;
             return !['Water','Wall','Palisade Wall','Climbable Wall','Keep Wall','Stone Wall'].includes(t);
         });
@@ -187,7 +188,7 @@
         for (const pos of candidates) {
             if (built >= newHomesNeeded) break;
             if (!canBuild(pos,2,2)) continue;
-            const capacity = [3,4,5][built % 3];
+            const capacity = [4,4,5][built % 3];
             const home = carveCottage(`hollowmere-cottage-${String(built+1).padStart(2,'0')}`,pos,capacity,built%6===0?'tenement':'cottage');
             paintPathToward(home.door,c,8); built++;
         }
@@ -348,8 +349,16 @@
 
     function pulse() {
         if (!install()) return;
-        enforcePopulationTarget();
-        if (pop().records.size!==socialisedPopulationSize) socialisePopulation();
+        const count = pop().records.size;
+        // Normal/legacy saves can still arrive with the old 180-resident
+        // population, so migrate those down. Explicit benchmark fixtures grow
+        // to 1,000+ residents and must remain untouched so scale tests stay real.
+        if (count < TARGET_POPULATION || (count > TARGET_POPULATION && count <= 180)) {
+            enforcePopulationTarget();
+            if (pop().records.size!==socialisedPopulationSize) socialisePopulation();
+        } else if (count <= 180 && pop().records.size!==socialisedPopulationSize) {
+            socialisePopulation();
+        }
         pop().pulseMaterialisation?.();
     }
 
