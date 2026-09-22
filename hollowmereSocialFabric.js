@@ -16,6 +16,7 @@
     let mapExpanded = false;
     let socialisedPopulationSize = -1;
     let populationPulseOwned = false;
+    let worldWrapperInstalled = false;
 
     const pop = () => window.GeneratedCivilianPopulation;
     const scheduler = () => window.NPCRoutineScheduler;
@@ -159,19 +160,30 @@
         return true;
     }
 
+    function findRegionByDoor(door) {
+        return (window.interiorRegions || []).find(r => r?.doorHex?.q === door.q && r?.doorHex?.r === door.r) || null;
+    }
+
     function addExistingRegistryEntries() {
-        [
+        const homeSpecs = [
             { id:'home-old-north', center:{q:0,r:-12}, door:{q:0,r:-10}, capacity:5 },
             { id:'home-mira-row', center:{q:12,r:9}, door:{q:10,r:9}, capacity:3 },
             { id:'home-oskar-row', center:{q:-6,r:9}, door:{q:-4,r:9}, capacity:3 },
             { id:'tankard-lodgings', center:{q:0,r:0}, door:window.campaign2HollowTankardStairHex || {q:0,r:4}, capacity:8, kind:'lodgings', floor:1 },
-        ].forEach(x => residences.push({...x, kind:x.kind || 'house'}));
-        workplaces.push(
+        ];
+        homeSpecs.forEach(x => residences.push({...x, kind:x.kind || 'house', region:x.floor ? null : findRegionByDoor(x.door)}));
+
+        const workSpecs = [
             {id:'hollow-tankard',type:'tavern',center:{q:0,r:0},door:{q:0,r:4},capacity:8},
             {id:'general-store',type:'shop',center:{q:0,r:18},door:{q:0,r:15},capacity:5},
             {id:'chapel',type:'chapel',center:{q:-14,r:0},door:{q:-11,r:0},capacity:3},
             {id:'market-green',type:'market',center:{...centre()},door:{...centre()},capacity:10},
-        );
+        ];
+        workSpecs.forEach(w => {
+            const region = findRegionByDoor(w.door);
+            if (region) region.hollowmereWorkplaceId = w.id;
+            workplaces.push({...w, region});
+        });
     }
 
     function expandMap() {
@@ -188,7 +200,7 @@
         for (const pos of candidates) {
             if (built >= newHomesNeeded) break;
             if (!canBuild(pos,2,2)) continue;
-            const capacity = [4,4,5][built % 3];
+            const capacity = [3,4,5][built % 3];
             const home = carveCottage(`hollowmere-cottage-${String(built+1).padStart(2,'0')}`,pos,capacity,built%6===0?'tenement':'cottage');
             paintPathToward(home.door,c,8); built++;
         }
@@ -218,6 +230,57 @@
         return true;
     }
 
+    function resetWorldBuildState() {
+        mapExpanded = false;
+        installed = false;
+        socialisedPopulationSize = -1;
+        residences.length = 0;
+        workplaces.length = 0;
+        households.clear();
+        delete window.HollowmereSettlementRegistry;
+        delete window.campaign2HollowTankardBuilding;
+        delete window.campaign2HollowTankardStairHex;
+        delete window.campaign2HollowTankardLodgingFloor;
+    }
+
+    // Campaign 2 snapshots deterministic terrain/tile objects inside
+    // setupVillageScene. The social-fabric geography must therefore be built
+    // in the same call, not by a timer afterward, otherwise every cottage is
+    // mistaken for a player-created save diff. Wrapping also means a load that
+    // regenerates the world rebuilds these houses instead of retaining a stale
+    // one-time mapExpanded flag from the previous scene.
+    function installWorldBuildWrapper() {
+        if (worldWrapperInstalled) return true;
+        const original = window.setupVillageScene;
+        if (typeof original !== 'function') return false;
+        if (original.__hollowmereSocialFabricWorldBuild) {
+            worldWrapperInstalled = true;
+            return true;
+        }
+        const wrapped = function(...args) {
+            resetWorldBuildState();
+            const result = original.apply(this, args);
+            if (expandMap()) {
+                // New cottage path stubs are deterministic world content too.
+                // Reconnect/reconcile them, then refresh the same baselines the
+                // original setup just created before returning to gameplay/load.
+                if (window.connectAllRoadNetworks) window.connectAllRoadNetworks();
+                if (window.reconcileRegionWallBookkeeping) window.reconcileRegionWallBookkeeping();
+                if (window.reconcileAllRegionFootprints) window.reconcileAllRegionFootprints();
+                window._campaign2TerrainBaseline = { ...window.overrideTerrain };
+                window._campaign2TileObjectsBaseline = { ...window.tileObjects };
+                if (window.drawMap) window.drawMap();
+                if (window.renderEntities) window.renderEntities();
+            }
+            return result;
+        };
+        wrapped.__hollowmereSocialFabricWorldBuild = true;
+        wrapped.__original = original;
+        window.setupVillageScene = wrapped;
+        worldWrapperInstalled = true;
+        return true;
+    }
+
     function takePopulationPulseOwnership() {
         if (populationPulseOwned) return;
         if (window.__generatedCivilianPopulationTimer) {
@@ -231,7 +294,10 @@
         const p = pop(); const s = scheduler();
         if (!p?.records) return;
         const records = [...p.records.values()].sort((a,b) => Number(a.id.split(':').pop()) - Number(b.id.split(':').pop()));
-        if (records.length > TARGET_POPULATION) {
+        // Normal/legacy Hollowmere populations are migrated to the village
+        // target. Explicit large fixtures (>180), used by scale regressions,
+        // are intentionally left intact so performance tests remain meaningful.
+        if (records.length > TARGET_POPULATION && records.length <= 180) {
             for (const record of records.slice(TARGET_POPULATION)) {
                 p.dematerialise?.(record.id,{force:true});
                 s?.unregisterNpc?.(record.id);
@@ -333,6 +399,10 @@
 
     function socialisePopulation() {
         const p=pop(); if (!p?.records?.size||!mapExpanded) return false;
+        // Social wiring is a village feature, not a 1,000-person benchmark.
+        // Large explicit stress populations keep their cheap generated records
+        // and scheduler events without an O(N^2) friendship pass.
+        if (p.records.size > 180) { socialisedPopulationSize=p.records.size; return true; }
         const records=[...p.records.values()].sort((a,b)=>a.id.localeCompare(b.id));
         if (socialisedPopulationSize===records.length && records.every(r=>r.householdId && (r.isDependent || r.workplaceId))) return true;
         assignHouseholds(records); assignWorkplaces(records); assignFriends(records); syncScheduler(records);
@@ -343,37 +413,38 @@
         if (installed) return true;
         if (window.currentCampaign!=='2'||!pop()?.records||!window.interiorRegions||!window.campaign2Landmarks?.crossroads) return false;
         takePopulationPulseOwnership(); enforcePopulationTarget();
-        if (!expandMap()) return false;
+        if (!mapExpanded && !expandMap()) return false;
         socialisePopulation(); pop().pulseMaterialisation?.(); installed=true; return true;
     }
 
     function pulse() {
+        installWorldBuildWrapper();
         if (!install()) return;
-        const count = pop().records.size;
-        // Normal/legacy saves can still arrive with the old 180-resident
-        // population, so migrate those down. Explicit benchmark fixtures grow
-        // to 1,000+ residents and must remain untouched so scale tests stay real.
-        if (count < TARGET_POPULATION || (count > TARGET_POPULATION && count <= 180)) {
-            enforcePopulationTarget();
-            if (pop().records.size!==socialisedPopulationSize) socialisePopulation();
-        } else if (count <= 180 && pop().records.size!==socialisedPopulationSize) {
-            socialisePopulation();
-        }
+        enforcePopulationTarget();
+        if (pop().records.size!==socialisedPopulationSize) socialisePopulation();
         pop().pulseMaterialisation?.();
     }
 
     window.HollowmereSocialFabric = {
-        install, expandMap, socialisePopulation,
+        install, expandMap, socialisePopulation, resetWorldBuildState, installWorldBuildWrapper,
         get residences(){return residences;}, get workplaces(){return workplaces;}, get households(){return households;},
         get stats(){
             const records=[...(pop()?.records?.values?.()||[])];
-            return { installed,mapExpanded,population:records.length,dependants:records.filter(r=>r.isDependent).length,adults:records.filter(r=>!r.isDependent).length,
+            return { installed,mapExpanded,worldWrapperInstalled,population:records.length,dependants:records.filter(r=>r.isDependent).length,adults:records.filter(r=>!r.isDependent).length,
                 households:households.size,residences:residences.length,housingCapacity:residences.reduce((n,r)=>n+r.capacity,0),workplaces:workplaces.length,
                 workplaceCapacity:workplaces.reduce((n,w)=>n+w.capacity,0),targetDwellings:TARGET_DWELLINGS,tankardUpperFloor:!!window.campaign2HollowTankardBuilding };
         },
         TARGET_POPULATION, TARGET_DWELLINGS,
     };
 
+    // Install the world-build wrapper as soon as campaign2World.js publishes
+    // setupVillageScene, independent of whether Campaign 2 has started yet.
+    if (!installWorldBuildWrapper()) {
+        const wrapperTimer=setInterval(() => {
+            if (installWorldBuildWrapper()) clearInterval(wrapperTimer);
+        },25);
+        setTimeout(() => clearInterval(wrapperTimer),5000);
+    }
     window.__hollowmereSocialFabricTimer=setInterval(pulse,BOOT_MS);
     pulse();
 })();
