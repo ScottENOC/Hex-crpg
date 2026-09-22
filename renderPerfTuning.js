@@ -101,6 +101,17 @@
         document.head.appendChild(civilianPersistence);
     }
 
+    // Purposeful daily deviations stay event-driven: one scattered planner per
+    // civilian can schedule market/tavern/worship visits, while rare settlement
+    // events do one bounded cohort scan only when they are triggered.
+    if (!document.querySelector('script[data-civilian-routine-variety]')) {
+        const routineVariety = document.createElement('script');
+        routineVariety.src = `civilianRoutineVariety.js?build=${encodeURIComponent(build)}`;
+        routineVariety.dataset.civilianRoutineVariety = 'true';
+        routineVariety.async = false;
+        document.head.appendChild(routineVariety);
+    }
+
     function installVisibilityBounds() {
         const original = window.isVisibleToPlayer;
         if (typeof original !== 'function' || original.__wideZoomBounds) return false;
