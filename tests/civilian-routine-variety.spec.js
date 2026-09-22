@@ -51,11 +51,8 @@ test.describe('sparse generated civilian routine variety', () => {
       pop.ensurePopulation(60);
       const record = [...pop.records.values()].find(r => routines.routineTraits(r).marketRegular);
       const traits = routines.routineTraits(record);
-      // Choose the first non-negative day whose weekday is this person's stable market day.
       const day = traits.marketDay;
       window.worldSeconds = day * 86400 + 3 * 3600;
-      // Reset this person's planner metadata/events generation, then schedule one
-      // planner in the chosen day so the test doesn't depend on page-start time.
       const state = sched.getState(record.id);
       sched.clearNpcEvents(record.id);
       state.metadata.routineVarietyPlannerAt = null;
@@ -63,7 +60,7 @@ test.describe('sparse generated civilian routine variety', () => {
       const planner = sched.exportState().events
         .filter(e => e.npcId === record.id && e.type === routines.EVENT_TYPES.PLAN_EVENT && e.generation === sched.getState(record.id).eventGeneration)
         .sort((a,b) => a.at-b.at)[0];
-      sched.processDueEvents(planner.at, { maxEvents: 10 });
+      sched.processDueEvents(planner.at, { maxEvents: 128 });
       const afterEvents = sched.exportState().events.filter(e => e.npcId === record.id && e.generation === sched.getState(record.id).eventGeneration);
       const marketVisit = afterEvents.find(e => e.type === routines.EVENT_TYPES.VISIT_EVENT && e.payload?.kind === 'market');
       return {
@@ -108,9 +105,6 @@ test.describe('sparse generated civilian routine variety', () => {
         travelTo: state.travel?.toHex,
         level: state.simulationLevel,
       };
-
-      // Dematerialise the same persistent person and directly schedule another
-      // visit. It should create abstract travel without producing a new Entity.
       pop.dematerialise(record.id, { force:true });
       const later = visit.at + 4000;
       window.worldSeconds = later;
