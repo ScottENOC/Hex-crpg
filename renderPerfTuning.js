@@ -67,6 +67,17 @@
         document.head.appendChild(bridge);
     }
 
+    // Generated civilians use the same scheduler but stay separate from the
+    // hand-authored named-NPC bridge. The module waits for Campaign 2, Entity,
+    // the party and settlement landmarks before creating any population.
+    if (!document.querySelector('script[data-generated-civilian-population]')) {
+        const civilians = document.createElement('script');
+        civilians.src = `generatedCivilianPopulation.js?build=${encodeURIComponent(build)}`;
+        civilians.dataset.generatedCivilianPopulation = 'true';
+        civilians.async = false;
+        document.head.appendChild(civilians);
+    }
+
     function installVisibilityBounds() {
         const original = window.isVisibleToPlayer;
         if (typeof original !== 'function' || original.__wideZoomBounds) return false;
