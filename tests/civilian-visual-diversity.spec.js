@@ -130,7 +130,9 @@ test.describe('generated civilian visual diversity', () => {
       const ctx = canvas.getContext('2d');
       const props = ['basket', 'sack', 'pouch', 'hammer', 'net', 'bundle', 'scroll', 'jug', 'tool'];
       const drawn = props.map((prop, i) => visuals.drawPropShape(ctx, prop, 8 + (i % 5) * 12, 12 + Math.floor(i / 5) * 30, 9));
-      const alphaPixels = [...ctx.getImageData(0, 0, 64, 64).data].filter((_, i) => i % 4 === 3 && ctx.getImageData(0, 0, 64, 64).data[i] > 0).length;
+      const pixels = ctx.getImageData(0, 0, 64, 64).data;
+      let alphaPixels = 0;
+      for (let i = 3; i < pixels.length; i += 4) if (pixels[i] > 0) alphaPixels++;
 
       const pop = window.GeneratedCivilianPopulation;
       window.entities.filter(e => e.side === 'player').forEach(p => { p.hex = { q: 5000, r: 5000 }; });
