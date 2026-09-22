@@ -47,6 +47,10 @@ test.describe('sparse generated civilian routine variety', () => {
       const sched = window.NPCRoutineScheduler;
       window.entities.filter(e => e.side === 'player').forEach(p => { p.hex={q:5000,r:5000}; p.visualQ=5000; p.visualR=5000; });
       const record = [...pop.records.values()].find(r => routines.routineTraits(r).marketRegular);
+      // The page may have already materialised this civilian during bootstrap
+      // before the player is moved off-screen. This test is specifically about
+      // the abstract/off-screen path, so make that precondition explicit.
+      pop.dematerialise(record.id, { force:true });
       const traits = routines.routineTraits(record);
       const day = traits.marketDay;
       window.worldSeconds = day*86400 + 3*3600;
