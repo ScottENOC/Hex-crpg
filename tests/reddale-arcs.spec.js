@@ -129,7 +129,11 @@ test.describe('Reddale arc content: necromancer/lich, orc border, Ironbond', () 
         await createCharacter(page);
         const result = await page.evaluate(() => {
             const playerEntity = window.entities.find(e => e.name === window.party[0].name);
-            playerEntity.hex = { q: window.campaign2Landmarks.crossroads.q + 30, r: 0 };
+            // Hollowmere now has a real ~20-dwelling footprint. q+30 can sit
+            // among its eastern cottages, so keep this encounter fixture well
+            // beyond the settlement edge where the test's "wilderness" premise
+            // remains true.
+            playerEntity.hex = { q: window.campaign2Landmarks.crossroads.q + 60, r: 0 };
             window.regions.hollowmere.security = 0; // maximize encounter chance
             window.orcRaiderEncounterAccum = 999;
             const before = window.entities.filter(e => e.orcRaiderBand).length;
