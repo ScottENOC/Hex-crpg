@@ -57,7 +57,11 @@ test.describe('sparse generated civilian routine variety', () => {
       const planner = sched.exportState().events.find(e =>
         e.npcId === record.id && e.type === routines.EVENT_TYPES.PLAN_EVENT && e.generation === sched.getState(record.id).eventGeneration
       );
-      sched.processDueEvents(planner.at, { maxEvents: 256 });
+      // The normal scheduler budget is intentionally small, but this synthetic
+      // test can have ~180 same-morning planners already queued before the
+      // selected person's event. Drain all due fixture work so the assertion is
+      // about planner behaviour rather than heap ordering under the live budget.
+      sched.processDueEvents(planner.at, { maxEvents: 2048 });
       const marketVisit = sched.exportState().events.find(e =>
         e.npcId === record.id && e.type === routines.EVENT_TYPES.VISIT_EVENT &&
         e.payload?.kind === 'market' && e.generation === sched.getState(record.id).eventGeneration
