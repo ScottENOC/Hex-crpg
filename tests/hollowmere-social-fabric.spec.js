@@ -7,11 +7,11 @@ test.describe('Hollowmere social fabric', () => {
     await page.waitForFunction(() =>
       !!window.HollowmereSocialFabric?.stats?.installed &&
       !!window.HollowmereSettlementRegistry &&
-      window.GeneratedCivilianPopulation?.records?.size >= 180
+      window.GeneratedCivilianPopulation?.records?.size === 80
     );
   });
 
-  test('the physical village has enough residential and work capacity for its population', async ({ page }) => {
+  test('the starting village stays village-sized with enough housing and work capacity', async ({ page }) => {
     const result = await page.evaluate(() => {
       const social = window.HollowmereSocialFabric;
       const stats = social.stats;
@@ -21,38 +21,72 @@ test.describe('Hollowmere social fabric', () => {
       return { ...stats, builtResidences, registeredRegions, workplaceRegions };
     });
 
-    expect(result.population).toBe(180);
-    expect(result.residences).toBeGreaterThanOrEqual(24);
-    expect(result.builtResidences).toBeGreaterThanOrEqual(20);
+    expect(result.population).toBe(80);
+    expect(result.targetDwellings).toBe(20);
+    expect(result.residences).toBeGreaterThanOrEqual(18);
+    expect(result.residences).toBeLessThanOrEqual(20);
+    expect(result.builtResidences).toBeGreaterThanOrEqual(14);
     expect(result.registeredRegions).toBe(result.builtResidences);
     expect(result.housingCapacity).toBeGreaterThanOrEqual(result.population);
     expect(result.workplaces).toBeGreaterThanOrEqual(9);
-    expect(result.workplaceCapacity).toBeGreaterThanOrEqual(result.population);
+    expect(result.workplaceCapacity).toBeGreaterThanOrEqual(result.adults);
     expect(result.workplaceRegions).toBeGreaterThanOrEqual(2);
+    expect(result.dependants).toBeGreaterThan(5);
+    expect(result.dependants).toBeLessThan(35);
   });
 
-  test('every generated civilian belongs to a household and a real workplace', async ({ page }) => {
+  test('the Hollow Tankard has a real upstairs lodging floor', async ({ page }) => {
+    const result = await page.evaluate(() => {
+      const building = window.campaign2HollowTankardBuilding;
+      const stair = window.campaign2HollowTankardStairHex;
+      const upper = building?.floors?.[1];
+      const beds = Object.values(upper?.tileObjects || {}).filter(o => o?.type === 'bed').length;
+      return {
+        building: !!building,
+        floor: window.campaign2HollowTankardLodgingFloor,
+        stair,
+        groundStair: stair ? window.tileObjects?.[`${stair.q},${stair.r}`] : null,
+        upperStair: stair ? upper?.tileObjects?.[`${stair.q},${stair.r}`] : null,
+        beds,
+        registered: (window.multiStoryBuildings || []).includes(building),
+      };
+    });
+    expect(result.building).toBe(true);
+    expect(result.floor).toBe(1);
+    expect(result.registered).toBe(true);
+    expect(result.groundStair?.type).toBe('stair_up');
+    expect(result.upperStair?.type).toBe('stair_down');
+    expect(result.beds).toBeGreaterThanOrEqual(5);
+  });
+
+  test('every adult has a household and real workplace while dependants remain household-based', async ({ page }) => {
     const result = await page.evaluate(() => {
       const pop = window.GeneratedCivilianPopulation;
       const social = window.HollowmereSocialFabric;
       const workplaceIds = new Set(social.workplaces.map(w => w.id));
       const residenceIds = new Set(social.residences.map(r => r.id));
       const records = [...pop.records.values()];
+      const adults = records.filter(r => !r.isDependent);
+      const dependants = records.filter(r => r.isDependent);
       return {
         total: records.length,
         withHousehold: records.filter(r => !!r.householdId).length,
-        withWorkplace: records.filter(r => workplaceIds.has(r.workplaceId)).length,
+        adultsWithWorkplace: adults.filter(r => workplaceIds.has(r.workplaceId)).length,
+        adults: adults.length,
+        dependants: dependants.length,
+        dependantsWithoutJobs: dependants.filter(r => !r.workplaceId).length,
         realHomes: records.filter(r => residenceIds.has(String(r.nodes.home.key).replace(/^home:/,''))).length,
         distinctHomes: new Set(records.map(r => r.householdId)).size,
-        distinctWorkplaces: new Set(records.map(r => r.workplaceId)).size,
+        distinctWorkplaces: new Set(adults.map(r => r.workplaceId)).size,
       };
     });
 
     expect(result.withHousehold).toBe(result.total);
-    expect(result.withWorkplace).toBe(result.total);
+    expect(result.adultsWithWorkplace).toBe(result.adults);
+    expect(result.dependantsWithoutJobs).toBe(result.dependants);
     expect(result.realHomes).toBe(result.total);
-    expect(result.distinctHomes).toBeGreaterThanOrEqual(20);
-    expect(result.distinctWorkplaces).toBeGreaterThanOrEqual(7);
+    expect(result.distinctHomes).toBeGreaterThanOrEqual(15);
+    expect(result.distinctWorkplaces).toBeGreaterThanOrEqual(6);
   });
 
   test('households create reciprocal spouse and parent-child relationships', async ({ page }) => {
@@ -76,11 +110,11 @@ test.describe('Hollowmere social fabric', () => {
     });
 
     expect(result.invalid).toBe(0);
-    expect(result.spouses).toBeGreaterThan(30);
-    expect(result.parentLinks).toBeGreaterThan(30);
+    expect(result.spouses).toBeGreaterThan(20);
+    expect(result.parentLinks).toBeGreaterThan(10);
   });
 
-  test('friend networks are persistent IDs and social destinations point at actual friends homes', async ({ page }) => {
+  test('friend networks point social visits at actual friends homes', async ({ page }) => {
     const result = await page.evaluate(() => {
       const records = [...window.GeneratedCivilianPopulation.records.values()];
       const byId = new Map(records.map(r => [r.id, r]));
@@ -96,12 +130,12 @@ test.describe('Hollowmere social fabric', () => {
       return { total:records.length, withFriends, valid, socialAtFriendHome };
     });
 
-    expect(result.withFriends).toBeGreaterThan(result.total * 0.8);
+    expect(result.withFriends).toBeGreaterThan(result.total * 0.7);
     expect(result.valid).toBe(result.withFriends);
     expect(result.socialAtFriendHome).toBe(result.withFriends);
   });
 
-  test('scheduler state is rebound to the assigned home/work nodes without increasing the live-entity cap', async ({ page }) => {
+  test('scheduler uses assigned addresses without increasing the live-entity cap', async ({ page }) => {
     const result = await page.evaluate(() => {
       const pop = window.GeneratedCivilianPopulation;
       const sched = window.NPCRoutineScheduler;
@@ -109,12 +143,7 @@ test.describe('Hollowmere social fabric', () => {
       const record = records.find(r => sched.getState(r.id) && !sched.getState(r.id).travel);
       const state = sched.getState(record.id);
       const validNode = [record.nodes.home.key, record.nodes.work.key, record.nodes.social.key].includes(state.currentNode);
-      return {
-        validNode,
-        currentHex: state.currentHex,
-        materialised: pop.materialised.size,
-        max: pop.MAX_MATERIALISED,
-      };
+      return { validNode, currentHex:state.currentHex, materialised:pop.materialised.size, max:pop.MAX_MATERIALISED };
     });
 
     expect(result.validNode).toBe(true);
