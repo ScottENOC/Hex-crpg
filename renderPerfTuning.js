@@ -78,6 +78,17 @@
         document.head.appendChild(civilians);
     }
 
+    // Stable visual identity is kept as a separate presentation layer so the
+    // persistent population remains cheap records. It only styles the at-most
+    // 40 materialised civilians and draws their cosmetic occupation props.
+    if (!document.querySelector('script[data-civilian-visual-diversity]')) {
+        const civilianVisuals = document.createElement('script');
+        civilianVisuals.src = `civilianVisualDiversity.js?build=${encodeURIComponent(build)}`;
+        civilianVisuals.dataset.civilianVisualDiversity = 'true';
+        civilianVisuals.async = false;
+        document.head.appendChild(civilianVisuals);
+    }
+
     function installVisibilityBounds() {
         const original = window.isVisibleToPlayer;
         if (typeof original !== 'function' || original.__wideZoomBounds) return false;
