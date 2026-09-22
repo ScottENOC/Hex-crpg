@@ -89,6 +89,18 @@
         document.head.appendChild(civilianVisuals);
     }
 
+    // Save/load treats generated civilian Entity objects as transient LOD
+    // shells. The adapter stores their persistent people/routine records in a
+    // compact versioned snapshot and leaves those shells out of the core entity
+    // array so a load cannot duplicate civilians.
+    if (!document.querySelector('script[data-civilian-persistence]')) {
+        const civilianPersistence = document.createElement('script');
+        civilianPersistence.src = `civilianPersistence.js?build=${encodeURIComponent(build)}`;
+        civilianPersistence.dataset.civilianPersistence = 'true';
+        civilianPersistence.async = false;
+        document.head.appendChild(civilianPersistence);
+    }
+
     function installVisibilityBounds() {
         const original = window.isVisibleToPlayer;
         if (typeof original !== 'function' || original.__wideZoomBounds) return false;
