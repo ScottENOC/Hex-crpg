@@ -60,6 +60,7 @@
     load('script[data-civilian-routine-variety]', 'civilianRoutineVariety.js', 'civilianRoutineVariety');
     load('script[data-hollowmere-social-fabric]', 'hollowmereSocialFabric.js', 'hollowmereSocialFabric');
     load('script[data-millbrook-expansion]', 'millbrookExpansion.js', 'millbrookExpansion');
+    load('script[data-millbrook-content]', 'millbrookContent.js', 'millbrookContent');
     load('script[data-emberlode-expansion]', 'emberlodeExpansion.js', 'emberlodeExpansion');
     load('script[data-silverhart-capital-rebuild]', 'silverhartCapitalRebuild.js', 'silverhartCapitalRebuild');
     load('script[data-silverhart-capital-completion]', 'silverhartCapitalCompletion.js', 'silverhartCapitalCompletion');
