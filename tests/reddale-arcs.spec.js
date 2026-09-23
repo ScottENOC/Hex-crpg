@@ -7,9 +7,9 @@ test.describe('Reddale arc content: necromancer/lich, orc border, Ironbond', () 
         const result = await page.evaluate(() => {
             window.campaign2AbandonedHouseCenter = window.campaign2AbandonedHouseCenter || { q: 100, r: 100 };
             const before = window.factions.necromancer_cult.standing;
-            window.interactPhylacteryAltar(); // pickup
+            window.interactPhylacteryAltar();
             const hasShardAfterPickup = window.player.inventory.includes('phylactery_shard');
-            window.interactPhylacteryAltar(); // opens return/keep dialogue
+            window.interactPhylacteryAltar();
             const options = document.querySelectorAll('#dialogue-options button');
             let returnBtn = null;
             options.forEach(b => { if (b.innerText.includes('Return the shard')) returnBtn = b; });
@@ -50,12 +50,12 @@ test.describe('Reddale arc content: necromancer/lich, orc border, Ironbond', () 
     test('lich reputation crash: keeping the shard tanks reputation across factions', async ({ page }) => {
         await createCharacter(page);
         const result = await page.evaluate(() => {
-            window.interactPhylacteryAltar(); // pickup
+            window.interactPhylacteryAltar();
             const before = {
                 silverhart: window.factions.silverhart_kingdom.standing,
                 ironbond: window.factions.ironbond_company.standing,
             };
-            window.interactPhylacteryAltar(); // opens keep/return dialogue
+            window.interactPhylacteryAltar();
             const options = document.querySelectorAll('#dialogue-options button');
             let keepBtn = null;
             options.forEach(b => { if (b.innerText.includes('Keep it')) keepBtn = b; });
@@ -91,7 +91,7 @@ test.describe('Reddale arc content: necromancer/lich, orc border, Ironbond', () 
         const result = await page.evaluate(() => {
             window.goblinScoutNoteRead = true;
             window.questLog = window.questLog || [];
-            window.questLog.push({ id: 'eyes_on_border_placeholder' }); // no-op, ensures array exists
+            window.questLog.push({ id: 'eyes_on_border_placeholder' });
             window.questLog = window.questLog.filter(q => q.id !== 'eyes_on_border_placeholder');
             window.triggerEyesOnBorder();
             const scout = window.entities.find(e => e.eyesOnBorderTarget);
@@ -110,7 +110,6 @@ test.describe('Reddale arc content: necromancer/lich, orc border, Ironbond', () 
             const quest = window.questLog.find(q => q.id === 'reddale_cut');
             const beforeInfluence = window.factions.ironbond_company.merchantInfluence.silverhart_kingdom;
             const beforeIronbond = window.factions.ironbond_company.standing;
-            // Simulate the "help push back" branch's effects directly (same code the dialogue action runs)
             window.adjustReputation(window.factions.ironbond_company, -15, 15);
             window.adjustMerchantInfluence(window.factions.ironbond_company, 'silverhart_kingdom', -15);
             quest.status = 'completed';
@@ -129,22 +128,26 @@ test.describe('Reddale arc content: necromancer/lich, orc border, Ironbond', () 
         await createCharacter(page);
         const result = await page.evaluate(() => {
             const playerEntity = window.entities.find(e => e.name === window.party[0].name);
-            // Hollowmere now has a real ~20-dwelling footprint. q+30 can sit
-            // among its eastern cottages, so keep this encounter fixture well
-            // beyond the settlement edge where the test's "wilderness" premise
-            // remains true.
-            playerEntity.hex = { q: window.campaign2Landmarks.crossroads.q + 60, r: 0 };
-            window.regions.hollowmere.security = 0; // maximize encounter chance
+            const cp = window.campaign2Landmarks.crossroads;
+            // Keep walking east until the entire local spawn neighbourhood is
+            // outside every settlement/hand-authored-site safety halo. This
+            // keeps the test about wilderness encounter weighting, not about
+            // whether an arbitrary fixed coordinate became urban later.
+            let candidate = { q: cp.q + 90, r: cp.r };
+            for (let i = 0; i < 12 && window.SettlementSafety?.isProceduralHostileSpawnBlocked(candidate, { extraBuffer: 25 }); i++) {
+                candidate = { q: candidate.q + 40, r: candidate.r };
+            }
+            playerEntity.hex = candidate;
+            window.regions.hollowmere.security = 0;
             window.orcRaiderEncounterAccum = 999;
             const before = window.entities.filter(e => e.orcRaiderBand).length;
-            // Roll many times since it's still probabilistic even at max chance base
             let after = before;
             for (let i = 0; i < 40 && after === before; i++) {
                 window.orcRaiderEncounterAccum = 999;
                 window.checkOrcRaiderEncounter(playerEntity, 0);
                 after = window.entities.filter(e => e.orcRaiderBand).length;
             }
-            return { before, after };
+            return { before, after, candidate };
         });
         expect(result.after).toBeGreaterThan(result.before);
     });
