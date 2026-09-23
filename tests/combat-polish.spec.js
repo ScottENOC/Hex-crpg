@@ -14,13 +14,17 @@ test.describe('Unarmed Mastery', () => {
         const result = await page.evaluate(() => {
             const player = window.entities.find(e => e.side === 'player' && !e.rider);
             player.equipped = { weapon: null, offhand: null, armor: null, helmet: null };
-            // Keep the target comfortably above either test hit. A normal
-            // low-HP goblin can be overkilled by both attacks, clamping both
-            // measured damage values to the same remaining HP and hiding the
-            // +2 skill delta this regression is intended to measure.
+            // Keep the target comfortably above either test hit and remove its
+            // mitigation entirely. This regression is about the attacker's
+            // +2 Unarmed Mastery delta; monster armour/minimum-damage floors
+            // must not be allowed to flatten both measured hits to the same
+            // post-mitigation value.
             const enemy = window.createMonster('goblin', { q: player.hex.q + 1, r: player.hex.r }, { health: 200 }, null, 'enemy');
             enemy.hp = 200;
             enemy.maxHp = 200;
+            enemy.baseReduction = 0;
+            enemy.damageReduction = 0;
+            enemy.equipped = { weapon: null, offhand: null, armor: null, helmet: null };
             window.entities.push(enemy);
             const originalRandom = Math.random;
             Math.random = () => 0; // guaranteed hit, no crit-roll variance
