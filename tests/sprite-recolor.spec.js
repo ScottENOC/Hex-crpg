@@ -1,9 +1,8 @@
 // tests/sprite-recolor.spec.js
 // Body sprite recolor (spriteRecolor.js): cheap character variety by hue-
-// shifting shirt/pants/skin independently (identified by lightness bands,
-// not hue — skin and clothing share nearly the same hue in this pixel art)
-// plus a separate full-image recolor for the hair overlay, all without
-// needing new art per variant.
+// shifting shirt/pants/skin independently (identified by source-art masks,
+// not the result of earlier tint passes) plus a separate full-image recolor
+// for the hair overlay, all without needing new art per variant.
 const { test, expect } = require('@playwright/test');
 const { createCharacter } = require('./helpers');
 
@@ -22,7 +21,7 @@ test.describe('sprite recolor', () => {
             }),
         }));
         expect(result.sameTwice).toBe(true);
-        expect(result.differsAcrossNames).toBeGreaterThan(1); // not all four collide to the same hue
+        expect(result.differsAcrossNames).toBeGreaterThan(1);
         expect(result.inRange).toBe(true);
     });
 
@@ -32,8 +31,6 @@ test.describe('sprite recolor', () => {
             const canvas = window.getRecoloredSprite(img, { shirtHue: 200, pantsHue: 90 });
             const ctx = canvas.getContext('2d');
 
-            // Torso (shirt band, ~L 0.43-0.45) and legs (pants band, ~L 0.17-0.18),
-            // sampled down the center column; face near the top.
             const torso = ctx.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height * 0.45), 1, 1).data;
             const legs = ctx.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height * 0.63), 1, 1).data;
             const face = ctx.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height * 0.12), 1, 1).data;
@@ -54,12 +51,49 @@ test.describe('sprite recolor', () => {
         });
         expect(result.torso[0] !== result.origTorso[0] || result.torso[1] !== result.origTorso[1] || result.torso[2] !== result.origTorso[2]).toBe(true);
         expect(result.legs[0] !== result.origLegs[0] || result.legs[1] !== result.origLegs[1] || result.legs[2] !== result.origLegs[2]).toBe(true);
-        // Shirt and pants should end up as visibly different colors from each other.
         expect(result.torso.slice(0, 3).join(',')).not.toBe(result.legs.slice(0, 3).join(','));
-        // Face untouched when only shirtHue/pantsHue are given (no skinHue).
         expect(result.face[0]).toBe(result.origFace[0]);
         expect(result.face[1]).toBe(result.origFace[1]);
         expect(result.face[2]).toBe(result.origFace[2]);
+    });
+
+    test('skin, shirt and pants stay independent when recolour passes are chained', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const img = window.gameVisuals.humanMaleBase;
+            const px = Math.floor(img.naturalWidth / 2);
+            const faceY = Math.floor(img.naturalHeight * 0.12);
+            const torsoY = Math.floor(img.naturalHeight * 0.45);
+            const legsY = Math.floor(img.naturalHeight * 0.63);
+            const sample = (canvas, y) => Array.from(canvas.getContext('2d').getImageData(px, y, 1, 1).data).slice(0, 3);
+
+            // Deliberately use a fantasy-blue skin tone, then radically
+            // different clothing hues. Clothing must not repaint the face.
+            const blueSkin = window.getRecoloredSkinSprite(img, { hue:220, saturation:0.65, lightness:0.40 });
+            const clothesA = window.getRecoloredSprite(blueSkin, { shirtHue:10, pantsHue:100 });
+            const clothesB = window.getRecoloredSprite(blueSkin, { shirtHue:300, pantsHue:210 });
+
+            // Now hold clothing fixed and change only skin. Shirt/pants pixels
+            // must be identical even though the first pass has a very
+            // different hue and lightness.
+            const warmSkin = window.getRecoloredSkinSprite(img, { hue:22, saturation:0.45, lightness:0.72 });
+            const sameClothesWarm = window.getRecoloredSprite(warmSkin, { shirtHue:200, pantsHue:35 });
+            const sameClothesBlue = window.getRecoloredSprite(blueSkin, { shirtHue:200, pantsHue:35 });
+
+            return {
+                faceA: sample(clothesA, faceY),
+                faceB: sample(clothesB, faceY),
+                torsoA: sample(clothesA, torsoY),
+                torsoB: sample(clothesB, torsoY),
+                warmTorso: sample(sameClothesWarm, torsoY),
+                blueTorso: sample(sameClothesBlue, torsoY),
+                warmLegs: sample(sameClothesWarm, legsY),
+                blueLegs: sample(sameClothesBlue, legsY),
+            };
+        });
+        expect(result.faceA).toEqual(result.faceB);
+        expect(result.torsoA).not.toEqual(result.torsoB);
+        expect(result.warmTorso).toEqual(result.blueTorso);
+        expect(result.warmLegs).toEqual(result.blueLegs);
     });
 
     test('skinHue recolors the face too (unlike shirt/pants, skin is not head-cutoff-excluded)', async ({ page }) => {
@@ -99,14 +133,12 @@ test.describe('sprite recolor', () => {
             origCtx.drawImage(img, 0, 0);
             const orig = origCtx.getImageData(0, 0, canvas.width, canvas.height).data;
 
-            // Find the first opaque pixel to compare before/after.
             let idx = -1;
             for (let i = 0; i < orig.length; i += 4) { if (orig[i + 3] >= 50) { idx = i; break; } }
 
             const tinted = window.getRecoloredHairSprite(img, 300);
             const tintedCtx = tinted.getContext('2d');
             const tintedData = tintedCtx.getImageData(0, 0, canvas.width, canvas.height).data;
-
             const again = window.getRecoloredHairSprite(img, 300);
 
             return {
@@ -147,9 +179,7 @@ test.describe('sprite recolor', () => {
         expect(result.skinHue).toBe(result.expectedSkin.hue);
         expect(result.skinSaturation).toBe(result.expectedSkin.saturation);
         expect(result.skinLightness).toBe(result.expectedSkin.lightness);
-        // Defaults are muted (natural palette), unlike an explicit player choice.
         expect(result.clothingSatMult).toBeLessThan(1);
-        // Salting per band means shirt/pants/hair shouldn't all collapse to the same hue.
         expect(new Set([result.shirtHue, result.pantsHue, result.hairHue]).size).toBeGreaterThan(1);
     });
 
