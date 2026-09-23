@@ -6,7 +6,7 @@
     'use strict';
 
     const PULSE_MS = 900;
-    const PER_OBSERVER_BUDGET = 40;
+    const PER_BUBBLE_BUDGET = 40;
     const HARD_CAP = 120;
     let installed = false;
     let pulseCount = 0;
@@ -44,7 +44,8 @@
             candidates.push({ record, distance:stream.nearestObserverDistance(hex,0) });
         }
         candidates.sort((a,b)=>a.distance-b.distance || String(a.record.id).localeCompare(String(b.record.id)));
-        const budget = Math.min(HARD_CAP, Math.max(PER_OBSERVER_BUDGET, observers.length * PER_OBSERVER_BUDGET));
+        const bubbles = Math.max(1, stream.observerBubbleCount || 1);
+        const budget = Math.min(HARD_CAP, bubbles * PER_BUBBLE_BUDGET);
         const selected = candidates.slice(0,budget);
         const wanted = new Set(selected.map(x=>x.record.id));
 
@@ -52,13 +53,15 @@
         if (!window.isInCombat) {
             for (const id of [...pop.materialised.keys()]) if (!wanted.has(id)) pop.dematerialise(id);
         }
-        return { candidates:candidates.length, materialised:pop.materialised.size, budget, observers:observers.length };
+        return { candidates:candidates.length, materialised:pop.materialised.size, budget, observers:observers.length, bubbles };
     }
 
     window.MultiAnchorCivilianStreaming = {
         install,
         pulse,
-        get stats(){ return { installed,pulseCount,observers:window.WorldChunkStreaming?.observers?.length || 0 }; },
+        PER_BUBBLE_BUDGET,
+        HARD_CAP,
+        get stats(){ return { installed,pulseCount,observers:window.WorldChunkStreaming?.observers?.length || 0,bubbles:window.WorldChunkStreaming?.observerBubbleCount || 0 }; },
     };
 
     const timer = setInterval(pulse,PULSE_MS);
