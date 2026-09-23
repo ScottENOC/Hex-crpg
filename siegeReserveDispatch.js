@@ -23,9 +23,6 @@
             state.sharedReservePool = DEFAULT_RESERVE_POOL;
             state.reserveDispatches = 0;
             state._reserveDispatchTick = 0;
-            // Local per-sector reserve counters were a foundation placeholder.
-            // Once the shared model is live they are deliberately zeroed so no
-            // sector can conjure its own private reinforcement stockpile.
             state.segments.forEach(s => { s.reserves = 0; });
         } else {
             if (!Number.isFinite(state.sharedReserveMax)) state.sharedReserveMax = DEFAULT_RESERVE_POOL;
@@ -120,10 +117,6 @@
             issuedAt: window.worldSeconds || 0,
         };
         entity.combatDirective = entity.combatDirective || {};
-        // Once Hart has given a strategic order, do not let the generic surge
-        // heuristic immediately redirect this soldier elsewhere. Normal combat
-        // targeting still wins whenever an enemy is actually visible/adjacent;
-        // siegeObjective is only the no-target movement destination.
         entity.combatDirective.canReinforce = false;
         entity.combatDirective.siegeObjective = { hex: { ...targetHex } };
         entity.combatDirective.reinforcementTargetHex = { ...targetHex };
@@ -139,6 +132,7 @@
         const defender = choosePhysicalDefender(state, target, sourceSector);
         if (!defender) return false;
 
+        const fromSectorId = nearestSectorForDefender(defender, state)?.id ?? null;
         state.sharedReservePool -= spend;
         state.reserveDispatches += 1;
         target.defenderStrength += spend;
@@ -149,7 +143,7 @@
             reserveRemaining: state.sharedReservePool,
             entityId: defender.id,
             entityName: defender.name,
-            fromSectorId: nearestSectorForDefender(defender, state)?.id ?? null,
+            fromSectorId,
         });
         window.SiegeSectorSystem?.updateSummary?.(state);
         return true;
@@ -163,9 +157,6 @@
 
         const target = mostPressuredSector(state);
         if (!target) return false;
-        // Do not spend reserves on a sector that is not actually under local
-        // pressure. A positive attacker/defender imbalance or a physical
-        // breach is enough to justify a dispatch.
         const needsHelp = target.breached || target.attackerStrength > target.defenderStrength || pressureFor(target) > 5;
         if (!needsHelp) return false;
         const dispatched = dispatchToSector(target.id, 1, 'commander_dispatch');
@@ -195,11 +186,6 @@
             const wrappedTick = function(...args) {
                 const before = window.siegeState;
                 const commanderWasAlive = !!before?.commanderAlive;
-
-                // Suppress the legacy infinite +0.5 reinforcement branch while
-                // preserving every other legacy siege effect. The finite shared
-                // reserve dispatch below becomes the sole commander reinforcement
-                // path once this module is installed.
                 if (before && commanderWasAlive) before.commanderAlive = false;
                 let result;
                 try {
@@ -216,6 +202,20 @@
             wrappedTick.__sharedReserveWrapper = true;
             wrappedTick.__original = tick;
             window.tickSiegeState = wrappedTick;
+        }
+
+        // Keep the sector system's public reinforcement API valid for any
+        // existing caller, but make it consume the same finite shared pool.
+        const reinforce = window.SiegeSectorSystem.reinforceSector;
+        if (typeof reinforce === 'function' && !reinforce.__sharedReserveWrapper) {
+            const wrappedReinforce = function(sectorId, strength = 2) {
+                const state = window.siegeState;
+                if (state?.reserveModelVersion) return dispatchToSector(sectorId, strength, 'reinforce');
+                return reinforce.call(this, sectorId, strength);
+            };
+            wrappedReinforce.__sharedReserveWrapper = true;
+            wrappedReinforce.__original = reinforce;
+            window.SiegeSectorSystem.reinforceSector = wrappedReinforce;
         }
 
         if (window.siegeState) ensureReserveState(window.siegeState);
