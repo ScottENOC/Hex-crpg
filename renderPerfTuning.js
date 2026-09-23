@@ -66,6 +66,11 @@
     // residents can exist without hundreds of live Entity objects.
     load('script[data-silverhart-population]', 'silverhartPopulation.js', 'silverhartPopulation');
 
+    // Northwatch and future city sieges share one persistent per-sector model.
+    // This wraps the legacy siege functions rather than replacing their public
+    // API, so existing quests and scripted assault beats keep working.
+    load('script[data-siege-sector-system]', 'siegeSectorSystem.js', 'siegeSectorSystem');
+
     function installVisibilityBounds() {
         const original = window.isVisibleToPlayer;
         if (typeof original !== 'function' || original.__wideZoomBounds) return false;
