@@ -13,6 +13,8 @@ test.describe('Persistent siege sector system', () => {
             return {
                 count: state.segments.length,
                 modelVersion: state.sectorModelVersion,
+                reserveModelVersion: state.reserveModelVersion,
+                sharedReservePool: state.sharedReservePool,
                 pressure: state.pressure,
                 sectors: state.segments.map(s => ({
                     id: s.id,
@@ -30,6 +32,8 @@ test.describe('Persistent siege sector system', () => {
         });
         expect(result.count).toBe(6);
         expect(result.modelVersion).toBe(1);
+        expect(result.reserveModelVersion).toBe(1);
+        expect(result.sharedReservePool).toBeGreaterThan(0);
         expect(result.pressure).toBe(0);
         expect(result.wrappedActivate).toBe(true);
         expect(result.wrappedTick).toBe(true);
@@ -37,7 +41,7 @@ test.describe('Persistent siege sector system', () => {
         result.sectors.forEach(s => {
             expect(s.integrity).toBeGreaterThan(99);
             expect(s.morale).toBe(100);
-            expect(s.reserves).toBe(6);
+            expect(s.reserves).toBe(0);
             expect(s.breached).toBe(false);
             expect(s.eventLog).toBe(true);
             expect(s.casualties).toEqual({ attackers: 0, defenders: 0 });
@@ -71,7 +75,7 @@ test.describe('Persistent siege sector system', () => {
         expect(result.worst).toBe(result.sectorId);
     });
 
-    test('reinforcements and casualties change only the selected local sector', async ({ page }) => {
+    test('reinforcement API consumes the shared fort reserve while casualties remain local', async ({ page }) => {
         const result = await page.evaluate(() => {
             const state = window.activateNorthwatchSiege();
             const first = state.segments[0], second = state.segments[1];
@@ -80,6 +84,7 @@ test.describe('Persistent siege sector system', () => {
                 firstRes: first.reserves,
                 secondDef: second.defenderStrength,
                 secondRes: second.reserves,
+                sharedReserve: state.sharedReservePool,
             };
             const reinforced = window.SiegeSectorSystem.reinforceSector(first.id, 3);
             window.SiegeSectorSystem.recordCasualties(first.id, 'defender', 2);
@@ -87,6 +92,7 @@ test.describe('Persistent siege sector system', () => {
             return {
                 reinforced,
                 before,
+                sharedReserve: state.sharedReservePool,
                 first: {
                     defenderStrength: first.defenderStrength,
                     attackerStrength: first.attackerStrength,
@@ -104,7 +110,8 @@ test.describe('Persistent siege sector system', () => {
             };
         });
         expect(result.reinforced).toBe(true);
-        expect(result.first.reserves).toBe(result.before.firstRes - 3);
+        expect(result.sharedReserve).toBe(result.before.sharedReserve - 3);
+        expect(result.first.reserves).toBe(0);
         expect(result.first.defenderStrength).toBeGreaterThan(result.before.firstDef);
         expect(result.first.attackerStrength).toBeLessThan(10);
         expect(result.first.casualties).toEqual({ attackers: 4, defenders: 2 });
@@ -137,6 +144,7 @@ test.describe('Persistent siege sector system', () => {
     test('abstract siege ticks do not repeatedly rescan physical wall terrain', async ({ page }) => {
         const result = await page.evaluate(() => {
             const state = window.activateNorthwatchSiege();
+            state.commanderAlive = false;
             const original = window.getTerrainAt;
             let terrainReads = 0;
             window.getTerrainAt = function(...args) {
@@ -154,11 +162,11 @@ test.describe('Persistent siege sector system', () => {
         expect(result.terrainReads).toBe(0);
     });
 
-    test('normal saves and exported save codes carry the active sector state', async ({ page }) => {
+    test('normal saves and exported save codes carry the active sector and shared-reserve state', async ({ page }) => {
         const result = await page.evaluate(() => {
             const state = window.activateNorthwatchSiege();
             window.SiegeSectorSystem.applySectorPressure(1, 30, 'persistence_probe');
-            state.segments[1].reserves = 2;
+            state.sharedReservePool = 2;
             window.saveGame('siege_sector_test');
             const stored = JSON.parse(localStorage.getItem('rpg_save_siege_sector_test'));
             const code = window.exportSaveCode();
@@ -168,19 +176,19 @@ test.describe('Persistent siege sector system', () => {
                 loadWrapped: !!window.loadGame.__siegeSectorPersistence,
                 exportWrapped: !!window.exportSaveCode.__siegeSectorPersistence,
                 storedVersion: stored.siegeState?.sectorModelVersion,
-                storedReserves: stored.siegeState?.segments?.[1]?.reserves,
+                storedReservePool: stored.siegeState?.sharedReservePool,
                 storedLogged: stored.siegeState?.segments?.[1]?.eventLog?.some(e => e.type === 'persistence_probe'),
                 exportedVersion: exported.siegeState?.sectorModelVersion,
-                exportedReserves: exported.siegeState?.segments?.[1]?.reserves,
+                exportedReservePool: exported.siegeState?.sharedReservePool,
             };
         });
         expect(result.saveWrapped).toBe(true);
         expect(result.loadWrapped).toBe(true);
         expect(result.exportWrapped).toBe(true);
         expect(result.storedVersion).toBe(1);
-        expect(result.storedReserves).toBe(2);
+        expect(result.storedReservePool).toBe(2);
         expect(result.storedLogged).toBe(true);
         expect(result.exportedVersion).toBe(1);
-        expect(result.exportedReserves).toBe(2);
+        expect(result.exportedReservePool).toBe(2);
     });
 });
