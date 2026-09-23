@@ -21,17 +21,28 @@ test.describe('Silverhart capital rebuild', () => {
         for(const key of ['palace','stable','goods','manor','thieves','neighbor']) expect(result[key],key).toBeTruthy();
     });
 
-    test('has two planned rings with explicit local detours around preserved authored walls, plus six radial avenues/gates', async ({ page }) => {
+    test('has two planned rings with explicit local detours around preserved authored structures, plus six radial avenues/gates', async ({ page }) => {
         await createCharacter(page);
-        await page.waitForFunction(()=>!!window.SilverhartCapitalRegistry?.ringDiagnostics);
+        await page.waitForFunction(()=>!!window.SilverhartCapitalRegistry?.ringDiagnostics && !!window.SilverhartCapitalRegistry?.avenueDiagnostics);
         const result=await page.evaluate(()=>{
             const c=window.campaign2PalaceThroneCenter;
             const inner=window.campaign2SilverhartRingRoadRadius;
             const outer=window.campaign2SilverhartOuterRingRadius;
-            const dirs=[{q:1,r:0},{q:1,r:-1},{q:0,r:-1},{q:-1,r:0},{q:-1,r:1},{q:0,r:1}];
+            const dirs=[
+                {q:1,r:0,name:'east'}, {q:1,r:-1,name:'north-east'}, {q:0,r:-1,name:'north'},
+                {q:-1,r:0,name:'west'}, {q:-1,r:1,name:'south-west'}, {q:0,r:1,name:'south'},
+            ];
+            const avenueDiag=window.SilverhartCapitalRegistry.avenueDiagnostics;
             const avenueSamples=dirs.map(d=>{
                 const h={q:c.q+d.q*40,r:c.r+d.r*40};
-                return window.getTerrainAt(h.q,h.r).name;
+                const t=window.getTerrainAt(h.q,h.r).name;
+                const blocked=avenueDiag.blocked.find(x=>x.direction===d.name&&x.d===40);
+                const detours=avenueDiag.detours.filter(x=>x.direction===d.name&&x.d===40);
+                return {
+                    direction:d.name,terrain:t,blocked:!!blocked,
+                    detourCount:detours.length,
+                    detoursAreRoad:detours.every(x=>window.getTerrainAt(x.hex.q,x.hex.r).name==='Path'),
+                };
             });
             const diagnostics=window.SilverhartCapitalRegistry.ringDiagnostics;
             const check=d=>({
@@ -51,7 +62,12 @@ test.describe('Silverhart capital rebuild', () => {
             expect(diag.detoursAreRoad).toBe(true);
             if(diag.blocked>0) expect(diag.detours).toBeGreaterThan(0);
         }
-        result.avenueSamples.forEach(t=>expect(t).toBe('Path'));
+        result.avenueSamples.forEach(sample=>{
+            if(sample.terrain==='Path') return;
+            expect(sample.blocked,sample.direction).toBe(true);
+            expect(sample.detourCount,sample.direction).toBeGreaterThan(0);
+            expect(sample.detoursAreRoad,sample.direction).toBe(true);
+        });
         expect(result.stats.avenues).toBe(6);
         expect(result.stats.gates).toBeGreaterThanOrEqual(18);
     });
