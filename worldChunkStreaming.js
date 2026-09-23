@@ -1,5 +1,5 @@
 // worldChunkStreaming.js
-// Continuous-world streaming for Campaign 2. Chunks are performance/Lod units,
+// Continuous-world streaming for Campaign 2. Chunks are performance/LOD units,
 // never gameplay zones: terrain remains addressable everywhere and there are no
 // loading screens. Every alive party member contributes a hot bubble, so a
 // split party simply keeps multiple distant parts of the world active at once.
@@ -14,6 +14,7 @@
     const activeChunks = new Set();
     const activeVerticalLayers = new Set();
     let observers = [];
+    let observerBubbleCount = 0;
     let pulseCount = 0;
 
     function floorOf(entity) {
@@ -23,6 +24,14 @@
 
     function chunkCoord(n) {
         return Math.floor(Number(n || 0) / CHUNK_SIZE);
+    }
+
+    function chunkPosition(entity) {
+        return {
+            cq: chunkCoord(entity.hex.q),
+            cr: chunkCoord(entity.hex.r),
+            floor: floorOf(entity),
+        };
     }
 
     function chunkKeyFromParts(cq, cr, floor = 0) {
@@ -39,6 +48,36 @@
             e?.alive && e.side === 'player' && !e.rider && e.hex &&
             Number.isFinite(Number(e.hex.q)) && Number.isFinite(Number(e.hex.r))
         );
+    }
+
+    function bubblesOverlap(a, b) {
+        if (a.floor !== b.floor) return false;
+        // Each observer owns a square radius-R chunk bubble. Their expensive
+        // crowd/AI budgets should be shared whenever those bubbles overlap.
+        const diameter = HOT_RADIUS_CHUNKS * 2;
+        return Math.abs(a.cq - b.cq) <= diameter && Math.abs(a.cr - b.cr) <= diameter;
+    }
+
+    function countObserverBubbles(nextObservers) {
+        if (!nextObservers.length) return 0;
+        const positions = nextObservers.map(chunkPosition);
+        const seen = new Set();
+        let groups = 0;
+        for (let i = 0; i < positions.length; i++) {
+            if (seen.has(i)) continue;
+            groups++;
+            const stack = [i];
+            seen.add(i);
+            while (stack.length) {
+                const current = stack.pop();
+                for (let j = 0; j < positions.length; j++) {
+                    if (seen.has(j) || !bubblesOverlap(positions[current], positions[j])) continue;
+                    seen.add(j);
+                    stack.push(j);
+                }
+            }
+        }
+        return groups;
     }
 
     function distance(a,b) {
@@ -59,7 +98,6 @@
             const floors = building?.floors || [];
             const stairByFloor = new Map();
 
-            // Ground-floor stairs live in the ordinary world tileObjects.
             for (const [k,obj] of Object.entries(window.tileObjects || {})) {
                 if (!obj || !String(obj.type || '').startsWith('stair_')) continue;
                 const [q,r] = k.split(',').map(Number);
@@ -101,6 +139,7 @@
     function pulse() {
         pulseCount++;
         observers = playerObservers();
+        observerBubbleCount = countObserverBubbles(observers);
         activeChunks.clear();
 
         for (const observer of observers) {
@@ -140,6 +179,7 @@
             chunkSize:CHUNK_SIZE,
             hotRadiusChunks:HOT_RADIUS_CHUNKS,
             observerCount:observers.length,
+            observerBubbleCount,
             activeChunkCount:activeChunks.size,
             activeChunks:[...activeChunks],
             activeVerticalLayers:[...activeVerticalLayers],
@@ -156,7 +196,9 @@
         isHexActive,
         nearestObserverDistance,
         observersNear,
+        countObserverBubbles,
         get observers(){ return observers.slice(); },
+        get observerBubbleCount(){ return observerBubbleCount; },
         get activeChunks(){ return new Set(activeChunks); },
         get activeVerticalLayers(){ return new Set(activeVerticalLayers); },
         get stats(){ return snapshot(); },
