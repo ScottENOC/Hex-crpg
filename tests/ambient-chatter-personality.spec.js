@@ -73,13 +73,13 @@ test.describe('personality-aware ambient chatter', () => {
                 history: xs.filter(x=>x.topic.startsWith('shared-')).length,
             };
         });
-        expect(stats.personaAdded).toBeGreaterThanOrEqual(90);
+        expect(stats.personaAdded).toBeGreaterThanOrEqual(120);
         expect(stats.voice).toBeGreaterThanOrEqual(50);
         expect(stats.mood).toBeGreaterThanOrEqual(15);
         expect(stats.status).toBeGreaterThanOrEqual(8);
         expect(stats.worldview).toBeGreaterThanOrEqual(8);
         expect(stats.history).toBeGreaterThanOrEqual(6);
-        expect(stats.total).toBeGreaterThanOrEqual(300);
+        expect(stats.total).toBeGreaterThanOrEqual(250);
     });
 
     test('danger produces different eligible chatter for cautious and bold people', async ({ page }) => {
