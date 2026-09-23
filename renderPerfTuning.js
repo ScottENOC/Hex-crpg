@@ -62,6 +62,15 @@
     load('script[data-silverhart-capital-rebuild]', 'silverhartCapitalRebuild.js', 'silverhartCapitalRebuild');
     load('script[data-silverhart-capital-completion]', 'silverhartCapitalCompletion.js', 'silverhartCapitalCompletion');
 
+    // Presentation/UI modules share the same character renderer as the map,
+    // rather than maintaining a second paper-doll implementation in the HUD.
+    load('script[data-initiative-portrait-renderer]', 'initiativePortraitRenderer.js', 'initiativePortraitRenderer');
+
+    // On touch devices in Auto mode, sustained expensive frames can lower the
+    // backing-canvas resolution without changing gameplay/camera coordinates.
+    // An explicit Graphics > Render Scale choice always wins and disables this.
+    load('script[data-adaptive-mobile-render-scale]', 'adaptiveMobileRenderScale.js', 'adaptiveMobileRenderScale');
+
     // The capital population is persistent but chunk-indexed: hundreds of
     // residents can exist without hundreds of live Entity objects.
     load('script[data-silverhart-population]', 'silverhartPopulation.js', 'silverhartPopulation');
