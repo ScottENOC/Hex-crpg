@@ -21,26 +21,32 @@ test.describe('Silverhart capital rebuild', () => {
         for(const key of ['palace','stable','goods','manor','thieves','neighbor']) expect(result[key],key).toBeTruthy();
     });
 
-    test('has two complete planned rings and six radial avenues/gates', async ({ page }) => {
+    test('has two planned rings with local detours around preserved authored walls, plus six radial avenues/gates', async ({ page }) => {
         await createCharacter(page);
+        await page.waitForFunction(()=>!!window.SilverhartCapitalRegistry?.ringDiagnostics);
         const result=await page.evaluate(()=>{
             const c=window.campaign2PalaceThroneCenter;
             const inner=window.campaign2SilverhartRingRoadRadius;
             const outer=window.campaign2SilverhartOuterRingRadius;
             const dirs=[{q:1,r:0},{q:1,r:-1},{q:0,r:-1},{q:-1,r:0},{q:-1,r:1},{q:0,r:1}];
-            const ringSamples=dirs.flatMap(d=>[
-                {q:c.q+d.q*inner,r:c.r+d.r*inner},
-                {q:c.q+d.q*outer,r:c.r+d.r*outer},
-            ]).map(h=>window.getTerrainAt(h.q,h.r).name);
             const avenueSamples=dirs.map(d=>{
                 const h={q:c.q+d.q*40,r:c.r+d.r*40};
                 return window.getTerrainAt(h.q,h.r).name;
             });
-            return {inner,outer,ringSamples,avenueSamples,stats:window.SilverhartCapitalRebuild.stats};
+            const diagnostics=window.SilverhartCapitalRegistry.ringDiagnostics;
+            const check=d=>({
+                total:d.total,pathCount:d.pathCount,blocked:d.blocked.length,detours:d.detours.length,
+                everyBlockedHasRoadAround:d.blocked.every(h=>(window.getNeighbors(h.q,h.r)||[]).some(n=>window.getTerrainAt(n.q,n.r).name==='Path')),
+            });
+            return {inner,outer,avenueSamples,innerDiag:check(diagnostics.inner),outerDiag:check(diagnostics.outer),stats:window.SilverhartCapitalRebuild.stats};
         });
         expect(result.inner).toBeGreaterThan(23);
         expect(result.outer).toBeGreaterThan(result.inner);
-        result.ringSamples.forEach(t=>expect(t).toBe('Path'));
+        for(const diag of [result.innerDiag,result.outerDiag]) {
+            expect(diag.pathCount+diag.blocked).toBe(diag.total);
+            expect(diag.everyBlockedHasRoadAround).toBe(true);
+            expect(diag.pathCount).toBeGreaterThan(diag.total*0.8);
+        }
         result.avenueSamples.forEach(t=>expect(t).toBe('Path'));
         expect(result.stats.avenues).toBe(6);
         expect(result.stats.gates).toBeGreaterThanOrEqual(18);
@@ -48,6 +54,7 @@ test.describe('Silverhart capital rebuild', () => {
 
     test('adds substantial multi-storey urban infill across distinct quarters', async ({ page }) => {
         await createCharacter(page);
+        await page.waitForFunction(()=>window.SilverhartCapitalRebuild?.stats?.buildings>=15);
         const result=await page.evaluate(()=>({
             stats:window.SilverhartCapitalRebuild.stats,
             ids:window.SilverhartCapitalRegistry.buildings.map(b=>b.id),
@@ -65,6 +72,7 @@ test.describe('Silverhart capital rebuild', () => {
 
     test('ordinary inns are vertically organised with accommodation above public ground floors', async ({ page }) => {
         await createCharacter(page);
+        await page.waitForFunction(()=>window.SilverhartCapitalRegistry?.buildings?.filter(b=>String(b.kind||'').includes('inn')).length>=2);
         const result=await page.evaluate(()=>{
             const inns=window.SilverhartCapitalRegistry.buildings.filter(b=>b.kind.includes('inn'));
             return inns.map(b=>{
