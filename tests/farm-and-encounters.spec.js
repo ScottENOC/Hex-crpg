@@ -108,7 +108,10 @@ test.describe('random wilderness encounters', () => {
             // Force the roll to hit by monkey-patching Math.random for this check only.
             const originalRandom = Math.random;
             Math.random = () => 0; // always "hits" the encounter chance
-            const farPlayer = { hex: { q: -80, r: 24 }, side: 'player' }; // west of the crossroads
+            // Keep the synthetic player comfortably beyond Hollowmere's hard
+            // settlement+vision exclusion. With random=0 the candidate is cast
+            // back east toward town, so -140 leaves enough margin for that too.
+            const farPlayer = { hex: { q: -140, r: 24 }, side: 'player' };
             window.wildernessEncounterAccum = 0;
             const before = window.entities.filter(e => e.name === 'Wolf').length;
             window.checkWildernessEncounter(farPlayer, 50); // under the 120s threshold - should NOT roll yet
