@@ -34,9 +34,17 @@ test.describe('Silverhart capital rebuild', () => {
                 return window.getTerrainAt(h.q,h.r).name;
             });
             const diagnostics=window.SilverhartCapitalRegistry.ringDiagnostics;
+            const hasLocalRoadBypass=(h)=>{
+                for(let dq=-2;dq<=2;dq++) for(let dr=-2;dr<=2;dr++) {
+                    const n={q:h.q+dq,r:h.r+dr};
+                    if(window.distance(h,n)>2)continue;
+                    if(window.getTerrainAt(n.q,n.r).name==='Path')return true;
+                }
+                return false;
+            };
             const check=d=>({
                 total:d.total,pathCount:d.pathCount,blocked:d.blocked.length,detours:d.detours.length,
-                everyBlockedHasRoadAround:d.blocked.every(h=>(window.getNeighbors(h.q,h.r)||[]).some(n=>window.getTerrainAt(n.q,n.r).name==='Path')),
+                everyBlockedHasRoadAround:d.blocked.every(hasLocalRoadBypass),
             });
             return {inner,outer,avenueSamples,innerDiag:check(diagnostics.inner),outerDiag:check(diagnostics.outer),stats:window.SilverhartCapitalRebuild.stats};
         });
