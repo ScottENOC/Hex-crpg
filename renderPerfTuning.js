@@ -4,14 +4,6 @@
 (() => {
     'use strict';
 
-    // directionalCharacterUI.js and raceSkinPalettes.js both decorate the
-    // character-creator preview after main.js publishes it. They initialise on
-    // different polling cadences, so without coordination they can alternately
-    // wrap one another. The directional wrapper keeps its legacy callback in a
-    // module variable, and repeated wrapping can therefore create a call cycle.
-    // Intercept assignments while this early bootstrap is alive and propagate
-    // the other decorator's marker onto the new outer wrapper. Each module then
-    // sees its feature already present and stops wrapping after one composition.
     function installAppearancePreviewWrapperCoordinator() {
         const existingDescriptor = Object.getOwnPropertyDescriptor(window, 'updateAppearancePreview');
         if (existingDescriptor && !existingDescriptor.configurable) return false;
@@ -41,97 +33,40 @@
     }
     installAppearancePreviewWrapperCoordinator();
 
-    // The routine scheduler is intentionally loaded from this already-small,
-    // early presentation/performance bootstrap rather than adding another
-    // heavyweight dependency to gameEngine.js. It owns no rendering state;
-    // this just guarantees the event-driven civilian clock is available in
-    // every normal game mode without changing the legacy script order.
     const build = window.PRESENTATION_BUILD || 'npc-routines-v1';
-    if (!document.querySelector('script[data-npc-routine-scheduler]')) {
-        const scheduler = document.createElement('script');
-        scheduler.src = `npcRoutineScheduler.js?build=${encodeURIComponent(build)}`;
-        scheduler.dataset.npcRoutineScheduler = 'true';
-        scheduler.async = false;
-        document.head.appendChild(scheduler);
-    }
+    const load = (selector, src, datasetKey) => {
+        if (document.querySelector(selector)) return;
+        const script = document.createElement('script');
+        script.src = `${src}?build=${encodeURIComponent(build)}`;
+        script.dataset[datasetKey] = 'true';
+        script.async = false;
+        document.head.appendChild(script);
+    };
 
-    // Bridge the existing Campaign 2 named timetables onto the scheduler.
-    // Dynamic scripts with async=false execute in insertion order, so this is
-    // evaluated after npcRoutineScheduler.js; it then waits for gameEngine.js's
-    // classic global updateNpcSchedules/getNpcSchedules bindings before install.
-    if (!document.querySelector('script[data-event-driven-npc-schedules]')) {
-        const bridge = document.createElement('script');
-        bridge.src = `eventDrivenNpcSchedules.js?build=${encodeURIComponent(build)}`;
-        bridge.dataset.eventDrivenNpcSchedules = 'true';
-        bridge.async = false;
-        document.head.appendChild(bridge);
-    }
+    load('script[data-npc-routine-scheduler]', 'npcRoutineScheduler.js', 'npcRoutineScheduler');
+    load('script[data-event-driven-npc-schedules]', 'eventDrivenNpcSchedules.js', 'eventDrivenNpcSchedules');
 
-    // Generated civilians use the same scheduler but stay separate from the
-    // hand-authored named-NPC bridge. The module waits for Campaign 2, Entity,
-    // the party and settlement landmarks before creating any population.
-    if (!document.querySelector('script[data-generated-civilian-population]')) {
-        const civilians = document.createElement('script');
-        civilians.src = `generatedCivilianPopulation.js?build=${encodeURIComponent(build)}`;
-        civilians.dataset.generatedCivilianPopulation = 'true';
-        civilians.async = false;
-        document.head.appendChild(civilians);
-    }
+    // Settlement tiers are descriptive metadata only. They never switch maps
+    // or decide which district is loaded; worldChunkStreaming owns the actual
+    // seamless hot/cold simulation state around every party member.
+    load('script[data-settlement-scale]', 'settlementScale.js', 'settlementScale');
+    load('script[data-world-chunk-streaming]', 'worldChunkStreaming.js', 'worldChunkStreaming');
 
-    // Stable visual identity is kept as a separate presentation layer so the
-    // persistent population remains cheap records. It only styles the at-most
-    // 40 materialised civilians and draws their cosmetic occupation props.
-    if (!document.querySelector('script[data-civilian-visual-diversity]')) {
-        const civilianVisuals = document.createElement('script');
-        civilianVisuals.src = `civilianVisualDiversity.js?build=${encodeURIComponent(build)}`;
-        civilianVisuals.dataset.civilianVisualDiversity = 'true';
-        civilianVisuals.async = false;
-        document.head.appendChild(civilianVisuals);
-    }
+    load('script[data-generated-civilian-population]', 'generatedCivilianPopulation.js', 'generatedCivilianPopulation');
+    load('script[data-multi-anchor-civilian-streaming]', 'multiAnchorCivilianStreaming.js', 'multiAnchorCivilianStreaming');
+    load('script[data-civilian-visual-diversity]', 'civilianVisualDiversity.js', 'civilianVisualDiversity');
+    load('script[data-civilian-persistence]', 'civilianPersistence.js', 'civilianPersistence');
+    load('script[data-civilian-routine-variety]', 'civilianRoutineVariety.js', 'civilianRoutineVariety');
+    load('script[data-hollowmere-social-fabric]', 'hollowmereSocialFabric.js', 'hollowmereSocialFabric');
 
-    // Save/load treats generated civilian Entity objects as transient LOD
-    // shells. The adapter stores their persistent people/routine records in a
-    // compact versioned snapshot and leaves those shells out of the core entity
-    // array so a load cannot duplicate civilians.
-    if (!document.querySelector('script[data-civilian-persistence]')) {
-        const civilianPersistence = document.createElement('script');
-        civilianPersistence.src = `civilianPersistence.js?build=${encodeURIComponent(build)}`;
-        civilianPersistence.dataset.civilianPersistence = 'true';
-        civilianPersistence.async = false;
-        document.head.appendChild(civilianPersistence);
-    }
-
-    // Purposeful daily deviations stay event-driven: one scattered planner per
-    // civilian can schedule market/tavern/worship visits, while rare settlement
-    // events do one bounded cohort scan only when they are triggered.
-    if (!document.querySelector('script[data-civilian-routine-variety]')) {
-        const routineVariety = document.createElement('script');
-        routineVariety.src = `civilianRoutineVariety.js?build=${encodeURIComponent(build)}`;
-        routineVariety.dataset.civilianRoutineVariety = 'true';
-        routineVariety.async = false;
-        document.head.appendChild(routineVariety);
-    }
-
-    // Hollowmere's social fabric consumes the persistent civilian records after
-    // the routine layer exists, expands the tiny original village with enough
-    // real homes/workplaces for its population, and binds people to households,
-    // colleagues and friendship networks rather than synthetic radial nodes.
-    if (!document.querySelector('script[data-hollowmere-social-fabric]')) {
-        const socialFabric = document.createElement('script');
-        socialFabric.src = `hollowmereSocialFabric.js?build=${encodeURIComponent(build)}`;
-        socialFabric.dataset.hollowmereSocialFabric = 'true';
-        socialFabric.async = false;
-        document.head.appendChild(socialFabric);
-    }
+    // The capital population is persistent but chunk-indexed: hundreds of
+    // residents can exist without hundreds of live Entity objects.
+    load('script[data-silverhart-population]', 'silverhartPopulation.js', 'silverhartPopulation');
 
     function installVisibilityBounds() {
         const original = window.isVisibleToPlayer;
         if (typeof original !== 'function' || original.__wideZoomBounds) return false;
 
-        // drawMap passes one stable friendlies array through all visibility
-        // checks for a frame. Cache a conservative world-space bounding box
-        // for that array: a target outside it cannot possibly be visible, so
-        // avoid the more expensive per-friendly distance/light/LOS path.
         const boundsByFriendlies = new WeakMap();
 
         function boundsFor(friendlies) {
