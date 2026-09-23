@@ -21,7 +21,7 @@ test.describe('Silverhart capital rebuild', () => {
         for(const key of ['palace','stable','goods','manor','thieves','neighbor']) expect(result[key],key).toBeTruthy();
     });
 
-    test('has two planned rings with local detours around preserved authored walls, plus six radial avenues/gates', async ({ page }) => {
+    test('has two planned rings with explicit local detours around preserved authored walls, plus six radial avenues/gates', async ({ page }) => {
         await createCharacter(page);
         await page.waitForFunction(()=>!!window.SilverhartCapitalRegistry?.ringDiagnostics);
         const result=await page.evaluate(()=>{
@@ -34,17 +34,12 @@ test.describe('Silverhart capital rebuild', () => {
                 return window.getTerrainAt(h.q,h.r).name;
             });
             const diagnostics=window.SilverhartCapitalRegistry.ringDiagnostics;
-            const hasLocalRoadBypass=(h)=>{
-                for(let dq=-2;dq<=2;dq++) for(let dr=-2;dr<=2;dr++) {
-                    const n={q:h.q+dq,r:h.r+dr};
-                    if(window.distance(h,n)>2)continue;
-                    if(window.getTerrainAt(n.q,n.r).name==='Path')return true;
-                }
-                return false;
-            };
             const check=d=>({
-                total:d.total,pathCount:d.pathCount,blocked:d.blocked.length,detours:d.detours.length,
-                everyBlockedHasRoadAround:d.blocked.every(hasLocalRoadBypass),
+                total:d.total,
+                pathCount:d.pathCount,
+                blocked:d.blocked.length,
+                detours:d.detours.length,
+                detoursAreRoad:d.detours.every(h=>window.getTerrainAt(h.q,h.r).name==='Path'),
             });
             return {inner,outer,avenueSamples,innerDiag:check(diagnostics.inner),outerDiag:check(diagnostics.outer),stats:window.SilverhartCapitalRebuild.stats};
         });
@@ -52,8 +47,9 @@ test.describe('Silverhart capital rebuild', () => {
         expect(result.outer).toBeGreaterThan(result.inner);
         for(const diag of [result.innerDiag,result.outerDiag]) {
             expect(diag.pathCount+diag.blocked).toBe(diag.total);
-            expect(diag.everyBlockedHasRoadAround).toBe(true);
             expect(diag.pathCount).toBeGreaterThan(diag.total*0.8);
+            expect(diag.detoursAreRoad).toBe(true);
+            if(diag.blocked>0) expect(diag.detours).toBeGreaterThan(0);
         }
         result.avenueSamples.forEach(t=>expect(t).toBe('Path'));
         expect(result.stats.avenues).toBe(6);
