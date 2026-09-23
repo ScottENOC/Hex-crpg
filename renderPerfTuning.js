@@ -79,7 +79,7 @@
     // API, so existing quests and scripted assault beats keep working.
     load('script[data-siege-sector-system]', 'siegeSectorSystem.js', 'siegeSectorSystem');
     load('script[data-siege-actor-sector-integration]', 'siegeActorSectorIntegration.js', 'siegeActorSectorIntegration');
-    load('script[data-siege-actor-reconciliation]', 'siegeActorSectorReconciliation.js', 'siegeActorReconciliation');
+    load('script[data-siege-actor-reconciliation]', 'siegeActorReconciliation.js', 'siegeActorReconciliation');
 
     function installVisibilityBounds() {
         const original = window.isVisibleToPlayer;
