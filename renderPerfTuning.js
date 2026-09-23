@@ -66,6 +66,7 @@
     load('script[data-relationship-ambient-chatter]', 'ambientChatterRelationships.js', 'relationshipAmbientChatter');
     load('script[data-personality-ambient-chatter]', 'ambientChatterPersonality.js', 'personalityAmbientChatter');
     load('script[data-bandit-camp-wilderness-fix]', 'banditCampWildernessFix.js', 'banditCampWildernessFix');
+    load('script[data-wilderness-incidents]', 'wildernessIncidents.js', 'wildernessIncidents');
     load('script[data-silverhart-capital-rebuild]', 'silverhartCapitalRebuild.js', 'silverhartCapitalRebuild');
     load('script[data-silverhart-capital-completion]', 'silverhartCapitalCompletion.js', 'silverhartCapitalCompletion');
     load('script[data-silverhart-avenue-detours]', 'silverhartAvenueDetours.js', 'silverhartAvenueDetours');
@@ -114,9 +115,7 @@
             const friendlies = friendliesOverride || window.entities.filter(e => e.alive && e.side === 'player');
             const b = boundsFor(friendlies);
             if (!b) return false;
-            if (targetHex.q < b.minQ || targetHex.q > b.maxQ || targetHex.r < b.minR || targetHex.r > b.maxR) {
-                return false;
-            }
+            if (targetHex.q < b.minQ || targetHex.q > b.maxQ || targetHex.r < b.minR || targetHex.r > b.maxR) return false;
             return original(targetHex, friendlies);
         };
         fast.__wideZoomBounds = true;
