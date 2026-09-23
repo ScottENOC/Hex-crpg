@@ -59,6 +59,7 @@
     load('script[data-civilian-persistence]', 'civilianPersistence.js', 'civilianPersistence');
     load('script[data-civilian-routine-variety]', 'civilianRoutineVariety.js', 'civilianRoutineVariety');
     load('script[data-hollowmere-social-fabric]', 'hollowmereSocialFabric.js', 'hollowmereSocialFabric');
+    load('script[data-farmstead-expansion]', 'farmsteadExpansion.js', 'farmsteadExpansion');
     load('script[data-silverhart-capital-rebuild]', 'silverhartCapitalRebuild.js', 'silverhartCapitalRebuild');
     load('script[data-silverhart-capital-completion]', 'silverhartCapitalCompletion.js', 'silverhartCapitalCompletion');
     load('script[data-silverhart-avenue-detours]', 'silverhartAvenueDetours.js', 'silverhartAvenueDetours');
