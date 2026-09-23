@@ -15,6 +15,7 @@
     const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
     const key = h => `${h.q},${h.r}`;
     let installed = false;
+    let persistenceInstalled = false;
 
     function terrainName(h) {
         return window.getTerrainAt?.(h.q, h.r)?.name || '';
@@ -188,8 +189,106 @@
         updateSummary(state);
     }
 
+    function plainState(state = window.siegeState) {
+        if (!state) return null;
+        try { return JSON.parse(JSON.stringify(state)); }
+        catch (e) { return null; }
+    }
+
+    function saveStorageKey(saveName = 'rpg_save_game') {
+        if (saveName === 'quick_save') return 'rpg_save_quick_save';
+        return saveName.startsWith('rpg_save_') ? saveName : `rpg_save_${saveName}`;
+    }
+
+    function patchStoredSave(saveName) {
+        const storageKey = saveStorageKey(saveName);
+        const raw = localStorage.getItem(storageKey);
+        if (!raw) return false;
+        try {
+            const data = JSON.parse(raw);
+            data.siegeState = plainState();
+            localStorage.setItem(storageKey, JSON.stringify(data));
+            return true;
+        } catch (e) {
+            console.warn('Could not append siege state to save', e);
+            return false;
+        }
+    }
+
+    function decodeSaveCode(code) {
+        try { return JSON.parse(decodeURIComponent(escape(atob(code)))); }
+        catch (e) { return null; }
+    }
+
+    function encodeSaveCode(data) {
+        try { return btoa(unescape(encodeURIComponent(JSON.stringify(data)))); }
+        catch (e) { return null; }
+    }
+
+    function installPersistenceHooks() {
+        if (persistenceInstalled) return true;
+        const saveGame = window.saveGame;
+        const loadGame = window.loadGame;
+        const exportSaveCode = window.exportSaveCode;
+        if (typeof saveGame !== 'function' || typeof loadGame !== 'function' || typeof exportSaveCode !== 'function') return false;
+
+        if (!saveGame.__siegeSectorPersistence) {
+            const wrappedSave = function(saveName = 'rpg_save_game', ...rest) {
+                const result = saveGame.call(this, saveName, ...rest);
+                patchStoredSave(saveName);
+                return result;
+            };
+            wrappedSave.__siegeSectorPersistence = true;
+            wrappedSave.__original = saveGame;
+            window.saveGame = wrappedSave;
+        }
+
+        if (!loadGame.__siegeSectorPersistence) {
+            const wrappedLoad = function(saveName = 'rpg_save_game', ...rest) {
+                let savedSiege = null;
+                try {
+                    const raw = localStorage.getItem(saveStorageKey(saveName));
+                    if (raw) savedSiege = JSON.parse(raw).siegeState || null;
+                } catch (e) {}
+                const restore = () => {
+                    if (savedSiege) {
+                        window.siegeState = savedSiege;
+                        upgradeState(window.siegeState);
+                    }
+                };
+                const result = loadGame.call(this, saveName, ...rest);
+                if (result && typeof result.then === 'function') return result.then(value => { restore(); return value; });
+                restore();
+                return result;
+            };
+            wrappedLoad.__siegeSectorPersistence = true;
+            wrappedLoad.__original = loadGame;
+            window.loadGame = wrappedLoad;
+        }
+
+        if (!exportSaveCode.__siegeSectorPersistence) {
+            const wrappedExport = function(...args) {
+                const code = exportSaveCode.apply(this, args);
+                if (!code) return code;
+                const data = decodeSaveCode(code);
+                if (!data) return code;
+                data.siegeState = plainState();
+                return encodeSaveCode(data) || code;
+            };
+            wrappedExport.__siegeSectorPersistence = true;
+            wrappedExport.__original = exportSaveCode;
+            window.exportSaveCode = wrappedExport;
+        }
+
+        persistenceInstalled = true;
+        return true;
+    }
+
     function install() {
-        if (installed) return true;
+        if (installed) {
+            installPersistenceHooks();
+            return true;
+        }
         const activate = window.activateNorthwatchSiege;
         const tick = window.tickSiegeState;
         const damageWall = window.damageWall;
@@ -240,6 +339,7 @@
 
         if (window.siegeState) upgradeState(window.siegeState);
         installed = true;
+        installPersistenceHooks();
         return true;
     }
 
@@ -254,6 +354,8 @@
         reinforceSector,
         recordCasualties,
         tickSectorState,
+        plainState,
+        installPersistenceHooks,
         install,
     };
 
