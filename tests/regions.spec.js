@@ -1,7 +1,7 @@
 // tests/regions.spec.js
 // Security/prosperity simulation (regions.js): downward baseline cascade
-// from parent, upward player-delta cascade, decay stability, and the two
-// integration points (the farm quest reward, wilderness encounter chance).
+// from parent, upward player-delta cascade, decay stability, and gameplay
+// integration with quest rewards and settlement safety.
 const { test, expect } = require('@playwright/test');
 const { createCharacter } = require('./helpers');
 
@@ -66,16 +66,16 @@ test.describe('regions.js: security/prosperity simulation', () => {
             };
         });
         expect(result.hollowmereDelta).toBeCloseTo(10, 5);
-        expect(result.aldervaleDelta).toBeCloseTo(3, 5); // 10 * 0.3
-        expect(result.kingdomDelta).toBeCloseTo(0.9, 5); // 10 * 0.3^2
+        expect(result.aldervaleDelta).toBeCloseTo(3, 5);
+        expect(result.kingdomDelta).toBeCloseTo(0.9, 5);
     });
 
     test('decay moves a region toward its baseline without ever overshooting, even given a huge delta', async ({ page }) => {
         const result = await page.evaluate(() => {
-            window.regions.aldervale.security = 50; // pin the parent so the baseline is stable
+            window.regions.aldervale.security = 50;
             window.regions.hollowmere.security = 10;
             const baseline = window.getRegionBaseline(window.regions.hollowmere, 'security');
-            window.tickRegions(3600 * 24 * 365 * 10); // 10 in-game years in one call
+            window.tickRegions(3600 * 24 * 365 * 10);
             return { baseline, after: window.regions.hollowmere.security };
         });
         expect(result.after).toBeCloseTo(result.baseline, 0);
@@ -87,55 +87,46 @@ test.describe('regions.js: security/prosperity simulation', () => {
         const result = await page.evaluate(() => {
             const before = { hollowmere: window.regions.hollowmere.security, aldervale: window.regions.aldervale.security };
             window.npcDialogueTrees.old_mac(window.entities.find(e => e.name === 'Old Mac'));
-            document.querySelector('#dialogue-options button').click(); // "I'll deal with the wolves."
+            document.querySelector('#dialogue-options button').click();
             window.triggerFarmWolfEncounter();
             window.entities.filter(e => e.farmQuestWolf).forEach(w => w.alive = false);
             window.npcDialogueTrees.old_mac(window.entities.find(e => e.name === 'Old Mac'));
             return before;
         });
         await page.waitForFunction(() => document.getElementById('dialogue-modal').style.display === 'block');
-        await page.click('#dialogue-options button'); // "Glad to help."
+        await page.click('#dialogue-options button');
         const after = await page.evaluate(() => ({ hollowmere: window.regions.hollowmere.security, aldervale: window.regions.aldervale.security }));
         expect(after.hollowmere).toBeGreaterThan(result.hollowmere);
         expect(after.aldervale).toBeGreaterThan(result.aldervale);
     });
 
-    test('integration: lower Hollowmere security makes wilderness wolf encounters more likely and reach closer to the village', async ({ page }) => {
+    test('integration: even zero security never lets procedural wilderness enemies breach Hollowmere settlement safety', async ({ page }) => {
         const result = await page.evaluate(() => {
             const originalRandom = Math.random;
-            Math.random = () => 0; // always "hits" the encounter chance if a roll happens at all
-
-            // Low security: encounters should trigger just past a modest radius.
-            // Far enough out that even the closest candidate hex (10-16 away
-            // from the player) clears the 30-hex no-wolves-near-any-building
-            // exclusion around Hollowmere's own buildings, not just the
-            // security-based safe radius.
+            Math.random = () => 0;
+            const cp = window.campaign2Landmarks.crossroads;
+            // This point is intentionally near the outer inhabited village.
+            // Historically security=0 let wolves reach it; settlement safety
+            // is now a hard spatial invariant independent of the region stat.
+            const nearVillage = { hex: { q: cp.q - 65, r: cp.r }, side: 'player' };
             window.regions.hollowmere.security = 0;
-            window.wildernessEncounterAccum = 0;
-            const nearPlayerLowSecurity = { hex: { q: 70, r: 0 }, side: 'player' };
-            const beforeLow = window.entities.filter(e => e.name === 'Wolf').length;
-            window.checkWildernessEncounter(nearPlayerLowSecurity, 200);
-            const afterLow = window.entities.filter(e => e.name === 'Wolf').length;
-
-            // High security: the same distance should now be inside the safe radius (no encounter).
-            window.regions.hollowmere.security = 100;
-            window.wildernessEncounterAccum = 0;
-            const beforeHigh = window.entities.filter(e => e.name === 'Wolf').length;
-            window.checkWildernessEncounter(nearPlayerLowSecurity, 200);
-            const afterHigh = window.entities.filter(e => e.name === 'Wolf').length;
-
+            window.wildernessEncounterAccum = 999;
+            const before = window.entities.filter(e => e.name === 'Wolf').length;
+            window.checkWildernessEncounter(nearVillage, 200);
+            const after = window.entities.filter(e => e.name === 'Wolf').length;
+            const safety = window.SettlementSafety.settlementSafetyAt(nearVillage.hex);
             Math.random = originalRandom;
-            return { spawnedAtLowSecurity: afterLow > beforeLow, spawnedAtHighSecurity: afterHigh > beforeHigh };
+            return { spawned: after > before, protectedBy: safety?.settlement?.id || null };
         });
-        expect(result.spawnedAtLowSecurity).toBe(true);
-        expect(result.spawnedAtHighSecurity).toBe(false);
+        expect(result.protectedBy).toBe('hollowmere');
+        expect(result.spawned).toBe(false);
     });
 
     test('regions persist through a real save/load round-trip', async ({ page }) => {
         const security = await page.evaluate(() => {
             window.regions.hollowmere.security = 77;
             window.saveGame('regions_test_save');
-            window.regions.hollowmere.security = 0; // clobber in-memory to prove load restores it
+            window.regions.hollowmere.security = 0;
             window.loadGame('regions_test_save');
             return window.regions.hollowmere.security;
         });
