@@ -134,6 +134,26 @@ test.describe('Persistent siege sector system', () => {
         expect(result.logged).toBe(true);
     });
 
+    test('abstract siege ticks do not repeatedly rescan physical wall terrain', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const state = window.activateNorthwatchSiege();
+            const original = window.getTerrainAt;
+            let terrainReads = 0;
+            window.getTerrainAt = function(...args) {
+                terrainReads++;
+                return original.apply(this, args);
+            };
+            try {
+                for (let i = 0; i < 5000 && state.active; i++) window.tickSiegeState();
+            } finally {
+                window.getTerrainAt = original;
+            }
+            return { terrainReads, sectorTicks: state._sectorTickCounter };
+        });
+        expect(result.sectorTicks).toBeGreaterThan(0);
+        expect(result.terrainReads).toBe(0);
+    });
+
     test('normal saves and exported save codes carry the active sector state', async ({ page }) => {
         const result = await page.evaluate(() => {
             const state = window.activateNorthwatchSiege();
