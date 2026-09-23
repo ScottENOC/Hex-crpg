@@ -133,4 +133,34 @@ test.describe('Persistent siege sector system', () => {
         expect(result.morale).toBeLessThan(100);
         expect(result.logged).toBe(true);
     });
+
+    test('normal saves and exported save codes carry the active sector state', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const state = window.activateNorthwatchSiege();
+            window.SiegeSectorSystem.applySectorPressure(1, 30, 'persistence_probe');
+            state.segments[1].reserves = 2;
+            window.saveGame('siege_sector_test');
+            const stored = JSON.parse(localStorage.getItem('rpg_save_siege_sector_test'));
+            const code = window.exportSaveCode();
+            const exported = JSON.parse(decodeURIComponent(escape(atob(code))));
+            return {
+                saveWrapped: !!window.saveGame.__siegeSectorPersistence,
+                loadWrapped: !!window.loadGame.__siegeSectorPersistence,
+                exportWrapped: !!window.exportSaveCode.__siegeSectorPersistence,
+                storedVersion: stored.siegeState?.sectorModelVersion,
+                storedReserves: stored.siegeState?.segments?.[1]?.reserves,
+                storedLogged: stored.siegeState?.segments?.[1]?.eventLog?.some(e => e.type === 'persistence_probe'),
+                exportedVersion: exported.siegeState?.sectorModelVersion,
+                exportedReserves: exported.siegeState?.segments?.[1]?.reserves,
+            };
+        });
+        expect(result.saveWrapped).toBe(true);
+        expect(result.loadWrapped).toBe(true);
+        expect(result.exportWrapped).toBe(true);
+        expect(result.storedVersion).toBe(1);
+        expect(result.storedReserves).toBe(2);
+        expect(result.storedLogged).toBe(true);
+        expect(result.exportedVersion).toBe(1);
+        expect(result.exportedReserves).toBe(2);
+    });
 });
