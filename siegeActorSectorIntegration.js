@@ -9,6 +9,7 @@
     let installed = false;
     const INSTALL_RETRY_MS = 25;
     const INSTALL_TIMEOUT_MS = 5000;
+    const hexKey = h => `${h.q},${h.r}`;
 
     function distance(a, b) {
         if (!a || !b) return Infinity;
@@ -16,9 +17,26 @@
         return Math.max(Math.abs(a.q-b.q), Math.abs(a.r-b.r), Math.abs((a.q+a.r)-(b.q+b.r)));
     }
 
+    function mergeForcedBreaches(s) {
+        if (!s?.segments) return s;
+        for (const sector of s.segments) {
+            if (!Array.isArray(sector.forcedBreachHexes)) sector.forcedBreachHexes = [];
+            const merged = new Map((sector.breachHexes || []).map(h => [hexKey(h), { ...h }]));
+            sector.forcedBreachHexes.forEach(h => merged.set(hexKey(h), { ...h }));
+            sector.breachHexes = [...merged.values()];
+            if (sector.breachHexes.length) {
+                sector.breached = true;
+                sector.status = 'breached';
+            }
+        }
+        window.SiegeSectorSystem?.updateSummary?.(s);
+        return s;
+    }
+
     function state() {
         const s = window.siegeState;
         if (s && window.SiegeSectorSystem?.upgradeState) window.SiegeSectorSystem.upgradeState(s);
+        if (s) mergeForcedBreaches(s);
         return s;
     }
 
@@ -65,17 +83,59 @@
         return best;
     }
 
+    function appendEvent(sector, event) {
+        if (!sector) return;
+        sector.eventLog = Array.isArray(sector.eventLog) ? sector.eventLog : [];
+        sector.eventLog.push({ worldSeconds: window.worldSeconds || 0, ...event });
+        if (sector.eventLog.length > 20) sector.eventLog.splice(0, sector.eventLog.length - 20);
+    }
+
     function noteSectorActor(sector, entity, role) {
         if (!sector || !entity) return;
-        sector.eventLog = Array.isArray(sector.eventLog) ? sector.eventLog : [];
-        sector.eventLog.push({
+        appendEvent(sector, {
             type: 'actor_assigned',
             role,
             entityId: entity.id,
             entityName: entity.name,
-            worldSeconds: window.worldSeconds || 0,
         });
-        if (sector.eventLog.length > 20) sector.eventLog.splice(0, sector.eventLog.length - 20);
+    }
+
+    function recordForcedBreach(sectorId, breachHex, source, moraleShock = 12) {
+        const s = state();
+        const sector = s?.segments?.find(x => x.id === sectorId) || s?.segments?.[sectorId];
+        if (!sector || !breachHex) return false;
+        sector.forcedBreachHexes = Array.isArray(sector.forcedBreachHexes) ? sector.forcedBreachHexes : [];
+        if (!sector.forcedBreachHexes.some(h => h.q === breachHex.q && h.r === breachHex.r)) {
+            sector.forcedBreachHexes.push({ q: breachHex.q, r: breachHex.r });
+            sector.morale = Math.max(0, (Number.isFinite(sector.morale) ? sector.morale : 100) - moraleShock);
+            appendEvent(sector, { type: source, q: breachHex.q, r: breachHex.r, moraleShock });
+        }
+        mergeForcedBreaches(s);
+        return true;
+    }
+
+    function syncResolvedEngineBreaches() {
+        const s = window.siegeState;
+        if (!s?.segments?.length) return false;
+        let changed = false;
+        const ram = window.campaign2NorthwatchRam;
+        if (ram && ram.roundsRemaining <= 0 && ram.siegeSectorId !== undefined && !ram._sectorBreachRecorded) {
+            const gate = window.campaign2NorthwatchGateHex || ram.siegeTargetHex;
+            if (gate && window.getTerrainAt?.(gate.q, gate.r)?.name === 'Rubble') {
+                changed = recordForcedBreach(ram.siegeSectorId, gate, 'ram_breach', 16) || changed;
+                ram._sectorBreachRecorded = true;
+            }
+        }
+        const sapper = window.campaign2NorthwatchSapper;
+        if (sapper && sapper.roundsRemaining <= 0 && sapper.siegeSectorId !== undefined && !sapper._sectorBreachRecorded) {
+            const target = sapper.siegeTargetHex;
+            if (target && window.getTerrainAt?.(target.q, target.r)?.name === 'Rubble') {
+                changed = recordForcedBreach(sapper.siegeSectorId, target, 'sapper_breach', 20) || changed;
+                sapper._sectorBreachRecorded = true;
+            }
+        }
+        if (!changed) mergeForcedBreaches(s);
+        return changed;
     }
 
     function bindActor(entity, sector, role, fallbackHex = null) {
@@ -125,6 +185,7 @@
     }
 
     function bindReinforcementWave(entities, role) {
+        syncResolvedEngineBreaches();
         const s = state();
         if (!s) return;
         const sector = chooseAssaultSector(s);
@@ -137,6 +198,7 @@
         const s = state();
         if (!s?.segments?.length) return;
         window.SiegeSectorSystem?.refreshAllWallStates?.(s);
+        mergeForcedBreaches(s);
         let struck = null, biggestLoss = 0;
         for (const sector of s.segments) {
             const before = beforeIntegrity.get(sector.id) ?? sector.wallIntegrity;
@@ -220,6 +282,9 @@
         bindActor,
         bindRamAndSapper,
         bindReinforcementWave,
+        recordForcedBreach,
+        syncResolvedEngineBreaches,
+        mergeForcedBreaches,
     };
 
     if (install()) return;
