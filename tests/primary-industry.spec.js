@@ -38,7 +38,9 @@ test.describe('wildlife: deer and wild boar', () => {
             const origRandom = Math.random;
             let call = 0;
             Math.random = () => { call++; return call === 1 ? 0.01 : 0.9; }; // roll succeeds (< 0.35), then isBoar roll fails (deer)
-            const farPlayer = { hex: { q: -80, r: 24 }, side: 'player' }; // west of the crossroads, same convention the wolf-encounter tests use
+            // Far enough west that both the player and every nearby spawn
+            // candidate are outside Hollowmere's settlement+vision buffer.
+            const farPlayer = { hex: { q: -140, r: 24 }, side: 'player' };
             window.checkWildlifeEncounter(farPlayer, 91);
             Math.random = origRandom;
             const spawned = window.entities.find(e => e.name === 'Deer' && window.entities.indexOf(e) >= before);
