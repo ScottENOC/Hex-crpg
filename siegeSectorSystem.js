@@ -9,6 +9,14 @@
 
     const INSTALL_RETRY_MS = 25;
     const INSTALL_TIMEOUT_MS = 5000;
+    // The legacy abstract siege test can execute tens of thousands of ticks
+    // in one synchronous burst. Local sector morale does not need to advance
+    // at that same microscopic cadence: physical wall damage/breaches update
+    // sectors immediately through their event hooks, while ambient morale is
+    // deliberately a slower layer on top. Throttling here keeps the old
+    // Monte-Carlo siege simulation cheap instead of multiplying every legacy
+    // tick by six sectors plus a full wall scan.
+    const LOCAL_STATE_TICK_INTERVAL = 10;
     const WALL_NAMES = new Set([
         'Wall', 'Stone Wall', 'Keep Wall', 'Climbable Wall', 'Palisade Wall'
     ]);
@@ -39,12 +47,22 @@
         return sector;
     }
 
-    function upgradeState(state = window.siegeState) {
+    function upgradeState(state = window.siegeState, { refreshWalls = false } = {}) {
         if (!state || !Array.isArray(state.segments)) return state;
         state.segments.forEach(ensureSectorShape);
         if (!state.sectorModelVersion) state.sectorModelVersion = 1;
-        if (!state.lastSectorTickWorldSeconds) state.lastSectorTickWorldSeconds = window.worldSeconds || 0;
-        refreshAllWallStates(state);
+        if (!Number.isFinite(state.lastSectorTickWorldSeconds)) state.lastSectorTickWorldSeconds = window.worldSeconds || 0;
+        if (!Number.isFinite(state._sectorTickCounter)) state._sectorTickCounter = 0;
+
+        // A newly-created legacy siege has no sector-derived wall snapshot yet,
+        // so take exactly one physical scan when it is upgraded. Thereafter,
+        // damageWall(), forced breaches and the lightweight strategic-actor
+        // reconciler keep wall state current incrementally. Callers that truly
+        // need a rescan (e.g. after loading/restoring terrain) can request one.
+        if (!state._sectorWallsInitialised || refreshWalls) {
+            refreshAllWallStates(state);
+            state._sectorWallsInitialised = true;
+        }
         updateSummary(state);
         return state;
     }
@@ -87,6 +105,7 @@
     function refreshAllWallStates(state = window.siegeState) {
         if (!state?.segments) return state;
         state.segments.forEach(refreshSectorWallState);
+        state._sectorWallsInitialised = true;
         return state;
     }
 
@@ -176,17 +195,23 @@
 
     function tickSectorState(state = window.siegeState) {
         if (!state?.active || !state.segments?.length) return;
-        refreshAllWallStates(state);
-        // Keep the first tranche deterministic and cheap. Physical damage,
-        // casualties and explicit actions change local state; this tick only
-        // lets a breached/overmatched sector's morale reflect that reality.
+        state._sectorTickCounter = (state._sectorTickCounter || 0) + 1;
+        if (state._sectorTickCounter % LOCAL_STATE_TICK_INTERVAL !== 0) return;
+
+        // Physical wall condition is event-driven; do NOT rescan the whole
+        // fortress here. This path may be called millions of times by legacy
+        // abstract siege simulations. Only the slow local morale response
+        // advances on this cadence.
+        let changed = false;
         for (const sector of state.segments) {
+            const before = sector.morale;
             const imbalance = sector.attackerStrength - sector.defenderStrength;
             if (sector.breached && imbalance > 0) sector.morale = clamp(sector.morale - Math.min(2, imbalance * 0.04), 0, 100);
             else if (!sector.breached && imbalance < 0) sector.morale = clamp(sector.morale + Math.min(1, (-imbalance) * 0.02), 0, 100);
+            if (sector.morale !== before) changed = true;
         }
         state.lastSectorTickWorldSeconds = window.worldSeconds || state.lastSectorTickWorldSeconds || 0;
-        updateSummary(state);
+        if (changed) updateSummary(state);
     }
 
     function plainState(state = window.siegeState) {
@@ -253,7 +278,10 @@
                 const restore = () => {
                     if (savedSiege) {
                         window.siegeState = savedSiege;
-                        upgradeState(window.siegeState);
+                        // Loading restores terrain and siege state separately;
+                        // one explicit physical rescan reconciles them, then
+                        // normal play goes back to event-driven updates.
+                        upgradeState(window.siegeState, { refreshWalls: true });
                     }
                 };
                 const result = loadGame.call(this, saveName, ...rest);
