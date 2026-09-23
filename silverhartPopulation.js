@@ -6,7 +6,7 @@
     'use strict';
 
     const TARGET_POPULATION = 500;
-    const PER_OBSERVER_BUDGET = 55;
+    const PER_BUBBLE_BUDGET = 55;
     const HARD_CAP = 180;
     const PULSE_MS = 900;
     const EVENT_TYPE = 'routine:silverhart-transition';
@@ -147,7 +147,6 @@
         const current=scheduler().getAbstractLocation(record.id,at)?.hex||state.currentHex||record.nodes.home.hex;
         const arrivesAt=at+record.commuteMinutes*60;
         scheduler().beginAbstractTravel(record.id,{fromNode:state.currentNode,toNode:target.key,fromHex:current,toHex:target.hex,departedAt:at,arrivesAt,activity:'travelling',arrivalActivity:event.payload?.activity||'scheduled'});
-        // While travelling index both ends so either hot chunk can promote the person.
         indexAt(record.id,current,target.hex);
         scheduler().scheduleEvent(record.id,arrivesAt+.01,ARRIVAL_INDEX_EVENT,{hex:target.hex});
         const next=nextTransition(record,at+1);
@@ -219,11 +218,12 @@
             candidates.push({record,distance:stream().nearestObserverDistance(hex,0)});
         }
         candidates.sort((a,b)=>a.distance-b.distance||a.record.id.localeCompare(b.record.id));
-        const budget=Math.min(HARD_CAP,Math.max(PER_OBSERVER_BUDGET,observers.length*PER_OBSERVER_BUDGET));
+        const bubbles=Math.max(1,stream().observerBubbleCount||1);
+        const budget=Math.min(HARD_CAP,bubbles*PER_BUBBLE_BUDGET);
         const selected=candidates.slice(0,budget),wanted=new Set(selected.map(x=>x.record.id));
         for(const {record} of selected)materialise(record,at);
         if(!window.isInCombat)for(const id of [...materialised.keys()])if(!wanted.has(id))dematerialise(id);
-        return {population:records.size,candidates:candidates.length,materialised:materialised.size,budget,observers:observers.length};
+        return {population:records.size,candidates:candidates.length,materialised:materialised.size,budget,observers:observers.length,bubbles};
     }
 
     function install(){
@@ -239,7 +239,7 @@
         install,pulse,ensurePopulation,materialise,dematerialise,recordLocation,
         get records(){return records;},get materialised(){return materialised;},get chunkIndex(){return chunkIndex;},
         get stats(){return {installed,population:records.size,living:[...records.values()].filter(r=>r.alive).length,materialised:materialised.size,indexedChunks:chunkIndex.size,pulseCount,materialiseCount,dematerialiseCount,targetPopulation:TARGET_POPULATION};},
-        TARGET_POPULATION,PER_OBSERVER_BUDGET,HARD_CAP,
+        TARGET_POPULATION,PER_BUBBLE_BUDGET,HARD_CAP,
     };
 
     window.__silverhartPopulationTimer=setInterval(pulse,PULSE_MS);
