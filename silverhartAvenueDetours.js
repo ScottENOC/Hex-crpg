@@ -1,8 +1,9 @@
 // silverhartAvenueDetours.js
 // Keeps Silverhart's six principal avenues continuous without bulldozing
-// authored buildings that already occupy an ideal radial centreline. A blocked
-// centreline hex gets a short lateral bypass; the authored interior remains
-// untouched and the bypass becomes part of deterministic world generation.
+// authored buildings that already occupy an ideal radial centreline. Rather
+// than side-stepping one blocked hex at a time, contiguous authored obstacles
+// are routed around as a single cluster so a several-hex-wide building still
+// gets a genuinely connected boulevard bypass.
 (() => {
     'use strict';
 
@@ -32,22 +33,67 @@
         return true;
     }
 
-    function lateralCandidates(h, dir, c, radial) {
-        return (window.getNeighbors?.(h.q,h.r)||[])
-            .filter(n => {
-                const t=terrain(n);
-                const r=dist(c,n);
-                // Stay alongside this point of the avenue rather than cutting
-                // inward through a block or jumping onto another radial road.
-                return !BLOCKERS.has(t) && Math.abs(r-radial)<=1;
-            })
-            .sort((a,b) => {
-                // Prefer a true side-step over moving farther along the same
-                // centreline. This makes the bypass visually legible.
-                const aForward=(a.q-h.q)===dir.q&&(a.r-h.r)===dir.r;
-                const bForward=(b.q-h.q)===dir.q&&(b.r-h.r)===dir.r;
-                return Number(aForward)-Number(bForward);
-            });
+    function lineHex(c, dir, d) {
+        return { q:c.q+dir.q*d, r:c.r+dir.r*d };
+    }
+
+    function findClearLinePoint(c,dir,startD,step,minD,maxD) {
+        let d=startD;
+        while(d>=minD && d<=maxD) {
+            const h=lineHex(c,dir,d);
+            if(!BLOCKERS.has(terrain(h))) {
+                paintSafe(h);
+                return {d,hex:h};
+            }
+            d+=step;
+        }
+        return null;
+    }
+
+    function reconstructPath(parent,startKey,goalKey,byKey) {
+        if(!parent.has(goalKey) && goalKey!==startKey) return null;
+        const out=[];
+        let cur=goalKey;
+        while(cur) {
+            out.push(byKey.get(cur));
+            if(cur===startKey) break;
+            cur=parent.get(cur);
+        }
+        if(out[out.length-1] && key(out[out.length-1])===startKey) return out.reverse();
+        return null;
+    }
+
+    function routeCluster(c,dir,entry,exit) {
+        if(!entry||!exit) return [];
+        const start={...entry.hex},goal={...exit.hex};
+        const startKey=key(start),goalKey=key(goal);
+        const queue=[start];
+        const seen=new Set([startKey]);
+        const parent=new Map();
+        const byKey=new Map([[startKey,start]]);
+        // Keep the bypass local to this stretch of boulevard. The +3 radial
+        // allowance is enough to skirt even the larger authored embassy/shop
+        // footprints without letting BFS wander across the city.
+        const minRad=Math.max(0,Math.min(entry.d,exit.d)-3);
+        const maxRad=Math.max(entry.d,exit.d)+3;
+        let cursor=0,visited=0;
+        while(cursor<queue.length && visited<600) {
+            const cur=queue[cursor++]; visited++;
+            if(key(cur)===goalKey) break;
+            for(const n of (window.getNeighbors?.(cur.q,cur.r)||[])) {
+                const nk=key(n);
+                if(seen.has(nk)) continue;
+                const radial=dist(c,n);
+                if(radial<minRad||radial>maxRad) continue;
+                if(nk!==goalKey && BLOCKERS.has(terrain(n))) continue;
+                seen.add(nk); parent.set(nk,key(cur)); byKey.set(nk,{...n}); queue.push({...n});
+            }
+        }
+        const path=reconstructPath(parent,startKey,goalKey,byKey);
+        if(!path) return [];
+        const painted=[];
+        for(const h of path) if(paintSafe(h)) painted.push({...h});
+        return painted;
     }
 
     function ensureAvenueDetours() {
@@ -56,25 +102,48 @@
         if(!c||!registry||!window.setTerrainAt) return false;
         const inner=Number(window.campaign2SilverhartRingRoadRadius||registry.innerRingRadius||30);
         const wall=Number(window.campaign2SilverhartCityWallRadius||registry.cityWallRadius||60);
+        const lineEnd=wall+8;
         const detours=[];
         const blocked=[];
 
         DIRS.forEach(dir => {
-            for(let d=inner;d<=wall+8;d++) {
-                const h={q:c.q+dir.q*d,r:c.r+dir.r*d};
+            let d=inner;
+            while(d<=lineEnd) {
+                const h=lineHex(c,dir,d);
                 const t=terrain(h);
-                if(t==='Path') continue;
-                if(!BLOCKERS.has(t)) {
-                    paintSafe(h);
-                    continue;
+                if(t==='Path') { d++; continue; }
+                if(!BLOCKERS.has(t)) { paintSafe(h); d++; continue; }
+
+                // Consume the entire contiguous blocked run on the ideal
+                // centreline. Every member is retained in diagnostics so a
+                // test/debug overlay can explain exactly what forced the road
+                // off-axis.
+                const cluster=[];
+                let scan=d;
+                while(scan<=lineEnd) {
+                    const bh=lineHex(c,dir,scan);
+                    const bt=terrain(bh);
+                    if(!BLOCKERS.has(bt)) break;
+                    const item={direction:dir.name,d:scan,hex:{...bh},terrain:bt};
+                    cluster.push(item); blocked.push(item); scan++;
                 }
-                blocked.push({direction:dir.name,d,hex:{...h},terrain:t});
-                const candidates=lateralCandidates(h,dir,c,d);
-                // Paint up to two side tiles. Consecutive blocked centreline
-                // cells then naturally join into a parallel one-hex bypass.
-                candidates.slice(0,2).forEach(n => {
-                    if(paintSafe(n)) detours.push({direction:dir.name,d,hex:{...n},around:{...h}});
-                });
+
+                const entry=findClearLinePoint(c,dir,d-1,-1,inner-3,lineEnd);
+                const exit=findClearLinePoint(c,dir,scan,1,inner-3,lineEnd+3);
+                const bypass=routeCluster(c,dir,entry,exit);
+
+                // Associate the connected bypass with every blocked ideal
+                // centreline cell in the cluster. This makes diagnostics say
+                // "this authored building caused this detour" rather than
+                // only recording the cluster's first cell.
+                for(const item of cluster) {
+                    for(const p of bypass) {
+                        if(entry && key(p)===key(entry.hex)) continue;
+                        if(exit && key(p)===key(exit.hex)) continue;
+                        detours.push({direction:dir.name,d:item.d,hex:{...p},around:{...item.hex}});
+                    }
+                }
+                d=Math.max(scan,d+1);
             }
         });
 
