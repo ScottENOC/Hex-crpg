@@ -16,7 +16,13 @@ test.describe('Hollowmere social fabric', () => {
       const social = window.HollowmereSocialFabric;
       const stats = social.stats;
       const builtResidences = social.residences.filter(r => r.region).length;
-      const registeredRegions = (window.interiorRegions || []).filter(r => r.hollowmereResidenceId).length;
+      // New cottages carry hollowmereResidenceId, while three older campaign
+      // homes reuse legacy interiorRegion objects that predate that tag. What
+      // matters is that every residence with a physical region is actually in
+      // the live interior registry, not whether an old region was retro-tagged.
+      const registeredRegions = social.residences.filter(r =>
+        r.region && (window.interiorRegions || []).includes(r.region)
+      ).length;
       const workplaceRegions = (window.interiorRegions || []).filter(r => r.hollowmereWorkplaceId).length;
       return { ...stats, builtResidences, registeredRegions, workplaceRegions };
     });
