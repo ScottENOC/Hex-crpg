@@ -62,6 +62,7 @@
     load('script[data-millbrook-expansion]', 'millbrookExpansion.js', 'millbrookExpansion');
     load('script[data-millbrook-content]', 'millbrookContent.js', 'millbrookContent');
     load('script[data-emberlode-expansion]', 'emberlodeExpansion.js', 'emberlodeExpansion');
+    load('script[data-reactive-ambient-chatter]', 'ambientChatterExpansion.js', 'reactiveAmbientChatter');
     load('script[data-silverhart-capital-rebuild]', 'silverhartCapitalRebuild.js', 'silverhartCapitalRebuild');
     load('script[data-silverhart-capital-completion]', 'silverhartCapitalCompletion.js', 'silverhartCapitalCompletion');
     load('script[data-silverhart-avenue-detours]', 'silverhartAvenueDetours.js', 'silverhartAvenueDetours');
