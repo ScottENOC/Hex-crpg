@@ -47,6 +47,63 @@ test.describe('Siege actors use physical sectors', () => {
         expect(result.sapper.objective).toBeTruthy();
     });
 
+    test('completed ram and sapper attacks persist as local breaches and morale shocks', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const state = window.activateNorthwatchSiege();
+            window.greenskinRamSapperSpawned = false;
+            window.spawnBatteringRamAndSapper();
+            const ram = window.campaign2NorthwatchRam;
+            const sapper = window.campaign2NorthwatchSapper;
+            const gate = window.campaign2NorthwatchGateHex;
+            const rear = { ...sapper.siegeTargetHex };
+            const ramSector = state.segments.find(s => s.id === ram.siegeSectorId);
+            const sapperSector = state.segments.find(s => s.id === sapper.siegeSectorId);
+            const before = { ramMorale: ramSector.morale, sapperMorale: sapperSector.morale };
+
+            // Mirror the existing scripted completion effect in gameEngine:
+            // these actors directly turn their target terrain into Rubble.
+            ram.roundsRemaining = 0;
+            ram.alive = false;
+            window.setTerrainAt(gate.q, gate.r, 'Rubble');
+            sapper.roundsRemaining = 0;
+            sapper.alive = false;
+            window.setTerrainAt(rear.q, rear.r, 'Rubble');
+            const changed = window.SiegeActorSectorIntegration.syncResolvedEngineBreaches();
+
+            return {
+                changed,
+                gate,
+                rear,
+                ramSector: {
+                    breached: ramSector.breached,
+                    forced: ramSector.forcedBreachHexes,
+                    breachHexes: ramSector.breachHexes,
+                    morale: ramSector.morale,
+                    logged: ramSector.eventLog.some(e => e.type === 'ram_breach'),
+                },
+                sapperSector: {
+                    breached: sapperSector.breached,
+                    forced: sapperSector.forcedBreachHexes,
+                    breachHexes: sapperSector.breachHexes,
+                    morale: sapperSector.morale,
+                    logged: sapperSector.eventLog.some(e => e.type === 'sapper_breach'),
+                },
+                before,
+            };
+        });
+        expect(result.changed).toBe(true);
+        expect(result.ramSector.breached).toBe(true);
+        expect(result.ramSector.forced).toContainEqual(result.gate);
+        expect(result.ramSector.breachHexes).toContainEqual(result.gate);
+        expect(result.ramSector.morale).toBeLessThan(result.before.ramMorale);
+        expect(result.ramSector.logged).toBe(true);
+        expect(result.sapperSector.breached).toBe(true);
+        expect(result.sapperSector.forced).toContainEqual(result.rear);
+        expect(result.sapperSector.breachHexes).toContainEqual(result.rear);
+        expect(result.sapperSector.morale).toBeLessThan(result.before.sapperMorale);
+        expect(result.sapperSector.logged).toBe(true);
+    });
+
     test('reinforcement waves exploit an existing physical breach instead of always marching at the gate', async ({ page }) => {
         const result = await page.evaluate(() => {
             const state = window.activateNorthwatchSiege();
