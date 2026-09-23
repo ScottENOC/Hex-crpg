@@ -112,6 +112,18 @@
         document.head.appendChild(routineVariety);
     }
 
+    // Hollowmere's social fabric consumes the persistent civilian records after
+    // the routine layer exists, expands the tiny original village with enough
+    // real homes/workplaces for its population, and binds people to households,
+    // colleagues and friendship networks rather than synthetic radial nodes.
+    if (!document.querySelector('script[data-hollowmere-social-fabric]')) {
+        const socialFabric = document.createElement('script');
+        socialFabric.src = `hollowmereSocialFabric.js?build=${encodeURIComponent(build)}`;
+        socialFabric.dataset.hollowmereSocialFabric = 'true';
+        socialFabric.async = false;
+        document.head.appendChild(socialFabric);
+    }
+
     function installVisibilityBounds() {
         const original = window.isVisibleToPlayer;
         if (typeof original !== 'function' || original.__wideZoomBounds) return false;

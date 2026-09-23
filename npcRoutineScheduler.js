@@ -16,6 +16,11 @@
     const entityRefs = new Map();
     const handlers = new Map();
     const heap = [];
+    // A deleted NPC can later be recreated with the same stable ID. Keep the
+    // last event generation outside the live state map so lazily-cancelled heap
+    // entries from the old incarnation can never become live again when that ID
+    // is reused (critical for population resizing and save/load reconstruction).
+    const generationTombstones = new Map();
     let sequence = 0;
     let lastObservedWorldSeconds = null;
 
@@ -73,6 +78,7 @@
             existing.id = id;
             return existing;
         }
+        const inheritedGeneration = generationTombstones.get(key) || 0;
         const state = {
             id,
             simulationLevel: spec.simulationLevel || 'dormant',
@@ -81,9 +87,10 @@
             currentHex: cloneHex(spec.currentHex),
             travel: spec.travel ? { ...spec.travel } : null,
             metadata: spec.metadata ? { ...spec.metadata } : {},
-            eventGeneration: 0,
-            travelGeneration: 0,
+            eventGeneration: Number.isFinite(spec.eventGeneration) ? spec.eventGeneration : inheritedGeneration,
+            travelGeneration: Number.isFinite(spec.travelGeneration) ? spec.travelGeneration : 0,
         };
+        generationTombstones.set(key, state.eventGeneration);
         states.set(key, state);
         return state;
     }
@@ -101,7 +108,10 @@
     function unregisterNpc(id) {
         const key = keyOf(id);
         const state = states.get(key);
-        if (state) state.eventGeneration++;
+        const previous = state?.eventGeneration ?? generationTombstones.get(key) ?? 0;
+        const nextGeneration = previous + 1;
+        if (state) state.eventGeneration = nextGeneration;
+        generationTombstones.set(key, nextGeneration);
         states.delete(key);
         entityRefs.delete(key);
     }
@@ -127,7 +137,13 @@
 
     function clearNpcEvents(id) {
         const state = getState(id);
-        if (state) state.eventGeneration++;
+        if (state) {
+            state.eventGeneration++;
+            generationTombstones.set(keyOf(id), state.eventGeneration);
+        } else {
+            const key = keyOf(id);
+            generationTombstones.set(key, (generationTombstones.get(key) || 0) + 1);
+        }
         // Stale heap entries are intentionally left in place. They are skipped
         // lazily when they reach the top, avoiding an O(queue) delete pass.
     }
@@ -271,6 +287,7 @@
         states.clear();
         entityRefs.clear();
         heap.length = 0;
+        generationTombstones.clear();
         sequence = Number(snapshot?.sequence || 0);
         for (const raw of snapshot?.states || []) registerNpc(raw.id, raw);
         for (const raw of snapshot?.events || []) heapPush({ ...raw });
