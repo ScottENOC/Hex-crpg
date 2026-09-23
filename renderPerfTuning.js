@@ -50,6 +50,7 @@
     // or decide which district is loaded; worldChunkStreaming owns the actual
     // seamless hot/cold simulation state around every party member.
     load('script[data-settlement-scale]', 'settlementScale.js', 'settlementScale');
+    load('script[data-settlement-safety]', 'settlementSafety.js', 'settlementSafety');
     load('script[data-world-chunk-streaming]', 'worldChunkStreaming.js', 'worldChunkStreaming');
 
     load('script[data-generated-civilian-population]', 'generatedCivilianPopulation.js', 'generatedCivilianPopulation');
@@ -58,6 +59,9 @@
     load('script[data-civilian-persistence]', 'civilianPersistence.js', 'civilianPersistence');
     load('script[data-civilian-routine-variety]', 'civilianRoutineVariety.js', 'civilianRoutineVariety');
     load('script[data-hollowmere-social-fabric]', 'hollowmereSocialFabric.js', 'hollowmereSocialFabric');
+    load('script[data-silverhart-capital-rebuild]', 'silverhartCapitalRebuild.js', 'silverhartCapitalRebuild');
+    load('script[data-silverhart-capital-completion]', 'silverhartCapitalCompletion.js', 'silverhartCapitalCompletion');
+    load('script[data-silverhart-avenue-detours]', 'silverhartAvenueDetours.js', 'silverhartAvenueDetours');
 
     // The capital population is persistent but chunk-indexed: hundreds of
     // residents can exist without hundreds of live Entity objects.
