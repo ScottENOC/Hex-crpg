@@ -48,23 +48,39 @@ test.describe('Silverhart persistent population', () => {
     expect(result.pulse.candidates).toBeLessThan(result.persistent);
   });
 
-  test('split observers increase the available live crowd budget instead of evicting the first area', async ({ page }) => {
+  test('nearby companions share one crowd budget', async ({ page }) => {
+    const result = await page.evaluate(() => {
+      const city=window.SettlementScale.get('silverhart');
+      const players=window.entities.filter(e=>e.alive&&e.side==='player'&&!e.rider);
+      players.forEach((p,i)=>{p.hex={q:city.centre.q+i,r:city.centre.r};p.visualQ=p.hex.q;p.visualR=p.hex.r;});
+      window.WorldChunkStreaming.pulse();
+      const pulse=window.SilverhartPopulation.pulse();
+      return {observers:pulse.observers,bubbles:pulse.bubbles,budget:pulse.budget,base:window.SilverhartPopulation.PER_BUBBLE_BUDGET};
+    });
+    expect(result.observers).toBeGreaterThanOrEqual(1);
+    expect(result.bubbles).toBe(1);
+    expect(result.budget).toBe(result.base);
+  });
+
+  test('split party bubbles increase the available live crowd budget instead of evicting the first area', async ({ page }) => {
     const result = await page.evaluate(() => {
       const city=window.SettlementScale.get('silverhart');
       const players=window.entities.filter(e=>e.alive&&e.side==='player'&&!e.rider);
       const first=players[0];
       let second=players[1];
       if(!second){
-        second=new window.Entity('Capital Split Companion','#777',{q:city.centre.q+96,r:city.centre.r},10);
+        second=new window.Entity('Capital Split Companion','#777',{q:city.centre.q+144,r:city.centre.r},10);
         second.id='capital-split-companion';second.side='player';second.alive=true;window.entities.push(second);
       }
       first.hex={...city.centre};first.visualQ=first.hex.q;first.visualR=first.hex.r;
-      second.hex={q:city.centre.q+96,r:city.centre.r};second.visualQ=second.hex.q;second.visualR=second.hex.r;
+      second.hex={q:city.centre.q+144,r:city.centre.r};second.visualQ=second.hex.q;second.visualR=second.hex.r;
+      for(const p of players.slice(2)){p.hex={...first.hex};p.visualQ=p.hex.q;p.visualR=p.hex.r;}
       window.WorldChunkStreaming.pulse();
       const pulse=window.SilverhartPopulation.pulse();
-      return { observers:pulse.observers,budget:pulse.budget,base:window.SilverhartPopulation.PER_OBSERVER_BUDGET,live:pulse.materialised };
+      return { observers:pulse.observers,bubbles:pulse.bubbles,budget:pulse.budget,base:window.SilverhartPopulation.PER_BUBBLE_BUDGET,live:pulse.materialised };
     });
     expect(result.observers).toBeGreaterThanOrEqual(2);
+    expect(result.bubbles).toBeGreaterThanOrEqual(2);
     expect(result.budget).toBeGreaterThan(result.base);
     expect(result.live).toBeLessThanOrEqual(result.budget);
   });
