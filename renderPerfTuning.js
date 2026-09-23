@@ -73,6 +73,7 @@
     load('script[data-siege-sector-system]', 'siegeSectorSystem.js', 'siegeSectorSystem');
     load('script[data-siege-actor-sector-integration]', 'siegeActorSectorIntegration.js', 'siegeActorSectorIntegration');
     load('script[data-siege-actor-reconciliation]', 'siegeActorReconciliation.js', 'siegeActorReconciliation');
+    load('script[data-siege-reserve-dispatch]', 'siegeReserveDispatch.js', 'siegeReserveDispatch');
 
     function installVisibilityBounds() {
         const original = window.isVisibleToPlayer;
