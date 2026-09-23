@@ -65,6 +65,7 @@
     load('script[data-reactive-ambient-chatter]', 'ambientChatterExpansion.js', 'reactiveAmbientChatter');
     load('script[data-relationship-ambient-chatter]', 'ambientChatterRelationships.js', 'relationshipAmbientChatter');
     load('script[data-personality-ambient-chatter]', 'ambientChatterPersonality.js', 'personalityAmbientChatter');
+    load('script[data-bandit-camp-wilderness-fix]', 'banditCampWildernessFix.js', 'banditCampWildernessFix');
     load('script[data-silverhart-capital-rebuild]', 'silverhartCapitalRebuild.js', 'silverhartCapitalRebuild');
     load('script[data-silverhart-capital-completion]', 'silverhartCapitalCompletion.js', 'silverhartCapitalCompletion');
     load('script[data-silverhart-avenue-detours]', 'silverhartAvenueDetours.js', 'silverhartAvenueDetours');
@@ -78,7 +79,7 @@
     // API, so existing quests and scripted assault beats keep working.
     load('script[data-siege-sector-system]', 'siegeSectorSystem.js', 'siegeSectorSystem');
     load('script[data-siege-actor-sector-integration]', 'siegeActorSectorIntegration.js', 'siegeActorSectorIntegration');
-    load('script[data-siege-actor-reconciliation]', 'siegeActorReconciliation.js', 'siegeActorReconciliation');
+    load('script[data-siege-actor-reconciliation]', 'siegeActorSectorReconciliation.js', 'siegeActorReconciliation');
 
     function installVisibilityBounds() {
         const original = window.isVisibleToPlayer;
