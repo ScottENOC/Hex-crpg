@@ -57,17 +57,18 @@
 
     function canBuild(pos,halfW=2,halfH=2) {
         if(regionTooClose(pos,6)) return false;
-        const all=[...floorHexes(pos,halfW,halfH),...wallRing(floorHexes(pos,halfW,halfH))];
+        const floors=floorHexes(pos,halfW,halfH);
+        const all=[...floors,...wallRing(floors)];
         return all.every(h => {
             const t=window.getTerrainAt?.(h.q,h.r)?.name;
-            if(['Water','Wall','Palisade Wall','Climbable Wall','Keep Wall','Stone Wall','Wood Floor','Cave Floor'].includes(t)) return false;
+            // Planned streets are sacred: buildings adapt to blocks, never
+            // overwrite a ring road or avenue after it has been laid out.
+            if(['Path','Water','Wall','Palisade Wall','Climbable Wall','Keep Wall','Stone Wall','Wood Floor','Cave Floor'].includes(t)) return false;
             return !window.tileObjects?.[key(h)];
         });
     }
 
     function nearestRoadDoor(ring, cityCentre) {
-        // Prefer the side facing the nearest planned ring/avenue; falling back
-        // toward the palace keeps shopfronts and townhouses facing streets.
         return ring.reduce((best,h)=>distance(h,cityCentre)<distance(best,cityCentre)?h:best,ring[0]);
     }
 
@@ -142,21 +143,19 @@
 
     function paintAvenues(centerHex,innerRadius,wallRadius) {
         avenues.length=0;gates.length=0;
-        DIRECTIONS.forEach(dir=>{
+        DIRECTIONS.forEach((dir,dirIndex)=>{
             const hexes=[];
             for(let d=innerRadius;d<=wallRadius+8;d++) {
                 const h={q:centerHex.q+dir.q*d,r:centerHex.r+dir.r*d};
                 const t=window.getTerrainAt?.(h.q,h.r)?.name;
-                // The six planned city gates deliberately pierce only the city
-                // wall, never an authored building or the palace curtain wall.
                 if(d===wallRadius) {
+                    const lateral=DIRECTIONS[(dirIndex+2)%6];
                     for(let w=-1;w<=1;w++) {
-                        const lateral=DIRECTIONS[(DIRECTIONS.indexOf(dir)+2)%6];
                         const g={q:h.q+lateral.q*w,r:h.r+lateral.r*w};
                         window.setTerrainAt(g.q,g.r,'Path');
                         gates.push({direction:dir.name,hex:g});
                     }
-                } else if(!['Wall','Keep Wall','Stone Wall','Water','Wood Floor','Cave Floor'].includes(t) && t!=='Palisade Wall') {
+                } else if(!['Wall','Keep Wall','Stone Wall','Water','Wood Floor','Cave Floor','Palisade Wall'].includes(t)) {
                     window.setTerrainAt(h.q,h.r,'Path');hexes.push(h);
                 }
             }
@@ -165,65 +164,64 @@
     }
 
     function connectDoorToRoad(door,maxSteps=8) {
-        const c=centre(); if(!door||!c)return;
+        if(!door)return;
         let cur={...door};
         for(let i=0;i<maxSteps;i++) {
             const ns=window.getNeighbors?.(cur.q,cur.r)||[]; if(!ns.length)break;
-            // Bias toward either planned ring: minimise distance to radius 50,
-            // with palace distance as a stable tie-breaker.
+            const path=ns.find(h=>window.getTerrainAt?.(h.q,h.r)?.name==='Path');
+            if(path)return;
             const next=ns.reduce((best,h)=>{
-                const score=x=>Math.abs(distance(c,x)-OUTER_RING_RADIUS)*3+distance(x,c)*0.01;
+                const score=x=>{
+                    const t=window.getTerrainAt?.(x.q,x.r)?.name;
+                    const blocked=['Wall','Palisade Wall','Keep Wall','Stone Wall','Water','Wood Floor','Cave Floor'].includes(t);
+                    return (blocked?10000:0)+Math.abs(distance(centre(),x)-OUTER_RING_RADIUS)*2;
+                };
                 return score(h)<score(best)?h:best;
             },ns[0]);
             const t=window.getTerrainAt?.(next.q,next.r)?.name;
-            if(t==='Path')break;
             if(!['Wall','Palisade Wall','Keep Wall','Stone Wall','Water','Wood Floor','Cave Floor'].includes(t))window.setTerrainAt(next.q,next.r,'Path');
             cur=next;
         }
     }
 
-    function candidateSpecs(c) {
-        const add=(list,district,kindPrefix,positions,floors=2)=>positions.forEach((p,i)=>list.push({
-            id:`silverhart-${district}-${kindPrefix}-${String(i+1).padStart(2,'0')}`,district,
-            kind:kindPrefix,center:{q:c.q+p[0],r:c.r+p[1]},floors:typeof floors==='function'?floors(i):floors,
-            large:['inn','guildhall','warehouse','manor','watch-hq'].some(x=>kindPrefix.includes(x)),
-        }));
-        const out=[];
-        // West: dense mercantile fabric around the four existing authored shops.
-        add(out,'merchant','shop',[[-34,-18],[-42,-18],[-50,-12],[-50,3],[-45,18],[-34,20]],2);
-        add(out,'merchant','warehouse',[[-52,-27],[-53,28]],2);
-        add(out,'merchant','golden-stag-inn',[[-40,29]],3);
-        // East: prosperous townhouses/manors, deliberately taller and roomier.
-        add(out,'wealthy','townhouse',[[34,-20],[43,-21],[51,-12],[51,5],[47,20],[37,25],[29,-29],[29,32]],3);
-        add(out,'wealthy','manor',[[48,-31],[49,32]],2);
-        // North: civic/institutional quarter completing the inner plan.
-        add(out,'civic','guildhall',[[-20,-43],[18,-43]],2);
-        add(out,'civic','watch-hq',[[0,-49]],2);
-        add(out,'civic','court',[[-11,-49]],2);
-        add(out,'civic','scribes-hall',[[11,-49]],2);
-        // Outer-ring ordinary city: workshops, tenements and everyday commerce.
-        add(out,'commons','tenement',[[-31,38],[-20,46],[-8,51],[15,49],[27,42],[38,32],[-39,-30],[31,-38]],3);
-        add(out,'commons','workshop',[[-47,35],[-28,50],[26,51],[44,36]],2);
-        add(out,'commons','market-inn',[[8,43]],2);
-        // Diplomatic south: supporting businesses/residences around existing embassies.
-        add(out,'diplomatic','diplomatic-townhouse',[[-23,55],[22,55]],2);
-        add(out,'diplomatic','envoys-rest-inn',[[28,47]],3);
-        add(out,'diplomatic','translator-office',[[-29,46]],2);
-        // Warrens remain intentionally irregular and less planned. These are
-        // relative to the existing guild anchor where possible (rebased below).
+    function spec(id,district,kind,q,r,floors=2,large=false){
+        const c=centre();return{id,district,kind,center:{q:c.q+q,r:c.r+r},floors,large};
+    }
+
+    function candidateSpecs() {
+        const out=[];let n=0;const add=(district,kind,positions,floors=2,large=false)=>positions.forEach(([q,r])=>out.push(spec(`silverhart-${district}-${kind}-${++n}`,district,kind,q,r,floors,large)));
+        // All offsets below are axial-hex distances safely inside radius 60.
+        // They sit between radial avenues rather than on them.
+        add('merchant','shop',[[-34,4],[-38,8],[-42,12],[-34,16],[-45,20],[-36,26]],2);
+        add('merchant','warehouse',[[-47,24],[-42,29]],2,true);
+        add('merchant','golden-stag-inn',[[-34,28]],3,true);
+
+        add('wealthy','townhouse',[[34,-4],[38,-8],[42,-12],[34,-16],[45,-20],[36,-26],[47,-24],[41,-30]],3);
+        add('wealthy','manor',[[28,-36],[33,-34]],2,true);
+
+        add('civic','guildhall',[[8,-39],[18,-42]],2,true);
+        add('civic','watch-hq',[[-8,-38]],2,true);
+        add('civic','court',[[13,-36]],2,true);
+        add('civic','scribes-hall',[[23,-38]],2);
+
+        add('commons','tenement',[[-28,39],[-20,43],[-10,45],[12,34],[23,31],[32,20],[-35,-8],[25,-35]],3);
+        add('commons','workshop',[[-39,31],[-29,41],[29,23],[38,10]],2);
+        add('commons','market-inn',[[-8,40]],2,true);
+
+        add('diplomatic','diplomatic-townhouse',[[-18,43],[-28,45]],2);
+        add('diplomatic','envoys-rest-inn',[[-4,44]],3,true);
+        add('diplomatic','translator-office',[[-34,42]],2);
         return out;
     }
 
     function addWarrensInfill(c) {
         const w=window.campaign2ThievesGuildCenter||{q:c.q+6,r:c.r+(window.campaign2SilverhartCityWallRadius||60)+10};
         const offsets=[[-14,-3],[-10,7],[-5,10],[7,9],[12,4],[15,-5],[-17,8],[17,8]];
+        const kinds=['cheap-tenement','pawn-shop','gambling-den','cheap-tenement','broken-cask-inn','cheap-tenement','fence-front','cheap-tenement'];
         offsets.forEach((o,i)=>{
-            const kinds=['cheap-tenement','pawn-shop','gambling-den','cheap-tenement','broken-cask-inn','cheap-tenement','fence-front','cheap-tenement'];
             const b=carveBuilding({id:`silverhart-warrens-infill-${i+1}`,district:'warrens',kind:kinds[i],center:{q:w.q+o[0],r:w.r+o[1]},floors:kinds[i].includes('inn')?2:1});
-            if(b) connectDoorToRoad(b.door,5);
+            if(b)connectDoorToRoad(b.door,5);
         });
-        // Organic alleys: unlike the royal avenues these wobble around the
-        // existing guild rather than respecting the circular plan.
         offsets.forEach(o=>{
             const target={q:w.q+o[0],r:w.r+o[1]}; let cur={...w};
             for(let i=0;i<18&&distance(cur,target)>1;i++) {
@@ -237,19 +235,19 @@
     }
 
     function exposeDistricts(c) {
-        window.campaign2MerchantQuarterCenter={q:c.q-40,r:c.r};
-        window.campaign2WealthyQuarterCenter={q:c.q+40,r:c.r};
-        window.campaign2CivicQuarterCenter={q:c.q,r:c.r-43};
-        window.campaign2CommonsCenter={q:c.q,r:c.r+43};
-        window.campaign2DiplomaticPlazaCenter=window.campaign2DiplomaticPlazaCenter||{q:c.q,r:c.r+52};
+        window.campaign2MerchantQuarterCenter={q:c.q-38,r:c.r+14};
+        window.campaign2WealthyQuarterCenter={q:c.q+38,r:c.r-14};
+        window.campaign2CivicQuarterCenter={q:c.q+10,r:c.r-40};
+        window.campaign2CommonsCenter={q:c.q-8,r:c.r+40};
+        window.campaign2DiplomaticPlazaCenter=window.campaign2DiplomaticPlazaCenter||{q:c.q-12,r:c.r+48};
         const s=window.SettlementScale?.get?.('silverhart');
-        if(s) s.districts=[
+        if(s)s.districts=[
             {id:'palace',name:'Palace & Inner Court',centre:{...c},radius:29},
-            {id:'merchant',name:'Merchant Quarter',centre:{...window.campaign2MerchantQuarterCenter},radius:28},
-            {id:'wealthy',name:'Wealthy Quarter',centre:{...window.campaign2WealthyQuarterCenter},radius:28},
-            {id:'civic',name:'Civic Quarter',centre:{...window.campaign2CivicQuarterCenter},radius:28},
-            {id:'diplomatic',name:'Diplomatic Quarter',centre:{...window.campaign2DiplomaticPlazaCenter},radius:32},
-            {id:'commons',name:'Commons',centre:{...window.campaign2CommonsCenter},radius:34},
+            {id:'merchant',name:'Merchant Quarter',centre:{...window.campaign2MerchantQuarterCenter},radius:25},
+            {id:'wealthy',name:'Wealthy Quarter',centre:{...window.campaign2WealthyQuarterCenter},radius:25},
+            {id:'civic',name:'Civic Quarter',centre:{...window.campaign2CivicQuarterCenter},radius:26},
+            {id:'diplomatic',name:'Diplomatic Quarter',centre:{...window.campaign2DiplomaticPlazaCenter},radius:30},
+            {id:'commons',name:'Commons',centre:{...window.campaign2CommonsCenter},radius:31},
             ...(window.campaign2ThievesGuildCenter?[{id:'warrens',name:'Warrens',centre:{...window.campaign2ThievesGuildCenter},radius:28}]:[]),
         ];
     }
@@ -260,16 +258,12 @@
         buildings.length=0;avenues.length=0;gates.length=0;
         const inner=Number(window.campaign2SilverhartRingRoadRadius||30);
         const wall=Number(window.campaign2SilverhartCityWallRadius||CITY_WALL_FALLBACK);
-        paintRing(c,inner);paintRing(c,OUTER_RING_RADIUS);paintAvenues(c,inner,wall);
-        exposeDistricts(c);
-        for(const spec of candidateSpecs(c)) {
-            const b=carveBuilding(spec);if(b)connectDoorToRoad(b.door,8);
-        }
+        paintRing(c,inner);paintRing(c,OUTER_RING_RADIUS);paintAvenues(c,inner,wall);exposeDistricts(c);
+        for(const s of candidateSpecs()) {const b=carveBuilding(s);if(b)connectDoorToRoad(b.door,8);}
         addWarrensInfill(c);
         window.campaign2SilverhartOuterRingRadius=OUTER_RING_RADIUS;
         window.SilverhartCapitalRegistry={
-            buildings,avenues,gates,
-            centre:{...c},innerRingRadius:inner,outerRingRadius:OUTER_RING_RADIUS,cityWallRadius:wall,
+            buildings,avenues,gates,centre:{...c},innerRingRadius:inner,outerRingRadius:OUTER_RING_RADIUS,cityWallRadius:wall,
             get multiStoreyCount(){return buildings.filter(b=>b.floors>1).length;},
             get districtCounts(){return buildings.reduce((m,b)=>(m[b.district]=(m[b.district]||0)+1,m),{});},
         };
@@ -278,8 +272,7 @@
 
     function resetWorldBuildState() {
         mapExpanded=false;buildings.length=0;avenues.length=0;gates.length=0;
-        delete window.SilverhartCapitalRegistry;
-        delete window.campaign2SilverhartOuterRingRadius;
+        delete window.SilverhartCapitalRegistry;delete window.campaign2SilverhartOuterRingRadius;
     }
 
     function installWorldBuildWrapper() {
@@ -288,39 +281,27 @@
         if(typeof original!=='function')return false;
         if(original.__silverhartCapitalRebuild){worldWrapperInstalled=true;return true;}
         const wrapped=function(...args){
-            resetWorldBuildState();
-            const result=original.apply(this,args);
+            resetWorldBuildState();const result=original.apply(this,args);
             if(expandCapital()) {
-                window.connectAllRoadNetworks?.();
-                window.reconcileRegionWallBookkeeping?.();
-                window.reconcileAllRegionFootprints?.();
-                window._campaign2TerrainBaseline={...window.overrideTerrain};
-                window._campaign2TileObjectsBaseline={...window.tileObjects};
+                window.connectAllRoadNetworks?.();window.reconcileRegionWallBookkeeping?.();window.reconcileAllRegionFootprints?.();
+                window._campaign2TerrainBaseline={...window.overrideTerrain};window._campaign2TileObjectsBaseline={...window.tileObjects};
                 window.drawMap?.();window.renderEntities?.();
             }
             return result;
         };
-        wrapped.__silverhartCapitalRebuild=true;wrapped.__original=original;
-        window.setupVillageScene=wrapped;worldWrapperInstalled=true;return true;
+        wrapped.__silverhartCapitalRebuild=true;wrapped.__original=original;window.setupVillageScene=wrapped;worldWrapperInstalled=true;return true;
     }
 
-    function install() {
-        installWorldBuildWrapper();
-        if(window.currentCampaign!=='2'||!centre())return false;
-        if(!mapExpanded)expandCapital();
-        return mapExpanded;
-    }
+    function install(){installWorldBuildWrapper();if(window.currentCampaign!=='2'||!centre())return false;if(!mapExpanded)expandCapital();return mapExpanded;}
 
     window.SilverhartCapitalRebuild={
         install,expandCapital,resetWorldBuildState,installWorldBuildWrapper,
         get buildings(){return buildings;},get avenues(){return avenues;},get gates(){return gates;},
-        get stats(){return {mapExpanded,buildings:buildings.length,multiStorey:buildings.filter(b=>b.floors>1).length,avenues:avenues.length,gates:gates.length,districtCounts:window.SilverhartCapitalRegistry?.districtCounts||{}};},
+        get stats(){return{mapExpanded,buildings:buildings.length,multiStorey:buildings.filter(b=>b.floors>1).length,avenues:avenues.length,gates:gates.length,districtCounts:window.SilverhartCapitalRegistry?.districtCounts||{}};},
     };
 
     if(!installWorldBuildWrapper()){
-        const t=setInterval(()=>{if(installWorldBuildWrapper())clearInterval(t);},25);
-        setTimeout(()=>clearInterval(t),5000);
+        const t=setInterval(()=>{if(installWorldBuildWrapper())clearInterval(t);},25);setTimeout(()=>clearInterval(t),5000);
     }
-    window.__silverhartCapitalRebuildTimer=setInterval(install,BOOT_MS);
-    install();
+    window.__silverhartCapitalRebuildTimer=setInterval(install,BOOT_MS);install();
 })();
