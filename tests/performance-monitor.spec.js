@@ -36,6 +36,7 @@ test.describe('in-game performance monitor', () => {
         expect(profiled.restored).toBe(true);
         expect(profiled.tickCount).toBeGreaterThan(0);
         expect(profiled.report).toContain('HEX-CRPG PERFORMANCE REPORT');
+        expect(profiled.report).toContain('Render breakdown:');
         expect(profiled.report).toContain('TICK WALL TIME');
         expect(profiled.report).toContain('runTickInternal (simulation)');
         expect(profiled.report).toContain('SLOWEST TICK SNAPSHOTS');
@@ -43,22 +44,25 @@ test.describe('in-game performance monitor', () => {
         expect(profiled.overlayAfter).toBe(false);
     });
 
-    test('Settings toggle enables the profiler and exposes copy/report controls', async ({ page }) => {
+    test('Settings controls enable the profiler and expose copy/report controls', async ({ page }) => {
         await createCharacter(page);
         await page.waitForFunction(() => !!window.performanceMonitor && !!document.getElementById('performance-monitor-enabled'));
 
-        await page.check('#performance-monitor-enabled');
+        await page.locator('#performance-monitor-toggle').dispatchEvent('touchend', {
+            changedTouches: [{ identifier: 1, clientX: 10, clientY: 10 }]
+        });
         await expect(page.locator('#performance-monitor-overlay')).toBeVisible();
         await expect(page.locator('#performance-monitor-copy')).toBeVisible();
         await expect(page.locator('#performance-monitor-show')).toBeVisible();
+        await expect(page.locator('#performance-monitor-toggle')).toHaveText('Stop Profiling');
+        expect(await page.evaluate(() => window.performanceMonitor.enabled)).toBe(true);
 
-        const enabled = await page.evaluate(() => window.performanceMonitor.enabled);
-        expect(enabled).toBe(true);
-
-        await page.uncheck('#performance-monitor-enabled');
+        await page.locator('#performance-monitor-toggle').dispatchEvent('touchend', {
+            changedTouches: [{ identifier: 1, clientX: 10, clientY: 10 }]
+        });
         await expect(page.locator('#performance-monitor-overlay')).toHaveCount(0);
-        const disabled = await page.evaluate(() => window.performanceMonitor.enabled);
-        expect(disabled).toBe(false);
+        await expect(page.locator('#performance-monitor-toggle')).toHaveText('Start Profiling');
+        expect(await page.evaluate(() => window.performanceMonitor.enabled)).toBe(false);
     });
 
     test('overlay actions work through explicit touchend without a synthetic click', async ({ page }) => {
@@ -67,8 +71,6 @@ test.describe('in-game performance monitor', () => {
         await page.evaluate(() => window.performanceMonitor.enable());
         await expect(page.locator('#performance-monitor-overlay')).toBeVisible();
 
-        // Mirrors the iOS path that failed in live play: act on touchend itself,
-        // rather than relying on Safari to synthesize a later click.
         await page.locator('#performance-monitor-show').dispatchEvent('touchend', {
             changedTouches: [{ identifier: 1, clientX: 10, clientY: 10 }]
         });
