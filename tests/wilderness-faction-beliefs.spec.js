@@ -120,4 +120,19 @@ test.describe('wilderness faction beliefs and double-agent play', () => {
         expect(result.goblin.working_for_us).toBe(1);
         expect(result.silverhart.working_against_raiders).toBe(1);
     });
+
+    test('a coarse alliance flag does not grant sensitive options after that faction turns hostile', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            window.playerAidingGreenskins = true;
+            window.factions.goblin_tribe.standing = -80;
+            window.factions.goblin_tribe.knowledge = 80;
+            const incident = window.WildernessIncidents.spawnIncident('stranded_merchant', { q: 110, r: 52 }, {
+                force:true,
+                provenance:{ person:'Perrin Wale', origin:'Reddale', destination:'Reddale', cargo:'salt' }
+            });
+            return window.WildernessIncidents.templates.stranded_merchant.choices(incident).map(x=>x.outcome).filter(Boolean);
+        });
+        expect(result).not.toContain('goblin_intel');
+        expect(result).toContain('escort');
+    });
 });
