@@ -339,6 +339,11 @@
     function syncSettingsUI() {
         const check = document.getElementById('performance-monitor-enabled');
         if (check) check.checked = state.enabled;
+        const toggle = document.getElementById('performance-monitor-toggle');
+        if (toggle) {
+            toggle.textContent = state.enabled ? 'Stop Profiling' : 'Start Profiling';
+            toggle.setAttribute('aria-pressed', state.enabled ? 'true' : 'false');
+        }
         const status = document.getElementById('performance-monitor-settings-status');
         if (status) status.textContent = state.enabled ? `Profiling ${state.tickSamples.length} ticks` : 'Off (zero profiling wrappers installed)';
     }
@@ -352,9 +357,10 @@
         section.innerHTML = `
             <h3>Performance Monitor</h3>
             <div class="form-group">
-                <label><input type="checkbox" id="performance-monitor-enabled"> Enable diagnostic profiler</label>
+                <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="performance-monitor-enabled"> Enable diagnostic profiler</label>
+                <button id="performance-monitor-toggle" type="button" aria-pressed="false" style="width:100%;min-height:48px;margin-top:8px;padding:10px 14px;touch-action:manipulation;font-weight:600;">Start Profiling</button>
                 <div id="performance-monitor-settings-status" style="font-size:.8em;color:#aaa;margin-top:4px;"></div>
-                <div style="font-size:.75em;color:#aaa;margin-top:4px;">Collects per-tick and per-function timings until you turn it off or reset it. Leave off for normal play.</div>
+                <div style="font-size:.75em;color:#aaa;margin-top:4px;">Collects per-tick and per-function timings until you turn it off or reset it. On iPhone, use the Start/Stop button if the native checkbox does not respond.</div>
             </div>
             <div class="form-group" style="display:flex;gap:6px;flex-wrap:wrap;">
                 <button id="performance-monitor-settings-copy">Copy Report</button>
@@ -363,6 +369,7 @@
             </div>`;
         settings.appendChild(section);
         section.querySelector('#performance-monitor-enabled').addEventListener('change', e => e.target.checked ? enable() : disable());
+        bindTap(section.querySelector('#performance-monitor-toggle'), () => state.enabled ? disable() : enable());
         const settingsActions = [
             ['#performance-monitor-settings-copy', () => copyReport()],
             ['#performance-monitor-settings-show', () => showReport()],
