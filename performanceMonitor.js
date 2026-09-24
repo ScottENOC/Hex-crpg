@@ -3,12 +3,15 @@
 (() => {
     'use strict';
 
+    // Deliberately exclude ultra-hot microscopic helpers such as
+    // isVisibleToPlayer/hasLineOfSight/getTerrainAt/isDormantAmbientNpc.
+    // Wrapping those individually adds millions of performance.now() calls at
+    // low zoom and measurably distorts the render time we are trying to study.
     const TRACKED_FUNCTIONS = [
         'collectPartyHexes', 'checkInCombat', 'checkPlayerCombatDisengage',
-        'isCombatDormant', 'isDormantAmbientNpc', 'rebuildRestlessSet',
-        'takeTurn', 'canSee', 'processRealTimeStep', 'updateVisualPositions',
-        'findPath', 'getEntityAtHex', 'isVisibleToPlayer', 'hasLineOfSight',
-        'getTerrainAt', 'updateNpcSchedules', 'tickNpcRoutines',
+        'isCombatDormant', 'rebuildRestlessSet', 'takeTurn', 'canSee',
+        'processRealTimeStep', 'updateVisualPositions', 'findPath',
+        'getEntityAtHex', 'updateNpcSchedules', 'tickNpcRoutines',
         'tickWorldPulse', 'updateWorldPulse', 'updateTime', 'drawMap',
         'renderEntities', 'updateTurnIndicator'
     ];
@@ -35,7 +38,6 @@
     }
     function fmt(ms) { return Number(ms || 0).toFixed(ms >= 10 ? 1 : 2); }
 
-    // Explicit touchend is needed for reliable taps over the live map on iOS.
     function bindTap(element, handler) {
         if (!element) return;
         let suppressClickUntil = 0;
@@ -162,6 +164,9 @@
 
     function environmentLines() {
         const r = window.performanceRenderStats || {};
+        const v = window.performanceVisibilityCacheStats || {};
+        const totalVis = (v.hits || 0) + (v.misses || 0);
+        const hitRate = totalVis ? (100 * (v.hits || 0) / totalVis).toFixed(1) : '0.0';
         return [
             `Captured: ${new Date().toISOString()}`,
             `Session: ${sessionStartedAt == null ? '0.0' : ((now() - sessionStartedAt) / 1000).toFixed(1)} s`,
@@ -171,6 +176,7 @@
             `Render coalescer: frames=${r.frames || 0}, avg=${fmt(r.avgFrameMs || 0)} ms, last=${fmt(r.lastFrameMs || 0)} ms, coalesced=${r.coalesced || 0}`,
             `Render breakdown: mapFrames=${r.mapFrames || 0}, map avg=${fmt(r.avgMapMs || 0)} ms, map-other avg=${fmt(r.avgMapOtherMs || 0)} ms, entities avg=${fmt(r.avgEntitiesMs || 0)} ms`,
             `Render last: map=${fmt(r.lastMapMs || 0)} ms, map-other=${fmt(r.lastMapOtherMs || 0)} ms, entities=${fmt(r.lastEntitiesMs || 0)} ms, entityOnlyFrames=${r.entityOnlyFrames || 0}`,
+            `Visibility cache: hits=${v.hits || 0}, misses=${v.misses || 0}, hitRate=${hitRate}%, rangeRejects=${v.rangeRejects || 0}, entries=${v.entries || 0}, clears=${v.clears || 0}, refreshes=${v.refreshes || 0}`,
             `User agent: ${navigator.userAgent}`
         ];
     }
@@ -221,6 +227,8 @@
             '- Profiling is opt-in and wrappers are removed when disabled.',
             '- Function timings are inclusive: a parent includes time spent in wrapped children.',
             '- Render breakdown is measured inside the real requestAnimationFrame flush; map-other excludes entity rendering invoked from drawMap.',
+            '- Ultra-hot tiny helpers (visibility, LOS, terrain lookup, dormancy check) are intentionally not individually timed because observer overhead distorted low-zoom rendering.',
+            '- Visibility-cache counters report those hot-path calls without wrapping each helper.',
             '- A tick begins at runTickInternal and closes after the surrounding synchronous game tick finishes.',
             '- p95/call uses the most recent capped call sample set; totals/call counts cover the whole profiling session.'
         );
@@ -305,13 +313,16 @@
         const ticks = state.tickSamples;
         const avg = ticks.length ? ticks.reduce((a, b) => a + b, 0) / ticks.length : 0;
         const rs = window.performanceRenderStats || {};
+        const vs = window.performanceVisibilityCacheStats || {};
+        const totalVis = (vs.hits || 0) + (vs.misses || 0);
         const rows = [...state.functionStats.entries()]
             .map(([name, s]) => ({ name, ms: ticks.length ? s.totalMs / ticks.length : 0 }))
             .sort((a, b) => b.ms - a.ms).slice(0, 3);
         el.textContent = [
-            `PERF ON  ticks ${ticks.length}`,
+            `PERF ON ticks ${ticks.length}`,
             `tick avg ${fmt(avg)}ms p95 ${fmt(percentile(ticks, .95))}`,
             `frame ${fmt(rs.avgFrameMs)}ms map-other ${fmt(rs.avgMapOtherMs)} entities ${fmt(rs.avgEntitiesMs)}`,
+            `vis hits ${vs.hits || 0}/${totalVis} reject ${vs.rangeRejects || 0}`,
             ...rows.map(r => `${r.name}: ${fmt(r.ms)} ms/tick`)
         ].join('\n');
     }
