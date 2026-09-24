@@ -18,15 +18,10 @@ test.describe('in-game performance monitor', () => {
             const before = window.runTickInternal;
             window.performanceMonitor.enable();
             const wrapped = window.runTickInternal;
-
-            // Drive deterministic logical ticks directly so this test does not
-            // depend on wall-clock setInterval timing or device speed.
             for (let i = 0; i < 30; i++) window.runTickInternal(false, true, 1.0);
-
             const report = window.performanceMonitor.getReport();
             const tickCount = window.performanceMonitor.tickCount;
             window.performanceMonitor.disable();
-
             return {
                 wrappedChanged: wrapped !== before,
                 restored: window.runTickInternal === before,
@@ -64,5 +59,30 @@ test.describe('in-game performance monitor', () => {
         await expect(page.locator('#performance-monitor-overlay')).toHaveCount(0);
         const disabled = await page.evaluate(() => window.performanceMonitor.enabled);
         expect(disabled).toBe(false);
+    });
+
+    test('overlay actions work through explicit touchend without a synthetic click', async ({ page }) => {
+        await createCharacter(page);
+        await page.waitForFunction(() => !!window.performanceMonitor);
+        await page.evaluate(() => window.performanceMonitor.enable());
+        await expect(page.locator('#performance-monitor-overlay')).toBeVisible();
+
+        // Mirrors the iOS path that failed in live play: act on touchend itself,
+        // rather than relying on Safari to synthesize a later click.
+        await page.locator('#performance-monitor-show').dispatchEvent('touchend', {
+            changedTouches: [{ identifier: 1, clientX: 10, clientY: 10 }]
+        });
+        await expect(page.locator('#performance-monitor-report-modal')).toBeVisible();
+
+        await page.locator('#performance-monitor-report-modal button', { hasText: 'Close' }).dispatchEvent('touchend', {
+            changedTouches: [{ identifier: 1, clientX: 10, clientY: 10 }]
+        });
+        await expect(page.locator('#performance-monitor-report-modal')).toHaveCount(0);
+
+        await page.locator('#performance-monitor-disable').dispatchEvent('touchend', {
+            changedTouches: [{ identifier: 1, clientX: 10, clientY: 10 }]
+        });
+        await expect(page.locator('#performance-monitor-overlay')).toHaveCount(0);
+        expect(await page.evaluate(() => window.performanceMonitor.enabled)).toBe(false);
     });
 });
