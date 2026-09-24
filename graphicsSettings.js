@@ -73,17 +73,7 @@ function syncGraphicsSettingsUI() {
 }
 window.syncGraphicsSettingsUI = syncGraphicsSettingsUI;
 
-// ---------------------------------------------------------------------------
-// Mobile performance layer
-// ---------------------------------------------------------------------------
-// Kept here because this file loads before gameEngine/main, while the setup
-// itself runs after DOMContentLoaded when every global renderer/entity helper
-// exists. This lets old call sites keep calling drawMap()/renderEntities()
-// without each gesture/tick being able to force several invisible renders
-// between two physical display refreshes.
 document.addEventListener('DOMContentLoaded', () => {
-    // Cache Entity#getAllHexes while an entity has not moved. This removes a
-    // large amount of tiny array/object allocation from dense render scans.
     if (window.Entity && !window.Entity.prototype.__perfCachedHexes) {
         const originalGetAllHexes = window.Entity.prototype.getAllHexes;
         window.Entity.prototype.getAllHexes = function() {
@@ -100,18 +90,13 @@ document.addEventListener('DOMContentLoaded', () => {
         window.Entity.prototype.__perfCachedHexes = true;
     }
 
-    // Spatial index for getEntityAtHex. Entity.hex is wrapped so both
-    // `entity.hex = {q,r}` and direct `entity.hex.q = ...` movement invalidate
-    // the index. New entities are wrapped lazily when they first appear.
     let entityIndex = new Map();
     let entityIndexDirty = true;
     let indexedEntityCount = -1;
     let indexedEntitiesRef = null;
     const wrappedEntities = new WeakSet();
-
     function markEntityIndexDirty() { entityIndexDirty = true; }
     window.invalidateEntitySpatialIndex = markEntityIndexDirty;
-
     function wrapHexObject(value) {
         const raw = value || { q: 0, r: 0 };
         if (raw && raw.__perfHexProxy) return raw;
@@ -125,7 +110,6 @@ document.addEventListener('DOMContentLoaded', () => {
         try { Object.defineProperty(proxy, '__perfHexProxy', { value: true, enumerable: false }); } catch (_) {}
         return proxy;
     }
-
     function wrapEntity(entity) {
         if (!entity || wrappedEntities.has(entity)) return;
         let hexValue = wrapHexObject(entity.hex);
@@ -137,12 +121,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 set(v) { hexValue = wrapHexObject(v); entityIndexDirty = true; }
             });
             wrappedEntities.add(entity);
-        } catch (_) {
-            // A non-configurable foreign/network entity can still participate;
-            // it just causes conservative index rebuilds via entity count/reference.
-        }
+        } catch (_) {}
     }
-
     function rebuildEntityIndex() {
         const entities = window.entities || [];
         entityIndex = new Map();
@@ -161,21 +141,13 @@ document.addEventListener('DOMContentLoaded', () => {
         indexedEntitiesRef = entities;
         entityIndexDirty = false;
     }
-
     function ensureEntityIndex() {
         const entities = window.entities || [];
-        // Length catches ordinary push/pop. Reference catches replacement with
-        // a filtered/copied array of the same length, which otherwise leaves
-        // stale occupants in the spatial index until something moves.
         if (entityIndexDirty || indexedEntityCount !== entities.length || indexedEntitiesRef !== entities) rebuildEntityIndex();
         return entityIndex;
     }
     window.rebuildEntitySpatialIndex = rebuildEntityIndex;
     window.getEntitiesAtHexFast = (q, r) => ensureEntityIndex().get(`${q},${r}`) || [];
-
-    // Classic-script global function declarations are reflected on window,
-    // so replacing the property also upgrades existing gameEngine/hexMap call
-    // sites without having to rewrite every caller.
     if (window.getEntityAtHex && !window.getEntityAtHex.__spatialIndexed) {
         const fastGetEntityAtHex = function(q, r) {
             const bucket = ensureEntityIndex().get(`${q},${r}`);
@@ -187,20 +159,17 @@ document.addEventListener('DOMContentLoaded', () => {
         window.getEntityAtHex = fastGetEntityAtHex;
     }
 
-    // updateTurnIndicator rebuilds DOM and active-spell UI. During real-time
-    // exploration it was being called on every simulation tick (~60/s on the
-    // captured iPhone trace) even though initiative state is not changing.
-    // Keep combat/reaction updates immediate, but cap ordinary exploration UI
-    // refreshes at 4 Hz. This avoids thousands of unnecessary DOM rebuilds
-    // without changing any game-state timing.
+    // During exploration this DOM-heavy status refresh used to run every
+    // simulation tick. Combat and reaction state still update immediately;
+    // ordinary real-time exploration is capped at 4 Hz.
     if (window.updateTurnIndicator && !window.updateTurnIndicator.__nonCombatThrottled) {
         const originalUpdateTurnIndicator = window.updateTurnIndicator;
         let lastNonCombatUiAt = -Infinity;
         const throttledUpdateTurnIndicator = function(...args) {
-            const urgent = !!window.isInCombat || window.gamePhase !== 'WAITING' || window.isPausedForReaction;
-            const now = performance.now();
-            if (!urgent && now - lastNonCombatUiAt < 250) return;
-            if (!urgent) lastNonCombatUiAt = now;
+            const urgent = !!window.isInCombat || !!window.isPausedForReaction;
+            const t = performance.now();
+            if (!urgent && t - lastNonCombatUiAt < 250) return;
+            if (!urgent) lastNonCombatUiAt = t;
             return originalUpdateTurnIndicator.apply(this, args);
         };
         throttledUpdateTurnIndicator.__nonCombatThrottled = true;
@@ -208,11 +177,6 @@ document.addEventListener('DOMContentLoaded', () => {
         window.updateTurnIndicator = throttledUpdateTurnIndicator;
     }
 
-    // Coalesce redraw requests onto requestAnimationFrame. On iOS, touchmove
-    // and pinch events can arrive multiple times between display refreshes;
-    // rendering every intermediate state burns CPU for frames the user never
-    // sees. A drawMap request dominates a renderEntities-only request because
-    // drawMap already invokes renderEntities internally.
     if (window.drawMap && window.renderEntities && !window.__renderCoalescerInstalled) {
         const originalDrawMap = window.drawMap;
         const originalRenderEntities = window.renderEntities;
@@ -220,25 +184,16 @@ document.addEventListener('DOMContentLoaded', () => {
         let wantsMap = false;
         let wantsEntities = false;
         const stats = window.performanceRenderStats = {
-            requests: 0,
-            frames: 0,
-            coalesced: 0,
-            lastFrameMs: 0,
-            avgFrameMs: 0,
-            lastMapMs: 0,
-            avgMapMs: 0,
-            lastEntitiesMs: 0,
-            avgEntitiesMs: 0,
-            lastMapOtherMs: 0,
-            avgMapOtherMs: 0,
-            mapFrames: 0,
-            entityOnlyFrames: 0
+            requests: 0, frames: 0, coalesced: 0,
+            lastFrameMs: 0, avgFrameMs: 0,
+            lastMapMs: 0, avgMapMs: 0,
+            lastEntitiesMs: 0, avgEntitiesMs: 0,
+            lastMapOtherMs: 0, avgMapOtherMs: 0,
+            mapFrames: 0, entityOnlyFrames: 0
         };
-
         function rollingAverage(current, sample, count) {
             return current + (sample - current) / Math.min(count, 120);
         }
-
         function flushRender() {
             rafPending = false;
             const doMap = wantsMap;
@@ -252,25 +207,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const savedProjectiles = window.renderProjectiles;
             let entityMsThisFrame = 0;
             let mapMsThisFrame = 0;
-
-            // Zoom LOD: below 0.55x seasonal foliage recolouring is invisible
-            // at phone scale; below 0.35x floating text/projectiles are too
-            // small to read. Core terrain and all entities are still drawn.
             if (zoom < 0.55) window.foliageDetail = 'simple';
             if (zoom < 0.35) {
                 window.renderFloatingTexts = null;
                 window.renderProjectiles = null;
             }
-
-            // Time entity rendering even when drawMap invokes it internally.
-            // That lets diagnostics split the real RAF cost into entity work
-            // and the rest of the map pipeline without modifying hexMap.js.
             const timedOriginalRenderEntities = function(...args) {
                 const te = performance.now();
                 try { return originalRenderEntities.apply(this, args); }
                 finally { entityMsThisFrame += performance.now() - te; }
             };
-
             window.renderEntities = timedOriginalRenderEntities;
             try {
                 if (doMap) {
@@ -288,12 +234,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 window.renderFloatingTexts = savedFloatingTexts;
                 window.renderProjectiles = savedProjectiles;
             }
-
             const dt = performance.now() - t0;
             stats.frames++;
             stats.lastFrameMs = dt;
             stats.avgFrameMs = rollingAverage(stats.avgFrameMs, dt, stats.frames);
-
             stats.lastEntitiesMs = entityMsThisFrame;
             stats.avgEntitiesMs = rollingAverage(stats.avgEntitiesMs, entityMsThisFrame, stats.frames);
             if (doMap) {
@@ -303,11 +247,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 stats.lastMapOtherMs = otherMs;
                 stats.avgMapOtherMs = rollingAverage(stats.avgMapOtherMs, otherMs, stats.mapFrames);
             }
-            // Entity hex proxies already mark the spatial index dirty when
-            // something actually moves. Rebuild lazily on the next lookup
-            // instead of doing O(entities) index work after every visual frame.
         }
-
         function queue() {
             stats.requests++;
             if (rafPending) {
@@ -319,15 +259,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         function queuedDrawMap() { wantsMap = true; queue(); }
         function queuedRenderEntities() { wantsEntities = true; queue(); }
-
         window.drawMap = queuedDrawMap;
         window.renderEntities = queuedRenderEntities;
         window.requestGameRender = queuedDrawMap;
         window.__renderCoalescerInstalled = true;
     }
 
-    // Optional diagnostic overlay. Enable from console with
-    // setPerformanceOverlay(true), or add ?perf=1 to the URL.
     let perfOverlay = null;
     function setPerformanceOverlay(enabled) {
         if (!enabled) {
@@ -354,9 +291,6 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (_) {}
 });
 
-// Deformable character/equipment rig. Keep this as a separate module rather
-// than growing the performance settings file; it waits until window.load and
-// installs only after gameEngine has exported CHAR_CONFIG and mapCtx.
 (() => {
     if (document.querySelector('script[data-character-rig]')) return;
     const script = document.createElement('script');
@@ -366,9 +300,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.head.appendChild(script);
 })();
 
-// Opt-in diagnostic profiler. Kept in its own module because it is developer
-// tooling rather than a rendering optimisation; when disabled it installs no
-// timing wrappers and costs normal play essentially nothing.
 (() => {
     if (document.querySelector('script[data-performance-monitor]')) return;
     const script = document.createElement('script');
