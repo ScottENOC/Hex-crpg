@@ -72,9 +72,8 @@
 
     function actorName(incident) {
         if (incident?.type === 'lost_child') {
-            const seed = hashUnit(`${incident.id}:child-name`);
             const names = ['Annie', 'Bess', 'Cora', 'Elsie', 'Mira', 'Nell', 'Tessa', 'Willa'];
-            return names[Math.floor(seed * names.length) % names.length];
+            return names[Math.floor(hashUnit(`${incident.id}:child-name`) * names.length) % names.length];
         }
         return incident?.provenance?.person || `Traveller ${incident?.id || ''}`.trim();
     }
@@ -110,8 +109,7 @@
         const incident = typeof incidentOrId === 'string'
             ? incidents()?.incidentById?.(incidentOrId)
             : incidentOrId;
-        if (!incident) return null;
-        return ensureActorForIncident(incident);
+        return incident ? ensureActorForIncident(incident) : null;
     }
 
     function reportDelay(incidentId, fact) {
@@ -161,10 +159,8 @@
             if (resolution === 'escorted') return { targetFaction:'silverhart_kingdom', fact:'player_helped_stranded_merchant', certainty:1 };
             if (resolution === 'silverhart_route_warning') return { targetFaction:'silverhart_kingdom', fact:'player_warned_of_vulnerable_route', certainty:2 };
         }
-        if (incident.type === 'lost_child') {
-            if (resolution === 'reunited' || resolution === 'safe_road') {
-                return { targetFaction:'silverhart_kingdom', fact:'player_helped_lost_child', certainty:1 };
-            }
+        if (incident.type === 'lost_child' && (resolution === 'reunited' || resolution === 'safe_road')) {
+            return { targetFaction:'silverhart_kingdom', fact:'player_helped_lost_child', certainty:1 };
         }
         return null;
     }
@@ -215,8 +211,6 @@
         let delivered = 0;
         for (const report of state.reports) {
             if (report.state !== 'travelling' || Number(report.deliverAt || Infinity) > at) continue;
-            // recordEvidence uses worldSeconds for its own timestamp, so tests and
-            // time-skips set worldSeconds before calling this function.
             if (deliverReport(report)) delivered++;
         }
         return delivered;
@@ -242,9 +236,37 @@
         return null;
     }
 
+    function actorHexIsOpen(hex) {
+        if (!hex) return false;
+        const terrain = window.getTerrainAt?.(hex.q, hex.r);
+        if (terrain?.impassable || ['Water','Wall','Palisade Wall','Keep Wall','Stone Wall'].includes(terrain?.name)) return false;
+        return !(window.entities || []).some(e => e?.alive && e.hex?.q === hex.q && e.hex?.r === hex.r);
+    }
+
+    function safeActorHex(target, actor) {
+        if (!target) return null;
+        const neighbours = window.getNeighbors?.(target.q, target.r) || [];
+        const candidates = [target, ...neighbours];
+        if (actor) {
+            const rotation = Math.floor(hashUnit(`${actor.id}:spawn`) * Math.max(1, candidates.length));
+            candidates.push(...candidates.splice(0, rotation));
+        }
+        return candidates.find(actorHexIsOpen) || target;
+    }
+
+    function recognitionText(actor) {
+        if (!actor) return 'The traveller gives you a cautious nod.';
+        if (actor.lastOutcome === 'escorted') return `${actor.name} recognises you immediately. “I made it after all. I said I owed you, and I meant it.”`;
+        if (actor.lastOutcome === 'helped') return `${actor.name} touches the old bandage at their leg. “You got me off that road alive. I haven't forgotten.”`;
+        if (actor.lastOutcome === 'reunited' || actor.lastOutcome === 'safe_road') return `${actor.name} beams when they see you. “I found them. I got home.”`;
+        if (actor.lastOutcome === 'robbed') return `${actor.name} goes still when they recognise you. Whatever happens next, they remember exactly who left them on that road.`;
+        return `${actor.name} recognises you from the road and watches to see whether you remember them too.`;
+    }
+
     function materialiseActor(actor) {
         if (!actor || entityForActor(actor) || typeof window.Entity !== 'function') return entityForActor(actor);
-        const hex = spawnHexForActor(actor);
+        const target = spawnHexForActor(actor);
+        const hex = safeActorHex(target, actor);
         if (!hex) return null;
         const e = new window.Entity(actor.name, '#8d8d8d', { q:hex.q, r:hex.r }, 8);
         e.side = 'neutral';
@@ -256,6 +278,17 @@
         e.gender = actor.gender || 'female';
         e.occupation = actor.role || 'traveller';
         e.dialogueId = null;
+        e.equipped = { weapon:null, offhand:null, armor:null, helmet:null };
+        e.hairStyle = 'brown_1';
+        e.bodyType = 'average';
+        e.shirtHue = Math.floor(hashUnit(`${actor.id}:shirt`) * 360);
+        e.pantsHue = Math.floor(hashUnit(`${actor.id}:pants`) * 360);
+        e.hairHue = Math.floor(hashUnit(`${actor.id}:hair`) * 55) + 5;
+        // Reuse the existing authored flavour path instead of repeatedly
+        // wrapping talkToNPC alongside npcReliability's own wrapper.
+        e.arenaFlavorLine = actor.state === 'arrived'
+            ? recognitionText(actor)
+            : `${actor.name} looks like they need help. The situation on the road is hard to ignore.`;
         e.hasBeenSeenByPlayer = true;
         e.homeHex = { q:hex.q, r:hex.r };
         window.entities = window.entities || [];
@@ -292,39 +325,11 @@
                 if (materialiseActor(actor)) changed++;
             } else if (existing && d > DEMATERIALISE_RADIUS) {
                 if (dematerialiseActor(actor)) changed++;
+            } else if (existing && actor.state === 'arrived') {
+                existing.arenaFlavorLine = recognitionText(actor);
             }
         }
         return changed;
-    }
-
-    function recognitionText(actor) {
-        if (!actor) return 'The traveller gives you a cautious nod.';
-        if (actor.lastOutcome === 'escorted') return `${actor.name} recognises you immediately. “I made it after all. I said I owed you, and I meant it.”`;
-        if (actor.lastOutcome === 'helped') return `${actor.name} touches the old bandage at their leg. “You got me off that road alive. I haven't forgotten.”`;
-        if (actor.lastOutcome === 'reunited' || actor.lastOutcome === 'safe_road') return `${actor.name} beams when they see you. “I found them. I got home.”`;
-        if (actor.lastOutcome === 'robbed') return `${actor.name} goes still when they recognise you. Whatever happens next, they remember exactly who left them on that road.`;
-        return `${actor.name} recognises you from the road and watches to see whether you remember them too.`;
-    }
-
-    function installTalkWrapper() {
-        const original = window.talkToNPC;
-        if (typeof original !== 'function') return false;
-        if (original.__wildernessLivingWorldTalk) return true;
-        const wrapped = function(npc, ...args) {
-            if (!npc?.isWildernessActor) return original.call(this, npc, ...args);
-            const state = ensureState();
-            const actor = state?.actors?.[npc.wildernessActorId];
-            const incident = incidents()?.incidentById?.(npc.wildernessIncidentId);
-            if (incident && incident.state !== 'resolved' && typeof incidents()?.presentIncident === 'function') {
-                incidents().presentIncident(incident);
-                return;
-            }
-            window.showDialogue?.(npc, recognitionText(actor), [{ label:'Take care.', action:()=>{} }]);
-        };
-        wrapped.__wildernessLivingWorldTalk = true;
-        wrapped.__original = original;
-        window.talkToNPC = wrapped;
-        return true;
     }
 
     function seedActors() {
@@ -365,7 +370,6 @@
         seedActors();
         processReports();
         reconcileActors();
-        installTalkWrapper();
     }
 
     function install() {
@@ -373,11 +377,10 @@
         ensureState();
         seedActors();
         installResolverWrapper();
-        installTalkWrapper();
         window.WildernessLivingWorld = {
-            ensureState,ensureActorForIncident,actorForIncident,createReport,processReports,deliverReport,
-            reconcileActors,materialiseActor,dematerialiseActor,recognitionText,reportSpec,settlementHex,
-            constants:{MATERIALISE_RADIUS,DEMATERIALISE_RADIUS,REPORT_BASE_DELAY,REPORT_JITTER},
+            ensureState, ensureActorForIncident, actorForIncident, createReport, processReports, deliverReport,
+            reconcileActors, materialiseActor, dematerialiseActor, recognitionText, reportSpec, settlementHex,
+            constants:{ MATERIALISE_RADIUS, DEMATERIALISE_RADIUS, REPORT_BASE_DELAY, REPORT_JITTER },
         };
         return true;
     }
