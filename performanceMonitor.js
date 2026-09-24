@@ -38,6 +38,114 @@
     }
     function fmt(ms) { return Number(ms || 0).toFixed(ms >= 10 ? 1 : 2); }
 
+    // Render-only visibility fast path. Gameplay perception remains completely
+    // camera-independent: outside the synchronous drawMap pass every caller
+    // still reaches the normal isVisibleToPlayer implementation. The render
+    // path instead precomputes the actual visible set by enumerating only the
+    // bounded vision discs around friendly characters and applying the normal
+    // LOS/light rules to those candidates. drawMap's much larger low-zoom
+    // viewport scan then becomes Set.has() rather than "screen hex -> range ->
+    // lighting -> LOS" for thousands of distant hexes.
+    function installRenderVisibilityFastPath() {
+        if (window.__renderVisibilityFastPathInstalled) return true;
+        if (typeof window.isVisibleToPlayer !== 'function' || typeof window.refreshPlayerVisibilityCache !== 'function') return false;
+
+        const baseVisibility = window.isVisibleToPlayer;
+        const baseRefresh = window.refreshPlayerVisibilityCache;
+        const stats = window.performanceRenderVisibilityStats = {
+            rebuilds: 0,
+            candidates: 0,
+            visible: 0,
+            renderQueries: 0,
+            renderHits: 0,
+            gameplayFallbacks: 0
+        };
+        let renderVisibleKeys = new Set();
+        let canonicalFriendlies = [];
+        let lastObservedClearCount = -1;
+        let renderFastActive = false;
+
+        function sameFriendlies(list) {
+            if (!list || list.length !== canonicalFriendlies.length) return false;
+            for (let i = 0; i < list.length; i++) if (list[i] !== canonicalFriendlies[i]) return false;
+            return true;
+        }
+
+        function rebuildRenderVisibleSet() {
+            canonicalFriendlies = (window.entities || []).filter(e => e?.alive && e.side === 'player');
+            const candidates = new Map();
+            const liveBase = window.LIVE_VISION_RANGE || 25;
+
+            for (const friendly of canonicalFriendlies) {
+                const origins = friendly.getAllHexes ? friendly.getAllHexes() : [friendly.hex];
+                const maxRange = Math.max(0, liveBase + (friendly.visionBonus || 0));
+                const radius = Math.ceil(maxRange);
+                for (const origin of origins) {
+                    if (!origin) continue;
+                    for (let dq = -radius; dq <= radius; dq++) {
+                        const minDr = Math.max(-radius, -dq - radius);
+                        const maxDr = Math.min(radius, -dq + radius);
+                        for (let dr = minDr; dr <= maxDr; dr++) {
+                            const q = origin.q + dq;
+                            const r = origin.r + dr;
+                            const dist = (Math.abs(dq) + Math.abs(dq + dr) + Math.abs(dr)) / 2;
+                            if (dist > maxRange) continue;
+                            const key = `${q},${r}`;
+                            if (!candidates.has(key)) candidates.set(key, { q, r });
+                        }
+                    }
+                }
+            }
+
+            const nextVisible = new Set();
+            for (const [key, hex] of candidates) {
+                if (baseVisibility(hex, canonicalFriendlies)) nextVisible.add(key);
+            }
+            renderVisibleKeys = nextVisible;
+            stats.rebuilds++;
+            stats.candidates += candidates.size;
+            stats.visible += nextVisible.size;
+        }
+
+        const fastVisibility = function(targetHex, friendliesOverride) {
+            if (!renderFastActive || (friendliesOverride && !sameFriendlies(friendliesOverride))) {
+                stats.gameplayFallbacks++;
+                return baseVisibility.apply(this, arguments);
+            }
+            stats.renderQueries++;
+            const hit = renderVisibleKeys.has(`${targetHex.q},${targetHex.r}`);
+            if (hit) stats.renderHits++;
+            return hit;
+        };
+        fastVisibility.__renderViewportFastPath = true;
+        fastVisibility.__original = baseVisibility;
+        window.isVisibleToPlayer = fastVisibility;
+
+        window.refreshPlayerVisibilityCache = function(...args) {
+            const result = baseRefresh.apply(this, args);
+            const cacheStats = window.performanceVisibilityCacheStats || {};
+            const clearCount = cacheStats.clears || 0;
+            if (!renderVisibleKeys.size || clearCount !== lastObservedClearCount) {
+                lastObservedClearCount = clearCount;
+                rebuildRenderVisibleSet();
+            } else {
+                canonicalFriendlies = (window.entities || []).filter(e => e?.alive && e.side === 'player');
+            }
+
+            // graphicsSettings invokes refresh immediately before the real,
+            // synchronous drawMap call inside its RAF flush. Keep the fast path
+            // active for the remainder of this JS task only; the microtask runs
+            // after drawMap returns, before unrelated gameplay work resumes.
+            renderFastActive = true;
+            queueMicrotask(() => { renderFastActive = false; });
+            return result;
+        };
+        window.refreshPlayerVisibilityCache.__renderViewportFastPath = true;
+        window.refreshPlayerVisibilityCache.__original = baseRefresh;
+        window.__renderVisibilityFastPathInstalled = true;
+        return true;
+    }
+
     function bindTap(element, handler) {
         if (!element) return;
         let suppressClickUntil = 0;
@@ -165,6 +273,7 @@
     function environmentLines() {
         const r = window.performanceRenderStats || {};
         const v = window.performanceVisibilityCacheStats || {};
+        const rv = window.performanceRenderVisibilityStats || {};
         const totalVis = (v.hits || 0) + (v.misses || 0);
         const hitRate = totalVis ? (100 * (v.hits || 0) / totalVis).toFixed(1) : '0.0';
         return [
@@ -177,6 +286,7 @@
             `Render breakdown: mapFrames=${r.mapFrames || 0}, map avg=${fmt(r.avgMapMs || 0)} ms, map-other avg=${fmt(r.avgMapOtherMs || 0)} ms, entities avg=${fmt(r.avgEntitiesMs || 0)} ms`,
             `Render last: map=${fmt(r.lastMapMs || 0)} ms, map-other=${fmt(r.lastMapOtherMs || 0)} ms, entities=${fmt(r.lastEntitiesMs || 0)} ms, entityOnlyFrames=${r.entityOnlyFrames || 0}`,
             `Visibility cache: hits=${v.hits || 0}, misses=${v.misses || 0}, hitRate=${hitRate}%, rangeRejects=${v.rangeRejects || 0}, entries=${v.entries || 0}, clears=${v.clears || 0}, refreshes=${v.refreshes || 0}`,
+            `Render visibility: rebuilds=${rv.rebuilds || 0}, candidates=${rv.candidates || 0}, visible=${rv.visible || 0}, renderQueries=${rv.renderQueries || 0}, renderHits=${rv.renderHits || 0}, gameplayFallbacks=${rv.gameplayFallbacks || 0}`,
             `User agent: ${navigator.userAgent}`
         ];
     }
@@ -228,6 +338,7 @@
             '- Function timings are inclusive: a parent includes time spent in wrapped children.',
             '- Render breakdown is measured inside the real requestAnimationFrame flush; map-other excludes entity rendering invoked from drawMap.',
             '- Ultra-hot tiny helpers (visibility, LOS, terrain lookup, dormancy check) are intentionally not individually timed because observer overhead distorted low-zoom rendering.',
+            '- Render visibility is precomputed from friendly vision discs; gameplay visibility remains camera-independent and uses the normal full-world path outside drawMap.',
             '- Visibility-cache counters report those hot-path calls without wrapping each helper.',
             '- A tick begins at runTickInternal and closes after the surrounding synchronous game tick finishes.',
             '- p95/call uses the most recent capped call sample set; totals/call counts cover the whole profiling session.'
@@ -314,6 +425,7 @@
         const avg = ticks.length ? ticks.reduce((a, b) => a + b, 0) / ticks.length : 0;
         const rs = window.performanceRenderStats || {};
         const vs = window.performanceVisibilityCacheStats || {};
+        const rv = window.performanceRenderVisibilityStats || {};
         const totalVis = (vs.hits || 0) + (vs.misses || 0);
         const rows = [...state.functionStats.entries()]
             .map(([name, s]) => ({ name, ms: ticks.length ? s.totalMs / ticks.length : 0 }))
@@ -323,6 +435,7 @@
             `tick avg ${fmt(avg)}ms p95 ${fmt(percentile(ticks, .95))}`,
             `frame ${fmt(rs.avgFrameMs)}ms map-other ${fmt(rs.avgMapOtherMs)} entities ${fmt(rs.avgEntitiesMs)}`,
             `vis hits ${vs.hits || 0}/${totalVis} reject ${vs.rangeRejects || 0}`,
+            `render-vis rebuilds ${rv.rebuilds || 0} q ${rv.renderQueries || 0}`,
             ...rows.map(r => `${r.name}: ${fmt(r.ms)} ms/tick`)
         ].join('\n');
     }
@@ -385,6 +498,12 @@
     window.getPerformanceReport = getReport;
 
     function init() {
+        installRenderVisibilityFastPath();
+        const renderVisRetry = setInterval(() => {
+            if (installRenderVisibilityFastPath()) clearInterval(renderVisRetry);
+        }, 250);
+        setTimeout(() => clearInterval(renderVisRetry), 10000);
+
         injectSettingsUI();
         const settingsRetry = setInterval(() => {
             injectSettingsUI();
