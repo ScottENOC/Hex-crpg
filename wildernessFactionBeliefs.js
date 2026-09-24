@@ -22,12 +22,7 @@
         const f = window.factions?.[id];
         const l = ledger();
         const belief = l?.factionBeliefs?.[id] || { claims:{}, evidence:{}, suspicion:0, exposed:false };
-        return {
-            id,
-            standing:Number(f?.standing || 0),
-            knowledge:Number(f?.knowledge || 0),
-            belief,
-        };
+        return { id, standing:Number(f?.standing || 0), knowledge:Number(f?.knowledge || 0), belief };
     }
 
     function ensureBelief(id) {
@@ -75,47 +70,32 @@
         return true;
     }
 
-    // Access means "they are willing to hear this pitch", not "the player is
-    // truly loyal". Multiple factions can return true at once.
+    // Access means "this faction currently trusts the player enough to hear
+    // this pitch". It does not say anything about the player's real loyalty.
+    // Rival factions can all return true at once.
     function canWorkWithFaction(id, opts={}) {
         const view = factionView(id);
         if (!window.factions?.[id]) return false;
         if (view.belief.exposed && !opts.allowAfterExposure) return false;
         const minStanding = Number(opts.minStanding ?? -5);
         const minKnowledge = Number(opts.minKnowledge ?? 0);
-        if (view.standing < minStanding || view.knowledge < minKnowledge) return false;
-        return true;
+        return view.standing >= minStanding && view.knowledge >= minKnowledge;
     }
 
     function goblinAccess() {
         const f = window.factions?.goblin_tribe;
-        if (!f) return false;
-        if (factionView('goblin_tribe').belief.exposed) return false;
-        // Prior alliance/greenskin kinship can substitute for accumulated
-        // knowledge, but current standing still matters. A human double-agent
-        // can qualify the ordinary way through reputation and repeated contact.
+        if (!f || factionView('goblin_tribe').belief.exposed) return false;
         if (window.isGoblinAligned?.() || window.isPlayerGreenskin?.()) return Number(f.standing || 0) >= -10;
         return canWorkWithFaction('goblin_tribe', { minStanding:0, minKnowledge:5 });
     }
-
-    function guildAccess() {
-        return canWorkWithFaction('thieves_guild', { minStanding:15, minKnowledge:5 });
-    }
-
-    function cultAccess() {
-        if (window.playerIsLich) return false;
-        return canWorkWithFaction('necromancer_cult', { minStanding:5, minKnowledge:5 });
-    }
-
-    function silverhartAccess() {
-        return canWorkWithFaction('silverhart_kingdom', { minStanding:-10, minKnowledge:0 });
-    }
+    function guildAccess() { return canWorkWithFaction('thieves_guild', { minStanding:15, minKnowledge:5 }); }
+    function cultAccess() { return !window.playerIsLich && canWorkWithFaction('necromancer_cult', { minStanding:5, minKnowledge:5 }); }
+    function silverhartAccess() { return canWorkWithFaction('silverhart_kingdom', { minStanding:-10, minKnowledge:0 }); }
 
     function addChoice(list, choice, beforeLast=true) {
         if (!Array.isArray(list) || !choice) return list;
         if (list.some(x => x?.outcome === choice.outcome || x?.label === choice.label)) return list;
-        const at = beforeLast ? Math.max(0, list.length - 1) : list.length;
-        list.splice(at, 0, choice);
+        list.splice(beforeLast ? Math.max(0, list.length - 1) : list.length, 0, choice);
         return list;
     }
 
@@ -129,11 +109,6 @@
     }
 
     function augmentChoices(type, base) {
-        // The older consequence layer may already have inserted faction options
-        // from a coarse "aligned" predicate. Strip any that the faction would
-        // not currently trust the player to attempt, then re-add every option
-        // justified by present standing/knowledge. This makes relationship state
-        // authoritative while allowing several rival factions simultaneously.
         const list = stripUnavailableFactionChoices(Array.isArray(base) ? base.slice() : []);
         if (type === 'stranded_merchant') {
             if (goblinAccess()) addChoice(list,{label:'Tell Skarn-tooth scouts where this merchant is headed.',outcome:'goblin_intel'});
@@ -141,8 +116,7 @@
             if (cultAccess()) addChoice(list,{label:'Ask about fresh graves and deaths along the road for the Vessel-Seeker.',outcome:'cult_intel'});
             if (window.playerIsLich) addChoice(list,{label:'Compel them to carry your seal and spread word of your claim.',outcome:'lich_claim'});
             if (silverhartAccess()) addChoice(list,{label:'Warn Silverhart patrols that this route is vulnerable.',outcome:'silverhart_route_warning'});
-        }
-        if (type === 'injured_traveller') {
+        } else if (type === 'injured_traveller') {
             if (goblinAccess()) addChoice(list,{label:'Question them about patrols and checkpoints for Skarn-tooth.',outcome:'goblin_patrol_intel'});
             if (guildAccess()) addChoice(list,{label:'Take their route book for the Guild, then leave them alive.',outcome:'guild_route_book'});
             if (cultAccess()) addChoice(list,{label:'Ask where the road has buried its dead lately.',outcome:'cult_grave_intel'});
@@ -159,10 +133,7 @@
             const template = api.templates?.[type];
             if (!template || template.__beliefAwareChoices) continue;
             const original = template.choices;
-            template.choices = function(incident) {
-                const base = typeof original === 'function' ? original(incident) : [];
-                return augmentChoices(type, base);
-            };
+            template.choices = incident => augmentChoices(type, typeof original === 'function' ? original(incident) : []);
             template.__beliefAwareChoices = true;
         }
         return true;
@@ -177,9 +148,6 @@
             if (!incident || !outcome) return original?.(id,outcome);
             const p = incident.provenance || {};
 
-            // Existing consequence code resolves the non-human faction options;
-            // we additionally record what each faction believes the action says
-            // about the player. None of these claims erase contrary claims.
             if (outcome === 'goblin_intel' || outcome === 'goblin_patrol_intel') {
                 recordClaim('goblin_tribe','working_for_us',1,'wilderness_intel');
                 recordEvidence('goblin_tribe','useful_intelligence_supplied',1);
@@ -200,7 +168,6 @@
                 window.showMessage?.('You pass the route, timing and weak points to a Silverhart patrol. They take the warning seriously.');
                 return incident;
             }
-
             if (outcome === 'silverhart_claim') {
                 incident.state='resolved'; incident.resolution='silverhart_claim'; incident.resolvedAt=now(); incident._consequenceRecorded=true;
                 window.adjustReputation?.(window.factions?.silverhart_kingdom,1,2);
@@ -209,7 +176,6 @@
                 window.showMessage?.('The traveller nods, relieved. Whether that is your true purpose is your business; what matters here is what they now believe.');
                 return incident;
             }
-
             return original?.(id,outcome);
         };
         api.__beliefAwareResolver = true;
@@ -221,10 +187,7 @@
         ledger();
         installChoiceWrappers();
         installResolverWrapper();
-        window.WildernessFactionBeliefs = {
-            ledger,factionView,recordClaim,recordEvidence,expose,canWorkWithFaction,
-            goblinAccess,guildAccess,cultAccess,silverhartAccess,augmentChoices,
-        };
+        window.WildernessFactionBeliefs = { ledger,factionView,recordClaim,recordEvidence,expose,canWorkWithFaction,goblinAccess,guildAccess,cultAccess,silverhartAccess,augmentChoices };
         return true;
     }
 
