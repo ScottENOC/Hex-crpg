@@ -90,9 +90,10 @@
     function goblinAccess() {
         const f = window.factions?.goblin_tribe;
         if (!f) return false;
+        if (factionView('goblin_tribe').belief.exposed) return false;
         // Prior alliance/greenskin kinship can substitute for accumulated
-        // knowledge, but is not exclusive. A human double-agent can qualify by
-        // reputation and repeated contact instead.
+        // knowledge, but current standing still matters. A human double-agent
+        // can qualify the ordinary way through reputation and repeated contact.
         if (window.isGoblinAligned?.() || window.isPlayerGreenskin?.()) return Number(f.standing || 0) >= -10;
         return canWorkWithFaction('goblin_tribe', { minStanding:0, minKnowledge:5 });
     }
@@ -118,8 +119,22 @@
         return list;
     }
 
+    function stripUnavailableFactionChoices(list) {
+        const blocked = new Set();
+        if (!goblinAccess()) ['goblin_intel','goblin_patrol_intel'].forEach(x=>blocked.add(x));
+        if (!guildAccess()) ['guild_diversion','guild_route_book'].forEach(x=>blocked.add(x));
+        if (!cultAccess()) ['cult_intel','cult_grave_intel'].forEach(x=>blocked.add(x));
+        if (!window.playerIsLich) ['lich_claim','lich_oath'].forEach(x=>blocked.add(x));
+        return list.filter(x => !blocked.has(x?.outcome));
+    }
+
     function augmentChoices(type, base) {
-        const list = Array.isArray(base) ? base.slice() : [];
+        // The older consequence layer may already have inserted faction options
+        // from a coarse "aligned" predicate. Strip any that the faction would
+        // not currently trust the player to attempt, then re-add every option
+        // justified by present standing/knowledge. This makes relationship state
+        // authoritative while allowing several rival factions simultaneously.
+        const list = stripUnavailableFactionChoices(Array.isArray(base) ? base.slice() : []);
         if (type === 'stranded_merchant') {
             if (goblinAccess()) addChoice(list,{label:'Tell Skarn-tooth scouts where this merchant is headed.',outcome:'goblin_intel'});
             if (guildAccess()) addChoice(list,{label:'Mark the cargo for the Guild to collect later.',outcome:'guild_diversion'});
