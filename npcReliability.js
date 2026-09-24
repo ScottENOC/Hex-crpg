@@ -7,7 +7,7 @@
   const BLOCKED=new Set(['Wall','Water','Palisade Wall','Keep Wall','Stone Wall']);
   const DOORS=new Set(['door_open','door_closed']);
   const styled=new WeakSet();
-  let talkWrapped=false,dialogueWrapped=false,renderWrapped=false,creatorInstalled=false,previewWrapped=false;
+  let talkWrapped=false,dialogueWrapped=false,renderWrapped=false,creatorInstalled=false;
   let maintenancePasses=0,doorwayMoves=0,doorCache=[],doorCacheAt=0;
 
   const SMALL_TALK={
@@ -59,13 +59,16 @@
   function installCreatorBaldOption(){const s=document.getElementById('hair-style-select');if(!s)return false;if(!s.querySelector('option[value="bald"]'))s.appendChild(new Option('Bald','bald'));creatorInstalled=true;return true;}
   function syncCreator(){if(!creatorVisible())return false;const style=document.getElementById('hair-style-select')?.value;if(!style)return false;const c=window.party?.[0];if(c){c.hairStyle=style;baldHints(c,null);}const e=c&&(window.entities||[]).find(x=>x.name===c.name&&x.side==='player');if(e){e.hairStyle=style;baldHints(e,null);}return true;}
   function installCreatorSync(){if(!installCreatorBaldOption())return false;const s=document.getElementById('hair-style-select');if(!s.dataset.npcReliabilityBaldListener){s.dataset.npcReliabilityBaldListener='true';s.addEventListener('change',()=>{syncCreator();window.updateAppearancePreview?.();});}return true;}
-  function installLegacyBaldPreview(){const current=window.updateAppearancePreview;if(typeof current!=='function')return false;if(current.__npcReliabilityBaldPreview){previewWrapped=true;return true;}const wrapped=function(...args){if(document.getElementById('hair-style-select')?.value!=='bald')return current.apply(this,args);installTransparentBaldHair();const b=blank(),g=window.gameVisuals||{},keys=['humanHair','humanMaleHair','elfFemaleHair','elfMaleHair','dwarfFemaleHair','dwarfMaleHair'],saved=new Map();for(const k of keys)if(g[k]){saved.set(k,g[k]);g[k]=b;}try{return current.apply(this,args);}finally{for(const[k,v]of saved)g[k]=v;}};wrapped.__npcReliabilityBaldPreview=true;wrapped.__original=current;window.updateAppearancePreview=wrapped;previewWrapped=true;return true;}
 
-  function install(){installTransparentBaldHair();installTalkFallback();installDialogueStyling();installRenderStyling();installCreatorSync();installLegacyBaldPreview();syncCreator();}
+  // Do not wrap updateAppearancePreview here. directionalCharacterUI already owns
+  // that wrapper lifecycle, and stacking another recurring wrapper around it can
+  // form a cycle when the directional module reattaches. Directional humans get
+  // true bald previews through the transparent `bald` asset installed above.
+  function install(){installTransparentBaldHair();installTalkFallback();installDialogueStyling();installRenderStyling();installCreatorSync();syncCreator();}
   function maintenance(){maintenancePasses++;install();normalisePopulationHair();styleGeneratedResidents();clearGeneratedDoorways();}
 
   window.NPCReliability={maintenance,normaliseHairRecord,normalisePopulationHair,styleEntityNow,styleGeneratedResidents,inDoorClearance,clearGeneratedDoorways,safeCivilianHex,smallTalkLine,installTransparentBaldHair,refreshDoors,
-    get stats(){return{maintenancePasses,doorwayMoves,talkWrapperInstalled:talkWrapped,dialogueWrapperInstalled:dialogueWrapped,renderWrapperInstalled:renderWrapped,creatorInstalled,previewWrapperInstalled:previewWrapped};},DOOR_CLEARANCE_RADIUS,MALE_BALD_CHANCE,SMALL_TALK};
+    get stats(){return{maintenancePasses,doorwayMoves,talkWrapperInstalled:talkWrapped,dialogueWrapperInstalled:dialogueWrapped,renderWrapperInstalled:renderWrapped,creatorInstalled,previewWrapperInstalled:false};},DOOR_CLEARANCE_RADIUS,MALE_BALD_CHANCE,SMALL_TALK};
 
   // Fast startup polling installs wrappers as dependencies appear. Door/appearance
   // maintenance itself stays low-frequency and event-sized rather than frame-sized.
