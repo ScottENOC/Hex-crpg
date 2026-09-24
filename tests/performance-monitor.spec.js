@@ -9,8 +9,7 @@ test.describe('in-game performance monitor', () => {
 
         const initial = await page.evaluate(() => ({
             enabled: window.performanceMonitor.enabled,
-            hasSettings: !!document.getElementById('performance-monitor-settings'),
-            originalTick: window.runTickInternal
+            hasSettings: !!document.getElementById('performance-monitor-settings')
         }));
         expect(initial.enabled).toBe(false);
         expect(initial.hasSettings).toBe(true);
