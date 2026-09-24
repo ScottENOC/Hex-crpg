@@ -48,7 +48,9 @@ test.describe('character creator randomizers', () => {
             shirt:'0',
             pants:'90',
             hair:'180',
-            hairStyle:'curly',
+            // Bald is now a first-class player hairstyle, so the deterministic
+            // high roll in this test legitimately selects it.
+            hairStyle:'bald',
             bodyType:'broad',
             skinTone:'42',
         });
