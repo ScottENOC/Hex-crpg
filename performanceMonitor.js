@@ -1,6 +1,5 @@
 // performanceMonitor.js
-// Opt-in runtime profiler for mobile/live testing. It is deliberately inert
-// until enabled from Settings so ordinary play pays no wrapper/timing cost.
+// Opt-in runtime profiler for mobile/live testing. Inert until enabled.
 (() => {
     'use strict';
 
@@ -13,7 +12,6 @@
         'tickWorldPulse', 'updateWorldPulse', 'updateTime', 'drawMap',
         'renderEntities', 'updateTurnIndicator'
     ];
-
     const MAX_TICK_SAMPLES = 6000;
     const MAX_CALL_SAMPLES = 2000;
     const SLOW_TICK_COUNT = 20;
@@ -23,16 +21,21 @@
     let currentTick = null;
     let tickSerial = 0;
     let sessionStartedAt = null;
-
     const state = { enabled: false, tickSamples: [], functionStats: new Map(), slowTicks: [] };
 
-    function now() { return performance.now(); }
+    const now = () => performance.now();
+    function percentile(values, p) {
+        if (!values.length) return 0;
+        const sorted = values.slice().sort((a, b) => a - b);
+        return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(p * sorted.length) - 1))];
+    }
+    function pushCapped(arr, value, cap) {
+        arr.push(value);
+        if (arr.length > cap) arr.splice(0, arr.length - cap);
+    }
+    function fmt(ms) { return Number(ms || 0).toFixed(ms >= 10 ? 1 : 2); }
 
-    // iOS Safari does not always synthesize a reliable click after a tap while
-    // the live map's touch gesture machinery is active. The rest of this game
-    // already hardens troublesome controls with explicit touchend handlers.
-    // Do the same here, while suppressing the synthetic click that follows a
-    // successful touchend so an action never fires twice.
+    // Explicit touchend is needed for reliable taps over the live map on iOS.
     function bindTap(element, handler) {
         if (!element) return;
         let suppressClickUntil = 0;
@@ -42,11 +45,11 @@
         element.addEventListener('touchend', e => {
             e.preventDefault();
             e.stopPropagation();
-            suppressClickUntil = performance.now() + 700;
+            suppressClickUntil = now() + 700;
             handler(e);
         }, { passive: false });
         element.addEventListener('click', e => {
-            if (performance.now() < suppressClickUntil) {
+            if (now() < suppressClickUntil) {
                 e.preventDefault();
                 e.stopPropagation();
                 return;
@@ -54,18 +57,6 @@
             e.stopPropagation();
             handler(e);
         });
-    }
-
-    function percentile(values, p) {
-        if (!values.length) return 0;
-        const sorted = values.slice().sort((a, b) => a - b);
-        const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil(p * sorted.length) - 1));
-        return sorted[idx];
-    }
-
-    function pushCapped(arr, value, cap) {
-        arr.push(value);
-        if (arr.length > cap) arr.splice(0, arr.length - cap);
     }
 
     function statFor(name) {
@@ -76,7 +67,6 @@
         }
         return stat;
     }
-
     function recordFunction(name, ms) {
         if (!state.enabled || !Number.isFinite(ms)) return;
         const stat = statFor(name);
@@ -89,54 +79,39 @@
             currentTick.calls[name] = (currentTick.calls[name] || 0) + 1;
         }
     }
-
     function finishCurrentTick(expectedId = null) {
         if (!currentTick || (expectedId !== null && currentTick.id !== expectedId)) return;
         const finished = currentTick;
         currentTick = null;
         const elapsed = Math.max(0, now() - finished.startedAt);
         pushCapped(state.tickSamples, elapsed, MAX_TICK_SAMPLES);
-        const topSections = Object.entries(finished.sections)
+        const sections = Object.entries(finished.sections)
             .sort((a, b) => b[1] - a[1]).slice(0, 8)
             .map(([name, ms]) => ({ name, ms, calls: finished.calls[name] || 0 }));
-        state.slowTicks.push({ id: finished.id, ms: elapsed, atMs: now() - sessionStartedAt, sections: topSections });
+        state.slowTicks.push({ id: finished.id, ms: elapsed, atMs: now() - sessionStartedAt, sections });
         state.slowTicks.sort((a, b) => b.ms - a.ms);
         if (state.slowTicks.length > SLOW_TICK_COUNT) state.slowTicks.length = SLOW_TICK_COUNT;
     }
-
     function beginTick() {
-        if (!state.enabled) return null;
+        if (!state.enabled) return;
         if (currentTick) finishCurrentTick();
         const id = ++tickSerial;
         currentTick = { id, startedAt: now(), sections: Object.create(null), calls: Object.create(null) };
         queueMicrotask(() => finishCurrentTick(id));
-        return id;
     }
 
     function makeWrapper(name, original) {
-        if (name === 'runTickInternal') {
-            const wrappedTick = function(...args) {
-                if (!state.enabled) return original.apply(this, args);
-                beginTick();
-                const t0 = now();
-                try { return original.apply(this, args); }
-                finally { recordFunction('runTickInternal (simulation)', now() - t0); }
-            };
-            wrappedTick.__performanceMonitorWrapper = true;
-            wrappedTick.__performanceMonitorOriginal = original;
-            return wrappedTick;
-        }
         const wrapped = function(...args) {
             if (!state.enabled) return original.apply(this, args);
+            if (name === 'runTickInternal') beginTick();
             const t0 = now();
             try { return original.apply(this, args); }
-            finally { recordFunction(name, now() - t0); }
+            finally { recordFunction(name === 'runTickInternal' ? 'runTickInternal (simulation)' : name, now() - t0); }
         };
         wrapped.__performanceMonitorWrapper = true;
         wrapped.__performanceMonitorOriginal = original;
         return wrapped;
     }
-
     function wrapFunction(name) {
         const current = window[name];
         if (typeof current !== 'function' || current.__performanceMonitorWrapper) return;
@@ -144,12 +119,10 @@
         wrappers.set(name, { original: current, wrapped });
         window[name] = wrapped;
     }
-
     function installWrappers() {
         wrapFunction('runTickInternal');
         TRACKED_FUNCTIONS.forEach(wrapFunction);
     }
-
     function restoreWrappers() {
         for (const [name, pair] of wrappers) if (window[name] === pair.wrapped) window[name] = pair.original;
         wrappers.clear();
@@ -164,7 +137,6 @@
         sessionStartedAt = now();
         updateOverlay();
     }
-
     function enable() {
         if (state.enabled) return;
         reset();
@@ -176,31 +148,29 @@
         syncSettingsUI();
         updateOverlay();
     }
-
     function disable() {
         if (!state.enabled) return;
         finishCurrentTick();
         state.enabled = false;
         if (rewrapTimer) clearInterval(rewrapTimer);
         if (overlayTimer) clearInterval(overlayTimer);
-        rewrapTimer = null;
-        overlayTimer = null;
+        rewrapTimer = overlayTimer = null;
         restoreWrappers();
         document.getElementById('performance-monitor-overlay')?.remove();
         syncSettingsUI();
     }
 
-    function fmt(ms) { return Number(ms || 0).toFixed(ms >= 10 ? 1 : 2); }
-
     function environmentLines() {
-        const renderStats = window.performanceRenderStats || {};
+        const r = window.performanceRenderStats || {};
         return [
             `Captured: ${new Date().toISOString()}`,
             `Session: ${sessionStartedAt == null ? '0.0' : ((now() - sessionStartedAt) / 1000).toFixed(1)} s`,
             `Campaign: ${window.currentCampaign ?? 'unknown'} | combat: ${!!window.isInCombat}`,
             `Entities: ${(window.entities || []).length} | zoom: ${(window.cameraZoom || 1).toFixed(2)}`,
             `Frame-rate mode: ${window.frameRateMode || 'unknown'} | render scale: ${window.renderScale || 1} | foliage: ${window.foliageDetail || 'unknown'}`,
-            `Render coalescer: frames=${renderStats.frames || 0}, avg=${fmt(renderStats.avgFrameMs || 0)} ms, last=${fmt(renderStats.lastFrameMs || 0)} ms, coalesced=${renderStats.coalesced || 0}`,
+            `Render coalescer: frames=${r.frames || 0}, avg=${fmt(r.avgFrameMs || 0)} ms, last=${fmt(r.lastFrameMs || 0)} ms, coalesced=${r.coalesced || 0}`,
+            `Render breakdown: mapFrames=${r.mapFrames || 0}, map avg=${fmt(r.avgMapMs || 0)} ms, map-other avg=${fmt(r.avgMapOtherMs || 0)} ms, entities avg=${fmt(r.avgEntitiesMs || 0)} ms`,
+            `Render last: map=${fmt(r.lastMapMs || 0)} ms, map-other=${fmt(r.lastMapOtherMs || 0)} ms, entities=${fmt(r.lastEntitiesMs || 0)} ms, entityOnlyFrames=${r.entityOnlyFrames || 0}`,
             `User agent: ${navigator.userAgent}`
         ];
     }
@@ -215,11 +185,16 @@
         const over16 = ticks.filter(v => v > 16.67).length;
         const over33 = ticks.filter(v => v > 33.33).length;
         const lines = [
-            'HEX-CRPG PERFORMANCE REPORT', '===========================', ...environmentLines(), '',
-            'TICK WALL TIME', `Samples: ${tickCount}`,
+            'HEX-CRPG PERFORMANCE REPORT',
+            '===========================',
+            ...environmentLines(),
+            '',
+            'TICK WALL TIME',
+            `Samples: ${tickCount}`,
             `Average: ${fmt(tickAvg)} ms | p50: ${fmt(percentile(ticks, .50))} ms | p95: ${fmt(percentile(ticks, .95))} ms | p99: ${fmt(percentile(ticks, .99))} ms | max: ${fmt(ticks.length ? Math.max(...ticks) : 0)} ms`,
             `Slow ticks: >10ms ${over10} (${tickCount ? (100 * over10 / tickCount).toFixed(1) : 0}%) | >16.7ms ${over16} (${tickCount ? (100 * over16 / tickCount).toFixed(1) : 0}%) | >33.3ms ${over33} (${tickCount ? (100 * over33 / tickCount).toFixed(1) : 0}%)`,
-            '', 'INCLUSIVE FUNCTION TIMINGS',
+            '',
+            'INCLUSIVE FUNCTION TIMINGS',
             'Nested timings overlap, so rows should not be added together.',
             'function | ms/tick | % tick | calls/tick | avg/call | p95/call | max/call | calls'
         ];
@@ -229,9 +204,13 @@
             pct: totalTickMs ? 100 * stat.totalMs / totalTickMs : 0,
             callsPerTick: tickCount ? stat.calls / tickCount : 0,
             avgCall: stat.calls ? stat.totalMs / stat.calls : 0,
-            p95Call: percentile(stat.samples, .95), maxCall: stat.maxMs, calls: stat.calls
+            p95Call: percentile(stat.samples, .95),
+            maxCall: stat.maxMs,
+            calls: stat.calls
         })).sort((a, b) => b.msPerTick - a.msPerTick);
-        for (const r of rows) lines.push(`${r.name} | ${fmt(r.msPerTick)} | ${r.pct.toFixed(1)}% | ${r.callsPerTick.toFixed(2)} | ${fmt(r.avgCall)} | ${fmt(r.p95Call)} | ${fmt(r.maxCall)} | ${r.calls}`);
+        for (const r of rows) {
+            lines.push(`${r.name} | ${fmt(r.msPerTick)} | ${r.pct.toFixed(1)}% | ${r.callsPerTick.toFixed(2)} | ${fmt(r.avgCall)} | ${fmt(r.p95Call)} | ${fmt(r.maxCall)} | ${r.calls}`);
+        }
         lines.push('', 'SLOWEST TICK SNAPSHOTS');
         if (!state.slowTicks.length) lines.push('(none captured)');
         state.slowTicks.forEach((tick, i) => {
@@ -241,6 +220,7 @@
         lines.push('', 'NOTES',
             '- Profiling is opt-in and wrappers are removed when disabled.',
             '- Function timings are inclusive: a parent includes time spent in wrapped children.',
+            '- Render breakdown is measured inside the real requestAnimationFrame flush; map-other excludes entity rendering invoked from drawMap.',
             '- A tick begins at runTickInternal and closes after the surrounding synchronous game tick finishes.',
             '- p95/call uses the most recent capped call sample set; totals/call counts cover the whole profiling session.'
         );
@@ -283,10 +263,8 @@
         textarea.style.cssText = 'flex:1;width:100%;box-sizing:border-box;background:#111;color:#d7f7ff;font:11px monospace;white-space:pre;-webkit-user-select:text;user-select:text;';
         const buttons = document.createElement('div');
         buttons.style.cssText = 'display:flex;gap:8px;';
-        const copy = document.createElement('button');
-        copy.textContent = 'Copy Report';
-        const close = document.createElement('button');
-        close.textContent = 'Close';
+        const copy = document.createElement('button'); copy.textContent = 'Copy Report';
+        const close = document.createElement('button'); close.textContent = 'Close';
         [copy, close].forEach(b => b.style.cssText = 'min-height:44px;padding:8px 12px;touch-action:manipulation;');
         bindTap(copy, () => copyReport());
         bindTap(close, () => shell.remove());
@@ -326,12 +304,14 @@
         const el = overlay.querySelector('#performance-monitor-summary');
         const ticks = state.tickSamples;
         const avg = ticks.length ? ticks.reduce((a, b) => a + b, 0) / ticks.length : 0;
+        const rs = window.performanceRenderStats || {};
         const rows = [...state.functionStats.entries()]
             .map(([name, s]) => ({ name, ms: ticks.length ? s.totalMs / ticks.length : 0 }))
-            .sort((a, b) => b.ms - a.ms).slice(0, 5);
+            .sort((a, b) => b.ms - a.ms).slice(0, 3);
         el.textContent = [
             `PERF ON  ticks ${ticks.length}`,
-            `tick avg ${fmt(avg)}ms  p95 ${fmt(percentile(ticks, .95))}  max ${fmt(ticks.length ? Math.max(...ticks) : 0)}`,
+            `tick avg ${fmt(avg)}ms p95 ${fmt(percentile(ticks, .95))}`,
+            `frame ${fmt(rs.avgFrameMs)}ms map-other ${fmt(rs.avgMapOtherMs)} entities ${fmt(rs.avgEntitiesMs)}`,
             ...rows.map(r => `${r.name}: ${fmt(r.ms)} ms/tick`)
         ].join('\n');
     }
@@ -360,7 +340,7 @@
                 <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="performance-monitor-enabled"> Enable diagnostic profiler</label>
                 <button id="performance-monitor-toggle" type="button" aria-pressed="false" style="width:100%;min-height:48px;margin-top:8px;padding:10px 14px;touch-action:manipulation;font-weight:600;">Start Profiling</button>
                 <div id="performance-monitor-settings-status" style="font-size:.8em;color:#aaa;margin-top:4px;"></div>
-                <div style="font-size:.75em;color:#aaa;margin-top:4px;">Collects per-tick and per-function timings until you turn it off or reset it. On iPhone, use the Start/Stop button if the native checkbox does not respond.</div>
+                <div style="font-size:.75em;color:#aaa;margin-top:4px;">Collects per-tick, per-function and real render-frame timings until you turn it off or reset it.</div>
             </div>
             <div class="form-group" style="display:flex;gap:6px;flex-wrap:wrap;">
                 <button id="performance-monitor-settings-copy">Copy Report</button>
@@ -370,12 +350,12 @@
         settings.appendChild(section);
         section.querySelector('#performance-monitor-enabled').addEventListener('change', e => e.target.checked ? enable() : disable());
         bindTap(section.querySelector('#performance-monitor-toggle'), () => state.enabled ? disable() : enable());
-        const settingsActions = [
+        const actions = [
             ['#performance-monitor-settings-copy', () => copyReport()],
             ['#performance-monitor-settings-show', () => showReport()],
             ['#performance-monitor-settings-reset', () => reset()]
         ];
-        for (const [selector, action] of settingsActions) {
+        for (const [selector, action] of actions) {
             const button = section.querySelector(selector);
             button.style.cssText += ';min-height:44px;touch-action:manipulation;';
             bindTap(button, action);
@@ -384,8 +364,8 @@
     }
 
     const api = {
-        get enabled() { return state.enabled; }, enable, disable, reset, getReport,
-        copyReport, showReport, installWrappers,
+        get enabled() { return state.enabled; },
+        enable, disable, reset, getReport, copyReport, showReport, installWrappers,
         get tickCount() { return state.tickSamples.length; }
     };
     window.performanceMonitor = api;
@@ -401,7 +381,6 @@
         }, 500);
         setTimeout(() => clearInterval(settingsRetry), 10000);
     }
-
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
     else init();
 })();
