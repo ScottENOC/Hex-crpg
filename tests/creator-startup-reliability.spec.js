@@ -39,6 +39,9 @@ test.describe('creator startup reliability', () => {
   test('a real new human-female game preserves directional-player identity', async ({ page }) => {
     await createCharacter(page, { race:'human', gender:'female', cls:'fighter', campaign:'2' });
     await page.waitForFunction(() => !!window.NPCReliability?.ensureDirectionalPlayerPresentation);
+    await page.waitForFunction(() => window.__facingRendererInstalled === true
+      && !!window.DIRECTIONAL_CHARACTER_ASSETS?.human_female?.body?.average?.side
+      && !!window.DIRECTIONAL_CHARACTER_ASSETS?.human_female?.body?.average?.back);
 
     const state = await page.evaluate(() => {
       window.NPCReliability.ensureDirectionalPlayerPresentation();
