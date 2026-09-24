@@ -54,6 +54,7 @@
     load('script[data-world-chunk-streaming]', 'worldChunkStreaming.js', 'worldChunkStreaming');
 
     load('script[data-generated-civilian-population]', 'generatedCivilianPopulation.js', 'generatedCivilianPopulation');
+    load('script[data-hollowmere-population-tuning]', 'hollowmerePopulationTuning.js', 'hollowmerePopulationTuning');
     load('script[data-multi-anchor-civilian-streaming]', 'multiAnchorCivilianStreaming.js', 'multiAnchorCivilianStreaming');
     load('script[data-civilian-visual-diversity]', 'civilianVisualDiversity.js', 'civilianVisualDiversity');
     load('script[data-civilian-persistence]', 'civilianPersistence.js', 'civilianPersistence');
