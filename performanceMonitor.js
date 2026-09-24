@@ -5,29 +5,13 @@
     'use strict';
 
     const TRACKED_FUNCTIONS = [
-        'collectPartyHexes',
-        'checkInCombat',
-        'checkPlayerCombatDisengage',
-        'isCombatDormant',
-        'isDormantAmbientNpc',
-        'rebuildRestlessSet',
-        'takeTurn',
-        'canSee',
-        'processRealTimeStep',
-        'updateVisualPositions',
-        'findPath',
-        'getEntityAtHex',
-        'isVisibleToPlayer',
-        'hasLineOfSight',
-        'getTerrainAt',
-        'updateNpcSchedules',
-        'tickNpcRoutines',
-        'tickWorldPulse',
-        'updateWorldPulse',
-        'updateTime',
-        'drawMap',
-        'renderEntities',
-        'updateTurnIndicator'
+        'collectPartyHexes', 'checkInCombat', 'checkPlayerCombatDisengage',
+        'isCombatDormant', 'isDormantAmbientNpc', 'rebuildRestlessSet',
+        'takeTurn', 'canSee', 'processRealTimeStep', 'updateVisualPositions',
+        'findPath', 'getEntityAtHex', 'isVisibleToPlayer', 'hasLineOfSight',
+        'getTerrainAt', 'updateNpcSchedules', 'tickNpcRoutines',
+        'tickWorldPulse', 'updateWorldPulse', 'updateTime', 'drawMap',
+        'renderEntities', 'updateTurnIndicator'
     ];
 
     const MAX_TICK_SAMPLES = 6000;
@@ -40,14 +24,37 @@
     let tickSerial = 0;
     let sessionStartedAt = null;
 
-    const state = {
-        enabled: false,
-        tickSamples: [],
-        functionStats: new Map(),
-        slowTicks: []
-    };
+    const state = { enabled: false, tickSamples: [], functionStats: new Map(), slowTicks: [] };
 
     function now() { return performance.now(); }
+
+    // iOS Safari does not always synthesize a reliable click after a tap while
+    // the live map's touch gesture machinery is active. The rest of this game
+    // already hardens troublesome controls with explicit touchend handlers.
+    // Do the same here, while suppressing the synthetic click that follows a
+    // successful touchend so an action never fires twice.
+    function bindTap(element, handler) {
+        if (!element) return;
+        let suppressClickUntil = 0;
+        element.style.touchAction = 'manipulation';
+        element.style.webkitUserSelect = 'none';
+        element.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+        element.addEventListener('touchend', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            suppressClickUntil = performance.now() + 700;
+            handler(e);
+        }, { passive: false });
+        element.addEventListener('click', e => {
+            if (performance.now() < suppressClickUntil) {
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+            e.stopPropagation();
+            handler(e);
+        });
+    }
 
     function percentile(values, p) {
         if (!values.length) return 0;
@@ -89,34 +96,19 @@
         currentTick = null;
         const elapsed = Math.max(0, now() - finished.startedAt);
         pushCapped(state.tickSamples, elapsed, MAX_TICK_SAMPLES);
-
         const topSections = Object.entries(finished.sections)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 8)
+            .sort((a, b) => b[1] - a[1]).slice(0, 8)
             .map(([name, ms]) => ({ name, ms, calls: finished.calls[name] || 0 }));
-        const snapshot = {
-            id: finished.id,
-            ms: elapsed,
-            atMs: now() - sessionStartedAt,
-            sections: topSections
-        };
-        state.slowTicks.push(snapshot);
+        state.slowTicks.push({ id: finished.id, ms: elapsed, atMs: now() - sessionStartedAt, sections: topSections });
         state.slowTicks.sort((a, b) => b.ms - a.ms);
         if (state.slowTicks.length > SLOW_TICK_COUNT) state.slowTicks.length = SLOW_TICK_COUNT;
     }
 
     function beginTick() {
         if (!state.enabled) return null;
-        // During accelerated rest runTickInternal can be called repeatedly in
-        // one JS task. Close the previous logical simulation tick before the
-        // next one begins instead of letting them collapse into one sample.
         if (currentTick) finishCurrentTick();
         const id = ++tickSerial;
         currentTick = { id, startedAt: now(), sections: Object.create(null), calls: Object.create(null) };
-        // Normal real-time tick() performs movement/render work synchronously
-        // *after* runTickInternal returns. A microtask closes the sample only
-        // after that outer tick call finishes, so those wrapped functions are
-        // still attributed to the same tick without modifying gameEngine.js.
         queueMicrotask(() => finishCurrentTick(id));
         return id;
     }
@@ -127,11 +119,8 @@
                 if (!state.enabled) return original.apply(this, args);
                 beginTick();
                 const t0 = now();
-                try {
-                    return original.apply(this, args);
-                } finally {
-                    recordFunction('runTickInternal (simulation)', now() - t0);
-                }
+                try { return original.apply(this, args); }
+                finally { recordFunction('runTickInternal (simulation)', now() - t0); }
             };
             wrappedTick.__performanceMonitorWrapper = true;
             wrappedTick.__performanceMonitorOriginal = original;
@@ -140,11 +129,8 @@
         const wrapped = function(...args) {
             if (!state.enabled) return original.apply(this, args);
             const t0 = now();
-            try {
-                return original.apply(this, args);
-            } finally {
-                recordFunction(name, now() - t0);
-            }
+            try { return original.apply(this, args); }
+            finally { recordFunction(name, now() - t0); }
         };
         wrapped.__performanceMonitorWrapper = true;
         wrapped.__performanceMonitorOriginal = original;
@@ -153,8 +139,7 @@
 
     function wrapFunction(name) {
         const current = window[name];
-        if (typeof current !== 'function') return;
-        if (current.__performanceMonitorWrapper) return;
+        if (typeof current !== 'function' || current.__performanceMonitorWrapper) return;
         const wrapped = makeWrapper(name, current);
         wrappers.set(name, { original: current, wrapped });
         window[name] = wrapped;
@@ -166,9 +151,7 @@
     }
 
     function restoreWrappers() {
-        for (const [name, pair] of wrappers) {
-            if (window[name] === pair.wrapped) window[name] = pair.original;
-        }
+        for (const [name, pair] of wrappers) if (window[name] === pair.wrapped) window[name] = pair.original;
         wrappers.clear();
     }
 
@@ -203,8 +186,7 @@
         rewrapTimer = null;
         overlayTimer = null;
         restoreWrappers();
-        const overlay = document.getElementById('performance-monitor-overlay');
-        if (overlay) overlay.remove();
+        document.getElementById('performance-monitor-overlay')?.remove();
         syncSettingsUI();
     }
 
@@ -232,44 +214,30 @@
         const over10 = ticks.filter(v => v > 10).length;
         const over16 = ticks.filter(v => v > 16.67).length;
         const over33 = ticks.filter(v => v > 33.33).length;
-
         const lines = [
-            'HEX-CRPG PERFORMANCE REPORT',
-            '===========================',
-            ...environmentLines(),
-            '',
-            'TICK WALL TIME',
-            `Samples: ${tickCount}`,
+            'HEX-CRPG PERFORMANCE REPORT', '===========================', ...environmentLines(), '',
+            'TICK WALL TIME', `Samples: ${tickCount}`,
             `Average: ${fmt(tickAvg)} ms | p50: ${fmt(percentile(ticks, .50))} ms | p95: ${fmt(percentile(ticks, .95))} ms | p99: ${fmt(percentile(ticks, .99))} ms | max: ${fmt(ticks.length ? Math.max(...ticks) : 0)} ms`,
             `Slow ticks: >10ms ${over10} (${tickCount ? (100 * over10 / tickCount).toFixed(1) : 0}%) | >16.7ms ${over16} (${tickCount ? (100 * over16 / tickCount).toFixed(1) : 0}%) | >33.3ms ${over33} (${tickCount ? (100 * over33 / tickCount).toFixed(1) : 0}%)`,
-            '',
-            'INCLUSIVE FUNCTION TIMINGS',
+            '', 'INCLUSIVE FUNCTION TIMINGS',
             'Nested timings overlap, so rows should not be added together.',
             'function | ms/tick | % tick | calls/tick | avg/call | p95/call | max/call | calls'
         ];
-
         const rows = [...state.functionStats.entries()].map(([name, stat]) => ({
             name,
             msPerTick: tickCount ? stat.totalMs / tickCount : 0,
-            pct: totalTickMs ? (100 * stat.totalMs / totalTickMs) : 0,
+            pct: totalTickMs ? 100 * stat.totalMs / totalTickMs : 0,
             callsPerTick: tickCount ? stat.calls / tickCount : 0,
             avgCall: stat.calls ? stat.totalMs / stat.calls : 0,
-            p95Call: percentile(stat.samples, .95),
-            maxCall: stat.maxMs,
-            calls: stat.calls
+            p95Call: percentile(stat.samples, .95), maxCall: stat.maxMs, calls: stat.calls
         })).sort((a, b) => b.msPerTick - a.msPerTick);
-
-        for (const r of rows) {
-            lines.push(`${r.name} | ${fmt(r.msPerTick)} | ${r.pct.toFixed(1)}% | ${r.callsPerTick.toFixed(2)} | ${fmt(r.avgCall)} | ${fmt(r.p95Call)} | ${fmt(r.maxCall)} | ${r.calls}`);
-        }
-
+        for (const r of rows) lines.push(`${r.name} | ${fmt(r.msPerTick)} | ${r.pct.toFixed(1)}% | ${r.callsPerTick.toFixed(2)} | ${fmt(r.avgCall)} | ${fmt(r.p95Call)} | ${fmt(r.maxCall)} | ${r.calls}`);
         lines.push('', 'SLOWEST TICK SNAPSHOTS');
         if (!state.slowTicks.length) lines.push('(none captured)');
         state.slowTicks.forEach((tick, i) => {
             const parts = tick.sections.map(s => `${s.name} ${fmt(s.ms)}ms${s.calls > 1 ? ` x${s.calls}` : ''}`);
             lines.push(`#${i + 1}: ${fmt(tick.ms)} ms at +${(tick.atMs / 1000).toFixed(1)}s${parts.length ? ` -> ${parts.join(', ')}` : ''}`);
         });
-
         lines.push('', 'NOTES',
             '- Profiling is opt-in and wrappers are removed when disabled.',
             '- Function timings are inclusive: a parent includes time spent in wrapped children.',
@@ -282,16 +250,13 @@
     async function copyReport() {
         const report = getReport();
         let copied = false;
-        try {
-            await navigator.clipboard.writeText(report);
-            copied = true;
-        } catch (_) {
+        try { await navigator.clipboard.writeText(report); copied = true; }
+        catch (_) {
             const ta = document.createElement('textarea');
             ta.value = report;
             ta.style.cssText = 'position:fixed;left:-9999px;top:0;';
             document.body.appendChild(ta);
-            ta.focus();
-            ta.select();
+            ta.focus(); ta.select();
             try { copied = document.execCommand('copy'); } catch (_) {}
             ta.remove();
         }
@@ -304,25 +269,27 @@
     }
 
     function showReport() {
-        const existing = document.getElementById('performance-monitor-report-modal');
-        if (existing) existing.remove();
+        document.getElementById('performance-monitor-report-modal')?.remove();
         const shell = document.createElement('div');
         shell.id = 'performance-monitor-report-modal';
-        shell.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;';
+        shell.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;pointer-events:auto;touch-action:manipulation;';
+        shell.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+        shell.addEventListener('touchmove', e => e.stopPropagation(), { passive: true });
         const panel = document.createElement('div');
         panel.style.cssText = 'width:min(760px,96vw);height:min(78vh,720px);background:#20252b;color:#fff;border:1px solid #78909c;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px;';
         const textarea = document.createElement('textarea');
         textarea.value = getReport();
         textarea.readOnly = true;
-        textarea.style.cssText = 'flex:1;width:100%;box-sizing:border-box;background:#111;color:#d7f7ff;font:11px monospace;white-space:pre;';
+        textarea.style.cssText = 'flex:1;width:100%;box-sizing:border-box;background:#111;color:#d7f7ff;font:11px monospace;white-space:pre;-webkit-user-select:text;user-select:text;';
         const buttons = document.createElement('div');
         buttons.style.cssText = 'display:flex;gap:8px;';
         const copy = document.createElement('button');
         copy.textContent = 'Copy Report';
-        copy.onclick = () => copyReport();
         const close = document.createElement('button');
         close.textContent = 'Close';
-        close.onclick = () => shell.remove();
+        [copy, close].forEach(b => b.style.cssText = 'min-height:44px;padding:8px 12px;touch-action:manipulation;');
+        bindTap(copy, () => copyReport());
+        bindTap(close, () => shell.remove());
         buttons.append(copy, close);
         panel.append(textarea, buttons);
         shell.appendChild(panel);
@@ -334,13 +301,22 @@
         if (overlay) return overlay;
         overlay = document.createElement('div');
         overlay.id = 'performance-monitor-overlay';
-        overlay.style.cssText = 'position:fixed;right:max(6px,env(safe-area-inset-right));bottom:max(6px,env(safe-area-inset-bottom));z-index:100000;background:rgba(10,14,18,.90);color:#d7f7ff;border:1px solid #607d8b;border-radius:7px;padding:7px;max-width:min(310px,92vw);font:11px monospace;box-shadow:0 2px 8px rgba(0,0,0,.4);';
-        overlay.innerHTML = '<div id="performance-monitor-summary" style="white-space:pre;line-height:1.3;"></div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;"><button id="performance-monitor-copy">Copy Report</button><button id="performance-monitor-show">Show Report</button><button id="performance-monitor-reset">Reset</button><button id="performance-monitor-disable">Off</button></div><div id="performance-monitor-copy-status" style="margin-top:4px;color:#9fe6a0;"></div>';
+        overlay.style.cssText = 'position:fixed;right:max(6px,env(safe-area-inset-right));bottom:max(6px,env(safe-area-inset-bottom));z-index:2147483646;background:rgba(10,14,18,.90);color:#d7f7ff;border:1px solid #607d8b;border-radius:7px;padding:7px;max-width:min(310px,92vw);font:11px monospace;box-shadow:0 2px 8px rgba(0,0,0,.4);pointer-events:auto;touch-action:manipulation;isolation:isolate;transform:translateZ(0);';
+        overlay.innerHTML = '<div id="performance-monitor-summary" style="white-space:pre;line-height:1.3;pointer-events:none;"></div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;"><button id="performance-monitor-copy">Copy Report</button><button id="performance-monitor-show">Show Report</button><button id="performance-monitor-reset">Reset</button><button id="performance-monitor-disable">Off</button></div><div id="performance-monitor-copy-status" style="margin-top:4px;color:#9fe6a0;pointer-events:none;"></div>';
         document.body.appendChild(overlay);
-        overlay.querySelector('#performance-monitor-copy').onclick = () => copyReport();
-        overlay.querySelector('#performance-monitor-show').onclick = () => showReport();
-        overlay.querySelector('#performance-monitor-reset').onclick = () => reset();
-        overlay.querySelector('#performance-monitor-disable').onclick = () => disable();
+        overlay.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+        overlay.addEventListener('touchmove', e => e.stopPropagation(), { passive: true });
+        const actions = [
+            ['#performance-monitor-copy', () => copyReport()],
+            ['#performance-monitor-show', () => showReport()],
+            ['#performance-monitor-reset', () => reset()],
+            ['#performance-monitor-disable', () => disable()]
+        ];
+        for (const [selector, action] of actions) {
+            const button = overlay.querySelector(selector);
+            button.style.cssText = 'min-height:44px;padding:6px 9px;touch-action:manipulation;';
+            bindTap(button, action);
+        }
         return overlay;
     }
 
@@ -352,8 +328,7 @@
         const avg = ticks.length ? ticks.reduce((a, b) => a + b, 0) / ticks.length : 0;
         const rows = [...state.functionStats.entries()]
             .map(([name, s]) => ({ name, ms: ticks.length ? s.totalMs / ticks.length : 0 }))
-            .sort((a, b) => b.ms - a.ms)
-            .slice(0, 5);
+            .sort((a, b) => b.ms - a.ms).slice(0, 5);
         el.textContent = [
             `PERF ON  ticks ${ticks.length}`,
             `tick avg ${fmt(avg)}ms  p95 ${fmt(percentile(ticks, .95))}  max ${fmt(ticks.length ? Math.max(...ticks) : 0)}`,
@@ -388,21 +363,22 @@
             </div>`;
         settings.appendChild(section);
         section.querySelector('#performance-monitor-enabled').addEventListener('change', e => e.target.checked ? enable() : disable());
-        section.querySelector('#performance-monitor-settings-copy').onclick = () => copyReport();
-        section.querySelector('#performance-monitor-settings-show').onclick = () => showReport();
-        section.querySelector('#performance-monitor-settings-reset').onclick = () => reset();
+        const settingsActions = [
+            ['#performance-monitor-settings-copy', () => copyReport()],
+            ['#performance-monitor-settings-show', () => showReport()],
+            ['#performance-monitor-settings-reset', () => reset()]
+        ];
+        for (const [selector, action] of settingsActions) {
+            const button = section.querySelector(selector);
+            button.style.cssText += ';min-height:44px;touch-action:manipulation;';
+            bindTap(button, action);
+        }
         syncSettingsUI();
     }
 
     const api = {
-        get enabled() { return state.enabled; },
-        enable,
-        disable,
-        reset,
-        getReport,
-        copyReport,
-        showReport,
-        installWrappers,
+        get enabled() { return state.enabled; }, enable, disable, reset, getReport,
+        copyReport, showReport, installWrappers,
         get tickCount() { return state.tickSamples.length; }
     };
     window.performanceMonitor = api;
@@ -412,8 +388,6 @@
 
     function init() {
         injectSettingsUI();
-        // Settings can be reconstructed by future UI code; cheap retry keeps
-        // the control present without profiling anything while disabled.
         const settingsRetry = setInterval(() => {
             injectSettingsUI();
             if (document.getElementById('performance-monitor-settings')) clearInterval(settingsRetry);
