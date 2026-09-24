@@ -64,14 +64,14 @@
         if(!window.tileObjects?.[key(to)]) window.setTerrainAt(to.q,to.r,type);
     }
 
-    function addNpc(name,title,c,offset,faction='silverhart_kingdom') {
+    function addNpc(name,title,c,offset,settlementId,faction='silverhart_kingdom') {
         if(typeof window.buildNPC!=='function' || window.entities?.some(e=>e.name===name)) return null;
         const npc=window.buildNPC({
             name,title,race:'human',gender:(name.charCodeAt(0)%2?'male':'female'),
             hex:{q:c.q+offset[0],r:c.r+offset[1]},side:'neutral',factionId:faction,
             color:'#8a7f70',dialogueId:'border_fort_resident'
         });
-        npc.homeSettlementId = dist(c,window.campaign2NorthwatchCenter||c) < 3 ? 'northwatch' : 'ridgehold';
+        npc.homeSettlementId = settlementId;
         npc.occupation=title;
         window.entities.push(npc);
         return npc;
@@ -107,12 +107,12 @@
         window.tileObjects[key({q:infirmary.q+1,r:infirmary.r})]={type:'bed'};
         window.tileObjects[key({q:quartermaster.q,r:quartermaster.r})]={type:'storage_chest',items:[]};
 
-        addNpc('Sister Elwen Marr','Field Chirurgeon',infirmary,[0,1]);
-        addNpc('Tomas Grey','Wounded Scout',infirmary,[-1,0]);
-        addNpc('Quartermaster Venn','Quartermaster',quartermaster,[0,1]);
-        addNpc('Hessa Coil','Ostler',stable,[0,1]);
-        addNpc('Merrit Dane','Camp Cook',cookyard,[1,0]);
-        addNpc('Jory Pell','Teamster',followers,[0,1]);
+        addNpc('Sister Elwen Marr','Field Chirurgeon',infirmary,[0,1],'northwatch');
+        addNpc('Tomas Grey','Wounded Scout',infirmary,[-1,0],'northwatch');
+        addNpc('Quartermaster Venn','Quartermaster',quartermaster,[0,1],'northwatch');
+        addNpc('Hessa Coil','Ostler',stable,[0,1],'northwatch');
+        addNpc('Merrit Dane','Camp Cook',cookyard,[1,0],'northwatch');
+        addNpc('Jory Pell','Teamster',followers,[0,1],'northwatch');
 
         const districts=[
             {id:'fort-core',name:'Northwatch Star Fort',centre:c,radius:14},
@@ -148,12 +148,12 @@
         window.tileObjects[key(mess)]={type:'fireplace',lightRadius:6};
         window.tileObjects[key({q:mess.q+2,r:mess.r})]={type:'table'};
 
-        addNpc('Sergeant Alwen Pike','Drill Sergeant',drill,[0,1]);
-        addNpc('Marta Rusk','Armourer',smith,[0,1]);
-        addNpc('Bel Orren','Magazine Keeper',magazine,[0,1]);
-        addNpc('Nell Pike','Garrison Spouse',households,[0,1]);
-        addNpc('Corin Pike','Garrison Child',households,[-1,1]);
-        addNpc('Harl Fen','Mess Steward',mess,[0,1]);
+        addNpc('Sergeant Alwen Pike','Drill Sergeant',drill,[0,1],'ridgehold');
+        addNpc('Marta Rusk','Armourer',smith,[0,1],'ridgehold');
+        addNpc('Bel Orren','Magazine Keeper',magazine,[0,1],'ridgehold');
+        addNpc('Nell Pike','Garrison Spouse',households,[0,1],'ridgehold');
+        addNpc('Corin Pike','Garrison Child',households,[-1,1],'ridgehold');
+        addNpc('Harl Fen','Mess Steward',mess,[0,1],'ridgehold');
 
         const districts=[
             {id:'fort-core',name:'Ridgehold Star Fort',centre:c,radius:14},
