@@ -126,7 +126,7 @@
             flavourOnly: !!def.flavourOnly,
         };
         window.tileObjects[key(h)] = obj;
-        placed.set(id, { id, hex: { ...h }, object: obj });
+        placed.set(id, { id, hex: { ...h } });
         return h;
     }
 
@@ -151,6 +151,15 @@
         return true;
     }
 
+    function markSearched(h, obj, actor) {
+        // Campaign 2's baseline snapshot is shallow. Never mutate a baseline
+        // tile-object in place; replace the live record so persistence.js's
+        // diffAgainstBaseline sees a different object/value on save.
+        const replacement = { ...obj, searched: true, searchedBy: actor.name };
+        window.tileObjects[key(h)] = replacement;
+        return replacement;
+    }
+
     function interact(id, obj, h, actor = playerActor()) {
         const def = DEFINITIONS[id];
         if (!def || !obj || !actor) return false;
@@ -166,8 +175,7 @@
                 label: actionLabel,
                 action: () => {
                     const names = giveItems(actor, def.loot || []);
-                    obj.searched = true;
-                    obj.searchedBy = actor.name;
+                    markSearched(h, obj, actor);
                     const suffix = names.length ? ` You take ${names.join(', ')}.` : '';
                     show(def, `${def.search}${suffix}`, [{ label: 'Continue.', action: () => {} }]);
                     window.drawMap?.();
