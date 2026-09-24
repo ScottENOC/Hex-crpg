@@ -56,6 +56,7 @@
     load('script[data-deepholds-city-expansion]', 'deepholdsCityExpansion.js', 'deepholdsCityExpansion');
     load('script[data-silthandriel-canopy-expansion]', 'silthandrielCanopyExpansion.js', 'silthandrielCanopyExpansion');
     load('script[data-greenskin-settlement-expansion]', 'greenskinSettlementExpansion.js', 'greenskinSettlementExpansion');
+    load('script[data-border-forts-expansion]', 'borderFortsExpansion.js', 'borderFortsExpansion');
     load('script[data-reactive-ambient-chatter]', 'ambientChatterExpansion.js', 'reactiveAmbientChatter');
     load('script[data-relationship-ambient-chatter]', 'ambientChatterRelationships.js', 'relationshipAmbientChatter');
     load('script[data-personality-ambient-chatter]', 'ambientChatterPersonality.js', 'personalityAmbientChatter');
