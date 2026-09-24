@@ -159,6 +159,80 @@ document.addEventListener('DOMContentLoaded', () => {
         window.getEntityAtHex = fastGetEntityAtHex;
     }
 
+    // Final player-visibility result cache. hexMap already memoises individual
+    // LOS rays, but at very low zoom drawMap still asks "can the party see this
+    // hex?" thousands of times per frame and repeats the party/light/range
+    // loops even when nobody has moved. Cache that final boolean until a
+    // friendly position/vision/light fingerprint changes or terrain explicitly
+    // invalidates visibility. This changes no LOS rules; it only reuses the
+    // same answer while all of its inputs are unchanged.
+    let visibilityResultCache = new Map();
+    let visibilityFingerprint = null;
+    let cachedVisibilityFriendlies = [];
+    const visibilityStats = window.performanceVisibilityCacheStats = {
+        hits: 0, misses: 0, clears: 0, entries: 0
+    };
+    if (window.isVisibleToPlayer && !window.isVisibleToPlayer.__finalResultCached) {
+        const originalIsVisibleToPlayer = window.isVisibleToPlayer;
+        const originalInvalidateVisibilityCache = window.invalidateVisibilityCache;
+
+        function clearFinalVisibilityCache() {
+            visibilityResultCache.clear();
+            visibilityStats.entries = 0;
+            visibilityStats.clears++;
+        }
+
+        function refreshFinalVisibilityFingerprint() {
+            const friendlies = (window.entities || []).filter(e => e.alive && e.side === 'player');
+            const parts = friendlies.map(f => `${f.hex.q},${f.hex.r}:${f.visionBonus || 0}:${(f.skills?.elf_darkvision || f.skills?.goblin_low_light_eyes) ? 1 : 0}`);
+            parts.push(`L${(window.lightLevel || 1).toFixed(2)}`);
+            const next = parts.join('|');
+            if (next !== visibilityFingerprint) {
+                visibilityFingerprint = next;
+                cachedVisibilityFriendlies = friendlies;
+                clearFinalVisibilityCache();
+            } else {
+                cachedVisibilityFriendlies = friendlies;
+            }
+            return cachedVisibilityFriendlies;
+        }
+
+        const cachedIsVisibleToPlayer = function(targetHex, friendliesOverride) {
+            const canonicalFriendlies = refreshFinalVisibilityFingerprint();
+            // A few specialised callers may deliberately pass a subset of the
+            // party. Preserve their exact semantics by bypassing this cache.
+            if (friendliesOverride && (friendliesOverride.length !== canonicalFriendlies.length ||
+                friendliesOverride.some((f, i) => f !== canonicalFriendlies[i]))) {
+                return originalIsVisibleToPlayer(targetHex, friendliesOverride);
+            }
+            const key = `${targetHex.q},${targetHex.r}`;
+            if (visibilityResultCache.has(key)) {
+                visibilityStats.hits++;
+                return visibilityResultCache.get(key);
+            }
+            visibilityStats.misses++;
+            const result = originalIsVisibleToPlayer(targetHex, canonicalFriendlies);
+            visibilityResultCache.set(key, result);
+            visibilityStats.entries = visibilityResultCache.size;
+            return result;
+        };
+        cachedIsVisibleToPlayer.__finalResultCached = true;
+        cachedIsVisibleToPlayer.__original = originalIsVisibleToPlayer;
+        window.isVisibleToPlayer = cachedIsVisibleToPlayer;
+        window.refreshPlayerVisibilityCache = refreshFinalVisibilityFingerprint;
+
+        if (originalInvalidateVisibilityCache && !originalInvalidateVisibilityCache.__finalResultInvalidator) {
+            const combinedInvalidator = function(...args) {
+                clearFinalVisibilityCache();
+                visibilityFingerprint = null;
+                return originalInvalidateVisibilityCache.apply(this, args);
+            };
+            combinedInvalidator.__finalResultInvalidator = true;
+            combinedInvalidator.__original = originalInvalidateVisibilityCache;
+            window.invalidateVisibilityCache = combinedInvalidator;
+        }
+    }
+
     // During exploration this DOM-heavy status refresh used to run every
     // simulation tick. Combat and reaction state still update immediately;
     // ordinary real-time exploration is capped at 4 Hz.
@@ -220,6 +294,7 @@ document.addEventListener('DOMContentLoaded', () => {
             window.renderEntities = timedOriginalRenderEntities;
             try {
                 if (doMap) {
+                    if (window.refreshPlayerVisibilityCache) window.refreshPlayerVisibilityCache();
                     const tm = performance.now();
                     originalDrawMap();
                     mapMsThisFrame = performance.now() - tm;
@@ -280,7 +355,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const update = () => {
             if (!perfOverlay) return;
             const s = window.performanceRenderStats || {};
-            perfOverlay.textContent = `entities ${(window.entities || []).length}\nzoom ${(window.cameraZoom || 1).toFixed(2)}\nframe ${(s.lastFrameMs || 0).toFixed(1)} ms\navg ${(s.avgFrameMs || 0).toFixed(1)} ms\nmap other ${(s.avgMapOtherMs || 0).toFixed(1)} ms\nentities ${(s.avgEntitiesMs || 0).toFixed(1)} ms\ncoalesced ${s.coalesced || 0}`;
+            const v = window.performanceVisibilityCacheStats || {};
+            perfOverlay.textContent = `entities ${(window.entities || []).length}\nzoom ${(window.cameraZoom || 1).toFixed(2)}\nframe ${(s.lastFrameMs || 0).toFixed(1)} ms\navg ${(s.avgFrameMs || 0).toFixed(1)} ms\nmap other ${(s.avgMapOtherMs || 0).toFixed(1)} ms\nentities ${(s.avgEntitiesMs || 0).toFixed(1)} ms\nvis cache ${v.hits || 0}/${(v.hits || 0) + (v.misses || 0)}\ncoalesced ${s.coalesced || 0}`;
             requestAnimationFrame(update);
         };
         requestAnimationFrame(update);
