@@ -59,6 +59,25 @@
     load('script[data-civilian-persistence]', 'civilianPersistence.js', 'civilianPersistence');
     load('script[data-civilian-routine-variety]', 'civilianRoutineVariety.js', 'civilianRoutineVariety');
     load('script[data-hollowmere-social-fabric]', 'hollowmereSocialFabric.js', 'hollowmereSocialFabric');
+
+    // Lived-in secondary settlements and social texture. These are additive
+    // to the seamless world: no map swaps, no special loading screens.
+    load('script[data-millbrook-expansion]', 'millbrookExpansion.js', 'millbrookExpansion');
+    load('script[data-millbrook-content]', 'millbrookContent.js', 'millbrookContent');
+    load('script[data-emberlode-expansion]', 'emberlodeExpansion.js', 'emberlodeExpansion');
+    load('script[data-reactive-ambient-chatter]', 'ambientChatterExpansion.js', 'reactiveAmbientChatter');
+    load('script[data-relationship-ambient-chatter]', 'ambientChatterRelationships.js', 'relationshipAmbientChatter');
+    load('script[data-personality-ambient-chatter]', 'ambientChatterPersonality.js', 'personalityAmbientChatter');
+    load('script[data-bandit-camp-wilderness-fix]', 'banditCampWildernessFix.js', 'banditCampWildernessFix');
+
+    // Sparse persistent wilderness incidents: discoveries can become stories
+    // and consequences without filling the map with permanent quest markers.
+    // Order matters: consequences wrap the base incident API, then faction
+    // beliefs refine choices based on what each faction actually knows.
+    load('script[data-wilderness-incidents]', 'wildernessIncidents.js', 'wildernessIncidents');
+    load('script[data-wilderness-consequences]', 'wildernessConsequences.js', 'wildernessConsequences');
+    load('script[data-wilderness-faction-beliefs]', 'wildernessFactionBeliefs.js', 'wildernessFactionBeliefs');
+
     load('script[data-silverhart-capital-rebuild]', 'silverhartCapitalRebuild.js', 'silverhartCapitalRebuild');
     load('script[data-silverhart-capital-completion]', 'silverhartCapitalCompletion.js', 'silverhartCapitalCompletion');
     load('script[data-silverhart-avenue-detours]', 'silverhartAvenueDetours.js', 'silverhartAvenueDetours');
@@ -70,7 +89,8 @@
     // Generated residents from every settlement share one reliability layer:
     // finish visual styling before first render/dialogue, keep background
     // civilians clear of doors, provide rare real baldness and small-talk
-    // fallback for otherwise-silent NPCs.
+    // fallback for otherwise-silent NPCs. Keep this after the living-world
+    // population/content modules so it can harden their generated residents too.
     load('script[data-npc-reliability]', 'npcReliability.js', 'npcReliability');
 
     // Northwatch and future city sieges share one persistent per-sector model.
