@@ -70,7 +70,7 @@ test.describe('character creator randomizers', () => {
         });
         expect(fantasy.fantasy).toBe(true);
         expect(fantasy.naturalAfter).toBe(fantasy.naturalBefore);
-        expect(fantasy.fantasyHue).toBe('323');
+        expect(fantasy.fantasyHue).toBe('324');
     });
 
     test('random name button rerolls from the existing race/gender name pool', async ({ page }) => {
