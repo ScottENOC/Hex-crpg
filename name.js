@@ -28,6 +28,109 @@ window.getRandomName = function(race, gender) {
 
 window.generateName = window.getRandomName;
 
+// Character-creator convenience controls. The creator itself lives in
+// index.html, but name.js is loaded immediately after that markup, so this is
+// an intentionally small place to install the two reroll buttons and choose a
+// non-prescriptive starting appearance before main.js paints the first preview.
+(() => {
+    function randomInt(min, max) {
+        return min + Math.floor(Math.random() * (max - min + 1));
+    }
+
+    function setRandomSlider(id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const min = Number(el.min || 0);
+        const max = Number(el.max || 100);
+        el.value = String(randomInt(min, max));
+    }
+
+    function setRandomSelect(id) {
+        const el = document.getElementById(id);
+        if (!el || !el.options.length) return;
+        const options = Array.from(el.options).filter(option => !option.disabled);
+        if (!options.length) return;
+        el.value = options[randomInt(0, options.length - 1)].value;
+    }
+
+    window.randomizeCharacterAppearance = function({ sync = true } = {}) {
+        // Clothing/hair colours deliberately use their full player-facing hue
+        // wheels. Skin respects the existing Fantasy colour toggle: natural
+        // mode rerolls only the race-aware 0..100 tone ramp; fantasy mode
+        // rerolls the unrestricted 0..359 hue wheel. Never alter the toggle.
+        setRandomSlider('shirt-hue-slider');
+        setRandomSlider('pants-hue-slider');
+        setRandomSlider('hair-hue-slider');
+        setRandomSelect('hair-style-select');
+        setRandomSelect('body-type-select');
+
+        const fantasy = !!document.getElementById('fantasy-skin-check')?.checked;
+        setRandomSlider(fantasy ? 'skin-hue-slider' : 'skin-tone-slider');
+
+        if (window.updateSkinToneControlMode) window.updateSkinToneControlMode();
+        if (window.updateAppearancePreview) window.updateAppearancePreview();
+        if (sync && window.syncCharacterToServer) window.syncCharacterToServer();
+    };
+
+    window.randomizeCharacterName = function() {
+        const input = document.getElementById('character-name');
+        const race = document.getElementById('race-select')?.value || 'human';
+        const gender = document.getElementById('gender-select')?.value || 'female';
+        if (!input || !window.getRandomName) return;
+        input.value = window.getRandomName(race, gender);
+        input.dispatchEvent(new Event('input', { bubbles:true }));
+    };
+
+    function creatorButton(id, text, onclick) {
+        const button = document.createElement('button');
+        button.id = id;
+        button.type = 'button';
+        button.textContent = text;
+        button.style.fontSize = '0.78em';
+        button.style.padding = '6px 9px';
+        button.style.backgroundColor = '#546e7a';
+        button.style.color = 'white';
+        button.style.flexShrink = '0';
+        button.addEventListener('click', onclick);
+        return button;
+    }
+
+    function installCharacterCreatorRandomControls() {
+        const nameInput = document.getElementById('character-name');
+        if (nameInput && !document.getElementById('randomize-name-btn')) {
+            const row = document.createElement('div');
+            row.style.display = 'flex';
+            row.style.gap = '6px';
+            row.style.alignItems = 'center';
+            nameInput.parentNode.insertBefore(row, nameInput);
+            row.appendChild(nameInput);
+            nameInput.style.flex = '1';
+            nameInput.style.minWidth = '0';
+            row.appendChild(creatorButton('randomize-name-btn', 'Random name', () => window.randomizeCharacterName()));
+        }
+
+        const preview = document.getElementById('appearance-preview-canvas');
+        const appearanceGroup = preview?.closest('.form-group');
+        if (appearanceGroup && !document.getElementById('randomize-appearance-btn')) {
+            const appearanceButton = creatorButton(
+                'randomize-appearance-btn',
+                '🎲 Randomise appearance',
+                () => window.randomizeCharacterAppearance()
+            );
+            appearanceButton.style.margin = '0 0 7px 0';
+            const appearanceLayout = preview.parentElement;
+            appearanceGroup.insertBefore(appearanceButton, appearanceLayout);
+        }
+    }
+
+    installCharacterCreatorRandomControls();
+    // Start every fresh creator view from a different appearance rather than
+    // visually endorsing the old pale-skin/brown-hair hard-coded defaults.
+    // Do not generate a name automatically: leaving it blank still preserves
+    // the existing "random name when you start" behaviour.
+    window.randomizeCharacterAppearance({ sync:false });
+})();
+
 // Build token for dynamically loaded presentation/performance modules. Changing
 // this value gives every deployment a new URL, avoiding stale Safari/GitHub
 // Pages script cache entries without separate per-file version numbers.

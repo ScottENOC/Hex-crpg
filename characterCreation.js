@@ -124,3 +124,14 @@ function createCharacterData(race, cls, name, gender = "female", voice = "pc_1")
 
 window.initializePlayer = initializePlayer;
 window.createCharacterData = createCharacterData;
+
+// Keep identity/pronouns in a small compatibility module rather than forcing
+// the legacy renderer to reinterpret its long-standing .gender body-art key.
+// The shared build token makes this new module cache-safe in installed/iOS use.
+if (!document.querySelector('script[data-identity-presentation]')) {
+  const identityScript = document.createElement('script');
+  identityScript.src = `identityPresentation.js?build=${encodeURIComponent(window.PRESENTATION_BUILD || 'identity-v1')}`;
+  identityScript.dataset.identityPresentation = 'true';
+  identityScript.async = false;
+  document.head.appendChild(identityScript);
+}

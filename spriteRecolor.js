@@ -1,17 +1,20 @@
 // spriteRecolor.js
 // Cheap visual variety without new art: recolors a base body sprite's shirt,
-// pants, and skin (each identified by its own lightness band) independently,
-// plus a separate full-image recolor for the hair overlay sprite. Real
-// per-pixel canvas work, so results are cached per (image, hues) combination
-// rather than redone every render frame.
+// pants, and skin independently, plus a separate full-image recolor for the
+// hair overlay sprite. Real per-pixel canvas work, so results are cached per
+// (image, hues) combination rather than redone every render frame.
 //
-// Why lightness, not a color-distance/hue match: sampling the actual sprite
+// Why lightness matters here: sampling the actual sprite
 // (images/humanmale.png) showed skin and clothing share almost the same hue
 // (~20-26°) — these are all "warm brown" pixel art assets. They separate
-// cleanly by lightness instead. Sampling a center-column strip down the body:
-// shirt/tunic sits around L=0.43-0.45, pants around L=0.17-0.18, boots drop
-// below L=0.12 (left unrecolored — a small trade-off to stay clear of pure-
-// black outline strokes), and skin (face, forearms, hands) sits at L=0.55+.
+// much more reliably by lightness. Sampling a center-column strip down the
+// body: shirt/tunic sits around L=0.43-0.45, pants around L=0.17-0.18, boots
+// drop below L=0.12, and skin (face, forearms, hands) sits at L=0.55+.
+//
+// IMPORTANT: body-part classification is always done from the UNTOUCHED
+// source art. Never classify a pixel after an earlier recolour pass: changing
+// skin lightness/hue can otherwise move a skin pixel into a shirt/pants band
+// (or vice versa), making the creator sliders interfere with one another.
 
 const _recolorCache = {};
 const _recolorSourceIds = new WeakMap();
@@ -65,9 +68,10 @@ function rgbToHsl(r, g, b) {
     return [h, s, l];
 }
 
-// The head/face region is excluded from the shirt/pants bands (so a dark
-// eyebrow/mouth pixel never gets recolored as clothing) but skin recoloring
-// deliberately covers the whole image, since skin includes the face.
+// The head/face region is excluded from shirt/pants classification. Skin can
+// occur anywhere, but source skin is a warm, chromatic, bright band in these
+// authored human/elf/dwarf body sprites. Keeping the three masks mutually
+// exclusive is more important than recolouring the odd anti-aliased edge.
 const HEAD_CUTOFF_FRAC = 0.32;
 const SHIRT_BAND = [0.36, 0.50];
 const PANTS_BAND = [0.12, 0.36];
@@ -79,98 +83,118 @@ function sourceReady(img) {
 function sourceWidth(img) { return img.naturalWidth || img.width; }
 function sourceHeight(img) { return img.naturalHeight || img.height; }
 
-// Returns a canvas with shirt/pants/skin recolored per the given hues.
-// `hues` is `{ shirtHue, pantsHue, skinHue, satMult }` — any of the three
-// hues may be omitted to leave that band untouched. `satMult` (default 1)
-// scales shirt/pants saturation down for the muted "natural palette" NPC
-// defaults (see CLOTHING_PALETTE) without affecting a player's explicit
-// slider choice, which is passed through at full saturation. Falls back to
-// the original image if it isn't loaded yet.
+function sourceSkinPixel(h, s, l) {
+    return h >= 5 && h <= 55 && s >= 0.18 && l >= SKIN_BAND_MIN && l <= 0.92;
+}
+
+function normalizeSkinSpec(tone) {
+    if (tone === undefined || tone === null) return null;
+    const spec = typeof tone === 'number' ? { hue:tone } : tone;
+    if (!Number.isFinite(spec?.hue)) return null;
+    return {
+        hue: Number(spec.hue),
+        saturation: Number.isFinite(spec.saturation) ? Number(spec.saturation) : null,
+        lightness: Number.isFinite(spec.lightness) ? Number(spec.lightness) : null,
+    };
+}
+
+function tintSkinPixel(h, s, l, spec) {
+    const targetSat = spec.saturation;
+    const targetLight = spec.lightness;
+    const s2 = targetSat === null ? s : Math.max(0, Math.min(1, targetSat * (0.65 + s * 0.5)));
+    const l2 = targetLight === null ? l : Math.max(0.08, Math.min(0.95, targetLight + (l - 0.68)));
+    return hslToRgb(spec.hue, s2, l2);
+}
+
+// Returns a canvas with shirt/pants/skin recolored independently. If `img` is
+// the result of getRecoloredSkinSprite, its untouched source and requested
+// skin tone are carried as metadata so this function can perform a fresh,
+// single classification pass from the original pixels. This is what prevents
+// a changed skin tone from being reclassified as clothing.
 function getRecoloredSprite(img, hues) {
     if (!sourceReady(img)) return img;
     const { shirtHue, pantsHue, skinHue, satMult = 1 } = hues || {};
-    if (shirtHue === undefined && pantsHue === undefined && skinHue === undefined) return img;
+    const inheritedSkinSpec = normalizeSkinSpec(img.__skinToneSpec);
+    const explicitSkinSpec = normalizeSkinSpec(skinHue);
+    const skinSpec = explicitSkinSpec || inheritedSkinSpec;
+    if (shirtHue === undefined && pantsHue === undefined && !skinSpec) return img;
 
-    const cacheKey = `${recolorSourceKey(img)}::s${shirtHue ?? 'x'}:p${pantsHue ?? 'x'}:k${skinHue ?? 'x'}:m${satMult}`;
+    const baseSource = sourceReady(img.__recolorBaseSource) ? img.__recolorBaseSource : img;
+    const cacheKey = `${recolorSourceKey(baseSource)}::s${shirtHue ?? 'x'}:p${pantsHue ?? 'x'}:k${skinSpec?.hue ?? 'x'}:ks${skinSpec?.saturation ?? 'source'}:kl${skinSpec?.lightness ?? 'source'}:m${satMult}`;
     if (_recolorCache[cacheKey]) return _recolorCache[cacheKey];
 
     const canvas = document.createElement('canvas');
-    canvas.width = sourceWidth(img);
-    canvas.height = sourceHeight(img);
+    canvas.width = sourceWidth(baseSource);
+    canvas.height = sourceHeight(baseSource);
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    ctx.drawImage(img, 0, 0);
+    ctx.drawImage(baseSource, 0, 0);
 
-    if (shirtHue !== undefined || pantsHue !== undefined) {
-        const headCutoffY = Math.floor(canvas.height * HEAD_CUTOFF_FRAC);
-        const bodyHeight = canvas.height - headCutoffY;
-        if (bodyHeight > 0) {
-            const imageData = ctx.getImageData(0, headCutoffY, canvas.width, bodyHeight);
-            const data = imageData.data;
-            for (let i = 0; i < data.length; i += 4) {
-                if (data[i + 3] < 50) continue; // skip transparent pixels
-                const [, s, l] = rgbToHsl(data[i], data[i + 1], data[i + 2]);
-                const s2 = Math.max(0, Math.min(1, s * satMult));
-                if (shirtHue !== undefined && l >= SHIRT_BAND[0] && l <= SHIRT_BAND[1]) {
-                    const [r2, g2, b2] = hslToRgb(shirtHue, s2, l);
-                    data[i] = r2; data[i + 1] = g2; data[i + 2] = b2;
-                } else if (pantsHue !== undefined && l >= PANTS_BAND[0] && l < PANTS_BAND[1]) {
-                    const [r2, g2, b2] = hslToRgb(pantsHue, s2, l);
-                    data[i] = r2; data[i + 1] = g2; data[i + 2] = b2;
-                }
-            }
-            ctx.putImageData(imageData, 0, headCutoffY);
-        }
-    }
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    const headCutoffY = Math.floor(canvas.height * HEAD_CUTOFF_FRAC);
+    for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] < 50) continue;
+        const pixel = i / 4;
+        const y = Math.floor(pixel / canvas.width);
+        const [h, s, l] = rgbToHsl(data[i], data[i + 1], data[i + 2]);
 
-    if (skinHue !== undefined) {
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
-        for (let i = 0; i < data.length; i += 4) {
-            if (data[i + 3] < 50) continue;
-            const [, s, l] = rgbToHsl(data[i], data[i + 1], data[i + 2]);
-            if (l >= SKIN_BAND_MIN) {
-                const [r2, g2, b2] = hslToRgb(skinHue, s, l);
+        // Skin wins before clothing, using only untouched source properties.
+        // Even if this call is clothing-only, identified skin pixels are
+        // deliberately skipped so a blue shirt can never paint an arm blue.
+        if (sourceSkinPixel(h, s, l)) {
+            if (skinSpec) {
+                const [r2, g2, b2] = tintSkinPixel(h, s, l, skinSpec);
                 data[i] = r2; data[i + 1] = g2; data[i + 2] = b2;
             }
+            continue;
         }
-        ctx.putImageData(imageData, 0, 0);
-    }
 
+        if (y < headCutoffY) continue;
+        const s2 = Math.max(0, Math.min(1, s * satMult));
+        if (shirtHue !== undefined && l >= SHIRT_BAND[0] && l <= SHIRT_BAND[1]) {
+            const [r2, g2, b2] = hslToRgb(shirtHue, s2, l);
+            data[i] = r2; data[i + 1] = g2; data[i + 2] = b2;
+        } else if (pantsHue !== undefined && l >= PANTS_BAND[0] && l < PANTS_BAND[1]) {
+            const [r2, g2, b2] = hslToRgb(pantsHue, s2, l);
+            data[i] = r2; data[i + 1] = g2; data[i + 2] = b2;
+        }
+    }
+    ctx.putImageData(imageData, 0, 0);
+
+    canvas.__recolorBaseSource = baseSource;
+    if (skinSpec) canvas.__skinToneSpec = skinSpec;
     _recolorCache[cacheKey] = canvas;
     return canvas;
 }
 window.getRecoloredSprite = getRecoloredSprite;
 
-// Skin is a distinct recolour pass, with a chroma-aware mask so pale tunics
-// and other bright equipment are not mistaken for skin. `tone` may be a raw
-// hue (player hue wheel) or { hue, saturation, lightness }. Lightness changes
-// are relative to each source pixel, preserving the authored shading.
+// Skin is a distinct recolour pass. The returned canvas remembers the
+// untouched source + requested tone so a subsequent shirt/pants pass can
+// rebuild from source rather than classifying already-recoloured pixels.
 function getRecoloredSkinSprite(img, tone) {
-    if (!sourceReady(img) || tone === undefined || tone === null) return img;
-    const spec = typeof tone === 'number' ? { hue:tone } : tone;
-    if (!Number.isFinite(spec.hue)) return img;
-    const targetSat = Number.isFinite(spec.saturation) ? spec.saturation : null;
-    const targetLight = Number.isFinite(spec.lightness) ? spec.lightness : null;
-    const cacheKey = `${recolorSourceKey(img)}::skin-only:${spec.hue}:${targetSat ?? 'source'}:${targetLight ?? 'source'}`;
+    if (!sourceReady(img)) return img;
+    const spec = normalizeSkinSpec(tone);
+    if (!spec) return img;
+    const baseSource = sourceReady(img.__recolorBaseSource) ? img.__recolorBaseSource : img;
+    const cacheKey = `${recolorSourceKey(baseSource)}::skin-only:${spec.hue}:${spec.saturation ?? 'source'}:${spec.lightness ?? 'source'}`;
     if (_recolorCache[cacheKey]) return _recolorCache[cacheKey];
 
     const canvas = document.createElement('canvas');
-    canvas.width = sourceWidth(img); canvas.height = sourceHeight(img);
+    canvas.width = sourceWidth(baseSource); canvas.height = sourceHeight(baseSource);
     const ctx = canvas.getContext('2d', { willReadFrequently:true });
-    ctx.drawImage(img, 0, 0);
+    ctx.drawImage(baseSource, 0, 0);
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
     for (let i=0; i<data.length; i+=4) {
         if (data[i+3] < 50) continue;
         const [h,s,l] = rgbToHsl(data[i], data[i+1], data[i+2]);
-        const sourceSkin = h >= 5 && h <= 55 && s >= 0.18 && l >= 0.24 && l <= 0.92;
-        if (!sourceSkin) continue;
-        const s2 = targetSat === null ? s : Math.max(0, Math.min(1, targetSat * (0.65 + s * 0.5)));
-        const l2 = targetLight === null ? l : Math.max(0.08, Math.min(0.95, targetLight + (l - 0.68)));
-        const [r2,g2,b2] = hslToRgb(spec.hue, s2, l2);
+        if (!sourceSkinPixel(h, s, l)) continue;
+        const [r2,g2,b2] = tintSkinPixel(h, s, l, spec);
         data[i]=r2; data[i+1]=g2; data[i+2]=b2;
     }
     ctx.putImageData(imageData, 0, 0);
+    canvas.__recolorBaseSource = baseSource;
+    canvas.__skinToneSpec = spec;
     _recolorCache[cacheKey] = canvas;
     return canvas;
 }
