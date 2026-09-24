@@ -87,4 +87,25 @@ test.describe('in-game performance monitor', () => {
         await expect(page.locator('#performance-monitor-overlay')).toHaveCount(0);
         expect(await page.evaluate(() => window.performanceMonitor.enabled)).toBe(false);
     });
+
+    test('reuses final player visibility while visibility inputs are unchanged', async ({ page }) => {
+        await createCharacter(page);
+        await page.waitForFunction(() => !!window.performanceVisibilityCacheStats && typeof window.isVisibleToPlayer === 'function');
+
+        const result = await page.evaluate(() => {
+            const stats = window.performanceVisibilityCacheStats;
+            const before = { hits: stats.hits, misses: stats.misses };
+            const hex = { q: window.player.hex.q, r: window.player.hex.r };
+            const first = window.isVisibleToPlayer(hex);
+            const afterFirst = { hits: stats.hits, misses: stats.misses };
+            const second = window.isVisibleToPlayer(hex);
+            const afterSecond = { hits: stats.hits, misses: stats.misses };
+            return { before, afterFirst, afterSecond, first, second };
+        });
+
+        expect(result.first).toBe(result.second);
+        expect(result.afterFirst.misses).toBeGreaterThan(result.before.misses);
+        expect(result.afterSecond.hits).toBeGreaterThan(result.afterFirst.hits);
+        expect(result.afterSecond.misses).toBe(result.afterFirst.misses);
+    });
 });
