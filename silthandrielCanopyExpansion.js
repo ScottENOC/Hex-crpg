@@ -36,19 +36,22 @@
         return out;
     }
 
-    function wallRing(floors) {
-        const set=new Set(floors.map(key));
-        const walls=new Map();
-        for(const h of floors) for(const n of (window.getNeighbors?.(h.q,h.r)||[])) {
-            if(!set.has(key(n))) walls.set(key(n),n);
+    // Multi-storey lookup falls through to ground terrain where a floor has
+    // no entry. In a tree city that would make empty air behave like walkable
+    // Grass/Forest. Kragmoor never exposed the bug because its fallback is
+    // solid Wall. Fill the canopy envelope with Void first, then carve real
+    // platforms and bridges over it.
+    function fillCanopyAir(floorN) {
+        const b=building(), f=ensureFloor(floorN);
+        if(!b||!f) return;
+        for(let q=b.minQ;q<=b.maxQ;q++) for(let r=b.minR;r<=b.maxR;r++) {
+            const k=`${q},${r}`;
+            if(!f.terrain[k]) f.terrain[k]='Void';
         }
-        return [...walls.values()];
     }
 
-    // Elven platforms are open-sided: no Wall ring. The surrounding absent
-    // floor simply falls back to the terrain below, while movement remains on
-    // the carved Wood Floor bridge/platform hexes. This keeps the capital from
-    // reading as a collection of human rooms floating in trees.
+    // Elven platforms are open-sided: no wall ring. Void around the platform
+    // provides the movement boundary without turning each bough into a room.
     function carvePlatform(id,floorN,c,halfW=3,halfH=2,floorType='Wood Floor') {
         const f=ensureFloor(floorN);
         if(!f) return null;
@@ -86,9 +89,6 @@
     }
 
     function addGroundLife(c) {
-        // The ground is still forest, not a conventional city street grid:
-        // a spring, herb garden and a small gathering ring sit beneath the
-        // canopy. Buildings remain above.
         const spring={q:c.q+5,r:c.r+8};
         window.setTerrainAt?.(spring.q,spring.r,'Water');
         prop(0,{q:spring.q+1,r:spring.r},'herb_patch',{hasHerbs:true});
@@ -102,9 +102,6 @@
     }
 
     function addLowerCanopy(c) {
-        // Existing archive (-12,+2), lodge (+12,+2), and main tree stair stay.
-        // New inhabited platforms fill the lower canopy without becoming a
-        // continuous slab: every room is its own bough linked by bridges.
         const moonwell={q:c.q,r:c.r+11};
         const craft={q:c.q+7,r:c.r-10};
         const kitchen={q:c.q-7,r:c.r-10};
@@ -151,9 +148,6 @@
     }
 
     function addHighBough(c) {
-        // A third height gives Sil'thandriel a skyline instead of capping out
-        // at the royal court. These are small, exposed platforms: observatory,
-        // ranger roost and wind shrine rather than another dense district.
         const stair={q:c.q,r:c.r-2};
         const observatory={q:c.q,r:c.r-10};
         const roost={q:c.q+11,r:c.r-3};
@@ -171,10 +165,6 @@
     }
 
     function addSecondAscent(c, lower) {
-        // The city no longer depends on one trunk stair. A second climb at the
-        // eastern edge rises from the forest to the lower canopy, then another
-        // stair nearby continues to the royal level. It is circulation, not a
-        // teleport; all three floor maps share the same coordinates.
         const ground={q:c.q+13,r:c.r+5};
         window.setTerrainAt?.(ground.q,ground.r,'Grass');
         bridge(1,ground,lower.homesEast);
@@ -239,6 +229,7 @@
         const c=centre();
         if(expanded||!c||!building()||!window.setTerrainAt) return false;
         platforms.length=0;
+        fillCanopyAir(1); fillCanopyAir(2); fillCanopyAir(3);
         addGroundLife(c);
         const lower=addLowerCanopy(c);
         const upper=addUpperCanopy(c);
@@ -273,7 +264,7 @@
 
     function install(){installWorldWrapper(); if(window.currentCampaign!=='2'||!centre())return false; if(!expanded)expand(); return expanded;}
 
-    window.SilthandrielCanopyExpansion={install,expand,reset,get platforms(){return platforms;},get stats(){return{installed,expanded,platforms:platforms.length,populationTarget:TARGET_POPULATION};}};
+    window.SilthandrielCanopyExpansion={install,expand,reset,fillCanopyAir,get platforms(){return platforms;},get stats(){return{installed,expanded,platforms:platforms.length,populationTarget:TARGET_POPULATION};}};
 
     if(!install()) {
         const timer=setInterval(()=>{if(install())clearInterval(timer);},25);
