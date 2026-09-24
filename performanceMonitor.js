@@ -142,18 +142,22 @@
         };
         window.refreshPlayerVisibilityCache.__renderViewportFastPath = true;
         window.refreshPlayerVisibilityCache.__original = baseRefresh;
+        // The set is the FULL party-visible world-space disc, not viewport-
+        // clipped. Pathfinding can therefore reuse it without making character
+        // perception depend on camera position.
+        window.getPlayerVisibleHexSet = () => renderVisibleKeys;
         window.__renderVisibilityFastPathInstalled = true;
         return true;
     }
 
     // A* hot-path wrapper. The underlying findPath implementation computes
-    // player visibility/exploration for every expanded neighbor even for NPCs,
-    // but every subsequent NPC branch ignores those values (`!isPlayer || ...`
-    // is already true, and `isPlayer && ...` is false). Temporarily replace
-    // those two global lookups with constants only for the synchronous NPC
-    // search. Route costs, blockers, terrain and the A* iteration cap are
-    // untouched. preferredPath is likewise converted to Set membership while
-    // preserving the exact `.includes(key)` contract used by findPath.
+    // visibility/exploration for every expanded neighbor. NPCs do not use
+    // either value, so those lookups are replaced with constants. Player
+    // searches DO need visibility for known occupied blockers, but can answer
+    // it from the already-correct full party-visible Set built above instead
+    // of repeating range/light/LOS work for every A* neighbor. Terrain costs,
+    // blockers, exploration rules, route costs and the A* iteration cap stay
+    // unchanged. preferredPath is converted to O(1) Set membership too.
     function installPathfindingFastPath() {
         if (window.__pathfindingFastPathInstalled) return true;
         if (typeof window.findPath !== 'function' || typeof window.isVisibleToPlayer !== 'function' || typeof window.isHexExplored !== 'function') return false;
@@ -164,6 +168,7 @@
             npcCalls: 0,
             playerCalls: 0,
             optimizedNpcCalls: 0,
+            optimizedPlayerCalls: 0,
             preferredSetCalls: 0,
             totalMs: 0,
             maxMs: 0,
@@ -183,10 +188,10 @@
                 stats.preferredSetCalls++;
             }
 
-            let savedVisibility = null;
+            const t0 = performance.now();
+            let savedVisibility = window.isVisibleToPlayer;
             let savedExplored = null;
             if (!isPlayer) {
-                savedVisibility = window.isVisibleToPlayer;
                 savedExplored = window.isHexExplored;
                 // Exact no-op values for NPC semantics in the current A*:
                 // visibility is only consulted behind `!isPlayer || visible`,
@@ -194,18 +199,29 @@
                 window.isVisibleToPlayer = () => false;
                 window.isHexExplored = () => true;
                 stats.optimizedNpcCalls++;
+            } else {
+                // Force the full world-space player-visible Set current before
+                // entering A*. Rebuild cost is included in this path timing.
+                if (typeof window.refreshPlayerVisibilityCache === 'function') {
+                    window.refreshPlayerVisibilityCache();
+                }
+                const visibleKeys = typeof window.getPlayerVisibleHexSet === 'function'
+                    ? window.getPlayerVisibleHexSet()
+                    : null;
+                if (visibleKeys instanceof Set) {
+                    window.isVisibleToPlayer = targetHex =>
+                        !!targetHex && visibleKeys.has(`${targetHex.q},${targetHex.r}`);
+                    stats.optimizedPlayerCalls++;
+                }
             }
 
-            const t0 = performance.now();
             let result;
             try {
                 result = baseFindPath.call(this, start, target, availableTP, entity, ignoreTP, preferredArg);
                 return result;
             } finally {
-                if (!isPlayer) {
-                    window.isVisibleToPlayer = savedVisibility;
-                    window.isHexExplored = savedExplored;
-                }
+                window.isVisibleToPlayer = savedVisibility;
+                if (!isPlayer && savedExplored) window.isHexExplored = savedExplored;
                 const elapsed = performance.now() - t0;
                 stats.totalMs += elapsed;
                 stats.maxMs = Math.max(stats.maxMs, elapsed);
@@ -335,7 +351,7 @@
         sessionStartedAt = now();
         const p = window.performancePathfindingStats;
         if (p) {
-            p.calls = p.npcCalls = p.playerCalls = p.optimizedNpcCalls = p.preferredSetCalls = 0;
+            p.calls = p.npcCalls = p.playerCalls = p.optimizedNpcCalls = p.optimizedPlayerCalls = p.preferredSetCalls = 0;
             p.totalMs = p.maxMs = 0;
             p.slowPaths.length = 0;
         }
@@ -383,7 +399,7 @@
             `Render last: map=${fmt(r.lastMapMs || 0)} ms, map-other=${fmt(r.lastMapOtherMs || 0)} ms, entities=${fmt(r.lastEntitiesMs || 0)} ms, entityOnlyFrames=${r.entityOnlyFrames || 0}`,
             `Visibility cache: hits=${v.hits || 0}, misses=${v.misses || 0}, hitRate=${hitRate}%, rangeRejects=${v.rangeRejects || 0}, entries=${v.entries || 0}, clears=${v.clears || 0}, refreshes=${v.refreshes || 0}`,
             `Render visibility: rebuilds=${rv.rebuilds || 0}, candidates=${rv.candidates || 0}, visible=${rv.visible || 0}, renderQueries=${rv.renderQueries || 0}, renderHits=${rv.renderHits || 0}, gameplayFallbacks=${rv.gameplayFallbacks || 0}`,
-            `Pathfinding fast path: calls=${p.calls || 0}, npc=${p.npcCalls || 0}, player=${p.playerCalls || 0}, npcOptimized=${p.optimizedNpcCalls || 0}, preferredSets=${p.preferredSetCalls || 0}, avg=${fmt(pathAvg)} ms, max=${fmt(p.maxMs || 0)} ms`,
+            `Pathfinding fast path: calls=${p.calls || 0}, npc=${p.npcCalls || 0}, player=${p.playerCalls || 0}, npcOptimized=${p.optimizedNpcCalls || 0}, playerOptimized=${p.optimizedPlayerCalls || 0}, preferredSets=${p.preferredSetCalls || 0}, avg=${fmt(pathAvg)} ms, max=${fmt(p.maxMs || 0)} ms`,
             `User agent: ${navigator.userAgent}`
         ];
     }
@@ -444,7 +460,7 @@
             '- Render breakdown is measured inside the real requestAnimationFrame flush; map-other excludes entity rendering invoked from drawMap.',
             '- Ultra-hot tiny helpers (visibility, LOS, terrain lookup, dormancy check) are intentionally not individually timed because observer overhead distorted low-zoom rendering.',
             '- Render visibility is precomputed from friendly vision discs; gameplay visibility remains camera-independent and uses the normal full-world path outside drawMap.',
-            '- NPC pathfinding skips player-only visibility/exploration lookups; route costs and blockers are unchanged.',
+            '- NPC pathfinding skips player-only visibility/exploration lookups; player pathfinding reuses the refreshed full visibility Set; route costs and blockers are unchanged.',
             '- Visibility-cache counters report those hot-path calls without wrapping each helper.',
             '- A tick begins at runTickInternal and closes after the surrounding synchronous game tick finishes.',
             '- p95/call uses the most recent capped call sample set; totals/call counts cover the whole profiling session.'
@@ -490,7 +506,7 @@
         buttons.style.cssText = 'display:flex;gap:8px;';
         const copy = document.createElement('button'); copy.textContent = 'Copy Report';
         const close = document.createElement('button'); close.textContent = 'Close';
-        [copy, close].forEach(b => b.style.cssText = 'min-height:44px;padding:8px 12px;touch-action:manipulation;');
+        [copy, close].forEach(b => b.style.cssText = 'min-height:44px;padding:8px 12px;touch-action:manipulation;';
         bindTap(copy, () => copyReport());
         bindTap(close, () => shell.remove());
         buttons.append(copy, close);
