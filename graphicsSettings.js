@@ -307,3 +307,15 @@ document.addEventListener('DOMContentLoaded', () => {
     script.async = false;
     document.head.appendChild(script);
 })();
+
+// Opt-in diagnostic profiler. Kept in its own module because it is developer
+// tooling rather than a rendering optimisation; when disabled it installs no
+// timing wrappers and costs normal play essentially nothing.
+(() => {
+    if (document.querySelector('script[data-performance-monitor]')) return;
+    const script = document.createElement('script');
+    script.src = 'performanceMonitor.js?v=1';
+    script.dataset.performanceMonitor = 'true';
+    script.async = false;
+    document.head.appendChild(script);
+})();
