@@ -69,6 +69,7 @@
     load('script[data-reactive-ambient-chatter]', 'ambientChatterExpansion.js', 'reactiveAmbientChatter');
     load('script[data-relationship-ambient-chatter]', 'ambientChatterRelationships.js', 'relationshipAmbientChatter');
     load('script[data-personality-ambient-chatter]', 'ambientChatterPersonality.js', 'personalityAmbientChatter');
+    load('script[data-npc-social-facing]', 'npcSocialFacing.js', 'npcSocialFacing');
     load('script[data-bandit-camp-wilderness-fix]', 'banditCampWildernessFix.js', 'banditCampWildernessFix');
 
     // Sparse persistent wilderness incidents: discoveries can become stories
