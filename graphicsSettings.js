@@ -187,6 +187,27 @@ document.addEventListener('DOMContentLoaded', () => {
         window.getEntityAtHex = fastGetEntityAtHex;
     }
 
+    // updateTurnIndicator rebuilds DOM and active-spell UI. During real-time
+    // exploration it was being called on every simulation tick (~60/s on the
+    // captured iPhone trace) even though initiative state is not changing.
+    // Keep combat/reaction updates immediate, but cap ordinary exploration UI
+    // refreshes at 4 Hz. This avoids thousands of unnecessary DOM rebuilds
+    // without changing any game-state timing.
+    if (window.updateTurnIndicator && !window.updateTurnIndicator.__nonCombatThrottled) {
+        const originalUpdateTurnIndicator = window.updateTurnIndicator;
+        let lastNonCombatUiAt = -Infinity;
+        const throttledUpdateTurnIndicator = function(...args) {
+            const urgent = !!window.isInCombat || window.gamePhase !== 'WAITING' || window.isPausedForReaction;
+            const now = performance.now();
+            if (!urgent && now - lastNonCombatUiAt < 250) return;
+            if (!urgent) lastNonCombatUiAt = now;
+            return originalUpdateTurnIndicator.apply(this, args);
+        };
+        throttledUpdateTurnIndicator.__nonCombatThrottled = true;
+        throttledUpdateTurnIndicator.__original = originalUpdateTurnIndicator;
+        window.updateTurnIndicator = throttledUpdateTurnIndicator;
+    }
+
     // Coalesce redraw requests onto requestAnimationFrame. On iOS, touchmove
     // and pinch events can arrive multiple times between display refreshes;
     // rendering every intermediate state burns CPU for frames the user never
@@ -203,8 +224,20 @@ document.addEventListener('DOMContentLoaded', () => {
             frames: 0,
             coalesced: 0,
             lastFrameMs: 0,
-            avgFrameMs: 0
+            avgFrameMs: 0,
+            lastMapMs: 0,
+            avgMapMs: 0,
+            lastEntitiesMs: 0,
+            avgEntitiesMs: 0,
+            lastMapOtherMs: 0,
+            avgMapOtherMs: 0,
+            mapFrames: 0,
+            entityOnlyFrames: 0
         };
+
+        function rollingAverage(current, sample, count) {
+            return current + (sample - current) / Math.min(count, 120);
+        }
 
         function flushRender() {
             rafPending = false;
@@ -217,6 +250,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const savedFoliageDetail = window.foliageDetail;
             const savedFloatingTexts = window.renderFloatingTexts;
             const savedProjectiles = window.renderProjectiles;
+            let entityMsThisFrame = 0;
+            let mapMsThisFrame = 0;
 
             // Zoom LOD: below 0.55x seasonal foliage recolouring is invisible
             // at phone scale; below 0.35x floating text/projectiles are too
@@ -227,13 +262,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 window.renderProjectiles = null;
             }
 
-            // originalDrawMap calls window.renderEntities; temporarily expose
-            // the original renderer so that one real frame stays internally
-            // consistent rather than scheduling a second RAF from inside it.
-            window.renderEntities = originalRenderEntities;
+            // Time entity rendering even when drawMap invokes it internally.
+            // That lets diagnostics split the real RAF cost into entity work
+            // and the rest of the map pipeline without modifying hexMap.js.
+            const timedOriginalRenderEntities = function(...args) {
+                const te = performance.now();
+                try { return originalRenderEntities.apply(this, args); }
+                finally { entityMsThisFrame += performance.now() - te; }
+            };
+
+            window.renderEntities = timedOriginalRenderEntities;
             try {
-                if (doMap) originalDrawMap();
-                else if (doEntities) originalRenderEntities();
+                if (doMap) {
+                    const tm = performance.now();
+                    originalDrawMap();
+                    mapMsThisFrame = performance.now() - tm;
+                    stats.mapFrames++;
+                } else if (doEntities) {
+                    timedOriginalRenderEntities();
+                    stats.entityOnlyFrames++;
+                }
             } finally {
                 window.renderEntities = queuedRenderEntities;
                 window.foliageDetail = savedFoliageDetail;
@@ -244,7 +292,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const dt = performance.now() - t0;
             stats.frames++;
             stats.lastFrameMs = dt;
-            stats.avgFrameMs += (dt - stats.avgFrameMs) / Math.min(stats.frames, 120);
+            stats.avgFrameMs = rollingAverage(stats.avgFrameMs, dt, stats.frames);
+
+            stats.lastEntitiesMs = entityMsThisFrame;
+            stats.avgEntitiesMs = rollingAverage(stats.avgEntitiesMs, entityMsThisFrame, stats.frames);
+            if (doMap) {
+                const otherMs = Math.max(0, mapMsThisFrame - entityMsThisFrame);
+                stats.lastMapMs = mapMsThisFrame;
+                stats.avgMapMs = rollingAverage(stats.avgMapMs, mapMsThisFrame, stats.mapFrames);
+                stats.lastMapOtherMs = otherMs;
+                stats.avgMapOtherMs = rollingAverage(stats.avgMapOtherMs, otherMs, stats.mapFrames);
+            }
             // Entity hex proxies already mark the spatial index dirty when
             // something actually moves. Rebuild lazily on the next lookup
             // instead of doing O(entities) index work after every visual frame.
@@ -285,7 +343,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const update = () => {
             if (!perfOverlay) return;
             const s = window.performanceRenderStats || {};
-            perfOverlay.textContent = `entities ${(window.entities || []).length}\nzoom ${(window.cameraZoom || 1).toFixed(2)}\nframe ${(s.lastFrameMs || 0).toFixed(1)} ms\navg ${(s.avgFrameMs || 0).toFixed(1)} ms\ncoalesced ${s.coalesced || 0}`;
+            perfOverlay.textContent = `entities ${(window.entities || []).length}\nzoom ${(window.cameraZoom || 1).toFixed(2)}\nframe ${(s.lastFrameMs || 0).toFixed(1)} ms\navg ${(s.avgFrameMs || 0).toFixed(1)} ms\nmap other ${(s.avgMapOtherMs || 0).toFixed(1)} ms\nentities ${(s.avgEntitiesMs || 0).toFixed(1)} ms\ncoalesced ${s.coalesced || 0}`;
             requestAnimationFrame(update);
         };
         requestAnimationFrame(update);
