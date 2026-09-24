@@ -54,11 +54,34 @@
     load('script[data-world-chunk-streaming]', 'worldChunkStreaming.js', 'worldChunkStreaming');
 
     load('script[data-generated-civilian-population]', 'generatedCivilianPopulation.js', 'generatedCivilianPopulation');
+    load('script[data-hollowmere-population-tuning]', 'hollowmerePopulationTuning.js', 'hollowmerePopulationTuning');
     load('script[data-multi-anchor-civilian-streaming]', 'multiAnchorCivilianStreaming.js', 'multiAnchorCivilianStreaming');
     load('script[data-civilian-visual-diversity]', 'civilianVisualDiversity.js', 'civilianVisualDiversity');
     load('script[data-civilian-persistence]', 'civilianPersistence.js', 'civilianPersistence');
     load('script[data-civilian-routine-variety]', 'civilianRoutineVariety.js', 'civilianRoutineVariety');
     load('script[data-hollowmere-social-fabric]', 'hollowmereSocialFabric.js', 'hollowmereSocialFabric');
+
+    // Lived-in secondary settlements and social texture. These are additive
+    // to the seamless world: no map swaps, no special loading screens.
+    load('script[data-millbrook-expansion]', 'millbrookExpansion.js', 'millbrookExpansion');
+    load('script[data-millbrook-content]', 'millbrookContent.js', 'millbrookContent');
+    load('script[data-emberlode-expansion]', 'emberlodeExpansion.js', 'emberlodeExpansion');
+    load('script[data-reactive-ambient-chatter]', 'ambientChatterExpansion.js', 'reactiveAmbientChatter');
+    load('script[data-relationship-ambient-chatter]', 'ambientChatterRelationships.js', 'relationshipAmbientChatter');
+    load('script[data-personality-ambient-chatter]', 'ambientChatterPersonality.js', 'personalityAmbientChatter');
+    load('script[data-npc-social-facing]', 'npcSocialFacing.js', 'npcSocialFacing');
+    load('script[data-bandit-camp-wilderness-fix]', 'banditCampWildernessFix.js', 'banditCampWildernessFix');
+
+    // Sparse persistent wilderness incidents: discoveries can become stories
+    // and consequences without filling the map with permanent quest markers.
+    // Order matters: consequences wrap the base incident API, faction beliefs
+    // refine choices, then the living-world layer creates people/reports from
+    // what actually happened without granting factions omniscient knowledge.
+    load('script[data-wilderness-incidents]', 'wildernessIncidents.js', 'wildernessIncidents');
+    load('script[data-wilderness-consequences]', 'wildernessConsequences.js', 'wildernessConsequences');
+    load('script[data-wilderness-faction-beliefs]', 'wildernessFactionBeliefs.js', 'wildernessFactionBeliefs');
+    load('script[data-wilderness-living-world]', 'wildernessLivingWorld.js', 'wildernessLivingWorld');
+
     load('script[data-silverhart-capital-rebuild]', 'silverhartCapitalRebuild.js', 'silverhartCapitalRebuild');
     load('script[data-silverhart-capital-completion]', 'silverhartCapitalCompletion.js', 'silverhartCapitalCompletion');
     load('script[data-silverhart-avenue-detours]', 'silverhartAvenueDetours.js', 'silverhartAvenueDetours');
@@ -70,7 +93,8 @@
     // Generated residents from every settlement share one reliability layer:
     // finish visual styling before first render/dialogue, keep background
     // civilians clear of doors, provide rare real baldness and small-talk
-    // fallback for otherwise-silent NPCs.
+    // fallback for otherwise-silent NPCs. Keep this after the living-world
+    // population/content modules so it can harden their generated residents too.
     load('script[data-npc-reliability]', 'npcReliability.js', 'npcReliability');
 
     // Northwatch and future city sieges share one persistent per-sector model.
