@@ -146,6 +146,94 @@
         return true;
     }
 
+    // A* hot-path wrapper. The underlying findPath implementation computes
+    // player visibility/exploration for every expanded neighbor even for NPCs,
+    // but every subsequent NPC branch ignores those values (`!isPlayer || ...`
+    // is already true, and `isPlayer && ...` is false). Temporarily replace
+    // those two global lookups with constants only for the synchronous NPC
+    // search. Route costs, blockers, terrain and the A* iteration cap are
+    // untouched. preferredPath is likewise converted to Set membership while
+    // preserving the exact `.includes(key)` contract used by findPath.
+    function installPathfindingFastPath() {
+        if (window.__pathfindingFastPathInstalled) return true;
+        if (typeof window.findPath !== 'function' || typeof window.isVisibleToPlayer !== 'function' || typeof window.isHexExplored !== 'function') return false;
+
+        const baseFindPath = window.findPath;
+        const stats = window.performancePathfindingStats = {
+            calls: 0,
+            npcCalls: 0,
+            playerCalls: 0,
+            optimizedNpcCalls: 0,
+            preferredSetCalls: 0,
+            totalMs: 0,
+            maxMs: 0,
+            slowPaths: []
+        };
+
+        const fastFindPath = function(start, target, availableTP, entity, ignoreTP = false, preferredPath = null) {
+            const isPlayer = entity?.side === 'player';
+            stats.calls++;
+            if (isPlayer) stats.playerCalls++;
+            else stats.npcCalls++;
+
+            let preferredArg = preferredPath;
+            if (preferredPath && typeof preferredPath.includes === 'function' && !(preferredPath instanceof Set)) {
+                const preferredSet = new Set(preferredPath);
+                preferredArg = { includes: key => preferredSet.has(key) };
+                stats.preferredSetCalls++;
+            }
+
+            let savedVisibility = null;
+            let savedExplored = null;
+            if (!isPlayer) {
+                savedVisibility = window.isVisibleToPlayer;
+                savedExplored = window.isHexExplored;
+                // Exact no-op values for NPC semantics in the current A*:
+                // visibility is only consulted behind `!isPlayer || visible`,
+                // exploration behind `!isPlayer || explored` / `isPlayer &&`.
+                window.isVisibleToPlayer = () => false;
+                window.isHexExplored = () => true;
+                stats.optimizedNpcCalls++;
+            }
+
+            const t0 = performance.now();
+            let result;
+            try {
+                result = baseFindPath.call(this, start, target, availableTP, entity, ignoreTP, preferredArg);
+                return result;
+            } finally {
+                if (!isPlayer) {
+                    window.isVisibleToPlayer = savedVisibility;
+                    window.isHexExplored = savedExplored;
+                }
+                const elapsed = performance.now() - t0;
+                stats.totalMs += elapsed;
+                stats.maxMs = Math.max(stats.maxMs, elapsed);
+                if (elapsed >= 8) {
+                    const dist = start && target && window.distance ? window.distance(start, target) : null;
+                    stats.slowPaths.push({
+                        ms: elapsed,
+                        side: entity?.side || 'unknown',
+                        name: entity?.name || entity?.id || 'unknown',
+                        distance: dist,
+                        start: start ? `${start.q},${start.r}` : '?',
+                        target: target ? `${target.q},${target.r}` : '?',
+                        resultLength: Array.isArray(result) ? result.length : 0,
+                        preferred: !!preferredPath,
+                        ignoreTP: !!ignoreTP
+                    });
+                    stats.slowPaths.sort((a, b) => b.ms - a.ms);
+                    if (stats.slowPaths.length > 12) stats.slowPaths.length = 12;
+                }
+            }
+        };
+        fastFindPath.__pathfindingFastPath = true;
+        fastFindPath.__original = baseFindPath;
+        window.findPath = fastFindPath;
+        window.__pathfindingFastPathInstalled = true;
+        return true;
+    }
+
     function bindTap(element, handler) {
         if (!element) return;
         let suppressClickUntil = 0;
@@ -245,6 +333,12 @@
         currentTick = null;
         tickSerial = 0;
         sessionStartedAt = now();
+        const p = window.performancePathfindingStats;
+        if (p) {
+            p.calls = p.npcCalls = p.playerCalls = p.optimizedNpcCalls = p.preferredSetCalls = 0;
+            p.totalMs = p.maxMs = 0;
+            p.slowPaths.length = 0;
+        }
         updateOverlay();
     }
     function enable() {
@@ -274,8 +368,10 @@
         const r = window.performanceRenderStats || {};
         const v = window.performanceVisibilityCacheStats || {};
         const rv = window.performanceRenderVisibilityStats || {};
+        const p = window.performancePathfindingStats || {};
         const totalVis = (v.hits || 0) + (v.misses || 0);
         const hitRate = totalVis ? (100 * (v.hits || 0) / totalVis).toFixed(1) : '0.0';
+        const pathAvg = p.calls ? (p.totalMs || 0) / p.calls : 0;
         return [
             `Captured: ${new Date().toISOString()}`,
             `Session: ${sessionStartedAt == null ? '0.0' : ((now() - sessionStartedAt) / 1000).toFixed(1)} s`,
@@ -287,6 +383,7 @@
             `Render last: map=${fmt(r.lastMapMs || 0)} ms, map-other=${fmt(r.lastMapOtherMs || 0)} ms, entities=${fmt(r.lastEntitiesMs || 0)} ms, entityOnlyFrames=${r.entityOnlyFrames || 0}`,
             `Visibility cache: hits=${v.hits || 0}, misses=${v.misses || 0}, hitRate=${hitRate}%, rangeRejects=${v.rangeRejects || 0}, entries=${v.entries || 0}, clears=${v.clears || 0}, refreshes=${v.refreshes || 0}`,
             `Render visibility: rebuilds=${rv.rebuilds || 0}, candidates=${rv.candidates || 0}, visible=${rv.visible || 0}, renderQueries=${rv.renderQueries || 0}, renderHits=${rv.renderHits || 0}, gameplayFallbacks=${rv.gameplayFallbacks || 0}`,
+            `Pathfinding fast path: calls=${p.calls || 0}, npc=${p.npcCalls || 0}, player=${p.playerCalls || 0}, npcOptimized=${p.optimizedNpcCalls || 0}, preferredSets=${p.preferredSetCalls || 0}, avg=${fmt(pathAvg)} ms, max=${fmt(p.maxMs || 0)} ms`,
             `User agent: ${navigator.userAgent}`
         ];
     }
@@ -333,12 +430,21 @@
             const parts = tick.sections.map(s => `${s.name} ${fmt(s.ms)}ms${s.calls > 1 ? ` x${s.calls}` : ''}`);
             lines.push(`#${i + 1}: ${fmt(tick.ms)} ms at +${(tick.atMs / 1000).toFixed(1)}s${parts.length ? ` -> ${parts.join(', ')}` : ''}`);
         });
+
+        lines.push('', 'SLOW PATH SEARCHES');
+        const slowPaths = window.performancePathfindingStats?.slowPaths || [];
+        if (!slowPaths.length) lines.push('(none >= 8ms)');
+        slowPaths.forEach((path, i) => {
+            lines.push(`#${i + 1}: ${fmt(path.ms)} ms | ${path.side} ${path.name} | ${path.start} -> ${path.target} | distance=${path.distance ?? '?'} | result=${path.resultLength} hexes | preferred=${path.preferred} | ignoreTP=${path.ignoreTP}`);
+        });
+
         lines.push('', 'NOTES',
             '- Profiling is opt-in and wrappers are removed when disabled.',
             '- Function timings are inclusive: a parent includes time spent in wrapped children.',
             '- Render breakdown is measured inside the real requestAnimationFrame flush; map-other excludes entity rendering invoked from drawMap.',
             '- Ultra-hot tiny helpers (visibility, LOS, terrain lookup, dormancy check) are intentionally not individually timed because observer overhead distorted low-zoom rendering.',
             '- Render visibility is precomputed from friendly vision discs; gameplay visibility remains camera-independent and uses the normal full-world path outside drawMap.',
+            '- NPC pathfinding skips player-only visibility/exploration lookups; route costs and blockers are unchanged.',
             '- Visibility-cache counters report those hot-path calls without wrapping each helper.',
             '- A tick begins at runTickInternal and closes after the surrounding synchronous game tick finishes.',
             '- p95/call uses the most recent capped call sample set; totals/call counts cover the whole profiling session.'
@@ -426,6 +532,7 @@
         const rs = window.performanceRenderStats || {};
         const vs = window.performanceVisibilityCacheStats || {};
         const rv = window.performanceRenderVisibilityStats || {};
+        const ps = window.performancePathfindingStats || {};
         const totalVis = (vs.hits || 0) + (vs.misses || 0);
         const rows = [...state.functionStats.entries()]
             .map(([name, s]) => ({ name, ms: ticks.length ? s.totalMs / ticks.length : 0 }))
@@ -436,6 +543,7 @@
             `frame ${fmt(rs.avgFrameMs)}ms map-other ${fmt(rs.avgMapOtherMs)} entities ${fmt(rs.avgEntitiesMs)}`,
             `vis hits ${vs.hits || 0}/${totalVis} reject ${vs.rangeRejects || 0}`,
             `render-vis rebuilds ${rv.rebuilds || 0} q ${rv.renderQueries || 0}`,
+            `paths ${ps.calls || 0} max ${fmt(ps.maxMs || 0)}ms`,
             ...rows.map(r => `${r.name}: ${fmt(r.ms)} ms/tick`)
         ].join('\n');
     }
@@ -503,6 +611,12 @@
             if (installRenderVisibilityFastPath()) clearInterval(renderVisRetry);
         }, 250);
         setTimeout(() => clearInterval(renderVisRetry), 10000);
+
+        installPathfindingFastPath();
+        const pathRetry = setInterval(() => {
+            if (installPathfindingFastPath()) clearInterval(pathRetry);
+        }, 250);
+        setTimeout(() => clearInterval(pathRetry), 10000);
 
         injectSettingsUI();
         const settingsRetry = setInterval(() => {
