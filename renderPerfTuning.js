@@ -67,6 +67,12 @@
     // residents can exist without hundreds of live Entity objects.
     load('script[data-silverhart-population]', 'silverhartPopulation.js', 'silverhartPopulation');
 
+    // Generated residents from every settlement share one reliability layer:
+    // finish visual styling before first render/dialogue, keep background
+    // civilians clear of doors, provide rare real baldness and small-talk
+    // fallback for otherwise-silent NPCs.
+    load('script[data-npc-reliability]', 'npcReliability.js', 'npcReliability');
+
     // Northwatch and future city sieges share one persistent per-sector model.
     // This wraps the legacy siege functions rather than replacing their public
     // API, so existing quests and scripted assault beats keep working.
