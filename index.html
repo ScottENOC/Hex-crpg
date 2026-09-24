@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="app-build" content="20260920-directional-orc">
+    <meta name="app-build" content="20260924-performance-monitor-touch">
     <title>Hex RPG</title>
     <link rel="stylesheet" href="style.css">
     <style>
@@ -171,14 +171,11 @@
                 <div style="display: flex; align-items: flex-start; gap: 10px;">
                     <div style="flex: 1; display: flex; flex-direction: column; gap: 6px;">
                         <label for="shirt-hue-slider" style="font-weight: normal; font-size: 0.85em;">Shirt Color</label>
-                        <input type="range" id="shirt-hue-slider" min="0" max="359" value="30"
-                               oninput="if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
+                        <input type="range" id="shirt-hue-slider" min="0" max="359" value="30" oninput="if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
                         <label for="pants-hue-slider" style="font-weight: normal; font-size: 0.85em;">Pants Color</label>
-                        <input type="range" id="pants-hue-slider" min="0" max="359" value="220"
-                               oninput="if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
+                        <input type="range" id="pants-hue-slider" min="0" max="359" value="220" oninput="if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
                         <label for="hair-hue-slider" style="font-weight: normal; font-size: 0.85em;">Hair Color</label>
-                        <input type="range" id="hair-hue-slider" min="0" max="359" value="25"
-                               oninput="if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
+                        <input type="range" id="hair-hue-slider" min="0" max="359" value="25" oninput="if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
                         <label for="hair-style-select" style="font-weight: normal; font-size: 0.85em;">Hair Style</label>
                         <select id="hair-style-select" onchange="if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
                             <option value="brown_1">Shoulder length</option>
@@ -191,16 +188,14 @@
                             <option value="broad">Broad</option>
                         </select>
                         <label for="skin-tone-slider" style="font-weight: normal; font-size: 0.85em;">Skin Tone</label>
-                        <input type="range" id="skin-tone-slider" min="0" max="100" value="45"
-                               oninput="if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
+                        <input type="range" id="skin-tone-slider" min="0" max="100" value="45" oninput="if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
                         <label style="font-weight: normal; font-size: 0.82em; display:flex; gap:0.35em; align-items:center;">
                             <input type="checkbox" id="fantasy-skin-check" onchange="if(window.updateSkinToneControlMode) window.updateSkinToneControlMode(); if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
                             Fantasy colour
                         </label>
                         <div id="fantasy-skin-controls" hidden>
                             <label for="skin-hue-slider" style="font-weight: normal; font-size: 0.82em;">Fantasy hue</label>
-                            <input type="range" id="skin-hue-slider" min="0" max="359" value="200"
-                                   oninput="if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
+                            <input type="range" id="skin-hue-slider" min="0" max="359" value="200" oninput="if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
                         </div>
                     </div>
                     <canvas id="appearance-preview-canvas" width="70" height="90" style="background:#222; border:1px solid #444; border-radius:4px; flex-shrink:0;"></canvas>
@@ -221,35 +216,21 @@
             <div class="form-group">
                 <label for="voice-select">Voice:</label>
                 <div style="display: flex; gap: 10px;">
-                    <select id="voice-select" style="flex: 1;" onchange="if(window.syncCharacterToServer) window.syncCharacterToServer()">
-                        <option value="pc_1">Voice 1</option>
-                    </select>
+                    <select id="voice-select" style="flex: 1;" onchange="if(window.syncCharacterToServer) window.syncCharacterToServer()"><option value="pc_1">Voice 1</option></select>
                     <button onclick="window.testVoice(document.getElementById('voice-select').value)" style="width: auto; padding: 5px 10px; font-size: 0.8em; background: #607d8b;">Test Voice</button>
                 </div>
             </div>
-            
-            <div id="selection-preview" style="background: #222; padding: 10px; border: 1px solid #444; border-radius: 5px; margin-bottom: 15px; font-size: 0.85em; line-height: 1.4; color: #ccc;">
-                <!-- Filled by JS -->
-            </div>
-
-            <!-- Multiplayer Section -->
+            <div id="selection-preview" style="background: #222; padding: 10px; border: 1px solid #444; border-radius: 5px; margin-bottom: 15px; font-size: 0.85em; line-height: 1.4; color: #ccc;"></div>
             <div id="multiplayer-section" style="background: #2c3e50; padding: 15px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #34495e;">
                 <h3 style="margin-top: 0; color: #ecf0f1;">Multiplayer</h3>
                 <div id="multiplayer-status" style="margin-bottom: 10px; font-size: 0.9em; color: #bdc3c7;">Status: Offline</div>
-                
                 <div id="multiplayer-controls">
                     <div class="form-group" style="margin-bottom: 10px;">
                         <label for="room-code-input" style="font-size: 0.8em;">Room Code:</label>
-                        <div style="display: flex; gap: 10px;">
-                            <input type="text" id="room-code-input" placeholder="e.g. ABCD" style="flex: 1; padding: 5px;">
-                            <button id="join-room-btn" style="background-color: #27ae60; padding: 5px 15px;">Join</button>
-                        </div>
+                        <div style="display: flex; gap: 10px;"><input type="text" id="room-code-input" placeholder="e.g. ABCD" style="flex: 1; padding: 5px;"><button id="join-room-btn" style="background-color: #27ae60; padding: 5px 15px;">Join</button></div>
                     </div>
-                    <div style="text-align: center;">
-                        <button id="create-room-btn" style="background-color: #2980b9; width: 100%;">Create New Room</button>
-                    </div>
+                    <div style="text-align: center;"><button id="create-room-btn" style="background-color: #2980b9; width: 100%;">Create New Room</button></div>
                 </div>
-
                 <div id="room-info" style="display: none; text-align: center;">
                     <div style="font-size: 1.1em; font-weight: bold; color: #f1c40f;">Room: <span id="current-room-code">----</span></div>
                     <div id="player-list" style="font-size: 0.8em; margin-top: 5px; color: #ecf0f1;">Players: 1</div>
@@ -257,379 +238,43 @@
                     <button id="leave-room-btn" style="background-color: #c0392b; margin-top: 10px; font-size: 0.8em;">Leave Room</button>
                 </div>
             </div>
-
-            <div class="form-group">
-                <label for="campaign-select">Campaign:</label>
-                <select id="campaign-select" onchange="window.toggleArenaOptions()">
-                    <option value="1" selected>Campaign 1 (Arena)</option>
-                    <option value="2">Campaign 2 (Small World)</option>
-                    <option value="3">Campaign 3 (Main)</option>
-                    <option value="4">Campaign 4 (Sprite Test)</option>
-                </select>
-            </div>
-            <div id="arena-roguelike-options" style="margin-bottom: 15px;">
-                <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
-                    <input type="checkbox" id="relics-activated-check" checked style="width: 20px; height: 20px;">
-                    <label for="relics-activated-check" style="margin-bottom: 0;">Roguelike Rewards Activated</label>
-                </div>
-                <div style="display: flex; gap: 6px; margin-top: 5px; flex-wrap: wrap;">
-                    <button id="reset-roguelike-btn" style="background-color: #f44336; font-size: 0.8em;">Reset Progress</button>
-                    <button id="export-roguelike-btn" style="background-color: #2196F3; font-size: 0.8em;">Export Progression</button>
-                    <button id="import-roguelike-btn" style="background-color: #ff9800; font-size: 0.8em;">Import Progression</button>
-                    <input type="file" id="import-roguelike-file" accept=".json" style="display: none;">
-                </div>
-            </div>
-            <div id="ironman-option" style="margin-bottom: 15px;">
-                <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
-                    <input type="checkbox" id="ironman-check" style="width: 20px; height: 20px;">
-                    <label for="ironman-check" style="margin-bottom: 0; font-weight: bold; color: #f44336;">Iron Man Mode</label>
-                </div>
-                <small style="color: #aaa; display: block; margin-top: -5px; margin-left: 30px;">Mandatory for Arena. Save/Quick-save exits to title and deletes other run saves.</small>
-            </div>
-            <div class="form-group" style="margin-bottom: 15px;">
-                <label for="difficulty-select">Difficulty:</label>
-                <select id="difficulty-select">
-                    <option value="easy">Easy</option>
-                    <option value="normal" selected>Normal</option>
-                    <option value="hard">Hard</option>
-                </select>
-                <small style="color: #aaa; display: block; margin-top: 3px;">Easy: more starting gold, a free rank of Health at level 1, better sell prices, weaker level-scaled enemies, slower world-event progress. Hard: you take more damage and deal less, worse sell prices.</small>
-            </div>
-            <!-- Skill Point Allocation Section -->
-            <div class="skills-section">
-                <div id="skill-trees-container">
-                    <!-- Skill trees will be populated by JavaScript -->
-                </div>
-            </div>
-            <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
-                <input type="checkbox" id="mute-check-title" onchange="window.syncMute(this.checked)" style="width: 20px; height: 20px;">
-                <label for="mute-check-title" style="margin-bottom: 0;">Mute Music</label>
-            </div>
-            <div id="roguelike-benefits-preview" style="background: #222; padding: 10px; border: 1px solid #444; border-radius: 5px; margin-bottom: 15px; font-size: 0.85em; line-height: 1.4; color: #ffeb3b; display: none;">
-                <!-- Filled by JS -->
-            </div>
-            <div class="button-group">
-                <button id="createCharacterButton">Create Character</button>
-            </div>
+            <div class="form-group"><label for="campaign-select">Campaign:</label><select id="campaign-select" onchange="window.toggleArenaOptions()"><option value="1" selected>Campaign 1 (Arena)</option><option value="2">Campaign 2 (Small World)</option><option value="3">Campaign 3 (Main)</option><option value="4">Campaign 4 (Sprite Test)</option></select></div>
+            <div id="arena-roguelike-options" style="margin-bottom: 15px;"><div class="form-group" style="display: flex; align-items: center; gap: 10px;"><input type="checkbox" id="relics-activated-check" checked style="width: 20px; height: 20px;"><label for="relics-activated-check" style="margin-bottom: 0;">Roguelike Rewards Activated</label></div><div style="display: flex; gap: 6px; margin-top: 5px; flex-wrap: wrap;"><button id="reset-roguelike-btn" style="background-color: #f44336; font-size: 0.8em;">Reset Progress</button><button id="export-roguelike-btn" style="background-color: #2196F3; font-size: 0.8em;">Export Progression</button><button id="import-roguelike-btn" style="background-color: #ff9800; font-size: 0.8em;">Import Progression</button><input type="file" id="import-roguelike-file" accept=".json" style="display: none;"></div></div>
+            <div id="ironman-option" style="margin-bottom: 15px;"><div class="form-group" style="display: flex; align-items: center; gap: 10px;"><input type="checkbox" id="ironman-check" style="width: 20px; height: 20px;"><label for="ironman-check" style="margin-bottom: 0; font-weight: bold; color: #f44336;">Iron Man Mode</label></div><small style="color: #aaa; display: block; margin-top: -5px; margin-left: 30px;">Mandatory for Arena. Save/Quick-save exits to title and deletes other run saves.</small></div>
+            <div class="form-group" style="margin-bottom: 15px;"><label for="difficulty-select">Difficulty:</label><select id="difficulty-select"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option></select><small style="color: #aaa; display: block; margin-top: 3px;">Easy: more starting gold, a free rank of Health at level 1, better sell prices, weaker level-scaled enemies, slower world-event progress. Hard: you take more damage and deal less, worse sell prices.</small></div>
+            <div class="skills-section"><div id="skill-trees-container"></div></div>
+            <div class="form-group" style="display: flex; align-items: center; gap: 10px;"><input type="checkbox" id="mute-check-title" onchange="window.syncMute(this.checked)" style="width: 20px; height: 20px;"><label for="mute-check-title" style="margin-bottom: 0;">Mute Music</label></div>
+            <div id="roguelike-benefits-preview" style="background: #222; padding: 10px; border: 1px solid #444; border-radius: 5px; margin-bottom: 15px; font-size: 0.85em; line-height: 1.4; color: #ffeb3b; display: none;"></div>
+            <div class="button-group"><button id="createCharacterButton">Create Character</button></div>
         </div>
     </div>
 
-    <!-- Disconnect overlay — shown in-game when socket drops -->
-    <div id="disconnect-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:9999; flex-direction:column; align-items:center; justify-content:center; gap:16px; color:#fff; font-family:sans-serif;">
-        <div style="font-size:2em;">⚠ Disconnected</div>
-        <div id="disconnect-msg" style="font-size:1em; color:#bbb;">Attempting to reconnect…</div>
-        <button id="disconnect-rejoin-btn" style="display:none; padding:10px 28px; font-size:1em; background:#27ae60; color:#fff; border:none; border-radius:6px; cursor:pointer;">Rejoin Room</button>
-        <button id="disconnect-lobby-btn" style="padding:8px 20px; font-size:0.9em; background:#555; color:#fff; border:none; border-radius:6px; cursor:pointer;">Return to Lobby</button>
-    </div>
+    <div id="disconnect-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:9999; flex-direction:column; align-items:center; justify-content:center; gap:16px; color:#fff; font-family:sans-serif;"><div style="font-size:2em;">⚠ Disconnected</div><div id="disconnect-msg" style="font-size:1em; color:#bbb;">Attempting to reconnect…</div><button id="disconnect-rejoin-btn" style="display:none; padding:10px 28px; font-size:1em; background:#27ae60; color:#fff; border:none; border-radius:6px; cursor:pointer;">Rejoin Room</button><button id="disconnect-lobby-btn" style="padding:8px 20px; font-size:0.9em; background:#555; color:#fff; border:none; border-radius:6px; cursor:pointer;">Return to Lobby</button></div>
 
-    <div id="gameContainer" style="display: none;">
-        <div id="game-container">
-            <div id="game-board">
-                <canvas id="mapCanvas"></canvas>
-            </div>
-            <div id="ui-container">
-                <div id="actions">
-                </div>
-                <div id="message-log"></div>
-                <div id="active-spells-list"></div>
-            </div>
-        </div>
-    </div>
+    <div id="gameContainer" style="display: none;"><div id="game-container"><div id="game-board"><canvas id="mapCanvas"></canvas></div><div id="ui-container"><div id="actions"></div><div id="message-log"></div><div id="active-spells-list"></div></div></div></div>
 
-    <div id="character-screen-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <button class="close-btn" id="close-character-modal">&times;</button>
-            <h2>Skills & Attributes</h2>
-            <div id="character-screen-content"></div>
-        </div>
-    </div>
-
-    <div id="spell-menu-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <button class="close-btn" id="close-spell-modal">&times;</button>
-            <h2>Spell Customization</h2>
-            <div id="spell-menu-content">
-                <!-- Spell creation form will be here -->
-            </div>
-        </div>
-    </div>
-
-    <div id="inventory-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <button class="close-btn" id="close-inventory-modal">&times;</button>
-            <h2>Inventory</h2>
-            <div id="inventory-content"></div>
-        </div>
-    </div>
-
-    <div id="world-map-modal" class="modal" style="display: none;">
-        <div class="modal-content" style="width: 90%; height: 90%; max-width: none;">
-            <button class="close-btn" id="close-world-map-modal">&times;</button>
-            <h2>World Map</h2>
-            <div style="display: flex; gap: 10px; height: 85%;">
-                <div id="world-map-container" style="flex: 1; overflow: auto; background: #222; padding: 10px; border-radius: 8px;">
-                    <canvas id="worldMapCanvas"></canvas>
-                </div>
-                <div id="world-map-details" style="width: 260px; flex-shrink: 0; background: #222; padding: 12px; border-radius: 8px; overflow-y: auto; display: none;">
-                    <h3 id="world-map-details-name" style="margin: 0 0 8px 0;">Location</h3>
-                    <p id="world-map-details-info" style="margin: 0 0 10px 0; color: #ccc; font-size: 0.9em;"></p>
-                    <label for="world-map-details-notes" style="font-size: 0.85em; color: #aaa;">Notes</label>
-                    <textarea id="world-map-details-notes" style="width: 100%; height: 120px; margin-top: 4px; background: #111; color: #eee; border: 1px solid #444; border-radius: 4px; resize: vertical;"></textarea>
-                    <button id="world-map-details-save" style="margin-top: 8px; width: 100%;">Save Notes</button>
-                </div>
-            </div>
-            <div id="world-map-legend" style="margin-top: 10px; display: flex; gap: 20px; flex-wrap: wrap; font-size: 0.9em;"></div>
-        </div>
-    </div>
-
-    <div id="quest-log-modal" class="modal" style="display: none;">
-        <div class="modal-content" style="width: 500px; max-width: 90%;">
-            <button class="close-btn" id="close-quest-log-modal">&times;</button>
-            <h2>Quest Log</h2>
-            <div id="quest-log-list" style="max-height: 60vh; overflow-y: auto;"></div>
-        </div>
-    </div>
-
-    <div id="roster-modal" class="modal" style="display: none;">
-        <div class="modal-content" style="width: 500px; max-width: 90%;">
-            <button class="close-btn" id="close-roster-modal">&times;</button>
-            <h2>Roster</h2>
-            <p style="color: #aaa; font-size: 0.85em; margin-top: -8px;">Only the main character plus 5 others can be with you at once. Everyone else waits safely off the field — swap freely, but only outside combat.</p>
-            <h3 style="margin-bottom: 4px;">Active Party</h3>
-            <div id="roster-active-list" style="max-height: 30vh; overflow-y: auto; margin-bottom: 12px;"></div>
-            <h3 style="margin-bottom: 4px;">Waiting</h3>
-            <div id="roster-benched-list" style="max-height: 30vh; overflow-y: auto;"></div>
-        </div>
-    </div>
-
-    <div id="reaction-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <h2 id="reaction-title">Reaction!</h2>
-            <p id="reaction-description"></p>
-            <div id="reaction-options"></div>
-        </div>
-    </div>
-
-    <div id="dialogue-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <h2 id="dialogue-speaker">Speaker Name</h2>
-            <div id="dialogue-portrait" style="width: 100px; height: 100px; background: #222; margin-bottom: 10px; position: relative;"></div>
-            <p id="dialogue-message">Dialogue text goes here.</p>
-            <div id="dialogue-options"></div>
-        </div>
-    </div>
-
-    <div id="shop-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <button class="close-btn" id="close-shop-modal">&times;</button>
-            <h2 id="shop-title">Shop</h2>
-            <div style="display: flex; gap: 20px;">
-                <div style="flex: 1;">
-                    <h3>Buy</h3>
-                    <div id="shop-buy-list" style="max-height: 400px; overflow-y: auto; background: #222; padding: 10px; border-radius: 4px;"></div>
-                </div>
-                <div style="flex: 1;">
-                    <h3>Sell (50% value)</h3>
-                    <div id="shop-sell-list" style="max-height: 400px; overflow-y: auto; background: #222; padding: 10px; border-radius: 4px;"></div>
-                </div>
-            </div>
-            <div id="shop-footer" style="margin-top: 20px; font-weight: bold; font-size: 1.2em; color: #ffd700;">
-                Your Gold: <span id="shop-player-gold">0</span>
-            </div>
-        </div>
-    </div>
-
-    <div id="save-game-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <button class="close-btn" id="close-save-modal">&times;</button>
-            <h2>Save Game</h2>
-            <div class="form-group">
-                <label for="save-name-input">Save Name:</label>
-                <input type="text" id="save-name-input" placeholder="Enter save name">
-            </div>
-            <button id="confirm-save-btn">Save</button>
-        </div>
-    </div>
-
-    <div id="load-game-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <button class="close-btn" id="close-load-modal">&times;</button>
-            <h2>Load Game</h2>
-            <div id="save-list" style="max-height: 400px; overflow-y: auto; background: #222; padding: 10px; border-radius: 4px;"></div>
-        </div>
-    </div>
-
-    <div id="game-over-modal" class="modal" style="display: none;">
-        <div class="modal-content" style="text-align: center;">
-            <h2 style="color: #f44336;">Game Over</h2>
-            <p id="game-over-message" style="color: #ddd;"></p>
-            <p style="color: #999; font-size: 0.9em;">No power in this world can undo this — resurrection and true teleportation both demand the resources of an entire nation, and some of what they require can't be bought at any price.</p>
-            <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
-                <button id="game-over-load-btn" style="background-color: #2196F3;">Load Game</button>
-                <button id="game-over-menu-btn" style="background-color: #607d8b;">Main Menu</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="mercenary-creation-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <h2>Hire Mercenary (100 Gold)</h2>
-            <div class="form-group">
-                <label for="merc-name">Name:</label>
-                <input type="text" id="merc-name" placeholder="Leave blank for random name">
-            </div>
-            <div class="form-group">
-                <label for="merc-race">Race:</label>
-                <select id="merc-race">
-                    <option value="human">Human</option>
-                    <option value="dwarf">Dwarf</option>
-                    <option value="elf">Elf</option>
-                    <option value="goblin">Goblin</option>
-                    <option value="orc">Orc</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="merc-gender">Gender:</label>
-                <select id="merc-gender">
-                    <option value="female">Female</option>
-                    <option value="male">Male</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="merc-class">Class:</label>
-                <select id="merc-class">
-                    <option value="fighter">Fighter</option>
-                    <option value="rogue">Rogue</option>
-                    <option value="cleric">Cleric</option>
-                    <option value="wizard">Wizard</option>
-                    <option value="druid">Druid</option>
-                    <option value="monk">Monk</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="merc-voice-select">Voice:</label>
-                <div style="display: flex; gap: 10px;">
-                    <select id="merc-voice-select" style="flex: 1;">
-                        <option value="pc_1">Voice 1</option>
-                    </select>
-                    <button onclick="window.testVoice(document.getElementById('merc-voice-select').value)" style="width: auto; padding: 5px 10px; font-size: 0.8em; background: #607d8b;">Test Voice</button>
-                </div>
-            </div>
-            <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
-                <button id="confirm-hire-btn">Hire</button>
-                <button id="cancel-hire-btn" style="background: #777;">Cancel</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="end-run-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <h2>Run Ended</h2>
-            <p id="end-run-message"></p>
-            <div id="reward-choices" style="display: flex; gap: 20px; justify-content: space-around; margin-top: 20px;"></div>
-        </div>
-    </div>
-
-    <div id="entity-details-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <button class="close-btn" id="close-entity-details-modal">&times;</button>
-            <h2 id="entity-details-name">Entity Details</h2>
-            <div id="entity-details-content"></div>
-        </div>
-    </div>
-
-    <div id="settings-modal" class="modal" style="display: none;">
-        <div class="modal-content" style="max-width: 400px;">
-            <button class="close-btn" id="close-settings-modal">&times;</button>
-            <h2>Settings</h2>
-            <div id="multiplayer-room-info-ingame" style="background: #2c3e50; padding: 10px; border-radius: 4px; margin-bottom: 20px; text-align: center; display: none;">
-                <div style="font-size: 0.8em; color: #bdc3c7;">Multiplayer Room Code</div>
-                <div id="ingame-room-code" style="font-size: 1.5em; font-weight: bold; color: #f1c40f;">----</div>
-                <div id="ingame-player-list" style="font-size: 0.7em; margin-top: 5px; color: #ecf0f1;">Players: 1</div>
-            </div>
-            <div id="host-game-container" style="margin-bottom: 20px;">
-                <button id="host-game-btn" style="background-color: #2980b9; width: 100%; padding: 10px;">Host This Game (Multiplayer)</button>
-            </div>
-            <div id="settings-content">
-                <h3>Audio Volume</h3>
-                <div class="form-group">
-                    <label>Master Volume</label>
-                    <input type="range" id="volume-master" min="0" max="1" step="0.01" value="1" oninput="window.updateAudioSetting('master', this.value)">
-                </div>
-                <div class="form-group">
-                    <label>Music Volume</label>
-                    <input type="range" id="volume-music" min="0" max="1" step="0.01" value="0.7" oninput="window.updateAudioSetting('music', this.value)">
-                </div>
-                <div class="form-group">
-                    <label>Effects Volume</label>
-                    <input type="range" id="volume-effects" min="0" max="1" step="0.01" value="0.8" oninput="window.updateAudioSetting('effects', this.value)">
-                </div>
-                <div class="form-group">
-                    <label>Dialogue Volume</label>
-                    <input type="range" id="volume-dialogue" min="0" max="1" step="0.01" value="1" oninput="window.updateAudioSetting('dialogue', this.value)">
-                </div>
-
-                <h3>Allegiance Hex Outlines</h3>
-                <div class="form-group">
-                    <label>Show colored hex outlines around characters</label>
-                    <select id="allegiance-outline-mode" onchange="window.setAllegianceOutlineMode(this.value)">
-                        <option value="combat">On during combat (default)</option>
-                        <option value="always">Always on</option>
-                        <option value="never">Always off</option>
-                    </select>
-                </div>
-
-                <h3>Graphics</h3>
-                <div class="form-group">
-                    <label>Frame Rate</label>
-                    <select id="graphics-framerate-mode" onchange="window.setFrameRateMode(this.value)">
-                        <option value="auto">Auto (recommended)</option>
-                        <option value="60">60 fps</option>
-                        <option value="30">30 fps</option>
-                        <option value="15">15 fps</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Render Scale</label>
-                    <select id="graphics-render-scale" onchange="window.setRenderScale(this.value)">
-                        <option value="1">100%</option>
-                        <option value="0.75">75%</option>
-                        <option value="0.5">50%</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label><input type="checkbox" id="graphics-reduce-motion" onchange="window.setReduceMotion(this.checked)"> Reduce motion (screen shake, lunge, floating text drift)</label>
-                </div>
-                <div class="form-group">
-                    <label>Foliage Detail</label>
-                    <select id="graphics-foliage-detail" onchange="window.setFoliageDetail(this.value)">
-                        <option value="full">Full</option>
-                        <option value="simple">Simple (faster)</option>
-                    </select>
-                </div>
-
-                <h3>Save Code</h3>
-                <div class="form-group">
-                    <label>Copy this to move your save between devices, or between browser testing and the installed app</label>
-                    <div style="display:flex; gap:8px;">
-                        <button id="export-save-code-btn" style="flex:1;" onclick="window.handleExportSaveCode()">Export Save Code</button>
-                    </div>
-                    <textarea id="save-code-textarea" rows="3" style="width:100%; margin-top:8px; font-size:0.7em;" placeholder="Paste a save code here to import it"></textarea>
-                    <div style="display:flex; gap:8px; margin-top:4px;">
-                        <button id="import-save-code-btn" style="flex:1;" onclick="window.handleImportSaveCode()">Import Save Code</button>
-                    </div>
-                </div>
-
-                <h3>Tutorial Mode</h3>
-                <div class="form-group">
-                    <label><input type="checkbox" id="tutorial-mode-toggle" onchange="window.setTutorialModeEnabled(this.checked)"> Explain new things the first time they happen</label>
-                </div>
-                <div class="form-group" style="display:flex; gap:8px;">
-                    <button onclick="window.resetTutorialMemory()" style="flex:1;">Reset Tutorial Tips</button>
-                </div>
-            </div>
-        </div>
-    </div>
+    <div id="character-screen-modal" class="modal" style="display: none;"><div class="modal-content"><button class="close-btn" id="close-character-modal">&times;</button><h2>Skills & Attributes</h2><div id="character-screen-content"></div></div></div>
+    <div id="spell-menu-modal" class="modal" style="display: none;"><div class="modal-content"><button class="close-btn" id="close-spell-modal">&times;</button><h2>Spell Customization</h2><div id="spell-menu-content"></div></div></div>
+    <div id="inventory-modal" class="modal" style="display: none;"><div class="modal-content"><button class="close-btn" id="close-inventory-modal">&times;</button><h2>Inventory</h2><div id="inventory-content"></div></div></div>
+    <div id="world-map-modal" class="modal" style="display: none;"><div class="modal-content" style="width: 90%; height: 90%; max-width: none;"><button class="close-btn" id="close-world-map-modal">&times;</button><h2>World Map</h2><div style="display: flex; gap: 10px; height: 85%;"><div id="world-map-container" style="flex: 1; overflow: auto; background: #222; padding: 10px; border-radius: 8px;"><canvas id="worldMapCanvas"></canvas></div><div id="world-map-details" style="width: 260px; flex-shrink: 0; background: #222; padding: 12px; border-radius: 8px; overflow-y: auto; display: none;"><h3 id="world-map-details-name" style="margin: 0 0 8px 0;">Location</h3><p id="world-map-details-info" style="margin: 0 0 10px 0; color: #ccc; font-size: 0.9em;"></p><label for="world-map-details-notes" style="font-size: 0.85em; color: #aaa;">Notes</label><textarea id="world-map-details-notes" style="width: 100%; height: 120px; margin-top: 4px; background: #111; color: #eee; border: 1px solid #444; border-radius: 4px; resize: vertical;"></textarea><button id="world-map-details-save" style="margin-top: 8px; width: 100%;">Save Notes</button></div></div><div id="world-map-legend" style="margin-top: 10px; display: flex; gap: 20px; flex-wrap: wrap; font-size: 0.9em;"></div></div></div>
+    <div id="quest-log-modal" class="modal" style="display: none;"><div class="modal-content" style="width: 500px; max-width: 90%;"><button class="close-btn" id="close-quest-log-modal">&times;</button><h2>Quest Log</h2><div id="quest-log-list" style="max-height: 60vh; overflow-y: auto;"></div></div></div>
+    <div id="roster-modal" class="modal" style="display: none;"><div class="modal-content" style="width: 500px; max-width: 90%;"><button class="close-btn" id="close-roster-modal">&times;</button><h2>Roster</h2><p style="color: #aaa; font-size: 0.85em; margin-top: -8px;">Only the main character plus 5 others can be with you at once. Everyone else waits safely off the field — swap freely, but only outside combat.</p><h3 style="margin-bottom: 4px;">Active Party</h3><div id="roster-active-list" style="max-height: 30vh; overflow-y: auto; margin-bottom: 12px;"></div><h3 style="margin-bottom: 4px;">Waiting</h3><div id="roster-benched-list" style="max-height: 30vh; overflow-y: auto;"></div></div></div>
+    <div id="reaction-modal" class="modal" style="display: none;"><div class="modal-content"><h2 id="reaction-title">Reaction!</h2><p id="reaction-description"></p><div id="reaction-options"></div></div></div>
+    <div id="dialogue-modal" class="modal" style="display: none;"><div class="modal-content"><h2 id="dialogue-speaker">Speaker Name</h2><div id="dialogue-portrait" style="width: 100px; height: 100px; background: #222; margin-bottom: 10px; position: relative;"></div><p id="dialogue-message">Dialogue text goes here.</p><div id="dialogue-options"></div></div></div>
+    <div id="shop-modal" class="modal" style="display: none;"><div class="modal-content"><button class="close-btn" id="close-shop-modal">&times;</button><h2 id="shop-title">Shop</h2><div style="display: flex; gap: 20px;"><div style="flex: 1;"><h3>Buy</h3><div id="shop-buy-list" style="max-height: 400px; overflow-y: auto; background: #222; padding: 10px; border-radius: 4px;"></div></div><div style="flex: 1;"><h3>Sell (50% value)</h3><div id="shop-sell-list" style="max-height: 400px; overflow-y: auto; background: #222; padding: 10px; border-radius: 4px;"></div></div></div><div id="shop-footer" style="margin-top: 20px; font-weight: bold; font-size: 1.2em; color: #ffd700;">Your Gold: <span id="shop-player-gold">0</span></div></div></div>
+    <div id="save-game-modal" class="modal" style="display: none;"><div class="modal-content"><button class="close-btn" id="close-save-modal">&times;</button><h2>Save Game</h2><div class="form-group"><label for="save-name-input">Save Name:</label><input type="text" id="save-name-input" placeholder="Enter save name"></div><button id="confirm-save-btn">Save</button></div></div>
+    <div id="load-game-modal" class="modal" style="display: none;"><div class="modal-content"><button class="close-btn" id="close-load-modal">&times;</button><h2>Load Game</h2><div id="save-list" style="max-height: 400px; overflow-y: auto; background: #222; padding: 10px; border-radius: 4px;"></div></div></div>
+    <div id="game-over-modal" class="modal" style="display: none;"><div class="modal-content" style="text-align: center;"><h2 style="color: #f44336;">Game Over</h2><p id="game-over-message" style="color: #ddd;"></p><p style="color: #999; font-size: 0.9em;">No power in this world can undo this — resurrection and true teleportation both demand the resources of an entire nation, and some of what they require can't be bought at any price.</p><div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;"><button id="game-over-load-btn" style="background-color: #2196F3;">Load Game</button><button id="game-over-menu-btn" style="background-color: #607d8b;">Main Menu</button></div></div></div>
+    <div id="mercenary-creation-modal" class="modal" style="display: none;"><div class="modal-content"><h2>Hire Mercenary (100 Gold)</h2><div class="form-group"><label for="merc-name">Name:</label><input type="text" id="merc-name" placeholder="Leave blank for random name"></div><div class="form-group"><label for="merc-race">Race:</label><select id="merc-race"><option value="human">Human</option><option value="dwarf">Dwarf</option><option value="elf">Elf</option><option value="goblin">Goblin</option><option value="orc">Orc</option></select></div><div class="form-group"><label for="merc-gender">Gender:</label><select id="merc-gender"><option value="female">Female</option><option value="male">Male</option></select></div><div class="form-group"><label for="merc-class">Class:</label><select id="merc-class"><option value="fighter">Fighter</option><option value="rogue">Rogue</option><option value="cleric">Cleric</option><option value="wizard">Wizard</option><option value="druid">Druid</option><option value="monk">Monk</option></select></div><div class="form-group"><label for="merc-voice-select">Voice:</label><div style="display: flex; gap: 10px;"><select id="merc-voice-select" style="flex: 1;"><option value="pc_1">Voice 1</option></select><button onclick="window.testVoice(document.getElementById('merc-voice-select').value)" style="width: auto; padding: 5px 10px; font-size: 0.8em; background: #607d8b;">Test Voice</button></div></div><div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;"><button id="confirm-hire-btn">Hire</button><button id="cancel-hire-btn" style="background: #777;">Cancel</button></div></div></div>
+    <div id="end-run-modal" class="modal" style="display: none;"><div class="modal-content"><h2>Run Ended</h2><p id="end-run-message"></p><div id="reward-choices" style="display: flex; gap: 20px; justify-content: space-around; margin-top: 20px;"></div></div></div>
+    <div id="entity-details-modal" class="modal" style="display: none;"><div class="modal-content"><button class="close-btn" id="close-entity-details-modal">&times;</button><h2 id="entity-details-name">Entity Details</h2><div id="entity-details-content"></div></div></div>
+    <div id="settings-modal" class="modal" style="display: none;"><div class="modal-content" style="max-width: 400px;"><button class="close-btn" id="close-settings-modal">&times;</button><h2>Settings</h2><div id="multiplayer-room-info-ingame" style="background: #2c3e50; padding: 10px; border-radius: 4px; margin-bottom: 20px; text-align: center; display: none;"><div style="font-size: 0.8em; color: #bdc3c7;">Multiplayer Room Code</div><div id="ingame-room-code" style="font-size: 1.5em; font-weight: bold; color: #f1c40f;">----</div><div id="ingame-player-list" style="font-size: 0.7em; margin-top: 5px; color: #ecf0f1;">Players: 1</div></div><div id="host-game-container" style="margin-bottom: 20px;"><button id="host-game-btn" style="background-color: #2980b9; width: 100%; padding: 10px;">Host This Game (Multiplayer)</button></div><div id="settings-content">
+        <h3>Audio Volume</h3><div class="form-group"><label>Master Volume</label><input type="range" id="volume-master" min="0" max="1" step="0.01" value="1" oninput="window.updateAudioSetting('master', this.value)"></div><div class="form-group"><label>Music Volume</label><input type="range" id="volume-music" min="0" max="1" step="0.01" value="0.7" oninput="window.updateAudioSetting('music', this.value)"></div><div class="form-group"><label>Effects Volume</label><input type="range" id="volume-effects" min="0" max="1" step="0.01" value="0.8" oninput="window.updateAudioSetting('effects', this.value)"></div><div class="form-group"><label>Dialogue Volume</label><input type="range" id="volume-dialogue" min="0" max="1" step="0.01" value="1" oninput="window.updateAudioSetting('dialogue', this.value)"></div>
+        <h3>Allegiance Hex Outlines</h3><div class="form-group"><label>Show colored hex outlines around characters</label><select id="allegiance-outline-mode" onchange="window.setAllegianceOutlineMode(this.value)"><option value="combat">On during combat (default)</option><option value="always">Always on</option><option value="never">Always off</option></select></div>
+        <h3>Graphics</h3><div class="form-group"><label>Frame Rate</label><select id="graphics-framerate-mode" onchange="window.setFrameRateMode(this.value)"><option value="auto">Auto (recommended)</option><option value="60">60 fps</option><option value="30">30 fps</option><option value="15">15 fps</option></select></div><div class="form-group"><label>Render Scale</label><select id="graphics-render-scale" onchange="window.setRenderScale(this.value)"><option value="1">100%</option><option value="0.75">75%</option><option value="0.5">50%</option></select></div><div class="form-group"><label><input type="checkbox" id="graphics-reduce-motion" onchange="window.setReduceMotion(this.checked)"> Reduce motion (screen shake, lunge, floating text drift)</label></div><div class="form-group"><label>Foliage Detail</label><select id="graphics-foliage-detail" onchange="window.setFoliageDetail(this.value)"><option value="full">Full</option><option value="simple">Simple (faster)</option></select></div>
+        <h3>Save Code</h3><div class="form-group"><label>Copy this to move your save between devices, or between browser testing and the installed app</label><div style="display:flex; gap:8px;"><button id="export-save-code-btn" style="flex:1;" onclick="window.handleExportSaveCode()">Export Save Code</button></div><textarea id="save-code-textarea" rows="3" style="width:100%; margin-top:8px; font-size:0.7em;" placeholder="Paste a save code here to import it"></textarea><div style="display:flex; gap:8px; margin-top:4px;"><button id="import-save-code-btn" style="flex:1;" onclick="window.handleImportSaveCode()">Import Save Code</button></div></div>
+        <h3>Tutorial Mode</h3><div class="form-group"><label><input type="checkbox" id="tutorial-mode-toggle" onchange="window.setTutorialModeEnabled(this.checked)"> Explain new things the first time they happen</label></div><div class="form-group" style="display:flex; gap:8px;"><button onclick="window.resetTutorialMemory()" style="flex:1;">Reset Tutorial Tips</button></div>
+    </div></div></div>
 
     <script src="vendor/socket.io.min.js"></script>
     <!-- Cache-busting: every local script below shares one ?v=N query param.
@@ -649,7 +294,7 @@
     <script src="characterCreation.js?v=5"></script>
     <script src="spriteRecolor.js?v=6"></script>
     <script src="hexMap.js?v=5"></script>
-    <script src="graphicsSettings.js?v=6"></script>
+    <script src="graphicsSettings.js?v=7"></script>
     <script src="terrain.js?v=5"></script>
     <script src="entities.js?v=7"></script>
     <script src="monsters.js?v=5"></script>
