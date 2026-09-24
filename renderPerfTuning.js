@@ -72,11 +72,13 @@
 
     // Sparse persistent wilderness incidents: discoveries can become stories
     // and consequences without filling the map with permanent quest markers.
-    // Order matters: consequences wrap the base incident API, then faction
-    // beliefs refine choices based on what each faction actually knows.
+    // Order matters: consequences wrap the base incident API, faction beliefs
+    // refine choices, then the living-world layer creates people/reports from
+    // what actually happened without granting factions omniscient knowledge.
     load('script[data-wilderness-incidents]', 'wildernessIncidents.js', 'wildernessIncidents');
     load('script[data-wilderness-consequences]', 'wildernessConsequences.js', 'wildernessConsequences');
     load('script[data-wilderness-faction-beliefs]', 'wildernessFactionBeliefs.js', 'wildernessFactionBeliefs');
+    load('script[data-wilderness-living-world]', 'wildernessLivingWorld.js', 'wildernessLivingWorld');
 
     load('script[data-silverhart-capital-rebuild]', 'silverhartCapitalRebuild.js', 'silverhartCapitalRebuild');
     load('script[data-silverhart-capital-completion]', 'silverhartCapitalCompletion.js', 'silverhartCapitalCompletion');
