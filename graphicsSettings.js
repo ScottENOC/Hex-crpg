@@ -58,9 +58,6 @@ function setFoliageDetail(mode) {
 }
 window.setFoliageDetail = setFoliageDetail;
 
-// Sync the settings-modal controls to the persisted values whenever the
-// modal opens, same pattern as the existing allegiance-outline/tutorial
-// controls (ui.js's openSettingsModal-equivalent code).
 function syncGraphicsSettingsUI() {
     const fr = document.getElementById('graphics-framerate-mode');
     if (fr) fr.value = window.frameRateMode;
@@ -159,18 +156,17 @@ document.addEventListener('DOMContentLoaded', () => {
         window.getEntityAtHex = fastGetEntityAtHex;
     }
 
-    // Final player-visibility result cache. hexMap already memoises individual
-    // LOS rays, but at very low zoom drawMap still asks "can the party see this
-    // hex?" thousands of times per frame and repeats the party/light/range
-    // loops even when nobody has moved. Cache that final boolean until a
-    // friendly position/vision/light fingerprint changes or terrain explicitly
-    // invalidates visibility. This changes no LOS rules; it only reuses the
-    // same answer while all of its inputs are unchanged.
+    // Cache the final party-visibility answer across render frames. The prior
+    // version rebuilt the party/light fingerprint inside every single hex
+    // query; at 0.15x zoom that turned cache bookkeeping into millions of
+    // entity scans. Refresh once before a real map frame instead, then each
+    // query is just a Map lookup (plus a cheap range reject on misses).
     let visibilityResultCache = new Map();
     let visibilityFingerprint = null;
     let cachedVisibilityFriendlies = [];
+    let cachedVisibilityRanges = [];
     const visibilityStats = window.performanceVisibilityCacheStats = {
-        hits: 0, misses: 0, clears: 0, entries: 0
+        hits: 0, misses: 0, rangeRejects: 0, clears: 0, entries: 0, refreshes: 0
     };
     if (window.isVisibleToPlayer && !window.isVisibleToPlayer.__finalResultCached) {
         const originalIsVisibleToPlayer = window.isVisibleToPlayer;
@@ -185,22 +181,49 @@ document.addEventListener('DOMContentLoaded', () => {
         function refreshFinalVisibilityFingerprint() {
             const friendlies = (window.entities || []).filter(e => e.alive && e.side === 'player');
             const parts = friendlies.map(f => `${f.hex.q},${f.hex.r}:${f.visionBonus || 0}:${(f.skills?.elf_darkvision || f.skills?.goblin_low_light_eyes) ? 1 : 0}`);
+            // Moving entity light sources can make a distant target visible, so
+            // include only entities that actually emit equipped light in the
+            // once-per-frame fingerprint rather than invalidating for every NPC.
+            const lightParts = [];
+            for (const e of (window.entities || [])) {
+                if (!e?.alive || !e.equipped) continue;
+                let radius = 0;
+                for (const iid of [e.equipped.weapon, e.equipped.offhand, e.equipped.accessory]) {
+                    if (iid && window.items?.[iid]?.lightRadius) radius = Math.max(radius, window.items[iid].lightRadius);
+                }
+                if (radius > 0) lightParts.push(`${e.hex.q},${e.hex.r}:${radius}`);
+            }
             parts.push(`L${(window.lightLevel || 1).toFixed(2)}`);
+            if (lightParts.length) parts.push(`E${lightParts.join(';')}`);
             const next = parts.join('|');
             if (next !== visibilityFingerprint) {
                 visibilityFingerprint = next;
-                cachedVisibilityFriendlies = friendlies;
                 clearFinalVisibilityCache();
-            } else {
-                cachedVisibilityFriendlies = friendlies;
             }
+            cachedVisibilityFriendlies = friendlies;
+            cachedVisibilityRanges = friendlies.map(f => (window.LIVE_VISION_RANGE || 25) + (f.visionBonus || 0));
+            visibilityStats.refreshes++;
             return cachedVisibilityFriendlies;
         }
 
+        function definitelyOutOfLiveRange(targetHex) {
+            for (let i = 0; i < cachedVisibilityFriendlies.length; i++) {
+                const f = cachedVisibilityFriendlies[i];
+                const range = cachedVisibilityRanges[i];
+                const hexes = f.getAllHexes ? f.getAllHexes() : [f.hex];
+                for (const h of hexes) {
+                    const dq = h.q - targetHex.q;
+                    const dr = h.r - targetHex.r;
+                    const dist = (Math.abs(dq) + Math.abs(dq + dr) + Math.abs(dr)) / 2;
+                    if (dist <= range) return false;
+                }
+            }
+            return true;
+        }
+
         const cachedIsVisibleToPlayer = function(targetHex, friendliesOverride) {
-            const canonicalFriendlies = refreshFinalVisibilityFingerprint();
-            // A few specialised callers may deliberately pass a subset of the
-            // party. Preserve their exact semantics by bypassing this cache.
+            if (!cachedVisibilityFriendlies.length) refreshFinalVisibilityFingerprint();
+            const canonicalFriendlies = cachedVisibilityFriendlies;
             if (friendliesOverride && (friendliesOverride.length !== canonicalFriendlies.length ||
                 friendliesOverride.some((f, i) => f !== canonicalFriendlies[i]))) {
                 return originalIsVisibleToPlayer(targetHex, friendliesOverride);
@@ -211,6 +234,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 return visibilityResultCache.get(key);
             }
             visibilityStats.misses++;
+            if (definitelyOutOfLiveRange(targetHex)) {
+                visibilityStats.rangeRejects++;
+                visibilityResultCache.set(key, false);
+                visibilityStats.entries = visibilityResultCache.size;
+                return false;
+            }
             const result = originalIsVisibleToPlayer(targetHex, canonicalFriendlies);
             visibilityResultCache.set(key, result);
             visibilityStats.entries = visibilityResultCache.size;
@@ -225,6 +254,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const combinedInvalidator = function(...args) {
                 clearFinalVisibilityCache();
                 visibilityFingerprint = null;
+                cachedVisibilityFriendlies = [];
+                cachedVisibilityRanges = [];
                 return originalInvalidateVisibilityCache.apply(this, args);
             };
             combinedInvalidator.__finalResultInvalidator = true;
@@ -356,7 +387,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!perfOverlay) return;
             const s = window.performanceRenderStats || {};
             const v = window.performanceVisibilityCacheStats || {};
-            perfOverlay.textContent = `entities ${(window.entities || []).length}\nzoom ${(window.cameraZoom || 1).toFixed(2)}\nframe ${(s.lastFrameMs || 0).toFixed(1)} ms\navg ${(s.avgFrameMs || 0).toFixed(1)} ms\nmap other ${(s.avgMapOtherMs || 0).toFixed(1)} ms\nentities ${(s.avgEntitiesMs || 0).toFixed(1)} ms\nvis cache ${v.hits || 0}/${(v.hits || 0) + (v.misses || 0)}\ncoalesced ${s.coalesced || 0}`;
+            const totalVis = (v.hits || 0) + (v.misses || 0);
+            perfOverlay.textContent = `entities ${(window.entities || []).length}\nzoom ${(window.cameraZoom || 1).toFixed(2)}\nframe ${(s.lastFrameMs || 0).toFixed(1)} ms\navg ${(s.avgFrameMs || 0).toFixed(1)} ms\nmap other ${(s.avgMapOtherMs || 0).toFixed(1)} ms\nentities ${(s.avgEntitiesMs || 0).toFixed(1)} ms\nvis hit ${(v.hits || 0)}/${totalVis} reject ${v.rangeRejects || 0}\ncoalesced ${s.coalesced || 0}`;
             requestAnimationFrame(update);
         };
         requestAnimationFrame(update);
