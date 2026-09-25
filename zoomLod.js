@@ -73,10 +73,10 @@
     }
 
     function destinationSize(args, source) {
-        // Canvas drawImage signatures: (img, dx, dy), (img, dx, dy, dw, dh),
-        // or (img, sx, sy, sw, sh, dx, dy, dw, dh).
-        if (args.length >= 9) return { w: Math.abs(Number(args[7])) || 0, h: Math.abs(Number(args[8])) || 0 };
-        if (args.length >= 5) return { w: Math.abs(Number(args[3])) || 0, h: Math.abs(Number(args[4])) || 0 };
+        // `source` has already been split off by wrappedDrawImage, so the
+        // remaining signatures contain 2, 4 or 8 arguments respectively.
+        if (args.length >= 8) return { w: Math.abs(Number(args[6])) || 0, h: Math.abs(Number(args[7])) || 0 };
+        if (args.length >= 4) return { w: Math.abs(Number(args[2])) || 0, h: Math.abs(Number(args[3])) || 0 };
         const w = source?.naturalWidth || source?.width || Infinity;
         const h = source?.naturalHeight || source?.height || Infinity;
         return { w, h };
