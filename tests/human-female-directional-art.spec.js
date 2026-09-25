@@ -57,11 +57,43 @@ test.describe('human female directional art', () => {
             };
         });
 
-        // Long braid needs a taller source crop so its crown is not cut off.
         expect(geometry.braid.crop.y).toBeLessThan(geometry.shoulder.crop.y - 0.05);
         expect(geometry.braid.crop.h).toBeGreaterThan(geometry.shoulder.crop.h + 0.08);
-        // Short curls sit roughly half a head higher than the generic placement.
         expect(geometry.curls.dest.y).toBeLessThan(geometry.shoulder.dest.y - 0.05);
+    });
+
+    test('gives broad bodies wider authored geometry and moves weapons outward/down', async ({ page }) => {
+        await page.waitForFunction(() => window.__directionalBodyTypeTuningInstalled === true && window.__directionalWeaponTuningApplied === true);
+        const result = await page.evaluate(() => {
+            const layout = window.HUMAN_FEMALE_DIRECTIONAL_LAYOUT;
+            const readBody = (bodyType, view) => {
+                window.__activeCharacterEntity = { bodyType };
+                const value = {
+                    crop:{ ...layout[view].bodyCrop },
+                    dest:{ ...layout[view].bodyDest },
+                };
+                delete window.__activeCharacterEntity;
+                return value;
+            };
+            const bounds={left:0,top:0,width:100,height:200};
+            window.__activeCharacterFacing='down';
+            const main = window.getCharacterAttachmentPoint('human_female','mainHand',bounds);
+            const off = window.getCharacterAttachmentPoint('human_female','offHand',bounds);
+            delete window.__activeCharacterFacing;
+            return {
+                average:readBody('average','front'),
+                broad:readBody('broad','front'),
+                main,
+                off,
+            };
+        });
+
+        expect(result.broad.crop.w).toBeGreaterThan(result.average.crop.w + 0.08);
+        expect(result.broad.dest.w).toBeGreaterThan(result.average.dest.w + 0.10);
+        expect(result.main.x).toBeLessThan(30);
+        expect(result.off.x).toBeGreaterThan(80);
+        expect(result.main.y).toBeGreaterThan(140);
+        expect(result.off.y).toBeGreaterThan(140);
     });
 
     test('preloads all six directional images successfully', async ({ page }) => {
