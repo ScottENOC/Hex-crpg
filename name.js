@@ -29,22 +29,17 @@ window.getRandomName = function(race, gender) {
 window.generateName = window.getRandomName;
 
 (() => {
-    function randomInt(min, max) {
-        return min + Math.floor(Math.random() * (max - min + 1));
-    }
+    function randomInt(min, max) { return min + Math.floor(Math.random() * (max - min + 1)); }
     function setRandomSlider(id) {
         const el = document.getElementById(id);
         if (!el) return;
-        const min = Number(el.min || 0);
-        const max = Number(el.max || 100);
-        el.value = String(randomInt(min, max));
+        el.value = String(randomInt(Number(el.min || 0), Number(el.max || 100)));
     }
     function setRandomSelect(id) {
         const el = document.getElementById(id);
         if (!el || !el.options.length) return;
         const options = Array.from(el.options).filter(option => !option.disabled);
-        if (!options.length) return;
-        el.value = options[randomInt(0, options.length - 1)].value;
+        if (options.length) el.value = options[randomInt(0, options.length - 1)].value;
     }
     window.randomizeCharacterAppearance = function({ sync = true } = {}) {
         setRandomSlider('shirt-hue-slider');
@@ -104,16 +99,13 @@ window.generateName = window.getRandomName;
     window.randomizeCharacterAppearance({ sync:false });
 })();
 
-// Build token for dynamically loaded presentation/performance modules. Bump
-// this whenever presentation code changes so Safari/iOS cannot retain an older
-// facing or UI renderer under a reused URL.
+// This single token versions every dynamically loaded presentation module.
 const PRESENTATION_BUILD = '20260925-directional-sprite-refresh';
-const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
+const freshScriptUrl = path => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
 
-// Read the deployed version from the actual source of the module cache token.
-// Previously the checker read index.html, which could drift out of sync with
-// this value and falsely report that an old in-memory app was current.
+// Check the deployed name.js rather than a second version marker in index.html.
+// That keeps update detection tied to the same token that versions the renderer.
 async function fetchRemotePresentationBuild() {
     const response = await fetch(`name.js?app-update-check=${Date.now()}`, { cache:'no-store' });
     if (!response.ok) return null;
@@ -159,52 +151,23 @@ document.addEventListener('visibilitychange', () => {
 });
 
 if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register(`sw.js?build=${encodeURIComponent(PRESENTATION_BUILD)}`, {
-        updateViaCache: 'none'
-    }).catch(err => console.warn('Service worker registration failed:', err));
+    navigator.serviceWorker.register(`sw.js?build=${encodeURIComponent(PRESENTATION_BUILD)}`, { updateViaCache: 'none' })
+        .catch(err => console.warn('Service worker registration failed:', err));
 }
 
 (() => {
-    if (!document.querySelector('script[data-render-perf-tuning]')) {
-        const perf = document.createElement('script');
-        perf.src = freshScriptUrl('renderPerfTuning.js');
-        perf.dataset.renderPerfTuning = 'true';
-        perf.async = false;
-        document.head.appendChild(perf);
-    }
-    if (!document.querySelector('script[data-facing-system]')) {
-        const facing = document.createElement('script');
-        facing.src = freshScriptUrl('facingSystem.js');
-        facing.dataset.facingSystem = 'true';
-        facing.async = false;
-        document.head.appendChild(facing);
-    }
-    if (!document.querySelector('script[data-directional-hair-tuning]')) {
-        const tuning = document.createElement('script');
-        tuning.src = freshScriptUrl('directionalHairTuning.js');
-        tuning.dataset.directionalHairTuning = 'true';
-        tuning.async = false;
-        document.head.appendChild(tuning);
-    }
-    if (!document.querySelector('script[data-directional-weapon-tuning]')) {
-        const weaponTuning = document.createElement('script');
-        weaponTuning.src = freshScriptUrl('directionalWeaponTuning.js');
-        weaponTuning.dataset.directionalWeaponTuning = 'true';
-        weaponTuning.async = false;
-        document.head.appendChild(weaponTuning);
-    }
-    if (!document.querySelector('script[data-directional-character-ui]')) {
-        const ui = document.createElement('script');
-        ui.src = freshScriptUrl('directionalCharacterUI.js');
-        ui.dataset.directionalCharacterUi = 'true';
-        ui.async = false;
-        document.head.appendChild(ui);
-    }
-    if (!document.querySelector('script[data-race-skin-palettes]')) {
-        const palettes = document.createElement('script');
-        palettes.src = freshScriptUrl('raceSkinPalettes.js');
-        palettes.dataset.raceSkinPalettes = 'true';
-        palettes.async = false;
-        document.head.appendChild(palettes);
-    }
+    const load = (selector, path, datasetName) => {
+        if (document.querySelector(selector)) return;
+        const script = document.createElement('script');
+        script.src = freshScriptUrl(path);
+        script.dataset[datasetName] = 'true';
+        script.async = false;
+        document.head.appendChild(script);
+    };
+    load('script[data-render-perf-tuning]', 'renderPerfTuning.js', 'renderPerfTuning');
+    load('script[data-facing-system]', 'facingSystem.js', 'facingSystem');
+    load('script[data-directional-hair-tuning]', 'directionalHairTuning.js', 'directionalHairTuning');
+    load('script[data-directional-weapon-tuning]', 'directionalWeaponTuning.js', 'directionalWeaponTuning');
+    load('script[data-directional-character-ui]', 'directionalCharacterUI.js', 'directionalCharacterUi');
+    load('script[data-race-skin-palettes]', 'raceSkinPalettes.js', 'raceSkinPalettes');
 })();
