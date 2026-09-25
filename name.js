@@ -123,16 +123,24 @@ const PRESENTATION_BUILD = '20260925-directional-sprite-refresh';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
 
+// Read the deployed build from name.js itself. Presentation modules are all
+// versioned from this token, so this cannot drift away from the thing we are
+// actually trying to refresh (which previously happened with index.html).
+async function fetchRemotePresentationBuild() {
+    const response = await fetch(`name.js?app-update-check=${Date.now()}`, { cache:'no-store' });
+    if (!response.ok) return null;
+    const source = await response.text();
+    const match = source.match(/const\s+PRESENTATION_BUILD\s*=\s*['\"]([^'\"]+)['\"]/);
+    return match?.[1] || null;
+}
+window.fetchRemotePresentationBuild = fetchRemotePresentationBuild;
+
 let appBuildCheckInFlight = null;
 window.checkForAppUpdate = function({ reload = true } = {}) {
     if (appBuildCheckInFlight) return appBuildCheckInFlight;
     appBuildCheckInFlight = (async () => {
         try {
-            const response = await fetch(`index.html?app-update-check=${Date.now()}`, { cache:'no-store' });
-            if (!response.ok) return false;
-            const html = await response.text();
-            const doc = new DOMParser().parseFromString(html, 'text/html');
-            const remoteBuild = doc.querySelector('meta[name="app-build"]')?.content;
+            const remoteBuild = await fetchRemotePresentationBuild();
             if (!remoteBuild || remoteBuild === PRESENTATION_BUILD) return false;
             if (reload) {
                 if ('caches' in window) {
