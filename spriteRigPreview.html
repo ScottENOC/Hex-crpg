@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Human Female Sprite Rig Preview</title>
+<style>
+body{margin:0;padding:20px;background:#101216;color:#eee;font:14px system-ui,sans-serif}h1{margin:0 0 8px}.note{max-width:900px;color:#b8c0cc;margin-bottom:18px}.grid{display:grid;grid-template-columns:repeat(3,minmax(290px,1fr));gap:14px;align-items:start}.row-heading{grid-column:1/-1;margin:18px 0 0;border-bottom:1px solid #39404a;padding-bottom:5px}.preview-card{background:#20242a;border:1px solid #39404a;border-radius:8px;padding:10px}.preview-card h3{text-transform:capitalize;margin:0 0 8px}.preview-card canvas{display:block;width:100%;max-width:290px;height:auto;margin:auto;background:#181818}.status{white-space:pre-wrap;color:#ffb4ab}@media(max-width:920px){.grid{grid-template-columns:1fr}.row-heading{grid-column:1}}
+</style>
+</head>
+<body>
+<h1>Human female sprite rig preview</h1>
+<p class="note">Validation sheet for the first trim/anchor tranche. Cyan markers are shared semantic anchors with independently-authored front, side and back coordinates. Current PNGs remain physically untrimmed; the same renderer will preserve logical placement once trim metadata is populated for cropped files.</p>
+<div id="status" class="status"></div>
+<main id="preview-grid" class="grid"></main>
+<script src="spriteRigging.js"></script>
+<script src="spriteRigPreview.js"></script>
+</body>
+</html>
