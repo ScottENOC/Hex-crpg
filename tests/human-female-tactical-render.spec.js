@@ -36,8 +36,6 @@ function nearDuplicateBodies(bodies) {
 
 test.describe('human female tactical-map render path', () => {
     test('does not double-draw a directional body and never draws legacy female art', async ({ page }) => {
-        // Instrument before app code so all final canvas draws remain observable,
-        // including drawImage functions captured/bound by renderer wrappers.
         await page.addInitScript(() => {
             const nativeDrawImage = CanvasRenderingContext2D.prototype.drawImage;
             const nativeClearRect = CanvasRenderingContext2D.prototype.clearRect;
@@ -70,9 +68,11 @@ test.describe('human female tactical-map render path', () => {
                 && assets.body.front.naturalWidth > 0;
         });
 
-        // Observe the inputs to the fully-installed map drawImage chain as well
-        // as the final prototype draws. This pinpoints which legacy layer, if any,
-        // is causing a second directional replacement and records its call site.
+        // This is the production contract that previously broke: gameEngine's
+        // CHAR_CONFIG is script-local, so the tactical renderer must install
+        // without relying on window.CHAR_CONFIG existing.
+        expect(await page.evaluate(() => !!window.CHAR_CONFIG)).toBe(false);
+
         await page.evaluate(() => {
             const ctx = window.mapCtx;
             const downstream = ctx.drawImage.bind(ctx);
@@ -88,6 +88,8 @@ test.describe('human female tactical-map render path', () => {
                 return downstream(image, ...args);
             };
             window.__tacticalDrawImageCalls.length = 0;
+            window.drawMap();
+            window.renderEntities();
         });
 
         await page.waitForFunction(() => (window.__tacticalDrawImageCalls || []).some(call =>
