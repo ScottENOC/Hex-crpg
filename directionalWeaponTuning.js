@@ -11,22 +11,21 @@
         const grips = window.ITEM_GRIPS;
         if (!rigs || !grips) return false;
 
-        // Live-map correction: weapons were still sitting too close to the
-        // character/camera centre and slightly too high. Push the hands farther
-        // out toward the silhouette edges and down by roughly another 6% of
-        // body height. Keep front/back mirrored around the body centre.
+        // Live-map correction: preserve the now-correct vertical placement but
+        // push BOTH weapon hands farther away from the body centre. Keep the
+        // pair exactly symmetric about x=0.5 so off-hand gets the same outward
+        // correction as main-hand rather than drifting inward.
         if (rigs.front) {
-            rigs.front.mainHand = { x:0.24, y:0.73 };
-            rigs.front.offHand = { x:0.86, y:0.73 };
+            rigs.front.mainHand = { x:0.18, y:0.73 };
+            rigs.front.offHand = { x:0.82, y:0.73 };
         }
         if (rigs.back) {
-            rigs.back.mainHand = { x:0.86, y:0.73 };
-            rigs.back.offHand = { x:0.24, y:0.73 };
+            rigs.back.mainHand = { x:0.82, y:0.73 };
+            rigs.back.offHand = { x:0.18, y:0.73 };
         }
 
         // Side-facing weapon placement is partly determined by the item's grip
-        // point. Lower the visual weapon slightly without changing its size.
-        // Horizontal side mirroring remains in facingSystem.
+        // point. Keep the proven vertical grip tuning unchanged.
         const gripAdjustments = {
             sword:  { x:0.56, y:0.79 },
             axe:    { x:0.56, y:0.69 },
