@@ -119,7 +119,7 @@ window.generateName = window.getRandomName;
     window.randomizeCharacterAppearance({ sync:false });
 })();
 
-const PRESENTATION_BUILD = '20260925-body-weapon-geometry';
+const PRESENTATION_BUILD = '20260925-equipment-fit';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
 
@@ -204,6 +204,14 @@ if ('serviceWorker' in navigator) {
         weaponTuning.dataset.directionalWeaponTuning = 'true';
         weaponTuning.async = false;
         document.head.appendChild(weaponTuning);
+    }
+
+    if (!document.querySelector('script[data-directional-equipment-tuning]')) {
+        const equipmentTuning = document.createElement('script');
+        equipmentTuning.src = freshScriptUrl('directionalEquipmentTuning.js');
+        equipmentTuning.dataset.directionalEquipmentTuning = 'true';
+        equipmentTuning.async = false;
+        document.head.appendChild(equipmentTuning);
     }
 
     if (!document.querySelector('script[data-directional-character-ui]')) {
