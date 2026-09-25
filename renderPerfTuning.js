@@ -104,6 +104,11 @@
     load('script[data-siege-actor-sector-integration]', 'siegeActorSectorIntegration.js', 'siegeActorSectorIntegration');
     load('script[data-siege-actor-reconciliation]', 'siegeActorReconciliation.js', 'siegeActorReconciliation');
 
+    // Extended profiler diagnostics and the explicit ring-0/1 visibility rule.
+    // Loaded here so it is present in normal gameplay even when profiling is
+    // disabled; its expensive sampling/experiments only run while requested.
+    load('script[data-performance-diagnostics]', 'performanceDiagnostics.js', 'performanceDiagnostics');
+
     function installVisibilityBounds() {
         const original = window.isVisibleToPlayer;
         if (typeof original !== 'function' || original.__wideZoomBounds) return false;
