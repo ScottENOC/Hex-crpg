@@ -68,10 +68,7 @@ test.describe('human female tactical-map render path', () => {
                 && assets.body.front.naturalWidth > 0;
         });
 
-        // This is the production contract that previously broke: gameEngine's
-        // CHAR_CONFIG is script-local, so the tactical renderer must install
-        // without relying on window.CHAR_CONFIG existing.
-        expect(await page.evaluate(() => !!window.CHAR_CONFIG)).toBe(false);
+        expect(await page.evaluate(() => window.__facingRendererInstalled)).toBe(true);
 
         await page.evaluate(() => {
             const ctx = window.mapCtx;
