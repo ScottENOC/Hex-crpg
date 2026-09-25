@@ -1,7 +1,6 @@
 // spriteRigging.js
-// Additive sprite metadata + composition helpers. This first tranche is
-// deliberately opt-in: existing production draws are unchanged until an
-// image is explicitly rendered through drawTrimAwareSprite.
+// Sprite trim metadata + composition helpers. Metadata describes the logical
+// pre-trim canvas so physically cropped PNGs can keep their authored placement.
 (() => {
     'use strict';
 
@@ -87,6 +86,32 @@
         shield: 'images/shield.png',
     };
 
+    // Physical trim metadata is asset-specific. The reference rig owns the
+    // canonical average body entries; other currently-untrimmed human-female
+    // layers are registered here so the production renderer can already use
+    // the same code path without changing their pixels or placement.
+    const SPRITE_TRIM_METADATA_BY_PATH = {};
+    function registerTrimMetadata(metadata) {
+        if (!metadata?.path) return metadata;
+        SPRITE_TRIM_METADATA_BY_PATH[metadata.path] = metadata;
+        return metadata;
+    }
+    Object.values(HUMAN_FEMALE_REFERENCE_RIGS).forEach(rig => registerTrimMetadata(rig.sprite));
+    [
+        'images/characters/human_female/body_broad_front.png',
+        'images/characters/human_female/body_broad_side.png',
+        'images/characters/human_female/body_broad_back.png',
+        'images/characters/human_female/hair_brown_1_front.png',
+        'images/characters/human_female/hair_brown_1_side.png',
+        'images/characters/human_female/hair_brown_1_back.png',
+        'images/characters/human_female/hair_braid_front.png',
+        'images/characters/human_female/hair_braid_side.png',
+        'images/characters/human_female/hair_braid_back.png',
+        'images/characters/human_female/hair_curly_front.png',
+        'images/characters/human_female/hair_curly_side.png',
+        'images/characters/human_female/hair_curly_back.png',
+    ].forEach(path => registerTrimMetadata(untrimmedMetadata(path)));
+
     function resolveTrimMetadata(metadata, image) {
         const iw = image?.naturalWidth || image?.width || 0;
         const ih = image?.naturalHeight || image?.height || 0;
@@ -134,6 +159,79 @@
         return dest;
     }
 
+    function normaliseAssetPath(value) {
+        if (!value) return '';
+        const raw = String(value);
+        try {
+            const url = new URL(raw, typeof document !== 'undefined' ? document.baseURI : 'http://local/');
+            return url.pathname.replace(/^\//, '');
+        } catch (_) {
+            return raw.replace(/^\//, '').split('?')[0].split('#')[0];
+        }
+    }
+
+    function sourcePathForImage(image) {
+        const source = image?.__recolorBaseSource || image;
+        return normaliseAssetPath(source?.src);
+    }
+
+    function getTrimMetadataForImage(image) {
+        return SPRITE_TRIM_METADATA_BY_PATH[sourcePathForImage(image)] || null;
+    }
+
+    // Trim-aware equivalent of the production renderer's authored crop draw.
+    // `crop` is normalised to the ORIGINAL full canvas, while `dest` is
+    // normalised to the character bounds. If the physical file has been
+    // trimmed, draw only the crop/trim intersection and move that fragment to
+    // the same place it occupied before trimming. Returns false for an
+    // unregistered asset so callers can safely fall back to their legacy draw.
+    function drawTrimAwareCroppedSprite(nativeDraw, image, crop, dest, bounds, metadata = null) {
+        if (typeof nativeDraw !== 'function' || !image || !crop || !dest || !bounds) return false;
+        const trimMetadata = metadata || getTrimMetadataForImage(image);
+        if (!trimMetadata) return false;
+
+        const trim = resolveTrimMetadata(trimMetadata, image);
+        const iw = image.naturalWidth || image.width;
+        const ih = image.naturalHeight || image.height;
+        if (!iw || !ih) return false;
+
+        const cropPx = {
+            x: crop.x * trim.originalWidth,
+            y: crop.y * trim.originalHeight,
+            width: crop.w * trim.originalWidth,
+            height: crop.h * trim.originalHeight,
+        };
+        if (cropPx.width <= 0 || cropPx.height <= 0) return true;
+
+        const left = Math.max(cropPx.x, trim.trimLeft);
+        const top = Math.max(cropPx.y, trim.trimTop);
+        const right = Math.min(cropPx.x + cropPx.width, trim.trimLeft + trim.trimWidth);
+        const bottom = Math.min(cropPx.y + cropPx.height, trim.trimTop + trim.trimHeight);
+        if (right <= left || bottom <= top) return true;
+
+        // Physical image pixels normally equal trimWidth/trimHeight. Scale the
+        // source coordinates too so generated/recoloured canvases remain safe
+        // if a browser representation differs from the metadata pixel count.
+        const physicalScaleX = iw / trim.trimWidth;
+        const physicalScaleY = ih / trim.trimHeight;
+        const sx = (left - trim.trimLeft) * physicalScaleX;
+        const sy = (top - trim.trimTop) * physicalScaleY;
+        const sw = (right - left) * physicalScaleX;
+        const sh = (bottom - top) * physicalScaleY;
+
+        const destX = bounds.left + dest.x * bounds.width;
+        const destY = bounds.top + dest.y * bounds.height;
+        const destW = dest.w * bounds.width;
+        const destH = dest.h * bounds.height;
+        const dx = destX + ((left - cropPx.x) / cropPx.width) * destW;
+        const dy = destY + ((top - cropPx.y) / cropPx.height) * destH;
+        const dw = ((right - left) / cropPx.width) * destW;
+        const dh = ((bottom - top) / cropPx.height) * destH;
+
+        nativeDraw(image, sx, sy, sw, sh, dx, dy, dw, dh);
+        return true;
+    }
+
     function getReferenceRig(characterKey, direction) {
         return SPRITE_REFERENCE_RIGS[characterKey]?.[direction] || null;
     }
@@ -178,11 +276,14 @@
 
     window.SPRITE_TRIM_FIELDS = REQUIRED_TRIM_FIELDS;
     window.SPRITE_REFERENCE_RIGS = SPRITE_REFERENCE_RIGS;
+    window.SPRITE_TRIM_METADATA_BY_PATH = SPRITE_TRIM_METADATA_BY_PATH;
     window.HUMAN_FEMALE_REFERENCE_RIGS = HUMAN_FEMALE_REFERENCE_RIGS;
     window.HUMAN_FEMALE_PREVIEW_LAYERS = HUMAN_FEMALE_PREVIEW_LAYERS;
     window.resolveSpriteTrimMetadata = resolveTrimMetadata;
     window.computeTrimAwareDestination = computeTrimAwareDestination;
     window.drawTrimAwareSprite = drawTrimAwareSprite;
+    window.drawTrimAwareCroppedSprite = drawTrimAwareCroppedSprite;
+    window.getSpriteTrimMetadataForImage = getTrimMetadataForImage;
     window.getSpriteReferenceRig = getReferenceRig;
     window.getSpriteRigAnchor = getRigAnchor;
     window.suggestSpriteAlphaTrim = suggestAlphaTrim;
