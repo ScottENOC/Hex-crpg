@@ -25,7 +25,6 @@ window.getRandomName = function(race, gender) {
     const list = names[race][gender];
     return list[Math.floor(Math.random() * list.length)];
 };
-
 window.generateName = window.getRandomName;
 
 (() => {
@@ -99,13 +98,10 @@ window.generateName = window.getRandomName;
     window.randomizeCharacterAppearance({ sync:false });
 })();
 
-// This single token versions every dynamically loaded presentation module.
 const PRESENTATION_BUILD = '20260925-directional-sprite-refresh';
 const freshScriptUrl = path => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
 
-// Check the deployed name.js rather than a second version marker in index.html.
-// That keeps update detection tied to the same token that versions the renderer.
 async function fetchRemotePresentationBuild() {
     const response = await fetch(`name.js?app-update-check=${Date.now()}`, { cache:'no-store' });
     if (!response.ok) return null;
@@ -135,20 +131,14 @@ window.checkForAppUpdate = function({ reload = true } = {}) {
         } catch (err) {
             console.warn('App update check failed', err);
             return false;
-        } finally {
-            appBuildCheckInFlight = null;
-        }
+        } finally { appBuildCheckInFlight = null; }
     })();
     return appBuildCheckInFlight;
 };
 
 setTimeout(() => window.checkForAppUpdate(), 15000);
-setInterval(() => {
-    if (document.visibilityState === 'visible') window.checkForAppUpdate();
-}, 5 * 60 * 1000);
-document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') window.checkForAppUpdate();
-});
+setInterval(() => { if (document.visibilityState === 'visible') window.checkForAppUpdate(); }, 5 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') window.checkForAppUpdate(); });
 
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register(`sw.js?build=${encodeURIComponent(PRESENTATION_BUILD)}`, { updateViaCache: 'none' })
