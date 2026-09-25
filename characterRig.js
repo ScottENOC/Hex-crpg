@@ -19,7 +19,7 @@
 
     const ARMOUR_RIGS = {
         human_male:   { shoulderL:0.05, shoulderR:0.95, waistL:0.14, waistR:0.86, hemL:0.10, hemR:0.90, waistY:0.56 },
-        human_female: { shoulderL:0.08, shoulderR:0.92, waistL:0.20, waistR:0.80, hemL:0.12, hemR:0.88, waistY:0.55 },
+        human_female: { shoulderL:0.05, shoulderR:0.95, waistL:0.10, waistR:0.90, hemL:0.07, hemR:0.93, waistY:0.55 },
         elf_male:     { shoulderL:0.08, shoulderR:0.92, waistL:0.18, waistR:0.82, hemL:0.13, hemR:0.87, waistY:0.58 },
         elf_female:   { shoulderL:0.10, shoulderR:0.90, waistL:0.22, waistR:0.78, hemL:0.14, hemR:0.86, waistY:0.57 },
         dwarf_male:   { shoulderL:0.02, shoulderR:0.98, waistL:0.08, waistR:0.92, hemL:0.04, hemR:0.96, waistY:0.53 },
@@ -32,6 +32,19 @@
         revenant_female:{ shoulderL:0.08, shoulderR:0.92, waistL:0.19, waistR:0.81, hemL:0.12, hemR:0.88, waistY:0.55 },
         skeleton_male:{ shoulderL:0.08, shoulderR:0.92, waistL:0.18, waistR:0.82, hemL:0.12, hemR:0.88, waistY:0.56 },
         skeleton_female:{ shoulderL:0.10, shoulderR:0.90, waistL:0.21, waistR:0.79, hemL:0.14, hemR:0.86, waistY:0.55 },
+    };
+
+    // Human-female directional body art is authored as three genuinely separate
+    // views. Give armour the same treatment: each view gets a deliberately mild
+    // fit rather than forcing one aggressive hourglass mesh over every facing.
+    // The offsets stay close to the source rectangle so the affine triangles can
+    // taper/lean the layer without visibly corkscrewing plates or trim.
+    const DIRECTIONAL_ARMOUR_RIGS = {
+        human_female: {
+            front: { shoulderL:0.05, shoulderR:0.95, waistL:0.10, waistR:0.90, hemL:0.07, hemR:0.93, waistY:0.55 },
+            side:  { shoulderL:0.10, shoulderR:0.88, waistL:0.14, waistR:0.84, hemL:0.11, hemR:0.87, waistY:0.55 },
+            back:  { shoulderL:0.06, shoulderR:0.94, waistL:0.11, waistR:0.89, hemL:0.08, hemR:0.92, waistY:0.55 },
+        },
     };
 
     const ATTACHMENT_DEFAULTS = {
@@ -159,6 +172,12 @@
         if (facing === 'up') return 'back';
         if (facing === 'left' || facing === 'right') return 'side';
         return 'front';
+    }
+
+    function getArmourRigForFacing(key, facing = window.__activeCharacterFacing) {
+        const views = DIRECTIONAL_ARMOUR_RIGS[key];
+        if (!views) return ARMOUR_RIGS[key] || null;
+        return views[facingToView(facing)] || ARMOUR_RIGS[key] || null;
     }
 
     function getDirectionalAttachmentPoint(key, name) {
@@ -296,7 +315,7 @@
                 }
 
                 if(isArmourImage(img)&&(window.cameraZoom||1)>=0.55){
-                    const key=matchRaceRig(dw,dh),rig=key&&ARMOUR_RIGS[key];
+                    const key=matchRaceRig(dw,dh),rig=key&&getArmourRigForFacing(key);
                     if(rig){drawWarpedArmour(ctx,nativeDrawImage,img,rig,dx,dy,dw,dh);return;}
                 }
 
@@ -348,11 +367,13 @@
     }
 
     window.ARMOUR_RIGS=ARMOUR_RIGS;
+    window.DIRECTIONAL_ARMOUR_RIGS=DIRECTIONAL_ARMOUR_RIGS;
     window.ATTACHMENT_DEFAULTS=ATTACHMENT_DEFAULTS;
     window.DIRECTIONAL_ATTACHMENT_RIGS=DIRECTIONAL_ATTACHMENT_RIGS;
     window.ITEM_GRIPS=ITEM_GRIPS;
     window.computeArmourMeshPoints=computeMeshPoints;
     window.drawWarpedArmour=drawWarpedArmour;
+    window.getArmourRigForFacing=getArmourRigForFacing;
     window.getRigHeightScale=getHeightScaleForKey;
     window.computeRigidGearSize=computeRigidGearSize;
     window.getCharacterAttachmentRig=getAttachmentRig;
