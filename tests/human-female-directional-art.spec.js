@@ -37,6 +37,33 @@ test.describe('human female directional art', () => {
         expect(result.layout.side.bodyDest.w).toBeLessThan(result.layout.front.bodyDest.w);
     });
 
+    test('uses hairstyle-specific hair geometry', async ({ page }) => {
+        await page.waitForFunction(() => window.__directionalHairStyleTuningInstalled === true);
+        const geometry = await page.evaluate(() => {
+            const layout = window.HUMAN_FEMALE_DIRECTIONAL_LAYOUT;
+            const read = (style, view) => {
+                window.__activeCharacterEntity = { hairStyle:style };
+                const value = {
+                    crop:{ ...layout[view].hairCrop },
+                    dest:{ ...layout[view].hairDest },
+                };
+                delete window.__activeCharacterEntity;
+                return value;
+            };
+            return {
+                shoulder:read('brown_1','front'),
+                braid:read('braid','front'),
+                curls:read('curly','front'),
+            };
+        });
+
+        // Long braid needs a taller source crop so its crown is not cut off.
+        expect(geometry.braid.crop.y).toBeLessThan(geometry.shoulder.crop.y - 0.05);
+        expect(geometry.braid.crop.h).toBeGreaterThan(geometry.shoulder.crop.h + 0.08);
+        // Short curls sit roughly half a head higher than the generic placement.
+        expect(geometry.curls.dest.y).toBeLessThan(geometry.shoulder.dest.y - 0.05);
+    });
+
     test('preloads all six directional images successfully', async ({ page }) => {
         await page.waitForFunction(() => {
             const a = window.HUMAN_FEMALE_DIRECTIONAL_ASSETS;
