@@ -28,10 +28,6 @@ window.getRandomName = function(race, gender) {
 
 window.generateName = window.getRandomName;
 
-// Character-creator convenience controls. The creator itself lives in
-// index.html, but name.js is loaded immediately after that markup, so this is
-// an intentionally small place to install the two reroll buttons and choose a
-// non-prescriptive starting appearance before main.js paints the first preview.
 (() => {
     function randomInt(min, max) {
         return min + Math.floor(Math.random() * (max - min + 1));
@@ -123,7 +119,7 @@ window.generateName = window.getRandomName;
     window.randomizeCharacterAppearance({ sync:false });
 })();
 
-const PRESENTATION_BUILD = '20260925-map-directional-install';
+const PRESENTATION_BUILD = '20260925-hair-style-geometry';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
 
