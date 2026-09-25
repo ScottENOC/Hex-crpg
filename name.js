@@ -54,10 +54,6 @@ window.generateName = window.getRandomName;
     }
 
     window.randomizeCharacterAppearance = function({ sync = true } = {}) {
-        // Clothing/hair colours deliberately use their full player-facing hue
-        // wheels. Skin respects the existing Fantasy colour toggle: natural
-        // mode rerolls only the race-aware 0..100 tone ramp; fantasy mode
-        // rerolls the unrestricted 0..359 hue wheel. Never alter the toggle.
         setRandomSlider('shirt-hue-slider');
         setRandomSlider('pants-hue-slider');
         setRandomSlider('hair-hue-slider');
@@ -124,26 +120,13 @@ window.generateName = window.getRandomName;
     }
 
     installCharacterCreatorRandomControls();
-    // Start every fresh creator view from a different appearance rather than
-    // visually endorsing the old pale-skin/brown-hair hard-coded defaults.
-    // Do not generate a name automatically: leaving it blank still preserves
-    // the existing "random name when you start" behaviour.
     window.randomizeCharacterAppearance({ sync:false });
 })();
 
-// Build token for dynamically loaded presentation/performance modules. Changing
-// this value gives every deployment a new URL, avoiding stale Safari/GitHub
-// Pages script cache entries without separate per-file version numbers.
-const PRESENTATION_BUILD = '20260925-directional-sprite-refresh';
+const PRESENTATION_BUILD = '20260925-map-directional-install';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
 
-// iOS Home Screen web apps can resume an old in-memory document for days,
-// bypassing normal navigation and service-worker update checks. Compare this
-// running document with a no-cache copy of name.js whenever the app becomes
-// visible (and periodically while it remains open). The presentation build is
-// sourced from the same token that versions the modules, so it cannot drift
-// out of sync with an index.html marker.
 async function fetchRemotePresentationBuild() {
     const response = await fetch(`name.js?app-update-check=${Date.now()}`, { cache:'no-store' });
     if (!response.ok) return null;
