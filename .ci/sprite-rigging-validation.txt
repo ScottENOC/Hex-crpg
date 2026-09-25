@@ -1,0 +1,1 @@
+Temporary CI trigger for sprite rigging validation. Safe to delete with the validation branch.
