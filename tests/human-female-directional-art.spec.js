@@ -62,7 +62,7 @@ test.describe('human female directional art', () => {
         expect(geometry.curls.dest.y).toBeLessThan(geometry.shoulder.dest.y - 0.05);
     });
 
-    test('gives broad bodies wider authored geometry and moves weapons outward/down', async ({ page }) => {
+    test('gives broad bodies wider authored geometry and keeps weapon hands symmetric and farther out', async ({ page }) => {
         await page.waitForFunction(() => window.__directionalBodyTypeTuningInstalled === true && window.__directionalWeaponTuningApplied === true);
         const result = await page.evaluate(() => {
             const layout = window.HUMAN_FEMALE_DIRECTIONAL_LAYOUT;
@@ -90,10 +90,29 @@ test.describe('human female directional art', () => {
 
         expect(result.broad.crop.w).toBeGreaterThan(result.average.crop.w + 0.08);
         expect(result.broad.dest.w).toBeGreaterThan(result.average.dest.w + 0.10);
-        expect(result.main.x).toBeLessThan(30);
-        expect(result.off.x).toBeGreaterThan(80);
-        expect(result.main.y).toBeGreaterThan(140);
-        expect(result.off.y).toBeGreaterThan(140);
+        expect(result.main.x).toBeLessThanOrEqual(18.5);
+        expect(result.off.x).toBeGreaterThanOrEqual(81.5);
+        expect(result.main.x + result.off.x).toBeCloseTo(100, 6);
+        expect(result.main.y).toBeCloseTo(result.off.y, 6);
+        expect(result.main.y).toBeCloseTo(146, 0);
+    });
+
+    test('fits armour to the torso and centres an enlarged helmet', async ({ page }) => {
+        await page.waitForFunction(() => window.__directionalEquipmentFitTuningApplied === true);
+        const result = await page.evaluate(() => {
+            const fit = window.HUMAN_FEMALE_EQUIPMENT_FIT;
+            const rigs = window.DIRECTIONAL_ATTACHMENT_RIGS?.human_female;
+            return {
+                fit,
+                headX: ['front','side','back'].map(view => rigs?.[view]?.headTop?.x),
+            };
+        });
+
+        expect(result.fit.armour.wMult).toBeGreaterThanOrEqual(1.30);
+        expect(result.fit.armour.topShift).toBeGreaterThanOrEqual(0.30);
+        expect(result.fit.helm.sizeMult).toBeGreaterThanOrEqual(1.40);
+        expect(result.fit.helm.xOff).toBe(0);
+        expect(result.headX).toEqual([0.5,0.5,0.5]);
     });
 
     test('preloads all six directional images successfully', async ({ page }) => {
