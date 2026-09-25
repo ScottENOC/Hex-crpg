@@ -1,6 +1,7 @@
 // sw.js
 // Development-oriented cache policy for Hex-crpg.
 // Keep app code fresh while this project is changing rapidly.
+// Cache reset generation: 2026-09-25 rollback-1.
 
 self.addEventListener('install', () => {
     self.skipWaiting();
