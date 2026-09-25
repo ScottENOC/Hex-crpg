@@ -3,7 +3,7 @@ name: Human Female Tactical Render Diagnostic
 on:
   push:
     branches:
-      - fix/human-female-explicit-render-context
+      - ci/equipment-fit-validation
 
 jobs:
   tactical-render:
@@ -19,5 +19,5 @@ jobs:
         run: npm ci
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Run tactical render regression
-        run: npx playwright test tests/human-female-tactical-render.spec.js --reporter=line
+      - name: Run equipment render regressions
+        run: npx playwright test tests/human-female-tactical-render.spec.js tests/human-female-directional-art.spec.js --reporter=line
