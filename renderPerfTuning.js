@@ -109,6 +109,11 @@
     // disabled; its expensive sampling/experiments only run while requested.
     load('script[data-performance-diagnostics]', 'performanceDiagnostics.js', 'performanceDiagnostics');
 
+    // Zoom-based visual LOD is deliberately renderer-only: it skips detail
+    // layers that are too small to resolve while preserving terrain, fog,
+    // LOS, collision and simulation semantics.
+    load('script[data-zoom-lod]', 'zoomLod.js', 'zoomLod');
+
     function installVisibilityBounds() {
         const original = window.isVisibleToPlayer;
         if (typeof original !== 'function' || original.__wideZoomBounds) return false;
