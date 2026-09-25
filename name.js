@@ -28,15 +28,10 @@ window.getRandomName = function(race, gender) {
 
 window.generateName = window.getRandomName;
 
-// Character-creator convenience controls. The creator itself lives in
-// index.html, but name.js is loaded immediately after that markup, so this is
-// an intentionally small place to install the two reroll buttons and choose a
-// non-prescriptive starting appearance before main.js paints the first preview.
 (() => {
     function randomInt(min, max) {
         return min + Math.floor(Math.random() * (max - min + 1));
     }
-
     function setRandomSlider(id) {
         const el = document.getElementById(id);
         if (!el) return;
@@ -44,7 +39,6 @@ window.generateName = window.getRandomName;
         const max = Number(el.max || 100);
         el.value = String(randomInt(min, max));
     }
-
     function setRandomSelect(id) {
         const el = document.getElementById(id);
         if (!el || !el.options.length) return;
@@ -52,22 +46,18 @@ window.generateName = window.getRandomName;
         if (!options.length) return;
         el.value = options[randomInt(0, options.length - 1)].value;
     }
-
     window.randomizeCharacterAppearance = function({ sync = true } = {}) {
         setRandomSlider('shirt-hue-slider');
         setRandomSlider('pants-hue-slider');
         setRandomSlider('hair-hue-slider');
         setRandomSelect('hair-style-select');
         setRandomSelect('body-type-select');
-
         const fantasy = !!document.getElementById('fantasy-skin-check')?.checked;
         setRandomSlider(fantasy ? 'skin-hue-slider' : 'skin-tone-slider');
-
         if (window.updateSkinToneControlMode) window.updateSkinToneControlMode();
         if (window.updateAppearancePreview) window.updateAppearancePreview();
         if (sync && window.syncCharacterToServer) window.syncCharacterToServer();
     };
-
     window.randomizeCharacterName = function() {
         const input = document.getElementById('character-name');
         const race = document.getElementById('race-select')?.value || 'human';
@@ -76,7 +66,6 @@ window.generateName = window.getRandomName;
         input.value = window.getRandomName(race, gender);
         input.dispatchEvent(new Event('input', { bubbles:true }));
     };
-
     function creatorButton(id, text, onclick) {
         const button = document.createElement('button');
         button.id = id;
@@ -90,7 +79,6 @@ window.generateName = window.getRandomName;
         button.addEventListener('click', onclick);
         return button;
     }
-
     function installCharacterCreatorRandomControls() {
         const nameInput = document.getElementById('character-name');
         if (nameInput && !document.getElementById('randomize-name-btn')) {
@@ -104,35 +92,28 @@ window.generateName = window.getRandomName;
             nameInput.style.minWidth = '0';
             row.appendChild(creatorButton('randomize-name-btn', 'Random name', () => window.randomizeCharacterName()));
         }
-
         const preview = document.getElementById('appearance-preview-canvas');
         const appearanceGroup = preview?.closest('.form-group');
         if (appearanceGroup && !document.getElementById('randomize-appearance-btn')) {
-            const appearanceButton = creatorButton(
-                'randomize-appearance-btn',
-                '🎲 Randomise appearance',
-                () => window.randomizeCharacterAppearance()
-            );
+            const appearanceButton = creatorButton('randomize-appearance-btn', '🎲 Randomise appearance', () => window.randomizeCharacterAppearance());
             appearanceButton.style.margin = '0 0 7px 0';
-            const appearanceLayout = preview.parentElement;
-            appearanceGroup.insertBefore(appearanceButton, appearanceLayout);
+            appearanceGroup.insertBefore(appearanceButton, preview.parentElement);
         }
     }
-
     installCharacterCreatorRandomControls();
     window.randomizeCharacterAppearance({ sync:false });
 })();
 
-// Build token for dynamically loaded presentation/performance modules. Changing
-// this value gives every deployment a new URL, avoiding stale Safari/GitHub
-// Pages script cache entries without separate per-file version numbers.
+// Build token for dynamically loaded presentation/performance modules. Bump
+// this whenever presentation code changes so Safari/iOS cannot retain an older
+// facing or UI renderer under a reused URL.
 const PRESENTATION_BUILD = '20260925-directional-sprite-refresh';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
 
-// The deployed presentation version is read from name.js itself, because this
-// is the source of the cache-busting token for the modules below. This prevents
-// an index.html marker from drifting away from the scripts it is meant to refresh.
+// Read the deployed version from the actual source of the module cache token.
+// Previously the checker read index.html, which could drift out of sync with
+// this value and falsely report that an old in-memory app was current.
 async function fetchRemotePresentationBuild() {
     const response = await fetch(`name.js?app-update-check=${Date.now()}`, { cache:'no-store' });
     if (!response.ok) return null;
@@ -191,7 +172,6 @@ if ('serviceWorker' in navigator) {
         perf.async = false;
         document.head.appendChild(perf);
     }
-
     if (!document.querySelector('script[data-facing-system]')) {
         const facing = document.createElement('script');
         facing.src = freshScriptUrl('facingSystem.js');
@@ -199,7 +179,6 @@ if ('serviceWorker' in navigator) {
         facing.async = false;
         document.head.appendChild(facing);
     }
-
     if (!document.querySelector('script[data-directional-hair-tuning]')) {
         const tuning = document.createElement('script');
         tuning.src = freshScriptUrl('directionalHairTuning.js');
@@ -207,7 +186,6 @@ if ('serviceWorker' in navigator) {
         tuning.async = false;
         document.head.appendChild(tuning);
     }
-
     if (!document.querySelector('script[data-directional-weapon-tuning]')) {
         const weaponTuning = document.createElement('script');
         weaponTuning.src = freshScriptUrl('directionalWeaponTuning.js');
@@ -215,7 +193,6 @@ if ('serviceWorker' in navigator) {
         weaponTuning.async = false;
         document.head.appendChild(weaponTuning);
     }
-
     if (!document.querySelector('script[data-directional-character-ui]')) {
         const ui = document.createElement('script');
         ui.src = freshScriptUrl('directionalCharacterUI.js');
@@ -223,7 +200,6 @@ if ('serviceWorker' in navigator) {
         ui.async = false;
         document.head.appendChild(ui);
     }
-
     if (!document.querySelector('script[data-race-skin-palettes]')) {
         const palettes = document.createElement('script');
         palettes.src = freshScriptUrl('raceSkinPalettes.js');
