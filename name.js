@@ -119,7 +119,7 @@ window.generateName = window.getRandomName;
     window.randomizeCharacterAppearance({ sync:false });
 })();
 
-const PRESENTATION_BUILD = '20260925-hair-style-geometry';
+const PRESENTATION_BUILD = '20260925-body-weapon-geometry';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
 
