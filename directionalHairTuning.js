@@ -18,18 +18,13 @@
         layout.side.hairCrop = { x:0.275, y:0.235, w:0.455, h:0.455 };
         layout.side.hairDest = { x:0.270, y:-0.015, w:0.460, h:0.420 };
 
-        // Capture the generic layout after the side correction. These remain
-        // the fallback for shoulder-length hair and for callers that inspect
-        // the layout without an active character context.
         const base = Object.fromEntries(['front','side','back'].map(view => [view, {
             hairCrop: { ...layout[view].hairCrop },
             hairDest: { ...layout[view].hairDest },
+            bodyCrop: { ...layout[view].bodyCrop },
+            bodyDest: { ...layout[view].bodyDest },
         }]));
 
-        // Different authored hairstyles do not occupy the same part of their
-        // source canvases. A single shared crop was clipping the top of the
-        // long braid, while the compact curls sat about half a head too low.
-        // Keep these as geometry-only overrides so the PNGs stay untouched.
         const styleLayouts = {
             braid: {
                 front: {
@@ -61,10 +56,27 @@
             },
         };
 
-        // facingSystem reads layout[view].hairCrop / hairDest while inside its
-        // active-entity render context. Accessors let those existing reads pick
-        // the current hairstyle's authored geometry without changing tactical
-        // render sequencing or the public layout API.
+        // The broad body artwork extends materially farther left/right than the
+        // average silhouette. The old average crop was literally cutting the
+        // shoulders/hips off. Use a wider source window and a slightly wider
+        // destination so broad stays visibly broad rather than being shrunk.
+        const bodyTypeLayouts = {
+            broad: {
+                front: {
+                    bodyCrop: { x:0.300, y:0.082, w:0.400, h:0.835 },
+                    bodyDest: { x:-0.070, y:0.000, w:1.140, h:1.000 },
+                },
+                side: {
+                    bodyCrop: { x:0.395, y:0.088, w:0.210, h:0.835 },
+                    bodyDest: { x:0.185, y:0.000, w:0.630, h:1.000 },
+                },
+                back: {
+                    bodyCrop: { x:0.300, y:0.080, w:0.400, h:0.840 },
+                    bodyDest: { x:-0.070, y:0.000, w:1.140, h:1.000 },
+                },
+            },
+        };
+
         for (const view of ['front','side','back']) {
             Object.defineProperty(layout[view], 'hairCrop', {
                 configurable: true,
@@ -82,10 +94,28 @@
                     return styleLayouts[style]?.[view]?.hairDest || base[view].hairDest;
                 },
             });
+            Object.defineProperty(layout[view], 'bodyCrop', {
+                configurable: true,
+                enumerable: true,
+                get() {
+                    const bodyType = window.__activeCharacterEntity?.bodyType;
+                    return bodyTypeLayouts[bodyType]?.[view]?.bodyCrop || base[view].bodyCrop;
+                },
+            });
+            Object.defineProperty(layout[view], 'bodyDest', {
+                configurable: true,
+                enumerable: true,
+                get() {
+                    const bodyType = window.__activeCharacterEntity?.bodyType;
+                    return bodyTypeLayouts[bodyType]?.[view]?.bodyDest || base[view].bodyDest;
+                },
+            });
         }
 
         window.HUMAN_FEMALE_HAIR_STYLE_LAYOUTS = styleLayouts;
+        window.HUMAN_FEMALE_BODY_TYPE_LAYOUTS = bodyTypeLayouts;
         window.__directionalHairStyleTuningInstalled = true;
+        window.__directionalBodyTypeTuningInstalled = true;
         return true;
     }
 
