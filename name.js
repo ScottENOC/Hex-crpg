@@ -28,6 +28,10 @@ window.getRandomName = function(race, gender) {
 
 window.generateName = window.getRandomName;
 
+// Character-creator convenience controls. The creator itself lives in
+// index.html, but name.js is loaded immediately after that markup, so this is
+// an intentionally small place to install the two reroll buttons and choose a
+// non-prescriptive starting appearance before main.js paints the first preview.
 (() => {
     function randomInt(min, max) {
         return min + Math.floor(Math.random() * (max - min + 1));
@@ -50,6 +54,10 @@ window.generateName = window.getRandomName;
     }
 
     window.randomizeCharacterAppearance = function({ sync = true } = {}) {
+        // Clothing/hair colours deliberately use their full player-facing hue
+        // wheels. Skin respects the existing Fantasy colour toggle: natural
+        // mode rerolls only the race-aware 0..100 tone ramp; fantasy mode
+        // rerolls the unrestricted 0..359 hue wheel. Never alter the toggle.
         setRandomSlider('shirt-hue-slider');
         setRandomSlider('pants-hue-slider');
         setRandomSlider('hair-hue-slider');
@@ -116,9 +124,16 @@ window.generateName = window.getRandomName;
     }
 
     installCharacterCreatorRandomControls();
+    // Start every fresh creator view from a different appearance rather than
+    // visually endorsing the old pale-skin/brown-hair hard-coded defaults.
+    // Do not generate a name automatically: leaving it blank still preserves
+    // the existing "random name when you start" behaviour.
     window.randomizeCharacterAppearance({ sync:false });
 })();
 
+// Build token for dynamically loaded presentation/performance modules. Changing
+// this value gives every deployment a new URL, avoiding stale Safari/GitHub
+// Pages script cache entries without separate per-file version numbers.
 const PRESENTATION_BUILD = '20260925-directional-sprite-refresh';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
@@ -135,6 +150,12 @@ async function fetchRemotePresentationBuild() {
 }
 window.fetchRemotePresentationBuild = fetchRemotePresentationBuild;
 
+// iOS Home Screen web apps can resume an old in-memory document for days,
+// bypassing normal navigation and service-worker update checks. Compare this
+// running document with a no-cache copy of the deployed presentation build
+// whenever the app becomes visible (and periodically while it remains open).
+// A new build gets one clean reload with the build token in the document URL,
+// which also defeats Safari's standalone-page cache.
 let appBuildCheckInFlight = null;
 window.checkForAppUpdate = function({ reload = true } = {}) {
     if (appBuildCheckInFlight) return appBuildCheckInFlight;
