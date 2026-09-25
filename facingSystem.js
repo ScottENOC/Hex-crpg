@@ -69,6 +69,19 @@
       },
     };
     DIRECTIONAL_CHARACTER_PATHS.human_male.hair = DIRECTIONAL_CHARACTER_PATHS.human_female.hair;
+
+    // The tactical renderer historically reverse-detected the currently drawn
+    // humanoid from CHAR_CONFIG. gameEngine.js deliberately keeps CHAR_CONFIG
+    // as a script-local const, though, so window.CHAR_CONFIG is absent on the
+    // actual map and this module used to wait forever without installing. Keep
+    // the first directional tranche self-contained: these are the exact body
+    // dimensions authored in gameEngine.js for the two directional human rigs.
+    // If CHAR_CONFIG is ever exposed globally, it remains the preferred source.
+    const DIRECTIONAL_BODY_CONFIG = {
+        human_female: { bodyW:1.60, bodyH:1.92 },
+        human_male: { bodyW:1.80, bodyH:2.16 },
+    };
+
     const HUMAN_FEMALE_ASSET_PATHS = {
         body: DIRECTIONAL_CHARACTER_PATHS.human_female.body.average,
         bodyTypes: DIRECTIONAL_CHARACTER_PATHS.human_female.body,
@@ -104,6 +117,7 @@
             // while this image was loading. Paint it as soon as the authored
             // asset is ready instead of waiting for the next game tick.
             if (typeof window.drawMap === 'function') window.drawMap();
+            if (typeof window.renderEntities === 'function') window.renderEntities();
             if (typeof window.refreshDirectionalTurnPortraits === 'function') {
                 window.refreshDirectionalTurnPortraits();
             }
@@ -186,12 +200,12 @@
     }
 
     function detectBodyKey(dw, dh) {
-        const configs = window.CHAR_CONFIG || {};
+        const configs = window.CHAR_CONFIG || DIRECTIONAL_BODY_CONFIG;
         const hs = window.hexSize || 1;
         const z = window.cameraZoom || 1;
         let bestKey = null, bestError = Infinity;
         for (const [key, cfg] of Object.entries(configs)) {
-            if (!cfg?.bodyW || !cfg?.bodyH) continue;
+            if (!DIRECTIONAL_CHARACTER_ASSETS[key] || !cfg?.bodyW || !cfg?.bodyH) continue;
             const ew = cfg.bodyW * hs * z;
             const eh = cfg.bodyH * hs * z;
             const err = Math.abs(dw - ew) / ew + Math.abs(dh - eh) / eh;
@@ -231,11 +245,9 @@
     function isLegacyFullHairDraw(args, active) {
         if (!active || active.key !== 'human_female' || active.femaleLayerStage !== 'await_hair' || args.length !== 4) return false;
         const [dx, dy, dw, dh] = args;
-        const cfg = window.CHAR_CONFIG?.human_female;
-        const hc = cfg?.hair;
-        if (hc?.type !== 'full') return false;
+        const cfg = window.CHAR_CONFIG?.human_female || DIRECTIONAL_BODY_CONFIG.human_female;
         const z = window.cameraZoom || 1;
-        const expectedY = active.top + (hc.yRaw || 0) * z;
+        const expectedY = active.top - 3 * z;
         const tolerance = Math.max(0.75, z * 0.75);
         return Math.abs(dx - active.left) <= tolerance
             && Math.abs(dy - expectedY) <= tolerance
@@ -274,10 +286,6 @@
     }
 
     function drawCropped(nativeDraw, img, crop, dest, bounds) {
-        // spriteRigging.js knows the logical pre-trim canvas for registered
-        // assets. For current untrimmed PNGs this produces exactly the same
-        // source/destination rectangles as the legacy maths below. Once an
-        // asset is physically cropped it preserves that same visual placement.
         if (typeof window.drawTrimAwareCroppedSprite === 'function'
             && window.drawTrimAwareCroppedSprite(nativeDraw, img, crop, dest, bounds)) return;
 
@@ -375,11 +383,8 @@
         const cx = bounds.left + bounds.width / 2;
 
         return withFacingContext(active.entity, facing, () => {
-            if (RIG_SEED_CANVAS) riggedDrawImage(RIG_SEED_CANVAS, dx, dy, dw, dh);
+            if (RIG_SEED_CANVAS && window.__characterRigInstalled) riggedDrawImage(RIG_SEED_CANVAS, dx, dy, dw, dh);
 
-            // On side views the far-side hand must genuinely sit behind the
-            // character. gameEngine emits weapons after the body, so pre-draw
-            // that one hand now and suppress its later legacy draw.
             const farHand = farHandForFacing(facing);
             if (farHand) drawSideWeapon(ctx, active, facing, farHand);
 
@@ -390,9 +395,6 @@
                 ctx.translate(-cx, 0);
             }
             try {
-                // Keep the source sprite as the canonical draw. Recolouring is
-                // layered over it so instrumentation and extensions can still
-                // identify the directional asset by its image URL.
                 drawCropped(riggedDrawImage, sourceBody, layout.bodyCrop, layout.bodyDest, bounds);
                 const skinTone = active.entity.skinHue === undefined ? null : {
                     hue:active.entity.skinHue,
@@ -411,9 +413,6 @@
                     const hairImg = active.entity.hairHue !== undefined && window.getRecoloredCharacterHairSprite
                         ? window.getRecoloredCharacterHairSprite(sourceHair, active.entity.hairHue, active.entity.hairLightMult || 1, active.entity.hairSatMult || 1)
                         : sourceHair;
-                    // The male rig intentionally shares hairstyle artwork with
-                    // the female rig. Only female source draws participate in
-                    // the legacy female-render compatibility contract.
                     if (active.key === 'human_female') {
                         drawCropped(riggedDrawImage, sourceHair, layout.hairCrop, layout.hairDest, bounds);
                     }
@@ -448,7 +447,10 @@
     }
 
     function installRendererFacing() {
-        if (installed || !window.mapCtx || !window.CHAR_CONFIG || !window.__characterRigInstalled) return false;
+        // Do not depend on characterRig/CHAR_CONFIG being global. The map's
+        // gameEngine keeps CHAR_CONFIG private, which previously prevented this
+        // renderer from ever installing even though creator/portrait paths worked.
+        if (installed || !window.mapCtx) return false;
         const ctx = window.mapCtx;
         const riggedDrawImage = ctx.drawImage.bind(ctx);
         const riggedClearRect = ctx.clearRect.bind(ctx);
@@ -462,9 +464,6 @@
         ctx.drawImage = function(img, ...args) {
             if (img && img === window.gameVisuals?.humanHair) return;
 
-            // Human-female side-facing weapons are handled here instead of by
-            // the legacy rig pass so their anchors, mirroring and depth order
-            // are tied directly to facing.
             if (active && DIRECTIONAL_CHARACTER_ASSETS[active.key] && args.length === 4 && weaponImage(img)) {
                 const facing = VALID_FACINGS.has(active.entity.facing) ? active.entity.facing : 'down';
                 if (facing === 'left' || facing === 'right') {
@@ -491,21 +490,13 @@
                             active = { entity, key, left:dx, top:dy, width:dw, height:dh, femaleLayerStage:'await_hair', weaponDrawCount:0 };
                             const facing = VALID_FACINGS.has(entity.facing) ? entity.facing : 'down';
                             if (drawDirectionalBody(ctx, riggedDrawImage, active, facing, args)) return;
-                            // Never flash the obsolete flat body while its
-                            // directional replacement is still downloading.
                             return;
                         }
                     }
-                } else if (key) {
-                    const entity = findEntityForBody(key, dx + dw/2, dy + dh/2, dh);
-                    if (entity) active = { entity, key, left:dx, top:dy, width:dw, height:dh };
                 }
 
                 if (active && isLikelyCharacterLayer(args, active)) {
                     const facing = VALID_FACINGS.has(active.entity.facing) ? active.entity.facing : 'down';
-                    // Suppress legacy hair/equipment as well while the new
-                    // body is pending; otherwise they float by themselves for
-                    // a frame and the old male hair remains visibly layered.
                     if (DIRECTIONAL_CHARACTER_ASSETS[active.key] && !directionalBodyReady(active, facing)) return;
                     if (DIRECTIONAL_CHARACTER_ASSETS[active.key]
                         && (img === window.gameVisuals?.humanHair || img === window.gameVisuals?.humanMaleHair)) return;
