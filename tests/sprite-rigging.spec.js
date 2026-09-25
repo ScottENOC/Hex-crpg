@@ -76,6 +76,64 @@ test.describe('trim-aware anchor sprite rigging', () => {
         expect(result.after).toBe(0);
     });
 
+    test('production crop remapping preserves authored placement after a physical trim', async ({ page }) => {
+        const args = await page.evaluate(() => {
+            const image = document.createElement('canvas');
+            image.width = 40; image.height = 50;
+            const metadata = {
+                originalWidth:100, originalHeight:100,
+                trimLeft:20, trimTop:10, trimWidth:40, trimHeight:50,
+            };
+            let captured = null;
+            const nativeDraw = (...drawArgs) => { captured = drawArgs.slice(1); };
+            const handled = window.drawTrimAwareCroppedSprite(
+                nativeDraw,
+                image,
+                { x:0.10, y:0.00, w:0.60, h:0.80 },
+                { x:0.20, y:0.10, w:0.50, h:0.70 },
+                { left:10, top:20, width:200, height:100 },
+                metadata
+            );
+            return { handled, captured };
+        });
+
+        expect(args.handled).toBe(true);
+        expect(args.captured[0]).toBeCloseTo(0, 6);
+        expect(args.captured[1]).toBeCloseTo(0, 6);
+        expect(args.captured[2]).toBeCloseTo(40, 6);
+        expect(args.captured[3]).toBeCloseTo(50, 6);
+        expect(args.captured[4]).toBeCloseTo(66.6666667, 5);
+        expect(args.captured[5]).toBeCloseTo(38.75, 5);
+        expect(args.captured[6]).toBeCloseTo(66.6666667, 5);
+        expect(args.captured[7]).toBeCloseTo(43.75, 5);
+    });
+
+    test('registered untrimmed production asset keeps the legacy crop rectangle exactly', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const image = document.createElement('canvas');
+            image.width = 200; image.height = 300;
+            image.src = 'images/characters/human_female/body_front.png';
+            let captured = null;
+            const handled = window.drawTrimAwareCroppedSprite(
+                (...drawArgs) => { captured = drawArgs.slice(1); },
+                image,
+                { x:0.350, y:0.088, w:0.297, h:0.823 },
+                { x:0, y:0, w:1, h:1 },
+                { left:7, top:9, width:50, height:75 }
+            );
+            return { handled, captured };
+        });
+        expect(result.handled).toBe(true);
+        expect(result.captured[0]).toBeCloseTo(70, 6);
+        expect(result.captured[1]).toBeCloseTo(26.4, 6);
+        expect(result.captured[2]).toBeCloseTo(59.4, 6);
+        expect(result.captured[3]).toBeCloseTo(246.9, 6);
+        expect(result.captured[4]).toBeCloseTo(7, 6);
+        expect(result.captured[5]).toBeCloseTo(9, 6);
+        expect(result.captured[6]).toBeCloseTo(50, 6);
+        expect(result.captured[7]).toBeCloseTo(75, 6);
+    });
+
     test('untrimmed metadata resolves from the current image without changing destination', async ({ page }) => {
         const result = await page.evaluate(() => {
             const img = document.createElement('canvas'); img.width=200; img.height=300;
@@ -102,4 +160,19 @@ test.describe('trim-aware anchor sprite rigging', () => {
             for (const view of ['front','side','back']) expect(cells).toContainEqual({mode,view});
         }
     });
+});
+
+test('live directional renderer loads trim-aware runtime support', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => window.facingToSpriteView && window.drawTrimAwareCroppedSprite);
+    const state = await page.evaluate(() => ({
+        facing: typeof window.facingToSpriteView,
+        trimCrop: typeof window.drawTrimAwareCroppedSprite,
+        rig: !!window.getSpriteReferenceRig?.('human_female', 'front'),
+        registeredBody: Object.prototype.hasOwnProperty.call(
+            window.SPRITE_TRIM_METADATA_BY_PATH || {},
+            'images/characters/human_female/body_front.png'
+        ),
+    }));
+    expect(state).toEqual({ facing:'function', trimCrop:'function', rig:true, registeredBody:true });
 });
