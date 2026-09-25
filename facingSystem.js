@@ -9,6 +9,18 @@
 (() => {
     'use strict';
 
+    // Keep trim support as a small presentation dependency rather than folding
+    // it into this renderer. Until it finishes loading, drawCropped falls back
+    // to the exact legacy path, so there is no blank-frame/load-order hazard.
+    if (!window.drawTrimAwareCroppedSprite && !document.querySelector('script[data-sprite-rigging]')) {
+        const trimScript = document.createElement('script');
+        const build = window.PRESENTATION_BUILD ? `?build=${encodeURIComponent(window.PRESENTATION_BUILD)}` : '';
+        trimScript.src = `spriteRigging.js${build}`;
+        trimScript.dataset.spriteRigging = 'true';
+        trimScript.async = false;
+        document.head.appendChild(trimScript);
+    }
+
     const VALID_FACINGS = new Set(['up', 'down', 'left', 'right']);
     const previousHex = new WeakMap();
     const HUMAN_FEMALE_RENDER_ASPECT = 0.48;
@@ -262,6 +274,13 @@
     }
 
     function drawCropped(nativeDraw, img, crop, dest, bounds) {
+        // spriteRigging.js knows the logical pre-trim canvas for registered
+        // assets. For current untrimmed PNGs this produces exactly the same
+        // source/destination rectangles as the legacy maths below. Once an
+        // asset is physically cropped it preserves that same visual placement.
+        if (typeof window.drawTrimAwareCroppedSprite === 'function'
+            && window.drawTrimAwareCroppedSprite(nativeDraw, img, crop, dest, bounds)) return;
+
         const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
         const sx = crop.x * iw;
         const sy = crop.y * ih;
