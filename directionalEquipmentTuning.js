@@ -2,11 +2,6 @@
 // Presentation-only fit tuning for human-female directional equipment.
 // The underlying armour/helmet PNGs contain generous transparent padding, so
 // their legacy destination rectangles make the visible gear look too small.
-//
-// Important: directional armour is a flat authored sprite layer. It may be
-// translated and scaled to fit the body, but must not be tapered, rotated,
-// sheared or otherwise mesh-warped. The reference art already contains its
-// intended silhouette.
 
 (() => {
     'use strict';
@@ -22,38 +17,21 @@
             return false;
         }
 
-        // characterRig.js exports the same mutable rig object used by its
-        // drawImage wrapper. Wait for that object rather than applying the
-        // destination-rectangle tuning early and accidentally leaving the old
-        // tapered mesh active.
+        // Wait until characterRig.js has installed the shared directional rig
+        // metadata before marking this presentation pass complete.
         const armourRig = window.ARMOUR_RIGS?.human_female;
-        if (!cfg || !armourRig) return false;
+        const directionalArmour = window.DIRECTIONAL_ARMOUR_RIGS?.human_female;
+        if (!cfg || !armourRig || !directionalArmour) return false;
 
-        // Armour should read as a fitted body layer: approximately the visible
-        // character width, starting below the head and extending to the lower
-        // body. Extra draw width compensates for transparent PNG margins.
-        // These two values are the only shape fit we want: translation + scale.
+        // Destination rectangle tuning remains intentionally simple. Shape fit
+        // now lives in the small per-facing meshes in characterRig.js so scale
+        // and translation are not mixed up with deformation parameters.
         cfg.armour = {
             ...(cfg.armour || {}),
             wMult: 1.34,
             topShift: 0.36,
+            mesh: { ...directionalArmour.front },
         };
-
-        // Keep the mesh mathematically rectangular. drawWarpedArmour still
-        // provides backwards-compatible rendering for the existing armour path,
-        // but with these points every triangle resolves to axis-aligned scale +
-        // translation (no rotation/shear/taper), so the authored sprite cannot
-        // be twisted.
-        Object.assign(armourRig, {
-            shoulderL: 0,
-            shoulderR: 1,
-            waistL: 0,
-            waistR: 1,
-            hemL: 0,
-            hemR: 1,
-            waistY: 0.55,
-        });
-        cfg.armour.mesh = { ...armourRig };
 
         // Centre the helmet on the character and enlarge its draw box enough
         // to compensate for transparent padding in the helmet artwork.
@@ -75,6 +53,11 @@
 
         window.HUMAN_FEMALE_EQUIPMENT_FIT = {
             armour: { ...cfg.armour },
+            armourViews: {
+                front: { ...directionalArmour.front },
+                side: { ...directionalArmour.side },
+                back: { ...directionalArmour.back },
+            },
             helm: { ...cfg.helm },
         };
         window.__directionalEquipmentFitTuningApplied = true;
