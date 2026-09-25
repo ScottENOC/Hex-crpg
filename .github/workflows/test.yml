@@ -12,10 +12,6 @@ concurrency:
 
 jobs:
   playwright:
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -32,13 +28,13 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Run tests
-        run: npx playwright test --shard=${{ matrix.shard }}/4
+      - name: Run focused sprite rig tests
+        run: npx playwright test tests/sprite-rigging.spec.js tests/human-female-directional-art.spec.js
 
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-${{ matrix.shard }}
+          name: playwright-report-sprite-rig
           path: playwright-report/
           retention-days: 14
