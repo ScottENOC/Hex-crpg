@@ -39,7 +39,7 @@ window.generateName = window.getRandomName;
     window.randomizeCharacterAppearance({sync:false});
 })();
 
-const PRESENTATION_BUILD = '20260926-armour-body-bounds-fit';
+const PRESENTATION_BUILD = '20260926-armour-source-anchor-map';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
 const presentationBuildMeta=document.querySelector('meta[name="app-build"]');if(presentationBuildMeta)presentationBuildMeta.content=PRESENTATION_BUILD;
@@ -58,8 +58,6 @@ if('serviceWorker'in navigator){navigator.serviceWorker.register(`sw.js?build=${
     const scripts = [
         ['movementInputFix.js','movementInputFix'],
         ['spriteRigging.js','spriteRigging'],
-        // Install the body draw observer before characterRig captures drawImage.
-        // Attachment synchronisation retries until characterRig exposes its tables.
         ['rigCalibration.js','rigCalibration'],
         ['rigDebug.js','rigDebug'],
         ['characterRig.js','characterRig'],
@@ -68,6 +66,7 @@ if('serviceWorker'in navigator){navigator.serviceWorker.register(`sw.js?build=${
         ['directionalHairTuning.js','directionalHairTuning'],
         ['directionalWeaponTuning.js','directionalWeaponTuning'],
         ['directionalEquipmentTuning.js','directionalEquipmentTuning'],
+        ['armourAnchorDebug.js','armourAnchorDebug'],
         ['directionalCharacterUI.js','directionalCharacterUi'],
         ['raceSkinPalettes.js','raceSkinPalettes'],
     ];
