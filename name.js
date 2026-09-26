@@ -119,13 +119,10 @@ window.generateName = window.getRandomName;
     window.randomizeCharacterAppearance({ sync:false });
 })();
 
-const PRESENTATION_BUILD = '20260926-anatomy-anchor-calibration';
+const PRESENTATION_BUILD = '20260926-no-forced-game-reload';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
 
-// Keep the visible document build marker aligned with the runtime source of
-// truth. This also repairs older cached index.html documents after name.js has
-// refreshed, rather than requiring the player to clear all Safari site data.
 const presentationBuildMeta = document.querySelector('meta[name="app-build"]');
 if (presentationBuildMeta) presentationBuildMeta.content = PRESENTATION_BUILD;
 
@@ -139,12 +136,22 @@ async function fetchRemotePresentationBuild() {
 window.fetchRemotePresentationBuild = fetchRemotePresentationBuild;
 
 let appBuildCheckInFlight = null;
-window.checkForAppUpdate = function({ reload = true } = {}) {
+window.checkForAppUpdate = function({ reload = false } = {}) {
     if (appBuildCheckInFlight) return appBuildCheckInFlight;
     appBuildCheckInFlight = (async () => {
         try {
             const remoteBuild = await fetchRemotePresentationBuild();
-            if (!remoteBuild || remoteBuild === PRESENTATION_BUILD) return false;
+            if (!remoteBuild || remoteBuild === PRESENTATION_BUILD) {
+                window.__appUpdateAvailable = null;
+                return false;
+            }
+
+            window.__appUpdateAvailable = remoteBuild;
+            window.dispatchEvent(new CustomEvent('appupdateavailable', { detail:{ build:remoteBuild } }));
+
+            // Reloading destroys the current in-memory game and returns the user
+            // to the start menu. Only explicit callers may opt into navigation;
+            // background polling below is deliberately detection-only.
             if (reload) {
                 if ('caches' in window) {
                     const keys = await caches.keys();
@@ -165,12 +172,12 @@ window.checkForAppUpdate = function({ reload = true } = {}) {
     return appBuildCheckInFlight;
 };
 
-setTimeout(() => window.checkForAppUpdate(), 15000);
+setTimeout(() => window.checkForAppUpdate({ reload:false }), 15000);
 setInterval(() => {
-    if (document.visibilityState === 'visible') window.checkForAppUpdate();
+    if (document.visibilityState === 'visible') window.checkForAppUpdate({ reload:false });
 }, 5 * 60 * 1000);
 document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') window.checkForAppUpdate();
+    if (document.visibilityState === 'visible') window.checkForAppUpdate({ reload:false });
 });
 
 if ('serviceWorker' in navigator) {
@@ -180,9 +187,6 @@ if ('serviceWorker' in navigator) {
 }
 
 (() => {
-    // Load rigDebug first: characterRig captures the canvas drawImage function
-    // as its low-level renderer, and the diagnostic needs to observe those
-    // internal strip draws without changing them.
     if (!document.querySelector('script[data-rig-debug]')) {
         const debug = document.createElement('script');
         debug.src = freshScriptUrl('rigDebug.js');
@@ -191,10 +195,6 @@ if ('serviceWorker' in navigator) {
         document.head.appendChild(debug);
     }
 
-    // characterRig used to be injected later by graphicsSettings.js with a
-    // fixed ?v=2 URL. Load it here first so every presentation module shares
-    // this deployment's build token. graphicsSettings keeps its selector-based
-    // fallback for backwards compatibility and will skip the duplicate.
     if (!document.querySelector('script[data-character-rig]')) {
         const rig = document.createElement('script');
         rig.src = freshScriptUrl('characterRig.js');
