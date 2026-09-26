@@ -1,8 +1,8 @@
 // rigCalibration.js
 // Production bridge from canonical sprite landmarks to characterRig attachment points.
-// Also records the actual directional human-female body draw rectangle so fitted
-// equipment can align source landmarks to body landmarks in the same pixel space.
-// This module contains no debug UI and does not own any coordinates itself.
+// Also records the actual directional human-female body draw rectangle and the
+// canvas transform active when that body was drawn, so debug overlays can render
+// source/target landmarks in the same screen space.
 (() => {
     'use strict';
 
@@ -46,6 +46,11 @@
         if(args.length===8)return {left:+args[4],top:+args[5],width:+args[6],height:+args[7]};
         return null;
     }
+    function copyTransform(ctx){
+        if(typeof ctx?.getTransform!=='function')return {a:1,b:0,c:0,d:1,e:0,f:0};
+        const m=ctx.getTransform();
+        return {a:m.a,b:m.b,c:m.c,d:m.d,e:m.e,f:m.f};
+    }
 
     function installBodyBoundsObserver(){
         const proto=window.CanvasRenderingContext2D?.prototype;
@@ -57,7 +62,11 @@
             if(view && (!window.mapCtx || this===window.mapCtx)){
                 const rect=destinationRect(args);
                 if(rect && rect.width>0 && rect.height>0){
-                    window.__humanFemaleLastBodyDraw={view,...rect,timestamp:performance.now()};
+                    window.__humanFemaleLastBodyDraw={
+                        view,...rect,
+                        transform:copyTransform(this),
+                        timestamp:performance.now()
+                    };
                 }
             }
             return previous.call(this,img,...args);
