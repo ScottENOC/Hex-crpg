@@ -23,8 +23,14 @@ test.describe('human female directional armour transform', () => {
 
         expect(result.fit.armourSource).toBe('body-torso-anchors');
         expect(result.fit.armourClearanceX).toBeCloseTo(0.32, 8);
-        expect(result.fit.armour.wMult).toBeGreaterThanOrEqual(1.5);
-        expect(result.fit.armour.topShift).toBeLessThanOrEqual(0.30);
+        expect(result.fit.armour.wMult).toBeCloseTo(1.58, 8);
+
+        // Vertical coverage is independent at the two ends: topShift raises
+        // the start substantially versus the previous 0.28 value, while
+        // bottomDrop extends only the lower edge.
+        expect(result.fit.armour.topShift).toBeCloseTo(0.10, 8);
+        expect(result.fit.armour.bottomDrop).toBeCloseTo(0.08, 8);
+        expect(result.fit.armourVertical).toEqual({ topShift:0.10, bottomDrop:0.08 });
 
         for (const view of ['front', 'side', 'back']) {
             const { anchors, derived } = result.views[view];
