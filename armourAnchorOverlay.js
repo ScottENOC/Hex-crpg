@@ -9,7 +9,7 @@
   function spanAt(rig,t){
     if(!rig)return {left:0,right:1};
     if(t<=rig.waistY){const u=rig.waistY>0?t/rig.waistY:0;return {left:lerp(rig.shoulderL,rig.waistL,u),right:lerp(rig.shoulderR,rig.waistR,u)};}
-    const d=1-rig.waistY,u=d>0?(t-rig.waistY)/d:1;return {left:lerp(rig.waistL,rig.hemL,u),right:lerp(rig.waistR,rig.hemR,u)};
+    const d=1-rig.waistY,u=d>0?(t-rig.waistY)/d:1;return {left:lerp(rig.waistL,rig.hemL,u),right:lerp(rig.hemL,rig.hemR,u)};
   }
   function tx(m,p){return {x:m.a*p.x+m.c*p.y+m.e,y:m.b*p.x+m.d*p.y+m.f};}
   function midpoint(names,anchors){const pts=names.map(n=>anchors?.[n]).filter(Boolean);if(!pts.length)return null;return {x:pts.reduce((s,p)=>s+p.x,0)/pts.length,y:pts.reduce((s,p)=>s+p.y,0)/pts.length};}
@@ -25,6 +25,12 @@
     return c;
   }
   function dot(ctx,p,color,label,side){ctx.beginPath();ctx.arc(p.x,p.y,6,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();ctx.lineWidth=2;ctx.strokeStyle='#000';ctx.stroke();ctx.font='12px monospace';ctx.textBaseline='middle';ctx.textAlign=side<0?'right':'left';const x=p.x+side*9,y=p.y-8;ctx.lineWidth=4;ctx.strokeText(label,x,y);ctx.fillStyle='#fff';ctx.fillText(label,x,y);}
+  function updatePanel(status,deltas){
+    const p=document.getElementById('armour-anchor-map-panel');if(!p||!window.showArmourAnchors)return;
+    const lines=['Armour anchor map','armour.topExtent → body.armourShoulderTop midpoint','armour.bottomExtent → body.footSole midpoint','armour.leftExtent — diagnostic only','armour.rightExtent — diagnostic only','',status];
+    if(deltas){for(const [name,d] of Object.entries(deltas))lines.push(`${name}: Δ ${d.dx.toFixed(1)}, ${d.dy.toFixed(1)} px (${d.distance.toFixed(1)} px)`);}
+    p.textContent=lines.join('\n');
+  }
 
   function frame(){
     const c=ensureCanvas();
@@ -49,7 +55,9 @@
             if(targetNames){const q=midpoint(targetNames,anchors);if(q){const tp=tx(m,{x:body.left+q.x*body.width,y:body.top+q.y*body.height});ctx.beginPath();ctx.moveTo(sp.x,sp.y);ctx.lineTo(tp.x,tp.y);ctx.strokeStyle='#ff80ab';ctx.lineWidth=2;ctx.stroke();dot(ctx,tp,'#40c4ff',`body:${targetNames.join('+')}`,1);const dx=sp.x-tp.x,dy=sp.y-tp.y;deltas[name]={dx,dy,distance:Math.hypot(dx,dy)};}}
           }
           window.__lastArmourAnchorDebug={view,deltas,timestamp:Date.now(),overlay:'separate-canvas'};
-          if(window.updateArmourAnchorLegend)window.updateArmourAnchorLegend(window.__lastArmourAnchorDebug);
+          updatePanel('Overlay active',deltas);
+        } else {
+          updatePanel(`Overlay loaded; waiting for placement (${fit?'fit':'no fit'}, ${body?'body':'no body'}, ${rig?'rig':'no rig'})`);
         }
       }
     }
