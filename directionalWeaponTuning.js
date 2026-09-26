@@ -1,42 +1,52 @@
 // directionalWeaponTuning.js
-// Fine-tunes human-female directional weapon placement without changing the
-// underlying authored body art. Front/back use attachment anchors; side views
-// use item-grip adjustment to correct the hard-coded side placement.
+// Source-asset anchor metadata for rigid weapons.
+//
+// A body hand anchor and an image edge are NOT interchangeable. Each weapon
+// defines the point inside its own artwork that represents the centre of the
+// grip. characterRig aligns that source grip point to the body's semantic
+// mainHand/offHand attachment point.
 
 (() => {
     'use strict';
 
+    // Normalised to each weapon's square source/destination artwork. These are
+    // SOURCE anchors: do not move the body hand anchors to compensate for them.
+    // The existing renderer consumes ITEM_GRIPS, so gripPrimary is projected
+    // into that compatibility table after the source rigs are registered.
+    const ITEM_SOURCE_RIGS = {
+        sword:  { gripPrimary:{ x:0.56, y:0.79 }, source:'authored-grip-centre' },
+        axe:    { gripPrimary:{ x:0.56, y:0.69 }, source:'authored-grip-centre' },
+        spear:  { gripPrimary:{ x:0.56, y:0.75 }, source:'authored-grip-centre' },
+        club:   { gripPrimary:{ x:0.56, y:0.71 }, source:'authored-grip-centre' },
+        bow:    { gripPrimary:{ x:0.56, y:0.37 }, source:'authored-grip-centre' },
+    };
+
+    function copyPoint(p) {
+        return p ? { x:Number(p.x), y:Number(p.y) } : null;
+    }
+
+    function getItemSourceAnchor(kind, name = 'gripPrimary') {
+        return copyPoint(window.ITEM_SOURCE_RIGS?.[kind]?.[name]);
+    }
+
     function apply() {
-        const rigs = window.DIRECTIONAL_ATTACHMENT_RIGS?.human_female;
         const grips = window.ITEM_GRIPS;
-        if (!rigs || !grips) return false;
+        const bodyRigs = window.DIRECTIONAL_ATTACHMENT_RIGS?.human_female;
+        if (!grips || !bodyRigs) return false;
 
-        // Live-map correction: preserve the now-correct vertical placement but
-        // push BOTH weapon hands farther away from the body centre. Keep the
-        // pair exactly symmetric about x=0.5 so off-hand gets the same outward
-        // correction as main-hand rather than drifting inward.
-        if (rigs.front) {
-            rigs.front.mainHand = { x:0.18, y:0.73 };
-            rigs.front.offHand = { x:0.82, y:0.73 };
-        }
-        if (rigs.back) {
-            rigs.back.mainHand = { x:0.82, y:0.73 };
-            rigs.back.offHand = { x:0.18, y:0.73 };
+        // Register source-side metadata and keep ITEM_GRIPS as a compatibility
+        // projection for characterRig's current placement path.
+        window.ITEM_SOURCE_RIGS = ITEM_SOURCE_RIGS;
+        for (const [kind, rig] of Object.entries(ITEM_SOURCE_RIGS)) {
+            if (!grips[kind]) continue;
+            Object.assign(grips[kind], rig.gripPrimary);
         }
 
-        // Side-facing weapon placement is partly determined by the item's grip
-        // point. Keep the proven vertical grip tuning unchanged.
-        const gripAdjustments = {
-            sword:  { x:0.56, y:0.79 },
-            axe:    { x:0.56, y:0.69 },
-            spear:  { x:0.56, y:0.75 },
-            club:   { x:0.56, y:0.71 },
-            bow:    { x:0.56, y:0.37 },
-        };
-        for (const [kind, point] of Object.entries(gripAdjustments)) {
-            if (grips[kind]) Object.assign(grips[kind], point);
-        }
-
+        // Deliberately DO NOT tune bodyRigs.front/back mainHand/offHand here.
+        // Those are target anatomy landmarks and are owned by the canonical
+        // character rig. Moving them to compensate for a weapon image is the
+        // category error this module is designed to prevent.
+        window.getItemSourceAnchor = getItemSourceAnchor;
         window.__directionalWeaponTuningApplied = true;
         return true;
     }
