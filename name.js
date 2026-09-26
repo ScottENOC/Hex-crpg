@@ -39,7 +39,7 @@ window.generateName = window.getRandomName;
     window.randomizeCharacterAppearance({sync:false});
 })();
 
-const PRESENTATION_BUILD = '20260926-rig-load-order-fix';
+const PRESENTATION_BUILD = '20260926-measured-canonical-rig';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
 const presentationBuildMeta=document.querySelector('meta[name="app-build"]');if(presentationBuildMeta)presentationBuildMeta.content=PRESENTATION_BUILD;
@@ -57,12 +57,10 @@ if('serviceWorker'in navigator){navigator.serviceWorker.register(`sw.js?build=${
 (() => {
     const scripts = [
         ['movementInputFix.js','movementInputFix'],
-        // The reference-rig module must exist before any debug, attachment or
-        // armour code consumes HUMAN_FEMALE_REFERENCE_RIGS. Loading it later
-        // from facingSystem created a startup race between several retry timers.
         ['spriteRigging.js','spriteRigging'],
         ['rigDebug.js','rigDebug'],
         ['characterRig.js','characterRig'],
+        ['rigCalibration.js','rigCalibration'],
         ['renderPerfTuning.js','renderPerfTuning'],
         ['facingSystem.js','facingSystem'],
         ['directionalHairTuning.js','directionalHairTuning'],
