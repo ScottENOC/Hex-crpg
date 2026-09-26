@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 
+// Focused CI also exercises this without creating a character first.
 test('calibrated anchor constants remain symmetric', async ({ page }) => {
     await page.goto('/');
     await page.waitForFunction(() => window.__rigDebugLoaded === true);
