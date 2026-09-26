@@ -1,7 +1,7 @@
 // sw.js
 // Development-oriented cache policy for Hex-crpg.
 // Keep app code fresh while this project is changing rapidly.
-// Cache reset generation: 2026-09-25 zoom-lod-1.
+// Cache reset generation: 2026-09-26 armour-alpha-cache-refresh.
 
 self.addEventListener('install', () => {
     self.skipWaiting();
