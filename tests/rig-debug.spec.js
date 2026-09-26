@@ -6,6 +6,7 @@ test.describe('rig debug tools', () => {
         await createCharacter(page, { race:'human', gender:'female' });
         await page.waitForFunction(() => window.__rigDebugLoaded === true);
         await page.waitForFunction(() => window.__characterRigInstalled === true && window.__directionalEquipmentFitTuningApplied === true);
+        await page.waitForFunction(() => window.__humanFemaleReferenceRigCalibrated === true);
         await page.waitForFunction(() => !!document.getElementById('graphics-show-rig-anchors'));
         await page.waitForFunction(() => window.mapCtx?.drawImage?.__rigDebugOuter === true);
 
@@ -23,7 +24,24 @@ test.describe('rig debug tools', () => {
             stored: localStorage.getItem('rpg_show_rig_anchors'),
             checked: document.getElementById('graphics-show-rig-anchors')?.checked,
         }));
-        expect(state).toEqual({ enabled:true, legacy:true, stored:'true', checked:true });
+        expect(state).toEqual({ enabled:true, legacy:false, stored:'true', checked:true });
+
+        const rig = await page.evaluate(() => ({
+            front: window.HUMAN_FEMALE_REFERENCE_RIGS.front.anchors,
+            attachmentFront: window.DIRECTIONAL_ATTACHMENT_RIGS.human_female.front,
+            armourFront: window.DIRECTIONAL_ARMOUR_RIGS.human_female.front,
+        }));
+        expect(rig.front.leftFoot.x).toBeCloseTo(0.305, 3);
+        expect(rig.front.rightFoot.x).toBeCloseTo(0.695, 3);
+        expect(rig.front.leftHand.x).toBeCloseTo(0.080, 3);
+        expect(rig.front.rightHand.x).toBeCloseTo(0.920, 3);
+        expect(rig.front.torsoWaistLeft.y).toBeCloseTo(0.405, 3);
+        expect(rig.front.torsoHipLeft.y).toBeCloseTo(0.530, 3);
+        expect(rig.attachmentFront.mainHand).toEqual(rig.front.mainHandGrip);
+        expect(rig.attachmentFront.offHand).toEqual(rig.front.offHandGrip);
+        expect(rig.attachmentFront.forearm).toEqual(rig.front.offForearm);
+        expect(rig.armourFront.source).toBe('calibrated-body-landmarks');
+        expect(rig.armourFront.waistY).toBeCloseTo(0.405, 3);
 
         await page.evaluate(() => window.setShowArmourWidthDebug(true));
         state = await page.evaluate(() => ({
