@@ -5,7 +5,8 @@
 // directional renderer centres a much narrower visual body inside that box
 // (width = body height * 0.48). Equipment fitting must use the visual box, not
 // the invisible legacy box. This module records that authoritative rectangle
-// before the facing/equipment wrappers consume the same draw.
+// and owns the final human-female armour composition so it cannot fall back to
+// the ghost legacy body rectangle because of wrapper ordering.
 (() => {
     'use strict';
 
@@ -13,6 +14,7 @@
     const HUMAN_FEMALE_BODY_H = 1.92;
     const HUMAN_FEMALE_RENDER_ASPECT = 0.48;
     const BODY_MATCH_TOLERANCE = 0.035;
+    const BODY_RECORD_MAX_AGE_MS = 1000;
     const liveBoundsByEntity = new WeakMap();
 
     function facingToView(facing) {
@@ -43,10 +45,19 @@
         return error <= BODY_MATCH_TOLERANCE;
     }
 
+    function isBaseArmourImage(img) {
+        const g = window.gameVisuals || {};
+        return !!img && (img === g.humanLight || img === g.humanMedium || img === g.humanHeavy);
+    }
+
+    function isHumanFemaleArmourImage(img) {
+        return isBaseArmourImage(img) || !!img?.__humanFemaleArmourBase;
+    }
+
     function isKnownEquipmentOrHair(img) {
         const g = window.gameVisuals || {};
         return img === g.humanHair || img === g.humanMaleHair
-            || img === g.humanLight || img === g.humanMedium || img === g.humanHeavy
+            || isHumanFemaleArmourImage(img)
             || img === g.nasal_helm || img === g.shield
             || img === g.swordIcon || img === g.axe || img === g.spear
             || img === g.club || img === g.bow;
@@ -86,16 +97,46 @@
             timestamp:Date.now(),
         };
         liveBoundsByEntity.set(entity, record);
-        // Equipment is drawn immediately after its body's legacy draw, so this
-        // remains the authoritative record for the currently composed entity.
+        // Equipment is emitted immediately after its body's legacy draw, so the
+        // most recent record is also the current composition target.
         window.__humanFemaleLastBodyDraw = record;
         window.__directionalRigHandoffLastBody = record;
         return record;
     }
 
-    function install() {
+    function armourDrawMatchesBody(args, body) {
+        if (!body || args.length !== 4) return false;
+        if (Date.now() - (body.timestamp || 0) > BODY_RECORD_MAX_AGE_MS) return false;
+        const [dx, dy, dw, dh] = args.map(Number);
+        if (![dx,dy,dw,dh].every(Number.isFinite) || dw <= 0 || dh <= 0) return false;
+        const armourCx = dx + dw / 2;
+        const armourCy = dy + dh / 2;
+        const bodyCx = body.left + body.width / 2;
+        const bodyCy = body.top + body.height / 2;
+        return Math.abs(armourCx - bodyCx) <= Math.max(2, body.width * 0.30)
+            && Math.abs(armourCy - bodyCy) <= body.height * 0.75;
+    }
+
+    function installGoldArmourTagging() {
+        const current = window.getGoldTintedSprite;
+        if (typeof current !== 'function' || current.__directionalRigHandoffTagged) return typeof current === 'function';
+        const wrapped = function(img, ...rest) {
+            const out = current.call(this, img, ...rest);
+            if (isBaseArmourImage(img) && out && typeof out === 'object') {
+                try { out.__humanFemaleArmourBase = img; } catch (_) {}
+            }
+            return out;
+        };
+        wrapped.__directionalRigHandoffTagged = true;
+        wrapped.__directionalRigHandoffPrevious = current;
+        window.getGoldTintedSprite = wrapped;
+        return true;
+    }
+
+    function installBodyObserver() {
         const ctx = window.mapCtx;
-        if (!ctx || ctx.drawImage?.__directionalRigHandoff) return !!ctx;
+        if (!ctx) return false;
+        if (ctx.drawImage?.__directionalRigBodyObserver) return true;
         if (!window.__facingRendererInstalled || !window.__characterRigInstalled) return false;
 
         const previous = ctx.drawImage.bind(ctx);
@@ -114,22 +155,86 @@
             }
             return previous(img, ...args);
         };
-        wrapper.__directionalRigHandoff = true;
+        wrapper.__directionalRigBodyObserver = true;
         wrapper.__directionalRigHandoffPrevious = previous;
         ctx.drawImage = wrapper;
-        window.__directionalRigHandoffInstalled = true;
+        window.__directionalRigBodyObserverInstalled = true;
         return true;
+    }
+
+    function installArmourCompositor() {
+        const ctx = window.mapCtx;
+        if (!ctx) return false;
+        if (ctx.drawImage?.__directionalRigArmourCompositor) return true;
+        if (!window.__directionalEquipmentFitTuningApplied
+            || typeof window.computeHumanFemaleMeasuredArmourPlacement !== 'function'
+            || typeof window.getArmourRigForFacing !== 'function'
+            || typeof window.drawStripDeformedArmour !== 'function') return false;
+
+        installGoldArmourTagging();
+        const previous = ctx.drawImage.bind(ctx);
+        const rawDraw = (img, ...args) => CanvasRenderingContext2D.prototype.drawImage.call(ctx, img, ...args);
+
+        const wrapper = function(img, ...args) {
+            if (args.length === 4 && isHumanFemaleArmourImage(img)) {
+                const body = window.__humanFemaleLastBodyDraw;
+                if (body?.entity?.race === 'human' && body?.entity?.gender === 'female' && armourDrawMatchesBody(args, body)) {
+                    const placement = window.computeHumanFemaleMeasuredArmourPlacement(img, body.view, body);
+                    const rig = window.getArmourRigForFacing('human_female', body.facing);
+                    if (placement && rig) {
+                        if ((window.cameraZoom || 1) >= 0.55) {
+                            window.drawStripDeformedArmour(
+                                ctx,
+                                rawDraw,
+                                img,
+                                rig,
+                                placement.dx,
+                                placement.dy,
+                                placement.outerWidthPx,
+                                placement.outerHeightPx
+                            );
+                        } else {
+                            rawDraw(img, placement.dx, placement.dy, placement.outerWidthPx, placement.outerHeightPx);
+                        }
+                        const measured = {
+                            ...placement,
+                            placementSource:'actual-body-draw-bounds',
+                            compositionSource:'directional-rig-handoff-direct',
+                        };
+                        if (window.HUMAN_FEMALE_EQUIPMENT_FIT) {
+                            window.HUMAN_FEMALE_EQUIPMENT_FIT.lastMeasuredArmour = measured;
+                        }
+                        window.__directionalRigHandoffLastArmour = measured;
+                        return;
+                    }
+                }
+            }
+            return previous(img, ...args);
+        };
+        wrapper.__directionalRigArmourCompositor = true;
+        wrapper.__directionalRigHandoffPrevious = previous;
+        ctx.drawImage = wrapper;
+        window.__directionalRigArmourCompositorInstalled = true;
+        return true;
+    }
+
+    function installAll() {
+        const bodyReady = installBodyObserver();
+        installGoldArmourTagging();
+        const armourReady = installArmourCompositor();
+        window.__directionalRigHandoffInstalled = bodyReady && armourReady;
+        return bodyReady && armourReady;
     }
 
     window.computeHumanFemaleDirectionalBodyBounds = computeDirectionalBounds;
     window.publishHumanFemaleDirectionalBodyBounds = publishBodyBounds;
     window.getHumanFemaleLiveBodyBounds = entity => entity ? liveBoundsByEntity.get(entity) || null : window.__humanFemaleLastBodyDraw || null;
-    window.installDirectionalRigHandoff = install;
+    window.installDirectionalRigHandoff = installAll;
 
-    if (install()) return;
+    if (installAll()) return;
     let attempts = 0;
     const timer = setInterval(() => {
         attempts += 1;
-        if (install() || attempts >= 200) clearInterval(timer);
+        if (installAll() || attempts >= 400) clearInterval(timer);
     }, 25);
 })();
