@@ -1,21 +1,147 @@
 // rigDebug.js
-// Optional visual diagnostics for directional character rigging. Loaded before
+// Optional visual diagnostics for directional character rigging, plus the
+// first-tranche human-female reference-rig calibration. Loaded before
 // characterRig.js so the low-level drawImage observer can see the strip draws
-// that characterRig captures as its native renderer. Nothing changes unless a
-// debug setting is enabled.
+// that characterRig captures as its native renderer.
 (() => {
     const KEY_ANCHORS = 'rpg_show_rig_anchors';
     const KEY_ARMOUR = 'rpg_show_armour_width_debug';
 
     window.showRigAnchors = localStorage.getItem(KEY_ANCHORS) === 'true';
     window.showArmourWidthDebug = localStorage.getItem(KEY_ARMOUR) === 'true';
-    // Preserve the older attachment-anchor overlay in characterRig as part of
-    // the new setting. The canonical reference anchors below supplement it.
-    window.charDebugMode = window.showRigAnchors;
+    // The canonical human-female overlay now contains the attachment points too.
+    // Do not also draw characterRig's legacy overlay on top of it.
+    window.charDebugMode = false;
+
+    // These points are anatomy landmarks, not convenient positions inside the
+    // sprite canvas. The front values were calibrated from the live rendered
+    // sprite: feet are centred between the visible alpha edges of each foot,
+    // hand grips sit on the palms, and waist/hip Y values follow the actual
+    // waist and pelvis instead of the old groin/knee approximations.
+    const HUMAN_FEMALE_ANATOMY = {
+        front: {
+            scalpCenter:{x:0.500,y:0.105}, hairAnchor:{x:0.500,y:0.125}, helmetAnchor:{x:0.500,y:0.030},
+            torsoShoulderLeft:{x:0.215,y:0.250}, torsoShoulderRight:{x:0.785,y:0.250},
+            torsoWaistLeft:{x:0.320,y:0.405}, torsoWaistRight:{x:0.680,y:0.405},
+            torsoHipLeft:{x:0.285,y:0.530}, torsoHipRight:{x:0.715,y:0.530},
+            leftHand:{x:0.080,y:0.545}, rightHand:{x:0.920,y:0.545},
+            mainHandGrip:{x:0.080,y:0.545}, offHandGrip:{x:0.920,y:0.545},
+            offForearm:{x:0.873,y:0.442}, backAnchor:{x:0.500,y:0.330},
+            waistCenter:{x:0.500,y:0.405},
+            leftFoot:{x:0.305,y:0.965}, rightFoot:{x:0.695,y:0.965},
+        },
+        side: {
+            scalpCenter:{x:0.525,y:0.105}, hairAnchor:{x:0.525,y:0.130}, helmetAnchor:{x:0.525,y:0.030},
+            torsoShoulderLeft:{x:0.460,y:0.250}, torsoShoulderRight:{x:0.560,y:0.250},
+            torsoWaistLeft:{x:0.475,y:0.405}, torsoWaistRight:{x:0.545,y:0.405},
+            torsoHipLeft:{x:0.465,y:0.530}, torsoHipRight:{x:0.555,y:0.530},
+            leftHand:{x:0.490,y:0.520}, rightHand:{x:0.530,y:0.545},
+            mainHandGrip:{x:0.530,y:0.545}, offHandGrip:{x:0.490,y:0.520},
+            offForearm:{x:0.500,y:0.440}, backAnchor:{x:0.430,y:0.330},
+            waistCenter:{x:0.505,y:0.405},
+            leftFoot:{x:0.485,y:0.965}, rightFoot:{x:0.535,y:0.965},
+        },
+        back: {
+            scalpCenter:{x:0.500,y:0.105}, hairAnchor:{x:0.500,y:0.125}, helmetAnchor:{x:0.500,y:0.030},
+            torsoShoulderLeft:{x:0.215,y:0.250}, torsoShoulderRight:{x:0.785,y:0.250},
+            torsoWaistLeft:{x:0.320,y:0.405}, torsoWaistRight:{x:0.680,y:0.405},
+            torsoHipLeft:{x:0.285,y:0.530}, torsoHipRight:{x:0.715,y:0.530},
+            leftHand:{x:0.920,y:0.545}, rightHand:{x:0.080,y:0.545},
+            mainHandGrip:{x:0.920,y:0.545}, offHandGrip:{x:0.080,y:0.545},
+            offForearm:{x:0.127,y:0.442}, backAnchor:{x:0.500,y:0.300},
+            waistCenter:{x:0.500,y:0.405},
+            leftFoot:{x:0.695,y:0.965}, rightFoot:{x:0.305,y:0.965},
+        },
+    };
+
+    const ARMOUR_LANDMARK_CLEARANCE = 0.10;
+    function copyPoint(p) { return p ? {x:p.x,y:p.y} : null; }
+    function applyCanonicalAnatomy() {
+        const refs = window.HUMAN_FEMALE_REFERENCE_RIGS;
+        if (!refs) return false;
+        for (const view of ['front','side','back']) {
+            if (!refs[view]?.anchors) return false;
+            Object.assign(refs[view].anchors, HUMAN_FEMALE_ANATOMY[view]);
+        }
+        window.HUMAN_FEMALE_ANATOMY = HUMAN_FEMALE_ANATOMY;
+        return true;
+    }
+
+    // characterRig historically had a second human-female attachment table.
+    // Keep the exported table for compatibility, but make it a projection of
+    // the canonical anatomy so weapons cannot drift away from the hand rig.
+    function syncCharacterRigAttachments() {
+        const target = window.DIRECTIONAL_ATTACHMENT_RIGS?.human_female;
+        if (!target) return false;
+        for (const view of ['front','side','back']) {
+            const a = HUMAN_FEMALE_ANATOMY[view];
+            Object.assign(target[view], {
+                headTop:copyPoint(a.helmetAnchor),
+                headCentre:copyPoint(a.scalpCenter),
+                shoulderLeft:copyPoint(a.torsoShoulderLeft),
+                shoulderRight:copyPoint(a.torsoShoulderRight),
+                back:copyPoint(a.backAnchor),
+                mainHand:copyPoint(a.mainHandGrip),
+                offHand:copyPoint(a.offHandGrip),
+                forearm:copyPoint(a.offForearm),
+            });
+        }
+        return true;
+    }
+
+    function span(left, right) {
+        return {
+            left:Math.max(0, Math.min(left.x,right.x)-ARMOUR_LANDMARK_CLEARANCE),
+            right:Math.min(1, Math.max(left.x,right.x)+ARMOUR_LANDMARK_CLEARANCE),
+        };
+    }
+    function armourFromAnatomy(view) {
+        const a = HUMAN_FEMALE_ANATOMY[view];
+        const shoulders=span(a.torsoShoulderLeft,a.torsoShoulderRight);
+        const waist=span(a.torsoWaistLeft,a.torsoWaistRight);
+        const hips=span(a.torsoHipLeft,a.torsoHipRight);
+        return {
+            shoulderL:shoulders.left, shoulderR:shoulders.right,
+            waistL:waist.left, waistR:waist.right,
+            hemL:hips.left, hemR:hips.right,
+            waistY:(a.torsoWaistLeft.y+a.torsoWaistRight.y)/2,
+            source:'calibrated-body-landmarks',
+        };
+    }
+    function syncArmourLandmarks() {
+        // Wait until directionalEquipmentTuning has done its one-time setup so
+        // its old 0.32 compensation cannot overwrite the calibrated result.
+        if (!window.__directionalEquipmentFitTuningApplied) return false;
+        const views=window.DIRECTIONAL_ARMOUR_RIGS?.human_female;
+        if (!views) return false;
+        for (const view of ['front','side','back']) Object.assign(views[view],armourFromAnatomy(view));
+        if (window.ARMOUR_RIGS?.human_female) Object.assign(window.ARMOUR_RIGS.human_female,armourFromAnatomy('front'));
+        const cfg=window.CHAR_CONFIG?.human_female;
+        if (cfg?.armour) cfg.armour.mesh={...armourFromAnatomy('front')};
+        if (window.HUMAN_FEMALE_EQUIPMENT_FIT) {
+            window.HUMAN_FEMALE_EQUIPMENT_FIT.armourViews=Object.fromEntries(['front','side','back'].map(v=>[v,{...armourFromAnatomy(v)}]));
+            window.HUMAN_FEMALE_EQUIPMENT_FIT.armourClearanceX=ARMOUR_LANDMARK_CLEARANCE;
+            window.HUMAN_FEMALE_EQUIPMENT_FIT.armourSource='calibrated-body-landmarks';
+        }
+        return true;
+    }
+
+    let calibrationAttempts=0;
+    const calibrationTimer=setInterval(()=>{
+        calibrationAttempts++;
+        const refs=applyCanonicalAnatomy();
+        const attachments=syncCharacterRigAttachments();
+        const armour=syncArmourLandmarks();
+        if ((refs&&attachments&&armour)||calibrationAttempts>200) {
+            if (refs&&attachments) window.__humanFemaleReferenceRigCalibrated=true;
+            clearInterval(calibrationTimer);
+        }
+    },25);
+    applyCanonicalAnatomy();
 
     function setShowRigAnchors(enabled) {
         window.showRigAnchors = !!enabled;
-        window.charDebugMode = window.showRigAnchors;
+        window.charDebugMode = false;
         localStorage.setItem(KEY_ANCHORS, enabled ? 'true' : 'false');
         syncUI();
     }
@@ -50,7 +176,7 @@
 
         const anchorGroup = document.createElement('div');
         anchorGroup.className = 'form-group';
-        anchorGroup.innerHTML = '<label><input type="checkbox" id="graphics-show-rig-anchors"> Show character anchor points</label><small style="display:block;color:#aaa;margin-top:3px;">Shows canonical head, torso, hand and foot anchors plus equipment attachment points.</small>';
+        anchorGroup.innerHTML = '<label><input type="checkbox" id="graphics-show-rig-anchors"> Show character anchor points</label><small style="display:block;color:#aaa;margin-top:3px;">Shows canonical head, torso, hand, equipment and foot anchors.</small>';
         anchorGroup.querySelector('input').addEventListener('change', e => setShowRigAnchors(e.target.checked));
 
         const armourGroup = document.createElement('div');
@@ -89,7 +215,6 @@
         return match?.[1] || null;
     }
     function destinationRect(args) {
-        // Rest args after the image: 4 args = dx,dy,dw,dh; 8 args = sx,sy,sw,sh,dx,dy,dw,dh.
         if (args.length === 4) return { x:+args[0], y:+args[1], width:+args[2], height:+args[3] };
         if (args.length === 8) return { x:+args[4], y:+args[5], width:+args[6], height:+args[7] };
         return null;
@@ -125,7 +250,7 @@
     }
     function anchorColour(name) {
         if (name.startsWith('torso')) return '#00e5ff';
-        if (/hand|grip/i.test(name)) return '#ffab40';
+        if (/hand|grip|forearm/i.test(name)) return '#ffab40';
         if (/foot/i.test(name)) return '#76ff03';
         if (/scalp|hair|helmet/i.test(name)) return '#e040fb';
         return '#ffeb3b';
