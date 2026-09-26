@@ -1,0 +1,1 @@
+Remove temporary smoke support files after CI completes.
