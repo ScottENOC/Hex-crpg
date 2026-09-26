@@ -23,13 +23,13 @@
         const directionalArmour = window.DIRECTIONAL_ARMOUR_RIGS?.human_female;
         if (!cfg || !armourRig || !directionalArmour) return false;
 
-        // Destination rectangle tuning remains intentionally simple. Shape fit
-        // now lives in the small per-facing meshes in characterRig.js so scale
-        // and translation are not mixed up with deformation parameters.
+        // The source armour PNGs have substantial transparent padding. Give the
+        // destination box enough room for the visible plate to cover the body;
+        // actual body-shape fitting is handled separately by centred strip scale.
         cfg.armour = {
             ...(cfg.armour || {}),
-            wMult: 1.34,
-            topShift: 0.36,
+            wMult: 1.58,
+            topShift: 0.28,
             mesh: { ...directionalArmour.front },
         };
 
