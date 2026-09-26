@@ -39,7 +39,7 @@ window.generateName = window.getRandomName;
     window.randomizeCharacterAppearance({sync:false});
 })();
 
-const PRESENTATION_BUILD = '20260926-source-target-asset-anchors';
+const PRESENTATION_BUILD = '20260926-mobile-tap-move-dedupe';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
 const presentationBuildMeta=document.querySelector('meta[name="app-build"]');if(presentationBuildMeta)presentationBuildMeta.content=PRESENTATION_BUILD;
@@ -56,6 +56,7 @@ if('serviceWorker'in navigator){navigator.serviceWorker.register(`sw.js?build=${
 
 (() => {
     const scripts = [
+        ['movementInputFix.js','movementInputFix'],
         ['rigDebug.js','rigDebug'],
         ['characterRig.js','characterRig'],
         ['renderPerfTuning.js','renderPerfTuning'],
