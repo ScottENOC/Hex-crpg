@@ -1,0 +1,21 @@
+name: Measured canonical rig smoke
+on:
+  pull_request:
+    paths:
+      - 'spriteRigging.js'
+      - 'rigDebug.js'
+      - 'rigCalibration.js'
+      - 'name.js'
+      - 'tests/human-female-rig-load-order.spec.js'
+      - '.github/workflows/measured-canonical-rig-smoke.yml'
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test tests/human-female-rig-load-order.spec.js --project=chromium
