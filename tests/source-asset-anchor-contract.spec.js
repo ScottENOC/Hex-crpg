@@ -16,8 +16,6 @@ test('weapon source grip aligns to canonical body hand without moving anatomy', 
     expect(state.sourceSword).toBeTruthy();
     expect(state.compatibilitySword).toEqual(state.sourceSword);
     expect(state.renderTarget).toEqual(state.bodyGrip);
-    // Source artwork coordinates and target anatomy coordinates are deliberately
-    // different spaces; tuning one must never rewrite the other.
     expect(state.sourceSword).not.toEqual(state.bodyGrip);
 });
 
@@ -31,7 +29,9 @@ test('armour source silhouette extents map exactly to shoulder-top and foot-sole
             originalWidth:1024, originalHeight:1024,
             trimLeft:300, trimTop:100, trimWidth:424, trimHeight:700,
         };
-        const image = { width:1024, height:1024 };
+        const image = document.createElement('canvas');
+        image.width = 1024;
+        image.height = 1024;
         const fit = window.computeHumanFemaleMeasuredArmourFit(image, 'front', trim);
         const anchors = window.HUMAN_FEMALE_REFERENCE_RIGS.front.anchors;
         const cfg = window.CHAR_CONFIG.human_female;
