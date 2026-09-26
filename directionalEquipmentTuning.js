@@ -1,28 +1,30 @@
 // directionalEquipmentTuning.js
 // Presentation-only fit tuning for human-female directional equipment.
-// The underlying armour/helmet PNGs contain generous transparent padding, so
-// their legacy destination rectangles make the visible gear look too small.
 //
-// Body geometry is canonical in spriteRigging.js. Armour fit is derived from
-// the body's torso anchors plus asset-clearance values for transparent padding;
-// it does not maintain a second body silhouette.
+// Body geometry is canonical in spriteRigging.js. Armour horizontal fit is
+// derived from torso anchors. Vertical/overall scale is measured from the
+// armour image's real alpha bounds so visible armour, not its transparent PNG
+// canvas, is sized against the body.
 
 (() => {
     'use strict';
 
-    // The armour files have a large transparent border around the visible
-    // plate. This is asset padding, not anatomy. Keeping it as one scalar means
-    // shoulder/waist/hip shape always comes from the body reference rig.
     const HUMAN_FEMALE_ARMOUR_CLEARANCE_X = 0.32;
+    const ALPHA_THRESHOLD = 8;
 
-    // Vertical coverage is intentionally independent at the two ends. The
-    // legacy renderer already understands topShift (distance down from body
-    // top), but historically had no way to extend the lower edge separately.
-    // These are in hexSize units, matching CHAR_CONFIG armour tuning.
-    const HUMAN_FEMALE_ARMOUR_TOP_SHIFT = 0.10;
-    const HUMAN_FEMALE_ARMOUR_BOTTOM_DROP = 0.08;
+    // Safe fallback used only until an armour image can be measured (or if an
+    // alpha scan is unavailable). Normal rendering replaces this rectangle
+    // with the measured shoulder-to-feet fit below.
+    const FALLBACK_ARMOUR = { wMult:1.58, topShift:0.10, bottomDrop:0.08 };
 
     const goldArmourImages = new WeakSet();
+    const measuredFits = new WeakMap();
+
+    function facingToView(facing) {
+        if (facing === 'up') return 'back';
+        if (facing === 'left' || facing === 'right') return 'side';
+        return 'front';
+    }
 
     function spanFromAnchors(anchors, leftName, rightName, clearance = HUMAN_FEMALE_ARMOUR_CLEARANCE_X) {
         const a = anchors?.[leftName];
@@ -56,6 +58,70 @@
         };
     }
 
+    function verticalBodyTarget(view) {
+        const anchors = window.HUMAN_FEMALE_REFERENCE_RIGS?.[view]?.anchors;
+        if (!anchors) return null;
+        const shoulderY = (anchors.torsoShoulderLeft.y + anchors.torsoShoulderRight.y) / 2;
+        const footY = Math.max(anchors.leftFoot.y, anchors.rightFoot.y);
+        if (!(footY > shoulderY)) return null;
+        return {
+            shoulderY,
+            footY,
+            heightFrac: footY - shoulderY,
+        };
+    }
+
+    // Solve a uniform image scale from the REAL opaque/visible armour height.
+    // If visible armour occupies alphaTop..alphaBottom in the source image,
+    // choose a scale such that that span equals shoulder..feet on the body.
+    // Width uses the same source-pixel scale, preserving the armour artwork's
+    // aspect ratio rather than independently guessing a width multiplier.
+    function computeMeasuredArmourFit(image, view = 'front', trimOverride = null) {
+        const cfg = getHumanFemaleConfig();
+        const target = verticalBodyTarget(view);
+        const iw = image?.naturalWidth || image?.width || 0;
+        const ih = image?.naturalHeight || image?.height || 0;
+        if (!cfg || !target || !iw || !ih) return null;
+
+        const trim = trimOverride || (typeof window.suggestSpriteAlphaTrim === 'function'
+            ? window.suggestSpriteAlphaTrim(image, ALPHA_THRESHOLD)
+            : null);
+        if (!trim?.trimHeight || !trim?.originalHeight || !trim?.originalWidth) return null;
+
+        const targetVisibleHeight = cfg.bodyH * target.heightFrac;
+        const scaleHexPerSourcePixel = targetVisibleHeight / trim.trimHeight;
+        const outerHeight = trim.originalHeight * scaleHexPerSourcePixel;
+        const outerWidth = trim.originalWidth * scaleHexPerSourcePixel;
+        const topShift = cfg.bodyH * target.shoulderY - trim.trimTop * scaleHexPerSourcePixel;
+        const visibleTop = topShift + trim.trimTop * scaleHexPerSourcePixel;
+        const visibleBottom = topShift + (trim.trimTop + trim.trimHeight) * scaleHexPerSourcePixel;
+
+        return {
+            view,
+            trim: { ...trim },
+            target: { ...target },
+            targetVisibleHeight,
+            outerHeight,
+            outerWidth,
+            wMult: outerWidth / cfg.bodyW,
+            topShift,
+            // Kept as a derived diagnostic for the legacy vocabulary. The
+            // measured wrapper draws the exact outerHeight directly.
+            bottomDrop: outerHeight - cfg.bodyH + topShift,
+            visibleTop,
+            visibleBottom,
+            source: 'alpha-bounds-to-body-shoulders-feet',
+        };
+    }
+
+    function getHumanFemaleConfig() {
+        try {
+            return typeof CHAR_CONFIG !== 'undefined' ? CHAR_CONFIG?.human_female : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
     function isBaseArmourImage(img) {
         const g = window.gameVisuals;
         return !!img && !!g && (img === g.humanLight || img === g.humanMedium || img === g.humanHeavy);
@@ -63,8 +129,7 @@
 
     function installGoldArmourTracking() {
         const current = window.getGoldTintedSprite;
-        if (typeof current !== 'function') return;
-        if (current.__humanFemaleVerticalExtentTracking) return;
+        if (typeof current !== 'function' || current.__humanFemaleMeasuredArmourTracking) return;
         const wrapped = function(img, ...rest) {
             const out = current.call(this, img, ...rest);
             if (isBaseArmourImage(img) && out && typeof out === 'object') {
@@ -72,7 +137,7 @@
             }
             return out;
         };
-        wrapped.__humanFemaleVerticalExtentTracking = true;
+        wrapped.__humanFemaleMeasuredArmourTracking = true;
         window.getGoldTintedSprite = wrapped;
     }
 
@@ -85,55 +150,68 @@
         return !!e && e.race === 'human' && e.gender === 'female';
     }
 
-    // The core armour draw rectangle ends at the body bottom. Add the missing
-    // independent lower extent here, after characterRig has installed its draw
-    // wrapper. Temporarily offset topShift only for characterRig's rectangle
-    // matcher so the deliberately taller rectangle is still recognised; the
-    // actual top coordinate is unchanged, so this can only extend downward.
-    function installVerticalExtentWrapper(cfg) {
+    function measuredFitFor(image, view) {
+        let byView = measuredFits.get(image);
+        if (!byView) {
+            byView = {};
+            measuredFits.set(image, byView);
+        }
+        if (!byView[view]) byView[view] = computeMeasuredArmourFit(image, view);
+        return byView[view] || null;
+    }
+
+    // gameEngine submits the old configurable armour rectangle. Intercept only
+    // human-female armour, replace it with the mathematically measured box,
+    // then temporarily tell characterRig's size matcher about that exact box.
+    // characterRig still performs the axis-aligned strip deformation afterwards.
+    function installMeasuredSizeWrapper(cfg) {
         const ctx = window.mapCtx;
         if (!ctx || !window.__characterRigInstalled) return false;
-        if (ctx.__humanFemaleArmourVerticalExtentInstalled) return true;
+        if (ctx.__humanFemaleMeasuredArmourSizeInstalled) return true;
 
         installGoldArmourTracking();
         const previousDrawImage = ctx.drawImage.bind(ctx);
         ctx.drawImage = function(img, ...args) {
             if (args.length === 4 && isTrackedArmourImage(img) && isActiveHumanFemale()) {
-                const [dx, dy, dw, dh] = args;
-                const bottomDrop = Number(cfg.armour?.bottomDrop) || 0;
-                if (bottomDrop > 0) {
-                    const pixelDrop = bottomDrop * (window.hexSize || 1) * (window.cameraZoom || 1);
+                const view = facingToView(window.__activeCharacterFacing);
+                const fit = measuredFitFor(img, view);
+                if (fit) {
+                    const [legacyDx, legacyDy, legacyDw] = args;
+                    const hsZ = (window.hexSize || 1) * (window.cameraZoom || 1);
+                    const bodyWidthPx = cfg.bodyW * hsZ;
+                    const bodyHeightPx = cfg.bodyH * hsZ;
+                    const centreX = legacyDx + legacyDw / 2;
+                    const bodyTop = legacyDy - (Number(cfg.armour?.topShift) || 0) * hsZ;
+                    const dw = fit.outerWidth * hsZ;
+                    const dh = fit.outerHeight * hsZ;
+                    const dx = centreX - dw / 2;
+                    const dy = bodyTop + fit.topShift * hsZ;
+
+                    const savedWMult = cfg.armour.wMult;
                     const savedTopShift = cfg.armour.topShift;
-                    // characterRig matches incoming armour height against
-                    // bodyH - topShift. Reducing the matcher shift by exactly
-                    // bottomDrop makes the extended rectangle an exact match.
-                    cfg.armour.topShift = savedTopShift - bottomDrop;
+                    const savedBottomDrop = cfg.armour.bottomDrop;
+                    cfg.armour.wMult = dw / bodyWidthPx;
+                    cfg.armour.topShift = cfg.bodyH - dh / hsZ; // matcher only
+                    cfg.armour.bottomDrop = 0;
                     try {
-                        return previousDrawImage(img, dx, dy, dw, dh + pixelDrop);
+                        const out = previousDrawImage(img, dx, dy, dw, dh);
+                        window.HUMAN_FEMALE_EQUIPMENT_FIT.lastMeasuredArmour = { ...fit };
+                        return out;
                     } finally {
+                        cfg.armour.wMult = savedWMult;
                         cfg.armour.topShift = savedTopShift;
+                        cfg.armour.bottomDrop = savedBottomDrop;
                     }
                 }
             }
             return previousDrawImage(img, ...args);
         };
-        ctx.__humanFemaleArmourVerticalExtentInstalled = true;
+        ctx.__humanFemaleMeasuredArmourSizeInstalled = true;
         return true;
     }
 
     function apply() {
-        let cfg;
-        try {
-            // CHAR_CONFIG is a top-level lexical binding in gameEngine.js. It
-            // deliberately is not window.CHAR_CONFIG, but later classic scripts
-            // can still access it by identifier once gameEngine has initialised.
-            cfg = typeof CHAR_CONFIG !== 'undefined' ? CHAR_CONFIG?.human_female : null;
-        } catch (_) {
-            return false;
-        }
-
-        // Wait for both the renderer's mutable fit objects and the canonical
-        // reference body rig. facingSystem loads spriteRigging.js on demand.
+        const cfg = getHumanFemaleConfig();
         const armourRig = window.ARMOUR_RIGS?.human_female;
         const directionalArmour = window.DIRECTIONAL_ARMOUR_RIGS?.human_female;
         const bodyRigs = window.HUMAN_FEMALE_REFERENCE_RIGS;
@@ -144,42 +222,15 @@
             const fit = deriveArmourRigFromBody(view);
             if (!fit) return false;
             derived[view] = fit;
-            // Mutate the existing shared objects because characterRig's draw
-            // wrapper already holds references to this directional map.
             Object.assign(directionalArmour[view], fit);
         }
         Object.assign(armourRig, derived.front);
 
-        // Width and horizontal shaping remain exactly as previously validated.
-        // Only the vertical envelope changes here: start substantially higher,
-        // while bottomDrop independently extends the hem slightly downward.
         cfg.armour = {
             ...(cfg.armour || {}),
-            wMult: 1.58,
-            topShift: HUMAN_FEMALE_ARMOUR_TOP_SHIFT,
-            bottomDrop: HUMAN_FEMALE_ARMOUR_BOTTOM_DROP,
+            ...FALLBACK_ARMOUR,
             mesh: { ...derived.front },
         };
-
-        if (!installVerticalExtentWrapper(cfg)) return false;
-
-        // Centre the helmet on the character and enlarge its draw box enough
-        // to compensate for transparent padding in the helmet artwork.
-        cfg.helm = {
-            ...(cfg.helm || {}),
-            xOff: 0,
-            yOff: -0.32,
-            sizeMult: 1.48,
-        };
-
-        // Directional attachment metadata should agree with the centred helmet
-        // even when the character is facing sideways.
-        const rigs = window.DIRECTIONAL_ATTACHMENT_RIGS?.human_female;
-        if (rigs) {
-            for (const view of ['front', 'side', 'back']) {
-                if (rigs[view]?.headTop) rigs[view].headTop.x = 0.5;
-            }
-        }
 
         window.HUMAN_FEMALE_EQUIPMENT_FIT = {
             armour: { ...cfg.armour },
@@ -189,14 +240,31 @@
                 back: { ...derived.back },
             },
             armourSource: 'body-torso-anchors',
+            armourScaleSource: 'alpha-bounds-to-body-shoulders-feet',
             armourClearanceX: HUMAN_FEMALE_ARMOUR_CLEARANCE_X,
-            armourVertical: {
-                topShift: HUMAN_FEMALE_ARMOUR_TOP_SHIFT,
-                bottomDrop: HUMAN_FEMALE_ARMOUR_BOTTOM_DROP,
-            },
-            helm: { ...cfg.helm },
+            targetVerticalByView: Object.fromEntries(['front','side','back'].map(view => [view, verticalBodyTarget(view)])),
+            helm: null,
         };
+
+        if (!installMeasuredSizeWrapper(cfg)) return false;
+
+        cfg.helm = {
+            ...(cfg.helm || {}),
+            xOff: 0,
+            yOff: -0.32,
+            sizeMult: 1.48,
+        };
+        window.HUMAN_FEMALE_EQUIPMENT_FIT.helm = { ...cfg.helm };
+
+        const rigs = window.DIRECTIONAL_ATTACHMENT_RIGS?.human_female;
+        if (rigs) {
+            for (const view of ['front', 'side', 'back']) {
+                if (rigs[view]?.headTop) rigs[view].headTop.x = 0.5;
+            }
+        }
+
         window.deriveHumanFemaleArmourRig = deriveArmourRigFromBody;
+        window.computeHumanFemaleMeasuredArmourFit = computeMeasuredArmourFit;
         window.__directionalEquipmentFitTuningApplied = true;
         return true;
     }
