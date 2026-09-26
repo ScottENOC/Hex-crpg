@@ -1,0 +1,22 @@
+name: Rig load order smoke
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'name.js'
+      - 'spriteRigging.js'
+      - 'rigDebug.js'
+      - 'characterRig.js'
+      - 'tests/human-female-rig-load-order.spec.js'
+      - '.github/workflows/rig-load-order-smoke.yml'
+jobs:
+  rig-load-order-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test tests/human-female-rig-load-order.spec.js --project=chromium
