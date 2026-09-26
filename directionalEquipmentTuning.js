@@ -3,14 +3,16 @@
 //
 // Body geometry is canonical in spriteRigging.js. Armour horizontal fit is
 // derived from torso anchors. Vertical/overall scale is measured from the
-// armour image's real alpha bounds so visible armour, not its transparent PNG
-// canvas, is sized against the body.
+// armour image's real visible silhouette so transparent padding (and isolated
+// edge-noise pixels) cannot make the fitted armour look too small.
 
 (() => {
     'use strict';
 
     const HUMAN_FEMALE_ARMOUR_CLEARANCE_X = 0.32;
-    const ALPHA_THRESHOLD = 8;
+    const ALPHA_THRESHOLD = 24;
+    const MIN_ROW_OCCUPANCY_FRAC = 0.005;
+    const MIN_COLUMN_OCCUPANCY_FRAC = 0.005;
 
     // Safe fallback used only until an armour image can be measured (or if an
     // alpha scan is unavailable). Normal rendering replaces this rectangle
@@ -71,11 +73,66 @@
         };
     }
 
-    // Solve a uniform image scale from the REAL opaque/visible armour height.
-    // If visible armour occupies alphaTop..alphaBottom in the source image,
-    // choose a scale such that that span equals shoulder..feet on the body.
-    // Width uses the same source-pixel scale, preserving the armour artwork's
-    // aspect ratio rather than independently guessing a width multiplier.
+    // A simple first/last-alpha-pixel box is too fragile for generated PNGs:
+    // one isolated semi-opaque pixel near an edge can make the source appear
+    // almost full-height and therefore shrink the fitted armour dramatically.
+    // Count opaque pixels per row/column and require a small but real amount of
+    // silhouette occupancy before accepting that row/column as armour content.
+    function measureRobustAlphaBounds(image, alphaThreshold = ALPHA_THRESHOLD) {
+        if (!image || typeof document === 'undefined') return null;
+        const w = image.naturalWidth || image.width || 0;
+        const h = image.naturalHeight || image.height || 0;
+        if (!w || !h) return null;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d', { willReadFrequently:true });
+        if (!ctx) return null;
+        try {
+            ctx.drawImage(image, 0, 0);
+            const data = ctx.getImageData(0, 0, w, h).data;
+            const rowCounts = new Uint32Array(h);
+            const colCounts = new Uint32Array(w);
+            for (let y=0; y<h; y++) {
+                const rowBase = y * w * 4;
+                for (let x=0; x<w; x++) {
+                    if (data[rowBase + x*4 + 3] < alphaThreshold) continue;
+                    rowCounts[y]++;
+                    colCounts[x]++;
+                }
+            }
+
+            const minRowPixels = Math.max(3, Math.ceil(w * MIN_ROW_OCCUPANCY_FRAC));
+            const minColPixels = Math.max(3, Math.ceil(h * MIN_COLUMN_OCCUPANCY_FRAC));
+            let minY = 0, maxY = h - 1, minX = 0, maxX = w - 1;
+            while (minY < h && rowCounts[minY] < minRowPixels) minY++;
+            while (maxY >= minY && rowCounts[maxY] < minRowPixels) maxY--;
+            while (minX < w && colCounts[minX] < minColPixels) minX++;
+            while (maxX >= minX && colCounts[maxX] < minColPixels) maxX--;
+            if (maxY < minY || maxX < minX) return null;
+
+            return {
+                originalWidth:w,
+                originalHeight:h,
+                trimLeft:minX,
+                trimTop:minY,
+                trimWidth:maxX-minX+1,
+                trimHeight:maxY-minY+1,
+                alphaThreshold,
+                minRowPixels,
+                minColPixels,
+                method:'row-column-occupancy',
+            };
+        } catch (_) {
+            return null;
+        }
+    }
+
+    // Solve a uniform image scale from the REAL armour silhouette height.
+    // The source image is enlarged until the robust visible span equals the
+    // body shoulder-to-feet span. Width uses the same pixel scale so artwork
+    // aspect ratio is preserved.
     function computeMeasuredArmourFit(image, view = 'front', trimOverride = null) {
         const cfg = getHumanFemaleConfig();
         const target = verticalBodyTarget(view);
@@ -83,9 +140,10 @@
         const ih = image?.naturalHeight || image?.height || 0;
         if (!cfg || !target || !iw || !ih) return null;
 
-        const trim = trimOverride || (typeof window.suggestSpriteAlphaTrim === 'function'
-            ? window.suggestSpriteAlphaTrim(image, ALPHA_THRESHOLD)
-            : null);
+        const rawTrim = typeof window.suggestSpriteAlphaTrim === 'function'
+            ? window.suggestSpriteAlphaTrim(image, 8)
+            : null;
+        const trim = trimOverride || measureRobustAlphaBounds(image) || rawTrim;
         if (!trim?.trimHeight || !trim?.originalHeight || !trim?.originalWidth) return null;
 
         const targetVisibleHeight = cfg.bodyH * target.heightFrac;
@@ -99,18 +157,17 @@
         return {
             view,
             trim: { ...trim },
+            rawTrim: rawTrim ? { ...rawTrim } : null,
             target: { ...target },
             targetVisibleHeight,
             outerHeight,
             outerWidth,
             wMult: outerWidth / cfg.bodyW,
             topShift,
-            // Kept as a derived diagnostic for the legacy vocabulary. The
-            // measured wrapper draws the exact outerHeight directly.
             bottomDrop: outerHeight - cfg.bodyH + topShift,
             visibleTop,
             visibleBottom,
-            source: 'alpha-bounds-to-body-shoulders-feet',
+            source: 'robust-alpha-bounds-to-body-shoulders-feet',
         };
     }
 
@@ -179,7 +236,6 @@
                     const [legacyDx, legacyDy, legacyDw] = args;
                     const hsZ = (window.hexSize || 1) * (window.cameraZoom || 1);
                     const bodyWidthPx = cfg.bodyW * hsZ;
-                    const bodyHeightPx = cfg.bodyH * hsZ;
                     const centreX = legacyDx + legacyDw / 2;
                     const bodyTop = legacyDy - (Number(cfg.armour?.topShift) || 0) * hsZ;
                     const dw = fit.outerWidth * hsZ;
@@ -240,7 +296,7 @@
                 back: { ...derived.back },
             },
             armourSource: 'body-torso-anchors',
-            armourScaleSource: 'alpha-bounds-to-body-shoulders-feet',
+            armourScaleSource: 'robust-alpha-bounds-to-body-shoulders-feet',
             armourClearanceX: HUMAN_FEMALE_ARMOUR_CLEARANCE_X,
             targetVerticalByView: Object.fromEntries(['front','side','back'].map(view => [view, verticalBodyTarget(view)])),
             helm: null,
@@ -264,6 +320,7 @@
         }
 
         window.deriveHumanFemaleArmourRig = deriveArmourRigFromBody;
+        window.measureHumanFemaleArmourAlphaBounds = measureRobustAlphaBounds;
         window.computeHumanFemaleMeasuredArmourFit = computeMeasuredArmourFit;
         window.__directionalEquipmentFitTuningApplied = true;
         return true;
