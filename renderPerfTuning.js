@@ -86,6 +86,10 @@
     load('script[data-silverhart-capital-completion]', 'silverhartCapitalCompletion.js', 'silverhartCapitalCompletion');
     load('script[data-silverhart-avenue-detours]', 'silverhartAvenueDetours.js', 'silverhartAvenueDetours');
 
+    // Sparse authored wilderness micro-stories. These are deterministic map
+    // dressing with tiny persisted state, not a per-tick simulation system.
+    load('script[data-world-texture-discoveries]', 'worldTextureDiscoveries.js', 'worldTextureDiscoveries');
+
     // The capital population is persistent but chunk-indexed: hundreds of
     // residents can exist without hundreds of live Entity objects.
     load('script[data-silverhart-population]', 'silverhartPopulation.js', 'silverhartPopulation');
