@@ -119,7 +119,7 @@ window.generateName = window.getRandomName;
     window.randomizeCharacterAppearance({ sync:false });
 })();
 
-const PRESENTATION_BUILD = '20260926-rig-debug-width-trace';
+const PRESENTATION_BUILD = '20260926-anatomy-anchor-calibration';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
 
