@@ -9,7 +9,7 @@
   function spanAt(rig,t){
     if(!rig)return {left:0,right:1};
     if(t<=rig.waistY){const u=rig.waistY>0?t/rig.waistY:0;return {left:lerp(rig.shoulderL,rig.waistL,u),right:lerp(rig.shoulderR,rig.waistR,u)};}
-    const d=1-rig.waistY,u=d>0?(t-rig.waistY)/d:1;return {left:lerp(rig.waistL,rig.hemL,u),right:lerp(rig.hemL,rig.hemR,u)};
+    const d=1-rig.waistY,u=d>0?(t-rig.waistY)/d:1;return {left:lerp(rig.waistL,rig.hemL,u),right:lerp(rig.waistR,rig.hemR,u)};
   }
   function tx(m,p){return {x:m.a*p.x+m.c*p.y+m.e,y:m.b*p.x+m.d*p.y+m.f};}
   function midpoint(names,anchors){const pts=names.map(n=>anchors?.[n]).filter(Boolean);if(!pts.length)return null;return {x:pts.reduce((s,p)=>s+p.x,0)/pts.length,y:pts.reduce((s,p)=>s+p.y,0)/pts.length};}
