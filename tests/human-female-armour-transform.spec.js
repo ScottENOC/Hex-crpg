@@ -7,7 +7,7 @@ test.describe('human female directional armour transform', () => {
         await page.waitForFunction(() => window.__directionalEquipmentFitTuningApplied === true);
     });
 
-    test('uses distinct, gently deformed front side and back armour rigs', async ({ page }) => {
+    test('keeps deformation symmetric and axis-aligned for every facing', async ({ page }) => {
         const result = await page.evaluate(() => {
             const facings = { front:'down', side:'right', back:'up' };
             const out = {};
@@ -15,54 +15,53 @@ test.describe('human female directional armour transform', () => {
             for (const [view, facing] of Object.entries(facings)) {
                 const rig = window.getArmourRigForFacing('human_female', facing);
                 const transforms = [];
+                const draws = [];
                 const ctx = {
-                    save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {},
-                    closePath() {}, clip() {},
-                    transform(a, b, c, d, e, f) { transforms.push({ a, b, c, d, e, f }); },
+                    transform(...args) { transforms.push(args); },
                 };
                 const image = { width:100, height:200 };
-                window.drawWarpedArmour(ctx, () => {}, image, rig, 10, 20, 120, 240);
-                out[view] = { rig:{ ...rig }, transforms };
+                window.drawStripDeformedArmour(ctx, (...args) => draws.push(args), image, rig, 10, 20, 120, 240);
+                out[view] = { rig:{ ...rig }, transforms, draws };
             }
-            return out;
+            return {
+                views: out,
+                fit: window.HUMAN_FEMALE_EQUIPMENT_FIT.armour,
+            };
         });
 
-        expect(result.front.rig).not.toEqual(result.side.rig);
-        expect(result.front.rig).not.toEqual(result.back.rig);
+        expect(result.fit.wMult).toBeGreaterThanOrEqual(1.5);
+        expect(result.fit.topShift).toBeLessThanOrEqual(0.30);
 
         for (const view of ['front', 'side', 'back']) {
-            const { rig, transforms } = result[view];
+            const { rig, transforms, draws } = result.views[view];
 
-            // Stay close to a rectangle: enough taper/lean to fit the authored
-            // body view, not enough to visibly twist plates or invert triangles.
-            expect(rig.shoulderL).toBeGreaterThanOrEqual(0);
-            expect(rig.shoulderR).toBeLessThanOrEqual(1);
-            expect(rig.waistL).toBeLessThan(0.20);
-            expect(rig.waistR).toBeGreaterThan(0.80);
-            expect(rig.hemL).toBeLessThan(0.16);
-            expect(rig.hemR).toBeGreaterThan(0.84);
-            expect(rig.shoulderL).toBeLessThan(rig.shoulderR);
-            expect(rig.waistL).toBeLessThan(rig.waistR);
-            expect(rig.hemL).toBeLessThan(rig.hemR);
+            // The armour art and body fit are symmetric around their centreline.
+            expect(rig.shoulderL + rig.shoulderR).toBeCloseTo(1, 8);
+            expect(rig.waistL + rig.waistR).toBeCloseTo(1, 8);
+            expect(rig.hemL + rig.hemR).toBeCloseTo(1, 8);
 
-            expect(transforms).toHaveLength(4);
-            for (const matrix of transforms) {
-                // Horizontal mesh bands mean no vertical-on-X skew. Allow a
-                // small X-on-Y component for taper/lean, but cap it tightly.
-                expect(Math.abs(matrix.b)).toBeLessThan(1e-8);
-                expect(Math.abs(matrix.c)).toBeLessThan(0.12);
-                expect(matrix.a).toBeGreaterThan(0);
-                expect(matrix.d).toBeGreaterThan(0);
-                expect(matrix.a * matrix.d - matrix.b * matrix.c).toBeGreaterThan(0);
+            // Strip deformation must never invoke a canvas affine transform.
+            expect(transforms).toHaveLength(0);
+            expect(draws).toHaveLength(12);
+
+            // Every strip is drawn with the 9-argument drawImage crop form and
+            // remains a positive-width, positive-height axis-aligned rectangle.
+            for (const draw of draws) {
+                expect(draw).toHaveLength(9);
+                expect(draw[7]).toBeGreaterThan(0);
+                expect(draw[8]).toBeGreaterThan(0);
             }
         }
     });
 
-    test('left and right share the authored side fit rather than mirroring the mesh twice', async ({ page }) => {
+    test('left and right share the same centred side fit', async ({ page }) => {
         const rigs = await page.evaluate(() => ({
             left: window.getArmourRigForFacing('human_female', 'left'),
             right: window.getArmourRigForFacing('human_female', 'right'),
         }));
         expect(rigs.left).toEqual(rigs.right);
+        expect(rigs.left.shoulderL + rigs.left.shoulderR).toBeCloseTo(1, 8);
+        expect(rigs.left.waistL + rigs.left.waistR).toBeCloseTo(1, 8);
+        expect(rigs.left.hemL + rigs.left.hemR).toBeCloseTo(1, 8);
     });
 });
