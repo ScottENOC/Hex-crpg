@@ -34,12 +34,12 @@ window.generateName = window.getRandomName;
     window.randomizeCharacterAppearance=function({sync=true}={}){setRandomSlider('shirt-hue-slider');setRandomSlider('pants-hue-slider');setRandomSlider('hair-hue-slider');setRandomSelect('hair-style-select');setRandomSelect('body-type-select');const fantasy=!!document.getElementById('fantasy-skin-check')?.checked;setRandomSlider(fantasy?'skin-hue-slider':'skin-tone-slider');if(window.updateSkinToneControlMode)window.updateSkinToneControlMode();if(window.updateAppearancePreview)window.updateAppearancePreview();if(sync&&window.syncCharacterToServer)window.syncCharacterToServer();};
     window.randomizeCharacterName=function(){const input=document.getElementById('character-name');const race=document.getElementById('race-select')?.value||'human';const gender=document.getElementById('gender-select')?.value||'female';if(!input||!window.getRandomName)return;input.value=window.getRandomName(race,gender);input.dispatchEvent(new Event('input',{bubbles:true}));};
     function creatorButton(id,text,onclick){const button=document.createElement('button');button.id=id;button.type='button';button.textContent=text;button.style.fontSize='0.78em';button.style.padding='6px 9px';button.style.backgroundColor='#546e7a';button.style.color='white';button.style.flexShrink='0';button.addEventListener('click',onclick);return button;}
-    function installCharacterCreatorRandomControls(){const nameInput=document.getElementById('character-name');if(nameInput&&!document.getElementById('randomize-name-btn')){const row=document.createElement('div');row.style.display='flex';row.style.gap='6px';row.style.alignItems='center';nameInput.parentNode.insertBefore(row,nameInput);row.appendChild(nameInput);nameInput.style.flex='1';nameInput.style.minWidth='0';row.appendChild(creatorButton('randomize-name-btn','Random name',()=>window.randomizeCharacterName()));}const preview=document.getElementById('appearance-preview-canvas');const appearanceGroup=preview?.closest('.form-group');if(appearanceGroup&&!document.getElementById('randomize-appearance-btn')){const appearanceButton=creatorButton('randomize-appearance-btn','🎲 Randomise appearance',()=>window.randomizeCharacterAppearance());appearanceButton.style.margin='0 0 7px 0';const appearanceLayout=preview.parentElement;appearanceGroup.insertBefore(appearanceButton,appearanceLayout);}}
-    installCharacterCreatorRandomControls();
+    window.installCharacterCreatorRandomControls=function(){const nameInput=document.getElementById('character-name');if(nameInput&&!document.getElementById('randomize-name-btn')){const row=document.createElement('div');row.style.display='flex';row.style.gap='6px';row.style.alignItems='center';nameInput.parentNode.insertBefore(row,nameInput);row.appendChild(nameInput);nameInput.style.flex='1';nameInput.style.minWidth='0';row.appendChild(creatorButton('randomize-name-btn','Random name',()=>window.randomizeCharacterName()));}const preview=document.getElementById('appearance-preview-canvas');const appearanceGroup=preview?.closest('.form-group');if(appearanceGroup&&!document.getElementById('randomize-appearance-btn')){const appearanceButton=creatorButton('randomize-appearance-btn','🎲 Randomise appearance',()=>window.randomizeCharacterAppearance());appearanceButton.style.margin='0 0 7px 0';const appearanceLayout=preview.parentElement;appearanceGroup.insertBefore(appearanceButton,appearanceLayout);}}
+    window.installCharacterCreatorRandomControls();
     window.randomizeCharacterAppearance({sync:false});
 })();
 
-const PRESENTATION_BUILD = '20260926-armour-anchor-trigger-fix';
+const PRESENTATION_BUILD = '20260927-armour-anchor-overlay-canvas';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
 const presentationBuildMeta=document.querySelector('meta[name="app-build"]');if(presentationBuildMeta)presentationBuildMeta.content=PRESENTATION_BUILD;
@@ -67,6 +67,7 @@ if('serviceWorker'in navigator){navigator.serviceWorker.register(`sw.js?build=${
         ['directionalWeaponTuning.js','directionalWeaponTuning'],
         ['directionalEquipmentTuning.js','directionalEquipmentTuning'],
         ['armourAnchorDebug.js','armourAnchorDebug'],
+        ['armourAnchorOverlay.js','armourAnchorOverlay'],
         ['directionalCharacterUI.js','directionalCharacterUi'],
         ['raceSkinPalettes.js','raceSkinPalettes'],
     ];
