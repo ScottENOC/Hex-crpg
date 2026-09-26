@@ -119,7 +119,7 @@ window.generateName = window.getRandomName;
     window.randomizeCharacterAppearance({ sync:false });
 })();
 
-const PRESENTATION_BUILD = '20260926-armour-alpha-cache-refresh';
+const PRESENTATION_BUILD = '20260926-rig-debug-width-trace';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
 
@@ -180,6 +180,17 @@ if ('serviceWorker' in navigator) {
 }
 
 (() => {
+    // Load rigDebug first: characterRig captures the canvas drawImage function
+    // as its low-level renderer, and the diagnostic needs to observe those
+    // internal strip draws without changing them.
+    if (!document.querySelector('script[data-rig-debug]')) {
+        const debug = document.createElement('script');
+        debug.src = freshScriptUrl('rigDebug.js');
+        debug.dataset.rigDebug = 'true';
+        debug.async = false;
+        document.head.appendChild(debug);
+    }
+
     // characterRig used to be injected later by graphicsSettings.js with a
     // fixed ?v=2 URL. Load it here first so every presentation module shares
     // this deployment's build token. graphicsSettings keeps its selector-based
