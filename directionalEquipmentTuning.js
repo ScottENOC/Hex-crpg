@@ -138,9 +138,6 @@
         const scaleHexPerSourcePixel=targetVisibleHeight/sourceVisibleHeightPx;
         const outerHeight=trim.originalHeight*scaleHexPerSourcePixel;
         const outerWidth=trim.originalWidth*scaleHexPerSourcePixel;
-
-        // Align SOURCE topExtent exactly to BODY armourShoulderTop, then the
-        // uniform scale guarantees SOURCE bottomExtent lands on BODY footSole.
         const topShift=cfg.bodyH*target.topY-sourceTopPx*scaleHexPerSourcePixel;
         const visibleTop=topShift+sourceTopPx*scaleHexPerSourcePixel;
         const visibleBottom=topShift+sourceBottomPx*scaleHexPerSourcePixel;
@@ -160,6 +157,42 @@
             bottomDrop:outerHeight-cfg.bodyH+topShift,
             visibleTop, visibleBottom,
             source:'source-armour-extents-to-body-armour-extents',
+        };
+    }
+
+    // Convert the semantic fit into the exact destination rectangle of the
+    // *actual body draw*. This avoids reconstructing bodyTop from a legacy armour
+    // draw rectangle that has already been shifted/scaled by earlier code.
+    function computeMeasuredArmourPlacement(image, view='front', bodyBounds=null, trimOverride=null) {
+        const fit=computeMeasuredArmourFit(image,view,trimOverride);
+        if(!fit||!bodyBounds?.height||!bodyBounds?.width)return null;
+        const trim=fit.trim;
+        const sourceTopPx=fit.sourceAnchors.topExtent.y*trim.originalHeight;
+        const sourceBottomPx=fit.sourceAnchors.bottomExtent.y*trim.originalHeight;
+        const sourceVisibleHeightPx=sourceBottomPx-sourceTopPx;
+        if(!(sourceVisibleHeightPx>0))return null;
+
+        const targetTopPx=bodyBounds.top+fit.target.topY*bodyBounds.height;
+        const targetBottomPx=bodyBounds.top+fit.target.bottomY*bodyBounds.height;
+        const targetVisibleHeightPx=targetBottomPx-targetTopPx;
+        if(!(targetVisibleHeightPx>0))return null;
+
+        const scalePxPerSourcePixel=targetVisibleHeightPx/sourceVisibleHeightPx;
+        const outerWidthPx=trim.originalWidth*scalePxPerSourcePixel;
+        const outerHeightPx=trim.originalHeight*scalePxPerSourcePixel;
+        const dx=bodyBounds.left+bodyBounds.width/2-outerWidthPx/2;
+        const dy=targetTopPx-sourceTopPx*scalePxPerSourcePixel;
+        const visibleTopPx=dy+sourceTopPx*scalePxPerSourcePixel;
+        const visibleBottomPx=dy+sourceBottomPx*scalePxPerSourcePixel;
+
+        return {
+            ...fit,
+            bodyBounds:{...bodyBounds},
+            dx,dy,outerWidthPx,outerHeightPx,
+            targetTopPx,targetBottomPx,targetVisibleHeightPx,
+            visibleTopPx,visibleBottomPx,
+            scalePxPerSourcePixel,
+            placementSource:'actual-body-draw-bounds',
         };
     }
 
@@ -184,6 +217,29 @@
         ctx.drawImage=function(img,...args){
             if(args.length===4&&isTrackedArmourImage(img)&&isActiveHumanFemale()){
                 const view=facingToView(window.__activeCharacterFacing);
+                const body=window.__humanFemaleLastBodyDraw;
+                const placement=(body?.view===view)?computeMeasuredArmourPlacement(img,view,body):null;
+                if(placement){
+                    const hsZ=(window.hexSize||1)*(window.cameraZoom||1);
+                    const savedWMult=cfg.armour.wMult,savedTopShift=cfg.armour.topShift,savedBottomDrop=cfg.armour.bottomDrop;
+                    // characterRig identifies armour by its legacy configured size.
+                    // Temporarily describe the measured destination so its strip
+                    // renderer recognises this draw without changing the placement.
+                    cfg.armour.wMult=placement.outerWidthPx/(cfg.bodyW*hsZ);
+                    cfg.armour.topShift=cfg.bodyH-placement.outerHeightPx/hsZ;
+                    cfg.armour.bottomDrop=0;
+                    try{
+                        const out=previousDrawImage(img,placement.dx,placement.dy,placement.outerWidthPx,placement.outerHeightPx);
+                        window.HUMAN_FEMALE_EQUIPMENT_FIT.lastMeasuredArmour={...placement};
+                        return out;
+                    }finally{
+                        cfg.armour.wMult=savedWMult; cfg.armour.topShift=savedTopShift; cfg.armour.bottomDrop=savedBottomDrop;
+                    }
+                }
+
+                // Conservative fallback for a frame where body bounds have not
+                // yet been observed. Keep the prior measured behaviour rather
+                // than dropping the armour entirely.
                 const fit=measuredFitFor(img,view);
                 if(fit){
                     const [legacyDx,legacyDy,legacyDw]=args;
@@ -197,7 +253,7 @@
                     cfg.armour.wMult=dw/bodyWidthPx; cfg.armour.topShift=cfg.bodyH-dh/hsZ; cfg.armour.bottomDrop=0;
                     try{
                         const out=previousDrawImage(img,dx,dy,dw,dh);
-                        window.HUMAN_FEMALE_EQUIPMENT_FIT.lastMeasuredArmour={...fit};
+                        window.HUMAN_FEMALE_EQUIPMENT_FIT.lastMeasuredArmour={...fit,placementSource:'legacy-fallback'};
                         return out;
                     }finally{
                         cfg.armour.wMult=savedWMult; cfg.armour.topShift=savedTopShift; cfg.armour.bottomDrop=savedBottomDrop;
@@ -228,6 +284,7 @@
             armourViews:{front:{...derived.front},side:{...derived.side},back:{...derived.back}},
             armourSource:'body-torso-anchors',
             armourScaleSource:'source-armour-extents-to-body-armour-extents',
+            armourPlacementSource:'actual-body-draw-bounds',
             armourClearanceX:HUMAN_FEMALE_ARMOUR_CLEARANCE_X,
             targetVerticalByView:Object.fromEntries(['front','side','back'].map(view=>[view,verticalBodyTarget(view)])),
             helm:null,
@@ -241,6 +298,7 @@
         window.measureHumanFemaleArmourAlphaBounds=measureRobustAlphaBounds;
         window.computeHumanFemaleArmourSourceExtentRig=sourceExtentRigFromTrim;
         window.computeHumanFemaleMeasuredArmourFit=computeMeasuredArmourFit;
+        window.computeHumanFemaleMeasuredArmourPlacement=computeMeasuredArmourPlacement;
         window.__directionalEquipmentFitTuningApplied=true;
         return true;
     }
