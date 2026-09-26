@@ -79,17 +79,10 @@
             for(const [name,d] of Object.entries(state.deltas)){
                 lines.push(`${name}: Δ ${d.dx.toFixed(1)}, ${d.dy.toFixed(1)} px (${d.distance.toFixed(1)} px)`);
             }
-        } else lines.push('','Waiting for armour draw…');
+        } else lines.push('','Waiting for measured armour placement…');
         panel.textContent=lines.join('\n');
     }
 
-    function sourcePath(img){return String((img?.__recolorBaseSource||img)?.src||'').split('?')[0].toLowerCase();}
-    function isHumanArmour(img){
-        const path=sourcePath(img);
-        if(/human(?:light|medium|heavy)armour\.png$/.test(path))return true;
-        const v=window.gameVisuals||{};
-        return img===v.humanLight||img===v.humanMedium||img===v.humanHeavy;
-    }
     function facingToView(facing){
         if(facing==='up')return'back';
         if(facing==='left'||facing==='right')return'side';
@@ -172,10 +165,9 @@
         if(!window.__directionalEquipmentFitTuningApplied)return false;
         const previous=ctx.drawImage.bind(ctx);
         const wrapped=function(img,...args){
-            const should=window.showArmourAnchors&&args.length===4&&isHumanArmour(img);
             const before=window.HUMAN_FEMALE_EQUIPMENT_FIT?.lastMeasuredArmour;
             const result=previous(img,...args);
-            if(should){
+            if(window.showArmourAnchors){
                 const fit=window.HUMAN_FEMALE_EQUIPMENT_FIT?.lastMeasuredArmour;
                 if(fit&&fit!==before)drawOverlay(ctx,fit);
             }
@@ -191,5 +183,6 @@
     let settingsAttempts=0;const settingsTimer=setInterval(()=>{if(installSettingsControl()||++settingsAttempts>40)clearInterval(settingsTimer);},250);
     let drawAttempts=0;const drawTimer=setInterval(()=>{if(installDrawWrapper()||++drawAttempts>100)clearInterval(drawTimer);},100);
     updateLegend();
+    window.drawHumanFemaleArmourAnchorDebug=fit=>drawOverlay(window.mapCtx,fit);
     window.__armourAnchorDebugLoaded=true;
 })();
