@@ -119,9 +119,15 @@ window.generateName = window.getRandomName;
     window.randomizeCharacterAppearance({ sync:false });
 })();
 
-const PRESENTATION_BUILD = '20260925-equipment-fit';
+const PRESENTATION_BUILD = '20260926-armour-alpha-cache-refresh';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
+
+// Keep the visible document build marker aligned with the runtime source of
+// truth. This also repairs older cached index.html documents after name.js has
+// refreshed, rather than requiring the player to clear all Safari site data.
+const presentationBuildMeta = document.querySelector('meta[name="app-build"]');
+if (presentationBuildMeta) presentationBuildMeta.content = PRESENTATION_BUILD;
 
 async function fetchRemotePresentationBuild() {
     const response = await fetch(`name.js?app-update-check=${Date.now()}`, { cache:'no-store' });
@@ -174,6 +180,18 @@ if ('serviceWorker' in navigator) {
 }
 
 (() => {
+    // characterRig used to be injected later by graphicsSettings.js with a
+    // fixed ?v=2 URL. Load it here first so every presentation module shares
+    // this deployment's build token. graphicsSettings keeps its selector-based
+    // fallback for backwards compatibility and will skip the duplicate.
+    if (!document.querySelector('script[data-character-rig]')) {
+        const rig = document.createElement('script');
+        rig.src = freshScriptUrl('characterRig.js');
+        rig.dataset.characterRig = 'true';
+        rig.async = false;
+        document.head.appendChild(rig);
+    }
+
     if (!document.querySelector('script[data-render-perf-tuning]')) {
         const perf = document.createElement('script');
         perf.src = freshScriptUrl('renderPerfTuning.js');
