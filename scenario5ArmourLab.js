@@ -53,6 +53,16 @@
     const width=img.naturalWidth*scale,height=img.naturalHeight*scale;
     return {x:(canvas.width-width)/2,y:(canvas.height-height)/2,width,height};
   }
+  function fitLogicalBodyRect(canvas,pad=34){
+    const aspect=window.HUMAN_FEMALE_RENDER_ASPECT||0.48;
+    const maxW=canvas.width-pad*2,maxH=canvas.height-pad*2;
+    let height=maxH,width=height*aspect;
+    if(width>maxW){width=maxW;height=width/aspect;}
+    return {x:(canvas.width-width)/2,y:(canvas.height-height)/2,width,height};
+  }
+  function destinationRect(logical,dest){
+    return {x:logical.x+dest.x*logical.width,y:logical.y+dest.y*logical.height,width:dest.w*logical.width,height:dest.h*logical.height};
+  }
   function pointInRect(p,r){return{x:r.x+p.x*r.width,y:r.y+p.y*r.height};}
   function dot(ctx,p,colour,label,side=1){
     ctx.beginPath();ctx.arc(p.x,p.y,7,0,Math.PI*2);ctx.fillStyle=colour;ctx.fill();ctx.lineWidth=2;ctx.strokeStyle='#050505';ctx.stroke();
@@ -71,7 +81,22 @@
 
   function drawBody(canvas,img,view){
     const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#181818';ctx.fillRect(0,0,canvas.width,canvas.height);
-    const r=fitRect(img,canvas);ctx.drawImage(img,r.x,r.y,r.width,r.height);
+    const layout=window.HUMAN_FEMALE_DIRECTIONAL_LAYOUT?.[view];
+    if(!layout?.bodyCrop||!layout?.bodyDest)throw new Error(`Live directional layout unavailable for ${view}`);
+
+    // IMPORTANT: HUMAN_FEMALE_REFERENCE_RIGS anchors are not normalised to the
+    // padded source PNG canvas. They are normalised to the body destination used
+    // by facingSystem.js. Reproduce that exact crop + destination here so the
+    // blue dots occupy the same coordinate space as the in-game rig overlay.
+    const logical=fitLogicalBodyRect(canvas);
+    const r=destinationRect(logical,layout.bodyDest);
+    const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height;
+    const crop=layout.bodyCrop;
+    ctx.drawImage(img,crop.x*iw,crop.y*ih,crop.w*iw,crop.h*ih,r.x,r.y,r.width,r.height);
+
+    ctx.strokeStyle='rgba(0,229,255,.22)';ctx.setLineDash([5,4]);ctx.strokeRect(logical.x,logical.y,logical.width,logical.height);ctx.setLineDash([]);
+    ctx.strokeStyle='rgba(64,196,255,.42)';ctx.strokeRect(r.x,r.y,r.width,r.height);
+
     const a=window.HUMAN_FEMALE_REFERENCE_RIGS?.[view]?.anchors||{};
     const points={};
     for(const name of ['armourShoulderTopLeft','armourShoulderTopRight','leftFootSole','rightFootSole']){
@@ -79,17 +104,23 @@
     }
     if(points.armourShoulderTopLeft&&points.armourShoulderTopRight){points.armourTopTarget=midpoint(points.armourShoulderTopLeft,points.armourShoulderTopRight);dot(ctx,points.armourTopTarget,'#00e5ff','top target',1);}
     if(points.leftFootSole&&points.rightFootSole){points.armourBottomTarget=midpoint(points.leftFootSole,points.rightFootSole);dot(ctx,points.armourBottomTarget,'#00e5ff','bottom target',1);}
-    return {rect:r,points,anchors:a};
+    return {logicalRect:logical,rect:r,points,anchors:a,layout};
   }
 
   function setStatus(text,isError=false){const el=document.getElementById('scenario5-status');if(el){el.textContent=text;el.style.color=isError?'#ff8a80':'#b0bec5';}}
-  function mappingText(armourKey,view,bounds,source,body){
+  function mappingText(armourKey,view,bounds,source,body,layout){
     const fmt=p=>p?`(${p.x.toFixed(4)}, ${p.y.toFixed(4)})`:'missing';
+    const rectFmt=r=>r?`x ${r.x.toFixed(3)}, y ${r.y.toFixed(3)}, w ${r.w.toFixed(3)}, h ${r.h.toFixed(3)}`:'missing';
     return [
       `Armour: ${ARMOURS[armourKey].label}`,
       `Facing reference: ${FACINGS[view].label}`,
       `Robust alpha bounds: x ${bounds.left}-${bounds.right}, y ${bounds.top}-${bounds.bottom}`,
       `Visible size: ${bounds.width} × ${bounds.height}px of ${bounds.sourceWidth} × ${bounds.sourceHeight}px`,
+      '',
+      'LIVE BODY RENDER SPACE',
+      `bodyCrop: ${rectFmt(layout?.bodyCrop)}`,
+      `bodyDest: ${rectFmt(layout?.bodyDest)}`,
+      'Blue dots use the same destination rectangle observed by the in-game rig overlay.',
       '',
       'ARMOUR SOURCE ANCHORS (pink)',
       `topExtent     ${fmt(source.topExtent)}`,
@@ -109,7 +140,7 @@
       'armour.leftExtent   → diagnostic only',
       'armour.rightExtent  → diagnostic only',
       '',
-      'This scenario does not use the live equipment renderer.',
+      'This scenario does not use the live equipment renderer, but it now uses the live body crop/destination coordinate space.',
     ].join('\n');
   }
 
@@ -117,6 +148,12 @@
     const generation=++renderGeneration;
     const armourKey=document.getElementById('scenario5-armour-select')?.value||'heavy';
     const view=document.getElementById('scenario5-facing-select')?.value||'front';
+    const layout=window.HUMAN_FEMALE_DIRECTIONAL_LAYOUT?.[view];
+    if(!layout){
+      setStatus('Waiting for live directional body layout…');
+      setTimeout(()=>{if(generation===renderGeneration)renderLab();},50);
+      return;
+    }
     setStatus('Loading raw sprites…');
     try{
       const [armourImg,bodyImg]=await Promise.all([loadImage(ARMOURS[armourKey].src),loadImage(FACINGS[view].src)]);
@@ -125,10 +162,17 @@
       const armourCanvas=document.getElementById('scenario5-armour-canvas'),bodyCanvas=document.getElementById('scenario5-body-canvas');
       drawArmour(armourCanvas,armourImg,source,bounds);
       const bodyDraw=drawBody(bodyCanvas,bodyImg,view);
-      const text=mappingText(armourKey,view,bounds,source,bodyDraw.anchors);
+      const text=mappingText(armourKey,view,bounds,source,bodyDraw.anchors,bodyDraw.layout);
       document.getElementById('scenario5-mapping').textContent=text;
-      window.SCENARIO5_ARMOUR_DEBUG_STATE={armour:armourKey,view,bounds,sourceAnchors:source,bodyAnchors:bodyDraw.anchors,mapping:{topExtent:['armourShoulderTopLeft','armourShoulderTopRight'],bottomExtent:['leftFootSole','rightFootSole'],leftExtent:[],rightExtent:[]},rendered:true,timestamp:Date.now()};
-      setStatus('Standalone raw-sprite render complete. Pink dots are armour anchors; blue dots are body targets.');
+      window.SCENARIO5_ARMOUR_DEBUG_STATE={
+        armour:armourKey,view,bounds,sourceAnchors:source,bodyAnchors:bodyDraw.anchors,
+        bodyCoordinateSpace:'live-directional-destination',
+        bodyCrop:{...bodyDraw.layout.bodyCrop},bodyDest:{...bodyDraw.layout.bodyDest},
+        logicalBodyRect:{...bodyDraw.logicalRect},bodyRenderRect:{...bodyDraw.rect},bodyCanvasPoints:{...bodyDraw.points},
+        mapping:{topExtent:['armourShoulderTopLeft','armourShoulderTopRight'],bottomExtent:['leftFootSole','rightFootSole'],leftExtent:[],rightExtent:[]},
+        rendered:true,timestamp:Date.now()
+      };
+      setStatus('Standalone render complete. Pink dots are armour anchors; blue dots now use the live in-game body coordinate space.');
     }catch(err){console.error('Scenario 5 armour lab failed',err);setStatus(`Failed: ${err.message}`,true);window.SCENARIO5_ARMOUR_DEBUG_STATE={rendered:false,error:String(err)};}
   }
 
