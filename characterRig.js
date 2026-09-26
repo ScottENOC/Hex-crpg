@@ -2,13 +2,15 @@
 // Unified humanoid presentation rig.
 //
 // Three deliberately separate concepts live here:
-//   1. ARMOUR_RIGS: deformable shoulder/waist/hem mesh for fitted armour.
+//   1. ARMOUR_RIGS: shoulder/waist/hem fit metadata for armour.
 //   2. ATTACHMENT_RIGS: named points on each body (head, hands, forearm,
 //      shoulders, back) used by rigid equipment and future animation/facing.
 //   3. ITEM_GRIPS: the point inside a rigid item's artwork that is actually
 //      held/attached. The item's grip is aligned to the body's named anchor.
 //
-// Rigid gear scales from BODY HEIGHT, never body width/area. Armour deforms.
+// Rigid gear scales from BODY HEIGHT, never body width/area. Generic armour can
+// use the legacy triangular mesh; human-female armour uses centred horizontal
+// strip scaling so a symmetric sprite can taper without rotation or shear.
 // At tactical zoom (<0.55) armour falls back to the original single drawImage
 // to retain the existing mobile LOD behaviour.
 
@@ -19,7 +21,7 @@
 
     const ARMOUR_RIGS = {
         human_male:   { shoulderL:0.05, shoulderR:0.95, waistL:0.14, waistR:0.86, hemL:0.10, hemR:0.90, waistY:0.56 },
-        human_female: { shoulderL:0.05, shoulderR:0.95, waistL:0.10, waistR:0.90, hemL:0.07, hemR:0.93, waistY:0.55 },
+        human_female: { shoulderL:0.03, shoulderR:0.97, waistL:0.08, waistR:0.92, hemL:0.05, hemR:0.95, waistY:0.55 },
         elf_male:     { shoulderL:0.08, shoulderR:0.92, waistL:0.18, waistR:0.82, hemL:0.13, hemR:0.87, waistY:0.58 },
         elf_female:   { shoulderL:0.10, shoulderR:0.90, waistL:0.22, waistR:0.78, hemL:0.14, hemR:0.86, waistY:0.57 },
         dwarf_male:   { shoulderL:0.02, shoulderR:0.98, waistL:0.08, waistR:0.92, hemL:0.04, hemR:0.96, waistY:0.53 },
@@ -34,16 +36,15 @@
         skeleton_female:{ shoulderL:0.10, shoulderR:0.90, waistL:0.21, waistR:0.79, hemL:0.14, hemR:0.86, waistY:0.55 },
     };
 
-    // Human-female directional body art is authored as three genuinely separate
-    // views. Give armour the same treatment: each view gets a deliberately mild
-    // fit rather than forcing one aggressive hourglass mesh over every facing.
-    // The offsets stay close to the source rectangle so the affine triangles can
-    // taper/lean the layer without visibly corkscrewing plates or trim.
+    // These fits are deliberately symmetric around x=0.5. Direction may alter
+    // how much the armour narrows, but it must never make one side lean relative
+    // to the other. The renderer below applies them as horizontal strips, not
+    // affine triangles, so there is no rotation/shear hidden in the deformation.
     const DIRECTIONAL_ARMOUR_RIGS = {
         human_female: {
-            front: { shoulderL:0.05, shoulderR:0.95, waistL:0.10, waistR:0.90, hemL:0.07, hemR:0.93, waistY:0.55 },
-            side:  { shoulderL:0.10, shoulderR:0.88, waistL:0.14, waistR:0.84, hemL:0.11, hemR:0.87, waistY:0.55 },
-            back:  { shoulderL:0.06, shoulderR:0.94, waistL:0.11, waistR:0.89, hemL:0.08, hemR:0.92, waistY:0.55 },
+            front: { shoulderL:0.03, shoulderR:0.97, waistL:0.08, waistR:0.92, hemL:0.05, hemR:0.95, waistY:0.55 },
+            side:  { shoulderL:0.09, shoulderR:0.91, waistL:0.13, waistR:0.87, hemL:0.10, hemR:0.90, waistY:0.55 },
+            back:  { shoulderL:0.04, shoulderR:0.96, waistL:0.09, waistR:0.91, hemL:0.06, hemR:0.94, waistY:0.55 },
         },
     };
 
@@ -255,6 +256,33 @@
         drawTriangle(ctx,nativeDrawImage,img,wl,br,bl,p.waistL,p.hemR,p.hemL);
     }
 
+    function lerp(a,b,t){ return a+(b-a)*t; }
+    function armourSpanAt(rig,t){
+        if(t<=rig.waistY){
+            const u=rig.waistY>0?t/rig.waistY:0;
+            return { left:lerp(rig.shoulderL,rig.waistL,u), right:lerp(rig.shoulderR,rig.waistR,u) };
+        }
+        const denom=1-rig.waistY;
+        const u=denom>0?(t-rig.waistY)/denom:1;
+        return { left:lerp(rig.waistL,rig.hemL,u), right:lerp(rig.waistR,rig.hemR,u) };
+    }
+
+    // Axis-aligned deformation for symmetric armour. Each horizontal source
+    // strip is only translated and X-scaled into a centred destination strip.
+    // No canvas transform matrix is used, so rotation and shear are impossible.
+    function drawStripDeformedArmour(ctx,nativeDrawImage,img,rig,dx,dy,dw,dh,slices=12){
+        if(!img||!img.width||!img.height||!rig){nativeDrawImage(img,dx,dy,dw,dh);return;}
+        const iw=img.width,ih=img.height,count=Math.max(1,Math.floor(slices));
+        for(let i=0;i<count;i++){
+            const t0=i/count,t1=(i+1)/count,tm=(t0+t1)/2;
+            const span=armourSpanAt(rig,tm);
+            const sx=0,sy=t0*ih,sw=iw,sh=(t1-t0)*ih;
+            const ddx=dx+span.left*dw,ddy=dy+t0*dh;
+            const ddw=Math.max(0,(span.right-span.left)*dw),ddh=(t1-t0)*dh;
+            nativeDrawImage(img,sx,sy,sw,sh,ddx,ddy,ddw,ddh);
+        }
+    }
+
     function matchRaceRig(dw,dh) {
         const configs=window.CHAR_CONFIG||{},hs=window.hexSize||1,z=window.cameraZoom||1;
         let bestKey=null,bestError=Infinity;
@@ -316,7 +344,11 @@
 
                 if(isArmourImage(img)&&(window.cameraZoom||1)>=0.55){
                     const key=matchRaceRig(dw,dh),rig=key&&getArmourRigForFacing(key);
-                    if(rig){drawWarpedArmour(ctx,nativeDrawImage,img,rig,dx,dy,dw,dh);return;}
+                    if(rig){
+                        if(key==='human_female')drawStripDeformedArmour(ctx,nativeDrawImage,img,rig,dx,dy,dw,dh);
+                        else drawWarpedArmour(ctx,nativeDrawImage,img,rig,dx,dy,dw,dh);
+                        return;
+                    }
                 }
 
                 if(activeBody&&isHelmetImage(img)){
@@ -373,6 +405,7 @@
     window.ITEM_GRIPS=ITEM_GRIPS;
     window.computeArmourMeshPoints=computeMeshPoints;
     window.drawWarpedArmour=drawWarpedArmour;
+    window.drawStripDeformedArmour=drawStripDeformedArmour;
     window.getArmourRigForFacing=getArmourRigForFacing;
     window.getRigHeightScale=getHeightScaleForKey;
     window.computeRigidGearSize=computeRigidGearSize;
