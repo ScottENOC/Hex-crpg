@@ -16,6 +16,7 @@ test('human female measured canonical anchors drive production attachments', asy
       rigVersion: window.__humanFemaleReferenceRigVersion,
       attachmentSource: window.__humanFemaleAttachmentRigSource,
       debugMutatesRig: window.__rigDebugMutatesRig,
+      bodyObserver: window.__humanFemaleBodyBoundsObserverInstalled,
       ref: {
         leftFoot: a.leftFoot,
         rightFoot: a.rightFoot,
@@ -39,10 +40,11 @@ test('human female measured canonical anchors drive production attachments', asy
     };
   });
 
-  expect(state.build).toBe('20260926-measured-canonical-rig');
+  expect(state.build).toBe('20260926-armour-body-bounds-fit');
   expect(state.rigVersion).toBe('measured-front-20260926');
   expect(state.attachmentSource).toBe('canonical-sprite-rig');
   expect(state.debugMutatesRig).toBe(false);
+  expect(state.bodyObserver).toBe(true);
 
   expect(state.ref.leftFoot).toEqual({ x: 0.310, y: 0.965 });
   expect(state.ref.rightFoot).toEqual({ x: 0.686, y: 0.965 });
@@ -61,4 +63,36 @@ test('human female measured canonical anchors drive production attachments', asy
   expect(state.attachments.offHand).toEqual(state.ref.offHandGrip);
   expect(state.attachments.shoulderLeft).toEqual(state.ref.shoulderLeft);
   expect(state.attachments.shoulderRight).toEqual(state.ref.shoulderRight);
+});
+
+test('armour opaque extents land exactly on shoulder-top and sole targets in body pixel space', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForFunction(() => typeof window.computeHumanFemaleMeasuredArmourPlacement === 'function');
+
+  const result = await page.evaluate(() => {
+    const image = document.createElement('canvas');
+    image.width = 1000;
+    image.height = 1000;
+    const ctx = image.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(250, 100, 500, 700);
+
+    const trim = {
+      originalWidth: 1000,
+      originalHeight: 1000,
+      trimLeft: 250,
+      trimTop: 100,
+      trimWidth: 500,
+      trimHeight: 700,
+    };
+    const body = { left: 100, top: 200, width: 400, height: 600 };
+    return window.computeHumanFemaleMeasuredArmourPlacement(image, 'front', body, trim);
+  });
+
+  expect(result.placementSource).toBe('actual-body-draw-bounds');
+  expect(result.targetTopPx).toBeCloseTo(200 + 0.225 * 600, 8);
+  expect(result.targetBottomPx).toBeCloseTo(200 + 0.995 * 600, 8);
+  expect(result.visibleTopPx).toBeCloseTo(result.targetTopPx, 8);
+  expect(result.visibleBottomPx).toBeCloseTo(result.targetBottomPx, 8);
+  expect(result.visibleBottomPx - result.visibleTopPx).toBeCloseTo(0.770 * 600, 8);
 });
