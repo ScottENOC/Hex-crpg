@@ -19,7 +19,7 @@ test.describe('human female directional armour transform', () => {
         });
 
         expect(result.fit.armourSource).toBe('body-torso-anchors');
-        expect(result.fit.armourScaleSource).toBe('alpha-bounds-to-body-shoulders-feet');
+        expect(result.fit.armourScaleSource).toBe('robust-alpha-bounds-to-body-shoulders-feet');
         expect(result.fit.armourClearanceX).toBeCloseTo(0.32, 8);
 
         for (const view of ['front', 'side', 'back']) {
@@ -66,16 +66,43 @@ test.describe('human female directional armour transform', () => {
         expect(result.fit.targetVisibleHeight).toBeCloseTo(targetHeight, 8);
         expect(result.fit.visibleTop).toBeCloseTo(1.92 * 0.250, 8);
         expect(result.fit.visibleBottom).toBeCloseTo(1.92 * 0.965, 8);
-
-        // Uniform source-pixel scale: a square source with 50% visible alpha
-        // must use a 2.7456-high outer box to make the visible half 1.3728.
         expect(result.fit.outerHeight).toBeCloseTo(2.7456, 8);
         expect(result.fit.outerWidth).toBeCloseTo(2.7456, 8);
         expect(result.fit.wMult).toBeCloseTo(2.7456 / 1.60, 8);
-        expect(result.fit.source).toBe('alpha-bounds-to-body-shoulders-feet');
+        expect(result.fit.source).toBe('robust-alpha-bounds-to-body-shoulders-feet');
     });
 
-    test('measures the real heavy armour alpha bounds and lands on the body target', async ({ page }) => {
+    test('ignores isolated alpha noise when measuring the armour silhouette', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 200;
+            canvas.height = 200;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0,0,200,200);
+            // Main armour silhouette: 100px high.
+            ctx.fillStyle = 'rgba(255,255,255,1)';
+            ctx.fillRect(50,50,100,100);
+            // Two fully opaque edge pixels that would poison a naive bounding box.
+            ctx.fillRect(1,1,1,1);
+            ctx.fillRect(198,198,1,1);
+            return {
+                raw: window.suggestSpriteAlphaTrim(canvas, 8),
+                robust: window.measureHumanFemaleArmourAlphaBounds(canvas),
+                fit: window.computeHumanFemaleMeasuredArmourFit(canvas, 'front'),
+            };
+        });
+
+        expect(result.raw.trimTop).toBe(1);
+        expect(result.raw.trimHeight).toBe(198);
+        expect(result.robust.trimTop).toBe(50);
+        expect(result.robust.trimHeight).toBe(100);
+        expect(result.robust.method).toBe('row-column-occupancy');
+        // Robust measurement must yield the larger outer scale implied by the
+        // actual 100px silhouette, not the nearly-full-canvas noisy raw box.
+        expect(result.fit.outerHeight).toBeCloseTo(200 * 1.3728 / 100, 8);
+    });
+
+    test('measures the real heavy armour with robust bounds and lands on the body target', async ({ page }) => {
         await page.waitForFunction(() => {
             const img = window.gameVisuals?.humanHeavy;
             return !!img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0;
@@ -98,6 +125,8 @@ test.describe('human female directional armour transform', () => {
         expect(result.fit.visibleBottom - result.fit.visibleTop).toBeCloseTo(1.3728, 8);
         expect(result.fit.outerHeight).toBeGreaterThan(result.fit.targetVisibleHeight);
         expect(result.fit.wMult).toBeGreaterThan(0);
+        expect(result.fit.rawTrim).toBeTruthy();
+        expect(result.fit.trim.trimHeight).toBeLessThanOrEqual(result.fit.rawTrim.trimHeight);
     });
 
     test('front and back torso geometry remain symmetric', async ({ page }) => {
