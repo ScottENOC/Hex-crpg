@@ -260,7 +260,7 @@ test.describe('direct humanoid compositor', () => {
             ctx.restore();
             count++;
 
-            if (race === 'human') {
+            if (race === 'human' && (gender === 'female' || gender === 'male')) {
               directCount++;
               const expected = ['body', helmet ? 'helmet' : 'hair'];
               if (armor) expected.push('armour');
@@ -284,10 +284,10 @@ test.describe('direct humanoid compositor', () => {
     });
 
     expect(result.races).toEqual(['human','dwarf','elf','goblin','orc']);
-    expect(result.genders).toEqual(['female','male']);
+    expect(result.genders).toEqual(['female','male','other']);
     expect(result.classes).toEqual(['fighter','rogue','cleric','wizard','druid','monk']);
     expect(result.bodies).toEqual(['average','broad']);
-    expect(result.expected).toBe(8640);
+    expect(result.expected).toBe(12960);
     expect(result.count).toBe(result.expected);
     expect(result.directCount).toBe(1728);
     expect(result.failures).toEqual([]);
