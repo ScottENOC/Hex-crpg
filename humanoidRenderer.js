@@ -85,7 +85,7 @@
     };
 
     // Fallback anchors for rigs that do not yet have measured reference metadata.
-    // Human female uses SPRITE_REFERENCE_RIGS when available.
+    // Direct humans reuse the approved human-female reference geometry when available.
     const FALLBACK_ANCHORS = {
         front:{helmetAnchor:{x:.50,y:.03},mainHandGrip:{x:.10,y:.55},offHandGrip:{x:.90,y:.55},offForearm:{x:.84,y:.44},backAnchor:{x:.50,y:.33}},
         side: {helmetAnchor:{x:.53,y:.03},mainHandGrip:{x:.56,y:.55},offHandGrip:{x:.47,y:.52},offForearm:{x:.50,y:.44},backAnchor:{x:.43,y:.33}},
@@ -94,7 +94,8 @@
 
     // Small compositor-only tuning offsets. The canonical reference rig stays a
     // measured description of the body art; these offsets describe how equipment
-    // should sit on that body. This makes visual tuning explicit and reversible.
+    // should sit on that body. Female-average is the approved baseline, and the
+    // same normalised geometry is reused by female-broad and male body art.
     const HUMAN_FEMALE_EQUIPMENT_TUNING = {
         front:{
             mainHandGrip:{x:0,y:.075},
@@ -131,6 +132,11 @@
 
     function keyFor(entity) {
         return entity?.race && entity?.gender ? `${entity.race}_${entity.gender}` : '';
+    }
+
+    function usesApprovedHumanEquipmentBaseline(entity) {
+        const key = keyFor(entity);
+        return key === 'human_female' || key === 'human_male';
     }
 
     function canDirectRender(entity) {
@@ -333,7 +339,7 @@
     }
 
     function anchorsFor(entity, view) {
-        if (keyFor(entity) === 'human_female') {
+        if (usesApprovedHumanEquipmentBaseline(entity)) {
             const measured = window.HUMAN_FEMALE_REFERENCE_RIGS?.[view]?.anchors;
             if (measured) return measured;
         }
@@ -344,7 +350,7 @@
         const anchors = anchorsFor(entity, view);
         const base = anchors?.[anchorName] || FALLBACK_ANCHORS[view][anchorName];
         if (!base) return null;
-        if (keyFor(entity) !== 'human_female') return base;
+        if (!usesApprovedHumanEquipmentBaseline(entity)) return base;
         const delta = HUMAN_FEMALE_EQUIPMENT_TUNING[view]?.[anchorName];
         if (!delta) return base;
         return {x:base.x + (delta.x || 0), y:base.y + (delta.y || 0)};
@@ -352,7 +358,7 @@
 
     function tunedHeldItemAnchor(entity, view, anchorName, slot, kind) {
         const base = tunedAnchor(entity, view, anchorName);
-        if (!base || keyFor(entity) !== 'human_female') return base;
+        if (!base || !usesApprovedHumanEquipmentBaseline(entity)) return base;
         const tuning = HUMAN_FEMALE_EQUIPMENT_TUNING[view]?.heldItems?.[kind];
         if (!tuning) return base;
         const side = slot === 'off' ? -1 : 1;
@@ -412,17 +418,14 @@
         const anchorPoint = tunedAnchor(entity, view, 'helmetAnchor');
         if (!anchorPoint) return false;
         const anchor = point(bounds, anchorPoint);
-        const female = keyFor(entity) === 'human_female';
-        const target = female ? {
-            x:(anchor.x-bounds.left)/bounds.width - .2025,
+        // Approved female-average helmet fit, reduced uniformly by 15% while
+        // keeping its top-centre attachment position unchanged. The same
+        // normalised fit is the baseline for all direct-rendered humans.
+        const target = {
+            x:(anchor.x-bounds.left)/bounds.width - .172125,
             y:(anchor.y-bounds.top)/bounds.height - .015,
-            w:.405,
-            h:.236,
-        } : {
-            x:(anchor.x-bounds.left)/bounds.width - .23,
-            y:(anchor.y-bounds.top)/bounds.height - .01,
-            w:.46,
-            h:.27,
+            w:.34425,
+            h:.2006,
         };
         return !!drawVisibleFit(ctx, image, bounds, target);
     }
@@ -431,7 +434,7 @@
         const image = armourImage(entity);
         if (!imageReady(image)) return false;
         const baseTarget = ARMOUR_TARGETS[view] || ARMOUR_TARGETS.front;
-        const armourY = keyFor(entity) === 'human_female'
+        const armourY = usesApprovedHumanEquipmentBaseline(entity)
             ? (HUMAN_FEMALE_EQUIPMENT_TUNING[view]?.armourY || 0)
             : 0;
         const target = armourY ? {...baseTarget,y:baseTarget.y+armourY} : baseTarget;
