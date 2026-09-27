@@ -1,0 +1,85 @@
+name: Generate human male broad sprites
+
+on:
+  push:
+    branches:
+      - development
+    paths:
+      - '.github/workflows/generate-human-male-broad.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 1
+
+      - name: Install Pillow
+        run: python -m pip install --disable-pip-version-check pillow
+
+      - name: Generate broad directional sprites from the male reference art
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+
+          root = Path('images/characters/human_male')
+
+          def smoothstep(t):
+              t = max(0.0, min(1.0, t))
+              return t * t * (3.0 - 2.0 * t)
+
+          def row_scale(y, height, peak):
+              n = y / max(1, height - 1)
+              if n < 0.19:
+                  return 1.0
+              if n < 0.29:
+                  return 1.0 + (peak - 1.0) * smoothstep((n - 0.19) / 0.10)
+              if n < 0.64:
+                  return peak
+              if n < 0.77:
+                  return peak - 0.02 * smoothstep((n - 0.64) / 0.13)
+              if n < 0.90:
+                  start = peak - 0.02
+                  return start + (1.0 - start) * smoothstep((n - 0.77) / 0.13)
+              return 1.0
+
+          def broaden(source_name, target_name, peak):
+              source = Image.open(root / source_name).convert('RGBA')
+              width, height = source.size
+              output = Image.new('RGBA', source.size, (0, 0, 0, 0))
+              for y in range(height):
+                  scale = row_scale(y, height, peak)
+                  if abs(scale - 1.0) < 1e-6:
+                      output.paste(source.crop((0, y, width, y + 1)), (0, y))
+                      continue
+                  row = source.crop((0, y, width, y + 1))
+                  stretched_width = max(width, round(width * scale))
+                  row = row.resize((stretched_width, 1), Image.Resampling.BICUBIC)
+                  crop_left = (stretched_width - width) // 2
+                  output.paste(row.crop((crop_left, 0, crop_left + width, 1)), (0, y))
+              output.save(root / target_name, optimize=True)
+
+          broaden('body_front.png', 'body_broad_front.png', 1.16)
+          broaden('body_side.png', 'body_broad_side.png', 1.12)
+          broaden('body_back.png', 'body_broad_back.png', 1.16)
+          PY
+
+      - name: Commit generated sprites
+        run: |
+          git add images/characters/human_male/body_broad_front.png \
+                  images/characters/human_male/body_broad_side.png \
+                  images/characters/human_male/body_broad_back.png
+          if git diff --cached --quiet; then
+            echo 'No generated sprite changes.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Add human male broad directional sprites'
+          git push origin HEAD:development
