@@ -5,8 +5,8 @@
 // directional renderer centres a much narrower visual body inside that box
 // (width = body height * 0.48). Equipment fitting must use the visual box, not
 // the invisible legacy box. This module records that authoritative rectangle
-// and owns the final human-female armour composition so it cannot fall back to
-// the ghost legacy body rectangle because of wrapper ordering.
+// and owns the final human-female armour composition so legacy sizing/deformation
+// wrappers cannot alter the final pixels.
 (() => {
     'use strict';
 
@@ -117,6 +117,62 @@
             && Math.abs(armourCy - bodyCy) <= body.height * 0.75;
     }
 
+    // Fit the armour's *visible alpha rectangle* directly to the body rig's
+    // armour envelope. This is deliberately a single axis-aligned translate +
+    // scale. It does not rotate, skew, strip-warp, or depend on legacy armour
+    // destination dimensions. Transparent padding therefore cannot make the
+    // visible armour appear too small.
+    function computeRigidArmourPlacement(image, view='front', bodyBounds=null, trimOverride=null) {
+        if (!bodyBounds?.height || !bodyBounds?.width) return null;
+        const measure = window.measureHumanFemaleArmourAlphaBounds;
+        const deriveRig = window.deriveHumanFemaleArmourRig;
+        const vertical = window.HUMAN_FEMALE_EQUIPMENT_FIT?.targetVerticalByView?.[view];
+        if (typeof deriveRig !== 'function' || !vertical) return null;
+
+        const trim = trimOverride || (typeof measure === 'function' ? measure(image) : null);
+        if (!trim?.originalWidth || !trim?.originalHeight || !trim?.trimWidth || !trim?.trimHeight) return null;
+
+        const rig = deriveRig(view);
+        if (!rig) return null;
+        const leftFrac = Math.min(rig.shoulderL, rig.waistL, rig.hemL);
+        const rightFrac = Math.max(rig.shoulderR, rig.waistR, rig.hemR);
+        if (![leftFrac,rightFrac,vertical.topY,vertical.bottomY].every(Number.isFinite)
+            || !(rightFrac > leftFrac) || !(vertical.bottomY > vertical.topY)) return null;
+
+        const targetLeftPx = bodyBounds.left + leftFrac * bodyBounds.width;
+        const targetRightPx = bodyBounds.left + rightFrac * bodyBounds.width;
+        const targetTopPx = bodyBounds.top + vertical.topY * bodyBounds.height;
+        const targetBottomPx = bodyBounds.top + vertical.bottomY * bodyBounds.height;
+        const targetVisibleWidthPx = targetRightPx - targetLeftPx;
+        const targetVisibleHeightPx = targetBottomPx - targetTopPx;
+        if (!(targetVisibleWidthPx > 0) || !(targetVisibleHeightPx > 0)) return null;
+
+        const scaleXPxPerSourcePixel = targetVisibleWidthPx / trim.trimWidth;
+        const scaleYPxPerSourcePixel = targetVisibleHeightPx / trim.trimHeight;
+        const outerWidthPx = trim.originalWidth * scaleXPxPerSourcePixel;
+        const outerHeightPx = trim.originalHeight * scaleYPxPerSourcePixel;
+        const dx = targetLeftPx - trim.trimLeft * scaleXPxPerSourcePixel;
+        const dy = targetTopPx - trim.trimTop * scaleYPxPerSourcePixel;
+
+        return {
+            view,
+            trim:{...trim},
+            bodyBounds:{...bodyBounds},
+            rig:{...rig},
+            dx, dy, outerWidthPx, outerHeightPx,
+            targetLeftPx, targetRightPx, targetTopPx, targetBottomPx,
+            targetVisibleWidthPx, targetVisibleHeightPx,
+            visibleLeftPx:dx + trim.trimLeft * scaleXPxPerSourcePixel,
+            visibleRightPx:dx + (trim.trimLeft + trim.trimWidth) * scaleXPxPerSourcePixel,
+            visibleTopPx:dy + trim.trimTop * scaleYPxPerSourcePixel,
+            visibleBottomPx:dy + (trim.trimTop + trim.trimHeight) * scaleYPxPerSourcePixel,
+            scaleXPxPerSourcePixel,
+            scaleYPxPerSourcePixel,
+            placementSource:'actual-body-draw-bounds',
+            compositionSource:'rigid-alpha-envelope',
+        };
+    }
+
     function installGoldArmourTagging() {
         const current = window.getGoldTintedSprite;
         if (typeof current !== 'function' || current.__directionalRigHandoffTagged) return typeof current === 'function';
@@ -167,9 +223,8 @@
         if (!ctx) return false;
         if (ctx.drawImage?.__directionalRigArmourCompositor) return true;
         if (!window.__directionalEquipmentFitTuningApplied
-            || typeof window.computeHumanFemaleMeasuredArmourPlacement !== 'function'
-            || typeof window.getArmourRigForFacing !== 'function'
-            || typeof window.drawStripDeformedArmour !== 'function') return false;
+            || typeof window.measureHumanFemaleArmourAlphaBounds !== 'function'
+            || typeof window.deriveHumanFemaleArmourRig !== 'function') return false;
 
         installGoldArmourTagging();
         const previous = ctx.drawImage.bind(ctx);
@@ -179,27 +234,17 @@
             if (args.length === 4 && isHumanFemaleArmourImage(img)) {
                 const body = window.__humanFemaleLastBodyDraw;
                 if (body?.entity?.race === 'human' && body?.entity?.gender === 'female' && armourDrawMatchesBody(args, body)) {
-                    const placement = window.computeHumanFemaleMeasuredArmourPlacement(img, body.view, body);
-                    const rig = window.getArmourRigForFacing('human_female', body.facing);
-                    if (placement && rig) {
-                        if ((window.cameraZoom || 1) >= 0.55) {
-                            window.drawStripDeformedArmour(
-                                ctx,
-                                rawDraw,
-                                img,
-                                rig,
-                                placement.dx,
-                                placement.dy,
-                                placement.outerWidthPx,
-                                placement.outerHeightPx
-                            );
-                        } else {
-                            rawDraw(img, placement.dx, placement.dy, placement.outerWidthPx, placement.outerHeightPx);
-                        }
+                    const placement = computeRigidArmourPlacement(img, body.view, body);
+                    if (placement) {
+                        // Final human-female armour pixels have one owner. Bypass
+                        // every mapCtx wrapper (including characterRig's old
+                        // strip-deformation path) and draw the rigid placement.
+                        rawDraw(img, placement.dx, placement.dy, placement.outerWidthPx, placement.outerHeightPx);
                         const measured = {
                             ...placement,
                             placementSource:'actual-body-draw-bounds',
-                            compositionSource:'directional-rig-handoff-direct',
+                            compositionSource:'directional-rig-handoff-rigid',
+                            stripDeformation:false,
                         };
                         if (window.HUMAN_FEMALE_EQUIPMENT_FIT) {
                             window.HUMAN_FEMALE_EQUIPMENT_FIT.lastMeasuredArmour = measured;
@@ -227,6 +272,7 @@
     }
 
     window.computeHumanFemaleDirectionalBodyBounds = computeDirectionalBounds;
+    window.computeHumanFemaleRigidArmourPlacement = computeRigidArmourPlacement;
     window.publishHumanFemaleDirectionalBodyBounds = publishBodyBounds;
     window.getHumanFemaleLiveBodyBounds = entity => entity ? liveBoundsByEntity.get(entity) || null : window.__humanFemaleLastBodyDraw || null;
     window.installDirectionalRigHandoff = installAll;
