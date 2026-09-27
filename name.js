@@ -62,6 +62,7 @@ if('serviceWorker'in navigator){navigator.serviceWorker.register(`sw.js?build=${
     // one explicit compositor with entity context; the old modules remain in the
     // repository only as migration/history references and are not loaded.
     const scripts = [
+        ['assetLoadScheduler.js','assetLoadScheduler'],
         ['movementInputFix.js','movementInputFix'],
         ['spriteRigging.js','spriteRigging'],
         ['scenario5ArmourLab.js','scenario5ArmourLab'],
