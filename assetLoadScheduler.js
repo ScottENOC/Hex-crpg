@@ -11,6 +11,9 @@
     const NativeImage = window.Image;
     if (typeof NativeImage !== 'function') return;
 
+    const nativeSrc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+    if (!nativeSrc || typeof nativeSrc.set !== 'function' || typeof nativeSrc.get !== 'function') return;
+
     const MAX_CONCURRENT = 6;
     let active = 0;
     const queue = [];
@@ -53,7 +56,7 @@
         if (/arenaHexFloor\d\.png$/.test(path)) return 0;
         if (/\/body_front\.png$/.test(path)) return 0;
         if (/\/hair_[^/]+_front\.png$/.test(path)) return 0;
-        if (/\.(svg)$/.test(path)) return 1;
+        if (/\.svg$/.test(path)) return 1;
         if (/body_broad_|_back\.png$|_side\.png$/.test(path)) return 3;
         return 2;
     }
@@ -81,7 +84,6 @@
             const event = new Event('error');
             event.assetLoadSchedulerReason = reason;
             event.assetPath = path;
-            if (typeof img.onerror === 'function') img.onerror.call(img, event);
             try { img.dispatchEvent(event); } catch (_) {}
         });
     }
@@ -91,7 +93,6 @@
         deferredStarted = true;
         for (const [path, key] of deferredPending) {
             const img = new NativeImage();
-            const finish = () => {};
             img.onload = () => {
                 window.gameVisuals = window.gameVisuals || {};
                 window.gameVisuals[key] = img;
@@ -100,16 +101,11 @@
             enqueue(path, done => {
                 img.addEventListener('load', done, {once:true});
                 img.addEventListener('error', done, {once:true});
-                const descriptor = Object.getOwnPropertyDescriptor(NativeImage.prototype, 'src')
-                    || Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
-                descriptor.set.call(img, path);
+                nativeSrc.set.call(img, path);
             });
         }
         deferredPending.clear();
     }
-
-    const nativeSrc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
-    if (!nativeSrc || typeof nativeSrc.set !== 'function' || typeof nativeSrc.get !== 'function') return;
 
     Object.defineProperty(HTMLImageElement.prototype, 'src', {
         configurable: nativeSrc.configurable,
