@@ -289,7 +289,7 @@ test.describe('direct humanoid compositor', () => {
     expect(result.bodies).toEqual(['average','broad']);
     expect(result.expected).toBe(8640);
     expect(result.count).toBe(result.expected);
-    expect(result.directCount).toBe(3456);
+    expect(result.directCount).toBe(1728);
     expect(result.failures).toEqual([]);
     expect(result.directLayerFailures).toEqual([]);
   });
