@@ -29,5 +29,54 @@ jobs:
         run: npm ci
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
+      - name: Diagnose renderer asset loading
+        run: |
+          node server.js >/tmp/hex-crpg-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/ >/dev/null; then break; fi
+            sleep 0.2
+          done
+          node <<'NODE'
+          const { chromium } = require('playwright');
+          (async () => {
+            const browser = await chromium.launch({headless:true});
+            const page = await browser.newPage();
+            await page.goto('http://127.0.0.1:3000/', {waitUntil:'domcontentloaded'});
+            await page.waitForFunction(() => window.__humanoidRendererReady === true, null, {timeout:10000});
+            await page.waitForTimeout(1500);
+            const status = await page.evaluate(() => {
+              const visuals = window.gameVisuals || {};
+              const legacyKeys = [
+                'humanBase', 'humanHair', 'humanMaleBase', 'humanMaleHair',
+                'elfFemaleBase', 'elfFemaleHair', 'elfMaleBase', 'elfMaleHair',
+                'dwarfFemaleBase', 'dwarfFemaleHair', 'dwarfMaleBase', 'dwarfMaleHair',
+                'orcBase', 'monsterDefault', 'humanLight', 'humanMedium', 'humanHeavy',
+                'swordIcon', 'shield', 'nasal_helm', 'axe', 'club', 'spear', 'bow',
+              ];
+              const imageState = image => image ? {
+                src:image.getAttribute?.('src') || image.src,
+                complete:image.complete,
+                naturalWidth:image.naturalWidth,
+                naturalHeight:image.naturalHeight,
+              } : null;
+              const male = window.DIRECTIONAL_CHARACTER_ASSETS?.human_male;
+              const female = window.DIRECTIONAL_CHARACTER_ASSETS?.human_female;
+              return {
+                rendererInstalled:window.__humanoidRendererInstalled === true,
+                legacy:Object.fromEntries(legacyKeys.map(key => [key, imageState(visuals[key])])),
+                femaleAverage:imageState(female?.body?.average?.front),
+                femaleBroad:imageState(female?.body?.broad?.front),
+                maleAverage:imageState(male?.body?.average?.front),
+                maleBroadFront:imageState(male?.body?.broad?.front),
+                maleBroadSide:imageState(male?.body?.broad?.side),
+                maleBroadBack:imageState(male?.body?.broad?.back),
+              };
+            });
+            console.log(JSON.stringify(status, null, 2));
+            await browser.close();
+          })().catch(error => { console.error(error); process.exit(1); });
+          NODE
       - name: Run focused humanoid rendering regression
         run: npx playwright test tests/human-female-direct-render.spec.js --reporter=line
