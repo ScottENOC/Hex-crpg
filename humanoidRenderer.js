@@ -20,7 +20,7 @@
 
     const CHARACTER_RIGS = {
         human_female: { bodyW:1.60, bodyH:1.92, yOff:-0.16, heightScale:1.92/2.16 },
-        human_male:   { bodyW:1.80, bodyH:2.16, yOff:-0.18, heightScale:1.00 },
+        human_male:   { bodyW:1.70, bodyH:2.06, yOff:-0.17, heightScale:2.06/2.16 },
     };
 
     const CHARACTER_PATHS = {
@@ -101,6 +101,12 @@
             offHandGrip:{x:0,y:.075},
             helmetAnchor:{x:0,y:-.025},
             armourY:-.010,
+            heldItems:{
+                axe:{inward:.055,y:0},
+                sword:{inward:.028,y:.020},
+                dagger:{inward:.028,y:.020},
+                bow:{inward:.040,y:-.030},
+            },
         },
         side:{helmetAnchor:{x:0,y:-.025},armourY:-.010},
         back:{helmetAnchor:{x:0,y:-.025},armourY:-.010},
@@ -311,7 +317,7 @@
         if (lower.includes('spear')) return {image:visuals.spear,kind:'spear',scale:1.08};
         if (lower.includes('axe') || lower.includes('pickaxe')) return {image:visuals.axe,kind:'axe',scale:1};
         if (lower.includes('club') || lower.includes('chair')) return {image:visuals.club,kind:'club',scale:1};
-        if (lower.includes('dagger')) return {image:visuals.swordIcon,kind:'sword',scale:.75};
+        if (lower.includes('dagger')) return {image:visuals.swordIcon,kind:'dagger',scale:.75};
         if (lower.includes('sword')) return {image:visuals.swordIcon,kind:'sword',scale:1};
         return null;
     }
@@ -342,6 +348,18 @@
         return {x:base.x + (delta.x || 0), y:base.y + (delta.y || 0)};
     }
 
+    function tunedHeldItemAnchor(entity, view, anchorName, slot, kind) {
+        const base = tunedAnchor(entity, view, anchorName);
+        if (!base || keyFor(entity) !== 'human_female') return base;
+        const tuning = HUMAN_FEMALE_EQUIPMENT_TUNING[view]?.heldItems?.[kind];
+        if (!tuning) return base;
+        const side = slot === 'off' ? -1 : 1;
+        return {
+            x:base.x + side * (tuning.inward || 0),
+            y:base.y + (tuning.y || 0),
+        };
+    }
+
     function point(bounds, p) {
         return {x:bounds.left+p.x*bounds.width,y:bounds.top+p.y*bounds.height};
     }
@@ -352,7 +370,9 @@
         if (expectedLayer === 'shield' && spec.kind !== 'shield') return false;
         if (expectedLayer === 'weapon' && spec.kind === 'shield') return false;
         const anchorName = spec.kind === 'shield' ? 'offForearm' : (slot === 'main' ? 'mainHandGrip' : 'offHandGrip');
-        const anchorPoint = tunedAnchor(entity, view, anchorName);
+        const anchorPoint = spec.kind === 'shield'
+            ? tunedAnchor(entity, view, anchorName)
+            : tunedHeldItemAnchor(entity, view, anchorName, slot, spec.kind);
         if (!anchorPoint) return false;
         const anchor = point(bounds, anchorPoint);
         const grip = ITEM_GRIPS[spec.kind] || ITEM_GRIPS.sword;
@@ -387,10 +407,10 @@
         const anchor = point(bounds, anchorPoint);
         const female = keyFor(entity) === 'human_female';
         const target = female ? {
-            x:(anchor.x-bounds.left)/bounds.width - .21,
+            x:(anchor.x-bounds.left)/bounds.width - .2025,
             y:(anchor.y-bounds.top)/bounds.height - .015,
-            w:.42,
-            h:.245,
+            w:.405,
+            h:.236,
         } : {
             x:(anchor.x-bounds.left)/bounds.width - .23,
             y:(anchor.y-bounds.top)/bounds.height - .01,
