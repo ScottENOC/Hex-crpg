@@ -39,7 +39,7 @@ window.generateName = window.getRandomName;
     window.randomizeCharacterAppearance({sync:false});
 })();
 
-const PRESENTATION_BUILD = '20260927-armour-context-recovery';
+const PRESENTATION_BUILD = '20260927-unified-character-renderer-v2';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
 const presentationBuildMeta=document.querySelector('meta[name="app-build"]');if(presentationBuildMeta)presentationBuildMeta.content=PRESENTATION_BUILD;
@@ -55,22 +55,11 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 if('serviceWorker'in navigator){navigator.serviceWorker.register(`sw.js?build=${encodeURIComponent(PRESENTATION_BUILD)}`,{updateViaCache:'none'}).catch(err=>console.warn('Service worker registration failed:',err));}
 
 (() => {
+    // Presentation is deliberately small now. Character rendering has one owner.
     const scripts = [
         ['movementInputFix.js','movementInputFix'],
-        ['spriteRigging.js','spriteRigging'],
-        ['rigCalibration.js','rigCalibration'],
-        ['rigDebug.js','rigDebug'],
-        ['scenario5ArmourLab.js','scenario5ArmourLab'],
-        ['characterRig.js','characterRig'],
         ['renderPerfTuning.js','renderPerfTuning'],
-        ['facingSystem.js','facingSystem'],
-        ['directionalHairTuning.js','directionalHairTuning'],
-        ['directionalWeaponTuning.js','directionalWeaponTuning'],
-        ['directionalEquipmentTuning.js','directionalEquipmentTuning'],
-        ['directionalRigHandoff.js','directionalRigHandoff'],
-        ['armourAnchorDebug.js','armourAnchorDebug'],
-        ['armourAnchorOverlay.js','armourAnchorOverlay'],
-        ['directionalCharacterUI.js','directionalCharacterUi'],
+        ['characterRenderer.js','characterRenderer'],
         ['raceSkinPalettes.js','raceSkinPalettes'],
     ];
     for (const [src,key] of scripts) {

@@ -1216,12 +1216,8 @@ function updatePlayerUI() {
 
 // CAMPAIGN 4: SPRITE OVERLAY TEST SCENARIO — a plain grassland populated
 // with static NPCs covering every playable race/gender combo, each shown in
-// a few fixed loadouts so weapon/armor/helmet overlay anchors (CHAR_CONFIG's
 // mainHand/offHand/helm/weaponSizeMult etc., gameEngine.js's
-// drawPlayerCharacter) can be eyeballed and tuned side by side. All five
-// races now have a real CHAR_CONFIG entry (goblin/orc reuse their flat
 // monster sprite as the body layer, same pipeline as everyone else — see
-// CHAR_CONFIG's goblin_male/orc_male comments). Not a real fight: no
 // monsters, no combat, side left 'neutral' so nothing auto-engages.
 window.SPRITE_TEST_ORIGIN = { q: 0, r: -6000 }; // far off in unused coordinate space, well clear of every other campaign's hand-placed content
 const SPRITE_TEST_RACES = ['human', 'elf', 'dwarf', 'orc', 'goblin'];
@@ -1762,275 +1758,14 @@ function startGameCore(isLoading = false) {
 }
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// CHARACTER RENDERING CONFIG
-// All values in hexSize units unless noted. Edit these to tune visuals;
-// press ` (backtick) in-game to toggle the debug overlay showing anchor dots.
-//
-// bodyW/bodyH : rendered size = bodyW/bodyH * hexSize * zoom
-// yOff        : vertical shift in hexSize units (negative = up)
-// hair.type   : 'full' = overlay at body rect | 'small' = cap at head
-// hair.yRaw   : extra y shift in raw pixels * zoom (full hair only)
-// hair.topFrac: where small hair center sits (0=body top, 1=body bottom)
-// armour.topShift: drop armour from body top by this many hexSize units
-// armour.wMult   : armour width as multiple of body width
-// mainHand/offHand: normalised (0â€“1) position within body rect for weapon hilt
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const CHAR_CONFIG = {
-    human_male:   { bodyW:1.80, bodyH:2.16, yOff:-0.18, baseKey:'humanMaleBase',  hair:{ key:'humanMaleHair',   type:'small', wFrac:0.30, hFrac:0.30, topFrac:0.19 }, armour:{ wMult:1.0, topShift:0   }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.35, y:0.64 }, offHand:{ x:0.59, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42, shieldOffset:{ x:0.15, y:0.15 }, mainHandYAdj:-0.3, offHandYAdj:-0.15 },
-    human_female: { bodyW:1.60, bodyH:1.92, yOff:-0.16, baseKey:'humanBase',       hair:{ key:'humanHair',       type:'full',  yRaw:-3                              }, armour:{ wMult:1.0, topShift:0   }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.40, y:0.66 }, offHand:{ x:0.60, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42, shieldOffset:{ x:0.30, y:0.30 }, mainHandYAdj:0.25 },
-    // elfMaleHair.png and dwarfFemaleHair.png are both drawn essentially
-    // edge-to-edge with no transparent padding (confirmed directly: ~99.5%
-    // of each canvas is opaque, versus ~52-82% for their well-padded
-    // siblings elfFemaleHair/dwarfMaleHair) — "full" hair stretches the raw
-    // image to the whole body box, so these two read as a giant hair-cape
-    // covering nearly the entire body instead of a normal hairstyle. hair.
-    // sizeMult (below) is the CHAR_CONFIG-level default for this correction
-    // — same mechanism as the per-entity e.hairSizeMult override already
-    // used for a couple of named NPCs before this was traced to specific
-    // broken assets rather than a per-character quirk.
-    elf_male:     { bodyW:2.00, bodyH:2.40, yOff:-0.20, baseKey:'elfMaleBase',     hair:{ key:'elfMaleHair',     type:'full', sizeMult:0.15                         }, armour:{ wMult:1.0, topShift:0.3 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.37, y:0.63 }, offHand:{ x:0.58, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
-    elf_female:   { bodyW:2.00, bodyH:2.40, yOff:-0.20, baseKey:'elfFemaleBase',   hair:{ key:'elfFemaleHair',   type:'full'                                        }, armour:{ wMult:1.0, topShift:0.3 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.37, y:0.63 }, offHand:{ x:0.58, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
-    dwarf_male:   { bodyW:1.60, bodyH:1.92, yOff:-0.07, baseKey:'dwarfMaleBase',   hair:{ key:'dwarfMaleHair',   type:'full'                                        }, armour:{ wMult:1.4, topShift:0.1 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.33, y:0.61 }, offHand:{ x:0.52, y:0.45 }, weaponSizeMult:1.0, shieldSizeMult:0.36 },
-    dwarf_female: { bodyW:1.60, bodyH:1.92, yOff:-0.07, baseKey:'dwarfFemaleBase', hair:{ key:'dwarfFemaleHair', type:'full', sizeMult:0.2 }, armour:{ wMult:1.4, topShift:0.1 }, helm:{ xOff:0,     yOff:0,     sizeMult:1.0 }, mainHand:{ x:0.33, y:0.61 }, offHand:{ x:0.52, y:0.45 }, weaponSizeMult:1.0, shieldSizeMult:0.36 },
-    // No dedicated layered orc body art exists (no orcMaleBase/orcFemaleBase
-    // images) — reuses the flat orc.png monster sprite (window.gameVisuals.
-    // orcBase) as the body layer itself, same "no hair" treatment as
-    // revenant/skeleton below. This routes orc players/companions through
-    // the SAME equipment-layering pipeline as every other race (armour/
-    // weapon/shield images are already race-agnostic, see the ARMOUR/SHIELD/
-    // WEAPON blocks below) instead of the old early-return that drew only
-    // the flat sprite with no equipment at all.
-    orc_male:     { bodyW:1.90, bodyH:2.10, yOff:-0.15, baseKey:'orcBase', hair:{ key:null }, armour:{ wMult:1.1, topShift:0.1 }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.35, y:0.64 }, offHand:{ x:0.59, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
-    orc_female:   { bodyW:1.85, bodyH:2.05, yOff:-0.15, baseKey:'orcBase', hair:{ key:null }, armour:{ wMult:1.1, topShift:0.1 }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.40, y:0.66 }, offHand:{ x:0.60, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
-
-    // Goblin: same treatment as orc above — no dedicated layered body art,
-    // reuses the flat goblin.png monster sprite (window.gameVisuals.
-    // monsterDefault) as the body layer. Smaller bodyW/H than orc (goblins
-    // are the small/wiry race per raceData's flavor), otherwise the same
-    // full equipment-layering pipeline every other race gets. This used to
-    // hit drawPlayerCharacter's early-return (no CHAR_CONFIG entry at all),
-    // drawing only the flat sprite with no weapon/armor/helmet ever shown.
-    goblin_male:   { bodyW:1.50, bodyH:1.75, yOff:-0.12, baseKey:'monsterDefault', hair:{ key:null }, armour:{ wMult:0.9, topShift:0.1 }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.0 }, mainHand:{ x:0.35, y:0.64 }, offHand:{ x:0.59, y:0.50 }, weaponSizeMult:0.85, shieldSizeMult:0.36 },
-    goblin_female: { bodyW:1.45, bodyH:1.70, yOff:-0.12, baseKey:'monsterDefault', hair:{ key:null }, armour:{ wMult:0.9, topShift:0.1 }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.0 }, mainHand:{ x:0.40, y:0.66 }, offHand:{ x:0.60, y:0.50 }, weaponSizeMult:0.85, shieldSizeMult:0.36 },
-
-    // ENEMY HUMANOIDS — sprite keys need matching images (e.g. gameVisuals.revenantBase)
-    // Use backtick debug overlay to tune anchor dots once sprites are loaded.
-    revenant_male:   { bodyW:1.85, bodyH:2.20, yOff:-0.18, baseKey:'revenantBase', hair:{ key:null }, armour:{ wMult:1.05, topShift:0 }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.35, y:0.64 }, offHand:{ x:0.59, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
-    revenant_female: { bodyW:1.65, bodyH:1.96, yOff:-0.16, baseKey:'revenantBase', hair:{ key:null }, armour:{ wMult:1.05, topShift:0 }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.40, y:0.66 }, offHand:{ x:0.60, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
-    // Skeleton: a real limbed body (skeletonBase.svg, arms/legs distinct
-    // from the torso) instead of the old flat single-image sprite, so
-    // whatever it's randomly equipped with (assignRandomEquipment,
-    // monsters.js) actually layers on visibly — same anchor tuning as
-    // revenant (closest existing "bony humanoid" posture).
-    skeleton_male:   { bodyW:1.85, bodyH:2.20, yOff:-0.18, baseKey:'skeletonBase', hair:{ key:null }, armour:{ wMult:1.05, topShift:0 }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.35, y:0.64 }, offHand:{ x:0.59, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
-    skeleton_female: { bodyW:1.65, bodyH:1.96, yOff:-0.16, baseKey:'skeletonBase', hair:{ key:null }, armour:{ wMult:1.05, topShift:0 }, helm:{ xOff:0.067, yOff:0.067, sizeMult:1.1 }, mainHand:{ x:0.40, y:0.66 }, offHand:{ x:0.60, y:0.50 }, weaponSizeMult:1.0, shieldSizeMult:0.42 },
-};
-
-// Cosmetic outfits for the 'clothes' equip slot (equipment.js) — fixed
-// shirt/pants hues per item, distinct from a player's own slider-chosen
-// everyday colors. Shown per window.clothingDisplayMode (see the inventory
-// screen's toggle, ui.js) — 'clothes' always shows them; the default
-// 'armor' mode only shows them when no armor is equipped to compete with.
+// Character sprites are owned exclusively by characterRenderer.js.
+// Unmigrated race/gender combinations intentionally render blank.
 window.CLOTHING_PRESETS = {
     traveler_garb:  { shirtHue: 30,  pantsHue: 25,  satMult: 0.7 },
     fine_tunic:     { shirtHue: 220, pantsHue: 0,   satMult: 0.9 },
     noble_doublet:  { shirtHue: 280, pantsHue: 0,   satMult: 1.1 },
     scholars_robe:  { shirtHue: 0,   pantsHue: 0,   satMult: 0.15 },
 };
-
-function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
-    const cfg = CHAR_CONFIG[`${e.race}_${e.gender}`];
-    if (!cfg || !window.gameVisuals) {
-        // Note: orc and goblin both now have real CHAR_CONFIG entries
-        // (baseKey:'orcBase'/'monsterDefault' respectively), so they go
-        // through the full equipment-layering path below instead of
-        // hitting this fallback block at all (this branch only fires if
-        // gameVisuals itself isn't loaded yet, same as every other race).
-        // Fallback: draw a colored circle so the entity is always visible
-        const r = window.hexSize * 0.45 * z;
-        ctx.beginPath();
-        ctx.arc(x, y + flyOff, r, 0, Math.PI * 2);
-        ctx.fillStyle = e.color || '#9c27b0';
-        ctx.fill();
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1.5 * z;
-        ctx.stroke();
-        return;
-    }
-
-    const hs = window.hexSize;
-    const bW = cfg.bodyW * hs * z;
-    const bH = cfg.bodyH * hs * z;
-    const yOff = cfg.yOff * hs * z + flyOff;
-
-    // Body top uses bW/2 as vertical anchor (matches original per-race convention)
-    const left = x - bW / 2;
-    const top  = y - bW / 2 + yOff;
-
-    // BASE BODY — shirt/pants/skin each recolored independently (see
-    // spriteRecolor.js) so not every human/elf/dwarf looks identical.
-    // Deterministic per entity name (salted per band so they don't all
-    // collapse to the same hue), so it's stable without a stored field.
-    // Defaults are drawn from CLOTHING_PALETTE/muted saturation — a raw
-    // full-hue-wheel hash looked garish on ordinary villagers — while a
-    // player's own slider choice (already set before this ever runs) is
-    // left untouched, at full saturation. Skin stays within a believable
-    // tan/brown range rather than the full hue wheel clothing gets.
-    const baseImg = window.gameVisuals[cfg.baseKey];
-    // Equipped clothes (equipment.js's 'clothes' type) override the default
-    // shirt/pants hues for this render only — e.shirtHue/pantsHue themselves
-    // are left untouched so unequipping reverts to the original look
-    // instantly. Shown whenever there's no armor equipped to compete with,
-    // or the "always show clothes" inventory toggle is on.
-    const clothesId = e.equipped?.clothes;
-    const clothesPreset = clothesId && window.CLOTHING_PRESETS?.[clothesId];
-    const showClothes = !!clothesPreset && (window.clothingDisplayMode === 'clothes' || !e.equipped?.armor);
-    if (baseImg?.complete) {
-        if (e.shirtHue === undefined && window.pickClothingHue) { e.shirtHue = window.pickClothingHue((e.name || 'x') + '_shirt'); e.clothingSatMult = 0.85; }
-        if (e.pantsHue === undefined && window.pickClothingHue) { e.pantsHue = window.pickClothingHue((e.name || 'x') + '_pants'); e.clothingSatMult = 0.85; }
-        if (e.skinHue === undefined && window.pickNaturalSkinTone) {
-            const tone = window.pickNaturalSkinTone((e.name || 'x') + '_skin');
-            e.skinHue = tone.hue; e.skinSaturation = tone.saturation; e.skinLightness = tone.lightness;
-        }
-        if (e.race === 'human' && e.hairStyle === undefined && window.hashStringToHue) {
-            const styles = ['brown_1', 'braid', 'curly'];
-            e.hairStyle = styles[window.hashStringToHue((e.name || 'x') + '_hair_style') % styles.length];
-        }
-        if (e.race === 'human' && e.gender === 'female' && e.bodyType === undefined && window.hashStringToHue) {
-            e.bodyType = window.hashStringToHue((e.name || 'x') + '_body') % 4 === 0 ? 'broad' : 'average';
-        }
-        const shirtHue = showClothes ? clothesPreset.shirtHue : e.shirtHue;
-        const pantsHue = showClothes ? clothesPreset.pantsHue : e.pantsHue;
-        const satMult = showClothes ? (clothesPreset.satMult !== undefined ? clothesPreset.satMult : 1) : e.clothingSatMult;
-        const skinImg = window.getRecoloredSkinSprite
-            ? window.getRecoloredSkinSprite(baseImg, { hue:e.skinHue, saturation:e.skinSaturation, lightness:e.skinLightness })
-            : baseImg;
-        const bodyImg = window.getRecoloredSprite ? window.getRecoloredSprite(skinImg, { shirtHue, pantsHue, satMult }) : skinImg;
-        ctx.drawImage(bodyImg || baseImg, left, top, bW, bH);
-    }
-
-    // HAIR
-    const hc = cfg.hair;
-    const hairImg = window.gameVisuals[hc.key];
-    if (hairImg?.complete) {
-        if (e.hairHue === undefined && window.pickHairPreset) {
-            const preset = window.pickHairPreset((e.name || 'x') + '_hair');
-            e.hairHue = preset.hue; e.hairLightMult = preset.lightMult; e.hairSatMult = preset.satMult;
-        }
-        const tintedHair = window.getRecoloredHairSprite ? window.getRecoloredHairSprite(hairImg, e.hairHue, e.hairLightMult, e.hairSatMult) : hairImg;
-        const drawHair = tintedHair || hairImg;
-        if (hc.type === 'full') {
-            // Per-entity override for an otherwise-fixed full-body hair sprite
-            // (e.g. Ambassador Elarion's absurdly oversized default) — scales
-            // around the head anchor (top-center) rather than stretching.
-            const sizeMult = e.hairSizeMult !== undefined ? e.hairSizeMult : (hc.sizeMult !== undefined ? hc.sizeMult : 1);
-            const hW = bW * sizeMult, hH = bH * sizeMult;
-            ctx.drawImage(drawHair, x - hW / 2, top + (hc.yRaw || 0) * z, hW, hH);
-        } else {
-            const hW = bW * hc.wFrac;
-            const hH = bH * hc.hFrac;
-            const topFrac = hc.topFrac !== undefined ? hc.topFrac : 0.2;
-            ctx.drawImage(drawHair, x - hW / 2, top + topFrac * bH - hH / 2, hW, hH);
-        }
-    }
-
-    // HELMET
-    if (e.equipped?.helmet === 'nasal_helm' && window.gameVisuals.nasal_helm?.complete) {
-        const hW = bW * cfg.helm.sizeMult;
-        let helmImg = window.gameVisuals.nasal_helm;
-        if (e.goldGear && window.getGoldTintedSprite) helmImg = window.getGoldTintedSprite(helmImg);
-        ctx.drawImage(helmImg, x - hW / 2 + cfg.helm.xOff * hs * z, top + cfg.helm.yOff * hs * z, hW, bH);
-    }
-
-    // ARMOUR (humanoid armour images scale to fit each race) — skipped when
-    // clothes are the thing actually being shown this render (see
-    // showClothes above), so the "always show clothes" toggle actually
-    // hides the armor overlay instead of just drawing both on top of
-    // each other.
-    if (e.equipped?.armor && !showClothes) {
-        let armorImg = null;
-        const aid = e.equipped.armor;
-        if (aid === 'light_armor')  armorImg = window.gameVisuals.humanLight;
-        if (aid === 'medium_armor') armorImg = window.gameVisuals.humanMedium;
-        if (aid === 'heavy_armor')  armorImg = window.gameVisuals.humanHeavy;
-        if (armorImg?.complete) {
-            if (e.goldGear && window.getGoldTintedSprite) armorImg = window.getGoldTintedSprite(armorImg);
-            const aW = bW * cfg.armour.wMult;
-            const aTopShift = cfg.armour.topShift * hs * z;
-            ctx.drawImage(armorImg, x - aW / 2, top + aTopShift, aW, bH - aTopShift);
-        }
-    }
-
-    // SHIELD (offhand slot)
-    if (e.equipped?.offhand && window.items[e.equipped.offhand]?.type === 'shield' && window.gameVisuals.shield?.complete) {
-        const sSize = bW * cfg.shieldSizeMult;
-        const shOff = cfg.shieldOffset || { x: 0, y: 0 };
-        ctx.drawImage(window.gameVisuals.shield, x - sSize / 2 + shOff.x * sSize, y + yOff - sSize / 2 + shOff.y * sSize, sSize, sSize);
-    }
-
-    // MAIN-HAND WEAPON
-    let weaponImg = null;
-    let weaponScale = 1.0;
-    let mainYAdj = cfg.mainHandYAdj !== undefined ? cfg.mainHandYAdj : 0.5;
-    const mainW = e.equipped?.weapon;
-    if (mainW === 'sword' || mainW === 'sword_arrow_deflection') weaponImg = window.gameVisuals.swordIcon;
-    else if (mainW === 'axe')    weaponImg = window.gameVisuals.axe;
-    else if (mainW === 'spear')  weaponImg = window.gameVisuals.spear;
-    else if (mainW === 'club')   weaponImg = window.gameVisuals.club;
-    else if (mainW === 'bow')    weaponImg = window.gameVisuals.bow;
-    else if (mainW === 'dagger') { weaponImg = window.gameVisuals.swordIcon; weaponScale = 0.75; mainYAdj = 0.1; }
-
-    if (weaponImg?.complete) {
-        const wSize = hs * cfg.weaponSizeMult * weaponScale * z;
-        const mhX = left + cfg.mainHand.x * bW;
-        // The sword png's hilt anchor sits at its vertical center, but the
-        // blade reads as "held too low" unless raised — mainHandYAdj (in
-        // wSize units) tunes this per race/weapon; daggers need much less
-        // of a raise than a full sword.
-        const mhY = top  + cfg.mainHand.y * bH - mainYAdj * wSize;
-        ctx.drawImage(weaponImg, mhX - wSize / 2, mhY - wSize / 2, wSize, wSize);
-    }
-
-    // OFF-HAND WEAPON (mirrored)
-    let offhandImg = null;
-    let offhandScale = 1.0;
-    let offYAdj = cfg.offHandYAdj !== undefined ? cfg.offHandYAdj : 0;
-    const offW = e.equipped?.offhand;
-    if (offW === 'sword' || offW === 'sword_arrow_deflection') offhandImg = window.gameVisuals.swordIcon;
-    else if (offW === 'axe')    offhandImg = window.gameVisuals.axe;
-    else if (offW === 'spear')  offhandImg = window.gameVisuals.spear;
-    else if (offW === 'club')   offhandImg = window.gameVisuals.club;
-    else if (offW === 'dagger') { offhandImg = window.gameVisuals.swordIcon; offhandScale = 0.75; offYAdj -= 0.4; }
-
-    if (offhandImg?.complete && window.items[offW]?.type === 'weapon') {
-        const wSize = hs * cfg.weaponSizeMult * offhandScale * z;
-        const ohX = left + cfg.offHand.x * bW;
-        const ohY = top  + cfg.offHand.y * bH - offYAdj * wSize;
-        ctx.save();
-        ctx.translate(ohX, ohY);
-        ctx.scale(-1, 1);
-        ctx.drawImage(offhandImg, -wSize / 2, -wSize / 2, wSize, wSize);
-        ctx.restore();
-    }
-
-    // DEBUG OVERLAY â€” press ` to toggle window.charDebugMode
-    if (window.charDebugMode) {
-        ctx.strokeStyle = '#0f0';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(left, top, bW, bH);
-        const dot = (px, py, color, label) => {
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            ctx.arc(px, py, 3 * z, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = '#fff';
-            ctx.font = `${9 * z}px monospace`;
-            ctx.fillText(label, px + 4 * z, py + 3 * z);
-        };
-        dot(left + cfg.mainHand.x * bW, top + cfg.mainHand.y * bH, '#f44', 'M');
-        dot(left + cfg.offHand.x  * bW, top + cfg.offHand.y  * bH, '#44f', 'O');
-    }
-}
 
 function renderEntities() {
   const z = window.cameraZoom || 1.0;
@@ -2461,11 +2196,11 @@ function renderEntities() {
           if (e.unconscious) window.mapCtx.globalAlpha = 0.4;
           const isSentientAlly = e.side === 'player' && !e.aiControlled && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(e.name);
           const flyOff = e.isFlying ? -20 * z : 0;
-  
-      // Enemy humanoids with sprite config are drawn the same way as player characters
-      const hasEnemySpriteCfg = !isSentientAlly && e.race && e.gender && CHAR_CONFIG[`${e.race}_${e.gender}`];
-      if ((isSentientAlly || hasEnemySpriteCfg) && !e.customImage && window.gameVisuals) {
-          drawPlayerCharacter(window.mapCtx, e, x, y, z, flyOff);
+      // Every race/gender actor belongs to the unified compositor. If its rig
+      // has not migrated yet, CharacterRenderer deliberately draws nothing.
+      const isCharacterActor = isSentientAlly || !!(e.race && e.gender);
+      if (isCharacterActor) {
+          window.CharacterRenderer?.draw(window.mapCtx, e, x, y, z, flyOff);
       } else if ((e instanceof window.Enemy || e.customImage) && window.gameVisuals) {
                           let size = window.hexSize * 1.5 * z;
                           let yOffset = 0;
@@ -9383,13 +9118,7 @@ window.spendTP = spendTP;
 window.finalizePlayerAction = finalizePlayerAction;
 window.handleMovement = (e) => {};
 
-window.charDebugMode = false;
 document.addEventListener('keydown', (ev) => {
-    if (ev.key === '`') {
-        window.charDebugMode = !window.charDebugMode;
-        window.renderEntities && window.renderEntities();
-    }
-
     // Space: re-center camera on local player and re-enable follow
     if (ev.key === ' ' && document.getElementById('gameContainer')?.style.display === 'flex') {
         ev.preventDefault();
@@ -9861,8 +9590,6 @@ function tryCastSpell(caster, spell, target, clickedHex, bypassCooldown = false)
 // GLOBAL EXPORTS
 window.updatePlayerUI = updatePlayerUI;
 window.autoMoveProcess = autoMoveProcess;
-window.drawPlayerCharacter = drawPlayerCharacter;
-window.CHAR_CONFIG = CHAR_CONFIG;
 window.handleClick = handleClick;
 window.getEntityAtHex = getEntityAtHex;
 window.getHexesInRange = getHexesInRange;
