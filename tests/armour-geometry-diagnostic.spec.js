@@ -5,6 +5,7 @@ test('report human female body and armour geometry', async ({ page }) => {
   await createCharacter(page, { race:'human', gender:'female' });
   await page.waitForFunction(() =>
     window.__directionalEquipmentFitTuningApplied === true &&
+    !!window.gameVisuals?.humanBase?.complete &&
     !!window.gameVisuals?.humanLight?.complete &&
     !!window.HUMAN_FEMALE_DIRECTIONAL_ASSETS?.body?.front?.complete
   );
@@ -34,15 +35,24 @@ test('report human female body and armour geometry', async ({ page }) => {
 
     const layout = window.HUMAN_FEMALE_DIRECTIONAL_LAYOUT.front;
     const body = window.HUMAN_FEMALE_DIRECTIONAL_ASSETS.body.front;
+    const legacyBody = alphaBounds(window.gameVisuals.humanBase);
     const armour = {};
     for (const [key,img] of Object.entries({light:window.gameVisuals.humanLight, medium:window.gameVisuals.humanMedium, heavy:window.gameVisuals.humanHeavy})) {
+      const robust = window.measureHumanFemaleArmourAlphaBounds(img);
+      const legacyVisibleWidthBodyUnits = (robust.trimWidth / robust.originalWidth) * 1.58 * 1.60;
+      const newBodyVisibleWidthBodyUnits = 1.92 * 0.48;
       armour[key] = {
         raw:alphaBounds(img),
-        robust:window.measureHumanFemaleArmourAlphaBounds(img),
+        robust,
+        legacyVisibleWidthBodyUnits,
+        newBodyVisibleWidthBodyUnits,
+        authoredWidthVsNewBody:legacyVisibleWidthBodyUnits / newBodyVisibleWidthBodyUnits,
         fit:window.computeHumanFemaleRigidArmourPlacement(img, 'front', {left:0,top:0,width:480,height:1000}),
       };
     }
     return {
+      legacyBody,
+      legacyBodyVisibleWidthBodyUnits:(legacyBody.width / legacyBody.sourceWidth) * 1.60,
       bodyRaw:alphaBounds(body),
       bodyCropped:alphaBounds(body, layout.bodyCrop),
       bodyCrop:layout.bodyCrop,
