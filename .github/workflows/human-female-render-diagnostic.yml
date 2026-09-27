@@ -29,168 +29,76 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          renderer_path = Path('humanoidRenderer.js')
-          renderer = renderer_path.read_text()
+          rp = Path('humanoidRenderer.js')
+          r = rp.read_text()
 
-          old = """    const CHARACTER_RIGS = {
-              human_female: { bodyW:1.60, bodyH:1.92, yOff:-0.16, heightScale:1.92/2.16 },
-              human_male:   { bodyW:1.70, bodyH:2.06, yOff:-0.17, heightScale:2.06/2.16 },
-          };"""
-          new = """    const CHARACTER_RIGS = {
-              human_female: { bodyW:1.60, bodyH:1.92, yOff:-0.16, heightScale:1.92/2.16 },
-              elf_female:   { bodyW:1.60, bodyH:1.92, yOff:-0.16, heightScale:1.92/2.16 },
-              human_male:   { bodyW:1.70, bodyH:2.06, yOff:-0.17, heightScale:2.06/2.16 },
-          };"""
-          if old not in renderer:
-              raise SystemExit('CHARACTER_RIGS anchor not found')
-          renderer = renderer.replace(old, new, 1)
+          anchor = "        human_female: { bodyW:1.60, bodyH:1.92, yOff:-0.16, heightScale:1.92/2.16 },\n        human_male:   { bodyW:1.70, bodyH:2.06, yOff:-0.17, heightScale:2.06/2.16 },"
+          repl = "        human_female: { bodyW:1.60, bodyH:1.92, yOff:-0.16, heightScale:1.92/2.16 },\n        elf_female:   { bodyW:1.60, bodyH:1.92, yOff:-0.16, heightScale:1.92/2.16 },\n        human_male:   { bodyW:1.70, bodyH:2.06, yOff:-0.17, heightScale:2.06/2.16 },"
+          if anchor not in r: raise SystemExit('CHARACTER_RIGS anchor not found')
+          r = r.replace(anchor, repl, 1)
 
-          old = """        human_male: {
-              body: {
-                  average: {
-                      front:'images/characters/human_male/body_front.png',"""
-          new = """        elf_female: {
-              body: {
-                  average: {
-                      front:'images/characters/elf_female/body_front.png',
-                      side:'images/characters/elf_female/body_side.png',
-                      back:'images/characters/elf_female/body_back.png',
-                  },
-              },
-              // Elf body art is deliberately bald; hair remains a separate layer.
-              hair:null,
-          },
-          human_male: {
-              body: {
-                  average: {
-                      front:'images/characters/human_male/body_front.png',"""
-          if old not in renderer:
-              raise SystemExit('human_male CHARACTER_PATHS anchor not found')
-          renderer = renderer.replace(old, new, 1)
+          anchor = "        human_male: {\n            body: {\n                average: {\n                    front:'images/characters/human_male/body_front.png',"
+          elf = "        elf_female: {\n            body: {\n                average: {\n                    front:'images/characters/elf_female/body_front.png',\n                    side:'images/characters/elf_female/body_side.png',\n                    back:'images/characters/elf_female/body_back.png',\n                },\n            },\n            // Elf body art is deliberately bald; hair remains a separate layer.\n            hair:null,\n        },\n"
+          if anchor not in r: raise SystemExit('human_male path anchor not found')
+          r = r.replace(anchor, elf + anchor, 1)
 
-          old = """    CHARACTER_PATHS.human_male.hair = CHARACTER_PATHS.human_female.hair;
+          anchor = "    CHARACTER_PATHS.human_male.hair = CHARACTER_PATHS.human_female.hair;\n\n    const DIRECTIONAL_LAYOUT = {"
+          repl = "    CHARACTER_PATHS.human_male.hair = CHARACTER_PATHS.human_female.hair;\n    CHARACTER_PATHS.elf_female.hair = CHARACTER_PATHS.human_female.hair;\n\n    // Elf-female source art has different transparent framing from the human body sheets.\n    const BODY_VISIBLE_TARGETS = {\n        elf_female: {\n            front:{x:.14,y:.01,w:.72,h:.98},\n            side: {x:.30,y:.01,w:.40,h:.98},\n            back: {x:.125,y:.005,w:.75,h:.99},\n        },\n    };\n\n    const DIRECTIONAL_LAYOUT = {"
+          if anchor not in r: raise SystemExit('shared hair/layout anchor not found')
+          r = r.replace(anchor, repl, 1)
 
-          const DIRECTIONAL_LAYOUT = {"""
-          new = """    CHARACTER_PATHS.human_male.hair = CHARACTER_PATHS.human_female.hair;
-          CHARACTER_PATHS.elf_female.hair = CHARACTER_PATHS.human_female.hair;
+          anchor = "        return key === 'human_female' || key === 'human_male';"
+          repl = "        return key === 'human_female' || key === 'human_male' || key === 'elf_female';"
+          if anchor not in r: raise SystemExit('equipment baseline anchor not found')
+          r = r.replace(anchor, repl, 1)
 
-          // Elf-female source art has different transparent framing from the human
-          // body sheets, so visible-fit places the authored body consistently while
-          // preserving the shared compositor bounds used by hair and equipment.
-          const BODY_VISIBLE_TARGETS = {
-              elf_female: {
-                  front:{x:.14,y:.01,w:.72,h:.98},
-                  side: {x:.30,y:.01,w:.40,h:.98},
-                  back: {x:.125,y:.005,w:.75,h:.99},
-              },
-          };
+          anchor = "        human_female:{x:-.1873125,y:-.015,w:.374625,h:.2183},\n        default:{x:-.172125,y:-.015,w:.34425,h:.2006},"
+          repl = "        human_female:{x:-.1873125,y:-.015,w:.374625,h:.2183},\n        elf_female:{x:-.1873125,y:-.015,w:.374625,h:.2183},\n        default:{x:-.172125,y:-.015,w:.34425,h:.2006},"
+          if anchor not in r: raise SystemExit('helmet target anchor not found')
+          r = r.replace(anchor, repl, 1)
 
-          const DIRECTIONAL_LAYOUT = {"""
-          if old not in renderer:
-              raise SystemExit('shared hair/layout anchor not found')
-          renderer = renderer.replace(old, new, 1)
+          anchor = "            if (drawCropped(ctx, imageReady(bodyImage) ? bodyImage : sourceBody, layout.bodyCrop, layout.bodyDest, bounds)) {\n                layerOrder.push('body');\n            }"
+          repl = "            const bodySource = imageReady(bodyImage) ? bodyImage : sourceBody;\n            const bodyTarget = BODY_VISIBLE_TARGETS[key]?.[view];\n            const bodyDrawn = bodyTarget\n                ? !!drawVisibleFit(ctx, bodySource, bounds, bodyTarget)\n                : drawCropped(ctx, bodySource, layout.bodyCrop, layout.bodyDest, bounds);\n            if (bodyDrawn) layerOrder.push('body');"
+          if anchor not in r: raise SystemExit('body draw anchor not found')
+          r = r.replace(anchor, repl, 1)
 
-          old = """        return key === 'human_female' || key === 'human_male';"""
-          new = """        return key === 'human_female' || key === 'human_male' || key === 'elf_female';"""
-          if old not in renderer:
-              raise SystemExit('equipment baseline anchor not found')
-          renderer = renderer.replace(old, new, 1)
+          anchor = "    window.HUMAN_FEMALE_DIRECTIONAL_LAYOUT = DIRECTIONAL_LAYOUT;\n    window.REAR_HUMAN_EQUIPMENT_ASSETS = REAR_EQUIPMENT_ASSETS;"
+          repl = "    window.HUMAN_FEMALE_DIRECTIONAL_LAYOUT = DIRECTIONAL_LAYOUT;\n    window.ELF_FEMALE_DIRECTIONAL_ASSETS = {\n        body:CHARACTER_ASSETS.elf_female.body.average,\n        bodyTypes:CHARACTER_ASSETS.elf_female.body,\n        hair:CHARACTER_ASSETS.elf_female.hair,\n    };\n    window.REAR_HUMAN_EQUIPMENT_ASSETS = REAR_EQUIPMENT_ASSETS;"
+          if anchor not in r: raise SystemExit('asset export anchor not found')
+          r = r.replace(anchor, repl, 1)
+          rp.write_text(r)
 
-          old = """    const HELMET_TARGETS = {
-              human_female:{x:-.1873125,y:-.015,w:.374625,h:.2183},
-              default:{x:-.172125,y:-.015,w:.34425,h:.2006},
-          };"""
-          new = """    const HELMET_TARGETS = {
-              human_female:{x:-.1873125,y:-.015,w:.374625,h:.2183},
-              elf_female:{x:-.1873125,y:-.015,w:.374625,h:.2183},
-              default:{x:-.172125,y:-.015,w:.34425,h:.2006},
-          };"""
-          if old not in renderer:
-              raise SystemExit('HELMET_TARGETS anchor not found')
-          renderer = renderer.replace(old, new, 1)
+          tp = Path('tests/human-female-direct-render.spec.js')
+          t = tp.read_text()
+          anchor = "    const female = window.DIRECTIONAL_CHARACTER_ASSETS?.human_female;\n    const male = window.DIRECTIONAL_CHARACTER_ASSETS?.human_male;\n    return window.__humanoidRendererInstalled === true"
+          repl = "    const female = window.DIRECTIONAL_CHARACTER_ASSETS?.human_female;\n    const male = window.DIRECTIONAL_CHARACTER_ASSETS?.human_male;\n    const elfFemale = window.DIRECTIONAL_CHARACTER_ASSETS?.elf_female;\n    return window.__humanoidRendererInstalled === true"
+          if anchor not in t: raise SystemExit('matrix declarations anchor not found')
+          t = t.replace(anchor, repl, 1)
 
-          old = """            if (drawCropped(ctx, imageReady(bodyImage) ? bodyImage : sourceBody, layout.bodyCrop, layout.bodyDest, bounds)) {
-                  layerOrder.push('body');
-              }"""
-          new = """            const bodySource = imageReady(bodyImage) ? bodyImage : sourceBody;
-              const bodyTarget = BODY_VISIBLE_TARGETS[key]?.[view];
-              const bodyDrawn = bodyTarget
-                  ? !!drawVisibleFit(ctx, bodySource, bounds, bodyTarget)
-                  : drawCropped(ctx, bodySource, layout.bodyCrop, layout.bodyDest, bounds);
-              if (bodyDrawn) layerOrder.push('body');"""
-          if old not in renderer:
-              raise SystemExit('body draw anchor not found')
-          renderer = renderer.replace(old, new, 1)
+          anchor = "      && male?.body?.broad?.side?.naturalWidth > 0\n      && male?.body?.broad?.back?.naturalWidth > 0;"
+          repl = "      && male?.body?.broad?.side?.naturalWidth > 0\n      && male?.body?.broad?.back?.naturalWidth > 0\n      && elfFemale?.body?.average?.front?.naturalWidth > 0\n      && elfFemale?.body?.average?.side?.naturalWidth > 0\n      && elfFemale?.body?.average?.back?.naturalWidth > 0;"
+          if anchor not in t: raise SystemExit('matrix readiness anchor not found')
+          t = t.replace(anchor, repl, 1)
 
-          old = """    window.HUMAN_FEMALE_DIRECTIONAL_LAYOUT = DIRECTIONAL_LAYOUT;
-              window.REAR_HUMAN_EQUIPMENT_ASSETS = REAR_EQUIPMENT_ASSETS;"""
-          new = """    window.HUMAN_FEMALE_DIRECTIONAL_LAYOUT = DIRECTIONAL_LAYOUT;
-              window.ELF_FEMALE_DIRECTIONAL_ASSETS = {
-                  body:CHARACTER_ASSETS.elf_female.body.average,
-                  bodyTypes:CHARACTER_ASSETS.elf_female.body,
-                  hair:CHARACTER_ASSETS.elf_female.hair,
-              };
-              window.REAR_HUMAN_EQUIPMENT_ASSETS = REAR_EQUIPMENT_ASSETS;"""
-          if old not in renderer:
-              raise SystemExit('asset export anchor not found')
-          renderer = renderer.replace(old, new, 1)
-          renderer_path.write_text(renderer)
+          anchor = "    expect(rendererSource).toContain(\"back:'images/characters/human_male/body_broad_back.png'\");"
+          repl = anchor + "\n    expect(rendererSource).toContain(\"front:'images/characters/elf_female/body_front.png'\");\n    expect(rendererSource).toContain(\"side:'images/characters/elf_female/body_side.png'\");\n    expect(rendererSource).toContain(\"back:'images/characters/elf_female/body_back.png'\");\n    expect(rendererSource).toContain('CHARACTER_PATHS.elf_female.hair = CHARACTER_PATHS.human_female.hair;');"
+          if anchor not in t: raise SystemExit('source assertion anchor not found')
+          t = t.replace(anchor, repl, 1)
 
-          test_path = Path('tests/human-female-direct-render.spec.js')
-          test = test_path.read_text()
-          old = """    const female = window.DIRECTIONAL_CHARACTER_ASSETS?.human_female;
-              const male = window.DIRECTIONAL_CHARACTER_ASSETS?.human_male;
-              return window.__humanoidRendererInstalled === true"""
-          new = """    const female = window.DIRECTIONAL_CHARACTER_ASSETS?.human_female;
-              const male = window.DIRECTIONAL_CHARACTER_ASSETS?.human_male;
-              const elfFemale = window.DIRECTIONAL_CHARACTER_ASSETS?.elf_female;
-              return window.__humanoidRendererInstalled === true"""
-          if old not in test:
-              raise SystemExit('matrix asset declarations anchor not found')
-          test = test.replace(old, new, 1)
+          anchor = "            if (race === 'human' && (gender === 'female' || gender === 'male')) {\n              directCount++;"
+          repl = "            const directExpected = (race === 'human' && (gender === 'female' || gender === 'male'))\n              || (race === 'elf' && gender === 'female');\n            if (directExpected) {\n              directCount++;"
+          if anchor not in t: raise SystemExit('matrix direct condition anchor not found')
+          t = t.replace(anchor, repl, 1)
+          if "expect(result.directCount).toBe(1728);" not in t: raise SystemExit('directCount assertion not found')
+          t = t.replace("expect(result.directCount).toBe(1728);", "expect(result.directCount).toBe(2592);", 1)
+          tp.write_text(t)
 
-          old = """      && male?.body?.broad?.side?.naturalWidth > 0
-              && male?.body?.broad?.back?.naturalWidth > 0;"""
-          new = """      && male?.body?.broad?.side?.naturalWidth > 0
-              && male?.body?.broad?.back?.naturalWidth > 0
-              && elfFemale?.body?.average?.front?.naturalWidth > 0
-              && elfFemale?.body?.average?.side?.naturalWidth > 0
-              && elfFemale?.body?.average?.back?.naturalWidth > 0;"""
-          if old not in test:
-              raise SystemExit('matrix readiness anchor not found')
-          test = test.replace(old, new, 1)
-
-          old = """    expect(rendererSource).toContain(\"back:'images/characters/human_male/body_broad_back.png'\");"""
-          new = old + """
-              expect(rendererSource).toContain(\"front:'images/characters/elf_female/body_front.png'\");
-              expect(rendererSource).toContain(\"side:'images/characters/elf_female/body_side.png'\");
-              expect(rendererSource).toContain(\"back:'images/characters/elf_female/body_back.png'\");
-              expect(rendererSource).toContain('CHARACTER_PATHS.elf_female.hair = CHARACTER_PATHS.human_female.hair;');"""
-          if old not in test:
-              raise SystemExit('renderer source assertion anchor not found')
-          test = test.replace(old, new, 1)
-
-          old = """            if (race === 'human' && (gender === 'female' || gender === 'male')) {
-                    directCount++;"""
-          new = """            const directExpected = (race === 'human' && (gender === 'female' || gender === 'male'))
-                    || (race === 'elf' && gender === 'female');
-                  if (directExpected) {
-                    directCount++;"""
-          if old not in test:
-              raise SystemExit('matrix direct-render condition anchor not found')
-          test = test.replace(old, new, 1)
-          if "expect(result.directCount).toBe(1728);" not in test:
-              raise SystemExit('directCount assertion anchor not found')
-          test = test.replace("expect(result.directCount).toBe(1728);", "expect(result.directCount).toBe(2592);", 1)
-          test_path.write_text(test)
-
-          name_path = Path('name.js')
-          name = name_path.read_text()
+          np = Path('name.js')
+          n = np.read_text()
           old = "const PRESENTATION_BUILD = '20260927-direct-humanoid-compositor';"
           new = "const PRESENTATION_BUILD = '20260928-elf-female-directional';"
-          if old not in name:
-              raise SystemExit('presentation build token anchor not found')
-          name_path.write_text(name.replace(old, new, 1))
+          if old not in n: raise SystemExit('build token anchor not found')
+          np.write_text(n.replace(old, new, 1))
           PY
       - name: Install dependencies
         run: npm ci
