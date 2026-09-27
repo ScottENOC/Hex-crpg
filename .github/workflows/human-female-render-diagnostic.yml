@@ -1,12 +1,22 @@
-name: Human Female Tactical Render Diagnostic
+name: Humanoid Renderer Focused Tests
 
 on:
   push:
     branches:
-      - fix/human-female-explicit-render-context
+      - development
+    paths:
+      - 'humanoidRenderer.js'
+      - 'name.js'
+      - 'tests/human-female-direct-render.spec.js'
+      - 'tests/character-creator.spec.js'
+      - '.github/workflows/human-female-render-diagnostic.yml'
+
+concurrency:
+  group: humanoid-renderer-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  tactical-render:
+  focused-render:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -19,5 +29,5 @@ jobs:
         run: npm ci
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Run tactical render regression
-        run: npx playwright test tests/human-female-tactical-render.spec.js --reporter=line
+      - name: Run focused humanoid rendering regressions
+        run: npx playwright test tests/human-female-direct-render.spec.js tests/character-creator.spec.js --reporter=line
