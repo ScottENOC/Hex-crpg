@@ -4,6 +4,39 @@ function initializePlayer(race, cls, gender, campaign = "3", voice = "pc_1") {
   window.partyInventory = undefined; // reset the shared pool for a fresh game (see partyInventory.js)
   window.selectedCharacterIndex = 0;
   window.currentCampaign = campaign;
+
+  // A brand-new character must never inherit transient world/combat state from
+  // an earlier run in the same page. In particular, Northwatch's siege uses a
+  // global state object and its physical assault can otherwise keep advancing
+  // after returning to the creator, eventually stealing the new game's turn
+  // queue from hundreds of hexes away.
+  window.isInCombat = false;
+  window.siegeState = null;
+  window.borderWarSallyActive = false;
+  window.greenskinAssaultTriggered = false;
+  window.greenskinWaveSpawned = false;
+  window.catapultHasFired = false;
+
+  // Human-female average body art is actively being iterated. The direct
+  // renderer owns Image objects for these three files, so an aggressively
+  // cached/broken prior response can survive even after the repository asset
+  // has been replaced. Refresh just this selected body set with a build token
+  // when a fresh game starts; broad and every other race/build are untouched.
+  const selectedBodyType = document.getElementById('body-type-select')?.value || 'average';
+  if (race === 'human' && gender === 'female' && selectedBodyType === 'average') {
+    const averageAssets = window.HUMAN_FEMALE_DIRECTIONAL_ASSETS?.body;
+    if (averageAssets) {
+      const paths = {
+        front:'images/characters/human_female/body_front.png',
+        side:'images/characters/human_female/body_side.png',
+        back:'images/characters/human_female/body_back.png',
+      };
+      Object.entries(paths).forEach(([view, path]) => {
+        const image = averageAssets[view];
+        if (image && typeof image.src === 'string') image.src = `${path}?build=20260928-female-average-refresh-1`;
+      });
+    }
+  }
   
   const mainChar = createCharacterData(race, cls, "Player (Main)", gender, voice);
   // Bumped from 100/40 now that armor no longer comes free — enough left
@@ -78,6 +111,7 @@ function createCharacterData(race, cls, name, gender = "female", voice = "pc_1")
     mountSize: 0,
     riding: null,
     rider: null,
+    bodyType: 'average',
     // Baked-in/base clothing colours remain distinct from the colours of a
     // separately equipped clothing sprite. Male base art uses one colour;
     // the UI mirrors shirtHue to pantsHue for that body. Female art exposes
@@ -133,6 +167,21 @@ function createCharacterData(race, cls, name, gender = "female", voice = "pc_1")
 
 window.initializePlayer = initializePlayer;
 window.createCharacterData = createCharacterData;
+
+// index.html calls this inline. main.js replaces it with the full version once
+// DOMContentLoaded runs, but defining a safe early implementation here avoids a
+// race/stale-cache TypeError if the campaign select is changed before main.js's
+// listener has installed its copy.
+if (typeof window.toggleArenaOptions !== 'function') {
+  window.toggleArenaOptions = function() {
+    const campaign = document.getElementById('campaign-select')?.value;
+    const optionsDiv = document.getElementById('arena-roguelike-options');
+    const ironmanCheck = document.getElementById('ironman-check');
+    if (optionsDiv) optionsDiv.style.display = campaign === '1' ? 'block' : 'none';
+    if (ironmanCheck) ironmanCheck.disabled = campaign === '4';
+    if (window.updateRoguelikePreview) window.updateRoguelikePreview();
+  };
+}
 
 // Keep identity/pronouns in a small compatibility module rather than forcing
 // the legacy renderer to reinterpret its long-standing .gender body-art key.
