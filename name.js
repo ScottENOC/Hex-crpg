@@ -39,7 +39,7 @@ window.generateName = window.getRandomName;
     window.randomizeCharacterAppearance({sync:false});
 })();
 
-const PRESENTATION_BUILD = '20260927-direct-armour-body-handoff';
+const PRESENTATION_BUILD = '20260927-rigid-armour-compositor';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
 const presentationBuildMeta=document.querySelector('meta[name="app-build"]');if(presentationBuildMeta)presentationBuildMeta.content=PRESENTATION_BUILD;
@@ -66,8 +66,8 @@ if('serviceWorker'in navigator){navigator.serviceWorker.register(`sw.js?build=${
         ['facingSystem.js','facingSystem'],
         ['directionalHairTuning.js','directionalHairTuning'],
         ['directionalWeaponTuning.js','directionalWeaponTuning'],
-        ['directionalRigHandoff.js','directionalRigHandoff'],
         ['directionalEquipmentTuning.js','directionalEquipmentTuning'],
+        ['directionalRigHandoff.js','directionalRigHandoff'],
         ['armourAnchorDebug.js','armourAnchorDebug'],
         ['armourAnchorOverlay.js','armourAnchorOverlay'],
         ['directionalCharacterUI.js','directionalCharacterUi'],
