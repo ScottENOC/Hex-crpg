@@ -1,4 +1,4 @@
-name: Generate human male broad sprites
+name: Wire human male broad sprites
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  generate:
+  wire:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,67 +19,87 @@ jobs:
           ref: development
           fetch-depth: 1
 
-      - name: Install Pillow
-        run: python -m pip install --disable-pip-version-check pillow
-
-      - name: Generate broad directional sprites from the male reference art
+      - name: Wire broad sprites and lower the rear sword
         run: |
           python - <<'PY'
           from pathlib import Path
-          from PIL import Image
 
-          root = Path('images/characters/human_male')
+          renderer_path = Path('humanoidRenderer.js')
+          renderer = renderer_path.read_text()
 
-          def smoothstep(t):
-              t = max(0.0, min(1.0, t))
-              return t * t * (3.0 - 2.0 * t)
+          old_male = """        human_male: {
+            body: {
+                average: {
+                    front:'images/characters/human_male/body_front.png',
+                    side:'images/characters/human_male/body_side.png',
+                    back:'images/characters/human_male/body_back.png',
+                },
+            },
+            // Hair choices are shared between genders; the body rig supplies placement.
+            hair:null,
+        },"""
+          new_male = """        human_male: {
+            body: {
+                average: {
+                    front:'images/characters/human_male/body_front.png',
+                    side:'images/characters/human_male/body_side.png',
+                    back:'images/characters/human_male/body_back.png',
+                },
+                broad: {
+                    front:'images/characters/human_male/body_broad_front.png',
+                    side:'images/characters/human_male/body_broad_side.png',
+                    back:'images/characters/human_male/body_broad_back.png',
+                },
+            },
+            // Hair choices are shared between genders; the body rig supplies placement.
+            hair:null,
+        },"""
+          if old_male not in renderer:
+              raise SystemExit('Expected human_male body-path block not found')
+          renderer = renderer.replace(old_male, new_male, 1)
 
-          def row_scale(y, height, peak):
-              n = y / max(1, height - 1)
-              if n < 0.19:
-                  return 1.0
-              if n < 0.29:
-                  return 1.0 + (peak - 1.0) * smoothstep((n - 0.19) / 0.10)
-              if n < 0.64:
-                  return peak
-              if n < 0.77:
-                  return peak - 0.02 * smoothstep((n - 0.64) / 0.13)
-              if n < 0.90:
-                  start = peak - 0.02
-                  return start + (1.0 - start) * smoothstep((n - 0.77) / 0.13)
-              return 1.0
+          old_back = "        back:{helmetAnchor:{x:0,y:-.025},armourY:-.010},"
+          new_back = """        back:{
+            helmetAnchor:{x:0,y:-.025},
+            armourY:-.010,
+            // Front sword is lowered by .075 at the grip plus .096336564429012
+            // at the held-item layer. Match that total in back view without
+            // moving the measured attachment anchor or changing other weapons.
+            heldItems:{sword:{inward:0,y:.171336564429012}},
+        },"""
+          if old_back not in renderer:
+              raise SystemExit('Expected back equipment-tuning block not found')
+          renderer = renderer.replace(old_back, new_back, 1)
+          renderer_path.write_text(renderer)
 
-          def broaden(source_name, target_name, peak):
-              source = Image.open(root / source_name).convert('RGBA')
-              width, height = source.size
-              output = Image.new('RGBA', source.size, (0, 0, 0, 0))
-              for y in range(height):
-                  scale = row_scale(y, height, peak)
-                  if abs(scale - 1.0) < 1e-6:
-                      output.paste(source.crop((0, y, width, y + 1)), (0, y))
-                      continue
-                  row = source.crop((0, y, width, y + 1))
-                  stretched_width = max(width, round(width * scale))
-                  row = row.resize((stretched_width, 1), Image.Resampling.BICUBIC)
-                  crop_left = (stretched_width - width) // 2
-                  output.paste(row.crop((crop_left, 0, crop_left + width, 1)), (0, y))
-              output.save(root / target_name, optimize=True)
+          test_path = Path('tests/human-female-direct-render.spec.js')
+          test = test_path.read_text()
+          old_ready = "      && male?.body?.average?.front?.naturalWidth > 0;"
+          new_ready = """      && male?.body?.average?.front?.naturalWidth > 0
+      && male?.body?.broad?.front?.naturalWidth > 0
+      && male?.body?.broad?.side?.naturalWidth > 0
+      && male?.body?.broad?.back?.naturalWidth > 0;"""
+          if old_ready not in test:
+              raise SystemExit('Expected male renderer-matrix readiness check not found')
+          test = test.replace(old_ready, new_ready, 1)
 
-          broaden('body_front.png', 'body_broad_front.png', 1.16)
-          broaden('body_side.png', 'body_broad_side.png', 1.12)
-          broaden('body_back.png', 'body_broad_back.png', 1.16)
+          old_assert = "    expect(rendererSource).toContain(\"helmet:'images/nasalHelm_back.svg'\");"
+          new_assert = """    expect(rendererSource).toContain(\"helmet:'images/nasalHelm_back.svg'\");
+    expect(rendererSource).toContain(\"heldItems:{sword:{inward:0,y:.171336564429012}}\");
+    expect(rendererSource).toContain(\"front:'images/characters/human_male/body_broad_front.png'\");
+    expect(rendererSource).toContain(\"side:'images/characters/human_male/body_broad_side.png'\");
+    expect(rendererSource).toContain(\"back:'images/characters/human_male/body_broad_back.png'\");"""
+          if old_assert not in test:
+              raise SystemExit('Expected renderer source assertion anchor not found')
+          test = test.replace(old_assert, new_assert, 1)
+          test_path.write_text(test)
           PY
 
-      - name: Commit generated sprites
+      - name: Remove one-shot generator and commit
         run: |
-          git add images/characters/human_male/body_broad_front.png \
-                  images/characters/human_male/body_broad_side.png \
-                  images/characters/human_male/body_broad_back.png
-          if git diff --cached --quiet; then
-            echo 'No generated sprite changes.'
-            exit 0
-          fi
+          git rm .github/workflows/generate-human-male-broad.yml
+          git add humanoidRenderer.js tests/human-female-direct-render.spec.js
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'Add human male broad directional sprites'
+          git commit -m 'Lower rear sword and wire male broad sprites'
           git push origin HEAD:development
