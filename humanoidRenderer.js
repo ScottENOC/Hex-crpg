@@ -102,10 +102,10 @@
             helmetAnchor:{x:0,y:-.025},
             armourY:-.010,
             heldItems:{
-                axe:{inward:.055,y:0},
-                sword:{inward:.028,y:.020},
-                dagger:{inward:.028,y:.020},
-                bow:{inward:.040,y:-.030},
+                axe:{inward:.075,y:0},
+                sword:{inward:.045,y:.035},
+                dagger:{inward:.045,y:.035},
+                bow:{inward:.065,y:-.045},
             },
         },
         side:{helmetAnchor:{x:0,y:-.025},armourY:-.010},
@@ -379,8 +379,13 @@
         let size;
         if (spec.kind === 'shield') size = bounds.width * spec.scale;
         else {
+            // Derive held-item size from the compositor bounds rather than the
+            // world camera. World rendering is unchanged because those bounds
+            // are themselves built from hexSize*z, while 100px initiative
+            // portraits now scale weapons down with the character.
             const rig = CHARACTER_RIGS[keyFor(entity)];
-            const basePixel = (window.hexSize || 1) * (window.cameraZoom || 1);
+            const bodyHeightUnits = rig?.bodyH || 1;
+            const basePixel = bounds.height / bodyHeightUnits;
             size = basePixel * (rig?.heightScale || 1) * spec.scale;
         }
 
