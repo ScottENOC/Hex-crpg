@@ -102,6 +102,8 @@ test.describe('direct humanoid compositor', () => {
   test('runtime stack no longer loads canvas-interception character patches', async ({ page }) => {
     const nameSource = await (await page.request.get(`${ROOT}/name.js`)).text();
     const rendererSource = await (await page.request.get(`${ROOT}/humanoidRenderer.js`)).text();
+    const entitiesSource = await (await page.request.get(`${ROOT}/entities.js`)).text();
+    const graphicsSource = await (await page.request.get(`${ROOT}/graphicsSettings.js`)).text();
 
     expect(nameSource).toContain("['humanoidRenderer.js','humanoidRenderer']");
     for (const retired of [
@@ -116,6 +118,8 @@ test.describe('direct humanoid compositor', () => {
       expect(nameSource).not.toContain(`['${retired}'`);
     }
 
+    expect(entitiesSource).not.toContain('facingSystem.js?');
+    expect(graphicsSource).not.toContain("script.src = 'characterRig.js");
     expect(rendererSource).toContain('function drawDirectionalHumanoidInBounds');
     expect(rendererSource).toContain("compositionSource:'direct-axis-aligned-scale-translate'");
     expect(rendererSource).toContain("human_female:{x:-.1873125,y:-.015,w:.374625,h:.2183}");

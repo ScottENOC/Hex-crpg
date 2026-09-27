@@ -399,14 +399,8 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (_) {}
 });
 
-(() => {
-    if (document.querySelector('script[data-character-rig]')) return;
-    const script = document.createElement('script');
-    script.src = 'characterRig.js?v=2';
-    script.dataset.characterRig = 'true';
-    script.async = false;
-    document.head.appendChild(script);
-})();
+// characterRig.js is a retired canvas-interception/deformation renderer.
+// The direct humanoid compositor owns equipment placement; do not load both.
 
 (() => {
     if (document.querySelector('script[data-performance-monitor]')) return;
