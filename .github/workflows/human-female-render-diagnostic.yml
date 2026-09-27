@@ -21,73 +21,13 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Trace directional asset registry overwrite
+      - name: Locate retired renderer loaders
         run: |
-          echo '--- human_male references ---'
-          grep -R -n --include='*.js' "human_male" . --exclude-dir=node_modules || true
-          node server.js >/tmp/hex-crpg-server.log 2>&1 &
-          SERVER_PID=$!
-          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
-          for attempt in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:3000/ >/dev/null; then break; fi
-            sleep 0.2
-          done
-          node <<'NODE'
-          const { chromium } = require('playwright');
-          (async () => {
-            const browser = await chromium.launch({headless:true});
-            const page = await browser.newPage();
-            await page.addInitScript(() => {
-              const events = [];
-              let registry;
-              const wrapMaleBody = next => {
-                const male = next?.human_male;
-                if (!male || male.__bodyTraceWrapped) return;
-                let body = male.body;
-                Object.defineProperty(male, 'body', {
-                  configurable:true,
-                  enumerable:true,
-                  get(){ return body; },
-                  set(value){
-                    events.push({kind:'human_male.body set', keys:Object.keys(value || {}), stack:new Error().stack});
-                    body = value;
-                  },
-                });
-                Object.defineProperty(male, '__bodyTraceWrapped', {value:true, configurable:true});
-              };
-              Object.defineProperty(window, 'DIRECTIONAL_CHARACTER_ASSETS', {
-                configurable:true,
-                enumerable:true,
-                get(){ return registry; },
-                set(value){
-                  events.push({kind:'registry set', maleBodyKeys:Object.keys(value?.human_male?.body || {}), stack:new Error().stack});
-                  registry = value;
-                  wrapMaleBody(value);
-                },
-              });
-              window.__directionalAssetTrace = events;
-            });
-            await page.goto('http://127.0.0.1:3000/', {waitUntil:'domcontentloaded'});
-            await page.waitForFunction(() => window.__humanoidRendererReady === true, null, {timeout:10000});
-            await page.waitForTimeout(1500);
-            const status = await page.evaluate(() => ({
-              scripts:Array.from(document.scripts).map(s => s.src).filter(Boolean),
-              bodyKeys:Object.keys(window.DIRECTIONAL_CHARACTER_ASSETS?.human_male?.body || {}),
-              trace:window.__directionalAssetTrace || [],
-            }));
-            console.log(JSON.stringify(status, null, 2));
-            await browser.close();
-          })().catch(error => { console.error(error); process.exit(1); });
-          NODE
+          echo '--- facingSystem.js references ---'
+          grep -R -n --include='*.js' --include='*.html' "facingSystem\.js" . --exclude-dir=node_modules || true
+          echo '--- characterRig.js references ---'
+          grep -R -n --include='*.js' --include='*.html' "characterRig\.js" . --exclude-dir=node_modules || true
+          echo '--- directional legacy references ---'
+          grep -R -n --include='*.js' --include='*.html' "directionalCharacterUI\.js\|directionalWeaponTuning\.js\|directionalEquipmentTuning\.js\|directionalRigHandoff\.js" . --exclude-dir=node_modules || true
       - name: Stop after diagnostic
         run: exit 1
-      - name: Run focused humanoid rendering regression
-        run: npx playwright test tests/human-female-direct-render.spec.js --reporter=line
