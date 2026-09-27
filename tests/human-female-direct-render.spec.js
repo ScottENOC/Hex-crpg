@@ -44,3 +44,19 @@ test('legacy full-body female hair is discarded before body detection', async ({
   expect(suppressionIndex).toBeGreaterThan(-1);
   expect(bodyDetectionIndex).toBeGreaterThan(suppressionIndex);
 });
+
+test('direct female armour handoff owns final pixels and does not strip-warp them', async ({ page }) => {
+  const handoffSource = await (await page.request.get(`${ROOT}/directionalRigHandoff.js`)).text();
+  const nameSource = await (await page.request.get(`${ROOT}/name.js`)).text();
+
+  expect(handoffSource).toContain('function computeRigidArmourPlacement');
+  expect(handoffSource).toContain("compositionSource:'directional-rig-handoff-rigid'");
+  expect(handoffSource).toContain('stripDeformation:false');
+  expect(handoffSource).not.toContain('drawStripDeformedArmour(');
+  expect(handoffSource).not.toContain('computeHumanFemaleMeasuredArmourPlacement(');
+
+  const fitterIndex = nameSource.indexOf("['directionalEquipmentTuning.js','directionalEquipmentTuning']");
+  const handoffIndex = nameSource.indexOf("['directionalRigHandoff.js','directionalRigHandoff']");
+  expect(fitterIndex).toBeGreaterThan(-1);
+  expect(handoffIndex).toBeGreaterThan(fitterIndex);
+});
