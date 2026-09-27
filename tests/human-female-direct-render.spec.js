@@ -40,7 +40,10 @@ async function waitForRendererMatrixAssets(page) {
       && legacyKeys.every(key => visuals[key]?.naturalWidth > 0)
       && female?.body?.average?.front?.naturalWidth > 0
       && female?.body?.broad?.front?.naturalWidth > 0
-      && male?.body?.average?.front?.naturalWidth > 0;
+      && male?.body?.average?.front?.naturalWidth > 0
+      && male?.body?.broad?.front?.naturalWidth > 0
+      && male?.body?.broad?.side?.naturalWidth > 0
+      && male?.body?.broad?.back?.naturalWidth > 0;
   });
 }
 
@@ -119,6 +122,10 @@ test.describe('direct humanoid compositor', () => {
     expect(rendererSource).toContain('const SHIELD_OPAQUE_HEIGHT_DROP = .10;');
     expect(rendererSource).toContain("shield:'images/shield_back.svg'");
     expect(rendererSource).toContain("helmet:'images/nasalHelm_back.svg'");
+    expect(rendererSource).toContain("heldItems:{sword:{inward:0,y:.171336564429012}}");
+    expect(rendererSource).toContain("front:'images/characters/human_male/body_broad_front.png'");
+    expect(rendererSource).toContain("side:'images/characters/human_male/body_broad_side.png'");
+    expect(rendererSource).toContain("back:'images/characters/human_male/body_broad_back.png'");
     expect(rendererSource).not.toMatch(/ctx\.drawImage\s*=/);
     expect(rendererSource).not.toMatch(/\.rotate\s*\(/);
     expect(rendererSource).not.toContain('drawStripDeformedArmour');

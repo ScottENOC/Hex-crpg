@@ -62,6 +62,11 @@
                     side:'images/characters/human_male/body_side.png',
                     back:'images/characters/human_male/body_back.png',
                 },
+                broad: {
+                    front:'images/characters/human_male/body_broad_front.png',
+                    side:'images/characters/human_male/body_broad_side.png',
+                    back:'images/characters/human_male/body_broad_back.png',
+                },
             },
             // Hair choices are shared between genders; the body rig supplies placement.
             hair:null,
@@ -112,7 +117,14 @@
             },
         },
         side:{helmetAnchor:{x:0,y:-.025},armourY:-.010},
-        back:{helmetAnchor:{x:0,y:-.025},armourY:-.010},
+        back:{
+            helmetAnchor:{x:0,y:-.025},
+            armourY:-.010,
+            // Front sword is lowered by .075 at the grip plus .096336564429012
+            // at the held-item layer. Match that total in back view without
+            // moving the measured attachment anchor or changing other weapons.
+            heldItems:{sword:{inward:0,y:.171336564429012}},
+        },
     };
 
     const ARMOUR_TARGETS = {
