@@ -39,7 +39,7 @@ window.generateName = window.getRandomName;
     window.randomizeCharacterAppearance({sync:false});
 })();
 
-const PRESENTATION_BUILD = '20260927-armour-context-recovery';
+const PRESENTATION_BUILD = '20260927-direct-humanoid-compositor';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
 const presentationBuildMeta=document.querySelector('meta[name="app-build"]');if(presentationBuildMeta)presentationBuildMeta.content=PRESENTATION_BUILD;
@@ -55,23 +55,19 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 if('serviceWorker'in navigator){navigator.serviceWorker.register(`sw.js?build=${encodeURIComponent(PRESENTATION_BUILD)}`,{updateViaCache:'none'}).catch(err=>console.warn('Service worker registration failed:',err));}
 
 (() => {
+    // Runtime presentation stack is intentionally small. The previous character
+    // path loaded several independent drawImage wrappers (characterRig,
+    // facingSystem, directional tuning and handoff modules) that each tried to
+    // infer which entity a subsequent canvas draw belonged to. Humanoids now use
+    // one explicit compositor with entity context; the old modules remain in the
+    // repository only as migration/history references and are not loaded.
     const scripts = [
         ['movementInputFix.js','movementInputFix'],
         ['spriteRigging.js','spriteRigging'],
-        ['rigCalibration.js','rigCalibration'],
-        ['rigDebug.js','rigDebug'],
         ['scenario5ArmourLab.js','scenario5ArmourLab'],
-        ['characterRig.js','characterRig'],
         ['renderPerfTuning.js','renderPerfTuning'],
-        ['facingSystem.js','facingSystem'],
-        ['directionalHairTuning.js','directionalHairTuning'],
-        ['directionalWeaponTuning.js','directionalWeaponTuning'],
-        ['directionalEquipmentTuning.js','directionalEquipmentTuning'],
-        ['directionalRigHandoff.js','directionalRigHandoff'],
-        ['armourAnchorDebug.js','armourAnchorDebug'],
-        ['armourAnchorOverlay.js','armourAnchorOverlay'],
-        ['directionalCharacterUI.js','directionalCharacterUi'],
         ['raceSkinPalettes.js','raceSkinPalettes'],
+        ['humanoidRenderer.js','humanoidRenderer'],
     ];
     for (const [src,key] of scripts) {
         const attr = `data-${key.replace(/[A-Z]/g,m=>'-'+m.toLowerCase())}`;
