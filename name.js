@@ -39,7 +39,7 @@ window.generateName = window.getRandomName;
     window.randomizeCharacterAppearance({sync:false});
 })();
 
-const PRESENTATION_BUILD = '20260927-rigid-armour-compositor';
+const PRESENTATION_BUILD = '20260927-armour-pin-diagnostic';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
 const presentationBuildMeta=document.querySelector('meta[name="app-build"]');if(presentationBuildMeta)presentationBuildMeta.content=PRESENTATION_BUILD;
@@ -72,6 +72,7 @@ if('serviceWorker'in navigator){navigator.serviceWorker.register(`sw.js?build=${
         ['armourAnchorOverlay.js','armourAnchorOverlay'],
         ['directionalCharacterUI.js','directionalCharacterUi'],
         ['raceSkinPalettes.js','raceSkinPalettes'],
+        ['armourFreezeDiagnostic.js','armourFreezeDiagnostic'],
     ];
     for (const [src,key] of scripts) {
         const attr = `data-${key.replace(/[A-Z]/g,m=>'-'+m.toLowerCase())}`;
