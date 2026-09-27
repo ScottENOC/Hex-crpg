@@ -1,62 +1,118 @@
 const { test, expect } = require('@playwright/test');
+const { createCharacter } = require('./helpers');
 
 const ROOT = 'http://127.0.0.1:3000';
 
-test('human female uses neutral shared layout and map-only 0.48 aspect', async ({ page }) => {
-  await page.goto(`${ROOT}/index.html`);
-  await page.waitForFunction(() => !!window.HUMAN_FEMALE_DIRECTIONAL_LAYOUT?.front);
+async function waitForDirectRenderer(page, key = 'human_female') {
+  await page.waitForFunction((characterKey) => {
+    const assets = window.DIRECTIONAL_CHARACTER_ASSETS?.[characterKey];
+    return window.__humanoidRendererInstalled === true
+      && assets?.body?.average?.front?.complete
+      && assets.body.average.front.naturalWidth > 0;
+  }, key);
+}
 
-  const state = await page.evaluate(() => ({
-    aspect: window.HUMAN_FEMALE_RENDER_ASPECT,
-    frontBody: { ...window.HUMAN_FEMALE_DIRECTIONAL_LAYOUT.front.bodyDest },
-    frontHair: { ...window.HUMAN_FEMALE_DIRECTIONAL_LAYOUT.front.hairDest },
-    polished: !!window.HUMAN_FEMALE_DIRECTIONAL_LAYOUT.__mapWidthPolished,
-  }));
+async function renderEquippedHuman(page, gender, facing) {
+  return page.evaluate(({ gender, facing }) => {
+    const entity = (window.entities || []).find(e => e.alive && e.race === 'human' && e.gender === gender && e.side === 'player');
+    if (!entity) throw new Error(`No player-side human ${gender} entity found`);
+    entity.equipped = {
+      ...(entity.equipped || {}),
+      armor:'heavy_armor',
+      helmet:'nasal_helm',
+      weapon:'sword',
+      offhand:'wooden_shield',
+    };
+    entity.facing = facing;
+    window.__humanoidRendererDrawCount = 0;
+    window.__humanoidRendererLastArmour = null;
+    window.drawMap?.();
+    window.renderEntities?.();
+    return {
+      count:window.__humanoidRendererDrawCount || 0,
+      draw:window.__humanoidRendererLastDraw && {
+        key:window.__humanoidRendererLastDraw.key,
+        view:window.__humanoidRendererLastDraw.view,
+        facing:window.__humanoidRendererLastDraw.facing,
+        bounds:{...window.__humanoidRendererLastDraw.bounds},
+      },
+      armour:window.__humanoidRendererLastArmour && {
+        view:window.__humanoidRendererLastArmour.view,
+        compositionSource:window.__humanoidRendererLastArmour.compositionSource,
+        rotation:window.__humanoidRendererLastArmour.rotation,
+        shear:window.__humanoidRendererLastArmour.shear,
+        width:window.__humanoidRendererLastArmour.width,
+        height:window.__humanoidRendererLastArmour.height,
+      },
+    };
+  }, { gender, facing });
+}
 
-  expect(state.aspect).toBeCloseTo(0.48, 6);
-  expect(state.frontBody).toEqual({ x: 0, y: 0, w: 1, h: 1 });
-  expect(state.frontHair.w).toBeCloseTo(0.56, 6);
-  expect(state.polished).toBe(false);
-});
+test.describe('direct humanoid compositor', () => {
+  test('runtime stack no longer loads canvas-interception character patches', async ({ page }) => {
+    const nameSource = await (await page.request.get(`${ROOT}/name.js`)).text();
+    const rendererSource = await (await page.request.get(`${ROOT}/humanoidRenderer.js`)).text();
 
-test('map replacement seeds equipment rig without drawing legacy female body', async ({ page }) => {
-  const facingSource = await (await page.request.get(`${ROOT}/facingSystem.js?v=6`)).text();
-  const nameSource = await (await page.request.get(`${ROOT}/name.js`)).text();
+    expect(nameSource).toContain("['humanoidRenderer.js','humanoidRenderer']");
+    for (const retired of [
+      'characterRig.js',
+      'facingSystem.js',
+      'directionalHairTuning.js',
+      'directionalWeaponTuning.js',
+      'directionalEquipmentTuning.js',
+      'directionalRigHandoff.js',
+      'directionalCharacterUI.js',
+    ]) {
+      expect(nameSource).not.toContain(`['${retired}'`);
+    }
 
-  expect(facingSource).toContain('const RIG_SEED_CANVAS');
-  expect(facingSource).toContain('artWidth = dh * HUMAN_FEMALE_RENDER_ASPECT');
-  expect(facingSource).toContain('riggedDrawImage(RIG_SEED_CANVAS, dx, dy, dw, dh)');
-  expect(facingSource).not.toContain('riggedDrawImage(originalImg');
-  expect(facingSource).not.toContain('ctx.globalAlpha = 0');
-  expect(nameSource).not.toContain('humanFemaleMapPolish.js');
-});
+    expect(rendererSource).toContain('function drawDirectionalHumanoidInBounds');
+    expect(rendererSource).toContain("compositionSource:'direct-axis-aligned-scale-translate'");
+    expect(rendererSource).not.toMatch(/ctx\.drawImage\s*=/);
+    expect(rendererSource).not.toMatch(/\.rotate\s*\(/);
+    expect(rendererSource).not.toContain('drawStripDeformedArmour');
+    expect(rendererSource).not.toContain('drawWarpedArmour');
+  });
 
-test('legacy full-body female hair is discarded before body detection', async ({ page }) => {
-  const facingSource = await (await page.request.get(`${ROOT}/facingSystem.js?v=6`)).text();
-  const suppression = 'if (img && img === window.gameVisuals?.humanHair) return;';
-  const suppressionIndex = facingSource.indexOf(suppression);
-  const bodyDetectionIndex = facingSource.indexOf('if (args.length === 4)', suppressionIndex);
+  test('human female tactical drawing enters the direct compositor with rigid armour in every view', async ({ page }) => {
+    await createCharacter(page, { race:'human', gender:'female' });
+    await waitForDirectRenderer(page, 'human_female');
 
-  // This is intentionally a source-order contract: the obsolete full-body
-  // hair sprite must be rejected before a same-size image can enter body
-  // detection and be interpreted as another directional character. Do not
-  // couple the regression test to explanatory comment wording.
-  expect(suppressionIndex).toBeGreaterThan(-1);
-  expect(bodyDetectionIndex).toBeGreaterThan(suppressionIndex);
-});
+    const down = await renderEquippedHuman(page, 'female', 'down');
+    expect(down.count).toBeGreaterThan(0);
+    expect(down.draw).toMatchObject({key:'human_female',view:'front',facing:'down'});
+    expect(down.armour).toMatchObject({
+      view:'front',
+      compositionSource:'direct-axis-aligned-scale-translate',
+      rotation:0,
+      shear:false,
+    });
+    expect(down.armour.width).toBeGreaterThan(0);
+    expect(down.armour.height).toBeGreaterThan(0);
 
-test('direct female armour handoff owns final pixels and does not strip-warp them', async ({ page }) => {
-  const handoffSource = await (await page.request.get(`${ROOT}/directionalRigHandoff.js`)).text();
-  const nameSource = await (await page.request.get(`${ROOT}/name.js`)).text();
+    const right = await renderEquippedHuman(page, 'female', 'right');
+    expect(right.count).toBeGreaterThan(0);
+    expect(right.draw).toMatchObject({key:'human_female',view:'side',facing:'right'});
+    expect(right.armour).toMatchObject({view:'side',rotation:0,shear:false});
 
-  expect(handoffSource).toContain('function computeRigidArmourPlacement');
-  expect(handoffSource).toContain("compositionSource:'directional-rig-handoff-rigid'");
-  expect(handoffSource).toContain('stripDeformation:false');
-  expect(handoffSource).not.toContain('drawStripDeformedArmour(');
-  expect(handoffSource).not.toContain('computeHumanFemaleMeasuredArmourPlacement(');
+    const up = await renderEquippedHuman(page, 'female', 'up');
+    expect(up.count).toBeGreaterThan(0);
+    expect(up.draw).toMatchObject({key:'human_female',view:'back',facing:'up'});
+    expect(up.armour).toMatchObject({view:'back',rotation:0,shear:false});
+  });
 
-  const fitterIndex = nameSource.indexOf("['directionalEquipmentTuning.js','directionalEquipmentTuning']");
-  const handoffIndex = nameSource.indexOf("['directionalRigHandoff.js','directionalRigHandoff']");
-  expect(fitterIndex).toBeGreaterThan(-1);
-  expect(handoffIndex).toBeGreaterThan(fitterIndex);
+  test('human male uses the same single-owner compositor instead of the legacy layered path', async ({ page }) => {
+    await createCharacter(page, { race:'human', gender:'male' });
+    await waitForDirectRenderer(page, 'human_male');
+
+    const result = await renderEquippedHuman(page, 'male', 'down');
+    expect(result.count).toBeGreaterThan(0);
+    expect(result.draw).toMatchObject({key:'human_male',view:'front',facing:'down'});
+    expect(result.armour).toMatchObject({
+      view:'front',
+      compositionSource:'direct-axis-aligned-scale-translate',
+      rotation:0,
+      shear:false,
+    });
+  });
 });
