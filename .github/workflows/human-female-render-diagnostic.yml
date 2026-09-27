@@ -1,4 +1,4 @@
-name: Humanoid Renderer Focused Tests
+name: Apply direct renderer loader cleanup
 
 on:
   push:
@@ -18,108 +18,80 @@ jobs:
         with:
           ref: development
           fetch-depth: 1
-      - name: Remove retired renderer loaders and restore focused CI
+      - name: Remove retired loaders and restore focused CI
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           entities_path = Path('entities.js')
           entities = entities_path.read_text()
-          old_entities = """// Facing is kept separate from entity/gameplay logic. Load the presentation
-// module here because entities.js is already an early, stable script in every
-// game mode; the module itself waits until map/character rendering is ready.
-(() => {
-    if (document.querySelector('script[data-facing-system]')) return;
-    const script = document.createElement('script');
-    const build = window.PRESENTATION_BUILD || '20260914-directional-humans';
-    script.src = `facingSystem.js?build=${encodeURIComponent(build)}`;
-    script.dataset.facingSystem = 'true';
-    script.async = false;
-    document.head.appendChild(script);
-})();"""
-          new_entities = """// Directional humanoid presentation is owned by humanoidRenderer.js.
-// facingSystem.js is a retired canvas-interception renderer and must not be
-// loaded alongside the direct compositor."""
-          if old_entities not in entities:
+          marker = '// Facing is kept separate from entity/gameplay logic. Load the presentation'
+          if marker not in entities:
               raise SystemExit('Expected retired facingSystem loader not found in entities.js')
-          entities_path.write_text(entities.replace(old_entities, new_entities, 1))
+          entities = entities[:entities.index(marker)] + '// Directional humanoid presentation is owned by humanoidRenderer.js.\n// facingSystem.js is a retired canvas-interception renderer and must not be\n// loaded alongside the direct compositor.\n'
+          entities_path.write_text(entities)
 
           graphics_path = Path('graphicsSettings.js')
           graphics = graphics_path.read_text()
-          old_graphics = """(() => {
-    if (document.querySelector('script[data-character-rig]')) return;
-    const script = document.createElement('script');
-    script.src = 'characterRig.js?v=2';
-    script.dataset.characterRig = 'true';
-    script.async = false;
-    document.head.appendChild(script);
-})();
-
-"""
-          new_graphics = """// characterRig.js is a retired canvas-interception/deformation renderer.
-// The direct humanoid compositor owns equipment placement; do not load both.
-
-"""
-          if old_graphics not in graphics:
+          pattern = r"\n\(\(\) => \{\n    if \(document\.querySelector\('script\[data-character-rig\]'\)\) return;\n    const script = document\.createElement\('script'\);\n    script\.src = 'characterRig\.js\?v=2';\n    script\.dataset\.characterRig = 'true';\n    script\.async = false;\n    document\.head\.appendChild\(script\);\n\}\)\(\);\n"
+          replacement = "\n// characterRig.js is a retired canvas-interception/deformation renderer.\n// The direct humanoid compositor owns equipment placement; do not load both.\n"
+          graphics, count = re.subn(pattern, replacement, graphics, count=1)
+          if count != 1:
               raise SystemExit('Expected retired characterRig loader not found in graphicsSettings.js')
-          graphics_path.write_text(graphics.replace(old_graphics, new_graphics, 1))
+          graphics_path.write_text(graphics)
 
           test_path = Path('tests/human-female-direct-render.spec.js')
           test = test_path.read_text()
-          old_fetches = """    const nameSource = await (await page.request.get(`${ROOT}/name.js`)).text();
-    const rendererSource = await (await page.request.get(`${ROOT}/humanoidRenderer.js`)).text();"""
-          new_fetches = """    const nameSource = await (await page.request.get(`${ROOT}/name.js`)).text();
-    const rendererSource = await (await page.request.get(`${ROOT}/humanoidRenderer.js`)).text();
-    const entitiesSource = await (await page.request.get(`${ROOT}/entities.js`)).text();
-    const graphicsSource = await (await page.request.get(`${ROOT}/graphicsSettings.js`)).text();"""
+          old_fetches = "    const nameSource = await (await page.request.get(`${ROOT}/name.js`)).text();\n    const rendererSource = await (await page.request.get(`${ROOT}/humanoidRenderer.js`)).text();"
+          new_fetches = old_fetches + "\n    const entitiesSource = await (await page.request.get(`${ROOT}/entities.js`)).text();\n    const graphicsSource = await (await page.request.get(`${ROOT}/graphicsSettings.js`)).text();"
           if old_fetches not in test:
               raise SystemExit('Expected focused-test source fetch block not found')
           test = test.replace(old_fetches, new_fetches, 1)
-          old_assert = """    expect(rendererSource).toContain('function drawDirectionalHumanoidInBounds');"""
-          new_assert = """    expect(entitiesSource).not.toContain('facingSystem.js?');
-    expect(graphicsSource).not.toContain("script.src = 'characterRig.js");
-    expect(rendererSource).toContain('function drawDirectionalHumanoidInBounds');"""
+          old_assert = "    expect(rendererSource).toContain('function drawDirectionalHumanoidInBounds');"
+          new_assert = "    expect(entitiesSource).not.toContain('facingSystem.js?');\n    expect(graphicsSource).not.toContain(\"script.src = 'characterRig.js\");\n" + old_assert
           if old_assert not in test:
               raise SystemExit('Expected focused-test renderer assertion not found')
           test_path.write_text(test.replace(old_assert, new_assert, 1))
 
-          workflow = """name: Humanoid Renderer Focused Tests
-
-# Deliberately scoped to the direct humanoid regression; do not expand this to the full suite.
-on:
-  push:
-    branches:
-      - development
-    paths:
-      - 'humanoidRenderer.js'
-      - 'entities.js'
-      - 'graphicsSettings.js'
-      - 'name.js'
-      - 'tests/human-female-direct-render.spec.js'
-      - '.github/workflows/human-female-render-diagnostic.yml'
-
-concurrency:
-  group: humanoid-renderer-${{ github.ref }}
-  cancel-in-progress: true
-
-jobs:
-  focused-render:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Run focused humanoid rendering regression
-        run: npx playwright test tests/human-female-direct-render.spec.js --reporter=line
-"""
-          Path('.github/workflows/human-female-render-diagnostic.yml').write_text(workflow)
+          workflow_lines = [
+              'name: Humanoid Renderer Focused Tests',
+              '',
+              '# Deliberately scoped to the direct humanoid regression; do not expand this to the full suite.',
+              'on:',
+              '  push:',
+              '    branches:',
+              '      - development',
+              '    paths:',
+              "      - 'humanoidRenderer.js'",
+              "      - 'entities.js'",
+              "      - 'graphicsSettings.js'",
+              "      - 'name.js'",
+              "      - 'tests/human-female-direct-render.spec.js'",
+              "      - '.github/workflows/human-female-render-diagnostic.yml'",
+              '',
+              'concurrency:',
+              '  group: humanoid-renderer-${{ github.ref }}',
+              '  cancel-in-progress: true',
+              '',
+              'jobs:',
+              '  focused-render:',
+              '    runs-on: ubuntu-latest',
+              '    timeout-minutes: 10',
+              '    steps:',
+              '      - uses: actions/checkout@v4',
+              '      - uses: actions/setup-node@v4',
+              '        with:',
+              "          node-version: '20'",
+              '          cache: npm',
+              '      - name: Install dependencies',
+              '        run: npm ci',
+              '      - name: Install Chromium',
+              '        run: npx playwright install --with-deps chromium',
+              '      - name: Run focused humanoid rendering regression',
+              '        run: npx playwright test tests/human-female-direct-render.spec.js --reporter=line',
+          ]
+          Path('.github/workflows/human-female-render-diagnostic.yml').write_text('\n'.join(workflow_lines) + '\n')
           PY
 
           git add entities.js graphicsSettings.js tests/human-female-direct-render.spec.js .github/workflows/human-female-render-diagnostic.yml
