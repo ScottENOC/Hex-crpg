@@ -102,10 +102,12 @@
             helmetAnchor:{x:0,y:-.025},
             armourY:-.010,
             heldItems:{
-                axe:{inward:.075,y:0},
-                sword:{inward:.045,y:.035},
-                dagger:{inward:.045,y:.035},
-                bow:{inward:.065,y:-.045},
+                // sword.png alpha>=8 trim: r=407/1024=.3974609375.
+                // Deltas were calculated in pixel space, then normalised per axis.
+                axe:{inward:.075,y:.061336564429012},
+                sword:{inward:.076946127306777,y:.096336564429012},
+                dagger:{inward:.076946127306777,y:.050334141107253},
+                bow:{inward:.141670705536265,y:-.045},
             },
         },
         side:{helmetAnchor:{x:0,y:-.025},armourY:-.010},
