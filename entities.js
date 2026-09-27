@@ -124,15 +124,6 @@ window.Enemy = Enemy;
 window.entities = entities;
 window.currentTurnEntity = currentTurnEntity;
 
-// Facing is kept separate from entity/gameplay logic. Load the presentation
-// module here because entities.js is already an early, stable script in every
-// game mode; the module itself waits until map/character rendering is ready.
-(() => {
-    if (document.querySelector('script[data-facing-system]')) return;
-    const script = document.createElement('script');
-    const build = window.PRESENTATION_BUILD || '20260914-directional-humans';
-    script.src = `facingSystem.js?build=${encodeURIComponent(build)}`;
-    script.dataset.facingSystem = 'true';
-    script.async = false;
-    document.head.appendChild(script);
-})();
+// Directional humanoid presentation is owned by humanoidRenderer.js.
+// facingSystem.js is a retired canvas-interception renderer and must not be
+// loaded alongside the direct compositor.
