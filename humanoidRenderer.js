@@ -92,6 +92,20 @@
         back: {helmetAnchor:{x:.50,y:.03},mainHandGrip:{x:.90,y:.55},offHandGrip:{x:.10,y:.55},offForearm:{x:.16,y:.44},backAnchor:{x:.50,y:.30}},
     };
 
+    // Small compositor-only tuning offsets. The canonical reference rig stays a
+    // measured description of the body art; these offsets describe how equipment
+    // should sit on that body. This makes visual tuning explicit and reversible.
+    const HUMAN_FEMALE_EQUIPMENT_TUNING = {
+        front:{
+            mainHandGrip:{x:0,y:.075},
+            offHandGrip:{x:0,y:.075},
+            helmetAnchor:{x:0,y:-.025},
+            armourY:-.010,
+        },
+        side:{helmetAnchor:{x:0,y:-.025},armourY:-.010},
+        back:{helmetAnchor:{x:0,y:-.025},armourY:-.010},
+    };
+
     // Armour has no directional artwork yet. Fit its visible pixels to a stable
     // envelope for each view using only translation and x/y scale. No rotation,
     // shear, strip deformation or triangle warp is used.
@@ -318,6 +332,16 @@
         return FALLBACK_ANCHORS[view];
     }
 
+    function tunedAnchor(entity, view, anchorName) {
+        const anchors = anchorsFor(entity, view);
+        const base = anchors?.[anchorName] || FALLBACK_ANCHORS[view][anchorName];
+        if (!base) return null;
+        if (keyFor(entity) !== 'human_female') return base;
+        const delta = HUMAN_FEMALE_EQUIPMENT_TUNING[view]?.[anchorName];
+        if (!delta) return base;
+        return {x:base.x + (delta.x || 0), y:base.y + (delta.y || 0)};
+    }
+
     function point(bounds, p) {
         return {x:bounds.left+p.x*bounds.width,y:bounds.top+p.y*bounds.height};
     }
@@ -327,9 +351,10 @@
         if (!spec || !imageReady(spec.image)) return false;
         if (expectedLayer === 'shield' && spec.kind !== 'shield') return false;
         if (expectedLayer === 'weapon' && spec.kind === 'shield') return false;
-        const anchors = anchorsFor(entity, view);
         const anchorName = spec.kind === 'shield' ? 'offForearm' : (slot === 'main' ? 'mainHandGrip' : 'offHandGrip');
-        const anchor = point(bounds, anchors?.[anchorName] || FALLBACK_ANCHORS[view][anchorName]);
+        const anchorPoint = tunedAnchor(entity, view, anchorName);
+        if (!anchorPoint) return false;
+        const anchor = point(bounds, anchorPoint);
         const grip = ITEM_GRIPS[spec.kind] || ITEM_GRIPS.sword;
         let size;
         if (spec.kind === 'shield') size = bounds.width * spec.scale;
@@ -338,16 +363,35 @@
             const basePixel = (window.hexSize || 1) * (window.cameraZoom || 1);
             size = basePixel * (rig?.heightScale || 1) * spec.scale;
         }
-        ctx.drawImage(spec.image, anchor.x - grip.x*size, anchor.y - grip.y*size, size, size);
+
+        const mirrorOffhandWeapon = slot === 'off' && spec.kind !== 'shield';
+        if (mirrorOffhandWeapon) {
+            // Mirror around the grip itself: the hilt stays on the off-hand anchor
+            // while the weapon points the opposite way to the main-hand copy.
+            ctx.save();
+            ctx.translate(anchor.x, anchor.y);
+            ctx.scale(-1, 1);
+            ctx.drawImage(spec.image, -grip.x*size, -grip.y*size, size, size);
+            ctx.restore();
+        } else {
+            ctx.drawImage(spec.image, anchor.x - grip.x*size, anchor.y - grip.y*size, size, size);
+        }
         return true;
     }
 
     function drawHelmet(ctx, entity, view, bounds) {
         const image = helmetImage(entity);
         if (!imageReady(image)) return false;
-        const anchors = anchorsFor(entity, view);
-        const anchor = point(bounds, anchors?.helmetAnchor || FALLBACK_ANCHORS[view].helmetAnchor);
-        const target = {
+        const anchorPoint = tunedAnchor(entity, view, 'helmetAnchor');
+        if (!anchorPoint) return false;
+        const anchor = point(bounds, anchorPoint);
+        const female = keyFor(entity) === 'human_female';
+        const target = female ? {
+            x:(anchor.x-bounds.left)/bounds.width - .21,
+            y:(anchor.y-bounds.top)/bounds.height - .015,
+            w:.42,
+            h:.245,
+        } : {
             x:(anchor.x-bounds.left)/bounds.width - .23,
             y:(anchor.y-bounds.top)/bounds.height - .01,
             w:.46,
@@ -359,7 +403,12 @@
     function drawArmour(ctx, entity, view, bounds) {
         const image = armourImage(entity);
         if (!imageReady(image)) return false;
-        const placement = drawVisibleFit(ctx, image, bounds, ARMOUR_TARGETS[view] || ARMOUR_TARGETS.front);
+        const baseTarget = ARMOUR_TARGETS[view] || ARMOUR_TARGETS.front;
+        const armourY = keyFor(entity) === 'human_female'
+            ? (HUMAN_FEMALE_EQUIPMENT_TUNING[view]?.armourY || 0)
+            : 0;
+        const target = armourY ? {...baseTarget,y:baseTarget.y+armourY} : baseTarget;
+        const placement = drawVisibleFit(ctx, image, bounds, target);
         if (placement) {
             window.__humanoidRendererLastArmour = {
                 entity, view, ...placement,
