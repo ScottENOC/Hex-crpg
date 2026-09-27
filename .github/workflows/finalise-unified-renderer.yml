@@ -1,0 +1,55 @@
+name: Finalise unified renderer cleanup
+
+on:
+  push:
+    branches:
+      - refactor/unified-character-renderer
+
+permissions:
+  contents: write
+
+jobs:
+  finalise:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/unified-character-renderer
+          fetch-depth: 0
+      - name: Remove remaining renderer-era plumbing
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+
+          let engine=fs.readFileSync('gameEngine.js','utf8');
+          const old="const isCharacterActor = isSentientAlly || !!(e.race && e.gender && !e.customImage);";
+          const next="const isCharacterActor = isSentientAlly || !!(e.race && e.gender);";
+          if (!engine.includes(old)) throw new Error('character dispatch anchor missing');
+          engine=engine.replace(old,next);
+          fs.writeFileSync('gameEngine.js',engine);
+
+          let perf=fs.readFileSync('renderPerfTuning.js','utf8');
+          const start=perf.indexOf('    function installAppearancePreviewWrapperCoordinator() {');
+          const endMarker='    installAppearancePreviewWrapperCoordinator();\n\n';
+          const end=perf.indexOf(endMarker,start);
+          if(start<0||end<0) throw new Error('legacy appearance wrapper coordinator anchor missing');
+          perf=perf.slice(0,start)+perf.slice(end+endMarker.length);
+          perf=perf.replace('Measured mobile rendering optimisations that can sit above the legacy\n// renderer without changing game rules.', 'Measured mobile rendering optimisations. Character composition is not\n// wrapped or intercepted here; characterRenderer.js owns it outright.');
+          if(/__directionalHumanFemalePreview|__greenskinPreviewWrapper|appearancePreviewWrapperCoordinator/.test(perf)) throw new Error('legacy preview wrapper plumbing survived');
+          fs.writeFileSync('renderPerfTuning.js',perf);
+
+          let name=fs.readFileSync('name.js','utf8');
+          if(!name.includes("20260927-unified-character-renderer-v1")) throw new Error('presentation build anchor missing');
+          name=name.replace('20260927-unified-character-renderer-v1','20260927-unified-character-renderer-v2');
+          fs.writeFileSync('name.js',name);
+
+          fs.rmSync('.github/workflows/finalise-unified-renderer.yml');
+          NODE
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Remove remaining legacy renderer plumbing"
+          git push origin HEAD:refactor/unified-character-renderer
