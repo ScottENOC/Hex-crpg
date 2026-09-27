@@ -78,11 +78,20 @@ function createCharacterData(race, cls, name, gender = "female", voice = "pc_1")
     mountSize: 0,
     riding: null,
     rider: null,
+    // Baked-in/base clothing colours remain distinct from the colours of a
+    // separately equipped clothing sprite. Male base art uses one colour;
+    // the UI mirrors shirtHue to pantsHue for that body. Female art exposes
+    // upper and lower base colours independently.
+    shirtHue: 30,
+    pantsHue: gender === 'male' ? 30 : 220,
+    clothingPrimaryHue: 28,
+    clothingSecondaryHue: 215,
     equipped: {
         weapon: null,
         offhand: null,
         armor: null,
-        helmet: null
+        helmet: null,
+        clothes: null
     }
   };
 
@@ -134,4 +143,15 @@ if (!document.querySelector('script[data-identity-presentation]')) {
   identityScript.dataset.identityPresentation = 'true';
   identityScript.async = false;
   document.head.appendChild(identityScript);
+}
+
+// Layered clothing is kept in a small compatibility module too. Loading it
+// here avoids another index.html cache token and makes the feature available
+// before inventory UI setup finishes.
+if (!document.querySelector('script[data-layered-clothing]')) {
+  const clothingScript = document.createElement('script');
+  clothingScript.src = 'clothingSystem.js?build=20260928-clothing-v1';
+  clothingScript.dataset.layeredClothing = 'true';
+  clothingScript.async = false;
+  document.head.appendChild(clothingScript);
 }
