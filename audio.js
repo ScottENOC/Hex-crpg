@@ -18,13 +18,12 @@ const tracks = {
     teleportSting: new Audio('audio/Arenalobby2arena.m4a'),
     deathSting: new Audio('audio/Arena death sting.m4a'),
     deathTheme: new Audio('audio/Arena death.m4a'),
-    // ROADMAP E4: a one-shot brass hit on combat start in Campaign 2,
-    // layered over musicDirector.js's own combat ramp rather than
-    // replacing it (see gameEngine.js's isInCombat transition). Missing
-    // like every other stem: playSting silently no-ops on a 0-length/
-    // unloaded file, same as the arena stings above when their .wav isn't
-    // present yet.
-    combatStartSting: new Audio('audio/music/combat_start_sting.wav')
+    // Campaign 2 currently has no dedicated combat-start recording in the
+    // repository. Reuse the existing arena battle sting rather than eagerly
+    // constructing an Audio element for a nonexistent .wav (which produced a
+    // 404 on every page load even while audio was muted). A dedicated asset
+    // can replace this path later without changing the playback API.
+    combatStartSting: new Audio('audio/Arena battle sting.m4a')
 };
 
 // Loop the main themes
