@@ -85,7 +85,7 @@
         return bestD2 <= maxDistance * maxDistance ? best : null;
     }
 
-    function publishBodyBounds(entity, facing, bounds, transform = null) {
+    function publishBodyBounds(entity, facing, bounds, transform = null, source='directional-rig-handoff') {
         if (!entity || !bounds) return null;
         const record = {
             ...bounds,
@@ -93,7 +93,7 @@
             facing,
             view:facingToView(facing),
             transform:transform || { a:1, b:0, c:0, d:1, e:0, f:0 },
-            source:'directional-rig-handoff',
+            source,
             timestamp:Date.now(),
         };
         liveBoundsByEntity.set(entity, record);
@@ -115,6 +115,50 @@
         const bodyCy = body.top + body.height / 2;
         return Math.abs(armourCx - bodyCx) <= Math.max(2, body.width * 0.30)
             && Math.abs(armourCy - bodyCy) <= body.height * 0.75;
+    }
+
+    // The old renderer gives armour the same bottom edge as the legacy body:
+    //   armourY = bodyTop + topShift
+    //   armourH = bodyH - topShift
+    // Therefore bodyTop = armourY - (bodyH - armourH). That lets us recover
+    // the exact body box from the armour call itself if an earlier drawImage
+    // wrapper swallowed the legacy body draw before our observer saw it.
+    function computeBodyBoundsFromLegacyArmourDraw(args) {
+        if (!Array.isArray(args) || args.length !== 4) return null;
+        const [dx, dy, dw, dh] = args.map(Number);
+        if (![dx,dy,dw,dh].every(Number.isFinite) || dw <= 0 || dh <= 0) return null;
+        const hs = Number(window.hexSize) || 1;
+        const z = Number(window.cameraZoom) || 1;
+        const legacyWidth = HUMAN_FEMALE_BODY_W * hs * z;
+        const legacyHeight = HUMAN_FEMALE_BODY_H * hs * z;
+        if (!(legacyWidth > 0 && legacyHeight > 0) || dh > legacyHeight * 1.05) return null;
+
+        const centreX = dx + dw / 2;
+        const topShift = legacyHeight - dh;
+        // A negative shift beyond rounding tolerance means this is not one of
+        // the legacy human-female armour draws we know how to reverse.
+        if (topShift < -Math.max(1, legacyHeight * 0.02)) return null;
+        const legacyTop = dy - Math.max(0, topShift);
+        const legacyLeft = centreX - legacyWidth / 2;
+        const bounds = computeDirectionalBounds(legacyLeft, legacyTop, legacyWidth, legacyHeight);
+        if (!bounds) return null;
+        return {
+            bounds,
+            legacy:{ left:legacyLeft, top:legacyTop, width:legacyWidth, height:legacyHeight },
+            centreX,
+            centreY:legacyTop + legacyHeight / 2,
+            topShift:Math.max(0, topShift),
+        };
+    }
+
+    function recoverBodyFromArmourDraw(args, ctx) {
+        const recovered = computeBodyBoundsFromLegacyArmourDraw(args);
+        if (!recovered) return null;
+        const entity = findHumanFemaleEntity(recovered.centreX, recovered.centreY, recovered.legacy.height);
+        if (!entity) return null;
+        const facing = ['up','down','left','right'].includes(entity.facing) ? entity.facing : 'down';
+        const transform = typeof ctx?.getTransform === 'function' ? ctx.getTransform() : null;
+        return publishBodyBounds(entity, facing, recovered.bounds, transform, 'armour-draw-context-recovery');
     }
 
     // Fit the armour's *visible alpha rectangle* directly to the body rig's
@@ -232,7 +276,13 @@
 
         const wrapper = function(img, ...args) {
             if (args.length === 4 && isHumanFemaleArmourImage(img)) {
-                const body = window.__humanFemaleLastBodyDraw;
+                let body = window.__humanFemaleLastBodyDraw;
+                let contextSource = 'observed-body-draw';
+                if (!(body?.entity?.race === 'human' && body?.entity?.gender === 'female' && armourDrawMatchesBody(args, body))) {
+                    body = recoverBodyFromArmourDraw(args, ctx);
+                    contextSource = body ? 'armour-draw-context-recovery' : 'unresolved';
+                }
+
                 if (body?.entity?.race === 'human' && body?.entity?.gender === 'female' && armourDrawMatchesBody(args, body)) {
                     const placement = computeRigidArmourPlacement(img, body.view, body);
                     if (placement) {
@@ -242,7 +292,8 @@
                         rawDraw(img, placement.dx, placement.dy, placement.outerWidthPx, placement.outerHeightPx);
                         const measured = {
                             ...placement,
-                            placementSource:'actual-body-draw-bounds',
+                            entity:body.entity,
+                            placementSource:contextSource,
                             compositionSource:'directional-rig-handoff-rigid',
                             stripDeformation:false,
                         };
@@ -250,8 +301,20 @@
                             window.HUMAN_FEMALE_EQUIPMENT_FIT.lastMeasuredArmour = measured;
                         }
                         window.__directionalRigHandoffLastArmour = measured;
+                        window.__directionalRigHandoffLastMiss = null;
                         return;
                     }
+                    window.__directionalRigHandoffLastMiss = {
+                        reason:'rigid-placement-unavailable',
+                        contextSource,
+                        view:body.view,
+                        timestamp:Date.now(),
+                    };
+                } else {
+                    window.__directionalRigHandoffLastMiss = {
+                        reason:'body-context-unresolved',
+                        timestamp:Date.now(),
+                    };
                 }
             }
             return previous(img, ...args);
@@ -272,6 +335,8 @@
     }
 
     window.computeHumanFemaleDirectionalBodyBounds = computeDirectionalBounds;
+    window.computeHumanFemaleBodyBoundsFromLegacyArmourDraw = computeBodyBoundsFromLegacyArmourDraw;
+    window.recoverHumanFemaleBodyFromArmourDraw = (args) => recoverBodyFromArmourDraw(args, window.mapCtx);
     window.computeHumanFemaleRigidArmourPlacement = computeRigidArmourPlacement;
     window.publishHumanFemaleDirectionalBodyBounds = publishBodyBounds;
     window.getHumanFemaleLiveBodyBounds = entity => entity ? liveBoundsByEntity.get(entity) || null : window.__humanFemaleLastBodyDraw || null;
