@@ -1,5 +1,6 @@
 name: Humanoid Renderer Focused Tests
 
+# Deliberately scoped to the direct humanoid regression; do not expand this to the full suite.
 on:
   push:
     branches:
