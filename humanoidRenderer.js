@@ -2,7 +2,7 @@
 // Direct humanoid compositor: one entity in, one deterministic stack out.
 //
 // This renderer deliberately does not intercept or replace CanvasRenderingContext2D
-// methods. Body, armour, hair, helmet, shield and weapons are placed from the
+// methods. Body, hair/helmet, armour, shield and weapons are placed from the
 // entity and its rig in one call, so equipment can never inherit stale context
 // from a previously drawn character.
 (() => {
@@ -322,9 +322,11 @@
         return {x:bounds.left+p.x*bounds.width,y:bounds.top+p.y*bounds.height};
     }
 
-    function drawHeldItem(ctx, entity, view, bounds, slot) {
+    function drawHeldItem(ctx, entity, view, bounds, slot, expectedLayer='any') {
         const spec = slotSpec(entity, slot);
         if (!spec || !imageReady(spec.image)) return false;
+        if (expectedLayer === 'shield' && spec.kind !== 'shield') return false;
+        if (expectedLayer === 'weapon' && spec.kind === 'shield') return false;
         const anchors = anchorsFor(entity, view);
         const anchorName = spec.kind === 'shield' ? 'offForearm' : (slot === 'main' ? 'mainHandGrip' : 'offHandGrip');
         const anchor = point(bounds, anchors?.[anchorName] || FALLBACK_ANCHORS[view][anchorName]);
@@ -386,8 +388,7 @@
             && (window.clothingDisplayMode === 'clothes' || !entity.equipped?.armor);
         const mirror = facing === 'left';
         const cx = bounds.left + bounds.width/2;
-        const farSlot = view === 'side' ? (facing === 'left' ? 'main' : 'off') : null;
-        const nearSlot = view === 'side' ? (farSlot === 'main' ? 'off' : 'main') : null;
+        const layerOrder = [];
 
         ctx.save();
         if (mirror) {
@@ -396,20 +397,35 @@
             ctx.translate(-cx, 0);
         }
         try {
-            if (farSlot) drawHeldItem(ctx, entity, view, bounds, farSlot);
-            drawCropped(ctx, imageReady(bodyImage) ? bodyImage : sourceBody, layout.bodyCrop, layout.bodyDest, bounds);
-            if (entity.equipped?.armor && !showClothes) drawArmour(ctx, entity, view, bounds);
-            if (!hasHelmet && imageReady(hairImage)) drawCropped(ctx, hairImage, layout.hairCrop, layout.hairDest, bounds);
-            if (hasHelmet) drawHelmet(ctx, entity, view, bounds);
-            if (nearSlot) drawHeldItem(ctx, entity, view, bounds, nearSlot);
-            else {
-                drawHeldItem(ctx, entity, view, bounds, 'main');
-                drawHeldItem(ctx, entity, view, bounds, 'off');
+            // Deterministic painter's order. Do not reintroduce side-view
+            // far/near equipment splitting: shield and weapons must always sit
+            // in front of body/head layers and armour.
+            if (drawCropped(ctx, imageReady(bodyImage) ? bodyImage : sourceBody, layout.bodyCrop, layout.bodyDest, bounds)) {
+                layerOrder.push('body');
             }
+            if (!hasHelmet && imageReady(hairImage)) {
+                if (drawCropped(ctx, hairImage, layout.hairCrop, layout.hairDest, bounds)) layerOrder.push('hair');
+            } else if (hasHelmet && drawHelmet(ctx, entity, view, bounds)) {
+                layerOrder.push('helmet');
+            }
+            if (entity.equipped?.armor && !showClothes && drawArmour(ctx, entity, view, bounds)) {
+                layerOrder.push('armour');
+            }
+
+            let shieldDrawn = false;
+            shieldDrawn = drawHeldItem(ctx, entity, view, bounds, 'off', 'shield') || shieldDrawn;
+            shieldDrawn = drawHeldItem(ctx, entity, view, bounds, 'main', 'shield') || shieldDrawn;
+            if (shieldDrawn) layerOrder.push('shield');
+
+            let weaponDrawn = false;
+            weaponDrawn = drawHeldItem(ctx, entity, view, bounds, 'main', 'weapon') || weaponDrawn;
+            weaponDrawn = drawHeldItem(ctx, entity, view, bounds, 'off', 'weapon') || weaponDrawn;
+            if (weaponDrawn) layerOrder.push('weapons');
         } finally {
             ctx.restore();
         }
 
+        window.__humanoidRendererLastLayerOrder = layerOrder;
         window.__humanoidRendererLastDraw = {entity,key,view,facing,bounds:{...bounds},timestamp:Date.now()};
         window.__humanoidRendererDrawCount = (window.__humanoidRendererDrawCount || 0) + 1;
         return true;
