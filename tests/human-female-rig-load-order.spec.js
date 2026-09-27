@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { createCharacter } = require('./helpers');
 
 test('human female measured canonical anchors drive production attachments', async ({ page }) => {
   await page.goto('/');
@@ -66,7 +67,7 @@ test('human female measured canonical anchors drive production attachments', asy
 });
 
 test('rigid armour compositor maps all four opaque extents to the body armour envelope', async ({ page }) => {
-  await page.goto('/');
+  await createCharacter(page, { race:'human', gender:'female' });
   await page.waitForFunction(() =>
     typeof window.computeHumanFemaleRigidArmourPlacement === 'function' &&
     typeof window.deriveHumanFemaleArmourRig === 'function' &&
