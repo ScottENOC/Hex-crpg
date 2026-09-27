@@ -29,12 +29,10 @@ jobs:
         run: npm ci
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Diagnose renderer asset loading
+      - name: Trace directional asset registry overwrite
         run: |
-          echo '--- checkout renderer broad references ---'
-          grep -n "body_broad_" humanoidRenderer.js || true
-          echo '--- all DIRECTIONAL_CHARACTER_ASSETS writers ---'
-          grep -R -n --include='*.js' "DIRECTIONAL_CHARACTER_ASSETS" . --exclude-dir=node_modules || true
+          echo '--- human_male references ---'
+          grep -R -n --include='*.js' "human_male" . --exclude-dir=node_modules || true
           node server.js >/tmp/hex-crpg-server.log 2>&1 &
           SERVER_PID=$!
           trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
@@ -47,19 +45,44 @@ jobs:
           (async () => {
             const browser = await chromium.launch({headless:true});
             const page = await browser.newPage();
+            await page.addInitScript(() => {
+              const events = [];
+              let registry;
+              const wrapMaleBody = next => {
+                const male = next?.human_male;
+                if (!male || male.__bodyTraceWrapped) return;
+                let body = male.body;
+                Object.defineProperty(male, 'body', {
+                  configurable:true,
+                  enumerable:true,
+                  get(){ return body; },
+                  set(value){
+                    events.push({kind:'human_male.body set', keys:Object.keys(value || {}), stack:new Error().stack});
+                    body = value;
+                  },
+                });
+                Object.defineProperty(male, '__bodyTraceWrapped', {value:true, configurable:true});
+              };
+              Object.defineProperty(window, 'DIRECTIONAL_CHARACTER_ASSETS', {
+                configurable:true,
+                enumerable:true,
+                get(){ return registry; },
+                set(value){
+                  events.push({kind:'registry set', maleBodyKeys:Object.keys(value?.human_male?.body || {}), stack:new Error().stack});
+                  registry = value;
+                  wrapMaleBody(value);
+                },
+              });
+              window.__directionalAssetTrace = events;
+            });
             await page.goto('http://127.0.0.1:3000/', {waitUntil:'domcontentloaded'});
             await page.waitForFunction(() => window.__humanoidRendererReady === true, null, {timeout:10000});
             await page.waitForTimeout(1500);
-            const status = await page.evaluate(async () => {
-              const male = window.DIRECTIONAL_CHARACTER_ASSETS?.human_male;
-              const liveSource = await fetch(`humanoidRenderer.js?diagnostic=${Date.now()}`, {cache:'no-store'}).then(r => r.text());
-              return {
-                scripts:Array.from(document.scripts).map(s => s.src).filter(src => src.includes('humanoidRenderer')),
-                liveSourceHasMaleBroad:liveSource.includes("front:'images/characters/human_male/body_broad_front.png'"),
-                bodyKeys:Object.keys(male?.body || {}),
-                maleBroad:male?.body?.broad ? Object.fromEntries(Object.entries(male.body.broad).map(([view,image]) => [view,{src:image.src,complete:image.complete,naturalWidth:image.naturalWidth,naturalHeight:image.naturalHeight}])) : null,
-              };
-            });
+            const status = await page.evaluate(() => ({
+              scripts:Array.from(document.scripts).map(s => s.src).filter(Boolean),
+              bodyKeys:Object.keys(window.DIRECTIONAL_CHARACTER_ASSETS?.human_male?.body || {}),
+              trace:window.__directionalAssetTrace || [],
+            }));
             console.log(JSON.stringify(status, null, 2));
             await browser.close();
           })().catch(error => { console.error(error); process.exit(1); });
