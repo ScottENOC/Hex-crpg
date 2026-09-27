@@ -67,7 +67,11 @@ test('human female measured canonical anchors drive production attachments', asy
 
 test('rigid armour compositor maps all four opaque extents to the body armour envelope', async ({ page }) => {
   await page.goto('/');
-  await page.waitForFunction(() => typeof window.computeHumanFemaleRigidArmourPlacement === 'function');
+  await page.waitForFunction(() =>
+    typeof window.computeHumanFemaleRigidArmourPlacement === 'function' &&
+    typeof window.deriveHumanFemaleArmourRig === 'function' &&
+    !!window.HUMAN_FEMALE_EQUIPMENT_FIT?.targetVerticalByView?.front
+  );
 
   const result = await page.evaluate(() => {
     const image = document.createElement('canvas');
@@ -89,6 +93,7 @@ test('rigid armour compositor maps all four opaque extents to the body armour en
     return window.computeHumanFemaleRigidArmourPlacement(image, 'front', body, trim);
   });
 
+  expect(result).toBeTruthy();
   expect(result.placementSource).toBe('actual-body-draw-bounds');
   expect(result.compositionSource).toBe('rigid-alpha-envelope');
   expect(result.targetTopPx).toBeCloseTo(200 + 0.225 * 600, 8);
