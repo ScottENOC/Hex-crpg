@@ -1,0 +1,77 @@
+name: One-time legacy renderer excision
+
+on:
+  push:
+    branches:
+      - refactor/unified-character-renderer
+
+permissions:
+  contents: write
+
+jobs:
+  excise:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/unified-character-renderer
+          fetch-depth: 0
+
+      - name: Remove legacy renderer from engine and finish unified ownership
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+
+          let engine = fs.readFileSync('gameEngine.js', 'utf8');
+          const marker = '// CHARACTER RENDERING CONFIG';
+          const start = engine.indexOf(marker);
+          const renderStart = engine.indexOf('function renderEntities()', start);
+          if (start < 0 || renderStart < 0) throw new Error('Could not locate legacy character renderer block');
+
+          const clothing = engine.slice(start, renderStart).match(/window\.CLOTHING_PRESETS\s*=\s*\{[\s\S]*?\n\};/);
+          if (!clothing) throw new Error('Could not preserve CLOTHING_PRESETS');
+
+          engine = engine.slice(0, start)
+            + '// Character sprites are owned exclusively by characterRenderer.js.\n'
+            + '// Unmigrated race/gender combinations intentionally render blank.\n'
+            + clothing[0] + '\n\n'
+            + engine.slice(renderStart);
+
+          const oldDispatch = /\s*\/\/ Enemy humanoids with sprite config are drawn the same way as player characters\n\s*const hasEnemySpriteCfg[^\n]*\n\s*if \(\(isSentientAlly \|\| hasEnemySpriteCfg\) && !e\.customImage && window\.gameVisuals\) \{\n\s*drawPlayerCharacter\(window\.mapCtx, e, x, y, z, flyOff\);\n\s*\} else if \(\(e instanceof window\.Enemy \|\| e\.customImage\) && window\.gameVisuals\) \{/;
+          if (!oldDispatch.test(engine)) throw new Error('Could not locate legacy render dispatch');
+          engine = engine.replace(oldDispatch, `\n      // Every race/gender actor belongs to the unified compositor. If its rig\n      // has not migrated yet, CharacterRenderer deliberately draws nothing.\n      const isCharacterActor = isSentientAlly || !!(e.race && e.gender && !e.customImage);\n      if (isCharacterActor) {\n          window.CharacterRenderer?.draw(window.mapCtx, e, x, y, z, flyOff);\n      } else if ((e instanceof window.Enemy || e.customImage) && window.gameVisuals) {`);
+
+          engine = engine.replace(/^window\.CHAR_CONFIG\s*=.*$/gm, '');
+          engine = engine.replace(/^window\.drawPlayerCharacter\s*=.*$/gm, '');
+          engine = engine.replace(/\nwindow\.charDebugMode = false;\ndocument\.addEventListener\('keydown', \(ev\) => \{\n\s*if \(ev\.key === '`'\) \{[\s\S]*?\n\s*\}\n\n\s*\/\/ Space:/, "\ndocument.addEventListener('keydown', (ev) => {\n    // Space:");
+
+          if (/\bCHAR_CONFIG\b/.test(engine)) throw new Error('CHAR_CONFIG survived excision');
+          if (/\bdrawPlayerCharacter\b/.test(engine)) throw new Error('drawPlayerCharacter survived excision');
+          fs.writeFileSync('gameEngine.js', engine);
+
+          let renderer = fs.readFileSync('characterRenderer.js', 'utf8');
+          const installStart = renderer.indexOf('    function install() {');
+          const registryStart = renderer.indexOf('    window.CharacterRenderer={', installStart);
+          if (installStart < 0 || registryStart < 0) throw new Error('Could not locate transitional renderer install block');
+          renderer = renderer.slice(0, installStart) + renderer.slice(registryStart);
+          renderer = renderer.replace('        install,\n', '');
+
+          const tailStart = renderer.indexOf('\n    if (!install()) {');
+          if (tailStart < 0) throw new Error('Could not locate transitional renderer polling tail');
+          renderer = renderer.slice(0, tailStart) + `\n    window.__characterRendererInstalled=BUILD;\n\n    function creatorPreviewEntity() {\n        const tone=window.getPlayerSkinToneFromControls?.() || {hue:24,saturation:0.43,lightness:0.64};\n        return {\n            name:document.getElementById('character-name')?.value || 'Preview',\n            race:document.getElementById('race-select')?.value || 'human',\n            gender:document.getElementById('gender-select')?.value || 'female',\n            facing:'down',\n            bodyType:document.getElementById('body-type-select')?.value || 'average',\n            hairStyle:document.getElementById('hair-style-select')?.value || 'brown_1',\n            shirtHue:Number(document.getElementById('shirt-hue-slider')?.value || 30),\n            pantsHue:Number(document.getElementById('pants-hue-slider')?.value || 220),\n            hairHue:Number(document.getElementById('hair-hue-slider')?.value || 25),\n            hairLightMult:1, hairSatMult:1,\n            skinHue:tone.hue, skinSaturation:tone.saturation, skinLightness:tone.lightness,\n            equipped:{weapon:null,offhand:null,armor:null,helmet:null},\n        };\n    }\n\n    function drawCreatorPreview() {\n        const canvas=document.getElementById('appearance-preview-canvas');\n        if (!canvas) return false;\n        const ctx=canvas.getContext('2d');\n        ctx.clearRect(0,0,canvas.width,canvas.height);\n        const entity=creatorPreviewEntity();\n        if (!supports(entity)) return false;\n        const cfg=RENDERERS.human_female;\n        const hs=window.hexSize || 32;\n        const z=(canvas.height*0.86)/(cfg.bodyH*hs);\n        const top=canvas.height*0.07;\n        const y=top+(cfg.bodyW*hs*z)/2-cfg.yOff*hs*z;\n        return draw(ctx,entity,canvas.width/2,y,z,0);\n    }\n    window.refreshCharacterRendererPreviews=drawCreatorPreview;\n    function installCreatorPreview() {\n        window.updateAppearancePreview=drawCreatorPreview;\n        drawCreatorPreview();\n    }\n    if (document.readyState==='loading') document.addEventListener('DOMContentLoaded',installCreatorPreview,{once:true});\n    else installCreatorPreview();\n})();\n`;
+
+          if (/window\.drawPlayerCharacter|window\.CHAR_CONFIG|function install\(\)/.test(renderer)) throw new Error('Transitional legacy bridge survived renderer cleanup');
+          fs.writeFileSync('characterRenderer.js', renderer);
+
+          // This workflow is scaffolding, not product code. Burn it too.
+          fs.rmSync('.github/workflows/prune-legacy-renderer.yml');
+          NODE
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Excise embedded legacy character renderer"
+          git push origin HEAD:refactor/unified-character-renderer
