@@ -378,20 +378,10 @@
         return drawHumanFemale(ctx,entity,x,y,z,flyOff);
     }
 
-    function install() {
-        if (typeof window.drawPlayerCharacter !== 'function') return false;
-        window.drawPlayerCharacter=draw;
-        // Public config intentionally contains ONLY migrated renderers.
-        window.CHAR_CONFIG={human_female:{bodyW:1.60,bodyH:1.92,yOff:-0.16}};
-        window.__characterRendererInstalled=BUILD;
-        return true;
-    }
-
     window.CharacterRenderer={
         build:BUILD,
         draw,
         supports,
-        install,
         facingFromHexDelta,
         facingToView,
         resolveFacing,
@@ -403,8 +393,45 @@
         migrated:['human_female'],
     };
 
-    if (!install()) {
-        const timer=setInterval(() => { if (install()) clearInterval(timer); },25);
-        setTimeout(() => clearInterval(timer),5000);
+    window.__characterRendererInstalled=BUILD;
+
+    function creatorPreviewEntity() {
+        const tone=window.getPlayerSkinToneFromControls?.() || {hue:24,saturation:0.43,lightness:0.64};
+        return {
+            name:document.getElementById('character-name')?.value || 'Preview',
+            race:document.getElementById('race-select')?.value || 'human',
+            gender:document.getElementById('gender-select')?.value || 'female',
+            facing:'down',
+            bodyType:document.getElementById('body-type-select')?.value || 'average',
+            hairStyle:document.getElementById('hair-style-select')?.value || 'brown_1',
+            shirtHue:Number(document.getElementById('shirt-hue-slider')?.value || 30),
+            pantsHue:Number(document.getElementById('pants-hue-slider')?.value || 220),
+            hairHue:Number(document.getElementById('hair-hue-slider')?.value || 25),
+            hairLightMult:1, hairSatMult:1,
+            skinHue:tone.hue, skinSaturation:tone.saturation, skinLightness:tone.lightness,
+            equipped:{weapon:null,offhand:null,armor:null,helmet:null},
+        };
     }
+
+    function drawCreatorPreview() {
+        const canvas=document.getElementById('appearance-preview-canvas');
+        if (!canvas) return false;
+        const ctx=canvas.getContext('2d');
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        const entity=creatorPreviewEntity();
+        if (!supports(entity)) return false;
+        const cfg=RENDERERS.human_female;
+        const hs=window.hexSize || 32;
+        const z=(canvas.height*0.86)/(cfg.bodyH*hs);
+        const top=canvas.height*0.07;
+        const y=top+(cfg.bodyW*hs*z)/2-cfg.yOff*hs*z;
+        return draw(ctx,entity,canvas.width/2,y,z,0);
+    }
+    window.refreshCharacterRendererPreviews=drawCreatorPreview;
+    function installCreatorPreview() {
+        window.updateAppearancePreview=drawCreatorPreview;
+        drawCreatorPreview();
+    }
+    if (document.readyState==='loading') document.addEventListener('DOMContentLoaded',installCreatorPreview,{once:true});
+    else installCreatorPreview();
 })();
