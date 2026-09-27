@@ -9,13 +9,57 @@
     'use strict';
 
     const INTERVAL_MS = 500;
+    // Physical Northwatch actors should only pull the player into real combat
+    // while the party is actually in/around the fort. The world is much larger
+    // than the engine's normal 40-hex active-simulation radius; 80 covers the
+    // fort, its approaches and the deliberately distant catapult position while
+    // still keeping a siege hundreds of hexes away from hijacking initiative.
+    const PHYSICAL_SIEGE_RADIUS = 80;
     let timer = null;
+    let waveGuardInstalled = false;
 
     function appendEvent(sector, event) {
         if (!sector) return;
         sector.eventLog = Array.isArray(sector.eventLog) ? sector.eventLog : [];
         sector.eventLog.push({ worldSeconds: window.worldSeconds || 0, ...event });
         if (sector.eventLog.length > 20) sector.eventLog.splice(0, sector.eventLog.length - 20);
+    }
+
+    function partyNearNorthwatchPhysicalSiege() {
+        const center = window.campaign2NorthwatchCenter;
+        if (!center || typeof window.distance !== 'function') return false;
+        const partyHexes = (window.entities || [])
+            .filter(e => e?.alive && e.side === 'player' && e.hex)
+            .map(e => e.hex);
+        if (!partyHexes.length && window.player?.hex) partyHexes.push(window.player.hex);
+        return partyHexes.some(hex => window.distance(hex, center) <= PHYSICAL_SIEGE_RADIUS);
+    }
+
+    // spawnGreenskinAssaultWave historically sets isInCombat=true
+    // unconditionally. That is correct when the player is at Northwatch, but
+    // catastrophic when the off-screen siege advances while the party is in
+    // Hollowmere/Silverhart: the distant scripted battle steals the global turn
+    // queue. Leave the abstract siege simulation running, but defer spawning the
+    // physical assault until the player is close enough to participate. Existing
+    // call sites already retry while !greenskinWaveSpawned, so approaching the
+    // fort later starts the real wave normally.
+    function installPhysicalWaveGuard() {
+        if (waveGuardInstalled) return true;
+        const original = window.spawnGreenskinAssaultWave;
+        if (typeof original !== 'function') return false;
+        if (original.__northwatchProximityGuard) {
+            waveGuardInstalled = true;
+            return true;
+        }
+        const guarded = function(...args) {
+            if (!partyNearNorthwatchPhysicalSiege()) return false;
+            return original.apply(this, args);
+        };
+        guarded.__northwatchProximityGuard = true;
+        guarded.__originalSpawnGreenskinAssaultWave = original;
+        window.spawnGreenskinAssaultWave = guarded;
+        waveGuardInstalled = true;
+        return true;
     }
 
     function syncCatapultTarget(state) {
@@ -40,6 +84,7 @@
     }
 
     function reconcile() {
+        installPhysicalWaveGuard();
         const state = window.siegeState;
         if (!state?.active || !window.SiegeSectorSystem || !window.SiegeActorSectorIntegration) return false;
         window.SiegeSectorSystem.upgradeState?.(state);
@@ -51,6 +96,7 @@
     }
 
     function install() {
+        installPhysicalWaveGuard();
         if (timer) return true;
         if (!window.SiegeActorSectorIntegration || !window.SiegeSectorSystem) return false;
         timer = setInterval(reconcile, INTERVAL_MS);
@@ -61,7 +107,10 @@
         reconcile,
         syncCatapultTarget,
         install,
+        installPhysicalWaveGuard,
+        partyNearNorthwatchPhysicalSiege,
         intervalMs: INTERVAL_MS,
+        physicalSiegeRadius: PHYSICAL_SIEGE_RADIUS,
     };
 
     if (install()) return;
