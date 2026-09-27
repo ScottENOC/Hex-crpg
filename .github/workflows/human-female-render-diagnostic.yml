@@ -1,35 +1,166 @@
-name: Humanoid Renderer Focused Tests
+name: Apply Elf Female Directional Sprites
 
-# Deliberately scoped to the direct humanoid regression; do not expand this to the full suite.
 on:
   push:
     branches:
       - development
     paths:
-      - 'humanoidRenderer.js'
-      - 'entities.js'
-      - 'graphicsSettings.js'
-      - 'name.js'
-      - 'tests/human-female-direct-render.spec.js'
       - '.github/workflows/human-female-render-diagnostic.yml'
 
-concurrency:
-  group: humanoid-renderer-${{ github.ref }}
-  cancel-in-progress: true
+permissions:
+  contents: write
 
 jobs:
-  focused-render:
+  apply-elf-female:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Run focused humanoid rendering regression
-        run: npx playwright test tests/human-female-direct-render.spec.js --reporter=line
+          ref: development
+          fetch-depth: 1
+      - name: Decode sprites and wire direct compositor
+        run: |
+          set -euo pipefail
+          mkdir -p images/characters/elf_female
+          cat .asset-staging/elf_female/front.* | base64 -d > images/characters/elf_female/body_front.png
+          cat .asset-staging/elf_female/side.*  | base64 -d > images/characters/elf_female/body_side.png
+          cat .asset-staging/elf_female/back.*  | base64 -d > images/characters/elf_female/body_back.png
+          cat > /tmp/elf-sprite-sha256 <<'EOF'
+          2b3090773c6466310042953147392cdb42f1d4fde489442b69324389f942d4c0  images/characters/elf_female/body_front.png
+          55e55499c7c318f7b31ac3d1e27a257bc826335366071068339599eb81d0cc4a  images/characters/elf_female/body_side.png
+          ef7526f443b9d359bfbe14c14b4ac116b41246358333859e471340489262aaea  images/characters/elf_female/body_back.png
+          EOF
+          sha256sum -c /tmp/elf-sprite-sha256
+
+          python - <<'PY'
+          from pathlib import Path
+
+          renderer_path = Path('humanoidRenderer.js')
+          renderer = renderer_path.read_text()
+
+          old = """    const CHARACTER_RIGS = {
+        human_female: { bodyW:1.60, bodyH:1.92, yOff:-0.16, heightScale:1.92/2.16 },
+        human_male:   { bodyW:1.70, bodyH:2.06, yOff:-0.17, heightScale:2.06/2.16 },
+    };"""
+          new = """    const CHARACTER_RIGS = {
+        human_female: { bodyW:1.60, bodyH:1.92, yOff:-0.16, heightScale:1.92/2.16 },
+        elf_female:   { bodyW:1.60, bodyH:1.92, yOff:-0.16, heightScale:1.92/2.16 },
+        human_male:   { bodyW:1.70, bodyH:2.06, yOff:-0.17, heightScale:2.06/2.16 },
+    };"""
+          if old not in renderer: raise SystemExit('CHARACTER_RIGS anchor not found')
+          renderer = renderer.replace(old, new, 1)
+
+          old = """        human_male: {
+            body: {
+                average: {
+                    front:'images/characters/human_male/body_front.png',"""
+          new = """        elf_female: {
+            body: {
+                average: {
+                    front:'images/characters/elf_female/body_front.png',
+                    side:'images/characters/elf_female/body_side.png',
+                    back:'images/characters/elf_female/body_back.png',
+                },
+            },
+            // Elf bodies are authored bald; use the same directional hair layer as humans.
+            hair:null,
+        },
+        human_male: {
+            body: {
+                average: {
+                    front:'images/characters/human_male/body_front.png',"""
+          if old not in renderer: raise SystemExit('human_male path anchor not found')
+          renderer = renderer.replace(old, new, 1)
+
+          old = """    CHARACTER_PATHS.human_male.hair = CHARACTER_PATHS.human_female.hair;
+
+    const DIRECTIONAL_LAYOUT = {"""
+          new = """    CHARACTER_PATHS.human_male.hair = CHARACTER_PATHS.human_female.hair;
+    CHARACTER_PATHS.elf_female.hair = CHARACTER_PATHS.human_female.hair;
+
+    // Elf-female source PNGs have different transparent framing from the human
+    // body sheets. Fit their visible pixels to a stable body envelope rather
+    // than reusing the human crop coordinates.
+    const BODY_VISIBLE_TARGETS = {
+        elf_female: {
+            front:{x:.14,y:.01,w:.72,h:.98},
+            side: {x:.30,y:.01,w:.40,h:.98},
+            back: {x:.125,y:.005,w:.75,h:.99},
+        },
+    };
+
+    const DIRECTIONAL_LAYOUT = {"""
+          if old not in renderer: raise SystemExit('shared hair/layout anchor not found')
+          renderer = renderer.replace(old, new, 1)
+
+          old = """            if (drawCropped(ctx, imageReady(bodyImage) ? bodyImage : sourceBody, layout.bodyCrop, layout.bodyDest, bounds)) {
+                layerOrder.push('body');
+            }"""
+          new = """            const bodySource = imageReady(bodyImage) ? bodyImage : sourceBody;
+            const bodyTarget = BODY_VISIBLE_TARGETS[key]?.[view];
+            const bodyDrawn = bodyTarget
+                ? !!drawVisibleFit(ctx, bodySource, bounds, bodyTarget)
+                : drawCropped(ctx, bodySource, layout.bodyCrop, layout.bodyDest, bounds);
+            if (bodyDrawn) layerOrder.push('body');"""
+          if old not in renderer: raise SystemExit('body draw anchor not found')
+          renderer = renderer.replace(old, new, 1)
+          renderer_path.write_text(renderer)
+
+          test_path = Path('tests/human-female-direct-render.spec.js')
+          test = test_path.read_text()
+          old = """    const female = window.DIRECTIONAL_CHARACTER_ASSETS?.human_female;
+    const male = window.DIRECTIONAL_CHARACTER_ASSETS?.human_male;
+    return window.__humanoidRendererInstalled === true"""
+          new = """    const female = window.DIRECTIONAL_CHARACTER_ASSETS?.human_female;
+    const male = window.DIRECTIONAL_CHARACTER_ASSETS?.human_male;
+    const elfFemale = window.DIRECTIONAL_CHARACTER_ASSETS?.elf_female;
+    return window.__humanoidRendererInstalled === true"""
+          if old not in test: raise SystemExit('matrix asset declarations anchor not found')
+          test = test.replace(old, new, 1)
+
+          old = """      && male?.body?.broad?.side?.naturalWidth > 0
+      && male?.body?.broad?.back?.naturalWidth > 0;"""
+          new = """      && male?.body?.broad?.side?.naturalWidth > 0
+      && male?.body?.broad?.back?.naturalWidth > 0
+      && elfFemale?.body?.average?.front?.naturalWidth > 0
+      && elfFemale?.body?.average?.side?.naturalWidth > 0
+      && elfFemale?.body?.average?.back?.naturalWidth > 0;"""
+          if old not in test: raise SystemExit('matrix readiness anchor not found')
+          test = test.replace(old, new, 1)
+
+          old = """    expect(rendererSource).toContain(\"back:'images/characters/human_male/body_broad_back.png'\");"""
+          new = old + """
+    expect(rendererSource).toContain(\"front:'images/characters/elf_female/body_front.png'\");
+    expect(rendererSource).toContain(\"side:'images/characters/elf_female/body_side.png'\");
+    expect(rendererSource).toContain(\"back:'images/characters/elf_female/body_back.png'\");
+    expect(rendererSource).toContain('CHARACTER_PATHS.elf_female.hair = CHARACTER_PATHS.human_female.hair;');"""
+          if old not in test: raise SystemExit('renderer source assertions anchor not found')
+          test = test.replace(old, new, 1)
+
+          old = """            if (race === 'human' && (gender === 'female' || gender === 'male')) {
+              directCount++;"""
+          new = """            const directExpected = (race === 'human' && (gender === 'female' || gender === 'male'))
+              || (race === 'elf' && gender === 'female');
+            if (directExpected) {
+              directCount++;"""
+          if old not in test: raise SystemExit('direct matrix condition anchor not found')
+          test = test.replace(old, new, 1)
+          if "expect(result.directCount).toBe(1728);" not in test:
+              raise SystemExit('directCount assertion anchor not found')
+          test = test.replace("expect(result.directCount).toBe(1728);", "expect(result.directCount).toBe(2592);", 1)
+          test_path.write_text(test)
+
+          name_path = Path('name.js')
+          name = name_path.read_text()
+          old = "const PRESENTATION_BUILD = '20260927-direct-humanoid-compositor';"
+          new = "const PRESENTATION_BUILD = '20260928-elf-female-directional';"
+          if old not in name: raise SystemExit('presentation build token anchor not found')
+          name_path.write_text(name.replace(old, new, 1))
+          PY
+
+          rm -rf .asset-staging
+          git add humanoidRenderer.js name.js tests/human-female-direct-render.spec.js images/characters/elf_female .asset-staging
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Use directional elf female body sprites'
+          git push origin HEAD:development
