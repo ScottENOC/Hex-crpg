@@ -12,6 +12,27 @@ async function waitForDirectRenderer(page, key = 'human_female') {
   }, key);
 }
 
+async function waitForRendererMatrixAssets(page) {
+  await page.waitForFunction(() => {
+    const visuals = window.gameVisuals || {};
+    const legacyKeys = [
+      'humanBase', 'humanHair', 'humanMaleBase', 'humanMaleHair',
+      'elfFemaleBase', 'elfFemaleHair', 'elfMaleBase', 'elfMaleHair',
+      'dwarfFemaleBase', 'dwarfFemaleHair', 'dwarfMaleBase', 'dwarfMaleHair',
+      'orcBase', 'monsterDefault',
+      'humanLight', 'humanMedium', 'humanHeavy',
+      'swordIcon', 'shield', 'nasal_helm', 'axe', 'club', 'spear', 'bow',
+    ];
+    const female = window.DIRECTIONAL_CHARACTER_ASSETS?.human_female;
+    const male = window.DIRECTIONAL_CHARACTER_ASSETS?.human_male;
+    return window.__humanoidRendererInstalled === true
+      && legacyKeys.every(key => visuals[key]?.naturalWidth > 0)
+      && female?.body?.average?.front?.naturalWidth > 0
+      && female?.body?.broad?.front?.naturalWidth > 0
+      && male?.body?.average?.front?.naturalWidth > 0;
+  });
+}
+
 async function renderEquippedHuman(page, gender, facing, { helmet = true } = {}) {
   return page.evaluate(({ gender, facing, helmet }) => {
     const entity = (window.entities || []).find(e => e.alive && e.race === 'human' && e.gender === gender && e.side === 'player');
@@ -134,5 +155,142 @@ test.describe('direct humanoid compositor', () => {
       rotation:0,
       shear:false,
     });
+  });
+
+  test('held weapons scale with compositor bounds instead of world camera size', async ({ page }) => {
+    await createCharacter(page, { race:'human', gender:'female' });
+    await waitForDirectRenderer(page, 'human_female');
+
+    const sizes = await page.evaluate(() => {
+      const entity = (window.entities || []).find(e => e.alive && e.race === 'human' && e.gender === 'female' && e.side === 'player');
+      entity.equipped = { ...(entity.equipped || {}), weapon:'sword', offhand:null, armor:null, helmet:null };
+
+      function captureWeaponSize(height) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 320;
+        canvas.height = 320;
+        const ctx = canvas.getContext('2d');
+        const width = height * (window.HUMAN_FEMALE_RENDER_ASPECT || 0.48);
+        const original = CanvasRenderingContext2D.prototype.drawImage;
+        let weaponSize = null;
+        CanvasRenderingContext2D.prototype.drawImage = function(image, ...args) {
+          if (this === ctx && image === window.gameVisuals?.swordIcon && args.length === 4) {
+            weaponSize = Math.abs(args[2]);
+          }
+          return original.call(this, image, ...args);
+        };
+        try {
+          window.drawDirectionalHumanoidInBounds(
+            ctx,
+            entity,
+            {left:(canvas.width-width)/2, top:10, width, height},
+            'down',
+          );
+        } finally {
+          CanvasRenderingContext2D.prototype.drawImage = original;
+        }
+        return weaponSize;
+      }
+
+      return {world:captureWeaponSize(240), portrait:captureWeaponSize(92)};
+    });
+
+    expect(sizes.world).toBeGreaterThan(0);
+    expect(sizes.portrait).toBeGreaterThan(0);
+    expect(sizes.portrait / sizes.world).toBeCloseTo(92 / 240, 5);
+  });
+
+  test('all selectable race, gender, class, body, armour and renderer-distinct equipment combinations draw without exceptions', async ({ page }) => {
+    test.setTimeout(120000);
+    await createCharacter(page, { race:'human', gender:'female' });
+    await waitForRendererMatrixAssets(page);
+
+    const result = await page.evaluate(() => {
+      const races = Array.from(document.querySelectorAll('#race-select option')).map(o => o.value);
+      const genders = Array.from(document.querySelectorAll('#gender-select option')).map(o => o.value);
+      const classes = Array.from(document.querySelectorAll('#class-select option')).map(o => o.value);
+      const bodies = Array.from(document.querySelectorAll('#body-type-select option')).map(o => o.value);
+      const armours = [null, 'light_armor', 'medium_armor', 'heavy_armor'];
+      const helmets = [null, 'nasal_helm'];
+      const equipmentCases = [
+        {name:'unarmed', weapon:null, offhand:null},
+        {name:'dagger', weapon:'dagger', offhand:null},
+        {name:'sword', weapon:'sword', offhand:null},
+        {name:'axe', weapon:'axe', offhand:null},
+        {name:'club', weapon:'club', offhand:null},
+        {name:'spear', weapon:'spear', offhand:null},
+        {name:'bow', weapon:'bow', offhand:null},
+        {name:'sword+shield', weapon:'sword', offhand:'wooden_shield'},
+        {name:'dual-wield', weapon:'sword', offhand:'dagger'},
+      ];
+      const canvas = document.createElement('canvas');
+      canvas.width = 260;
+      canvas.height = 300;
+      const ctx = canvas.getContext('2d');
+      const failures = [];
+      const directLayerFailures = [];
+      let count = 0;
+      let directCount = 0;
+
+      for (const race of races) for (const gender of genders) for (const cls of classes) for (const bodyType of bodies) {
+        for (const armor of armours) for (const helmet of helmets) for (const equipment of equipmentCases) {
+          const entity = window.createCharacterData(race, cls, `Renderer matrix ${race} ${gender} ${cls}`, gender);
+          Object.assign(entity, {
+            bodyType,
+            facing:'down',
+            alive:true,
+            shirtHue:30,
+            pantsHue:220,
+            hairHue:25,
+            skinHue:20,
+            skinSaturation:40,
+            skinLightness:55,
+          });
+          entity.equipped = {
+            ...(entity.equipped || {}),
+            armor,
+            helmet,
+            weapon:equipment.weapon,
+            offhand:equipment.offhand,
+          };
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          try {
+            ctx.save();
+            window.drawPlayerCharacter(ctx, entity, canvas.width / 2, 135, 0.8, 0);
+            ctx.restore();
+            count++;
+
+            if (race === 'human') {
+              directCount++;
+              const expected = ['body', helmet ? 'helmet' : 'hair'];
+              if (armor) expected.push('armour');
+              if (equipment.offhand === 'wooden_shield') expected.push('shield');
+              if (equipment.weapon || (equipment.offhand && equipment.offhand !== 'wooden_shield')) expected.push('weapons');
+              const actual = [...(window.__humanoidRendererLastLayerOrder || [])];
+              if (actual.join('|') !== expected.join('|')) {
+                directLayerFailures.push({race,gender,cls,bodyType,armor,helmet,equipment:equipment.name,expected,actual});
+              }
+            }
+          } catch (error) {
+            try { ctx.restore(); } catch (_) {}
+            failures.push({race,gender,cls,bodyType,armor,helmet,equipment:equipment.name,error:String(error?.stack || error)});
+          }
+        }
+      }
+
+      const expected = races.length * genders.length * classes.length * bodies.length
+        * armours.length * helmets.length * equipmentCases.length;
+      return {count,directCount,expected,failures,directLayerFailures,races,genders,classes,bodies};
+    });
+
+    expect(result.races).toEqual(['human','dwarf','elf','goblin','orc']);
+    expect(result.genders).toEqual(['female','male']);
+    expect(result.classes).toEqual(['fighter','rogue','cleric','wizard','druid','monk']);
+    expect(result.bodies).toEqual(['average','broad']);
+    expect(result.expected).toBe(8640);
+    expect(result.count).toBe(result.expected);
+    expect(result.directCount).toBe(3456);
+    expect(result.failures).toEqual([]);
+    expect(result.directLayerFailures).toEqual([]);
   });
 });
