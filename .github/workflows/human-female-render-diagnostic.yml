@@ -1,52 +1,35 @@
-name: Finish direct renderer runtime cleanup
+name: Humanoid Renderer Focused Tests
 
+# Deliberately scoped to the direct humanoid regression; do not expand this to the full suite.
 on:
   push:
     branches:
       - development
     paths:
+      - 'humanoidRenderer.js'
+      - 'entities.js'
+      - 'graphicsSettings.js'
+      - 'name.js'
+      - 'tests/human-female-direct-render.spec.js'
       - '.github/workflows/human-female-render-diagnostic.yml'
 
-permissions:
-  contents: write
+concurrency:
+  group: humanoid-renderer-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  cleanup:
+  focused-render:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          ref: development
-          fetch-depth: 1
-      - name: Remove retired character rig loader and harden focused test
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import re
-
-          graphics_path = Path('graphicsSettings.js')
-          graphics = graphics_path.read_text()
-          pattern = r"\n\(\(\) => \{\n    if \(document\.querySelector\('script\[data-character-rig\]'\)\) return;\n    const script = document\.createElement\('script'\);\n    script\.src = 'characterRig\.js\?v=2';\n    script\.dataset\.characterRig = 'true';\n    script\.async = false;\n    document\.head\.appendChild\(script\);\n\}\)\(\);\n"
-          replacement = "\n// characterRig.js is a retired canvas-interception/deformation renderer.\n// The direct humanoid compositor owns equipment placement; do not load both.\n"
-          graphics, count = re.subn(pattern, replacement, graphics, count=1)
-          if count != 1:
-              raise SystemExit('Expected retired characterRig loader not found')
-          graphics_path.write_text(graphics)
-
-          test_path = Path('tests/human-female-direct-render.spec.js')
-          test = test_path.read_text()
-          old_fetches = "    const nameSource = await (await page.request.get(`${ROOT}/name.js`)).text();\n    const rendererSource = await (await page.request.get(`${ROOT}/humanoidRenderer.js`)).text();"
-          if old_fetches not in test:
-              raise SystemExit('Expected focused-test source fetch block not found')
-          test = test.replace(old_fetches, old_fetches + "\n    const entitiesSource = await (await page.request.get(`${ROOT}/entities.js`)).text();\n    const graphicsSource = await (await page.request.get(`${ROOT}/graphicsSettings.js`)).text();", 1)
-          old_assert = "    expect(rendererSource).toContain('function drawDirectionalHumanoidInBounds');"
-          if old_assert not in test:
-              raise SystemExit('Expected focused-test renderer assertion not found')
-          test = test.replace(old_assert, "    expect(entitiesSource).not.toContain('facingSystem.js?');\n    expect(graphicsSource).not.toContain(\"script.src = 'characterRig.js\");\n" + old_assert, 1)
-          test_path.write_text(test)
-          PY
-          git add graphicsSettings.js tests/human-female-direct-render.spec.js
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'Keep retired renderers out of direct compositor runtime'
-          git push origin HEAD:development
+          node-version: '20'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run focused humanoid rendering regression
+        run: npx playwright test tests/human-female-direct-render.spec.js --reporter=line
