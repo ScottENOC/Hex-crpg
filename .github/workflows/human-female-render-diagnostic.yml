@@ -19,5 +19,5 @@ jobs:
         run: npm ci
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Run outer armour call diagnostic
-        run: npx playwright test tests/human-female-armour-outer-call-diagnostic.spec.js --reporter=line
+      - name: Run render error diagnostic
+        run: npx playwright test tests/human-female-render-error-diagnostic.spec.js --reporter=line
