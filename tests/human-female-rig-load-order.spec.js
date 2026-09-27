@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { createCharacter } = require('./helpers');
 
 test('human female measured canonical anchors drive production attachments', async ({ page }) => {
   await page.goto('/');
@@ -40,7 +41,7 @@ test('human female measured canonical anchors drive production attachments', asy
     };
   });
 
-  expect(state.build).toBe('20260927-rigid-armour-compositor');
+  expect(state.build).toBe('20260927-armour-context-recovery');
   expect(state.rigVersion).toBe('measured-front-20260926');
   expect(state.attachmentSource).toBe('canonical-sprite-rig');
   expect(state.debugMutatesRig).toBe(false);
@@ -66,8 +67,12 @@ test('human female measured canonical anchors drive production attachments', asy
 });
 
 test('rigid armour compositor maps all four opaque extents to the body armour envelope', async ({ page }) => {
-  await page.goto('/');
-  await page.waitForFunction(() => typeof window.computeHumanFemaleRigidArmourPlacement === 'function');
+  await createCharacter(page, { race:'human', gender:'female' });
+  await page.waitForFunction(() =>
+    typeof window.computeHumanFemaleRigidArmourPlacement === 'function' &&
+    typeof window.deriveHumanFemaleArmourRig === 'function' &&
+    !!window.HUMAN_FEMALE_EQUIPMENT_FIT?.targetVerticalByView?.front
+  );
 
   const result = await page.evaluate(() => {
     const image = document.createElement('canvas');
@@ -89,6 +94,7 @@ test('rigid armour compositor maps all four opaque extents to the body armour en
     return window.computeHumanFemaleRigidArmourPlacement(image, 'front', body, trim);
   });
 
+  expect(result).toBeTruthy();
   expect(result.placementSource).toBe('actual-body-draw-bounds');
   expect(result.compositionSource).toBe('rigid-alpha-envelope');
   expect(result.targetTopPx).toBeCloseTo(200 + 0.225 * 600, 8);
@@ -106,4 +112,34 @@ test('rigid armour compositor maps all four opaque extents to the body armour en
   function bodyRight(left, width, rig) {
     return left + Math.max(rig.shoulderR, rig.waistR, rig.hemR) * width;
   }
+});
+
+test('legacy armour draw can recover the directional female body box without a body observer event', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForFunction(() => typeof window.computeHumanFemaleBodyBoundsFromLegacyArmourDraw === 'function');
+
+  const result = await page.evaluate(() => {
+    const oldHex = window.hexSize;
+    const oldZoom = window.cameraZoom;
+    window.hexSize = 50;
+    window.cameraZoom = 1;
+    try {
+      // Legacy female body: 80 x 96 px. The armour starts 8 px below body
+      // top and preserves the same bottom edge, so its height is 88 px.
+      return window.computeHumanFemaleBodyBoundsFromLegacyArmourDraw([270, 208, 60, 88]);
+    } finally {
+      window.hexSize = oldHex;
+      window.cameraZoom = oldZoom;
+    }
+  });
+
+  expect(result).toBeTruthy();
+  expect(result.legacy).toEqual({ left: 260, top: 200, width: 80, height: 96 });
+  expect(result.topShift).toBeCloseTo(8, 8);
+  expect(result.centreX).toBeCloseTo(300, 8);
+  expect(result.centreY).toBeCloseTo(248, 8);
+  expect(result.bounds.top).toBeCloseTo(200, 8);
+  expect(result.bounds.height).toBeCloseTo(96, 8);
+  expect(result.bounds.width).toBeCloseTo(96 * 0.48, 8);
+  expect(result.bounds.left).toBeCloseTo(300 - (96 * 0.48) / 2, 8);
 });
