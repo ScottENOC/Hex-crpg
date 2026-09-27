@@ -2198,7 +2198,7 @@ function renderEntities() {
           const flyOff = e.isFlying ? -20 * z : 0;
       // Every race/gender actor belongs to the unified compositor. If its rig
       // has not migrated yet, CharacterRenderer deliberately draws nothing.
-      const isCharacterActor = isSentientAlly || !!(e.race && e.gender && !e.customImage);
+      const isCharacterActor = isSentientAlly || !!(e.race && e.gender);
       if (isCharacterActor) {
           window.CharacterRenderer?.draw(window.mapCtx, e, x, y, z, flyOff);
       } else if ((e instanceof window.Enemy || e.customImage) && window.gameVisuals) {

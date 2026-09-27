@@ -1,37 +1,8 @@
 // renderPerfTuning.js
-// Measured mobile rendering optimisations that can sit above the legacy
-// renderer without changing game rules.
+// Measured mobile rendering optimisations. Character composition is not
+// wrapped or intercepted here; characterRenderer.js owns it outright.
 (() => {
     'use strict';
-
-    function installAppearancePreviewWrapperCoordinator() {
-        const existingDescriptor = Object.getOwnPropertyDescriptor(window, 'updateAppearancePreview');
-        if (existingDescriptor && !existingDescriptor.configurable) return false;
-        let current = existingDescriptor?.get
-            ? existingDescriptor.get.call(window)
-            : window.updateAppearancePreview;
-
-        Object.defineProperty(window, 'updateAppearancePreview', {
-            configurable: true,
-            enumerable: true,
-            get() { return current; },
-            set(next) {
-                if (typeof next === 'function') {
-                    const previous = current;
-                    if (next.__directionalHumanFemalePreview && next.__legacyPreview?.__greenskinPreviewWrapper) {
-                        next.__greenskinPreviewWrapper = true;
-                    }
-                    if (next.__greenskinPreviewWrapper && previous?.__directionalHumanFemalePreview) {
-                        next.__directionalHumanFemalePreview = true;
-                    }
-                }
-                current = next;
-            },
-        });
-        window.__appearancePreviewWrapperCoordinatorInstalled = true;
-        return true;
-    }
-    installAppearancePreviewWrapperCoordinator();
 
     const build = window.PRESENTATION_BUILD || 'npc-routines-v1';
     const load = (selector, src, datasetKey) => {
