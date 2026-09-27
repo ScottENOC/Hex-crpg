@@ -36,6 +36,7 @@ async function waitForRendererMatrixAssets(page) {
     ];
     const female = window.DIRECTIONAL_CHARACTER_ASSETS?.human_female;
     const male = window.DIRECTIONAL_CHARACTER_ASSETS?.human_male;
+    const elfFemale = window.DIRECTIONAL_CHARACTER_ASSETS?.elf_female;
     return window.__humanoidRendererInstalled === true
       && legacyKeys.every(key => visuals[key]?.naturalWidth > 0)
       && female?.body?.average?.front?.naturalWidth > 0
@@ -43,7 +44,10 @@ async function waitForRendererMatrixAssets(page) {
       && male?.body?.average?.front?.naturalWidth > 0
       && male?.body?.broad?.front?.naturalWidth > 0
       && male?.body?.broad?.side?.naturalWidth > 0
-      && male?.body?.broad?.back?.naturalWidth > 0;
+      && male?.body?.broad?.back?.naturalWidth > 0
+      && elfFemale?.body?.average?.front?.naturalWidth > 0
+      && elfFemale?.body?.average?.side?.naturalWidth > 0
+      && elfFemale?.body?.average?.back?.naturalWidth > 0;
   });
 }
 
@@ -130,6 +134,10 @@ test.describe('direct humanoid compositor', () => {
     expect(rendererSource).toContain("front:'images/characters/human_male/body_broad_front.png'");
     expect(rendererSource).toContain("side:'images/characters/human_male/body_broad_side.png'");
     expect(rendererSource).toContain("back:'images/characters/human_male/body_broad_back.png'");
+    expect(rendererSource).toContain("front:'images/characters/elf_female/body_front.png'");
+    expect(rendererSource).toContain("side:'images/characters/elf_female/body_side.png'");
+    expect(rendererSource).toContain("back:'images/characters/elf_female/body_back.png'");
+    expect(rendererSource).toContain('CHARACTER_PATHS.elf_female.hair = CHARACTER_PATHS.human_female.hair;');
     expect(rendererSource).not.toMatch(/ctx\.drawImage\s*=/);
     expect(rendererSource).not.toMatch(/\.rotate\s*\(/);
     expect(rendererSource).not.toContain('drawStripDeformedArmour');
@@ -287,7 +295,9 @@ test.describe('direct humanoid compositor', () => {
             ctx.restore();
             count++;
 
-            if (race === 'human' && (gender === 'female' || gender === 'male')) {
+            const directExpected = (race === 'human' && (gender === 'female' || gender === 'male'))
+              || (race === 'elf' && gender === 'female');
+            if (directExpected) {
               directCount++;
               const expected = ['body', helmet ? 'helmet' : 'hair'];
               if (armor) expected.push('armour');
@@ -316,7 +326,7 @@ test.describe('direct humanoid compositor', () => {
     expect(result.bodies).toEqual(['average','broad']);
     expect(result.expected).toBe(12960);
     expect(result.count).toBe(result.expected);
-    expect(result.directCount).toBe(1728);
+    expect(result.directCount).toBe(2592);
     expect(result.failures).toEqual([]);
     expect(result.directLayerFailures).toEqual([]);
   });

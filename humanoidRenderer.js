@@ -20,6 +20,7 @@
 
     const CHARACTER_RIGS = {
         human_female: { bodyW:1.60, bodyH:1.92, yOff:-0.16, heightScale:1.92/2.16 },
+        elf_female:   { bodyW:1.60, bodyH:1.92, yOff:-0.16, heightScale:1.92/2.16 },
         human_male:   { bodyW:1.70, bodyH:2.06, yOff:-0.17, heightScale:2.06/2.16 },
     };
 
@@ -55,6 +56,17 @@
                 },
             },
         },
+        elf_female: {
+            body: {
+                average: {
+                    front:'images/characters/elf_female/body_front.png',
+                    side:'images/characters/elf_female/body_side.png',
+                    back:'images/characters/elf_female/body_back.png',
+                },
+            },
+            // Elf body art is deliberately bald; hair remains a separate layer.
+            hair:null,
+        },
         human_male: {
             body: {
                 average: {
@@ -73,6 +85,16 @@
         },
     };
     CHARACTER_PATHS.human_male.hair = CHARACTER_PATHS.human_female.hair;
+    CHARACTER_PATHS.elf_female.hair = CHARACTER_PATHS.human_female.hair;
+
+    // Elf-female source art has different transparent framing from the human body sheets.
+    const BODY_VISIBLE_TARGETS = {
+        elf_female: {
+            front:{x:.14,y:.01,w:.72,h:.98},
+            side: {x:.30,y:.01,w:.40,h:.98},
+            back: {x:.125,y:.005,w:.75,h:.99},
+        },
+    };
 
     const DIRECTIONAL_LAYOUT = {
         front: {
@@ -138,6 +160,7 @@
     // reduced fit. Male rendering deliberately keeps the existing target.
     const HELMET_TARGETS = {
         human_female:{x:-.1873125,y:-.015,w:.374625,h:.2183},
+        elf_female:{x:-.1873125,y:-.015,w:.374625,h:.2183},
         default:{x:-.172125,y:-.015,w:.34425,h:.2006},
     };
     const SHIELD_OPAQUE_HEIGHT_DROP = .10;
@@ -164,7 +187,7 @@
 
     function usesApprovedHumanEquipmentBaseline(entity) {
         const key = keyFor(entity);
-        return key === 'human_female' || key === 'human_male';
+        return key === 'human_female' || key === 'human_male' || key === 'elf_female';
     }
 
     function canDirectRender(entity) {
@@ -541,9 +564,12 @@
             // retain the established body/head/armour then shield/weapons order.
             if (view === 'back') drawHeldLayers();
 
-            if (drawCropped(ctx, imageReady(bodyImage) ? bodyImage : sourceBody, layout.bodyCrop, layout.bodyDest, bounds)) {
-                layerOrder.push('body');
-            }
+            const bodySource = imageReady(bodyImage) ? bodyImage : sourceBody;
+            const bodyTarget = BODY_VISIBLE_TARGETS[key]?.[view];
+            const bodyDrawn = bodyTarget
+                ? !!drawVisibleFit(ctx, bodySource, bounds, bodyTarget)
+                : drawCropped(ctx, bodySource, layout.bodyCrop, layout.bodyDest, bounds);
+            if (bodyDrawn) layerOrder.push('body');
             if (!hasHelmet && imageReady(hairImage)) {
                 if (drawCropped(ctx, hairImage, layout.hairCrop, layout.hairDest, bounds)) layerOrder.push('hair');
             } else if (hasHelmet && drawHelmet(ctx, entity, view, bounds)) {
@@ -699,6 +725,11 @@
         hair:CHARACTER_ASSETS.human_female.hair,
     };
     window.HUMAN_FEMALE_DIRECTIONAL_LAYOUT = DIRECTIONAL_LAYOUT;
+    window.ELF_FEMALE_DIRECTIONAL_ASSETS = {
+        body:CHARACTER_ASSETS.elf_female.body.average,
+        bodyTypes:CHARACTER_ASSETS.elf_female.body,
+        hair:CHARACTER_ASSETS.elf_female.hair,
+    };
     window.REAR_HUMAN_EQUIPMENT_ASSETS = REAR_EQUIPMENT_ASSETS;
     window.ITEM_GRIPS = ITEM_GRIPS;
     window.facingToSpriteView = facingToView;
