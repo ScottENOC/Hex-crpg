@@ -40,7 +40,7 @@ test('human female measured canonical anchors drive production attachments', asy
     };
   });
 
-  expect(state.build).toBe('20260926-armour-body-bounds-fit');
+  expect(state.build).toBe('20260927-rigid-armour-compositor');
   expect(state.rigVersion).toBe('measured-front-20260926');
   expect(state.attachmentSource).toBe('canonical-sprite-rig');
   expect(state.debugMutatesRig).toBe(false);
@@ -65,9 +65,9 @@ test('human female measured canonical anchors drive production attachments', asy
   expect(state.attachments.shoulderRight).toEqual(state.ref.shoulderRight);
 });
 
-test('armour opaque extents land exactly on shoulder-top and sole targets in body pixel space', async ({ page }) => {
+test('rigid armour compositor maps all four opaque extents to the body armour envelope', async ({ page }) => {
   await page.goto('/');
-  await page.waitForFunction(() => typeof window.computeHumanFemaleMeasuredArmourPlacement === 'function');
+  await page.waitForFunction(() => typeof window.computeHumanFemaleRigidArmourPlacement === 'function');
 
   const result = await page.evaluate(() => {
     const image = document.createElement('canvas');
@@ -86,13 +86,24 @@ test('armour opaque extents land exactly on shoulder-top and sole targets in bod
       trimHeight: 700,
     };
     const body = { left: 100, top: 200, width: 400, height: 600 };
-    return window.computeHumanFemaleMeasuredArmourPlacement(image, 'front', body, trim);
+    return window.computeHumanFemaleRigidArmourPlacement(image, 'front', body, trim);
   });
 
   expect(result.placementSource).toBe('actual-body-draw-bounds');
+  expect(result.compositionSource).toBe('rigid-alpha-envelope');
   expect(result.targetTopPx).toBeCloseTo(200 + 0.225 * 600, 8);
   expect(result.targetBottomPx).toBeCloseTo(200 + 0.995 * 600, 8);
   expect(result.visibleTopPx).toBeCloseTo(result.targetTopPx, 8);
   expect(result.visibleBottomPx).toBeCloseTo(result.targetBottomPx, 8);
-  expect(result.visibleBottomPx - result.visibleTopPx).toBeCloseTo(0.770 * 600, 8);
+  expect(result.visibleLeftPx).toBeCloseTo(result.targetLeftPx, 8);
+  expect(result.visibleRightPx).toBeCloseTo(result.targetRightPx, 8);
+  expect(result.targetLeftPx).toBeCloseTo(bodyLeft(100, 400, result.rig), 8);
+  expect(result.targetRightPx).toBeCloseTo(bodyRight(100, 400, result.rig), 8);
+
+  function bodyLeft(left, width, rig) {
+    return left + Math.min(rig.shoulderL, rig.waistL, rig.hemL) * width;
+  }
+  function bodyRight(left, width, rig) {
+    return left + Math.max(rig.shoulderR, rig.waistR, rig.hemR) * width;
+  }
 });
