@@ -39,4 +39,34 @@ test.describe('Siege actor reconciliation', () => {
         });
         expect(result).toBe(false);
     });
+
+    test('does not start the physical Northwatch assault while the party is miles away', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const center = window.campaign2NorthwatchCenter;
+            const playerEntity = window.entities.find(e => e.side === 'player') || window.player;
+            const originalHex = playerEntity.hex ? { ...playerEntity.hex } : null;
+            playerEntity.hex = { q: center.q + 500, r: center.r + 500 };
+            if (window.player && window.player !== playerEntity) window.player.hex = { ...playerEntity.hex };
+
+            window.isInCombat = false;
+            window.greenskinWaveSpawned = false;
+            window.SiegeActorReconciliation.installPhysicalWaveGuard();
+            const near = window.SiegeActorReconciliation.partyNearNorthwatchPhysicalSiege();
+            const returned = window.spawnGreenskinAssaultWave();
+            const snapshot = {
+                near,
+                returned,
+                isInCombat: window.isInCombat,
+                waveSpawned: window.greenskinWaveSpawned,
+            };
+
+            if (originalHex) playerEntity.hex = originalHex;
+            return snapshot;
+        });
+
+        expect(result.near).toBe(false);
+        expect(result.returned).toBe(false);
+        expect(result.waveSpawned).toBe(false);
+        expect(result.isInCombat).toBe(false);
+    });
 });
