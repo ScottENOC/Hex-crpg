@@ -2,9 +2,8 @@
   <defs>
     <linearGradient id="plate" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#c2c6c5"/><stop offset=".28" stop-color="#777e80"/><stop offset=".56" stop-color="#3f4648"/><stop offset=".82" stop-color="#8f9595"/><stop offset="1" stop-color="#292f31"/></linearGradient>
     <linearGradient id="dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#666d6f"/><stop offset="1" stop-color="#272d2f"/></linearGradient>
-    <filter id="metal" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency=".025" numOctaves="2" seed="17" result="n"/><feBlend in="SourceGraphic" in2="n" mode="soft-light"/></filter>
   </defs>
-  <path d="M176 79c25 13 51 20 80 20s55-7 80-20l62 46-23 79-38-13 9 222c-56 24-124 24-180 0l9-222-38 13-23-79Z" fill="url(#plate)" stroke="#1d2224" stroke-width="10" filter="url(#metal)"/>
+  <path d="M176 79c25 13 51 20 80 20s55-7 80-20l62 46-23 79-38-13 9 222c-56 24-124 24-180 0l9-222-38 13-23-79Z" fill="url(#plate)" stroke="#1d2224" stroke-width="10"/>
   <path d="M184 93c18 32 42 48 72 48s54-16 72-48" fill="none" stroke="#333a3c" stroke-width="14"/>
   <path d="M119 126c29-26 56-34 82-24l-16 93-57 16-28-48Z" fill="url(#dark)" stroke="#1c2123" stroke-width="8"/>
   <path d="M393 126c-29-26-56-34-82-24l16 93 57 16 28-48Z" fill="url(#dark)" stroke="#1c2123" stroke-width="8"/>

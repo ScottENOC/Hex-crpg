@@ -118,7 +118,8 @@
     const ARMOUR_TARGETS = {
         front:{x:.03,y:.225,w:.94,h:.770},
         side: {x:.18,y:.225,w:.64,h:.770},
-        back: {x:.04,y:.225,w:.92,h:.770},
+        // Rear-specific art should occupy the same visible envelope as front art.
+        back: {x:.03,y:.225,w:.94,h:.770},
     };
 
     // Human-female nasal helm sits halfway between the pre-reduction and current

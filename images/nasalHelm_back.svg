@@ -11,12 +11,8 @@
       <stop offset="0" stop-color="#697071"/>
       <stop offset="1" stop-color="#262b2d"/>
     </linearGradient>
-    <filter id="metalNoise" x="-10%" y="-10%" width="120%" height="120%">
-      <feTurbulence type="fractalNoise" baseFrequency=".035" numOctaves="3" seed="13" result="n"/>
-      <feBlend in="SourceGraphic" in2="n" mode="soft-light"/>
-    </filter>
   </defs>
-  <path d="M256 42C174 90 126 175 118 284c30 19 77 30 138 30s108-11 138-30C386 175 338 90 256 42Z" fill="url(#steel)" stroke="#1c2123" stroke-width="10" filter="url(#metalNoise)"/>
+  <path d="M256 42C174 90 126 175 118 284c30 19 77 30 138 30s108-11 138-30C386 175 338 90 256 42Z" fill="url(#steel)" stroke="#1c2123" stroke-width="10"/>
   <path d="M256 52v257" fill="none" stroke="#2d3436" stroke-width="8" opacity=".8"/>
   <path d="M256 58C211 111 188 190 186 302M256 58c45 53 68 132 70 244" fill="none" stroke="#e1e3e1" stroke-width="4" opacity=".28"/>
   <path d="M111 273c42 20 91 29 145 29s103-9 145-29l7 53c-45 25-96 37-152 37s-107-12-152-37Z" fill="url(#darkSteel)" stroke="#1d2224" stroke-width="8"/>
