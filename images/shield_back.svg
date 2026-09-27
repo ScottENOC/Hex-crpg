@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="wood" cx="42%" cy="36%" r="70%">
+      <stop offset="0" stop-color="#93623b"/>
+      <stop offset="0.55" stop-color="#6f4429"/>
+      <stop offset="1" stop-color="#4d2e1e"/>
+    </radialGradient>
+    <linearGradient id="iron" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#9da2a2"/>
+      <stop offset="0.35" stop-color="#555b5c"/>
+      <stop offset="0.7" stop-color="#2e3335"/>
+      <stop offset="1" stop-color="#777d7d"/>
+    </linearGradient>
+    <linearGradient id="leather" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6f452e"/>
+      <stop offset="1" stop-color="#38251b"/>
+    </linearGradient>
+    <clipPath id="face"><circle cx="256" cy="256" r="205"/></clipPath>
+    <filter id="grain" x="-15%" y="-15%" width="130%" height="130%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.035 0.22" numOctaves="2" seed="9" result="noise"/>
+      <feBlend in="SourceGraphic" in2="noise" mode="soft-light"/>
+    </filter>
+  </defs>
+  <circle cx="256" cy="256" r="220" fill="#17191a" opacity=".35"/>
+  <circle cx="256" cy="256" r="211" fill="url(#iron)" stroke="#171a1b" stroke-width="9"/>
+  <g clip-path="url(#face)" filter="url(#grain)">
+    <rect x="45" y="45" width="422" height="422" fill="url(#wood)"/>
+    <g fill="none" stroke="#3d2418" stroke-width="5" opacity=".9">
+      <path d="M118 39v434M186 39v434M256 39v434M326 39v434M394 39v434"/>
+    </g>
+    <g fill="none" stroke="#bb8353" stroke-width="2" opacity=".26">
+      <path d="M84 111c92 19 232 17 345-4M72 203c121 15 253 17 370-1M74 309c105-16 249-13 363 2M90 402c119-18 238-15 331-2"/>
+    </g>
+  </g>
+  <circle cx="256" cy="256" r="205" fill="none" stroke="#777d7d" stroke-width="16"/>
+  <circle cx="256" cy="256" r="205" fill="none" stroke="#202426" stroke-width="5"/>
+  <g fill="url(#iron)" stroke="#1b1e1f" stroke-width="3">
+    <circle cx="256" cy="50" r="8"/><circle cx="256" cy="462" r="8"/>
+    <circle cx="50" cy="256" r="8"/><circle cx="462" cy="256" r="8"/>
+    <circle cx="110" cy="110" r="8"/><circle cx="402" cy="110" r="8"/>
+    <circle cx="110" cy="402" r="8"/><circle cx="402" cy="402" r="8"/>
+  </g>
+  <g fill="url(#leather)" stroke="#211710" stroke-width="5">
+    <rect x="112" y="176" width="288" height="48" rx="18"/>
+    <rect x="145" y="291" width="222" height="43" rx="16" transform="rotate(-8 256 312)"/>
+  </g>
+  <g fill="#8c5c38" stroke="#24170f" stroke-width="3">
+    <rect x="126" y="166" width="45" height="68" rx="8"/>
+    <rect x="341" y="166" width="45" height="68" rx="8"/>
+    <rect x="163" y="282" width="38" height="62" rx="8" transform="rotate(-8 182 313)"/>
+    <rect x="316" y="280" width="38" height="62" rx="8" transform="rotate(-8 335 311)"/>
+  </g>
+  <g fill="url(#iron)" stroke="#1c2021" stroke-width="2">
+    <circle cx="149" cy="199" r="7"/><circle cx="363" cy="199" r="7"/>
+    <circle cx="182" cy="314" r="6"/><circle cx="335" cy="311" r="6"/>
+  </g>
+</svg>

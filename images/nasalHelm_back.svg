@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="steel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d2d5d4"/>
+      <stop offset="0.22" stop-color="#8b9192"/>
+      <stop offset="0.52" stop-color="#4a5052"/>
+      <stop offset="0.78" stop-color="#9ca1a1"/>
+      <stop offset="1" stop-color="#313638"/>
+    </linearGradient>
+    <linearGradient id="darkSteel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#697071"/>
+      <stop offset="1" stop-color="#262b2d"/>
+    </linearGradient>
+    <filter id="metalNoise" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency=".035" numOctaves="3" seed="13" result="n"/>
+      <feBlend in="SourceGraphic" in2="n" mode="soft-light"/>
+    </filter>
+  </defs>
+  <path d="M256 42C174 90 126 175 118 284c30 19 77 30 138 30s108-11 138-30C386 175 338 90 256 42Z" fill="url(#steel)" stroke="#1c2123" stroke-width="10" filter="url(#metalNoise)"/>
+  <path d="M256 52v257" fill="none" stroke="#2d3436" stroke-width="8" opacity=".8"/>
+  <path d="M256 58C211 111 188 190 186 302M256 58c45 53 68 132 70 244" fill="none" stroke="#e1e3e1" stroke-width="4" opacity=".28"/>
+  <path d="M111 273c42 20 91 29 145 29s103-9 145-29l7 53c-45 25-96 37-152 37s-107-12-152-37Z" fill="url(#darkSteel)" stroke="#1d2224" stroke-width="8"/>
+  <g fill="#a5aaaa" stroke="#252a2c" stroke-width="3">
+    <circle cx="135" cy="302" r="8"/><circle cx="196" cy="322" r="8"/>
+    <circle cx="256" cy="328" r="8"/><circle cx="316" cy="322" r="8"/><circle cx="377" cy="302" r="8"/>
+  </g>
+  <path d="M113 319c-4 48 2 92 21 132l43-21-8-91c-21-3-39-10-56-20Z" fill="url(#darkSteel)" stroke="#1d2224" stroke-width="8"/>
+  <path d="M399 319c4 48-2 92-21 132l-43-21 8-91c21-3 39-10 56-20Z" fill="url(#darkSteel)" stroke="#1d2224" stroke-width="8"/>
+  <path d="M141 337l17 83M371 337l-17 83" stroke="#9da2a2" stroke-width="4" opacity=".3"/>
+  <ellipse cx="256" cy="48" rx="17" ry="12" fill="#b9bdbc" stroke="#222729" stroke-width="6"/>
+</svg>

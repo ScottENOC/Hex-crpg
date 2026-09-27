@@ -115,13 +115,28 @@
         back:{helmetAnchor:{x:0,y:-.025},armourY:-.010},
     };
 
-    // Armour has no directional artwork yet. Fit its visible pixels to a stable
-    // envelope for each view using only translation and x/y scale. No rotation,
-    // shear, strip deformation or triangle warp is used.
     const ARMOUR_TARGETS = {
         front:{x:.03,y:.225,w:.94,h:.770},
         side: {x:.18,y:.225,w:.64,h:.770},
         back: {x:.04,y:.225,w:.92,h:.770},
+    };
+
+    // Human-female nasal helm sits halfway between the pre-reduction and current
+    // reduced fit. Male rendering deliberately keeps the existing target.
+    const HELMET_TARGETS = {
+        human_female:{x:-.1873125,y:-.015,w:.374625,h:.2183},
+        default:{x:-.172125,y:-.015,w:.34425,h:.2006},
+    };
+    const SHIELD_OPAQUE_HEIGHT_DROP = .10;
+
+    const REAR_EQUIPMENT_PATHS = {
+        shield:'images/shield_back.svg',
+        helmet:'images/nasalHelm_back.svg',
+        armour:{
+            light:'images/humanlightarmour_back.svg',
+            medium:'images/humanmediumarmour_back.svg',
+            heavy:'images/humanheavyarmour_back.svg',
+        },
     };
 
     const ITEM_GRIPS = {
@@ -181,6 +196,12 @@
 
     const CHARACTER_ASSETS = Object.fromEntries(Object.entries(CHARACTER_PATHS)
         .map(([key, paths]) => [key, loadSet(paths)]));
+    const REAR_EQUIPMENT_ASSETS = {
+        shield:loadImage(REAR_EQUIPMENT_PATHS.shield),
+        helmet:loadImage(REAR_EQUIPMENT_PATHS.helmet),
+        armour:Object.fromEntries(Object.entries(REAR_EQUIPMENT_PATHS.armour)
+            .map(([tier, src]) => [tier, loadImage(src)])),
+    };
 
     function facingFromHexDelta(dq, dr) {
         if (!dq && !dr) return null;
@@ -298,21 +319,27 @@
         return {dx,dy,width:outerW,height:outerH,target:{left:targetLeft,top:targetTop,width:targetWidth,height:targetHeight}};
     }
 
-    function armourImage(entity) {
+    function rearPreferred(view, rearImage, fallback) {
+        return view === 'back' && imageReady(rearImage) ? rearImage : fallback;
+    }
+
+    function armourImage(entity, view) {
         const id = entity.equipped?.armor;
         if (!id) return null;
         const item = window.items?.[id];
         const reduction = Number(item?.reduction || 0);
         const visuals = window.gameVisuals || {};
-        let image = reduction >= 3 ? visuals.humanHeavy : reduction >= 2 ? visuals.humanMedium : visuals.humanLight;
+        const tier = reduction >= 3 ? 'heavy' : reduction >= 2 ? 'medium' : 'light';
+        const generic = tier === 'heavy' ? visuals.humanHeavy : tier === 'medium' ? visuals.humanMedium : visuals.humanLight;
+        let image = rearPreferred(view, REAR_EQUIPMENT_ASSETS.armour[tier], generic);
         if (!image) return null;
         if (entity.goldGear && window.getGoldTintedSprite) image = window.getGoldTintedSprite(image) || image;
         return image;
     }
 
-    function helmetImage(entity) {
+    function helmetImage(entity, view) {
         if (!entity.equipped?.helmet) return null;
-        let image = window.gameVisuals?.nasal_helm || null;
+        let image = rearPreferred(view, REAR_EQUIPMENT_ASSETS.helmet, window.gameVisuals?.nasal_helm || null);
         if (image && entity.goldGear && window.getGoldTintedSprite) image = window.getGoldTintedSprite(image) || image;
         return image;
     }
@@ -330,11 +357,13 @@
         return null;
     }
 
-    function slotSpec(entity, slot) {
+    function slotSpec(entity, slot, view) {
         const id = slot === 'main' ? entity.equipped?.weapon : entity.equipped?.offhand;
         if (!id) return null;
         const item = window.items?.[id];
-        if (item?.type === 'shield') return {image:window.gameVisuals?.shield,kind:'shield',scale:.73};
+        if (item?.type === 'shield') {
+            return {image:rearPreferred(view, REAR_EQUIPMENT_ASSETS.shield, window.gameVisuals?.shield),kind:'shield',scale:.73};
+        }
         return weaponSpec(id);
     }
 
@@ -373,7 +402,7 @@
     }
 
     function drawHeldItem(ctx, entity, view, bounds, slot, expectedLayer='any') {
-        const spec = slotSpec(entity, slot);
+        const spec = slotSpec(entity, slot, view);
         if (!spec || !imageReady(spec.image)) return false;
         if (expectedLayer === 'shield' && spec.kind !== 'shield') return false;
         if (expectedLayer === 'weapon' && spec.kind === 'shield') return false;
@@ -397,6 +426,15 @@
             size = basePixel * (rig?.heightScale || 1) * spec.scale;
         }
 
+        let itemY = anchor.y - grip.y*size;
+        if (spec.kind === 'shield') {
+            const trim = alphaTrim(spec.image);
+            const opaqueHeight = trim?.trimHeight && trim?.originalHeight
+                ? size * trim.trimHeight / trim.originalHeight
+                : size;
+            itemY += opaqueHeight * SHIELD_OPAQUE_HEIGHT_DROP;
+        }
+
         const mirrorOffhandWeapon = slot === 'off' && spec.kind !== 'shield';
         if (mirrorOffhandWeapon) {
             // Mirror around the grip itself: the hilt stays on the off-hand anchor
@@ -407,31 +445,29 @@
             ctx.drawImage(spec.image, -grip.x*size, -grip.y*size, size, size);
             ctx.restore();
         } else {
-            ctx.drawImage(spec.image, anchor.x - grip.x*size, anchor.y - grip.y*size, size, size);
+            ctx.drawImage(spec.image, anchor.x - grip.x*size, itemY, size, size);
         }
         return true;
     }
 
     function drawHelmet(ctx, entity, view, bounds) {
-        const image = helmetImage(entity);
+        const image = helmetImage(entity, view);
         if (!imageReady(image)) return false;
         const anchorPoint = tunedAnchor(entity, view, 'helmetAnchor');
         if (!anchorPoint) return false;
         const anchor = point(bounds, anchorPoint);
-        // Approved female-average helmet fit, reduced uniformly by 15% while
-        // keeping its top-centre attachment position unchanged. The same
-        // normalised fit is the baseline for all direct-rendered humans.
+        const helmetTarget = HELMET_TARGETS[keyFor(entity)] || HELMET_TARGETS.default;
         const target = {
-            x:(anchor.x-bounds.left)/bounds.width - .172125,
-            y:(anchor.y-bounds.top)/bounds.height - .015,
-            w:.34425,
-            h:.2006,
+            x:(anchor.x-bounds.left)/bounds.width + helmetTarget.x,
+            y:(anchor.y-bounds.top)/bounds.height + helmetTarget.y,
+            w:helmetTarget.w,
+            h:helmetTarget.h,
         };
         return !!drawVisibleFit(ctx, image, bounds, target);
     }
 
     function drawArmour(ctx, entity, view, bounds) {
-        const image = armourImage(entity);
+        const image = armourImage(entity, view);
         if (!imageReady(image)) return false;
         const baseTarget = ARMOUR_TARGETS[view] || ARMOUR_TARGETS.front;
         const armourY = usesApprovedHumanEquipmentBaseline(entity)
@@ -469,6 +505,18 @@
         const cx = bounds.left + bounds.width/2;
         const layerOrder = [];
 
+        const drawHeldLayers = () => {
+            let shieldDrawn = false;
+            shieldDrawn = drawHeldItem(ctx, entity, view, bounds, 'off', 'shield') || shieldDrawn;
+            shieldDrawn = drawHeldItem(ctx, entity, view, bounds, 'main', 'shield') || shieldDrawn;
+            if (shieldDrawn) layerOrder.push('shield');
+
+            let weaponDrawn = false;
+            weaponDrawn = drawHeldItem(ctx, entity, view, bounds, 'main', 'weapon') || weaponDrawn;
+            weaponDrawn = drawHeldItem(ctx, entity, view, bounds, 'off', 'weapon') || weaponDrawn;
+            if (weaponDrawn) layerOrder.push('weapons');
+        };
+
         ctx.save();
         if (mirror) {
             ctx.translate(cx, 0);
@@ -476,9 +524,10 @@
             ctx.translate(-cx, 0);
         }
         try {
-            // Deterministic painter's order. Do not reintroduce side-view
-            // far/near equipment splitting: shield and weapons must always sit
-            // in front of body/head layers and armour.
+            // Back-view equipment belongs behind the character. Front and side
+            // retain the established body/head/armour then shield/weapons order.
+            if (view === 'back') drawHeldLayers();
+
             if (drawCropped(ctx, imageReady(bodyImage) ? bodyImage : sourceBody, layout.bodyCrop, layout.bodyDest, bounds)) {
                 layerOrder.push('body');
             }
@@ -491,15 +540,7 @@
                 layerOrder.push('armour');
             }
 
-            let shieldDrawn = false;
-            shieldDrawn = drawHeldItem(ctx, entity, view, bounds, 'off', 'shield') || shieldDrawn;
-            shieldDrawn = drawHeldItem(ctx, entity, view, bounds, 'main', 'shield') || shieldDrawn;
-            if (shieldDrawn) layerOrder.push('shield');
-
-            let weaponDrawn = false;
-            weaponDrawn = drawHeldItem(ctx, entity, view, bounds, 'main', 'weapon') || weaponDrawn;
-            weaponDrawn = drawHeldItem(ctx, entity, view, bounds, 'off', 'weapon') || weaponDrawn;
-            if (weaponDrawn) layerOrder.push('weapons');
+            if (view !== 'back') drawHeldLayers();
         } finally {
             ctx.restore();
         }
@@ -645,6 +686,7 @@
         hair:CHARACTER_ASSETS.human_female.hair,
     };
     window.HUMAN_FEMALE_DIRECTIONAL_LAYOUT = DIRECTIONAL_LAYOUT;
+    window.REAR_HUMAN_EQUIPMENT_ASSETS = REAR_EQUIPMENT_ASSETS;
     window.ITEM_GRIPS = ITEM_GRIPS;
     window.facingToSpriteView = facingToView;
     window.facingFromHexDelta = facingFromHexDelta;

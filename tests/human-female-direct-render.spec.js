@@ -12,6 +12,17 @@ async function waitForDirectRenderer(page, key = 'human_female') {
   }, key);
 }
 
+async function waitForRearEquipmentAssets(page) {
+  await page.waitForFunction(() => {
+    const rear = window.REAR_HUMAN_EQUIPMENT_ASSETS;
+    return rear?.shield?.naturalWidth > 0
+      && rear?.helmet?.naturalWidth > 0
+      && rear?.armour?.light?.naturalWidth > 0
+      && rear?.armour?.medium?.naturalWidth > 0
+      && rear?.armour?.heavy?.naturalWidth > 0;
+  });
+}
+
 async function waitForRendererMatrixAssets(page) {
   await page.waitForFunction(() => {
     const visuals = window.gameVisuals || {};
@@ -104,15 +115,20 @@ test.describe('direct humanoid compositor', () => {
 
     expect(rendererSource).toContain('function drawDirectionalHumanoidInBounds');
     expect(rendererSource).toContain("compositionSource:'direct-axis-aligned-scale-translate'");
+    expect(rendererSource).toContain("human_female:{x:-.1873125,y:-.015,w:.374625,h:.2183}");
+    expect(rendererSource).toContain('const SHIELD_OPAQUE_HEIGHT_DROP = .10;');
+    expect(rendererSource).toContain("shield:'images/shield_back.svg'");
+    expect(rendererSource).toContain("helmet:'images/nasalHelm_back.svg'");
     expect(rendererSource).not.toMatch(/ctx\.drawImage\s*=/);
     expect(rendererSource).not.toMatch(/\.rotate\s*\(/);
     expect(rendererSource).not.toContain('drawStripDeformedArmour');
     expect(rendererSource).not.toContain('drawWarpedArmour');
   });
 
-  test('human female paints body, head layer, armour, shield, then weapons in every view', async ({ page }) => {
+  test('human female keeps front/side items high and paints back-view items lowest', async ({ page }) => {
     await createCharacter(page, { race:'human', gender:'female' });
     await waitForDirectRenderer(page, 'human_female');
+    await waitForRearEquipmentAssets(page);
 
     const down = await renderEquippedHuman(page, 'female', 'down');
     expect(down.count).toBeGreaterThan(0);
@@ -133,7 +149,7 @@ test.describe('direct humanoid compositor', () => {
     expect(right.armour).toMatchObject({view:'side',rotation:0,shear:false});
 
     const up = await renderEquippedHuman(page, 'female', 'up');
-    expect(up.layerOrder).toEqual(['body','helmet','armour','shield','weapons']);
+    expect(up.layerOrder).toEqual(['shield','weapons','body','helmet','armour']);
     expect(up.draw).toMatchObject({key:'human_female',view:'back',facing:'up'});
     expect(up.armour).toMatchObject({view:'back',rotation:0,shear:false});
 
