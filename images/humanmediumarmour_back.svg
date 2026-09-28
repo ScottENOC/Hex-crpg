@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="mail" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#929899"/><stop offset=".45" stop-color="#505759"/><stop offset="1" stop-color="#292f31"/></linearGradient>
+    <pattern id="rings" width="20" height="14" patternUnits="userSpaceOnUse"><path d="M1 7c0-5 18-5 18 0s-18 5-18 0Z" fill="none" stroke="#c4c8c7" stroke-width="2" opacity=".38"/><path d="M-9 14c0-5 18-5 18 0M11 14c0-5 18-5 18 0" fill="none" stroke="#1f2527" stroke-width="2" opacity=".7"/></pattern>
+    <linearGradient id="leather" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#70452d"/><stop offset="1" stop-color="#34231a"/></linearGradient>
+  </defs>
+  <path d="M171 75c27 16 55 24 85 24s58-8 85-24l75 72-38 78-38-29v236c-52 22-116 22-168 0V196l-38 29-38-78Z" fill="url(#mail)" stroke="#1e2426" stroke-width="10"/>
+  <path d="M171 75c27 16 55 24 85 24s58-8 85-24l75 72-38 78-38-29v236c-52 22-116 22-168 0V196l-38 29-38-78Z" fill="url(#rings)" opacity=".95"/>
+  <path d="M179 92c22 28 47 42 77 42s55-14 77-42" fill="none" stroke="#242a2c" stroke-width="15"/>
+  <path d="M111 147l71 61M401 147l-71 61" stroke="#7c8384" stroke-width="9" opacity=".65"/>
+  <path d="M156 303c66 23 134 23 200 0l4 35c-69 25-139 25-208 0Z" fill="url(#leather)" stroke="#231711" stroke-width="6"/>
+  <rect x="238" y="299" width="36" height="44" rx="5" fill="#7f8585" stroke="#24292b" stroke-width="5"/>
+  <path d="M166 421c58 22 122 22 180 0l7 31c-63 26-131 26-194 0Z" fill="#262c2e" stroke="#171b1d" stroke-width="6"/>
+</svg>
