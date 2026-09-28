@@ -119,6 +119,7 @@ function buildNPC({ name, title, race, gender, hex, classLevels, skillPicks, equ
 
     ensureDirectionalNpcImages();
     syncDirectionalNpcArt(ent);
+    window.applyNpcRegionalAppearance?.(ent);
     return ent;
 }
 
@@ -132,8 +133,21 @@ setInterval(() => {
         if (!ent.directionalArtKey && ent.name === 'Goblin') ent.directionalArtKey = 'npc_goblin';
         if (!ent.directionalArtKey && ent.name === 'Orc') ent.directionalArtKey = 'npc_orc';
         if (ent.directionalArtKey) syncDirectionalNpcArt(ent);
+        window.applyNpcRegionalAppearance?.(ent);
     }
 }, 100);
+
+// Presentation fixes are kept in their own module, but npcBuilder is the first
+// guaranteed appearance-oriented script in the static load order after name.js.
+// Load it once here so old/cached HTML builds do not need another script tag.
+(() => {
+    if (document.querySelector('script[data-directional-presentation-fixes]')) return;
+    const script = document.createElement('script');
+    script.src = `directionalPresentationFixes.js?build=20260928-character-presentation-v2`;
+    script.async = false;
+    script.dataset.directionalPresentationFixes = 'true';
+    document.head.appendChild(script);
+})();
 
 window.DIRECTIONAL_NPC_ART = DIRECTIONAL_NPC_ART;
 window.ensureDirectionalNpcImages = ensureDirectionalNpcImages;

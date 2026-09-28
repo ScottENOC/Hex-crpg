@@ -1,12 +1,34 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <g stroke="#291b16" stroke-width="18" stroke-linejoin="round">
-    <path fill="#d04b4b" d="M330 278 L430 245 L512 270 L594 245 L694 278 L760 420 L690 458 L646 386 L632 650 L392 650 L378 386 L334 458 L264 420 Z"/>
-    <path fill="#b73d3d" d="M430 245 L512 335 L594 245 L560 232 L512 270 L464 232 Z"/>
-    <path fill="#3f60c0" d="M392 650 L494 650 L480 968 L350 968 Z"/>
-    <path fill="#3f60c0" d="M530 650 L632 650 L674 968 L544 968 Z"/>
-    <path fill="#6b4328" d="M382 618 L642 618 L646 668 L378 668 Z"/>
-    <rect fill="#c79a4b" x="486" y="624" width="52" height="38" rx="5"/>
-    <path fill="#9f3434" d="M284 420 L350 400 L390 560 L340 590 Z"/>
-    <path fill="#9f3434" d="M740 420 L674 400 L634 560 L684 590 Z"/>
+  <g stroke="#2a1d18" stroke-linejoin="round" stroke-linecap="round">
+    <!-- semi-transparent cloth preserves the detailed baked-in body shading -->
+    <path fill="#c94a48" fill-opacity="0.76" stroke-width="16" d="M352 300 L430 264 L512 282 L594 264 L672 300 L692 430 L650 452 L625 392 L620 620 L404 620 L399 392 L374 452 L332 430 Z"/>
+    <path fill="#3f60c0" fill-opacity="0.72" stroke-width="14" d="M432 266 L512 332 L592 266 L558 246 L512 278 L466 246 Z"/>
+    <path fill="#3f60c0" fill-opacity="0.60" stroke-width="10" d="M405 430 L460 414 L470 592 L414 602 Z M619 430 L564 414 L554 592 L610 602 Z"/>
+
+    <!-- tailored seams / folds -->
+    <g fill="none" stroke="#5b2628" stroke-width="10" opacity="0.82">
+      <path d="M430 300 Q452 382 438 596"/>
+      <path d="M594 300 Q572 382 586 596"/>
+      <path d="M512 332 L512 606"/>
+      <path d="M404 510 Q512 540 620 510"/>
+    </g>
+    <g fill="none" stroke="#6f79c8" stroke-width="8" opacity="0.72">
+      <path d="M450 286 Q512 344 574 286"/>
+      <path d="M421 468 Q445 478 468 470"/>
+      <path d="M603 468 Q579 478 556 470"/>
+    </g>
+
+    <!-- leather belt, pouch and shoulder strap -->
+    <path fill="#6a432a" stroke-width="14" d="M394 592 L630 592 L638 648 L386 648 Z"/>
+    <rect x="484" y="598" width="56" height="42" rx="7" fill="#c89a4b" stroke-width="11"/>
+    <path d="M424 276 L600 620" fill="none" stroke="#6a432a" stroke-width="22" opacity="0.9"/>
+    <path fill="#5a3824" stroke-width="12" d="M598 522 Q660 528 668 576 L662 640 Q630 656 596 640 Z"/>
+
+    <!-- lower tunic split and boot tops; pants remain visible beneath -->
+    <path fill="#b84042" fill-opacity="0.62" stroke-width="13" d="M406 618 L500 618 L488 752 L408 730 Z M524 618 L618 618 L616 730 L536 752 Z"/>
+    <path fill="#4b3327" stroke-width="12" d="M366 842 L478 842 L472 968 L350 968 Z M546 842 L658 842 L674 968 L552 968 Z"/>
+    <g fill="none" stroke="#b68d62" stroke-width="7" opacity="0.65">
+      <path d="M372 886 L470 886 M370 920 L468 920 M554 886 L660 886 M558 920 L664 920"/>
+    </g>
   </g>
 </svg>
