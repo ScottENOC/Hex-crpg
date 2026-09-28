@@ -1,0 +1,39 @@
+name: Equipment appearance one-shot v3
+
+on:
+  push:
+    branches: [development]
+    paths:
+      - '.github/workflows/equipment-appearance-once-v3.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Apply patch
+        run: python tools/equipment_appearance_patch_once.py
+      - name: Syntax checks
+        run: |
+          node --check clothingSystem.js
+          node --check clothingLayers.js
+          node --check equipmentAppearance.js
+          node --check clothingInventoryUI.js
+          node --check humanoidRenderer.js
+          node --check ui.js
+      - name: Commit changes
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add clothingSystem.js clothingLayers.js equipmentAppearance.js clothingInventoryUI.js humanoidRenderer.js ui.js
+          git commit -m "Move equipment appearance controls into inventory"
+          git push origin HEAD:development
