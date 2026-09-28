@@ -22,7 +22,8 @@ jobs:
           node --check characterCreation.js
           node --check ui.js
       - run: |
-          if [ -f package.json ]; then npx playwright test tests/human-female-direct-render.spec.js; fi
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+          npx playwright test tests/human-female-direct-render.spec.js
       - run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
