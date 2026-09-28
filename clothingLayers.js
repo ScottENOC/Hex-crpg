@@ -1,7 +1,7 @@
 // Explicit garment layers: one authored image per colourable part.
 (() => {
   'use strict';
-  const BUILD='20260928-clothing-layers-v3';
+  const BUILD='20260928-clothing-layers-v4';
   // Draw order is innermost -> outermost. Preload order is the reverse so a
   // partially loaded character gets useful outer clothing before future
   // underwear layers, and the renderer can gate body drawing on visible clothes.
@@ -24,6 +24,7 @@
   const TOPS=['top_blouse','top_dress','top_shirt','top_tunic'];
   const PANTS=['pants_baggy_wraps','pants_breeches','pants_hose','pants_trousers'];
   const PLAYER_DEFAULT={shirt:'top_shirt',pants:'pants_trousers'};
+  const HUMANOID_RACES=new Set(['human','elf','dwarf','goblin','orc']);
 
   function legacy(itemId){
     if(itemId!=='traveler_garb') return null;
@@ -60,7 +61,7 @@
     if(e.displayClothes===undefined) e.displayClothes=true;
   }
   function hash(text){let h=2166136261;for(const ch of String(text||'')){h^=ch.charCodeAt(0);h=Math.imul(h,16777619);}return h>>>0;}
-  function eligible(e){const k=`${e?.race||''}_${e?.gender||''}`;return k==='human_female'||k==='human_male'||k==='elf_female';}
+  function eligible(e){return !!e&&HUMANOID_RACES.has(e.race)&&!!e.gender;}
   function deterministicColour(seed,offset=0){
     const h=hash(`${seed}|${offset}`);
     return {hue:h%360,saturation:48+((h>>>9)%38),value:48+((h>>>16)%32)};
@@ -147,6 +148,9 @@
     for(const e of window.entities||[])ensureDefaultOutfit(e,{player:e?.side==='player'});
   }
   const timer=setInterval(()=>{if(registerBuiltinItems()){install();clearInterval(timer);}},50);
+  // NPCs and companions can spawn well after initial world load. A cheap
+  // one-second wardrobe reconciliation gives each humanoid a stable outfit once.
+  setInterval(()=>{for(const e of window.entities||[])ensureDefaultOutfit(e,{player:e?.side==='player'});},1000);
   if(document.readyState==='complete') install(); else window.addEventListener('load',install,{once:true});
 
   window.clothingSystem={build:BUILD,slots,preloadSlots,slotLabels:labels,builtinGarments:GARMENTS,playerDefault:PLAYER_DEFAULT,getItemSpec:spec,migrateLegacyEquipment:migrate,ensureDefaultOutfit,preloadOutfit,visibleSlotsReady,getLayerColour:colour,setLayerColour:setColour,drawSlot,tintWholeLayer:tint,registerBuiltinItems};
