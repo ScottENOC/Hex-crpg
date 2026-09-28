@@ -85,6 +85,11 @@
             ctx.drawImage(source,trim.trimLeft,trim.trimTop,trim.trimWidth,trim.trimHeight,dx,dy,dw,dh);
         }
         ctx.restore();
+        // The startup poll may inspect the registry again before clothingSystem
+        // finishes loading. Mark the replacement itself as processed so a side
+        // hairstyle cannot be mirrored a second time and accidentally restored
+        // to the wrong orientation.
+        processed.add(out);
         return out;
     }
 
