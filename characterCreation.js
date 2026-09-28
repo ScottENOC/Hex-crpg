@@ -206,6 +206,17 @@ if (!document.querySelector('script[data-northwatch-siege-spawn]')) {
   document.head.appendChild(siegeSpawnScript);
 }
 
+// The new human-female directional art has pale base garments rather than the
+// old warm-brown tunic/pants bands. Install its semantic body/upper/lower mask
+// before the layered clothing UI starts rendering previews.
+if (!document.querySelector('script[data-female-base-recolor]')) {
+  const femaleBaseRecolorScript = document.createElement('script');
+  femaleBaseRecolorScript.src = 'femaleBaseClothingRecolor.js?build=20260928-female-base-mask-v1';
+  femaleBaseRecolorScript.dataset.femaleBaseRecolor = 'true';
+  femaleBaseRecolorScript.async = false;
+  document.head.appendChild(femaleBaseRecolorScript);
+}
+
 // Layered clothing is kept in a small compatibility module too. Loading it
 // here avoids another index.html cache token and makes the feature available
 // before inventory UI setup finishes.
