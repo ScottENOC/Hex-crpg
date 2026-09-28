@@ -70,6 +70,15 @@ if (!window.__npcProgressionModuleLoaded) {
     document.write('<script src="npcProgressionPolicy.js?build=20260929-package-policy-v3"><\/script>');
 }
 
+// Dialogue hearing installs after the rest of the blocking game scripts have
+// loaded (DOMContentLoaded), but is fetched here so index.html stays stable.
+// This gives source volume, distance falloff, partial intelligibility, reactive
+// appearance chatter, and the elf Keen Hearing passive one cache-busted module.
+if (!window.__dialogueHearingModuleLoaded) {
+    window.__dialogueHearingModuleLoaded = true;
+    document.write('<script src="dialogueHearing.js?build=20260929-dialogue-hearing-v1"><\/script>');
+}
+
 // Declarative hints for NPC/AI skill spending. Existing gameplay prereq fields
 // remain authoritative; these simply make equipment relationships explicit so
 // future generators/tools do not have to infer everything from descriptions.
