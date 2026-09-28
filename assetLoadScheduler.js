@@ -134,13 +134,18 @@
         'images/spiderweb.png':'images/props/effects/spiderweb.png',
     }));
 
-    // Keep speculative creator traffic conservative. At Start, allow extra
-    // slots so gameplay can begin immediately even if a few warmups are still
-    // in flight; HTTP/2 still remains far below the old unbounded Promise.all.
+    // Four simultaneous image streams is deliberately conservative for
+    // GitHub Pages/HTTP2. We previously jumped to eight on Start; Chrome was
+    // intermittently reporting ERR_HTTP2_PROTOCOL_ERROR with a 200 response
+    // while several large directional character PNGs arrived together.
     const CREATOR_MAX_CONCURRENT = 4;
-    const GAME_MAX_CONCURRENT = 8;
+    const GAME_MAX_CONCURRENT = 4;
+    const GAMEPLAY_WARMUP_GRACE_MS = 750;
+    const TRANSIENT_RETRY_DELAY_MS = 180;
     let active = 0;
     let gameStarted = false;
+    let gameplayWarmupResumeAt = 0;
+    let warmupResumeTimer = null;
     const queue = [];
 
     // Compatibility guard only. Direct-rendered humans/elf-female must not
@@ -176,11 +181,33 @@
         return 2;
     }
 
+    function scheduleWarmupResume() {
+        if (warmupResumeTimer || !gameStarted) return;
+        const delay = Math.max(0, gameplayWarmupResumeAt - performance.now());
+        if (delay <= 0) return;
+        warmupResumeTimer = setTimeout(() => {
+            warmupResumeTimer = null;
+            pump();
+        }, delay + 1);
+    }
+
     function pump() {
         const limit = concurrencyLimit();
         while (active < limit && queue.length) {
             queue.sort((a, b) => a.priority - b.priority || a.order - b.order);
-            const job = queue.shift();
+            const job = queue[0];
+
+            // Start is the most latency-sensitive moment. Give requests made
+            // after the click a short exclusive window instead of immediately
+            // filling newly-free slots with old creator-time warmups. Nothing
+            // is discarded: the warmups resume automatically after the grace
+            // period, so their Image objects/promises still settle normally.
+            if (gameStarted && job.queuedBeforeGameStart && performance.now() < gameplayWarmupResumeAt) {
+                scheduleWarmupResume();
+                return;
+            }
+
+            queue.shift();
             active++;
             job.start(() => {
                 active = Math.max(0, active - 1);
@@ -213,6 +240,7 @@
     function beginGameplayLoading() {
         if (gameStarted) return;
         gameStarted = true;
+        gameplayWarmupResumeAt = performance.now() + GAMEPLAY_WARMUP_GRACE_MS;
         for (const job of queue) {
             if (job.queuedBeforeGameStart) job.priority = 50;
         }
@@ -233,11 +261,48 @@
             }
 
             const canonicalPath = LEGACY_ASSET_REDIRECTS.get(requestedPath) || requestedPath;
+            const targetSrc = canonicalPath === requestedPath ? value : canonicalPath;
             enqueue(canonicalPath, done => {
-                const settle = () => done();
-                img.addEventListener('load', settle, {once:true});
-                img.addEventListener('error', settle, {once:true});
-                nativeSrc.set.call(img, canonicalPath === requestedPath ? value : canonicalPath);
+                let retriesRemaining = 1;
+
+                const armAttempt = () => {
+                    const onLoad = () => {
+                        cleanup();
+                        done();
+                    };
+                    const onError = (event) => {
+                        cleanup();
+                        if (retriesRemaining > 0) {
+                            retriesRemaining--;
+                            // This first error is treated as transient. Stop it
+                            // before renderer/main.js handlers mark the Image as
+                            // permanently broken; retry the exact same URL after
+                            // a tiny backoff. A second error is allowed through.
+                            if (event) {
+                                event.preventDefault?.();
+                                event.stopImmediatePropagation?.();
+                            }
+                            setTimeout(armAttempt, TRANSIENT_RETRY_DELAY_MS);
+                            return;
+                        }
+                        done();
+                    };
+                    const cleanup = () => {
+                        img.removeEventListener('load', onLoad, true);
+                        img.removeEventListener('error', onError, true);
+                    };
+
+                    // Capture phase lets the scheduler suppress only the first
+                    // transient error before existing onerror/load listeners
+                    // see it. The retry bypasses our overridden setter so it
+                    // does not create a second queue job or consume another
+                    // concurrency slot.
+                    img.addEventListener('load', onLoad, {once:true, capture:true});
+                    img.addEventListener('error', onError, {once:true, capture:true});
+                    nativeSrc.set.call(img, targetSrc);
+                };
+
+                armAttempt();
             });
         },
     });
@@ -252,6 +317,8 @@
     window.__assetLoadScheduler = {
         creatorMaxConcurrent: CREATOR_MAX_CONCURRENT,
         gameMaxConcurrent: GAME_MAX_CONCURRENT,
+        gameplayWarmupGraceMs: GAMEPLAY_WARMUP_GRACE_MS,
+        transientRetryDelayMs: TRANSIENT_RETRY_DELAY_MS,
         suppressed: [...SUPPRESSED],
         legacyRedirectCount: LEGACY_ASSET_REDIRECTS.size,
         canonicalPathFor(path) { return LEGACY_ASSET_REDIRECTS.get(normalise(path)) || normalise(path); },
