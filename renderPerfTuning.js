@@ -75,11 +75,13 @@
     // Sparse persistent wilderness incidents: discoveries can become stories
     // and consequences without filling the map with permanent quest markers.
     // Order matters: consequences wrap the base incident API, faction beliefs
-    // refine choices, then the living-world layer creates people/reports from
-    // what actually happened without granting factions omniscient knowledge.
+    // refine choices, skill solutions add party-competence routes, then the
+    // living-world layer creates people/reports from what actually happened
+    // without granting factions omniscient knowledge.
     load('script[data-wilderness-incidents]', 'wildernessIncidents.js', 'wildernessIncidents');
     load('script[data-wilderness-consequences]', 'wildernessConsequences.js', 'wildernessConsequences');
     load('script[data-wilderness-faction-beliefs]', 'wildernessFactionBeliefs.js', 'wildernessFactionBeliefs');
+    load('script[data-wilderness-skill-solutions]', 'wildernessSkillSolutions.js', 'wildernessSkillSolutions');
     load('script[data-wilderness-living-world]', 'wildernessLivingWorld.js', 'wildernessLivingWorld');
 
     load('script[data-silverhart-capital-rebuild]', 'silverhartCapitalRebuild.js', 'silverhartCapitalRebuild');
@@ -119,12 +121,10 @@
         if (typeof original !== 'function' || original.__wideZoomBounds) return false;
 
         const boundsByFriendlies = new WeakMap();
-
         function boundsFor(friendlies) {
             if (!friendlies || typeof friendlies !== 'object') return null;
             const cached = boundsByFriendlies.get(friendlies);
             if (cached) return cached;
-
             let minQ = Infinity, maxQ = -Infinity, minR = Infinity, maxR = -Infinity;
             for (const f of friendlies) {
                 if (!f || !f.alive || !f.hex) continue;
@@ -147,9 +147,7 @@
             const friendlies = friendliesOverride || window.entities.filter(e => e.alive && e.side === 'player');
             const b = boundsFor(friendlies);
             if (!b) return false;
-            if (targetHex.q < b.minQ || targetHex.q > b.maxQ || targetHex.r < b.minR || targetHex.r > b.maxR) {
-                return false;
-            }
+            if (targetHex.q < b.minQ || targetHex.q > b.maxQ || targetHex.r < b.minR || targetHex.r > b.maxR) return false;
             return original(targetHex, friendlies);
         };
         fast.__wideZoomBounds = true;
