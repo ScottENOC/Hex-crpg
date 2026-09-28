@@ -149,6 +149,18 @@ setInterval(() => {
     document.head.appendChild(script);
 })();
 
+// Living-world quest behaviour is similarly loaded from this guaranteed NPC
+// bootstrap point so cached HTML builds pick it up without another index.html
+// cache-bust. The module waits for Campaign 2/world globals before acting.
+(() => {
+    if (document.querySelector('script[data-proactive-quest-givers]')) return;
+    const script = document.createElement('script');
+    script.src = `proactiveQuestGivers.js?build=20260928-proactive-quests-v1`;
+    script.async = false;
+    script.dataset.proactiveQuestGivers = 'true';
+    document.head.appendChild(script);
+})();
+
 window.DIRECTIONAL_NPC_ART = DIRECTIONAL_NPC_ART;
 window.ensureDirectionalNpcImages = ensureDirectionalNpcImages;
 window.syncDirectionalNpcArt = syncDirectionalNpcArt;
