@@ -33,7 +33,7 @@ function initializePlayer(race, cls, gender, campaign = "3", voice = "pc_1") {
       };
       Object.entries(paths).forEach(([view, path]) => {
         const image = averageAssets[view];
-        if (image && typeof image.src === 'string') image.src = `${path}?build=20260928-female-average-refresh-1`;
+        if (image && typeof image.src === 'string') image.src = `${path}?build=20260928-female-average-refresh-2`;
       });
     }
   }
@@ -207,7 +207,7 @@ if (!document.querySelector('script[data-northwatch-siege-spawn]')) {
 // before inventory UI setup finishes.
 if (!document.querySelector('script[data-layered-clothing]')) {
   const clothingScript = document.createElement('script');
-  clothingScript.src = 'clothingSystem.js?build=20260928-clothing-v3';
+  clothingScript.src = 'clothingSystem.js?build=20260928-clothing-v6';
   clothingScript.dataset.layeredClothing = 'true';
   clothingScript.async = false;
   document.head.appendChild(clothingScript);
