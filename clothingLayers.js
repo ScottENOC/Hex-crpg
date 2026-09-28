@@ -1,7 +1,7 @@
 // Explicit garment layers: one authored image per colourable part.
 (() => {
   'use strict';
-  const BUILD='20260928-clothing-layers-v12';
+  const BUILD='20260929-clothing-layers-v13';
   const slots=['underwear','bra','pants','shirt'];
   const preloadSlots=['shirt','pants','bra','underwear'];
   const labels={underwear:'Underwear',bra:'Bra',pants:'Pants',shirt:'Shirt / Dress'};
@@ -235,15 +235,17 @@
     return null;
   }
 
-  function drawFittedGarment(ctx,source,trim,target,bounds,slot,entity){
+  function drawFittedGarment(ctx,source,trim,target,bounds,slot,entity,itemId){
     if(!trim?.w||!trim?.h)return false;
     const targetX=bounds.left+target.x*bounds.width,targetY=bounds.top+target.y*bounds.height;
     const targetW=target.w*bounds.width,targetH=target.h*bounds.height;
     const scale=Math.min(targetW/trim.w,targetH/trim.h);
     let dw=trim.w*scale,dh=trim.h*scale,dx=targetX+(targetW-dw)/2;
-    // Tops sit on the waist seam, pants begin at it; compact undergarments are
-    // centred in their torso/pelvis envelopes so source padding cannot make them huge.
-    let dy=slot==='shirt'?targetY+(targetH-dh):(slot==='pants'?targetY:targetY+(targetH-dh)/2);
+    // Ordinary tops remain bottom-aligned to the waist seam. A dress occupies a
+    // taller envelope, so bottom-aligning it makes the neckline hang too low;
+    // top-align the dress to the same authored top edge as shirts/armour instead.
+    const topAlignedDress=slot==='shirt'&&itemId==='top_dress';
+    let dy=topAlignedDress?targetY:(slot==='shirt'?targetY+(targetH-dh):(slot==='pants'?targetY:targetY+(targetH-dh)/2));
     if(slot==='underwear'){
       const briefsRise=dh/3,oldWidth=dw;
       dw*=1.10;
@@ -267,7 +269,7 @@
       const src=sourceForLayer(l,v),img=load(src);if(!img?.complete||!img.naturalWidth)continue;
       const rendered=l.tint?tint(img,colour(e,itemId,l),l):img,target=clothingTarget(slot,itemId,v);
       const trim=l.sourceTone?toneBounds(img):opaqueBounds(img);
-      if(target) drew=drawFittedGarment(ctx,rendered,trim,target,bounds,slot,e)||drew;
+      if(target) drew=drawFittedGarment(ctx,rendered,trim,target,bounds,slot,e,itemId)||drew;
       else {ctx.drawImage(rendered,bounds.left,bounds.top,bounds.width,bounds.height);drew=true;}
     }
     return drew;
