@@ -39,9 +39,6 @@
         if (!entity?.alive || entity.side !== 'neutral' || !entity.isNPC || entity.rider) return false;
         if (entity.__socialInitialFacingApplied) return false;
         entity.__socialInitialFacingApplied = true;
-
-        // Travellers keep the facing implied by their movement. Stationary NPCs
-        // get a deterministic direction so they do not all default to 'down'.
         if (!entity.destination) {
             const seed = entity.generatedCivilianSeed || entity.id || `${entity.name}|${entity.hex?.q},${entity.hex?.r}`;
             entity.facing = FACINGS[hash(seed) % FACINGS.length];
@@ -57,14 +54,9 @@
     function applyLatestConversationFacing() {
         const convo = window.lastAmbientChatter;
         if (!convo?.pair || convo.pair.length < 2) return false;
-
-        // lastAmbientChatter is replaced for every exchange. Track the object
-        // identity as well as its content so repeated lines by the same pair can
-        // still trigger a fresh turn toward one another later.
         const marker = convo;
         if (marker === window.__lastSocialFacingConversation) return false;
         window.__lastSocialFacingConversation = marker;
-
         const entities = window.entities || [];
         const a = entities.find(e => e?.alive && e.name === convo.pair[0]);
         const b = entities.find(e => e?.alive && e.name === convo.pair[1] && e !== a);
@@ -91,4 +83,15 @@
 
     window.__npcSocialFacingTimer = setInterval(pulse, PULSE_MS);
     pulse();
+
+    // Low-cost environmental-detail extension. It does no per-frame work;
+    // this simply loads the authored roadside sites once alongside the other
+    // living-world presentation modules.
+    if (!document.querySelector('script[data-roadside-world-texture-v2]')) {
+        const script = document.createElement('script');
+        script.src = `roadsideWorldTextureV2.js?build=${encodeURIComponent(window.PRESENTATION_BUILD || 'npc-routines-v1')}`;
+        script.dataset.roadsideWorldTextureV2 = 'true';
+        script.async = false;
+        document.head.appendChild(script);
+    }
 })();
