@@ -23,6 +23,7 @@ jobs:
           node --check ui.js
       - run: |
           if [ -f package-lock.json ]; then npm ci; else npm install; fi
+          npx playwright install chromium
           npx playwright test tests/human-female-direct-render.spec.js
       - run: |
           git config user.name github-actions[bot]
