@@ -58,3 +58,12 @@ const classData = {
 // Expose globals for other scripts
 window.raceData = raceData;
 window.classData = classData;
+
+// Humanoid NPC progression is loaded early but defers its wrappers until
+// DOMContentLoaded, after skills/monsters/npcBuilder have been defined. Loading
+// from data.js keeps the branch-compatible index.html script list stable while
+// giving this module its own iOS-safe cache token.
+if (!window.__npcProgressionModuleLoaded) {
+    window.__npcProgressionModuleLoaded = true;
+    document.write('<script src="npcProgression.js?build=20260929-pc-style-npcs-v1"><\/script>');
+}
