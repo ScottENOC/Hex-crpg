@@ -1,7 +1,7 @@
 // Explicit garment layers: one authored image per colourable part.
 (() => {
   'use strict';
-  const BUILD='20260928-clothing-layers-v11';
+  const BUILD='20260928-clothing-layers-v12';
   const slots=['underwear','bra','pants','shirt'];
   const preloadSlots=['shirt','pants','bra','underwear'];
   const labels={underwear:'Underwear',bra:'Bra',pants:'Pants',shirt:'Shirt / Dress'};
@@ -43,12 +43,22 @@
     pants_hose:singleLayer('pants','images/equipment/clothing/pants_hose.png','Hose'),
     pants_trousers:singleLayer('pants','images/equipment/clothing/pants_trousers.png','Trousers'),
     underwear_briefs:twoToneGarment('underwear',{
-      front:'images/equipment/clothing/briefs_female_front.jpg',
-      back:'images/equipment/clothing/briefs_female_back.jpg',
+      front:'images/equipment/clothing/briefs_female_front.png',
+      back:'images/equipment/clothing/briefs_female_back.png',
+    },'Main','Trim'),
+    underwear_briefs_gstring:twoToneGarment('underwear',{
+      front:'images/equipment/clothing/briefs_gstring_front.png',
+      side:'images/equipment/clothing/briefs_gstring_side.png',
+      back:'images/equipment/clothing/briefs_gstring_back.png',
     },'Main','Trim'),
     underwear_bra:twoToneGarment('bra',{
-      front:'images/equipment/clothing/bra_front.jpg',
-      back:'images/equipment/clothing/bra_back.jpg',
+      front:'images/equipment/clothing/bra_front.png',
+      back:'images/equipment/clothing/bra_back.png',
+    },'Main','Trim'),
+    underwear_bra_strapless:twoToneGarment('bra',{
+      front:'images/equipment/clothing/bra_strapless_front.png',
+      side:'images/equipment/clothing/bra_strapless_side.png',
+      back:'images/equipment/clothing/bra_strapless_back.png',
     },'Main','Trim'),
   };
   const TOPS=['top_blouse','top_dress','top_shirt','top_tunic'];
@@ -86,7 +96,8 @@
   function registerBuiltinItems(){
     if(!window.items) return false;
     const names={top_blouse:'Blouse',top_dress:'Dress',top_shirt:'Shirt',top_tunic:'Tunic',pants_baggy_wraps:'Baggy Wraps',
-      pants_breeches:'Breeches',pants_hose:'Hose',pants_trousers:'Trousers',underwear_briefs:'Briefs',underwear_bra:'Bra'};
+      pants_breeches:'Breeches',pants_hose:'Hose',pants_trousers:'Trousers',underwear_briefs:'Briefs',
+      underwear_briefs_gstring:'G-string',underwear_bra:'Bra',underwear_bra_strapless:'Strapless Bra'};
     for(const [id,g] of Object.entries(GARMENTS)) if(!window.items[id]) window.items[id]={name:names[id]||id,type:'clothes',clothingSlot:g.slot};
     return true;
   }
