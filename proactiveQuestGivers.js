@@ -8,7 +8,11 @@
     'use strict';
 
     const TICK_MS = 350;
-    const PUBLIC_LINGER_MS = 5000;
+    // If the giver cannot already see the player, allow time for word to move
+    // through a settlement before they know the adventurer is around. This is
+    // intentionally real-time rather than world-time: it measures the player
+    // actually hanging around town, not sleeping/fast-forwarding for an hour.
+    const PUBLIC_LINGER_MS = 60 * 1000;
     const APPROACH_RADIUS = 32;
     const APPROACH_STOP_DISTANCE = 2;
     const APPROACH_COOLDOWN_MS = 5 * 60 * 1000;
@@ -22,8 +26,6 @@
     const dialogueQuestCache = new Map();
     let activeApproacherId = null;
     let publicSince = 0;
-    let stationarySince = 0;
-    let lastPlayerHexKey = null;
     let lastTickAt = 0;
 
     function nowMs() {
@@ -152,6 +154,20 @@
         // where locals plausibly hear that the adventurer is hanging around.
         if (terrain === 'Cave Floor') return false;
         return true;
+    }
+
+    // Use the game's real party visibility calculation rather than a separate
+    // distance threshold. If a quest giver is already visible to the player,
+    // no rumour delay is needed: they can recognise the adventurer directly.
+    function canPlayerSeeNpc(npc) {
+        if (!npc?.hex) return false;
+        if (typeof window.isVisibleToPlayer === 'function') {
+            return !!window.isVisibleToPlayer(npc.hex);
+        }
+        const player = leader();
+        if (!player?.hex) return false;
+        const inFallbackRange = distance(player.hex, npc.hex) <= 8;
+        return inFallbackRange && (typeof window.hasLineOfSight !== 'function' || window.hasLineOfSight(player.hex, npc.hex));
     }
 
     function anyBlockingModalOpen() {
@@ -344,40 +360,41 @@
         const isPublic = isPublicPlayerLocation(player);
         if (!isPublic) {
             publicSince = 0;
-            stationarySince = 0;
-            lastPlayerHexKey = null;
             return false;
         }
         if (!publicSince) publicSince = now;
-
-        const key = hexKey(player.hex);
-        if (key !== lastPlayerHexKey || player.destination) {
-            lastPlayerHexKey = key;
-            stationarySince = now;
-        } else if (!stationarySince) {
-            stationarySince = now;
-        }
-        return now - publicSince >= PUBLIC_LINGER_MS && now - stationarySince >= PUBLIC_LINGER_MS;
+        // Walking around the settlement still counts. The point is to model
+        // time for locals to notice and pass word, not to require the player
+        // to stand motionless on one exact hex for a full minute.
+        return now - publicSince >= PUBLIC_LINGER_MS;
     }
 
     function eligibleQuestNpcs(player) {
         return (window.entities || []).filter(npc => isQuestNpc(npc) && npc !== player && npc.hex);
     }
 
-    function chooseApproacher(candidates, player, now) {
+    function chooseApproacher(candidates, player, now, rumourReady = false) {
+        if (!isPublicPlayerLocation(player)) return null;
         return candidates
             .filter(npc => {
                 const state = stateFor(npc);
                 const d = distance(npc.hex, player.hex);
+                const visibleNow = canPlayerSeeNpc(npc);
                 return state.mode === 'idle'
                     && now >= state.cooldownUntil
                     && d > APPROACH_STOP_DISTANCE
                     && d <= APPROACH_RADIUS
+                    && (visibleNow || rumourReady)
                     && knowsPlayerAsHelper(npc)
                     && hasUnseenQuestContent(npc)
                     && !expectsPlayerHarm(npc);
             })
-            .sort((a, b) => distance(a.hex, player.hex) - distance(b.hex, player.hex))[0] || null;
+            // If the minute has elapsed at the same moment a giver is already
+            // in sight, the visible person gets first chance to react.
+            .sort((a, b) => {
+                const visibleDelta = Number(canPlayerSeeNpc(b)) - Number(canPlayerSeeNpc(a));
+                return visibleDelta || distance(a.hex, player.hex) - distance(b.hex, player.hex);
+            })[0] || null;
     }
 
     function tick() {
@@ -389,6 +406,7 @@
         if (!player?.hex) return;
 
         const candidates = eligibleQuestNpcs(player);
+        const rumourReady = updatePublicLinger(player, now);
 
         // Fear wins over every social behaviour. It is deliberately local:
         // bad reputation does not teleport an NPC out of town; they react once
@@ -420,11 +438,16 @@
             }
         }
 
-        if (activeApproacherId === null && updatePublicLinger(player, now) && !anyBlockingModalOpen()) {
-            const npc = chooseApproacher(candidates, player, now);
-            if (npc) beginApproach(npc, player, stateFor(npc));
-        } else if (!isPublicPlayerLocation(player)) {
-            updatePublicLinger(player, now);
+        if (activeApproacherId === null && !anyBlockingModalOpen()) {
+            const npc = chooseApproacher(candidates, player, now, rumourReady);
+            if (npc) {
+                const wasVisible = canPlayerSeeNpc(npc);
+                beginApproach(npc, player, stateFor(npc));
+                // A rumour-driven approach represents someone successfully
+                // hearing that the player is around. Restart the rumour clock
+                // so the whole town does not form an immediate quest queue.
+                if (!wasVisible && rumourReady) publicSince = now;
+            }
         }
     }
 
@@ -433,8 +456,6 @@
         dialogueQuestCache.clear();
         activeApproacherId = null;
         publicSince = 0;
-        stationarySince = 0;
-        lastPlayerHexKey = null;
     }
 
     window.ProactiveQuestGivers = {
@@ -446,9 +467,11 @@
         dialogueQuestInfo,
         hasUnseenQuestContent,
         isPublicPlayerLocation,
+        canPlayerSeeNpc,
         fleeHex,
         approachHex,
         stateFor,
+        chooseApproacher,
         constants: {
             PUBLIC_LINGER_MS,
             APPROACH_RADIUS,
