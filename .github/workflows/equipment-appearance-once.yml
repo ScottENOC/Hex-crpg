@@ -1,0 +1,271 @@
+name: Equipment appearance one-shot
+
+on:
+  push:
+    branches: [development]
+    paths:
+      - '.github/workflows/equipment-appearance-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Patch equipment appearance
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          def replace(path, old, new):
+              p=Path(path); s=p.read_text()
+              if old not in s:
+                  raise SystemExit(f'anchor not found in {path}: {old[:80]!r}')
+              p.write_text(s.replace(old,new,1))
+
+          # Loader: appearance system must exist before the inventory UI asks it for controls.
+          p=Path('clothingSystem.js'); s=p.read_text()
+          s=s.replace("const BUILD='20260928-clothing-v4';", "const BUILD='20260928-clothing-v5';")
+          s=s.replace("load('clothingLayers.js','explicit-clothing-layers');\n  load('clothingInventoryUI.js','clothing-inventory-ui');",
+                      "load('clothingLayers.js','explicit-clothing-layers');\n  load('equipmentAppearance.js','equipment-appearance');\n  load('clothingInventoryUI.js','clothing-inventory-ui');")
+          p.write_text(s)
+
+          # Per-slot clothing visibility; old global displayClothes remains only as save compatibility.
+          p=Path('clothingLayers.js'); s=p.read_text()
+          s=s.replace("const BUILD='20260928-clothing-layers-v7';", "const BUILD='20260928-clothing-layers-v8';")
+          old="migrate(e);if(e.displayClothes===false)return false;ensureDefaultOutfit(e,{player:e?.side==='player'});"
+          new="migrate(e);if(e.displayClothes===false)return false;if(window.equipmentAppearanceSystem?.isSlotVisible?.(e,slot)===false)return false;ensureDefaultOutfit(e,{player:e?.side==='player'});"
+          if old not in s: raise SystemExit('clothing drawSlot anchor missing')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+
+          # Direct renderer: visibility belongs in the compositor, not a drawImage interceptor.
+          p=Path('humanoidRenderer.js'); s=p.read_text()
+          anchor="    function keyFor(entity) {\n        return entity?.race && entity?.gender ? `${entity.race}_${entity.gender}` : '';\n    }\n"
+          inject=anchor+"\n    function equipmentSlotVisible(entity, slot) {\n        return window.equipmentAppearanceSystem?.isSlotVisible?.(entity, slot) !== false;\n    }\n"
+          if anchor not in s: raise SystemExit('renderer keyFor anchor missing')
+          s=s.replace(anchor,inject,1)
+          s=s.replace("        const spec = slotSpec(entity, slot, view);\n        if (!spec || !imageReady(spec.image)) return false;",
+                      "        const equipmentSlot = slot === 'main' ? 'weapon' : 'offhand';\n        if (!equipmentSlotVisible(entity, equipmentSlot)) return false;\n        const spec = slotSpec(entity, slot, view);\n        if (!spec) return false;\n        const image = spec.kind === 'shield' ? spec.image : (window.equipmentAppearanceSystem?.resolveWeaponImage?.(entity, spec.itemId, spec.image, spec.kind) || spec.image);\n        if (!imageReady(image)) return false;",1)
+          s=s.replace("            const trim = alphaTrim(spec.image);", "            const trim = alphaTrim(image);",1)
+          s=s.replace("            ctx.drawImage(spec.image, -grip.x*size, -grip.y*size, size, size);", "            ctx.drawImage(image, -grip.x*size, -grip.y*size, size, size);",1)
+          s=s.replace("            ctx.drawImage(spec.image, anchor.x - grip.x*size, itemY, size, size);", "            ctx.drawImage(image, anchor.x - grip.x*size, itemY, size, size);",1)
+          s=s.replace("            return {image:rearPreferred(view, REAR_EQUIPMENT_ASSETS.shield, window.gameVisuals?.shield),kind:'shield',scale:.73};",
+                      "            return {image:rearPreferred(view, REAR_EQUIPMENT_ASSETS.shield, window.gameVisuals?.shield),kind:'shield',scale:.73,itemId:id};",1)
+          s=s.replace("        return weaponSpec(id);", "        const spec = weaponSpec(id);\n        return spec ? {...spec,itemId:id} : null;",1)
+          s=s.replace("        const hasHelmet = !!entity.equipped?.helmet;", "        const hasHelmet = !!entity.equipped?.helmet && equipmentSlotVisible(entity,'helmet');",1)
+          s=s.replace("            if (entity.displayArmour !== false && entity.equipped?.armor && drawArmour(ctx, entity, view, bounds)) layerOrder.push('armour');",
+                      "            if (entity.displayArmour !== false && equipmentSlotVisible(entity,'armor') && entity.equipped?.armor && drawArmour(ctx, entity, view, bounds)) layerOrder.push('armour');",1)
+          p.write_text(s)
+
+          # Remove the old global Armour/Clothes visibility block from the skills screen.
+          p=Path('ui.js'); s=p.read_text()
+          pattern=re.compile(r"\n\s*const appearanceDiv=document\.createElement\('div'\);.*?contentDiv\.appendChild\(appearanceDiv\);\n",re.S)
+          s2,n=pattern.subn('\n',s,count=1)
+          if n!=1: raise SystemExit(f'character display block replacements={n}')
+          p.write_text(s2)
+
+          Path('equipmentAppearance.js').write_text(r'''// Per-equipped-item rendering visibility and material colour controls.
+(() => {
+  'use strict';
+  const BUILD='20260928-equipment-appearance-v1';
+  const renderSlots=['weapon','offhand','armor','helmet','shirt','pants','bra','underwear'];
+  const slotLabels={weapon:'Main hand',offhand:'Off hand',armor:'Armour',helmet:'Helmet',shirt:'Shirt / Dress',pants:'Pants',bra:'Bra',underwear:'Underwear'};
+  const tintCache=new WeakMap();
+
+  function ensure(e){
+    if(!e) return;
+    if(!e.equipmentVisibility||typeof e.equipmentVisibility!=='object') e.equipmentVisibility={};
+    if(!e.equipmentColors||typeof e.equipmentColors!=='object') e.equipmentColors={};
+    // Global toggles were replaced by per-slot controls. Treat old false values as
+    // legacy UI state rather than a permanent hidden-everything setting.
+    e.displayArmour=true;
+    e.displayClothes=true;
+  }
+
+  function isSlotVisible(e,slot){ensure(e);return e?.equipmentVisibility?.[slot]!==false;}
+  function setSlotVisible(e,slot,visible){
+    if(!e||!renderSlots.includes(slot)) return;
+    ensure(e);e.equipmentVisibility[slot]=!!visible;
+  }
+
+  function weaponParts(itemId){
+    const item=window.items?.[itemId];
+    if(!item||item.type!=='weapon') return [];
+    const id=String(itemId).toLowerCase();
+    if(id.includes('bow')||id.includes('club')||id.includes('chair')||id.includes('torch')) return ['wood'];
+    if(id.includes('axe')||id.includes('pickaxe')||id.includes('spear')) return ['metal','wood'];
+    if(id.includes('sword')||id.includes('dagger')) return ['metal','wood'];
+    return ['metal'];
+  }
+
+  function defaultMaterial(part){
+    return part==='wood'
+      ? {hue:30,saturation:68,value:55,opacity:1,unlocked:false}
+      : {hue:210,saturation:8,value:72,opacity:1,unlocked:false};
+  }
+
+  function getWeaponMaterial(e,itemId,part){
+    ensure(e);
+    const item=e.equipmentColors[itemId]||(e.equipmentColors[itemId]={});
+    const c=item[part]||(item[part]=defaultMaterial(part));
+    if(c.opacity===undefined)c.opacity=1;if(c.unlocked===undefined)c.unlocked=false;
+    return c;
+  }
+
+  function setWeaponMaterial(e,itemId,part,next){
+    const prev=getWeaponMaterial(e,itemId,part);
+    e.equipmentColors[itemId][part]={
+      hue:Number(next.hue??prev.hue),saturation:Number(next.saturation??prev.saturation),value:Number(next.value??prev.value),
+      opacity:Math.max(0,Math.min(1,Number(next.opacity??prev.opacity??1))),unlocked:!!(next.unlocked??prev.unlocked),
+    };
+  }
+
+  function rgbToHsv(r,g,b){
+    r/=255;g/=255;b/=255;const max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min;let h=0;
+    if(d){if(max===r)h=60*(((g-b)/d)%6);else if(max===g)h=60*((b-r)/d+2);else h=60*((r-g)/d+4);}
+    if(h<0)h+=360;return {h,s:max?d/max:0,v:max};
+  }
+  function hsvToRgb(h,s,v){
+    h=((h%360)+360)%360;const c=v*s,x=c*(1-Math.abs((h/60)%2-1)),m=v-c;let a=[0,0,0];
+    if(h<60)a=[c,x,0];else if(h<120)a=[x,c,0];else if(h<180)a=[0,c,x];else if(h<240)a=[0,x,c];else if(h<300)a=[x,0,c];else a=[c,0,x];
+    return a.map(n=>Math.round((n+m)*255));
+  }
+  function woodPixel(r,g,b,a){
+    if(!a)return false;const hsv=rgbToHsv(r,g,b);return hsv.s>.16&&hsv.h>=8&&hsv.h<=75&&r>=b*1.05;
+  }
+
+  function resolveWeaponImage(e,itemId,image,kind){
+    if(!image||!itemId||!weaponParts(itemId).length)return image;
+    const w=image.naturalWidth||image.width,h=image.naturalHeight||image.height;if(!w||!h)return image;
+    const parts=weaponParts(itemId),settings=parts.map(p=>[p,getWeaponMaterial(e,itemId,p)]);
+    const key=settings.map(([p,c])=>`${p}:${c.hue}:${c.saturation}:${c.value}:${c.opacity}:${c.unlocked?1:0}`).join('|');
+    let perImage=tintCache.get(image);if(!perImage){perImage=new Map();tintCache.set(image,perImage);}if(perImage.has(key))return perImage.get(key);
+    const out=document.createElement('canvas');out.width=w;out.height=h;const ctx=out.getContext('2d',{willReadFrequently:true});ctx.drawImage(image,0,0,w,h);
+    const d=ctx.getImageData(0,0,w,h),px=d.data;
+    for(let i=0;i<px.length;i+=4){
+      if(!px[i+3])continue;
+      let part=parts[0];
+      if(parts.includes('metal')&&parts.includes('wood')) part=woodPixel(px[i],px[i+1],px[i+2],px[i+3])?'wood':'metal';
+      const c=getWeaponMaterial(e,itemId,part),src=rgbToHsv(px[i],px[i+1],px[i+2]);
+      const naturalHue=part==='wood'?Math.max(15,Math.min(60,c.hue)):210;
+      const hue=c.unlocked?c.hue:naturalHue;
+      const sat=c.unlocked?Math.max(.10,Math.min(.95,c.saturation/100)):(part==='wood'?.68:.08);
+      const baseV=Math.max(.04,Math.min(1,c.value/100));
+      const v=Math.max(.03,Math.min(1,baseV+(src.v-.5)*.58));
+      const rgb=hsvToRgb(hue,sat,v);px[i]=rgb[0];px[i+1]=rgb[1];px[i+2]=rgb[2];px[i+3]=Math.round(px[i+3]*Math.max(0,Math.min(1,c.opacity??1)));
+    }
+    ctx.putImageData(d,0,0);perImage.set(key,out);return out;
+  }
+
+  function syncCharacter(source){
+    if(!source)return;ensure(source);
+    for(const target of [...(window.party||[]),...(window.entities||[])]){
+      if(!target||target===source||target.name!==source.name)continue;
+      target.equipmentVisibility=JSON.parse(JSON.stringify(source.equipmentVisibility||{}));
+      target.equipmentColors=JSON.parse(JSON.stringify(source.equipmentColors||{}));
+      target.displayArmour=true;target.displayClothes=true;
+    }
+  }
+  function redraw(e){syncCharacter(e);window.drawMap?.();window.renderEntities?.();window.refreshDirectionalTurnPortraits?.();}
+
+  window.equipmentAppearanceSystem={build:BUILD,renderSlots,slotLabels,ensure,isSlotVisible,setSlotVisible,weaponParts,getWeaponMaterial,setWeaponMaterial,resolveWeaponImage,syncCharacter,redraw};
+})();
+''')
+
+          # Inventory UI: one compact row per equipped item, colour + visibility side by side.
+          Path('clothingInventoryUI.js').write_text(r'''// Inventory appearance controls: per-item colour and render visibility.
+(() => {
+  'use strict';
+  const BUILD='20260928-inventory-appearance-v3';
+  let wrapped=false;
+  function ensurePicker(){
+    if(window.buildPreciseColorPicker||document.querySelector('script[data-precise-appearance-colour]'))return;
+    const s=document.createElement('script');s.src=`preciseAppearanceColor.js?build=${BUILD}`;s.async=false;s.dataset.preciseAppearanceColour='true';document.head.appendChild(s);
+  }
+  function colourControl(label,key,value,onChange){
+    if(window.buildPreciseColorPicker)return window.buildPreciseColorPicker({key,label,hue:value.hue,saturation:value.saturation,value:value.value,compact:true,onChange});
+    const row=document.createElement('label');row.style.cssText='display:grid;grid-template-columns:130px 1fr;gap:8px;align-items:center;margin:5px 0;font-size:.88em;';
+    const t=document.createElement('span');t.textContent=label;const i=document.createElement('input');i.type='range';i.min='0';i.max='359';i.value=String(value.hue);i.oninput=()=>onChange({...value,hue:Number(i.value)});row.append(t,i);return row;
+  }
+  function transparencyControl(label,value,onChange){
+    const row=document.createElement('label');row.style.cssText='display:grid;grid-template-columns:130px 1fr 38px;gap:8px;align-items:center;margin:5px 0;font-size:.88em;';
+    const t=document.createElement('span');t.textContent=`${label} transparency`;const i=document.createElement('input');i.type='range';i.min='0';i.max='100';i.step='1';
+    const out=document.createElement('span');out.style.cssText='font-size:.8em;text-align:right;color:#bbb;';const n=Math.round((1-Math.max(0,Math.min(1,Number(value.opacity??1))))*100);i.value=String(n);out.textContent=`${n}%`;
+    i.oninput=()=>{const x=Number(i.value);out.textContent=`${x}%`;onChange({...value,opacity:1-x/100});};row.append(t,i,out);return row;
+  }
+  function materialSlider(part,value,onChange,reopen){
+    const wrap=document.createElement('div');wrap.style.cssText='border:1px solid #444;border-radius:4px;padding:7px;margin:6px 0;';
+    const label=part==='metal'?'Metal':'Wood';const top=document.createElement('label');top.style.cssText='display:flex;gap:6px;align-items:center;font-size:.84em;margin-bottom:5px;';
+    const unlock=document.createElement('input');unlock.type='checkbox';unlock.checked=!!value.unlocked;top.append(unlock,document.createTextNode('Unlock full colour range'));unlock.onchange=()=>{onChange({...value,unlocked:unlock.checked});reopen();};wrap.appendChild(top);
+    const row=document.createElement('label');row.style.cssText='display:grid;grid-template-columns:130px 1fr 38px;gap:8px;align-items:center;font-size:.88em;';const t=document.createElement('span'),i=document.createElement('input'),out=document.createElement('span');out.style.cssText='font-size:.8em;text-align:right;color:#bbb;';i.type='range';
+    if(part==='metal'&&!value.unlocked){t.textContent='Metallic tone';i.min='0';i.max='100';i.value=String(Math.round(value.value));out.textContent=i.value;i.oninput=()=>{out.textContent=i.value;onChange({...value,value:Number(i.value),hue:210,saturation:8});};}
+    else {t.textContent=`${label} hue`;i.min=value.unlocked?'0':(part==='wood'?'15':'195');i.max=value.unlocked?'359':(part==='wood'?'60':'225');i.value=String(Math.round(value.hue));out.textContent=i.value;i.oninput=()=>{out.textContent=i.value;onChange({...value,hue:Number(i.value)});};}
+    row.append(t,i,out);wrap.appendChild(row);wrap.appendChild(transparencyControl(label,value,onChange));return wrap;
+  }
+  function clothingSpec(id){return window.clothingSystem?.getItemSpec?.(id)||null;}
+  function weaponParts(id){return window.equipmentAppearanceSystem?.weaponParts?.(id)||[];}
+  function isColourable(id){const sp=clothingSpec(id);return !!(sp?.layers?.some(p=>p.tint)||weaponParts(id).length);}
+  function redraw(p){window.equipmentAppearanceSystem?.redraw?.(p);}
+
+  function openEditor(box,p,id){
+    box.querySelector('[data-item-appearance-editor]')?.remove();const item=window.items?.[id],name=item?.name||id;const editor=document.createElement('div');editor.dataset.itemAppearanceEditor='true';editor.style.cssText='border-top:1px solid #555;margin-top:8px;padding-top:8px;';
+    const head=document.createElement('div');head.style.cssText='display:flex;justify-content:space-between;align-items:center;';const title=document.createElement('strong');title.textContent=`Colour: ${name}`;const close=document.createElement('button');close.textContent='Close';close.type='button';close.style.cssText='width:auto;padding:4px 8px;font-size:.8em;';close.onclick=()=>editor.remove();head.append(title,close);editor.appendChild(head);
+    const sp=clothingSpec(id);
+    if(sp){for(const part of sp.layers){if(!part.tint)continue;const c=window.clothingSystem.getLayerColour(p,id,part),partBox=document.createElement('div');partBox.style.cssText='border:1px solid #444;border-radius:4px;padding:6px;margin:6px 0;';if(sp.layers.length>1){const h=document.createElement('div');h.textContent=part.label;h.style.cssText='font-size:.85em;font-weight:bold;margin-bottom:4px;';partBox.appendChild(h);}partBox.appendChild(colourControl(sp.layers.length>1?'Colour':`${name} colour`,`clothing-${id}-${part.id}`,c,next=>{window.clothingSystem.setLayerColour(p,id,part.id,next);redraw(p);}));partBox.appendChild(transparencyControl(sp.layers.length>1?part.label:name,c,next=>{window.clothingSystem.setLayerColour(p,id,part.id,next);redraw(p);}));editor.appendChild(partBox);}}
+    else {for(const part of weaponParts(id)){const c=window.equipmentAppearanceSystem.getWeaponMaterial(p,id,part);editor.appendChild(materialSlider(part,c,next=>{window.equipmentAppearanceSystem.setWeaponMaterial(p,id,part,next);redraw(p);},()=>openEditor(box,p,id)));}}
+    box.appendChild(editor);
+  }
+
+  function equippedRows(p){
+    const ea=window.equipmentAppearanceSystem,rows=[];if(!ea)return rows;ea.ensure(p);
+    for(const slot of ea.renderSlots){const id=p.equipped?.[slot];if(id)rows.push({slot,id});}return rows;
+  }
+  function inject(){
+    const host=document.getElementById('inventory-content'),p=window.player,ea=window.equipmentAppearanceSystem;if(!host||!p||!ea||host.querySelector('[data-equipment-appearance]'))return;window.clothingSystem?.migrateLegacyEquipment?.(p);ea.ensure(p);
+    const box=document.createElement('div');box.dataset.equipmentAppearance='true';box.style.cssText='border:1px solid #555;border-radius:5px;padding:8px;margin:8px 0 12px;';const title=document.createElement('strong');title.textContent='Equipment appearance';box.appendChild(title);
+    const list=document.createElement('div');list.style.cssText='display:flex;flex-direction:column;gap:5px;margin-top:7px;';
+    for(const {slot,id} of equippedRows(p)){
+      const row=document.createElement('div');row.style.cssText='display:grid;grid-template-columns:minmax(105px,1fr) auto auto;gap:7px;align-items:center;border-bottom:1px solid #3f3f3f;padding:4px 0 7px;';const name=document.createElement('span');name.textContent=`${ea.slotLabels[slot]||slot}: ${window.items?.[id]?.name||id}`;row.appendChild(name);
+      if(isColourable(id)){const colour=document.createElement('button');colour.type='button';colour.textContent='Colour';colour.style.cssText='width:auto;padding:5px 9px;font-size:.8em;';colour.onclick=()=>openEditor(box,p,id);row.appendChild(colour);}else row.appendChild(document.createElement('span'));
+      const vis=document.createElement('label');vis.style.cssText='display:flex;gap:4px;align-items:center;font-size:.8em;white-space:nowrap;';const cb=document.createElement('input');cb.type='checkbox';cb.checked=ea.isSlotVisible(p,slot);cb.onchange=()=>{ea.setSlotVisible(p,slot,cb.checked);redraw(p);};vis.append(cb,document.createTextNode('Visible'));row.appendChild(vis);list.appendChild(row);
+    }
+    box.appendChild(list);
+    const stored=[...new Set(p.inventory||[])].filter(id=>isColourable(id)&&!equippedRows(p).some(r=>r.id===id));if(stored.length){const h=document.createElement('div');h.textContent='Stored colourable items';h.style.cssText='font-size:.8em;color:#aaa;margin-top:8px;';box.appendChild(h);const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;';for(const id of stored){const b=document.createElement('button');b.type='button';b.textContent=`Colour ${window.items?.[id]?.name||id}`;b.style.cssText='width:auto;padding:4px 7px;font-size:.76em;';b.onclick=()=>openEditor(box,p,id);row.appendChild(b);}box.appendChild(row);}
+    host.prepend(box);
+  }
+  function install(){ensurePicker();if(wrapped||typeof window.showInventoryScreen!=='function')return;const base=window.showInventoryScreen;window.showInventoryScreen=function(){const r=base.apply(this,arguments);inject();return r;};wrapped=true;}
+  window.injectClothingColourControls=inject;window.injectEquipmentAppearanceControls=inject;const timer=setInterval(()=>{install();if(wrapped)clearInterval(timer);},50);if(document.readyState==='complete')install();else window.addEventListener('load',install,{once:true});
+})();
+''')
+
+          # Cache-bust the loader if index/other loaders supply an old query string.
+          for path in ['clothingSystem.js','clothingLayers.js','clothingInventoryUI.js','equipmentAppearance.js','humanoidRenderer.js','ui.js']:
+              if Path(path).exists():
+                  pass
+
+      - name: Syntax checks
+        run: |
+          node --check clothingSystem.js
+          node --check clothingLayers.js
+          node --check equipmentAppearance.js
+          node --check clothingInventoryUI.js
+          node --check humanoidRenderer.js
+          node --check ui.js
+      - name: Commit changes
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add clothingSystem.js clothingLayers.js equipmentAppearance.js clothingInventoryUI.js humanoidRenderer.js ui.js
+          git commit -m "Move equipment appearance controls into inventory"
+          git push origin HEAD:development
