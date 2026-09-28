@@ -253,7 +253,9 @@
     if(typeof current!=='function'||current.__preciseColourContext) return;
     const base=current;
     const wrapped=function(ctx,entity){const prev=window.__preciseAppearanceContext;window.__preciseAppearanceContext=entity;try{return base.apply(this,arguments);}finally{window.__preciseAppearanceContext=prev;}};
-    wrapped.__preciseColourContext=true; wrapped.__preciseBase=base; window.drawPlayerCharacter=wrapped;
+    wrapped.__preciseColourContext=true; wrapped.__preciseBase=base;
+    if(base.__directHumanoidCompositor) wrapped.__directHumanoidCompositor=true;
+    window.drawPlayerCharacter=wrapped;
   }
 
   function installStartSync(){
