@@ -1,4 +1,3 @@
-// npcBuilder.js
 // Builds NPCs the same way PCs are built: race + class level(s) -> attribute
 // pool -> skills purchased from that pool -> equipment. Mirrors
 // characterCreation.js's createCharacterData and the real skill-purchase
@@ -155,7 +154,7 @@ setInterval(() => {
 (() => {
     if (document.querySelector('script[data-proactive-quest-givers]')) return;
     const script = document.createElement('script');
-    script.src = `proactiveQuestGivers.js?build=20260928-proactive-quests-v1`;
+    script.src = `proactiveQuestGivers.js?build=20260928-proactive-quests-v2`;
     script.async = false;
     script.dataset.proactiveQuestGivers = 'true';
     document.head.appendChild(script);
