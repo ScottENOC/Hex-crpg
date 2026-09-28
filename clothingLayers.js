@@ -1,7 +1,7 @@
 // Explicit garment layers: one authored image per colourable part.
 (() => {
   'use strict';
-  const BUILD='20260928-clothing-layers-v7';
+  const BUILD='20260928-clothing-layers-v8';
   const slots=['underwear','bra','pants','shirt'];
   const preloadSlots=['shirt','pants','bra','underwear'];
   const labels={underwear:'Underwear',bra:'Bra',pants:'Pants',shirt:'Shirt / Dress'};
@@ -164,7 +164,7 @@
   }
 
   function drawSlot(ctx,e,slot,v,bounds){
-    migrate(e);if(e.displayClothes===false)return false;ensureDefaultOutfit(e,{player:e?.side==='player'});
+    migrate(e);if(e.displayClothes===false)return false;if(window.equipmentAppearanceSystem?.isSlotVisible?.(e,slot)===false)return false;ensureDefaultOutfit(e,{player:e?.side==='player'});
     const itemId=e?.equipped?.[slot],s=itemId&&spec(itemId);if(!s||s.slot!==slot)return false;let drew=false;
     for(const l of s.layers){const src=sourceForLayer(l,v),img=load(src);if(!img?.complete||!img.naturalWidth)continue;ctx.drawImage(l.tint?tint(img,colour(e,itemId,l),l):img,bounds.left,bounds.top,bounds.width,bounds.height);drew=true;}return drew;
   }

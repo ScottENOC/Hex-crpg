@@ -195,6 +195,10 @@
         return entity?.race && entity?.gender ? `${entity.race}_${entity.gender}` : '';
     }
 
+    function equipmentSlotVisible(entity, slot) {
+        return window.equipmentAppearanceSystem?.isSlotVisible?.(entity, slot) !== false;
+    }
+
     function usesApprovedHumanEquipmentBaseline(entity) {
         const key = keyFor(entity);
         return key === 'human_female' || key === 'human_male' || key === 'elf_female';
@@ -398,9 +402,10 @@
         if (!id) return null;
         const item = window.items?.[id];
         if (item?.type === 'shield') {
-            return {image:rearPreferred(view, REAR_EQUIPMENT_ASSETS.shield, window.gameVisuals?.shield),kind:'shield',scale:.73};
+            return {image:rearPreferred(view, REAR_EQUIPMENT_ASSETS.shield, window.gameVisuals?.shield),kind:'shield',scale:.73,itemId:id};
         }
-        return weaponSpec(id);
+        const spec = weaponSpec(id);
+        return spec ? {...spec,itemId:id} : null;
     }
 
     function anchorsFor(entity, view) {
@@ -438,8 +443,12 @@
     }
 
     function drawHeldItem(ctx, entity, view, bounds, slot, expectedLayer='any') {
+        const equipmentSlot = slot === 'main' ? 'weapon' : 'offhand';
+        if (!equipmentSlotVisible(entity, equipmentSlot)) return false;
         const spec = slotSpec(entity, slot, view);
-        if (!spec || !imageReady(spec.image)) return false;
+        if (!spec) return false;
+        const image = spec.kind === 'shield' ? spec.image : (window.equipmentAppearanceSystem?.resolveWeaponImage?.(entity, spec.itemId, spec.image, spec.kind) || spec.image);
+        if (!imageReady(image)) return false;
         if (expectedLayer === 'shield' && spec.kind !== 'shield') return false;
         if (expectedLayer === 'weapon' && spec.kind === 'shield') return false;
         const anchorName = spec.kind === 'shield' ? 'offForearm' : (slot === 'main' ? 'mainHandGrip' : 'offHandGrip');
@@ -464,7 +473,7 @@
 
         let itemY = anchor.y - grip.y*size;
         if (spec.kind === 'shield') {
-            const trim = alphaTrim(spec.image);
+            const trim = alphaTrim(image);
             const opaqueHeight = trim?.trimHeight && trim?.originalHeight
                 ? size * trim.trimHeight / trim.originalHeight
                 : size;
@@ -478,10 +487,10 @@
             ctx.save();
             ctx.translate(anchor.x, anchor.y);
             ctx.scale(-1, 1);
-            ctx.drawImage(spec.image, -grip.x*size, -grip.y*size, size, size);
+            ctx.drawImage(image, -grip.x*size, -grip.y*size, size, size);
             ctx.restore();
         } else {
-            ctx.drawImage(spec.image, anchor.x - grip.x*size, itemY, size, size);
+            ctx.drawImage(image, anchor.x - grip.x*size, itemY, size, size);
         }
         return true;
     }
@@ -579,7 +588,7 @@
         const sourceHair = set?.hair?.[entity.hairStyle || 'brown_1']?.[view] || set?.hair?.brown_1?.[view];
         const bodyImage = resolvedBodyImage(entity, sourceBody);
         const hairImage = resolvedHairImage(entity, sourceHair);
-        const hasHelmet = !!entity.equipped?.helmet;
+        const hasHelmet = !!entity.equipped?.helmet && equipmentSlotVisible(entity,'helmet');
         window.clothingSystem?.migrateLegacyEquipment?.(entity);
         const mirror = facing === 'left';
         const cx = bounds.left + bounds.width/2;
@@ -617,7 +626,7 @@
             for (const slot of ['underwear','bra','pants','shirt']) {
                 if (window.clothingSystem?.drawSlot?.(ctx, entity, slot, view, bounds)) layerOrder.push(slot);
             }
-            if (entity.displayArmour !== false && entity.equipped?.armor && drawArmour(ctx, entity, view, bounds)) layerOrder.push('armour');
+            if (entity.displayArmour !== false && equipmentSlotVisible(entity,'armor') && entity.equipped?.armor && drawArmour(ctx, entity, view, bounds)) layerOrder.push('armour');
             if (typeof window.drawFacialHairLayer === 'function' && window.drawFacialHairLayer(ctx,entity,view,bounds)) layerOrder.push('facialHair');
             if (!hasHelmet && imageReady(hairImage)) {
                 if (drawCropped(ctx, hairImage, layout.hairCrop, layout.hairDest, bounds)) layerOrder.push('hair');

@@ -2,7 +2,7 @@
 // Compatibility loader for the explicit garment-layer model.
 (() => {
   'use strict';
-  const BUILD='20260928-clothing-v4';
+  const BUILD='20260928-clothing-v5';
 
   function load(src,key){
     const attr=`data-${key}`;
@@ -20,6 +20,7 @@
   // Clothing is no longer inferred from colours baked into body sprites.
   // Each clothing part is an authored image and owns its own colour control.
   load('clothingLayers.js','explicit-clothing-layers');
+  load('equipmentAppearance.js','equipment-appearance');
   load('clothingInventoryUI.js','clothing-inventory-ui');
 
   window.applyClothingPreset=function(entity,itemId){

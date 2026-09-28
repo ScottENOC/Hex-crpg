@@ -351,13 +351,6 @@ function showCharacterScreen() {
     if (!contentDiv) return;
     contentDiv.innerHTML = '';
 
-    const appearanceDiv=document.createElement('div');
-    appearanceDiv.style.cssText='display:flex;gap:18px;align-items:center;padding:8px 10px;margin-bottom:12px;border:1px solid #555;border-radius:5px;';
-    appearanceDiv.innerHTML=`<strong>Display:</strong>
-      <label style="font-weight:normal;"><input type="checkbox" ${char.displayArmour===false?'':'checked'} onchange="window.setAppearanceLayerVisibility('armour',this.checked)"> Armour</label>
-      <label style="font-weight:normal;"><input type="checkbox" ${char.displayClothes===false?'':'checked'} onchange="window.setAppearanceLayerVisibility('clothes',this.checked)"> Clothes</label>`;
-    contentDiv.appendChild(appearanceDiv);
-
     // SHOW ALL SKILLS TOGGLE
     const toggleDiv = document.createElement('div');
     toggleDiv.style.marginBottom = '15px';
