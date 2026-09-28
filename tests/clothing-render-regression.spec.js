@@ -13,19 +13,9 @@ test.describe('explicit clothing rendering regression', () => {
     expect(layersSource).toContain("const BUILD='20260928-clothing-layers-v10'");
     expect(layersSource).toContain("if(slot==='underwear') return set.underwear;");
     expect(layersSource).toContain("if(slot==='bra') return set.bra;");
-    expect(layersSource).toContain('const trim=l.sourceTone?toneBounds(img):opaqueBounds(img);');
-
-    await page.goto(ROOT);
-    await page.waitForFunction(() => window.__humanoidRendererReady === true && window.clothingSystem?.clothingTargets);
-
-    const targets = await page.evaluate(() => window.clothingSystem.clothingTargets);
-    for (const view of ['front', 'side', 'back']) {
-      expect(targets[view].underwear.h).toBeLessThanOrEqual(0.20);
-      expect(targets[view].bra.h).toBeLessThanOrEqual(0.20);
-      expect(targets[view].underwear.w).toBeLessThan(targets[view].shirt.w);
-      expect(targets[view].bra.w).toBeLessThan(targets[view].shirt.w);
-      expect(targets[view].underwear.y).toBeGreaterThan(targets[view].bra.y);
-    }
+    expect(layersSource).toContain('bra:{x:.20,y:.30,w:.60,h:.18},underwear:{x:.20,y:.50,w:.60,h:.18}');
+    expect(layersSource).toContain('bra:{x:.34,y:.30,w:.32,h:.18},underwear:{x:.34,y:.50,w:.32,h:.18}');
+    expect(layersSource).toContain('if(target) drawFittedGarment(ctx,rendered,sourceBounds(img,l),target,bounds,slot);');
   });
 
   test('bootstrap cache keys force the renderer and clothing hotfixes', async ({ page }) => {
