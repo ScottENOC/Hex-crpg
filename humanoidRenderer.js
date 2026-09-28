@@ -229,7 +229,11 @@
             window.renderEntities?.();
             queuePortraitRefresh();
         });
-        image.src = src;
+        // Renderer-owned art uses the compositor build token so fresh clothing JS
+        // can never be paired with a stale/broken cached body image on iOS Safari.
+        const assetBuild = encodeURIComponent(window.PRESENTATION_BUILD || 'direct-humanoid-assets-v1');
+        const separator = src.includes('?') ? '&' : '?';
+        image.src = `${src}${separator}build=${assetBuild}`;
         return image;
     }
 

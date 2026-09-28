@@ -33,7 +33,10 @@ function initializePlayer(race, cls, gender, campaign = "3", voice = "pc_1") {
       };
       Object.entries(paths).forEach(([view, path]) => {
         const image = averageAssets[view];
-        if (image && typeof image.src === 'string') image.src = `${path}?build=20260928-female-average-refresh-2`;
+        if (image && typeof image.src === 'string') {
+          const bodyBuild = encodeURIComponent(window.PRESENTATION_BUILD || 'human-female-body-v1');
+          image.src = `${path}?build=${bodyBuild}`;
+        }
       });
     }
   }
