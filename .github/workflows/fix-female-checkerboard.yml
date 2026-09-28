@@ -1,4 +1,4 @@
-name: One-shot fix female checkerboard transparency
+name: One-shot clean female side/back transparency
 
 on:
   push:
@@ -22,43 +22,96 @@ jobs:
           python-version: '3.12'
       - name: Install Pillow
         run: python -m pip install --disable-pip-version-check pillow
-      - name: Profile side and back PNG pixels
+      - name: Clean transparency without touching character component
         run: |
           python - <<'PY'
-          from collections import Counter, deque
+          from collections import deque
           from pathlib import Path
           from PIL import Image
 
-          for path in [Path('images/characters/human_female/body_side.png'), Path('images/characters/human_female/body_back.png')]:
-              im=Image.open(path).convert('RGBA'); w,h=im.size; px=im.load()
-              alphas=Counter(p[3] for p in im.getdata())
-              opaque=[(x,y) for y in range(h) for x in range(w) if px[x,y][3]>0]
-              xs=[p[0] for p in opaque]; ys=[p[1] for p in opaque]
-              bins=Counter((px[x,y][0]//8,px[x,y][1]//8,px[x,y][2]//8) for x,y in opaque)
-              neutral=Counter()
-              for x,y in opaque:
-                  r,g,b,a=px[x,y]
-                  if max(r,g,b)-min(r,g,b)<=16:
-                      neutral[(r//8,g//8,b//8)] += 1
-              print('\nFILE',path,'size',im.size,'opaque',len(opaque),'transparent',alphas[0],'partial alpha',sum(v for a,v in alphas.items() if 0<a<255))
-              print('opaque bbox',(min(xs),min(ys),max(xs),max(ys)))
-              print('top RGB8 bins',bins.most_common(30))
-              print('top neutral RGB8 bins',neutral.most_common(30))
+          TARGETS = [
+              Path('images/characters/human_female/body_side.png'),
+              Path('images/characters/human_female/body_back.png'),
+          ]
 
-              # connected components of alpha>0
-              seen=bytearray(w*h); comps=[]
-              for sx,sy in opaque:
-                  idx=sy*w+sx
-                  if seen[idx]: continue
-                  q=deque([(sx,sy)]); seen[idx]=1; n=0; minx=maxx=sx; miny=maxy=sy
-                  while q:
-                      x,y=q.popleft(); n+=1; minx=min(minx,x);maxx=max(maxx,x);miny=min(miny,y);maxy=max(maxy,y)
-                      for nx,ny in ((x-1,y),(x+1,y),(x,y-1),(x,y+1)):
-                          if 0<=nx<w and 0<=ny<h:
-                              i=ny*w+nx
-                              if not seen[i] and px[nx,ny][3]>0:
-                                  seen[i]=1;q.append((nx,ny))
-                  comps.append((n,(minx,miny,maxx,maxy)))
-              comps.sort(reverse=True)
-              print('components',len(comps),'top20',comps[:20])
+          for path in TARGETS:
+              im = Image.open(path).convert('RGBA')
+              w, h = im.size
+              px = im.load()
+              seen = bytearray(w*h)
+              components = []
+
+              # Find every alpha-connected component. The real sprite is, by a very
+              # large margin, the largest component; detached dots are export debris.
+              for y in range(h):
+                  for x in range(w):
+                      i = y*w+x
+                      if seen[i] or px[x,y][3] == 0:
+                          continue
+                      seen[i] = 1
+                      q = deque([(x,y)])
+                      coords = []
+                      while q:
+                          cx,cy = q.popleft()
+                          coords.append((cx,cy))
+                          for nx,ny in ((cx-1,cy),(cx+1,cy),(cx,cy-1),(cx,cy+1)):
+                              if 0 <= nx < w and 0 <= ny < h:
+                                  ni = ny*w+nx
+                                  if not seen[ni] and px[nx,ny][3] > 0:
+                                      seen[ni] = 1
+                                      q.append((nx,ny))
+                      components.append(coords)
+
+              components.sort(key=len, reverse=True)
+              if not components:
+                  raise RuntimeError(f'{path}: no visible component found')
+              main = components[0]
+              visible_total = sum(map(len, components))
+              debris_total = visible_total - len(main)
+              if len(main) / visible_total < 0.98:
+                  raise RuntimeError(f'{path}: main component is unexpectedly small; refusing cleanup')
+
+              main_mask = bytearray(w*h)
+              for x,y in main:
+                  main_mask[y*w+x] = 1
+
+              out = im.copy()
+              opx = out.load()
+              changed = 0
+              hidden_rgb_cleared = 0
+              debris_cleared = 0
+              for y in range(h):
+                  row = y*w
+                  for x in range(w):
+                      r,g,b,a = opx[x,y]
+                      if main_mask[row+x]:
+                          continue  # preserve every RGBA value of the actual character
+                      if a > 0:
+                          opx[x,y] = (0,0,0,0)
+                          changed += 1
+                          debris_cleared += 1
+                      elif r or g or b:
+                          # Alpha-zero RGB cannot render, but normalising it removes
+                          # baked checker colour data for tools that inspect raw RGB.
+                          opx[x,y] = (0,0,0,0)
+                          changed += 1
+                          hidden_rgb_cleared += 1
+
+              out.save(path, optimize=True)
+              print(
+                  f'{path}: size={w}x{h}; kept character component={len(main)} pixels; '
+                  f'cleared detached alpha debris={debris_cleared}; '
+                  f'cleared hidden RGB from {hidden_rgb_cleared} transparent pixels; changed={changed}'
+              )
           PY
+      - name: Commit corrected PNGs
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add images/characters/human_female/body_side.png images/characters/human_female/body_back.png
+          if git diff --cached --quiet; then
+            echo 'No image changes required.'
+            exit 0
+          fi
+          git commit -m 'Clean transparency on female side and back sprites [skip ci]'
+          git push origin HEAD:development
