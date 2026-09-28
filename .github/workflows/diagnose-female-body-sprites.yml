@@ -1,0 +1,79 @@
+name: One-shot diagnose female body sprites
+
+on:
+  push:
+    branches: [development]
+    paths:
+      - '.github/workflows/diagnose-female-body-sprites.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Pillow
+        run: python -m pip install --disable-pip-version-check pillow
+      - name: Inspect female average body PNGs
+        run: |
+          python - <<'PY'
+          from collections import Counter, deque
+          from pathlib import Path
+          from PIL import Image
+
+          paths = [
+              Path('images/characters/human_female/body_front.png'),
+              Path('images/characters/human_female/body_side.png'),
+              Path('images/characters/human_female/body_back.png'),
+          ]
+
+          for path in paths:
+              print(f'\n=== {path} ===')
+              with Image.open(path) as probe:
+                  print('format=', probe.format, 'mode=', probe.mode, 'size=', probe.size)
+                  probe.verify()
+                  print('verify=OK')
+              im = Image.open(path).convert('RGBA')
+              w,h = im.size
+              px = im.load()
+              alpha = Counter(a for *_,a in im.getdata())
+              visible = sum(n for a,n in alpha.items() if a > 0)
+              partial = sum(n for a,n in alpha.items() if 0 < a < 255)
+              transparent = alpha.get(0,0)
+              bbox = im.getchannel('A').getbbox()
+              print('visible=', visible, 'transparent=', transparent, 'partial=', partial, 'alpha_bbox=', bbox)
+
+              seen = bytearray(w*h)
+              components = []
+              for y in range(h):
+                  for x in range(w):
+                      i=y*w+x
+                      if seen[i] or px[x,y][3] == 0:
+                          continue
+                      seen[i]=1
+                      q=deque([(x,y)])
+                      n=0
+                      minx=maxx=x; miny=maxy=y
+                      while q:
+                          cx,cy=q.popleft(); n += 1
+                          minx=min(minx,cx); maxx=max(maxx,cx); miny=min(miny,cy); maxy=max(maxy,cy)
+                          for nx,ny in ((cx-1,cy),(cx+1,cy),(cx,cy-1),(cx,cy+1)):
+                              if 0 <= nx < w and 0 <= ny < h:
+                                  ni=ny*w+nx
+                                  if not seen[ni] and px[nx,ny][3] > 0:
+                                      seen[ni]=1; q.append((nx,ny))
+                      components.append((n,(minx,miny,maxx,maxy)))
+              components.sort(reverse=True)
+              print('components=', len(components), 'largest=', components[:8])
+
+              corners=[px[0,0],px[w-1,0],px[0,h-1],px[w-1,h-1]]
+              print('corners=', corners)
+          PY
