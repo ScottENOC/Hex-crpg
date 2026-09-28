@@ -12,9 +12,10 @@ This directory is organised by what an image represents rather than by the code 
 - `equipment/` — armour, clothing, helmets, shields, weapons, mount equipment and accessories.
 - `terrain/bases/` — ground/floor/water/path textures used as terrain bases.
 - `props/` — furniture, structures, vegetation, resources, effects and small world/item props.
+- `scrap/` — archived/unused art retained for reference only; runtime code must not depend on it.
 
-## Compatibility aliases
+## Legacy URL migration
 
-The game historically loaded many assets directly from the flat `images/` root. During the migration, those old root paths remain present as compatibility aliases to the same Git blobs. New art and new code should use the canonical folders above. Once all runtime references have migrated, the flat aliases can be removed safely.
+Physical flat-file aliases have been removed from `images/`. `assetLoadScheduler.js` translates historical `images/<file>` requests to the canonical folders before the browser starts the request. This keeps older call sites working while ensuring network traffic and new development use the organised tree.
 
-Do not add new flat files to `images/` unless they are temporary migration aliases.
+New code and new art must use canonical paths directly. Do not add new flat files to `images/`.

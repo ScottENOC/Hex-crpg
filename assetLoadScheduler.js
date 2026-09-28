@@ -12,6 +12,128 @@
     const nativeSrc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
     if (!nativeSrc || typeof nativeSrc.set !== 'function' || typeof nativeSrc.get !== 'function') return;
 
+    // Historical flat image URLs are translated here so old call sites do not
+    // require physical compatibility aliases in images/. All browser requests
+    // therefore resolve to the canonical asset folders.
+    const LEGACY_ASSET_REDIRECTS = new Map(Object.entries({
+        'images/Grishnak.png':'images/characters/npcs/grishnak.png',
+        'images/arenaannouncer.png':'images/characters/npcs/arena/announcer.png',
+        'images/arenamercenary.png':'images/characters/npcs/arena/mercenary.png',
+        'images/arenashopkeeper.png':'images/characters/npcs/arena/shopkeeper.png',
+
+        'images/elf.png':'images/characters/legacy/elf/body.png',
+        'images/elffemale.png':'images/characters/legacy/elf_female/body.png',
+        'images/elffemalehair.png':'images/characters/legacy/elf_female/hair.png',
+        'images/elfmale.png':'images/characters/legacy/elf_male/body.png',
+        'images/elfmalehair.png':'images/characters/legacy/elf_male/hair.png',
+        'images/dwarffemale.png':'images/characters/legacy/dwarf_female/body.png',
+        'images/dwarffemalehair.png':'images/characters/legacy/dwarf_female/hair.png',
+        'images/dwarfmale.png':'images/characters/legacy/dwarf_male/body.png',
+        'images/dwarfmalehair.png':'images/characters/legacy/dwarf_male/hair.png',
+
+        'images/basilisk.svg':'images/characters/creatures/basilisk.svg',
+        'images/boar.png':'images/characters/creatures/boar.png',
+        'images/dragon.svg':'images/characters/creatures/dragon.svg',
+        'images/eagle.png':'images/characters/creatures/eagle.png',
+        'images/eagleflying.png':'images/characters/creatures/eagle_flying.png',
+        'images/elite_goblin.svg':'images/characters/creatures/elite_goblin.svg',
+        'images/goblin.png':'images/characters/creatures/goblin.png',
+        'images/harpy.svg':'images/characters/creatures/harpy.svg',
+        'images/horse.png':'images/characters/creatures/horse.png',
+        'images/imp.svg':'images/characters/creatures/imp.svg',
+        'images/minotaur.png':'images/characters/creatures/minotaur.png',
+        'images/orc.png':'images/characters/creatures/orc.png',
+        'images/revenant.svg':'images/characters/creatures/revenant.svg',
+        'images/sheep.svg':'images/characters/creatures/sheep.svg',
+        'images/skeleton.svg':'images/characters/creatures/skeleton.svg',
+        'images/skeletonBase.svg':'images/characters/creatures/skeleton_base.svg',
+        'images/spider1.png':'images/characters/creatures/spider_1.png',
+        'images/spider2.png':'images/characters/creatures/spider_2.png',
+        'images/tiger.png':'images/characters/creatures/tiger.png',
+        'images/troll.png':'images/characters/creatures/troll.png',
+        'images/unicorn.png':'images/characters/creatures/unicorn.png',
+        'images/wolf.png':'images/characters/creatures/wolf.png',
+        'images/wraith.svg':'images/characters/creatures/wraith.svg',
+        'images/zombie.svg':'images/characters/creatures/zombie.svg',
+
+        'images/elfchainarmour.png':'images/equipment/armour/elf/chain.png',
+        'images/elfleatherarmour.png':'images/equipment/armour/elf/leather.png',
+        'images/humanlightarmour.png':'images/equipment/armour/human/light.png',
+        'images/humanlightarmour_back.svg':'images/equipment/armour/human/light_back.svg',
+        'images/humanmediumarmour.png':'images/equipment/armour/human/medium.png',
+        'images/humanmediumarmour_back.svg':'images/equipment/armour/human/medium_back.svg',
+        'images/humanheavyarmour.png':'images/equipment/armour/human/heavy.png',
+        'images/humanheavyarmour_back.svg':'images/equipment/armour/human/heavy_back.svg',
+        'images/nasalHelm.png':'images/equipment/helmets/nasal_helm.png',
+        'images/nasalHelm_back.svg':'images/equipment/helmets/nasal_helm_back.svg',
+        'images/shield.png':'images/equipment/shields/round.png',
+        'images/shield_back.svg':'images/equipment/shields/round_back.svg',
+        'images/kiteshield.png':'images/equipment/shields/kite.png',
+        'images/barding_light.svg':'images/equipment/mounts/barding_light.svg',
+        'images/barding_medium.svg':'images/equipment/mounts/barding_medium.svg',
+        'images/barding_heavy.svg':'images/equipment/mounts/barding_heavy.svg',
+        'images/locket.svg':'images/equipment/accessories/locket.svg',
+        'images/axe.png':'images/equipment/weapons/axe.png',
+        'images/battering_ram.svg':'images/equipment/weapons/battering_ram.svg',
+        'images/bow.svg':'images/equipment/weapons/bow.svg',
+        'images/club.svg':'images/equipment/weapons/club.svg',
+        'images/giant_club.png':'images/equipment/weapons/giant_club.png',
+        'images/spear.png':'images/equipment/weapons/spear.png',
+        'images/sword.png':'images/equipment/weapons/sword.png',
+
+        'images/arenaHexFloor1.png':'images/terrain/bases/arena/floor_1.png',
+        'images/arenaHexFloor2.png':'images/terrain/bases/arena/floor_2.png',
+        'images/arenaHexFloor3.png':'images/terrain/bases/arena/floor_3.png',
+        'images/arenaHexFloor4.png':'images/terrain/bases/arena/floor_4.png',
+        'images/dirt.svg':'images/terrain/bases/dirt.svg',
+        'images/grass_1.svg':'images/terrain/bases/grass_1.svg',
+        'images/grass_2.svg':'images/terrain/bases/grass_2.svg',
+        'images/grass_3.svg':'images/terrain/bases/grass_3.svg',
+        'images/path.svg':'images/terrain/bases/path.svg',
+        'images/water.png':'images/terrain/bases/water.png',
+        'images/water_1.svg':'images/terrain/bases/water_1.svg',
+        'images/water_2.svg':'images/terrain/bases/water_2.svg',
+        'images/wood_floor.svg':'images/terrain/bases/wood_floor.svg',
+
+        'images/altar_unholy.svg':'images/props/furniture/altar_unholy.svg',
+        'images/bed.svg':'images/props/furniture/bed.svg',
+        'images/bench.svg':'images/props/furniture/bench.svg',
+        'images/fireplace_base.svg':'images/props/furniture/fireplace_base.svg',
+        'images/fireplace_flame.svg':'images/props/furniture/fireplace_flame.svg',
+        'images/fireplace_unlit.svg':'images/props/furniture/fireplace_unlit.svg',
+        'images/fountain.svg':'images/props/furniture/fountain.svg',
+        'images/mediumpillar.png':'images/props/furniture/pedestal.png',
+        'images/table.svg':'images/props/furniture/table.svg',
+        'images/throne.svg':'images/props/furniture/throne.svg',
+
+        'images/door_closed.svg':'images/props/structures/door_closed.svg',
+        'images/door_open.svg':'images/props/structures/door_open.svg',
+        'images/fence_broken.svg':'images/props/structures/fence_broken.svg',
+        'images/fence_h.svg':'images/props/structures/fence_horizontal.svg',
+        'images/fence_v.svg':'images/props/structures/fence_vertical.svg',
+        'images/gate_arch.svg':'images/props/structures/gate_arch.svg',
+        'images/hut.svg':'images/props/structures/hut.svg',
+        'images/hut_large.svg':'images/props/structures/hut_large.svg',
+        'images/ladder.svg':'images/props/structures/ladder.svg',
+        'images/signpost.svg':'images/props/structures/signpost.svg',
+        'images/watchtower.svg':'images/props/structures/watchtower.svg',
+
+        'images/bush_large.svg':'images/props/nature/bush_large.svg',
+        'images/bush_small.svg':'images/props/nature/bush_small.svg',
+        'images/foliage.png':'images/props/nature/foliage.png',
+        'images/tree_large.svg':'images/props/nature/tree_large.svg',
+        'images/tree_small.svg':'images/props/nature/tree_small.svg',
+        'images/ore_vein.svg':'images/props/resources/ore_vein.svg',
+        'images/apple.svg':'images/props/items/apple.svg',
+        'images/journal.svg':'images/props/items/journal.svg',
+        'images/oil_barrel.svg':'images/props/interactives/oil_barrel.svg',
+        'images/torch_lit.svg':'images/props/interactives/torch_lit.svg',
+        'images/overlay blood.png':'images/props/effects/blood_overlay.png',
+        'images/overlay skull.png':'images/props/effects/skull_overlay.png',
+        'images/corpse_marker.svg':'images/props/effects/corpse_marker.svg',
+        'images/spiderweb.png':'images/props/effects/spiderweb.png',
+    }));
+
     // Keep speculative creator traffic conservative. At Start, allow extra
     // slots so gameplay can begin immediately even if a few warmups are still
     // in flight; HTTP/2 still remains far below the old unbounded Promise.all.
@@ -21,9 +143,8 @@
     let gameStarted = false;
     const queue = [];
 
-    // Compatibility guard only. main.js should no longer reference these
-    // superseded flat sprites; if another stale caller does, fail visibly
-    // without sending an unnecessary request.
+    // Compatibility guard only. Direct-rendered humans/elf-female must not
+    // fall back to their superseded flat single-image sprites.
     const SUPPRESSED = new Set([
         'images/humanfemale.png',
         'images/humanfemalehair.png',
@@ -47,8 +168,6 @@
     }
 
     function priorityFor(path) {
-        // Once gameplay starts, every newly requested image outranks all
-        // creator-time warmups still waiting in the queue.
         if (gameStarted) return -10;
         if (/\/body_front\.png$/.test(path)) return 0;
         if (/\/hair_[^/]+_front\.png$/.test(path)) return 0;
@@ -94,13 +213,6 @@
     function beginGameplayLoading() {
         if (gameStarted) return;
         gameStarted = true;
-
-        // Do not delete queued requests: humanoidRenderer.js creates/caches
-        // Image objects before first use, so abandoning one would strand that
-        // sprite forever. Instead move every creator-time warmup behind future
-        // gameplay requests. Raising the concurrency ceiling from 4 to 8 also
-        // gives gameplay four immediate transfer slots even if all creator
-        // slots were occupied at the instant Start was pressed.
         for (const job of queue) {
             if (job.queuedBeforeGameStart) job.priority = 50;
         }
@@ -113,24 +225,23 @@
         get: nativeSrc.get,
         set(value) {
             const img = this;
-            const path = normalise(value);
+            const requestedPath = normalise(value);
 
-            if (SUPPRESSED.has(path)) {
-                dispatchSyntheticError(img, path, 'obsolete-direct-humanoid-asset');
+            if (SUPPRESSED.has(requestedPath)) {
+                dispatchSyntheticError(img, requestedPath, 'obsolete-direct-humanoid-asset');
                 return;
             }
 
-            enqueue(path, done => {
+            const canonicalPath = LEGACY_ASSET_REDIRECTS.get(requestedPath) || requestedPath;
+            enqueue(canonicalPath, done => {
                 const settle = () => done();
                 img.addEventListener('load', settle, {once:true});
                 img.addEventListener('error', settle, {once:true});
-                nativeSrc.set.call(img, value);
+                nativeSrc.set.call(img, canonicalPath === requestedPath ? value : canonicalPath);
             });
         },
     });
 
-    // Capture phase runs before main.js's normal click/touch handlers call
-    // startGame, so gameplay priority is active before scene loading begins.
     document.addEventListener('click', event => {
         if (event.target?.id === 'createCharacterButton') beginGameplayLoading();
     }, true);
@@ -142,6 +253,8 @@
         creatorMaxConcurrent: CREATOR_MAX_CONCURRENT,
         gameMaxConcurrent: GAME_MAX_CONCURRENT,
         suppressed: [...SUPPRESSED],
+        legacyRedirectCount: LEGACY_ASSET_REDIRECTS.size,
+        canonicalPathFor(path) { return LEGACY_ASSET_REDIRECTS.get(normalise(path)) || normalise(path); },
         beginGameplayLoading,
         get gameStarted() { return gameStarted; },
         get queued() { return queue.length; },
