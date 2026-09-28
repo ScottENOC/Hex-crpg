@@ -1,17 +1,23 @@
 name: Humanoid Renderer Focused Tests
 
-# Deliberately scoped to the direct humanoid regression; do not expand this to the full suite.
+# Deliberately scoped to the direct humanoid + clothing regressions; do not expand this to the full suite.
 on:
   push:
     branches:
       - development
     paths:
       - 'humanoidRenderer.js'
+      - 'clothingLayers.js'
+      - 'clothingSystem.js'
+      - 'characterCreation.js'
+      - 'index.html'
       - 'entities.js'
       - 'graphicsSettings.js'
       - 'name.js'
       - 'tests/human-female-direct-render.spec.js'
+      - 'tests/clothing-render-regression.spec.js'
       - 'images/characters/elf_female/**'
+      - 'images/equipment/clothing/**'
       - '.github/workflows/human-female-render-diagnostic.yml'
 
 concurrency:
@@ -32,5 +38,5 @@ jobs:
         run: npm ci
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Run focused humanoid rendering regression
-        run: npx playwright test tests/human-female-direct-render.spec.js --reporter=line
+      - name: Run focused humanoid and clothing rendering regressions
+        run: npx playwright test tests/human-female-direct-render.spec.js tests/clothing-render-regression.spec.js --reporter=line
