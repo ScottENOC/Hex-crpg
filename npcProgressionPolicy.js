@@ -112,6 +112,23 @@
         return map;
     }
 
+    function restoreAuthoredEquipment(entity, equipmentIds) {
+        entity.equipped = entity.equipped || { weapon: null, offhand: null, armor: null, helmet: null };
+        entity.inventory = entity.inventory || [];
+        (equipmentIds || []).forEach(itemId => {
+            const item = window.items?.[itemId];
+            if (!item) return;
+            if (!entity.inventory.includes(itemId)) entity.inventory.push(itemId);
+            if (item.type === 'armor' && item.subType !== 'barding') entity.equipped.armor = itemId;
+            else if (item.type === 'helmet') entity.equipped.helmet = itemId;
+            else if (item.type === 'shield') entity.equipped.offhand = itemId;
+            else if (item.type === 'weapon') {
+                if (!entity.equipped.weapon) entity.equipped.weapon = itemId;
+                else if (item.canOffhand && entity.equipped.weapon !== itemId && !entity.equipped.offhand) entity.equipped.offhand = itemId;
+            }
+        });
+    }
+
     function rebuild(entity, packageDef, level, preferredSkills, seed) {
         const classLevels = window.NPCProgression.expandClassPackage(packageDef, level);
         entity.npcClassPackage = { id: packageDef.id, classes: [...packageDef.classes], primary: packageDef.primary };
@@ -167,6 +184,10 @@
 
             entity.npcLegacySkillPointTarget = target;
             if (entity.level !== level || entity.npcClassPackage.id !== packageDef.id) {
+                // The core pass may have removed armour that was illegal under
+                // the old one-class package. Put the authored loadout back before
+                // rebuilding the now-legal package so training is actually paid.
+                restoreAuthoredEquipment(entity, equipmentIds);
                 rebuild(entity, packageDef, level, preferredSkills,
                     `${window.currentCampaign || 'game'}:${spec.name || spec.title || 'NPC'}:${entity.race}:legacy-conversion`);
             } else {
