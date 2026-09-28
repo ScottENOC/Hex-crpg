@@ -144,10 +144,12 @@
   function enhanceCreatorPicker(id,key){
     const hue=document.getElementById(id); if(!hue||hue.dataset.preciseColour==='true') return false;
     const label=document.querySelector(`label[for="${id}"]`); const parent=hue.parentNode; if(!parent) return false;
+    const marker=document.createComment(`precise-${key}-picker`);
+    parent.insertBefore(marker,label||hue);
     const spec=initialSpec(key,Number(hue.value));
     const root=buildPicker({key,label:label?.textContent||key,hue:spec.hue,saturation:spec.saturation,value:spec.value,existingHueInput:hue,onChange:()=>syncCreatorAppearanceToPlayer()});
     hue.dataset.preciseColour='true';
-    parent.insertBefore(root,label||hue);
+    marker.replaceWith(root);
     return true;
   }
 
