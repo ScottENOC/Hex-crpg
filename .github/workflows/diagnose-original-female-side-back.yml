@@ -1,0 +1,41 @@
+name: Diagnose original female side/back
+
+on:
+  push:
+    branches: [temp-female-bg-diag-run2]
+    paths:
+      - '.github/workflows/diagnose-original-female-side-back.yml'
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: temp-female-bg-diag-run2
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check pillow
+      - name: Restore original uploaded side/back and inspect
+        run: |
+          git show 0d79594fbdaecc0562c8f525f2ea16ad07f291ce:images/characters/human_female/body_side.png > /tmp/body_side.png
+          git show 0d79594fbdaecc0562c8f525f2ea16ad07f291ce:images/characters/human_female/body_back.png > /tmp/body_back.png
+          python - <<'PY'
+          from PIL import Image
+          from collections import Counter
+          for p in ['/tmp/body_side.png','/tmp/body_back.png']:
+              im=Image.open(p).convert('RGB')
+              w,h=im.size
+              c=Counter(im.getdata())
+              print('\n',p,im.size,'colors',len(c))
+              print('top20',c.most_common(20))
+              border=[]
+              px=im.load()
+              for x in range(w): border += [px[x,0],px[x,h-1]]
+              for y in range(h): border += [px[0,y],px[w-1,y]]
+              bc=Counter(border)
+              print('border top20',bc.most_common(20))
+              print('corners',px[0,0],px[w-1,0],px[0,h-1],px[w-1,h-1])
+          PY
