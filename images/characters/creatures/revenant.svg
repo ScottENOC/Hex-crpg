@@ -1,0 +1,13 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Gaunt undead head -->
+  <path d="M24 20C24 12 27 6 32 6C37 6 40 12 40 20C40 27 37 31 32 31C27 31 24 27 24 20Z" fill="#9aa89a" stroke="#333" stroke-width="2"/>
+  <!-- Sunken eyes -->
+  <circle cx="28" cy="19" r="2" fill="#4fffb0"/>
+  <circle cx="36" cy="19" r="2" fill="#4fffb0"/>
+  <!-- Gaunt cheeks -->
+  <path d="M25 24C27 22 29 22 30 24" stroke="#5a685a" stroke-width="1" fill="none"/>
+  <path d="M39 24C37 22 35 22 34 24" stroke="#5a685a" stroke-width="1" fill="none"/>
+  <!-- Torso silhouette (armor/weapon layered on top by CHAR_CONFIG) -->
+  <path d="M22 31C18 40 17 52 20 62H44C47 52 46 40 42 31Z" fill="#7c8a7c" stroke="#333" stroke-width="2"/>
+  <path d="M32 31V62" stroke="#5a685a" stroke-width="1"/>
+</svg>

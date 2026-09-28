@@ -1,0 +1,19 @@
+<svg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <!-- High back -->
+  <rect x="25" y="10" width="50" height="65" rx="4" fill="#5a2a1a" />
+  <rect x="30" y="15" width="40" height="55" rx="3" fill="#7a3a20" />
+  <!-- Gold trim on the back -->
+  <rect x="30" y="15" width="40" height="55" rx="3" fill="none" stroke="#ffd700" stroke-width="2" />
+  <path d="M50 18 L55 28 L50 38 L45 28 Z" fill="#ffd700" />
+  <!-- Seat -->
+  <rect x="22" y="60" width="56" height="14" rx="2" fill="#7a3a20" />
+  <rect x="22" y="60" width="56" height="14" rx="2" fill="none" stroke="#ffd700" stroke-width="2" />
+  <!-- Armrests -->
+  <rect x="14" y="48" width="10" height="28" rx="3" fill="#5a2a1a" />
+  <rect x="76" y="48" width="10" height="28" rx="3" fill="#5a2a1a" />
+  <circle cx="19" cy="48" r="5" fill="#ffd700" />
+  <circle cx="81" cy="48" r="5" fill="#ffd700" />
+  <!-- Legs -->
+  <rect x="22" y="74" width="8" height="16" fill="#3e2723" />
+  <rect x="70" y="74" width="8" height="16" fill="#3e2723" />
+</svg>

@@ -1,0 +1,16 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Heavy barding: overlapping steel plates covering chest, flank, and croup, with visible rivets. -->
+  <path d="M12 24C12 20 20 17 32 17C44 17 52 20 52 24L50 44C50 48 40 51 32 51C24 51 14 48 14 44Z"
+        fill="#6b7178" fill-opacity="0.95" stroke="#2b2e32" stroke-width="1.8"/>
+  <path d="M15 26C20 24 26 23 32 23C38 23 44 24 49 26L48 33C42 31 37 30 32 30C27 30 22 31 16 33Z" fill="#82888f" stroke="#2b2e32" stroke-width="1"/>
+  <path d="M16 33L47 33L46 40C40 38 36 37 32 37C28 37 24 38 17 40Z" fill="#787e85" stroke="#2b2e32" stroke-width="1"/>
+  <path d="M17 40L46 40L44 46C39 44 35 43 32 43C29 43 25 44 19 46Z" fill="#6b7178" stroke="#2b2e32" stroke-width="1"/>
+  <g fill="#2b2e32">
+    <circle cx="21" cy="27" r="1.1"/>
+    <circle cx="32" cy="25" r="1.1"/>
+    <circle cx="43" cy="27" r="1.1"/>
+    <circle cx="20" cy="36" r="1.1"/>
+    <circle cx="32" cy="34" r="1.1"/>
+    <circle cx="44" cy="36" r="1.1"/>
+  </g>
+</svg>

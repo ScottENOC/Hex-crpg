@@ -1,0 +1,12 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Medium barding: chainmail draping, drawn as a grid of small linked rings over a fitted cloth base. -->
+  <path d="M13 25C13 21 21 18 32 18C43 18 51 21 51 25L49 43C49 47 40 50 32 50C24 50 15 47 15 43Z"
+        fill="#5a5f66" fill-opacity="0.9" stroke="#33363b" stroke-width="1.5"/>
+  <g stroke="#8a9099" stroke-width="0.8" opacity="0.6">
+    <path d="M17 24C21 26 27 26 32 26C37 26 43 26 47 24"/>
+    <path d="M16 29C20 31 26 31 32 31C38 31 44 31 48 29"/>
+    <path d="M16 34C20 36 26 36 32 36C38 36 44 36 48 34"/>
+    <path d="M17 39C21 41 27 41 32 41C37 41 43 41 47 39"/>
+    <path d="M19 44C23 46 28 46 32 46C36 46 41 46 45 44"/>
+  </g>
+</svg>

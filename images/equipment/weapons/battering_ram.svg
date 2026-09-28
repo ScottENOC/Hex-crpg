@@ -1,0 +1,24 @@
+<svg width="200" height="140" viewBox="0 0 200 140" xmlns="http://www.w3.org/2000/svg">
+  <!-- Simple side-view wheeled battering ram: A-frame housing, hanging log, iron head -->
+  <g stroke="#000" stroke-width="2" stroke-linejoin="round">
+    <!-- roof/frame -->
+    <path d="M20 40 L100 8 L180 40 L180 55 L20 55 Z" fill="#6e4527"/>
+    <path d="M20 55 L20 100 L180 100 L180 55 Z" fill="none" stroke="#3f2a18" stroke-width="3" opacity="0.6"/>
+    <!-- support posts -->
+    <path d="M28 55 L28 100" stroke="#3f2a18" stroke-width="6"/>
+    <path d="M172 55 L172 100" stroke="#3f2a18" stroke-width="6"/>
+    <path d="M100 55 L100 100" stroke="#3f2a18" stroke-width="5" opacity="0.5"/>
+    <!-- hanging chains -->
+    <path d="M55 55 L60 78" stroke="#555" stroke-width="2"/>
+    <path d="M145 55 L140 78" stroke="#555" stroke-width="2"/>
+    <!-- the ram log itself -->
+    <rect x="35" y="72" width="130" height="16" rx="7" fill="#8a5a34" stroke="#3f2a18"/>
+    <!-- iron ram head -->
+    <path d="M20 80 L38 72 L38 88 Z" fill="#5a5a5a" stroke="#222"/>
+    <!-- wheels -->
+    <circle cx="45" cy="112" r="16" fill="#4a3a2a" stroke="#222" stroke-width="3"/>
+    <circle cx="45" cy="112" r="5" fill="#222"/>
+    <circle cx="155" cy="112" r="16" fill="#4a3a2a" stroke="#222" stroke-width="3"/>
+    <circle cx="155" cy="112" r="5" fill="#222"/>
+  </g>
+</svg>

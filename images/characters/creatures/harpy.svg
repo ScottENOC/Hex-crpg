@@ -1,0 +1,21 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Wings -->
+  <path d="M22 30C10 24 4 16 6 8C14 10 22 18 26 28Z" fill="#a85a3f" stroke="#5c2c1a" stroke-width="2"/>
+  <path d="M42 30C54 24 60 16 58 8C50 10 42 18 38 28Z" fill="#a85a3f" stroke="#5c2c1a" stroke-width="2"/>
+  <!-- Head -->
+  <path d="M22 22C22 14 26 9 32 9C38 9 42 14 42 22C42 29 37 33 32 33C27 33 22 29 22 22Z" fill="#e8c39a" stroke="#5c2c1a" stroke-width="2"/>
+  <!-- Hair feathers -->
+  <path d="M22 18C18 14 18 8 22 6" stroke="#5c2c1a" stroke-width="2" fill="none"/>
+  <path d="M42 18C46 14 46 8 42 6" stroke="#5c2c1a" stroke-width="2" fill="none"/>
+  <!-- Eyes -->
+  <circle cx="28" cy="21" r="2" fill="#000"/>
+  <circle cx="36" cy="21" r="2" fill="#000"/>
+  <!-- Beak-like mouth -->
+  <path d="M29 27L32 30L35 27" fill="#c9822f" stroke="#5c2c1a" stroke-width="1"/>
+  <!-- Feathered body -->
+  <path d="M24 33C20 40 20 50 24 58H40C44 50 44 40 40 33Z" fill="#c97b52" stroke="#5c2c1a" stroke-width="2"/>
+  <path d="M26 42C30 44 34 44 38 42" stroke="#5c2c1a" stroke-width="1.5" fill="none"/>
+  <path d="M26 50C30 52 34 52 38 50" stroke="#5c2c1a" stroke-width="1.5" fill="none"/>
+  <!-- Talons -->
+  <path d="M27 58L25 62M32 58L32 62M37 58L39 62" stroke="#5c2c1a" stroke-width="2" stroke-linecap="round"/>
+</svg>
