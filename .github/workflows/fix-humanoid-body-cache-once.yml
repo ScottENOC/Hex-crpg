@@ -1,0 +1,101 @@
+name: Fix humanoid body asset cache
+
+on:
+  push:
+    branches: [development]
+    paths:
+      - '.github/workflows/fix-humanoid-body-cache-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+
+      - name: Apply narrow body visibility fix
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          renderer = Path('humanoidRenderer.js')
+          text = renderer.read_text()
+          old = """        image.src = src;
+        return image;
+"""
+          new = """        // Renderer-owned character/equipment art must use the same build token as
+        // the compositor itself. iOS Safari can otherwise keep a stale/broken body
+        // image while loading fresh clothing JS, leaving only the clothes visible.
+        const assetBuild = encodeURIComponent(window.PRESENTATION_BUILD || 'direct-humanoid-assets-v1');
+        const separator = src.includes('?') ? '&' : '?';
+        image.src = `${src}${separator}build=${assetBuild}`;
+        return image;
+"""
+          if old not in text:
+              raise SystemExit('humanoidRenderer loadImage anchor not found')
+          renderer.write_text(text.replace(old, new, 1))
+
+          creation = Path('characterCreation.js')
+          text = creation.read_text()
+          old = """        if (image && typeof image.src === 'string') image.src = `${path}?build=20260928-female-average-refresh-2`;
+"""
+          new = """        if (image && typeof image.src === 'string') {
+          const bodyBuild = encodeURIComponent(window.PRESENTATION_BUILD || 'human-female-body-v1');
+          image.src = `${path}?build=${bodyBuild}`;
+        }
+"""
+          if old not in text:
+              raise SystemExit('characterCreation body refresh anchor not found')
+          creation.write_text(text.replace(old, new, 1))
+
+          name = Path('name.js')
+          text = name.read_text()
+          old = "const PRESENTATION_BUILD = '20260928-character-sizing-v2';"
+          new = "const PRESENTATION_BUILD = '20260928-character-body-assets-v3';"
+          if old not in text:
+              raise SystemExit('presentation build anchor not found')
+          name.write_text(text.replace(old, new, 1))
+
+          index = Path('index.html')
+          text = index.read_text()
+          replacements = {
+              '<meta name="app-build" content="20260928-character-sizing-v2">': '<meta name="app-build" content="20260928-character-body-assets-v3">',
+              '<script src="name.js?v=13"></script>': '<script src="name.js?v=14"></script>',
+              '<script src="characterCreation.js?v=7"></script>': '<script src="characterCreation.js?v=8"></script>',
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'index anchor not found: {old}')
+              text = text.replace(old, new, 1)
+          index.write_text(text)
+          PY
+
+      - name: Validate patch
+        shell: bash
+        run: |
+          node --check humanoidRenderer.js
+          node --check characterCreation.js
+          node --check name.js
+          grep -F "image.src = \`\${src}\${separator}build=\${assetBuild}\`;" humanoidRenderer.js
+          grep -F "image.src = \`\${path}?build=\${bodyBuild}\`;" characterCreation.js
+          ! grep -F "female-average-refresh-2" characterCreation.js
+          grep -F "20260928-character-body-assets-v3" name.js index.html
+          grep -F '<script src="name.js?v=14"></script>' index.html
+          grep -F '<script src="characterCreation.js?v=8"></script>' index.html
+          git diff --check
+
+      - name: Commit production fix and remove one-shot workflow
+        shell: bash
+        run: |
+          rm .github/workflows/fix-humanoid-body-cache-once.yml
+          git config user.name 'OpenAI ChatGPT'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add humanoidRenderer.js characterCreation.js name.js index.html .github/workflows/fix-humanoid-body-cache-once.yml
+          git commit -m 'Keep humanoid body assets cache-safe'
+          git push origin HEAD:development
