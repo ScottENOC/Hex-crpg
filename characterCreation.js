@@ -139,7 +139,7 @@ function createCharacterData(race, cls, name, gender = "female", voice = "pc_1")
   // equipItem), and a fresh level-1 character hasn't bought any skills yet.
   // Weapons/shields aren't skill-gated, so those still start equipped;
   // starting gold is bumped a bit (see initializePlayer) so a player who
-  // wants armor right away can buy both the piece and the training skill.
+  // wants armor right away can buy both the piece and its training skill.
   if (cls === 'fighter') {
     char.inventory.push('sword');
     char.equipped.weapon = 'sword';
@@ -204,17 +204,6 @@ if (!document.querySelector('script[data-northwatch-siege-spawn]')) {
   siegeSpawnScript.dataset.northwatchSiegeSpawn = 'true';
   siegeSpawnScript.async = false;
   document.head.appendChild(siegeSpawnScript);
-}
-
-// The new human-female directional art has pale base garments rather than the
-// old warm-brown tunic/pants bands. Install its semantic body/upper/lower mask
-// before the layered clothing UI starts rendering previews.
-if (!document.querySelector('script[data-female-base-recolor]')) {
-  const femaleBaseRecolorScript = document.createElement('script');
-  femaleBaseRecolorScript.src = 'femaleBaseClothingRecolor.js?build=20260928-female-base-mask-v1';
-  femaleBaseRecolorScript.dataset.femaleBaseRecolor = 'true';
-  femaleBaseRecolorScript.async = false;
-  document.head.appendChild(femaleBaseRecolorScript);
 }
 
 // Layered clothing is kept in a small compatibility module too. Loading it
