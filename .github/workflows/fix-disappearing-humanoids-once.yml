@@ -1,0 +1,98 @@
+name: Fix disappearing humanoids once
+
+on:
+  push:
+    branches:
+      - development
+    paths:
+      - '.github/workflows/fix-disappearing-humanoids-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+
+      - name: Make missing direct body assets fall back safely
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          renderer = Path('humanoidRenderer.js')
+          source = renderer.read_text()
+          old = "        if (!imageReady(sourceBody)) return true; // own the frame; never flash legacy art while loading\n"
+          new = "        // A direct body image can be temporarily unavailable or permanently broken.\n        // Do not claim an empty frame: decline it so the established renderer can\n        // draw the character while the direct asset loads or recovers.\n        if (!imageReady(sourceBody)) return false;\n"
+          if old not in source:
+              raise SystemExit('Expected direct-body readiness gate was not found')
+          renderer.write_text(source.replace(old, new, 1))
+
+          test = Path('tests/human-female-direct-render.spec.js')
+          tests = test.read_text()
+          marker = "\n});\n"
+          insert = r'''
+
+  test('missing direct body asset falls through instead of swallowing the character frame', async ({ page }) => {
+    await createCharacter(page, { race:'human', gender:'female' });
+    await waitForDirectRenderer(page, 'human_female');
+
+    const handled = await page.evaluate(() => {
+      const entity = (window.entities || []).find(e => e.alive && e.race === 'human' && e.gender === 'female' && e.side === 'player');
+      if (!entity) throw new Error('No player-side human female entity found');
+      entity.facing = 'down';
+
+      const assets = window.DIRECTIONAL_CHARACTER_ASSETS?.human_female?.body?.average;
+      if (!assets) throw new Error('Human-female body assets unavailable');
+      const original = assets.front;
+      const pending = new Image();
+      assets.front = pending;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = 240;
+      canvas.height = 300;
+      const ctx = canvas.getContext('2d');
+      const height = 240;
+      const width = height * (window.HUMAN_FEMALE_RENDER_ASPECT || 0.48);
+
+      try {
+        return window.drawDirectionalHumanoidInBounds(
+          ctx,
+          entity,
+          {left:(canvas.width-width)/2, top:20, width, height},
+          'down',
+        );
+      } finally {
+        assets.front = original;
+      }
+    });
+
+    expect(handled).toBe(false);
+  });
+'''
+          pos = tests.rfind(marker)
+          if pos < 0:
+              raise SystemExit('Could not find final test describe terminator')
+          if "missing direct body asset falls through" not in tests:
+              tests = tests[:pos] + insert + tests[pos:]
+              test.write_text(tests)
+          PY
+
+          node --check humanoidRenderer.js
+          node --check tests/human-female-direct-render.spec.js
+
+      - name: Commit fix without overwriting newer development work
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git rm .github/workflows/fix-disappearing-humanoids-once.yml
+          git add humanoidRenderer.js tests/human-female-direct-render.spec.js
+          git commit -m "Let legacy renderer cover unavailable humanoid bodies"
+          git fetch origin development
+          git rebase origin/development
+          git push origin HEAD:development
