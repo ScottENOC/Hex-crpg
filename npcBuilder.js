@@ -1,3 +1,4 @@
+// npcBuilder.js
 // Builds NPCs the same way PCs are built: race + class level(s) -> attribute
 // pool -> skills purchased from that pool -> equipment. Mirrors
 // characterCreation.js's createCharacterData and the real skill-purchase
