@@ -156,6 +156,16 @@
         back: {x:.03,y:.225,w:.94,h:.770},
     };
 
+    // Optional local width shaping. Values are multipliers relative to the
+    // existing rigid armour fit; vertical placement, anchors and total height
+    // remain unchanged. Side view stays rigid to avoid inventing depth.
+    const ARMOUR_BODY_SHAPE_PROFILES = {
+        human_female:{average:{shoulders:1.00,waist:1.02,hips:1.10},broad:{shoulders:1.04,waist:1.06,hips:1.14}},
+        elf_female:  {average:{shoulders:.98,waist:1.00,hips:1.05}},
+        human_male:  {average:{shoulders:1.08,waist:1.00,hips:.98},broad:{shoulders:1.12,waist:1.05,hips:1.00}},
+    };
+    window.ARMOUR_BODY_SHAPE_PROFILES = ARMOUR_BODY_SHAPE_PROFILES;
+
     // Human-female nasal helm sits halfway between the pre-reduction and current
     // reduced fit. Male rendering deliberately keeps the existing target.
     const HELMET_TARGETS = {
@@ -492,6 +502,47 @@
         return !!drawVisibleFit(ctx, image, bounds, target);
     }
 
+    function armourWidthAt(profile, t) {
+        const shoulderY=.18, waistY=.53, hipY=.84;
+        const lerp=(a,b,u)=>a+(b-a)*Math.max(0,Math.min(1,u));
+        if(t<=waistY) return lerp(profile.shoulders,profile.waist,(t-shoulderY)/(waistY-shoulderY));
+        return lerp(profile.waist,profile.hips,(t-waistY)/(hipY-waistY));
+    }
+
+    function armourShapeProfile(entity, view) {
+        if(view==='side') return null;
+        const byBody=ARMOUR_BODY_SHAPE_PROFILES[keyFor(entity)];
+        if(!byBody) return null;
+        return entity.armourBodyShape || byBody[entity.bodyType || 'average'] || byBody.average || null;
+    }
+
+    function drawShapedArmourFit(ctx, image, bounds, target, profile) {
+        if(!profile) return drawVisibleFit(ctx,image,bounds,target);
+        const trim=alphaTrim(image);
+        if(!trim?.trimWidth || !trim?.trimHeight) return false;
+        const iw=image.naturalWidth||image.width, ih=image.naturalHeight||image.height;
+        const targetLeft=bounds.left+target.x*bounds.width;
+        const targetTop=bounds.top+target.y*bounds.height;
+        const targetWidth=target.w*bounds.width;
+        const targetHeight=target.h*bounds.height;
+        const scaleX=targetWidth/trim.trimWidth, scaleY=targetHeight/trim.trimHeight;
+        const outerW=iw*scaleX, outerH=ih*scaleY;
+        const dx=targetLeft-trim.trimLeft*scaleX, dy=targetTop-trim.trimTop*scaleY;
+        const cx=dx+outerW/2;
+        const strips=32;
+        for(let i=0;i<strips;i++){
+            const sy=Math.floor(i*ih/strips), sy2=Math.ceil((i+1)*ih/strips), sh=Math.max(1,sy2-sy);
+            const sourceMid=sy+sh/2;
+            const t=Math.max(0,Math.min(1,(sourceMid-trim.trimTop)/trim.trimHeight));
+            const widthScale=armourWidthAt(profile,t);
+            const dw=outerW*widthScale;
+            const destY=dy+(sy/ih)*outerH;
+            const destH=(sh/ih)*outerH+.35;
+            ctx.drawImage(image,0,sy,iw,sh,cx-dw/2,destY,dw,destH);
+        }
+        return {dx,dy,width:outerW,height:outerH,target:{left:targetLeft,top:targetTop,width:targetWidth,height:targetHeight},shapeProfile:{...profile}};
+    }
+
     function drawArmour(ctx, entity, view, bounds) {
         const image = armourImage(entity, view);
         if (!imageReady(image)) return false;
@@ -500,11 +551,12 @@
             ? (HUMAN_FEMALE_EQUIPMENT_TUNING[view]?.armourY || 0)
             : 0;
         const target = armourY ? {...baseTarget,y:baseTarget.y+armourY} : baseTarget;
-        const placement = drawVisibleFit(ctx, image, bounds, target);
+        const profile=armourShapeProfile(entity,view);
+        const placement = drawShapedArmourFit(ctx, image, bounds, target, profile);
         if (placement) {
             window.__humanoidRendererLastArmour = {
                 entity, view, ...placement,
-                compositionSource:'direct-axis-aligned-scale-translate',
+                compositionSource:profile?'direct-horizontal-strip-width-profile':'direct-axis-aligned-scale-translate',
                 rotation:0, shear:false,
             };
         }
@@ -517,6 +569,9 @@
         const view = facingToView(facing);
         const set = CHARACTER_ASSETS[key];
         const bodyType = entity.bodyType || 'average';
+        window.clothingSystem?.ensureDefaultOutfit?.(entity,{player:entity.side==='player'});
+        window.clothingSystem?.preloadOutfit?.(entity,view);
+        if (entity.displayClothes !== false && window.clothingSystem?.visibleSlotsReady && !window.clothingSystem.visibleSlotsReady(entity,view)) return true;
         const sourceBody = (set?.body?.[bodyType] || set?.body?.average)?.[view];
         if (!imageReady(sourceBody)) return true; // own the frame; never flash legacy art while loading
 
@@ -562,7 +617,7 @@
             for (const slot of ['underwear','bra','pants','shirt']) {
                 if (window.clothingSystem?.drawSlot?.(ctx, entity, slot, view, bounds)) layerOrder.push(slot);
             }
-            if (entity.equipped?.armor && drawArmour(ctx, entity, view, bounds)) layerOrder.push('armour');
+            if (entity.displayArmour !== false && entity.equipped?.armor && drawArmour(ctx, entity, view, bounds)) layerOrder.push('armour');
             if (typeof window.drawFacialHairLayer === 'function' && window.drawFacialHairLayer(ctx,entity,view,bounds)) layerOrder.push('facialHair');
             if (!hasHelmet && imageReady(hairImage)) {
                 if (drawCropped(ctx, hairImage, layout.hairCrop, layout.hairDest, bounds)) layerOrder.push('hair');
@@ -628,6 +683,11 @@
             };
             const skin = window.getPlayerSkinToneFromControls?.();
             if (skin) Object.assign(preview, {skinHue:skin.hue,skinSaturation:skin.saturation,skinLightness:skin.lightness});
+            preview.side='player';
+            preview.displayArmour=true;
+            preview.displayClothes=true;
+            window.clothingSystem?.ensureDefaultOutfit?.(preview,{player:true});
+            window.clothingSystem?.preloadOutfit?.(preview,'front');
             if (!canDirectRender(preview)) return creatorLegacy.apply(this, arguments);
             const canvas = document.getElementById('appearance-preview-canvas');
             if (!canvas) return creatorLegacy.apply(this, arguments);

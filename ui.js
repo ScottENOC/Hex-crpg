@@ -327,13 +327,36 @@ HP: ${Math.ceil(window.player.hp)}/${window.player.maxHp} | MP: ${Math.floor(win
   info.innerHTML=txt;
 }
 
+function setAppearanceLayerVisibility(layer, checked) {
+    const char=window.player;
+    if(!char) return;
+    const key=layer==='armour'?'displayArmour':'displayClothes';
+    char[key]=!!checked;
+    const partyChar=(window.party||[]).find(p=>p.name===char.name);
+    if(partyChar) partyChar[key]=!!checked;
+    const ent=(window.entities||[]).find(e=>e.name===char.name&&e.alive);
+    if(ent) ent[key]=!!checked;
+    window.renderEntities?.();
+    window.refreshDirectionalTurnPortraits?.();
+}
+window.setAppearanceLayerVisibility=setAppearanceLayerVisibility;
+
 function showCharacterScreen() {
     if (!window.player) return;
 
     const char = window.player;
+    window.clothingSystem?.migrateLegacyEquipment?.(char);
+    window.clothingSystem?.ensureDefaultOutfit?.(char,{player:true});
     const contentDiv = document.getElementById("character-screen-content");
     if (!contentDiv) return;
-    contentDiv.innerHTML = ''; 
+    contentDiv.innerHTML = '';
+
+    const appearanceDiv=document.createElement('div');
+    appearanceDiv.style.cssText='display:flex;gap:18px;align-items:center;padding:8px 10px;margin-bottom:12px;border:1px solid #555;border-radius:5px;';
+    appearanceDiv.innerHTML=`<strong>Display:</strong>
+      <label style="font-weight:normal;"><input type="checkbox" ${char.displayArmour===false?'':'checked'} onchange="window.setAppearanceLayerVisibility('armour',this.checked)"> Armour</label>
+      <label style="font-weight:normal;"><input type="checkbox" ${char.displayClothes===false?'':'checked'} onchange="window.setAppearanceLayerVisibility('clothes',this.checked)"> Clothes</label>`;
+    contentDiv.appendChild(appearanceDiv);
 
     // SHOW ALL SKILLS TOGGLE
     const toggleDiv = document.createElement('div');
