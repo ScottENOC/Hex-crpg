@@ -194,6 +194,18 @@ if (!document.querySelector('script[data-identity-presentation]')) {
   document.head.appendChild(identityScript);
 }
 
+// Northwatch defenders exist in the persistent Campaign 2 world, but the
+// attacking siege force must not exist until an explicit siege dialogue/cheat
+// path activates it. This compatibility module wraps world setup + activation
+// without touching unrelated encounters.
+if (!document.querySelector('script[data-northwatch-siege-spawn]')) {
+  const siegeSpawnScript = document.createElement('script');
+  siegeSpawnScript.src = 'northwatchSiegeSpawn.js?build=20260928-explicit-siege-v1';
+  siegeSpawnScript.dataset.northwatchSiegeSpawn = 'true';
+  siegeSpawnScript.async = false;
+  document.head.appendChild(siegeSpawnScript);
+}
+
 // Layered clothing is kept in a small compatibility module too. Loading it
 // here avoids another index.html cache token and makes the feature available
 // before inventory UI setup finishes.
