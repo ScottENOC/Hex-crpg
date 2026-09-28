@@ -1,0 +1,169 @@
+name: Audit outerwear widths once
+on:
+  push:
+    branches: [development]
+permissions:
+  contents: write
+jobs:
+  audit:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pillow
+      - name: Measure rendered silhouette widths
+        run: |
+          python - <<'PY'
+          from PIL import Image
+          import json, math
+
+          files = {
+            'heavy_armour':'images/humanheavyarmour.png',
+            'blouse':'images/equipment/clothing/top_blouse.png',
+            'dress':'images/equipment/clothing/top_dress.png',
+            'shirt':'images/equipment/clothing/top_shirt.png',
+            'tunic':'images/equipment/clothing/top_tunic.png',
+            'baggy_wraps':'images/equipment/clothing/pants_baggy_wraps.png',
+            'breeches':'images/equipment/clothing/pants_breeches.png',
+            'hose':'images/equipment/clothing/pants_hose.png',
+            'trousers':'images/equipment/clothing/pants_trousers.png',
+          }
+
+          def alpha_rows(path):
+            im=Image.open(path).convert('RGBA')
+            w,h=im.size
+            a=im.getchannel('A')
+            pix=a.load()
+            rows=[]
+            left=w; right=-1; top=h; bottom=-1
+            for y in range(h):
+              xs=[x for x in range(w) if pix[x,y] >= 8]
+              if xs:
+                lo,hi=min(xs),max(xs)
+                rows.append((y,lo,hi,hi-lo+1))
+                left=min(left,lo); right=max(right,hi); top=min(top,y); bottom=max(bottom,y)
+            if right < left:
+              return im.size, (0,0,0,0), []
+            return im.size, (left,top,right,bottom), rows
+
+          data={}
+          for name,path in files.items():
+            size,bbox,rows=alpha_rows(path)
+            data[name]={'path':path,'size':size,'bbox':bbox,'rows':rows}
+
+          # Runtime targets, front view, current development.
+          targets={
+            'shirt':{'x':.077,'y':.205,'w':.846,'h':.3665},
+            'dress':{'x':.077,'y':.205,'w':.846,'h':.810},
+            'pants':{'x':.077,'y':.5715,'w':.846,'h':.4435},
+            # Armour gets the compositor's -0.010 front y tuning.
+            'armour':{'x':.03,'y':.195,'w':.94,'h':.810},
+          }
+
+          def clothing_geometry(name,kind):
+            d=data[name]; iw,ih=d['size']; l,t,r,b=d['bbox']; tw=r-l+1; th=b-t+1
+            target=targets[kind]
+            scale=min(target['w']/tw,target['h']/th)
+            dw=tw*scale; dh=th*scale
+            dx=target['x']+(target['w']-dw)/2
+            if kind=='dress': dy=target['y']
+            elif kind=='shirt': dy=target['y']+(target['h']-dh)
+            else: dy=target['y']
+            return {'scale':scale,'dx':dx,'dy':dy,'dw':dw,'dh':dh,'trim':(l,t,r,b)}
+
+          def armour_width_scale(t):
+            # human_female average profile
+            shoulders,waist,hips=1.00,1.02,1.10
+            shoulderY,waistY,hipY=.18,.53,.84
+            def lerp(a,b,u):
+              u=max(0,min(1,u)); return a+(b-a)*u
+            if t<=waistY:
+              return lerp(shoulders,waist,(t-shoulderY)/(waistY-shoulderY))
+            return lerp(waist,hips,(t-waistY)/(hipY-waistY))
+
+          def clothing_width_at(name,kind,char_y):
+            g=clothing_geometry(name,kind); d=data[name]; l,t,r,b=g['trim'];
+            if char_y < g['dy'] or char_y > g['dy']+g['dh']: return 0.0
+            sy=t + (char_y-g['dy'])/g['scale']
+            row=min(d['rows'], key=lambda q: abs(q[0]-sy)) if d['rows'] else None
+            return 0.0 if not row else row[3]*g['scale']
+
+          def armour_width_at(char_y):
+            d=data['heavy_armour']; iw,ih=d['size']; l,t,r,b=d['bbox']; tw=r-l+1; th=b-t+1
+            target=targets['armour']
+            if char_y < target['y'] or char_y > target['y']+target['h']: return 0.0
+            scaleX=target['w']/tw; scaleY=target['h']/th
+            sy=t+(char_y-target['y'])/scaleY
+            row=min(d['rows'], key=lambda q: abs(q[0]-sy)) if d['rows'] else None
+            if not row: return 0.0
+            norm_t=max(0,min(1,(row[0]-t)/th))
+            return row[3]*scaleX*armour_width_scale(norm_t)
+
+          upper_samples={
+            'top_edge':.215,
+            'shoulders':.255,
+            'upper_chest_arms':.305,
+            'mid_chest':.365,
+            'lower_torso':.445,
+            'waist':.535,
+          }
+          lower_samples={
+            'hips':.590,
+            'upper_thigh':.665,
+            'mid_thigh':.750,
+            'knee':.835,
+            'lower_leg':.925,
+          }
+
+          report={'targets':targets,'source':{},'upper':{},'lower':{}}
+          for name,d in data.items():
+            l,t,r,b=d['bbox'];
+            report['source'][name]={
+              'size':d['size'],
+              'alpha_bbox':[l,t,r,b],
+              'opaque_bbox_width':max(0,r-l+1),
+              'opaque_bbox_height':max(0,b-t+1),
+            }
+
+          for name in ['blouse','shirt','tunic','dress']:
+            kind='dress' if name=='dress' else 'shirt'
+            g=clothing_geometry(name,kind)
+            rows={}
+            for label,y in upper_samples.items():
+              cw=clothing_width_at(name,kind,y); aw=armour_width_at(y)
+              rows[label]={'y':y,'clothing':round(cw,5),'armour':round(aw,5),'ratio':round(cw/aw,4) if aw else None}
+            report['upper'][name]={
+              'visible_top':round(g['dy'],5),'visible_bottom':round(g['dy']+g['dh'],5),
+              'max_fitted_width':round(g['dw'],5),
+              'max_width_vs_armour_target':round(g['dw']/targets['armour']['w'],4),
+              'bands':rows,
+            }
+
+          for name in ['baggy_wraps','breeches','hose','trousers']:
+            g=clothing_geometry(name,'pants')
+            rows={}
+            for label,y in lower_samples.items():
+              cw=clothing_width_at(name,'pants',y); aw=armour_width_at(y)
+              rows[label]={'y':y,'clothing':round(cw,5),'armour':round(aw,5),'ratio':round(cw/aw,4) if aw else None}
+            report['lower'][name]={
+              'visible_top':round(g['dy'],5),'visible_bottom':round(g['dy']+g['dh'],5),
+              'max_fitted_width':round(g['dw'],5),
+              'max_width_vs_armour_target':round(g['dw']/targets['armour']['w'],4),
+              'bands':rows,
+            }
+
+          print('OUTERWEAR_WIDTH_REPORT_BEGIN')
+          print(json.dumps(report,indent=2))
+          print('OUTERWEAR_WIDTH_REPORT_END')
+          PY
+      - name: Remove one-time audit workflow
+        if: always()
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git rm .github/workflows/outerwear-width-audit-once.yml
+          git commit -m "Remove one-time outerwear width audit" || true
+          git push
