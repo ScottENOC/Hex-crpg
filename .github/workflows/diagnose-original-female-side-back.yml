@@ -18,24 +18,63 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install --disable-pip-version-check pillow
-      - name: Restore original uploaded side/back and inspect
+      - name: Restore originals and build transparency previews
         run: |
-          git show 0d79594fbdaecc0562c8f525f2ea16ad07f291ce:images/characters/human_female/body_side.png > /tmp/body_side.png
-          git show 0d79594fbdaecc0562c8f525f2ea16ad07f291ce:images/characters/human_female/body_back.png > /tmp/body_back.png
+          mkdir -p /tmp/female-preview
+          git show 0d79594fbdaecc0562c8f525f2ea16ad07f291ce:images/characters/human_female/body_side.png > /tmp/female-preview/body_side_original.png
+          git show 0d79594fbdaecc0562c8f525f2ea16ad07f291ce:images/characters/human_female/body_back.png > /tmp/female-preview/body_back_original.png
+          cp images/characters/human_female/body_front.png /tmp/female-preview/body_front_current.png
           python - <<'PY'
           from PIL import Image
-          from collections import Counter
-          for p in ['/tmp/body_side.png','/tmp/body_back.png']:
-              im=Image.open(p).convert('RGB')
+          from collections import deque
+          from pathlib import Path
+
+          outdir=Path('/tmp/female-preview')
+
+          def clean(src,dst,preview):
+              im=Image.open(src).convert('RGBA')
               w,h=im.size
-              c=Counter(im.getdata())
-              print('\n',p,im.size,'colors',len(c))
-              print('top20',c.most_common(20))
-              border=[]
               px=im.load()
-              for x in range(w): border += [px[x,0],px[x,h-1]]
-              for y in range(h): border += [px[0,y],px[w-1,y]]
-              bc=Counter(border)
-              print('border top20',bc.most_common(20))
-              print('corners',px[0,0],px[w-1,0],px[0,h-1],px[w-1,h-1])
+              bg=bytearray(w*h)
+              q=deque()
+              def candidate(x,y):
+                  r,g,b,a=px[x,y]
+                  return a>0 and max(r,g,b)-min(r,g,b) <= 22 and (r+g+b)/3 >= 205
+              for x in range(w):
+                  for y in (0,h-1):
+                      i=y*w+x
+                      if not bg[i] and candidate(x,y): bg[i]=1; q.append((x,y))
+              for y in range(h):
+                  for x in (0,w-1):
+                      i=y*w+x
+                      if not bg[i] and candidate(x,y): bg[i]=1; q.append((x,y))
+              while q:
+                  x,y=q.popleft()
+                  for nx,ny in ((x-1,y),(x+1,y),(x,y-1),(x,y+1)):
+                      if 0<=nx<w and 0<=ny<h:
+                          i=ny*w+nx
+                          if not bg[i] and candidate(nx,ny):
+                              bg[i]=1; q.append((nx,ny))
+              data=list(im.getdata())
+              removed=0
+              for i,(r,g,b,a) in enumerate(data):
+                  if bg[i]:
+                      data[i]=(0,0,0,0); removed+=1
+              out=Image.new('RGBA',(w,h)); out.putdata(data); out.save(dst,optimize=True)
+              alpha=out.getchannel('A')
+              bbox=alpha.getbbox()
+              visible=sum(1 for a in alpha.getdata() if a)
+              print(Path(src).name,'removed',removed,'visible',visible,'bbox',bbox)
+              comp=Image.new('RGBA',(w,h),(255,0,255,255)); comp.alpha_composite(out); comp.convert('RGB').save(preview,quality=95)
+              return bbox
+
+          side=clean(outdir/'body_side_original.png',outdir/'body_side_clean.png',outdir/'body_side_magenta.jpg')
+          back=clean(outdir/'body_back_original.png',outdir/'body_back_clean.png',outdir/'body_back_magenta.jpg')
+          front=Image.open(outdir/'body_front_current.png').convert('RGBA')
+          print('front current bbox',front.getchannel('A').getbbox(),'size',front.size)
           PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: female-side-back-preview
+          path: /tmp/female-preview
+          if-no-files-found: error
