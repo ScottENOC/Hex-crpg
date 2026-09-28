@@ -578,9 +578,10 @@
         const view = facingToView(facing);
         const set = CHARACTER_ASSETS[key];
         const bodyType = entity.bodyType || 'average';
+        // Clothing is optional decoration. Start its loads, but never let a
+        // missing/slow garment suppress the body layer for the entire character.
         window.clothingSystem?.ensureDefaultOutfit?.(entity,{player:entity.side==='player'});
         window.clothingSystem?.preloadOutfit?.(entity,view);
-        if (entity.displayClothes !== false && window.clothingSystem?.visibleSlotsReady && !window.clothingSystem.visibleSlotsReady(entity,view)) return true;
         const sourceBody = (set?.body?.[bodyType] || set?.body?.average)?.[view];
         if (!imageReady(sourceBody)) return true; // own the frame; never flash legacy art while loading
 
