@@ -589,7 +589,10 @@
         window.clothingSystem?.ensureDefaultOutfit?.(entity,{player:entity.side==='player'});
         window.clothingSystem?.preloadOutfit?.(entity,view);
         const sourceBody = (set?.body?.[bodyType] || set?.body?.average)?.[view];
-        if (!imageReady(sourceBody)) return true; // own the frame; never flash legacy art while loading
+        // A direct body image can be temporarily unavailable or permanently broken.
+        // Do not claim an empty frame: decline it so the established renderer can
+        // draw the character while the direct asset loads or recovers.
+        if (!imageReady(sourceBody)) return false;
 
         const layout = DIRECTIONAL_LAYOUT[view];
         const sourceHair = set?.hair?.[entity.hairStyle || 'brown_1']?.[view] || set?.hair?.brown_1?.[view];
