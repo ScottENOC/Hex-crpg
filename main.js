@@ -29,14 +29,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Asset Preloading Logic
     //
-    // Three tiers, loaded strictly in order, instead of one flat "everything
-    // after the arena floor tiles" list — a fresh page load has nothing
-    // rendered yet, so *what the player sees in the first few seconds* (the
-    // tavern's opening room, the arena lobby, and whatever race/gender the
-    // character creator is currently showing) should win the race against
-    // the other ~70 sprites (every monster, every other race/gender combo,
-    // every piece of world furniture) that won't be on screen for minutes,
-    // if ever, in a given playthrough.
+    // Character creation is useful idle time: warm likely gameplay assets in
+    // the background while the player is choosing a character. The global
+    // asset scheduler bounds concurrency and discards queued speculative work
+    // the instant Start is pressed, so preload work never gates scene loading.
     async function preloadAssets() {
         const priorityImages = [
             {key: 'floor1', src: 'images/arenaHexFloor1.png'},
@@ -45,23 +41,16 @@ document.addEventListener("DOMContentLoaded", () => {
             {key: 'floor4', src: 'images/arenaHexFloor4.png'}
         ];
 
-        // The exact race/gender combo tags used everywhere else in this
-        // file (APPEARANCE_BASE_SRC keys, CHAR_CONFIG) — reused here so
-        // there's one single source of truth for "which two images does
-        // this race/gender combo need."
+        // Only legacy-rendered race/gender combinations belong here. Human
+        // female, human male and elf female are owned by humanoidRenderer.js,
+        // which loads their directional body/hair art directly.
         const raceGenderImages = {
-            human_female: [{key: 'humanBase', src: 'images/humanfemale.png'}, {key: 'humanHair', src: 'images/humanfemalehair.png'}],
-            human_male: [{key: 'humanMaleBase', src: 'images/humanmale.png'}, {key: 'humanMaleHair', src: 'images/humanmalehair.png'}],
-            elf_female: [{key: 'elfFemaleBase', src: 'images/elffemale.png'}, {key: 'elfFemaleHair', src: 'images/elffemalehair.png'}],
             elf_male: [{key: 'elfMaleBase', src: 'images/elfmale.png'}, {key: 'elfMaleHair', src: 'images/elfmalehair.png'}],
             dwarf_female: [{key: 'dwarfFemaleBase', src: 'images/dwarffemale.png'}, {key: 'dwarfFemaleHair', src: 'images/dwarffemalehair.png'}],
             dwarf_male: [{key: 'dwarfMaleBase', src: 'images/dwarfmale.png'}, {key: 'dwarfMaleHair', src: 'images/dwarfmalehair.png'}],
         };
 
-        // Everything visible in the Hollowmere tavern's starting room
-        // (where every campaign begins — see setupVillageScene's tavern
-        // furniture in campaign2World.js) and the Campaign 1 arena lobby,
-        // both seen within seconds of clicking "Create Character."
+        // Lightweight assets useful immediately after character creation.
         const earlyRoomImages = [
             {key: 'wood_floor', src: 'images/wood_floor.svg'},
             {key: 'table', src: 'images/table.svg'},
@@ -71,15 +60,17 @@ document.addEventListener("DOMContentLoaded", () => {
             {key: 'fireplace_unlit', src: 'images/fireplace_unlit.svg'},
             {key: 'door_open', src: 'images/door_open.svg'},
             {key: 'door_closed', src: 'images/door_closed.svg'},
-            {key: 'swordIcon', src: 'images/sword.png'},
             {key: 'shield', src: 'images/shield.png'},
             {key: 'nasal_helm', src: 'images/nasalHelm.png'},
-            {key: 'arenaannouncer', src: 'images/arenaannouncer.png'},
-            {key: 'arenamercenary', src: 'images/arenamercenary.png'},
-            {key: 'arenashopkeeper', src: 'images/arenashopkeeper.png'},
         ];
 
         const restImages = [
+            // Legitimate but non-critical art: useful to warm while the player
+            // spends time in character creation, never something Start waits on.
+            {key: 'swordIcon', src: 'images/sword.png'},
+            {key: 'arenaannouncer', src: 'images/arenaannouncer.png'},
+            {key: 'arenamercenary', src: 'images/arenamercenary.png'},
+            {key: 'arenashopkeeper', src: 'images/arenashopkeeper.png'},
             {key: 'playerBase', src: 'images/elf.png'},
             {key: 'leatherArmor', src: 'images/elfleatherarmour.png'},
             {key: 'chainArmor', src: 'images/elfchainarmour.png'},
@@ -151,10 +142,9 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         }
 
-        // Re-prioritizable on demand: if the player changes race/gender in
-        // the character creator mid-load, that combo's two images jump the
-        // queue immediately rather than waiting for their turn in
-        // raceGenderImages/restImages further down.
+        // Re-prioritizable on demand for combinations still using legacy flat
+        // creator/game art. Direct-rendered humanoids load through their own
+        // directional asset table instead.
         function loadRaceGender(race, gender) {
             const images = raceGenderImages[`${race}_${gender}`];
             if (!images) return Promise.resolve();
@@ -168,23 +158,21 @@ document.addEventListener("DOMContentLoaded", () => {
             return { race: raceSelect?.value || 'human', gender: genderSelect?.value || 'female' };
         }
 
-        // Priority load: arena floor tiles, this room's furniture/NPCs, and
-        // whichever race/gender the creator defaults to (or is already set
-        // to, if this runs after the DOM's initial state is established).
         await Promise.all([
             ...priorityImages.map(load),
             ...earlyRoomImages.map(load),
             loadRaceGender(currentRaceGender().race, currentRaceGender().gender),
         ]);
         console.log("Priority assets loaded");
-        if (window.updateAppearancePreview) window.updateAppearancePreview(); // sprites just finished loading — refresh the (until-now-blank) preview
+        if (window.updateAppearancePreview) window.updateAppearancePreview();
 
-        // Background load: every other race/gender combo, then everything else.
+        // Opportunistic creator-time warmup. assetLoadScheduler.js keeps this
+        // bounded and drops queued work immediately when gameplay starts.
         await Promise.all([
             ...Object.entries(raceGenderImages).flatMap(([key, images]) => images.map(load)),
             ...restImages.map(load),
         ]);
-        console.log("All assets loaded");
+        console.log("All creator-time background assets loaded");
 
         // Audio pre-fetch (minimal)
         if (typeof window.playMusic === 'function') {
@@ -192,10 +180,8 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // If the player changes race/gender while background assets are still
-    // loading, jump that combo to the front of the queue instead of waiting
-    // for its turn — keeps "whatever the character creator is currently set
-    // to make" accurate even after the initial preload snapshot.
+    // If the player changes to a legacy-rendered race/gender while background
+    // assets are still loading, jump that pair into the scheduler.
     ['race-select', 'gender-select'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.addEventListener('change', () => {
@@ -651,20 +637,15 @@ window.updateRoguelikePreview = function() {
     
     window.updateRoguelikePreview();
 
-    // Live preview of the chosen race/gender/clothing-color combo — color
-    // only, never shape/race (see spriteRecolor.js for the recolor itself).
-    // Self-contained (doesn't depend on window.gameVisuals/CHAR_CONFIG,
-    // which aren't populated until startGameCore runs after character
-    // creation) — loads base body sprites directly the first time they're
-    // needed and caches them.
+    // Legacy flat-sprite preview is retained only for combinations not yet
+    // owned by humanoidRenderer.js. Direct humanoids install their own
+    // directional creator preview and therefore must not request old flat art.
     const APPEARANCE_BASE_SRC = {
-        human_female: 'images/humanfemale.png', human_male: 'images/humanmale.png',
-        elf_female: 'images/elffemale.png', elf_male: 'images/elfmale.png',
+        elf_male: 'images/elfmale.png',
         dwarf_female: 'images/dwarffemale.png', dwarf_male: 'images/dwarfmale.png'
     };
     const APPEARANCE_HAIR_SRC = {
-        human_female: 'images/humanfemalehair.png', human_male: 'images/humanmalehair.png',
-        elf_female: 'images/elffemalehair.png', elf_male: 'images/elfmalehair.png',
+        elf_male: 'images/elfmalehair.png',
         dwarf_female: 'images/dwarffemalehair.png', dwarf_male: 'images/dwarfmalehair.png'
     };
     const _appearancePreviewImages = {};
@@ -698,7 +679,7 @@ window.updateRoguelikePreview = function() {
         const hairSrc = APPEARANCE_HAIR_SRC[key];
         const ctx = canvas.getContext("2d");
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        if (!bodySrc) return;
+        if (!bodySrc) return; // direct humanoid preview will own this combination
 
         const bodyImg = loadAppearancePreviewImage(bodySrc);
         if (!bodyImg.complete || !bodyImg.naturalWidth) return; // redraws via onload once loaded
@@ -898,6 +879,8 @@ window.cheatMaxSkills = function() {
     window.showCharacterScreen();
 };
 window.startGame = function() {
+  // End speculative character-creator preloading before gameplay requests begin.
+  window.__assetLoadScheduler?.beginGameplayLoading?.();
   console.log("Starting game...");
 
   // Set timestamp to prevent the click that started the game from bleeding through to the map
