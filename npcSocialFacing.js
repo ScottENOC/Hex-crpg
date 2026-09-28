@@ -84,14 +84,20 @@
     window.__npcSocialFacingTimer = setInterval(pulse, PULSE_MS);
     pulse();
 
-    // Low-cost environmental-detail extension. It does no per-frame work;
-    // this simply loads the authored roadside sites once alongside the other
-    // living-world presentation modules.
-    if (!document.querySelector('script[data-roadside-world-texture-v2]')) {
+    function loadOnce(datasetKey, src) {
+        const selector = `script[data-${datasetKey.replace(/[A-Z]/g, m => `-${m.toLowerCase()}`)}]`;
+        if (document.querySelector(selector)) return;
         const script = document.createElement('script');
-        script.src = `roadsideWorldTextureV2.js?build=${encodeURIComponent(window.PRESENTATION_BUILD || 'npc-routines-v1')}`;
-        script.dataset.roadsideWorldTextureV2 = 'true';
+        script.src = `${src}?build=${encodeURIComponent(window.PRESENTATION_BUILD || 'npc-routines-v1')}`;
+        script.dataset[datasetKey] = 'true';
         script.async = false;
         document.head.appendChild(script);
     }
+
+    // Low-cost authored roadside sites, followed by sparse named travellers.
+    // Dynamic scripts marked async=false execute in insertion order, so the
+    // persistence adapter sees the traffic API once it arrives.
+    loadOnce('roadsideWorldTextureV2', 'roadsideWorldTextureV2.js');
+    loadOnce('persistentRoadTravellers', 'persistentRoadTravellers.js');
+    loadOnce('roadTravellerPersistence', 'roadTravellerPersistence.js');
 })();
