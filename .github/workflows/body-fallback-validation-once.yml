@@ -1,0 +1,38 @@
+name: Validate disappearing humanoid fallback once
+
+on:
+  push:
+    branches:
+      - development
+    paths:
+      - '.github/workflows/body-fallback-validation-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Run disappearing-character regression only
+        run: npx playwright test tests/humanoid-body-fallback-regression.spec.js --reporter=line
+      - name: Remove one-time validation workflow
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git rm .github/workflows/body-fallback-validation-once.yml
+          git commit -m "Remove one-time humanoid fallback validation"
+          git fetch origin development
+          git rebase origin/development
+          git push origin HEAD:development
