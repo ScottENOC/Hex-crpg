@@ -1,7 +1,7 @@
 // Explicit garment layers: one authored image per colourable part.
 (() => {
   'use strict';
-  const BUILD='20260929-clothing-layers-v14';
+  const BUILD='20260929-clothing-layers-v15';
   const slots=['underwear','bra','pants','shirt'];
   const preloadSlots=['shirt','pants','bra','underwear'];
   const labels={underwear:'Underwear',bra:'Bra',pants:'Pants',shirt:'Shirt / Dress'};
@@ -35,7 +35,7 @@
   // gap to heavy armour; looser garments and lower-body items get progressively
   // more room. Underwear/bra deliberately keep their compact aspect-preserving fit.
   const OUTERWEAR_WIDTH_USAGE={
-    top_blouse:.82,top_dress:.82,top_shirt:.82,top_tunic:.84,
+    top_blouse:.82,top_dress:.82,top_shirt:.82,top_shirt_f:.82,top_tunic:.84,
     pants_baggy_wraps:.74,pants_breeches:.70,pants_hose:.62,pants_trousers:.66,
   };
   function outerwearWidthUsage(slot,itemId){
@@ -48,10 +48,12 @@
     {id:'dark',label:labelDark,defaultColor:{hue:110,saturation:60,value:42,opacity:1},views,sourceTone:'darkGreen'},
     {id:'light',label:labelLight,defaultColor:{hue:110,saturation:45,value:72,opacity:1},views,sourceTone:'lightGreen'},
   ]});
+  const twoToneTop=(path)=>twoToneGarment('shirt',{front:path,side:path,back:path},'Main','Trim');
 
   const GARMENTS={
-    top_blouse:singleLayer('shirt','images/equipment/clothing/top_blouse.png','Blouse'),
-    top_dress:singleLayer('shirt','images/equipment/clothing/top_dress.png','Dress'),
+    top_blouse:twoToneTop('images/equipment/clothing/top_blouse.png'),
+    top_dress:twoToneTop('images/equipment/clothing/top_dress.png'),
+    top_shirt_f:twoToneTop('images/equipment/clothing/top_shirt_f.png'),
     top_shirt:singleLayer('shirt','images/equipment/clothing/top_shirt.png','Shirt'),
     top_tunic:singleLayer('shirt','images/equipment/clothing/top_tunic.png','Tunic'),
     pants_baggy_wraps:singleLayer('pants','images/equipment/clothing/pants_baggy_wraps.png','Baggy wraps'),
@@ -77,7 +79,8 @@
       back:'images/equipment/clothing/bra_strapless_back.png',
     },'Main','Trim'),
   };
-  const TOPS=['top_blouse','top_dress','top_shirt','top_tunic'];
+  const FEMININE_START_TOPS=['top_blouse','top_dress','top_shirt_f'];
+  const MASCULINE_START_TOPS=['top_shirt'];
   const PANTS=['pants_baggy_wraps','pants_breeches','pants_hose','pants_trousers'];
   const PLAYER_DEFAULT={shirt:'top_shirt',pants:'pants_trousers',underwear:'underwear_briefs',bra:'underwear_bra'};
   const HUMANOID_RACES=new Set(['human','elf','dwarf','goblin','orc']);
@@ -111,7 +114,7 @@
 
   function registerBuiltinItems(){
     if(!window.items) return false;
-    const names={top_blouse:'Blouse',top_dress:'Dress',top_shirt:'Shirt',top_tunic:'Tunic',pants_baggy_wraps:'Baggy Wraps',
+    const names={top_blouse:'Blouse',top_dress:'Dress',top_shirt_f:'Fitted Shirt',top_shirt:'Shirt',top_tunic:'Tunic',pants_baggy_wraps:'Baggy Wraps',
       pants_breeches:'Breeches',pants_hose:'Hose',pants_trousers:'Trousers',underwear_briefs:'Briefs',
       underwear_briefs_gstring:'G-string',underwear_bra:'Bra',underwear_bra_strapless:'Strapless Bra'};
     for(const [id,g] of Object.entries(GARMENTS)) if(!window.items[id]) window.items[id]={name:names[id]||id,type:'clothes',clothingSlot:g.slot};
@@ -131,6 +134,7 @@
   function hash(text){let h=2166136261;for(const ch of String(text||'')){h^=ch.charCodeAt(0);h=Math.imul(h,16777619);}return h>>>0;}
   function eligible(e){return !!e&&HUMANOID_RACES.has(e.race)&&!!e.gender;}
   function hasFeminineBody(e){return e?.gender==='female';}
+  function starterTop(e,seed){const pool=hasFeminineBody(e)?FEMININE_START_TOPS:MASCULINE_START_TOPS;return pool[hash(`${seed}|top`)%pool.length];}
   function deterministicColour(seed,offset=0){const h=hash(`${seed}|${offset}`);return {hue:h%360,saturation:48+((h>>>9)%38),value:48+((h>>>16)%32),opacity:1};}
 
   function ensureDefaultOutfit(e,{player=false}={}){
@@ -139,7 +143,7 @@
     const seed=e.name||`${e.race}_${e.gender}`;
 
     if(e.clothingDefaultsApplied!==true){
-      if(!e.equipped.shirt) e.equipped.shirt=player?PLAYER_DEFAULT.shirt:TOPS[hash(`${seed}|top`)%TOPS.length];
+      if(!e.equipped.shirt) e.equipped.shirt=starterTop(e,seed);
       if(!e.equipped.pants) e.equipped.pants=player?PLAYER_DEFAULT.pants:PANTS[hash(`${seed}|pants`)%PANTS.length];
       if(player&&!e.equipped.underwear) e.equipped.underwear=PLAYER_DEFAULT.underwear;
       if(player&&hasFeminineBody(e)&&!e.equipped.bra) e.equipped.bra=PLAYER_DEFAULT.bra;
@@ -299,6 +303,6 @@
   setInterval(()=>{for(const e of window.entities||[])ensureDefaultOutfit(e,{player:e?.side==='player'});if(window.player)ensureDefaultOutfit(window.player,{player:true});},1000);
   if(document.readyState==='complete')install();else window.addEventListener('load',install,{once:true});
 
-  window.clothingSystem={build:BUILD,slots,preloadSlots,slotLabels:labels,builtinGarments:GARMENTS,clothingTargets:CLOTHING_TARGETS,playerDefault:PLAYER_DEFAULT,getItemSpec:spec,migrateLegacyEquipment:migrate,ensureDefaultOutfit,preloadOutfit,visibleSlotsReady,getLayerColour:colour,setLayerColour:setColour,drawSlot,tintWholeLayer:tint,registerBuiltinItems};
+  window.clothingSystem={build:BUILD,slots,preloadSlots,slotLabels:labels,builtinGarments:GARMENTS,clothingTargets:CLOTHING_TARGETS,playerDefault:PLAYER_DEFAULT,starterTops:{feminine:[...FEMININE_START_TOPS],masculine:[...MASCULINE_START_TOPS]},getItemSpec:spec,migrateLegacyEquipment:migrate,ensureDefaultOutfit,preloadOutfit,visibleSlotsReady,getLayerColour:colour,setLayerColour:setColour,drawSlot,tintWholeLayer:tint,registerBuiltinItems};
   window.CLOTHING_SLOTS=slots;
 })();
