@@ -145,6 +145,7 @@
     let warmupResumeTimer = null;
     let pumpScheduled = false;
     const queue = [];
+    const proactiveWarmImages = new Map();
 
     // Compatibility guard for superseded flat sprites and three genuinely dead
     // generic-elf paper-doll assets. The latter still have stale new-Image()
@@ -337,6 +338,25 @@
         schedulePump();
     }
 
+    function warmPath(path) {
+        if (gameStarted || proactiveWarmImages.has(path)) return;
+        const img = new Image();
+        proactiveWarmImages.set(path, img);
+        img.src = path;
+    }
+
+    function warmSelectedScenario() {
+        if (gameStarted || selectedCampaign() !== '1') return;
+
+        // main.js already requests the four arena floor tiles in its first
+        // batch. Warm only the Scenario 1 art that main.js otherwise buries in
+        // its second/background batch, avoiding duplicate floor requests.
+        for (const path of ARENA_CRITICAL) {
+            if (!path.includes('/terrain/bases/arena/floor_')) warmPath(path);
+        }
+        for (const path of ARENA_SOON) warmPath(path);
+    }
+
     function beginGameplayLoading() {
         if (gameStarted) return;
         gameStarted = true;
@@ -407,8 +427,12 @@
         },
     });
 
+    document.addEventListener('DOMContentLoaded', warmSelectedScenario, {once:true});
     document.addEventListener('change', event => {
-        if (event.target?.id === 'campaign-select') reprioritiseCreatorQueue();
+        if (event.target?.id === 'campaign-select') {
+            reprioritiseCreatorQueue();
+            warmSelectedScenario();
+        }
     }, true);
     document.addEventListener('click', event => {
         if (event.target?.id === 'createCharacterButton') beginGameplayLoading();
@@ -428,6 +452,7 @@
         priorityFor(path) { return priorityFor(LEGACY_ASSET_REDIRECTS.get(normalise(path)) || normalise(path)); },
         beginGameplayLoading,
         reprioritiseCreatorQueue,
+        warmSelectedScenario,
         get gameStarted() { return gameStarted; },
         get queued() { return queue.length; },
         get active() { return active; },
