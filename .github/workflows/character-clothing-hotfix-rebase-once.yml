@@ -1,0 +1,65 @@
+name: Character clothing hotfix rebase finaliser
+
+on:
+  push:
+    branches:
+      - development
+    paths:
+      - '.github/workflows/character-clothing-hotfix-rebase-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  finalise:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+
+      - name: Apply final renderer and bootstrap changes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          renderer = Path('humanoidRenderer.js')
+          source = renderer.read_text()
+          old = """        window.clothingSystem?.ensureDefaultOutfit?.(entity,{player:entity.side==='player'});\n        window.clothingSystem?.preloadOutfit?.(entity,view);\n        if (entity.displayClothes !== false && window.clothingSystem?.visibleSlotsReady && !window.clothingSystem.visibleSlotsReady(entity,view)) return true;\n"""
+          new = """        // Clothing is optional decoration. Start its loads, but never let a\n        // missing/slow garment suppress the body layer for the entire character.\n        window.clothingSystem?.ensureDefaultOutfit?.(entity,{player:entity.side==='player'});\n        window.clothingSystem?.preloadOutfit?.(entity,view);\n"""
+          if old not in source:
+              raise SystemExit('Expected humanoid clothing-readiness gate was not found')
+          renderer.write_text(source.replace(old, new, 1))
+
+          index = Path('index.html')
+          html = index.read_text()
+          replacements = {
+              '<script src="name.js?v=11"></script>': '<script src="name.js?v=12"></script>',
+              '<script src="characterCreation.js?v=5"></script>': '<script src="characterCreation.js?v=6"></script>',
+          }
+          for old_text, new_text in replacements.items():
+              if old_text not in html:
+                  raise SystemExit(f'Expected bootstrap token not found: {old_text}')
+              html = html.replace(old_text, new_text, 1)
+          index.write_text(html)
+          PY
+          node --check humanoidRenderer.js
+          node --check clothingLayers.js
+          node --check clothingSystem.js
+          node --check characterCreation.js
+          node --check name.js
+          node --check tests/clothing-render-regression.spec.js
+
+      - name: Commit without clobbering newer work
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git rm .github/workflows/character-clothing-hotfix-once.yml
+          git rm .github/workflows/character-clothing-hotfix-rebase-once.yml
+          git add humanoidRenderer.js index.html
+          git commit -m "Keep humanoid bodies visible while clothing loads"
+          git fetch origin development
+          git rebase origin/development
+          git push origin HEAD:development
