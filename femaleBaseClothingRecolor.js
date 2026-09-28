@@ -1,18 +1,20 @@
 // femaleBaseClothingRecolor.js
-// Human-female directional body art has two authored, continuous pale garments:
-// one upper piece and one lower piece. Do not infer these from generic anatomy
-// lightness bands. Instead find the largest connected near-white region in the
-// upper torso and pelvis respectively, then use those exact connected regions
-// (plus a very small antialias expansion) as the clothing masks.
+// Human-female directional body art has two authored pale garments: one upper
+// piece and one lower piece. Build a semantic mask once from the untouched body
+// art, then recolour only those masked pixels while preserving the original
+// lightness/shading. The mask is an actual canvas: red = upper clothing,
+// blue = lower clothing, channel intensity = blend strength at antialiased edges.
 (() => {
   'use strict';
 
-  const INSTALL_FLAG = '__femaleBaseClothingRecolorV3Installed';
+  const INSTALL_FLAG = '__femaleBaseClothingRecolorV4Installed';
   const ALPHA_MIN = 40;
-  const TARGET_CLOTH_SAT = 0.58;
   const maskCache = new WeakMap();
+  const sourcePixelCache = new WeakMap();
   const clothingCache = new WeakMap();
   const skinCache = new WeakMap();
+
+  function clamp(v,min=0,max=1){ return Math.max(min,Math.min(max,v)); }
 
   function rgbToHsl(r,g,b){
     r/=255; g/=255; b/=255;
@@ -28,7 +30,7 @@
 
   function hslToRgb(h,s,l){
     h=((h%360)+360)%360/360;
-    if(!s){const v=Math.round(l*255);return[v,v,v];}
+    if(!s){ const v=Math.round(l*255); return [v,v,v]; }
     const q=l<.5?l*(1+s):l+s-l*s, p=2*l-q;
     const f=t=>{if(t<0)t+=1;if(t>1)t-=1;if(t<1/6)return p+(q-p)*6*t;if(t<1/2)return q;if(t<2/3)return p+(q-p)*(2/3-t)*6;return p;};
     return [Math.round(f(h+1/3)*255),Math.round(f(h)*255),Math.round(f(h-1/3)*255)];
@@ -47,12 +49,16 @@
     if(tone===undefined||tone===null) return null;
     const spec=typeof tone==='number'?{hue:tone}:tone;
     if(!Number.isFinite(spec?.hue)) return null;
-    return {hue:Number(spec.hue),saturation:Number.isFinite(spec.saturation)?Number(spec.saturation):null,lightness:Number.isFinite(spec.lightness)?Number(spec.lightness):null};
+    return {
+      hue:Number(spec.hue),
+      saturation:Number.isFinite(spec.saturation)?Number(spec.saturation):null,
+      lightness:Number.isFinite(spec.lightness)?Number(spec.lightness):null,
+    };
   }
 
   function tintSkin(h,s,l,spec){
-    const s2=spec.saturation===null?s:Math.max(0,Math.min(1,spec.saturation*(.65+s*.5)));
-    const l2=spec.lightness===null?l:Math.max(.08,Math.min(.95,spec.lightness+(l-.68)));
+    const s2=spec.saturation===null?s:clamp(spec.saturation*(.65+s*.5));
+    const l2=spec.lightness===null?l:clamp(spec.lightness+(l-.68),.08,.95);
     return hslToRgb(spec.hue,s2,l2);
   }
 
@@ -61,10 +67,14 @@
   }
 
   function sourcePixels(base){
-    const w=wOf(base),h=hOf(base),c=document.createElement('canvas');c.width=w;c.height=h;
-    const ctx=c.getContext('2d',{willReadFrequently:true});ctx.drawImage(base,0,0);
-    const imageData=ctx.getImageData(0,0,w,h);
-    return {w,h,imageData};
+    const cached=sourcePixelCache.get(base); if(cached) return cached;
+    const w=wOf(base), h=hOf(base), c=document.createElement('canvas');
+    c.width=w; c.height=h;
+    const ctx=c.getContext('2d',{willReadFrequently:true});
+    ctx.drawImage(base,0,0);
+    const result={w,h,imageData:ctx.getImageData(0,0,w,h)};
+    sourcePixelCache.set(base,result);
+    return result;
   }
 
   function opaqueBounds(data,w,h){
@@ -77,101 +87,132 @@
     return right>=left&&bottom>=top?{left,right,top,bottom,width:right-left+1,height:bottom-top+1}:null;
   }
 
-  function seedNearWhite(r,g,b,a){
+  // Bright neutral pixels are reliable seeds. Shaded cloth is darker, so the
+  // flood-fill is allowed to grow through connected low-chroma greys after a
+  // seed has proved that the region is clothing.
+  function seedPixel(r,g,b,a){
     if(a<ALPHA_MIN) return false;
-    const max=Math.max(r,g,b), min=Math.min(r,g,b);
-    const [,s,l]=rgbToHsl(r,g,b);
-    // Authored underwear is white/very pale grey. This deliberately excludes
-    // pale warm skin by requiring both low chroma and high brightness.
-    return l>=.68 && s<=.20 && max-min<=54;
+    const max=Math.max(r,g,b), min=Math.min(r,g,b), [,s,l]=rgbToHsl(r,g,b);
+    return l>=.70 && s<=.22 && max-min<=58;
   }
 
-  function edgeFabricCandidate(r,g,b,a){
+  function fabricPixel(r,g,b,a){
     if(a<ALPHA_MIN) return false;
-    const [,s,l]=rgbToHsl(r,g,b);
-    // Only used for one-pixel dilation around an already-proven white region.
-    // It catches antialias/shadow pixels without becoming a second global
-    // colour classifier.
-    return l>=.38 && s<=.42;
+    const max=Math.max(r,g,b), min=Math.min(r,g,b), [,s,l]=rgbToHsl(r,g,b);
+    return (s<=.30 && l>=.24 && max-min<=92) || (l>=.76 && s<=.42);
   }
 
-  function connectedComponents(seed,w,h,bounds){
-    const seen=new Uint8Array(w*h), comps=[];
-    const left=Math.max(0,bounds?.left??0), right=Math.min(w-1,bounds?.right??w-1);
-    const top=Math.max(0,bounds?.top??0), bottom=Math.min(h-1,bounds?.bottom??h-1);
-    const dirs=[[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]];
-    for(let y=top;y<=bottom;y++) for(let x=left;x<=right;x++){
+  function softEdgePixel(r,g,b,a){
+    if(a<16) return false;
+    const [,s,l]=rgbToHsl(r,g,b);
+    return s<=.42 && l>=.18;
+  }
+
+  const DIRS=[[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]];
+
+  function grownComponents(data,w,h,zone){
+    const seed=new Uint8Array(w*h), fabric=new Uint8Array(w*h), seen=new Uint8Array(w*h), comps=[];
+    for(let y=zone.top;y<=zone.bottom;y++) for(let x=zone.left;x<=zone.right;x++){
+      const idx=y*w+x,i=idx*4;
+      if(seedPixel(data[i],data[i+1],data[i+2],data[i+3])) seed[idx]=1;
+      if(fabricPixel(data[i],data[i+1],data[i+2],data[i+3])) fabric[idx]=1;
+    }
+    for(let y=zone.top;y<=zone.bottom;y++) for(let x=zone.left;x<=zone.right;x++){
       const start=y*w+x;
       if(!seed[start]||seen[start]) continue;
-      const queue=[start]; seen[start]=1;
-      const pixels=[]; let sumX=0,sumY=0,minX=x,maxX=x,minY=y,maxY=y;
+      const queue=[start], pixels=[]; seen[start]=1;
+      let sumX=0,sumY=0,minX=x,maxX=x,minY=y,maxY=y,seedCount=0;
       for(let qi=0;qi<queue.length;qi++){
-        const idx=queue[qi], px=idx%w, py=Math.floor(idx/w);
-        pixels.push(idx);sumX+=px;sumY+=py;
+        const idx=queue[qi],px=idx%w,py=Math.floor(idx/w);
+        pixels.push(idx); sumX+=px; sumY+=py; if(seed[idx]) seedCount++;
         if(px<minX)minX=px;if(px>maxX)maxX=px;if(py<minY)minY=py;if(py>maxY)maxY=py;
-        for(const [dx,dy] of dirs){
+        for(const [dx,dy] of DIRS){
           const nx=px+dx,ny=py+dy;
-          if(nx<left||nx>right||ny<top||ny>bottom)continue;
-          const ni=ny*w+nx;if(seed[ni]&&!seen[ni]){seen[ni]=1;queue.push(ni);}
+          if(nx<zone.left||nx>zone.right||ny<zone.top||ny>zone.bottom) continue;
+          const ni=ny*w+nx;
+          if(fabric[ni]&&!seen[ni]){ seen[ni]=1; queue.push(ni); }
         }
       }
-      comps.push({pixels,size:pixels.length,cx:sumX/pixels.length,cy:sumY/pixels.length,minX,maxX,minY,maxY});
+      if(seedCount) comps.push({pixels,size:pixels.length,seedCount,cx:sumX/pixels.length,cy:sumY/pixels.length,minX,maxX,minY,maxY});
     }
     return comps;
   }
 
-  function buildGarmentMasks(base){
-    const cached=maskCache.get(base);if(cached)return cached;
-    const {w,h,imageData}=sourcePixels(base),data=imageData.data,bounds=opaqueBounds(data,w,h);
-    const upper=new Uint8Array(w*h),lower=new Uint8Array(w*h),seed=new Uint8Array(w*h);
-    if(!bounds){const empty={w,h,upper,lower,upperSize:0,lowerSize:0,components:[]};maskCache.set(base,empty);return empty;}
-
-    // Restrict component discovery to the central body. Arms/hands and almost
-    // all face/leg highlights are excluded before colour is even considered.
-    const central={
-      left:Math.floor(bounds.left+bounds.width*.14),
-      right:Math.ceil(bounds.left+bounds.width*.86),
-      top:Math.floor(bounds.top+bounds.height*.12),
-      bottom:Math.ceil(bounds.top+bounds.height*.68),
-    };
-    for(let y=central.top;y<=central.bottom;y++) for(let x=central.left;x<=central.right;x++){
-      const idx=y*w+x,i=idx*4;
-      if(seedNearWhite(data[i],data[i+1],data[i+2],data[i+3]))seed[idx]=1;
-    }
-
-    const comps=connectedComponents(seed,w,h,central).filter(c=>c.size>=8);
-    const relY=c=>(c.cy-bounds.top)/Math.max(1,bounds.height-1);
-    // User-provided invariant: one continuous upper garment and one continuous
-    // lower garment. Select the largest white component in each broad vertical
-    // zone rather than trying to infer exact anatomy from colour.
-    const upperComp=comps.filter(c=>relY(c)>=.15&&relY(c)<=.43).sort((a,b)=>b.size-a.size)[0]||null;
-    const lowerComp=comps.filter(c=>relY(c)>=.34&&relY(c)<=.64).sort((a,b)=>b.size-a.size)[0]||null;
-    if(upperComp)for(const idx of upperComp.pixels)upper[idx]=1;
-    if(lowerComp)for(const idx of lowerComp.pixels)lower[idx]=1;
-
-    // Include just one neighbouring ring of plausible fabric edge pixels. This
-    // keeps antialiased garment edges out of the skin pass without swallowing
-    // surrounding belly/thigh skin.
-    function dilate(mask){
-      const additions=[];
-      for(let idx=0;idx<mask.length;idx++){
-        if(!mask[idx])continue;
-        const x=idx%w,y=Math.floor(idx/w);
-        for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
-          if(!dx&&!dy)continue;
-          const nx=x+dx,ny=y+dy;if(nx<0||nx>=w||ny<0||ny>=h)continue;
-          const ni=ny*w+nx;if(mask[ni])continue;
-          const i=ni*4;if(edgeFabricCandidate(data[i],data[i+1],data[i+2],data[i+3]))additions.push(ni);
-        }
+  function addSoftEdge(mask,data,w,h){
+    const additions=[];
+    for(let idx=0;idx<mask.length;idx++){
+      if(mask[idx]!==255) continue;
+      const x=idx%w,y=Math.floor(idx/w);
+      for(const [dx,dy] of DIRS){
+        const nx=x+dx,ny=y+dy;
+        if(nx<0||nx>=w||ny<0||ny>=h) continue;
+        const ni=ny*w+nx; if(mask[ni]) continue;
+        const i=ni*4;
+        if(softEdgePixel(data[i],data[i+1],data[i+2],data[i+3])) additions.push(ni);
       }
-      for(const idx of additions)mask[idx]=1;
     }
-    dilate(upper);dilate(lower);
+    for(const idx of additions) if(mask[idx]<144) mask[idx]=144;
+  }
 
-    let upperSize=0,lowerSize=0;for(const v of upper)upperSize+=v;for(const v of lower)lowerSize+=v;
-    const result={w,h,upper,lower,upperSize,lowerSize,components:comps.map(c=>({size:c.size,cx:c.cx,cy:c.cy,minX:c.minX,maxX:c.maxX,minY:c.minY,maxY:c.maxY}))};
+  function maskName(base){
+    const src=String(base?.src||'').split('#')[0].split('?')[0];
+    return src.split('/').pop()?.replace(/\.png$/i,'') || `body-${Date.now()}`;
+  }
+
+  function buildSemanticMask(base){
+    const cached=maskCache.get(base); if(cached) return cached;
+    const {w,h,imageData}=sourcePixels(base), data=imageData.data, bounds=opaqueBounds(data,w,h);
+    const upper=new Uint8Array(w*h), lower=new Uint8Array(w*h);
+    const canvas=document.createElement('canvas'); canvas.width=w; canvas.height=h;
+    if(!bounds){
+      const empty={w,h,upper,lower,canvas,upperSize:0,lowerSize:0,upperComponents:[],lowerComponents:[]};
+      maskCache.set(base,empty); return empty;
+    }
+
+    const xLeft=Math.max(0,Math.floor(bounds.left+bounds.width*.12));
+    const xRight=Math.min(w-1,Math.ceil(bounds.left+bounds.width*.88));
+    const yAt=f=>Math.max(0,Math.min(h-1,Math.round(bounds.top+bounds.height*f)));
+    const upperZone={left:xLeft,right:xRight,top:yAt(.14),bottom:yAt(.43)};
+    const lowerZone={left:xLeft,right:xRight,top:yAt(.36),bottom:yAt(.66)};
+
+    const upperComponents=grownComponents(data,w,h,upperZone).filter(c=>c.seedCount>=3&&c.size>=12).sort((a,b)=>b.size-a.size);
+    const lowerComponents=grownComponents(data,w,h,lowerZone).filter(c=>c.seedCount>=3&&c.size>=12).sort((a,b)=>b.size-a.size);
+    const upperComp=upperComponents[0]||null, lowerComp=lowerComponents[0]||null;
+    if(upperComp) for(const idx of upperComp.pixels) upper[idx]=255;
+    if(lowerComp) for(const idx of lowerComp.pixels) lower[idx]=255;
+    addSoftEdge(upper,data,w,h); addSoftEdge(lower,data,w,h);
+
+    // If the broad zones overlap, give an ambiguous pixel to whichever selected
+    // component centre is vertically closer. In practice the garments are
+    // separated, but this guarantees the red/blue semantic channels never fight.
+    for(let idx=0;idx<upper.length;idx++) if(upper[idx]&&lower[idx]){
+      const y=Math.floor(idx/w);
+      const du=upperComp?Math.abs(y-upperComp.cy):Infinity;
+      const dl=lowerComp?Math.abs(y-lowerComp.cy):Infinity;
+      if(du<=dl) lower[idx]=0; else upper[idx]=0;
+    }
+
+    const maskCtx=canvas.getContext('2d');
+    const maskData=maskCtx.createImageData(w,h), mp=maskData.data;
+    let upperSize=0,lowerSize=0;
+    for(let idx=0;idx<upper.length;idx++){
+      const u=upper[idx],l=lower[idx]; if(!u&&!l) continue;
+      if(u) upperSize++; if(l) lowerSize++;
+      const i=idx*4; mp[i]=u; mp[i+1]=0; mp[i+2]=l; mp[i+3]=Math.max(u,l);
+    }
+    maskCtx.putImageData(maskData,0,0);
+    canvas.__semanticClothingMask=true;
+    canvas.__sourceBody=base;
+
+    const key=maskName(base);
+    window.HUMAN_FEMALE_CLOTHING_MASKS=window.HUMAN_FEMALE_CLOTHING_MASKS||{};
+    window.HUMAN_FEMALE_CLOTHING_MASKS[key]=canvas;
+    const result={w,h,upper,lower,canvas,upperSize,lowerSize,
+      upperComponents:upperComponents.slice(0,8).map(c=>({size:c.size,seedCount:c.seedCount,cx:c.cx,cy:c.cy,minX:c.minX,maxX:c.maxX,minY:c.minY,maxY:c.maxY})),
+      lowerComponents:lowerComponents.slice(0,8).map(c=>({size:c.size,seedCount:c.seedCount,cx:c.cx,cy:c.cy,minX:c.minX,maxX:c.maxX,minY:c.minY,maxY:c.maxY}))};
     maskCache.set(base,result);
-    window.__femaleBaseClothingMaskDebug={src:String(base.src||''),width:w,height:h,upperSize,lowerSize,components:result.components};
+    window.__femaleBaseClothingMaskDebug={src:String(base.src||''),maskKey:key,width:w,height:h,upperSize,lowerSize,
+      upperComponents:result.upperComponents,lowerComponents:result.lowerComponents,maskCanvas:canvas};
     return result;
   }
 
@@ -180,55 +221,87 @@
 
   function recolorSkin(img,tone){
     if(!ready(img)||!isFemaleDirectionalBody(img)) return null;
-    const spec=skinSpec(tone);if(!spec)return img;
-    const base=baseOf(img),key=`${spec.hue}:${spec.saturation??'s'}:${spec.lightness??'l'}`;
-    const cached=cacheGet(skinCache,base,key);if(cached)return cached;
-    const {w,h,imageData}=sourcePixels(base),p=imageData.data,masks=buildGarmentMasks(base);
+    const spec=skinSpec(tone); if(!spec) return img;
+    const base=baseOf(img), key=`${spec.hue}:${spec.saturation??'s'}:${spec.lightness??'l'}`;
+    const cached=cacheGet(skinCache,base,key); if(cached) return cached;
+    const {w,h,imageData}=sourcePixels(base), p=new Uint8ClampedArray(imageData.data), masks=buildSemanticMask(base);
     for(let i=0;i<p.length;i+=4){
-      if(p[i+3]<ALPHA_MIN)continue;
-      const idx=i/4;if(masks.upper[idx]||masks.lower[idx])continue;
-      const [hh,s,l]=rgbToHsl(p[i],p[i+1],p[i+2]);if(!femaleSkinPixel(hh,s,l))continue;
-      const [r,g,b]=tintSkin(hh,s,l,spec);p[i]=r;p[i+1]=g;p[i+2]=b;
+      if(p[i+3]<ALPHA_MIN) continue;
+      const idx=i/4; if(masks.upper[idx]>=32||masks.lower[idx]>=32) continue;
+      const [hh,s,l]=rgbToHsl(p[i],p[i+1],p[i+2]); if(!femaleSkinPixel(hh,s,l)) continue;
+      const [r,g,b]=tintSkin(hh,s,l,spec); p[i]=r;p[i+1]=g;p[i+2]=b;
     }
-    const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').putImageData(imageData,0,0);
-    c.__recolorBaseSource=base;c.__skinToneSpec=spec;
-    return cacheSet(skinCache,base,key,c);
+    const out=document.createElement('canvas');out.width=w;out.height=h;
+    out.getContext('2d').putImageData(new ImageData(p,w,h),0,0);
+    out.__recolorBaseSource=base; out.__skinToneSpec=spec;
+    return cacheSet(skinCache,base,key,out);
   }
 
+  function clothingSaturation(sourceSat,sourceLight,satMult){
+    // Midtones carry the strongest colour; highlights and deep folds are a bit
+    // less saturated. This keeps the original rendered fabric looking painted,
+    // not like a flat RGB flood fill.
+    const highlightPenalty=Math.max(0,sourceLight-.70)*.75;
+    const shadowPenalty=Math.max(0,.28-sourceLight)*.45;
+    return clamp((.58 + sourceSat*.12 - highlightPenalty - shadowPenalty)*satMult,.26,.78);
+  }
+
+  function blendChannel(a,b,t){ return Math.round(a+(b-a)*t); }
+
   function recolorBody(img,hues){
-    if(!ready(img)||!isFemaleDirectionalBody(img))return null;
-    const base=baseOf(img),inherited=skinSpec(img.__skinToneSpec),explicit=skinSpec(hues?.skinHue),spec=explicit||inherited;
-    const shirtHue=hues?.shirtHue,pantsHue=hues?.pantsHue,satMult=Number.isFinite(hues?.satMult)?hues.satMult:1;
+    if(!ready(img)||!isFemaleDirectionalBody(img)) return null;
+    const base=baseOf(img), inherited=skinSpec(img.__skinToneSpec), explicit=skinSpec(hues?.skinHue), spec=explicit||inherited;
+    const shirtHue=hues?.shirtHue, pantsHue=hues?.pantsHue, satMult=Number.isFinite(hues?.satMult)?hues.satMult:1;
     const key=`${shirtHue??'x'}:${pantsHue??'x'}:${satMult}:${spec?.hue??'x'}:${spec?.saturation??'x'}:${spec?.lightness??'x'}`;
-    const cached=cacheGet(clothingCache,base,key);if(cached)return cached;
-    const {w,h,imageData}=sourcePixels(base),p=imageData.data,masks=buildGarmentMasks(base);
+    const cached=cacheGet(clothingCache,base,key); if(cached) return cached;
+    const {w,h,imageData}=sourcePixels(base), p=new Uint8ClampedArray(imageData.data), masks=buildSemanticMask(base);
+
     for(let i=0;i<p.length;i+=4){
-      if(p[i+3]<ALPHA_MIN)continue;
-      const idx=i/4;let hue;
-      if(masks.upper[idx])hue=shirtHue;else if(masks.lower[idx])hue=pantsHue;
-      if(hue!==undefined){
-        const [,srcSat,l]=rgbToHsl(p[i],p[i+1],p[i+2]);
-        const sat=Math.max(.38,Math.min(.82,TARGET_CLOTH_SAT*satMult));
-        const light=Math.max(.22,Math.min(.84,l*.90));
-        const [r,g,b]=hslToRgb(hue,Math.max(sat,srcSat*.75),light);p[i]=r;p[i+1]=g;p[i+2]=b;
-        continue;
+      if(p[i+3]<ALPHA_MIN) continue;
+      const idx=i/4, u=masks.upper[idx]/255, d=masks.lower[idx]/255;
+      const garment=Math.max(u,d);
+      if(garment>0){
+        const hue=u>=d?shirtHue:pantsHue;
+        if(hue!==undefined){
+          const [hh,srcSat,srcLight]=rgbToHsl(p[i],p[i+1],p[i+2]);
+          const sat=clothingSaturation(srcSat,srcLight,satMult);
+          // Preserve the source lightness exactly except for pure/near-white
+          // highlights, where HSL would otherwise remain visibly white no matter
+          // what hue is selected. A gentle cap keeps the highlight while letting
+          // the chosen colour show through.
+          const light=Math.min(.93,srcLight);
+          const [r,g,b]=hslToRgb(hue,sat,light);
+          p[i]=blendChannel(p[i],r,garment);
+          p[i+1]=blendChannel(p[i+1],g,garment);
+          p[i+2]=blendChannel(p[i+2],b,garment);
+        }
+        continue; // semantic clothing can never fall through into skin
       }
-      if((masks.upper[idx]||masks.lower[idx]))continue;
-      if(spec){const [hh,s,l]=rgbToHsl(p[i],p[i+1],p[i+2]);if(femaleSkinPixel(hh,s,l)){const [r,g,b]=tintSkin(hh,s,l,spec);p[i]=r;p[i+1]=g;p[i+2]=b;}}
+      if(spec){
+        const [hh,s,l]=rgbToHsl(p[i],p[i+1],p[i+2]);
+        if(femaleSkinPixel(hh,s,l)){
+          const [r,g,b]=tintSkin(hh,s,l,spec); p[i]=r;p[i+1]=g;p[i+2]=b;
+        }
+      }
     }
-    const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').putImageData(imageData,0,0);
-    c.__recolorBaseSource=base;if(spec)c.__skinToneSpec=spec;
-    return cacheSet(clothingCache,base,key,c);
+
+    const out=document.createElement('canvas');out.width=w;out.height=h;
+    out.getContext('2d').putImageData(new ImageData(p,w,h),0,0);
+    out.__recolorBaseSource=base; if(spec) out.__skinToneSpec=spec;
+    return cacheSet(clothingCache,base,key,out);
   }
 
   function install(){
-    if(window[INSTALL_FLAG])return true;
-    if(typeof window.getRecoloredSprite!=='function'||typeof window.getRecoloredSkinSprite!=='function')return false;
-    const legacySprite=window.getRecoloredSprite,legacySkin=window.getRecoloredSkinSprite;
+    if(window[INSTALL_FLAG]) return true;
+    if(typeof window.getRecoloredSprite!=='function'||typeof window.getRecoloredSkinSprite!=='function') return false;
+    const legacySprite=window.getRecoloredSprite, legacySkin=window.getRecoloredSkinSprite;
     window.getRecoloredSkinSprite=function(img,tone){return recolorSkin(img,tone)||legacySkin.apply(this,arguments);};
     window.getRecoloredSprite=function(img,hues){return recolorBody(img,hues)||legacySprite.apply(this,arguments);};
+    window.getHumanFemaleClothingMaskCanvas=function(img){
+      const base=baseOf(img); return ready(base)&&isFemaleDirectionalBody(base)?buildSemanticMask(base).canvas:null;
+    };
     window[INSTALL_FLAG]=true;
-    window.__femaleBaseClothingMaskVersion=3;
+    window.__femaleBaseClothingMaskVersion=4;
     window.drawMap?.();window.renderEntities?.();window.refreshDirectionalTurnPortraits?.();
     return true;
   }
