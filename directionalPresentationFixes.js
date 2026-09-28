@@ -5,10 +5,16 @@
 (() => {
     'use strict';
 
-    const BUILD = '20260928-character-presentation-v2';
+    const BUILD = '20260928-character-presentation-v3';
     const processed = new WeakSet();
     let registryReady = false;
     let clothingAssetsRefreshed = false;
+
+    const HAIR_STYLE_WIDTH = {
+        braid: {front:1.22, side:1.12, back:1.20},
+        curly: {front:1.06, side:1.04, back:1.06},
+        brown_1: {front:1, side:1, back:1},
+    };
 
     function imageReady(img) {
         return !!img && ((img.complete && img.naturalWidth > 0 && img.naturalHeight > 0)
@@ -42,7 +48,6 @@
             const x0 = Math.floor(crop.x*w), y0 = Math.floor(crop.y*h);
             const x1 = Math.ceil((crop.x+crop.w)*w), y1 = Math.ceil((crop.y+crop.h)*h);
             let total=0, inside=0;
-            // One sample per 2x2 block is enough for a one-time framing check.
             for (let y=0; y<h; y+=2) {
                 for (let x=0; x<w; x+=2) {
                     if (pixels[(y*w+x)*4+3] < 8) continue;
@@ -56,7 +61,7 @@
         }
     }
 
-    function packIntoCrop(source, crop, {mirror=false, pad=0.02, tag='packed'}={}) {
+    function packIntoCrop(source, crop, {mirror=false, pad=0.02, tag='packed', widthScale=1}={}) {
         if (!imageReady(source) || !crop) return source;
         const trim = trimFor(source);
         if (!trim) return source;
@@ -72,7 +77,8 @@
         const targetW = crop.w * (1-pad*2) * w;
         const targetH = crop.h * (1-pad*2) * h;
         const scale = Math.min(targetW/trim.trimWidth, targetH/trim.trimHeight);
-        const dw = trim.trimWidth*scale;
+        const baseDw = trim.trimWidth*scale;
+        const dw = baseDw * widthScale;
         const dh = trim.trimHeight*scale;
         const dx = targetX + (targetW-dw)/2;
         const dy = targetY + (targetH-dh)/2;
@@ -99,25 +105,26 @@
         }
         processed.add(source);
         const share = opaqueShareInsideCrop(source,crop);
-        // Correct only genuinely misframed art. Properly-authored bodies stay
-        // pixel-for-pixel on the existing renderer path and keep all approved tuning.
         if (share < 0.72) {
             bodySlot[view] = packIntoCrop(source,crop,{pad:0.015,tag:`body-${view}`});
         }
     }
 
-    function normaliseHairSlot(hairSlot, view, crop) {
+    function normaliseHairSlot(hairSlot, style, view, crop) {
         const source = hairSlot?.[view];
         if (!source || processed.has(source)) return;
         if (!imageReady(source)) {
-            source.addEventListener?.('load', () => normaliseHairSlot(hairSlot,view,crop), {once:true});
+            source.addEventListener?.('load', () => normaliseHairSlot(hairSlot,style,view,crop), {once:true});
             return;
         }
         processed.add(source);
-        // The authored side hair faces opposite the body-side source. Correct
-        // that once here; the compositor's ordinary whole-character mirror then
-        // gives the matching left view automatically.
-        hairSlot[view] = packIntoCrop(source,crop,{mirror:view==='side',pad:0.01,tag:`hair-${view}`});
+        // Screenshot validation showed the authored side asset already matches the
+        // canonical body-side direction. The previous v2 pass mirrored it here,
+        // which made the character read as if the back of the head faced us.
+        // Leave canonical side hair untouched; the compositor itself mirrors the
+        // whole character for the opposite facing.
+        const widthScale = HAIR_STYLE_WIDTH[style]?.[view] || 1;
+        hairSlot[view] = packIntoCrop(source,crop,{mirror:false,pad:0.01,widthScale,tag:`hair-${style}-${view}`});
     }
 
     function normaliseDirectionalAssets() {
@@ -132,13 +139,11 @@
             for (const bodySlot of Object.values(set.body || {})) {
                 for (const view of ['front','side','back']) normaliseBodySlot(bodySlot,view,layout[view]?.bodyCrop);
             }
-            for (const hairSlot of Object.values(set.hair || {})) {
-                for (const view of ['front','side','back']) normaliseHairSlot(hairSlot,view,layout[view]?.hairCrop);
+            for (const [style,hairSlot] of Object.entries(set.hair || {})) {
+                for (const view of ['front','side','back']) normaliseHairSlot(hairSlot,style,view,layout[view]?.hairCrop);
             }
         }
 
-        // Give hairstyles a little more vertical room. This is character-space,
-        // not a hex clip: negative Y is intentionally allowed to spill upward.
         if (!registryReady) {
             if (layout.front?.hairDest) Object.assign(layout.front.hairDest,{y:-0.055,h:0.425});
             if (layout.side?.hairDest) Object.assign(layout.side.hairDest,{y:-0.050,h:0.445});
@@ -196,6 +201,15 @@
         for (const entity of window.entities || []) applyNpcAppearance(entity);
     }
 
+    function ensureFemaleBaseRecolor() {
+        if (window.__femaleBaseClothingRecolorV2Installed || document.querySelector('script[data-female-base-clothing-recolor-v2]')) return;
+        const script=document.createElement('script');
+        script.src=`femaleBaseClothingRecolor.js?build=${BUILD}`;
+        script.async=false;
+        script.dataset.femaleBaseClothingRecolorV2='true';
+        document.head.appendChild(script);
+    }
+
     function ensureClothingSystem() {
         if (window.CLOTHING_VISUALS || document.querySelector('script[data-clothing-system-loader]')) return;
         const script=document.createElement('script');
@@ -224,6 +238,7 @@
     }
 
     function install() {
+        ensureFemaleBaseRecolor();
         ensureClothingSystem();
         normaliseDirectionalAssets();
         applyNpcAppearances();
@@ -239,7 +254,7 @@
     install();
     const timer=setInterval(() => {
         install();
-        if (registryReady && window.CLOTHING_VISUALS && clothingAssetsRefreshed) {
+        if (registryReady && window.CLOTHING_VISUALS && clothingAssetsRefreshed && window.__femaleBaseClothingRecolorV2Installed) {
             clearInterval(timer);
             setInterval(applyNpcAppearances,1000);
         }
