@@ -21,7 +21,6 @@
         'images/arenamercenary.png':'images/characters/npcs/arena/mercenary.png',
         'images/arenashopkeeper.png':'images/characters/npcs/arena/shopkeeper.png',
 
-        'images/elf.png':'images/characters/legacy/elf/body.png',
         'images/elffemale.png':'images/characters/legacy/elf_female/body.png',
         'images/elffemalehair.png':'images/characters/legacy/elf_female/hair.png',
         'images/elfmale.png':'images/characters/legacy/elf_male/body.png',
@@ -56,8 +55,6 @@
         'images/wraith.svg':'images/characters/creatures/wraith.svg',
         'images/zombie.svg':'images/characters/creatures/zombie.svg',
 
-        'images/elfchainarmour.png':'images/equipment/armour/elf/chain.png',
-        'images/elfleatherarmour.png':'images/equipment/armour/elf/leather.png',
         'images/humanlightarmour.png':'images/equipment/armour/human/light.png',
         'images/humanlightarmour_back.svg':'images/equipment/armour/human/light_back.svg',
         'images/humanmediumarmour.png':'images/equipment/armour/human/medium.png',
@@ -146,10 +143,14 @@
     let gameStarted = false;
     let gameplayWarmupResumeAt = 0;
     let warmupResumeTimer = null;
+    let pumpScheduled = false;
     const queue = [];
 
-    // Compatibility guard only. Direct-rendered humans/elf-female must not
-    // fall back to their superseded flat single-image sprites.
+    // Compatibility guard for superseded flat sprites and three genuinely dead
+    // generic-elf paper-doll assets. The latter still have stale new-Image()
+    // assignments in gameEngine/main, but nothing renders those keys any more;
+    // suppressing them here lets the physical ~4.3 MB of obsolete art go away
+    // without turning those harmless compatibility calls into network 404s.
     const SUPPRESSED = new Set([
         'images/humanfemale.png',
         'images/humanfemalehair.png',
@@ -157,6 +158,58 @@
         'images/humanmalehair.png',
         'images/elffemale.png',
         'images/elffemalehair.png',
+        'images/elf.png',
+        'images/elfleatherarmour.png',
+        'images/elfchainarmour.png',
+    ]);
+
+    // Semantic creator-time priorities. File format is deliberately irrelevant:
+    // an SVG on the far side of the world must not outrank an immediately visible
+    // PNG just because it happens to be vector art.
+    const ARENA_CRITICAL = new Set([
+        'images/terrain/bases/arena/floor_1.png',
+        'images/terrain/bases/arena/floor_2.png',
+        'images/terrain/bases/arena/floor_3.png',
+        'images/terrain/bases/arena/floor_4.png',
+        'images/characters/npcs/arena/announcer.png',
+        'images/characters/npcs/arena/shopkeeper.png',
+        'images/characters/npcs/arena/mercenary.png',
+        'images/props/structures/fence_horizontal.svg',
+        'images/props/structures/fence_vertical.svg',
+    ]);
+
+    const ARENA_SOON = new Set([
+        'images/characters/creatures/goblin.png',
+        'images/characters/creatures/orc.png',
+        'images/characters/creatures/skeleton.svg',
+        'images/characters/creatures/zombie.svg',
+        'images/characters/creatures/imp.svg',
+        'images/characters/creatures/spider_1.png',
+        'images/characters/creatures/spider_2.png',
+        'images/characters/creatures/troll.png',
+        'images/characters/creatures/wraith.svg',
+        'images/characters/creatures/basilisk.svg',
+        'images/characters/creatures/harpy.svg',
+        'images/characters/creatures/minotaur.png',
+        'images/characters/creatures/revenant.svg',
+        'images/characters/creatures/elite_goblin.svg',
+        'images/characters/creatures/wolf.png',
+        'images/characters/creatures/boar.png',
+        'images/characters/creatures/tiger.png',
+        'images/characters/creatures/horse.png',
+    ]);
+
+    const CAMPAIGN2_NEARBY = new Set([
+        'images/terrain/bases/wood_floor.svg',
+        'images/terrain/bases/path.svg',
+        'images/props/furniture/table.svg',
+        'images/props/furniture/bench.svg',
+        'images/props/furniture/fireplace_base.svg',
+        'images/props/furniture/fireplace_flame.svg',
+        'images/props/furniture/fireplace_unlit.svg',
+        'images/props/structures/door_open.svg',
+        'images/props/structures/door_closed.svg',
+        'images/props/structures/signpost.svg',
     ]);
 
     function normalise(src) {
@@ -168,17 +221,36 @@
         }
     }
 
+    function selectedCampaign() {
+        return document.getElementById('campaign-select')?.value || '1';
+    }
+
     function concurrencyLimit() {
         return gameStarted ? GAME_MAX_CONCURRENT : CREATOR_MAX_CONCURRENT;
     }
 
     function priorityFor(path) {
         if (gameStarted) return -10;
+
+        // The currently visible character preview is always first.
         if (/\/body_front\.png$/.test(path)) return 0;
         if (/\/hair_[^/]+_front\.png$/.test(path)) return 0;
-        if (/\.svg$/.test(path)) return 1;
-        if (/body_broad_|_back\.png$|_side\.png$/.test(path)) return 3;
-        return 2;
+
+        const campaign = selectedCampaign();
+        if (campaign === '1') {
+            if (ARENA_CRITICAL.has(path)) return 0;
+            if (ARENA_SOON.has(path)) return 1;
+        } else if (campaign === '2' && CAMPAIGN2_NEARBY.has(path)) {
+            return 1;
+        }
+
+        // Side/back character art can be needed on the player's first move.
+        if (/body_broad_|_back\.png$|_side\.png$/.test(path)) return 1;
+
+        // Everything else is opportunistic creator-time warming. It may still
+        // download if there is spare time, but it never gets priority merely
+        // because of its file type.
+        return 20;
     }
 
     function scheduleWarmupResume() {
@@ -216,6 +288,15 @@
         }
     }
 
+    function schedulePump() {
+        if (pumpScheduled) return;
+        pumpScheduled = true;
+        queueMicrotask(() => {
+            pumpScheduled = false;
+            pump();
+        });
+    }
+
     let order = 0;
     function enqueue(path, start) {
         queue.push({
@@ -225,7 +306,10 @@
             order:order++,
             queuedBeforeGameStart:!gameStarted,
         });
-        pump();
+        // Batch synchronous bursts (Promise.all/image-table initialisation) so
+        // the semantic priorities can actually reorder the first four requests
+        // before they consume every available connection slot.
+        schedulePump();
     }
 
     function dispatchSyntheticError(img, path, reason) {
@@ -235,6 +319,12 @@
             event.assetPath = path;
             try { img.dispatchEvent(event); } catch (_) {}
         });
+    }
+
+    function reprioritiseCreatorQueue() {
+        if (gameStarted) return;
+        for (const job of queue) job.priority = priorityFor(job.path);
+        schedulePump();
     }
 
     function beginGameplayLoading() {
@@ -256,7 +346,7 @@
             const requestedPath = normalise(value);
 
             if (SUPPRESSED.has(requestedPath)) {
-                dispatchSyntheticError(img, requestedPath, 'obsolete-direct-humanoid-asset');
+                dispatchSyntheticError(img, requestedPath, 'obsolete-unused-asset');
                 return;
             }
 
@@ -307,6 +397,9 @@
         },
     });
 
+    document.addEventListener('change', event => {
+        if (event.target?.id === 'campaign-select') reprioritiseCreatorQueue();
+    }, true);
     document.addEventListener('click', event => {
         if (event.target?.id === 'createCharacterButton') beginGameplayLoading();
     }, true);
@@ -322,7 +415,9 @@
         suppressed: [...SUPPRESSED],
         legacyRedirectCount: LEGACY_ASSET_REDIRECTS.size,
         canonicalPathFor(path) { return LEGACY_ASSET_REDIRECTS.get(normalise(path)) || normalise(path); },
+        priorityFor(path) { return priorityFor(LEGACY_ASSET_REDIRECTS.get(normalise(path)) || normalise(path)); },
         beginGameplayLoading,
+        reprioritiseCreatorQueue,
         get gameStarted() { return gameStarted; },
         get queued() { return queue.length; },
         get active() { return active; },
