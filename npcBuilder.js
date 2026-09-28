@@ -143,7 +143,7 @@ setInterval(() => {
 (() => {
     if (document.querySelector('script[data-directional-presentation-fixes]')) return;
     const script = document.createElement('script');
-    script.src = `directionalPresentationFixes.js?build=20260928-character-presentation-v2`;
+    script.src = `directionalPresentationFixes.js?build=20260928-character-presentation-v3`;
     script.async = false;
     script.dataset.directionalPresentationFixes = 'true';
     document.head.appendChild(script);
