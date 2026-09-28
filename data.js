@@ -62,8 +62,10 @@ window.classData = classData;
 // Humanoid NPC progression is loaded early but defers its wrappers until
 // DOMContentLoaded, after skills/monsters/npcBuilder have been defined. Loading
 // from data.js keeps the branch-compatible index.html script list stable while
-// giving this module its own iOS-safe cache token.
+// giving these modules their own iOS-safe cache tokens. Listener registration
+// order matters: the policy layer runs after the core wrapper is installed.
 if (!window.__npcProgressionModuleLoaded) {
     window.__npcProgressionModuleLoaded = true;
     document.write('<script src="npcProgression.js?build=20260929-pc-style-npcs-v1"><\/script>');
+    document.write('<script src="npcProgressionPolicy.js?build=20260929-package-policy-v1"><\/script>');
 }
