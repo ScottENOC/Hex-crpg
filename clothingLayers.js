@@ -1,20 +1,29 @@
 // Explicit garment layers: one authored image per colourable part.
 (() => {
   'use strict';
-  const BUILD='20260928-clothing-layers-v9';
+  const BUILD='20260928-clothing-layers-v10';
   const slots=['underwear','bra','pants','shirt'];
   const preloadSlots=['shirt','pants','bra','underwear'];
   const labels={underwear:'Underwear',bra:'Bra',pants:'Pants',shirt:'Shirt / Dress'};
   const images=new Map(), tinted=new Map();
-  const opaqueBoundsCache=new WeakMap();
+  const opaqueBoundsCache=new WeakMap(), toneBoundsCache=new WeakMap();
 
-  // Shirt + pants are fitted into an envelope deliberately no larger than heavy armour.
-  // The front/back heavy-armour target is x=.03,w=.94,y=.225,h=.770; side is x=.18,w=.64.
-  // Clothing uses 90% of that width, with 45% of the height reserved for tops and 55% for pants.
+  // Outer clothing stays inside the heavy-armour envelope. Underwear uses its
+  // own compact torso/pelvis envelopes instead of being stretched across the
+  // full character bounds. All fitted layers preserve their authored aspect.
   const CLOTHING_TARGETS={
-    front:{shirt:{x:.077,y:.225,w:.846,h:.3465},pants:{x:.077,y:.5715,w:.846,h:.4235},dress:{x:.077,y:.225,w:.846,h:.770}},
-    side: {shirt:{x:.212,y:.225,w:.576,h:.3465},pants:{x:.212,y:.5715,w:.576,h:.4235},dress:{x:.212,y:.225,w:.576,h:.770}},
-    back: {shirt:{x:.077,y:.225,w:.846,h:.3465},pants:{x:.077,y:.5715,w:.846,h:.4235},dress:{x:.077,y:.225,w:.846,h:.770}},
+    front:{
+      shirt:{x:.077,y:.225,w:.846,h:.3465},pants:{x:.077,y:.5715,w:.846,h:.4235},dress:{x:.077,y:.225,w:.846,h:.770},
+      bra:{x:.20,y:.30,w:.60,h:.18},underwear:{x:.20,y:.50,w:.60,h:.18},
+    },
+    side:{
+      shirt:{x:.212,y:.225,w:.576,h:.3465},pants:{x:.212,y:.5715,w:.576,h:.4235},dress:{x:.212,y:.225,w:.576,h:.770},
+      bra:{x:.34,y:.30,w:.32,h:.18},underwear:{x:.34,y:.50,w:.32,h:.18},
+    },
+    back:{
+      shirt:{x:.077,y:.225,w:.846,h:.3465},pants:{x:.077,y:.5715,w:.846,h:.4235},dress:{x:.077,y:.225,w:.846,h:.770},
+      bra:{x:.20,y:.30,w:.60,h:.18},underwear:{x:.20,y:.50,w:.60,h:.18},
+    },
   };
 
   const singleLayer=(slot,path,label)=>({slot,layers:[{id:'base',label,defaultColor:{hue:110,saturation:55,value:62,opacity:1},views:{front:path,side:path,back:path}}]});
@@ -187,20 +196,44 @@
     opaqueBoundsCache.set(img,result);return result;
   }
 
+  function toneBounds(img){
+    if(toneBoundsCache.has(img)) return toneBoundsCache.get(img);
+    const w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;
+    let result=opaqueBounds(img);
+    try{
+      const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(img,0,0);
+      const p=x.getImageData(0,0,w,h).data;let left=w,top=h,right=-1,bottom=-1;
+      for(let yy=0;yy<h;yy++) for(let xx=0;xx<w;xx++){
+        const i=(yy*w+xx)*4,r=p[i],g=p[i+1],b=p[i+2],a=p[i+3];
+        if(pixelMatchesTone(r,g,b,a,'darkGreen')||pixelMatchesTone(r,g,b,a,'lightGreen')){
+          if(xx<left)left=xx;if(xx>right)right=xx;if(yy<top)top=yy;if(yy>bottom)bottom=yy;
+        }
+      }
+      if(right>=left&&bottom>=top) result={x:left,y:top,w:right-left+1,h:bottom-top+1};
+    }catch(_){/* Keep alpha bounds when source pixels cannot be inspected. */}
+    toneBoundsCache.set(img,result);return result;
+  }
+
   function clothingTarget(slot,itemId,v){
     const resolved=view(v),set=CLOTHING_TARGETS[resolved]||CLOTHING_TARGETS.front;
     if(slot==='shirt') return itemId==='top_dress'?set.dress:set.shirt;
-    return slot==='pants'?set.pants:null;
+    if(slot==='pants') return set.pants;
+    if(slot==='bra') return set.bra;
+    if(slot==='underwear') return set.underwear;
+    return null;
   }
 
   function drawFittedGarment(ctx,source,trim,target,bounds,slot){
+    if(!trim?.w||!trim?.h)return false;
     const targetX=bounds.left+target.x*bounds.width,targetY=bounds.top+target.y*bounds.height;
     const targetW=target.w*bounds.width,targetH=target.h*bounds.height;
     const scale=Math.min(targetW/trim.w,targetH/trim.h);
     const dw=trim.w*scale,dh=trim.h*scale,dx=targetX+(targetW-dw)/2;
-    // Keep tops seated on the waist seam and pants seated immediately below it.
-    const dy=slot==='shirt'?targetY+(targetH-dh):targetY;
+    // Tops sit on the waist seam, pants begin at it; compact undergarments are
+    // centred in their torso/pelvis envelopes so source padding cannot make them huge.
+    const dy=slot==='shirt'?targetY+(targetH-dh):(slot==='pants'?targetY:targetY+(targetH-dh)/2);
     ctx.drawImage(source,trim.x,trim.y,trim.w,trim.h,dx,dy,dw,dh);
+    return true;
   }
 
   function drawSlot(ctx,e,slot,v,bounds){
@@ -209,9 +242,9 @@
     for(const l of s.layers){
       const src=sourceForLayer(l,v),img=load(src);if(!img?.complete||!img.naturalWidth)continue;
       const rendered=l.tint?tint(img,colour(e,itemId,l),l):img,target=clothingTarget(slot,itemId,v);
-      if(target) drawFittedGarment(ctx,rendered,opaqueBounds(img),target,bounds,slot);
-      else ctx.drawImage(rendered,bounds.left,bounds.top,bounds.width,bounds.height);
-      drew=true;
+      const trim=l.sourceTone?toneBounds(img):opaqueBounds(img);
+      if(target) drew=drawFittedGarment(ctx,rendered,trim,target,bounds,slot)||drew;
+      else {ctx.drawImage(rendered,bounds.left,bounds.top,bounds.width,bounds.height);drew=true;}
     }
     return drew;
   }
@@ -221,6 +254,6 @@
   setInterval(()=>{for(const e of window.entities||[])ensureDefaultOutfit(e,{player:e?.side==='player'});if(window.player)ensureDefaultOutfit(window.player,{player:true});},1000);
   if(document.readyState==='complete')install();else window.addEventListener('load',install,{once:true});
 
-  window.clothingSystem={build:BUILD,slots,preloadSlots,slotLabels:labels,builtinGarments:GARMENTS,playerDefault:PLAYER_DEFAULT,getItemSpec:spec,migrateLegacyEquipment:migrate,ensureDefaultOutfit,preloadOutfit,visibleSlotsReady,getLayerColour:colour,setLayerColour:setColour,drawSlot,tintWholeLayer:tint,registerBuiltinItems};
+  window.clothingSystem={build:BUILD,slots,preloadSlots,slotLabels:labels,builtinGarments:GARMENTS,clothingTargets:CLOTHING_TARGETS,playerDefault:PLAYER_DEFAULT,getItemSpec:spec,migrateLegacyEquipment:migrate,ensureDefaultOutfit,preloadOutfit,visibleSlotsReady,getLayerColour:colour,setLayerColour:setColour,drawSlot,tintWholeLayer:tint,registerBuiltinItems};
   window.CLOTHING_SLOTS=slots;
 })();
