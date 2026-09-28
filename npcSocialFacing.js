@@ -58,9 +58,6 @@
         const convo = window.lastAmbientChatter;
         if (!convo?.pair || convo.pair.length < 2) return false;
 
-        // lastAmbientChatter is replaced for every exchange. Track the object
-        // identity as well as its content so repeated lines by the same pair can
-        // still trigger a fresh turn toward one another later.
         const marker = convo;
         if (marker === window.__lastSocialFacingConversation) return false;
         window.__lastSocialFacingConversation = marker;
@@ -91,4 +88,15 @@
 
     window.__npcSocialFacingTimer = setInterval(pulse, PULSE_MS);
     pulse();
+
+    // Keep the low-cost environmental-detail layer next to the other living-
+    // world presentation extensions. It is still a separate module and does
+    // no per-frame work; this bootstrap only ensures it is loaded once.
+    if (!document.querySelector('script[data-roadside-world-texture-v2]')) {
+        const script = document.createElement('script');
+        script.src = `roadsideWorldTextureV2.js?build=${encodeURIComponent(window.PRESENTATION_BUILD || 'npc-routines-v1')}`;
+        script.dataset.roadsideWorldTextureV2 = 'true';
+        script.async = false;
+        document.head.appendChild(script);
+    }
 })();
