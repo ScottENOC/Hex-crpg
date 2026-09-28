@@ -215,7 +215,17 @@
     function normalise(src) {
         try {
             const url = new URL(String(src), document.baseURI);
-            return url.pathname.replace(/^\/+/, '');
+            const baseDir = new URL('.', document.baseURI);
+            const basePath = baseDir.pathname.endsWith('/') ? baseDir.pathname : `${baseDir.pathname}/`;
+
+            // GitHub project Pages serves the app below /<repo>/, while the
+            // bundled Capacitor build may use capacitor://localhost/ or file:.
+            // Compare URLs relative to the actual app directory so every host
+            // normalises `images/foo` to the same redirect-table key.
+            if (url.origin === baseDir.origin && url.pathname.startsWith(basePath)) {
+                return decodeURIComponent(url.pathname.slice(basePath.length)).replace(/^\/+/, '');
+            }
+            return decodeURIComponent(url.pathname).replace(/^\/+/, '');
         } catch (_) {
             return String(src).replace(/^\.\//, '');
         }
