@@ -112,20 +112,16 @@ function createCharacterData(race, cls, name, gender = "female", voice = "pc_1")
     riding: null,
     rider: null,
     bodyType: 'average',
-    // Baked-in/base clothing colours remain distinct from the colours of a
-    // separately equipped clothing sprite. Male base art uses one colour;
-    // the UI mirrors shirtHue to pantsHue for that body. Female art exposes
-    // upper and lower base colours independently.
-    shirtHue: 30,
-    pantsHue: gender === 'male' ? 30 : 220,
-    clothingPrimaryHue: 28,
-    clothingSecondaryHue: 215,
+    clothingColors: {},
     equipped: {
         weapon: null,
         offhand: null,
         armor: null,
         helmet: null,
-        clothes: null
+        shirt: null,
+        pants: null,
+        bra: null,
+        underwear: null
     }
   };
 
@@ -211,7 +207,7 @@ if (!document.querySelector('script[data-northwatch-siege-spawn]')) {
 // before inventory UI setup finishes.
 if (!document.querySelector('script[data-layered-clothing]')) {
   const clothingScript = document.createElement('script');
-  clothingScript.src = 'clothingSystem.js?build=20260928-clothing-v1';
+  clothingScript.src = 'clothingSystem.js?build=20260928-clothing-v3';
   clothingScript.dataset.layeredClothing = 'true';
   clothingScript.async = false;
   document.head.appendChild(clothingScript);

@@ -290,9 +290,6 @@
     }
 
     function ensureAppearance(entity) {
-        if (entity.shirtHue === undefined) entity.shirtHue = window.pickClothingHue?.(`${entity.name || 'x'}_shirt`) ?? 30;
-        if (entity.pantsHue === undefined) entity.pantsHue = window.pickClothingHue?.(`${entity.name || 'x'}_pants`) ?? 220;
-        if (entity.clothingSatMult === undefined) entity.clothingSatMult = .85;
         if (entity.skinHue === undefined) {
             const tone = window.pickNaturalSkinTone?.(`${entity.name || 'x'}_skin`);
             entity.skinHue = tone?.hue ?? 20;
@@ -304,16 +301,9 @@
 
     function resolvedBodyImage(entity, source) {
         ensureAppearance(entity);
-        const clothesId = entity.equipped?.clothes;
-        const clothesPreset = clothesId && window.CLOTHING_PRESETS?.[clothesId];
-        const showClothes = !!clothesPreset && (window.clothingDisplayMode === 'clothes' || !entity.equipped?.armor);
-        const shirtHue = showClothes ? clothesPreset.shirtHue : entity.shirtHue;
-        const pantsHue = showClothes ? clothesPreset.pantsHue : entity.pantsHue;
-        const satMult = showClothes ? (clothesPreset.satMult ?? 1) : (entity.clothingSatMult || 1);
-        const skinned = window.getRecoloredSkinSprite
+        return window.getRecoloredSkinSprite
             ? window.getRecoloredSkinSprite(source, {hue:entity.skinHue,saturation:entity.skinSaturation,lightness:entity.skinLightness})
             : source;
-        return window.getRecoloredSprite ? window.getRecoloredSprite(skinned, {shirtHue,pantsHue,satMult}) : skinned;
     }
 
     function resolvedHairImage(entity, source) {
@@ -535,8 +525,7 @@
         const bodyImage = resolvedBodyImage(entity, sourceBody);
         const hairImage = resolvedHairImage(entity, sourceHair);
         const hasHelmet = !!entity.equipped?.helmet;
-        const showClothes = !!entity.equipped?.clothes
-            && (window.clothingDisplayMode === 'clothes' || !entity.equipped?.armor);
+        window.clothingSystem?.migrateLegacyEquipment?.(entity);
         const mirror = facing === 'left';
         const cx = bounds.left + bounds.width/2;
         const layerOrder = [];
@@ -570,14 +559,14 @@
                 ? !!drawVisibleFit(ctx, bodySource, bounds, bodyTarget)
                 : drawCropped(ctx, bodySource, layout.bodyCrop, layout.bodyDest, bounds);
             if (bodyDrawn) layerOrder.push('body');
+            for (const slot of ['underwear','bra','pants','shirt']) {
+                if (window.clothingSystem?.drawSlot?.(ctx, entity, slot, view, bounds)) layerOrder.push(slot);
+            }
+            if (entity.equipped?.armor && drawArmour(ctx, entity, view, bounds)) layerOrder.push('armour');
+            if (typeof window.drawFacialHairLayer === 'function' && window.drawFacialHairLayer(ctx,entity,view,bounds)) layerOrder.push('facialHair');
             if (!hasHelmet && imageReady(hairImage)) {
                 if (drawCropped(ctx, hairImage, layout.hairCrop, layout.hairDest, bounds)) layerOrder.push('hair');
-            } else if (hasHelmet && drawHelmet(ctx, entity, view, bounds)) {
-                layerOrder.push('helmet');
-            }
-            if (entity.equipped?.armor && !showClothes && drawArmour(ctx, entity, view, bounds)) {
-                layerOrder.push('armour');
-            }
+            } else if (hasHelmet && drawHelmet(ctx, entity, view, bounds)) layerOrder.push('helmet');
 
             if (view !== 'back') drawHeldLayers();
         } finally {
@@ -636,8 +625,6 @@
                 hairStyle:document.getElementById('hair-style-select')?.value || 'brown_1',
                 bodyType:document.getElementById('body-type-select')?.value || 'average',
                 hairHue:Number(document.getElementById('hair-hue-slider')?.value || 25),
-                shirtHue:Number(document.getElementById('shirt-hue-slider')?.value || 30),
-                pantsHue:Number(document.getElementById('pants-hue-slider')?.value || 220),
             };
             const skin = window.getPlayerSkinToneFromControls?.();
             if (skin) Object.assign(preview, {skinHue:skin.hue,skinSaturation:skin.saturation,skinLightness:skin.lightness});
