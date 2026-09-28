@@ -1,7 +1,7 @@
 // Explicit garment layers: one authored image per colourable part.
 (() => {
   'use strict';
-  const BUILD='20260928-clothing-layers-v2';
+  const BUILD='20260928-clothing-layers-v3';
   // Draw order is innermost -> outermost. Preload order is the reverse so a
   // partially loaded character gets useful outer clothing before future
   // underwear layers, and the renderer can gate body drawing on visible clothes.
@@ -71,6 +71,9 @@
     const seed=e.name||`${e.race}_${e.gender}`;
     if(!e.equipped.shirt) e.equipped.shirt=player?PLAYER_DEFAULT.shirt:TOPS[hash(`${seed}|top`)%TOPS.length];
     if(!e.equipped.pants) e.equipped.pants=player?PLAYER_DEFAULT.pants:PANTS[hash(`${seed}|pants`)%PANTS.length];
+    if(player&&Array.isArray(e.inventory)){
+      for(const slot of ['shirt','pants']){const id=e.equipped[slot];if(id&&!e.inventory.includes(id))e.inventory.push(id);}
+    }
     for(const [slot,offset] of [['shirt',1],['pants',2]]){
       const itemId=e.equipped[slot],s=spec(itemId);if(!s)continue;
       for(const l of s.layers){
@@ -97,6 +100,7 @@
     img.onload=()=>{window.renderEntities?.();window.refreshDirectionalTurnPortraits?.();};
     images.set(src,img); return img;
   }
+  function view(v){return(v==='up'||v==='back')?'back':(v==='left'||v==='right'||v==='side')?'side':'front';}
   function preloadOutfit(e,v='front'){
     migrate(e);ensureDefaultOutfit(e,{player:e?.side==='player'});
     for(const slot of preloadSlots){
@@ -131,7 +135,6 @@
     for(let i=0;i<p.length;i+=4){if(!p[i+3])continue;const lum=(Math.max(p[i],p[i+1],p[i+2])+Math.min(p[i],p[i+1],p[i+2]))/510,l=Math.max(.02,Math.min(.98,target.lightness+(lum-.5)*.78)),rgb=hslRgb(target.hue,target.saturation,l);p[i]=rgb[0];p[i+1]=rgb[1];p[i+2]=rgb[2];}
     x.putImageData(d,0,0);tinted.set(key,out);return out;
   }
-  function view(v){return(v==='up'||v==='back')?'back':(v==='left'||v==='right'||v==='side')?'side':'front';}
   function drawSlot(ctx,e,slot,v,bounds){
     migrate(e);if(e.displayClothes===false)return false;ensureDefaultOutfit(e,{player:e?.side==='player'});
     const itemId=e?.equipped?.[slot],s=itemId&&spec(itemId);if(!s||s.slot!==slot)return false;let drew=false;
