@@ -1,0 +1,168 @@
+name: One-shot fix female checkerboard transparency
+
+on:
+  push:
+    branches: [development]
+    paths:
+      - '.github/workflows/fix-female-checkerboard.yml'
+      - 'images/characters/human_female/body_side.png'
+      - 'images/characters/human_female/body_back.png'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Pillow
+        run: python -m pip install --disable-pip-version-check pillow
+      - name: Remove edge-connected checkerboard backgrounds
+        shell: bash
+        run: |
+          python - <<'PY'
+          from collections import Counter, deque
+          from pathlib import Path
+          from PIL import Image
+          import math
+
+          FILES = [
+              Path('images/characters/human_female/body_side.png'),
+              Path('images/characters/human_female/body_back.png'),
+          ]
+
+          def dist(a, b):
+              return math.sqrt(sum((a[i] - b[i]) ** 2 for i in range(3)))
+
+          def process(path):
+              im = Image.open(path).convert('RGBA')
+              w, h = im.size
+              px = im.load()
+
+              # Use a reasonably thick border to learn the checker colours, but
+              # quantise slightly so antialias/compression-like colour drift does
+              # not split an otherwise flat checker colour into many buckets.
+              border = []
+              band = max(4, min(w, h) // 100)
+              for y in range(h):
+                  for x in range(w):
+                      if x < band or x >= w-band or y < band or y >= h-band:
+                          r, g, b, a = px[x, y]
+                          if a > 0:
+                              border.append((round(r/4)*4, round(g/4)*4, round(b/4)*4))
+
+              counts = Counter(border)
+              if not counts:
+                  print(f'{path}: already fully transparent at border; no change')
+                  return False
+
+              # Checkerboard export backgrounds are normally the two overwhelmingly
+              # common neutral border colours. Keep only near-neutral dominant tones.
+              palette = []
+              total = len(border)
+              for colour, count in counts.most_common(12):
+                  spread = max(colour) - min(colour)
+                  if spread <= 12 and count / total >= 0.01:
+                      palette.append(colour)
+                  if len(palette) >= 4:
+                      break
+
+              if len(palette) < 2:
+                  raise RuntimeError(f'{path}: could not confidently identify checker colours; palette={palette}')
+
+              print(f'{path}: learned checker palette {palette}')
+
+              # Restrict removal to pixels connected to the canvas edge. This is
+              # the key safeguard that prevents similarly coloured clothing/eyes/
+              # highlights inside the figure from being made transparent.
+              def bg_like(x, y, tolerance=20):
+                  r, g, b, a = px[x, y]
+                  if a == 0:
+                      return True
+                  return min(dist((r, g, b), c) for c in palette) <= tolerance
+
+              seen = bytearray(w * h)
+              q = deque()
+              def seed(x, y):
+                  i = y*w + x
+                  if not seen[i] and bg_like(x, y):
+                      seen[i] = 1
+                      q.append((x, y))
+
+              for x in range(w):
+                  seed(x, 0); seed(x, h-1)
+              for y in range(h):
+                  seed(0, y); seed(w-1, y)
+
+              while q:
+                  x, y = q.popleft()
+                  for nx, ny in ((x-1,y),(x+1,y),(x,y-1),(x,y+1)):
+                      if 0 <= nx < w and 0 <= ny < h:
+                          i = ny*w + nx
+                          if not seen[i] and bg_like(nx, ny):
+                              seen[i] = 1
+                              q.append((nx, ny))
+
+              removed = sum(seen)
+              ratio = removed / (w*h)
+              if ratio < 0.20 or ratio > 0.97:
+                  raise RuntimeError(f'{path}: safety check rejected removal ratio {ratio:.3%}')
+
+              out = im.copy()
+              opx = out.load()
+              for y in range(h):
+                  row = y*w
+                  for x in range(w):
+                      if seen[row+x]:
+                          r,g,b,a = opx[x,y]
+                          opx[x,y] = (r,g,b,0)
+
+              # One conservative fringe pass: checker-matted edge pixels are often
+              # a few RGB levels away from the flat background. Only touch pixels
+              # directly adjacent to newly transparent background and very close to
+              # one of the learned checker tones.
+              transparent = seen
+              fringe = []
+              for y in range(1, h-1):
+                  row = y*w
+                  for x in range(1, w-1):
+                      i = row+x
+                      if transparent[i]:
+                          continue
+                      if not (transparent[i-1] or transparent[i+1] or transparent[i-w] or transparent[i+w]):
+                          continue
+                      r,g,b,a = opx[x,y]
+                      if min(dist((r,g,b), c) for c in palette) <= 28:
+                          fringe.append((x,y))
+              for x,y in fringe:
+                  r,g,b,a = opx[x,y]
+                  opx[x,y] = (r,g,b,0)
+
+              final_removed = removed + len(fringe)
+              out.save(path, optimize=True)
+              print(f'{path}: transparent {final_removed}/{w*h} pixels ({final_removed/(w*h):.2%}); size {w}x{h}')
+              return True
+
+          changed = False
+          for p in FILES:
+              changed |= process(p)
+          print('changed=', changed)
+          PY
+      - name: Commit corrected PNGs
+        run: |
+          if git diff --quiet -- images/characters/human_female/body_side.png images/characters/human_female/body_back.png; then
+            echo 'No image changes required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add images/characters/human_female/body_side.png images/characters/human_female/body_back.png
+          git commit -m 'Fix transparency on female side and back sprites [skip ci]'
+          git push origin HEAD:development
