@@ -161,6 +161,18 @@ setInterval(() => {
     document.head.appendChild(script);
 })();
 
+// Ambient chatter context waits for the existing chatter engine, then wraps
+// its public checker so we keep its personalities/relationships/cooldowns while
+// adding audibility, incident suppression and fresh aftermath conversation.
+(() => {
+    if (document.querySelector('script[data-ambient-chatter-context]')) return;
+    const script = document.createElement('script');
+    script.src = `ambientChatterContext.js?build=20260928-chatter-context-v1`;
+    script.async = false;
+    script.dataset.ambientChatterContext = 'true';
+    document.head.appendChild(script);
+})();
+
 window.DIRECTIONAL_NPC_ART = DIRECTIONAL_NPC_ART;
 window.ensureDirectionalNpcImages = ensureDirectionalNpcImages;
 window.syncDirectionalNpcArt = syncDirectionalNpcArt;
