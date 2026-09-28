@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 jobs:
-  patch:
+  apply:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,81 +21,71 @@ jobs:
       - name: Apply narrow body visibility fix
         shell: bash
         run: |
-          python3 - <<'PY'
+          python - <<'PY'
           from pathlib import Path
 
-          renderer = Path('humanoidRenderer.js')
-          text = renderer.read_text()
-          old = """        image.src = src;
-        return image;
-"""
-          new = """        // Renderer-owned character/equipment art must use the same build token as
-        // the compositor itself. iOS Safari can otherwise keep a stale/broken body
-        // image while loading fresh clothing JS, leaving only the clothes visible.
-        const assetBuild = encodeURIComponent(window.PRESENTATION_BUILD || 'direct-humanoid-assets-v1');
-        const separator = src.includes('?') ? '&' : '?';
-        image.src = `${src}${separator}build=${assetBuild}`;
-        return image;
-"""
-          if old not in text:
-              raise SystemExit('humanoidRenderer loadImage anchor not found')
-          renderer.write_text(text.replace(old, new, 1))
+          def replace_exact(path, old, new, count=1):
+              p = Path(path)
+              text = p.read_text()
+              found = text.count(old)
+              if found != count:
+                  raise SystemExit(f'{path}: expected {count} occurrence(s), found {found}: {old!r}')
+              p.write_text(text.replace(old, new))
 
-          creation = Path('characterCreation.js')
-          text = creation.read_text()
-          old = """        if (image && typeof image.src === 'string') image.src = `${path}?build=20260928-female-average-refresh-2`;
-"""
-          new = """        if (image && typeof image.src === 'string') {
-          const bodyBuild = encodeURIComponent(window.PRESENTATION_BUILD || 'human-female-body-v1');
-          image.src = `${path}?build=${bodyBuild}`;
-        }
-"""
-          if old not in text:
-              raise SystemExit('characterCreation body refresh anchor not found')
-          creation.write_text(text.replace(old, new, 1))
+          replace_exact('humanoidRenderer.js',
+              "        image.src = src;\n        return image;\n",
+              "        // Renderer-owned art uses the compositor build token so fresh clothing JS\n        // can never be paired with a stale/broken cached body image on iOS Safari.\n        const assetBuild = encodeURIComponent(window.PRESENTATION_BUILD || 'direct-humanoid-assets-v1');\n        const separator = src.includes('?') ? '&' : '?';\n        image.src = `${src}${separator}build=${assetBuild}`;\n        return image;\n")
 
-          name = Path('name.js')
-          text = name.read_text()
-          old = "const PRESENTATION_BUILD = '20260928-character-sizing-v2';"
-          new = "const PRESENTATION_BUILD = '20260928-character-body-assets-v3';"
-          if old not in text:
-              raise SystemExit('presentation build anchor not found')
-          name.write_text(text.replace(old, new, 1))
+          replace_exact('characterCreation.js',
+              "        if (image && typeof image.src === 'string') image.src = `${path}?build=20260928-female-average-refresh-2`;\n",
+              "        if (image && typeof image.src === 'string') {\n          const bodyBuild = encodeURIComponent(window.PRESENTATION_BUILD || 'human-female-body-v1');\n          image.src = `${path}?build=${bodyBuild}`;\n        }\n")
 
-          index = Path('index.html')
-          text = index.read_text()
-          replacements = {
-              '<meta name="app-build" content="20260928-character-sizing-v2">': '<meta name="app-build" content="20260928-character-body-assets-v3">',
-              '<script src="name.js?v=13"></script>': '<script src="name.js?v=14"></script>',
-              '<script src="characterCreation.js?v=7"></script>': '<script src="characterCreation.js?v=8"></script>',
-          }
-          for old, new in replacements.items():
-              if old not in text:
-                  raise SystemExit(f'index anchor not found: {old}')
-              text = text.replace(old, new, 1)
-          index.write_text(text)
+          replace_exact('name.js',
+              "const PRESENTATION_BUILD = '20260928-character-sizing-v2';",
+              "const PRESENTATION_BUILD = '20260928-character-body-assets-v3';")
+          replace_exact('index.html',
+              '<meta name="app-build" content="20260928-character-sizing-v2">',
+              '<meta name="app-build" content="20260928-character-body-assets-v3">')
+          replace_exact('index.html',
+              '<script src="name.js?v=13"></script>',
+              '<script src="name.js?v=14"></script>')
+          replace_exact('index.html',
+              '<script src="characterCreation.js?v=7"></script>',
+              '<script src="characterCreation.js?v=8"></script>')
           PY
 
-      - name: Validate patch
+      - name: Verify body cache fix
         shell: bash
         run: |
           node --check humanoidRenderer.js
           node --check characterCreation.js
           node --check name.js
-          grep -F "image.src = \`\${src}\${separator}build=\${assetBuild}\`;" humanoidRenderer.js
-          grep -F "image.src = \`\${path}?build=\${bodyBuild}\`;" characterCreation.js
-          ! grep -F "female-average-refresh-2" characterCreation.js
-          grep -F "20260928-character-body-assets-v3" name.js index.html
-          grep -F '<script src="name.js?v=14"></script>' index.html
-          grep -F '<script src="characterCreation.js?v=8"></script>' index.html
+          python - <<'PY'
+          from pathlib import Path
+          r=Path('humanoidRenderer.js').read_text()
+          c=Path('characterCreation.js').read_text()
+          n=Path('name.js').read_text()
+          i=Path('index.html').read_text()
+          checks=[
+            ('assetBuild = encodeURIComponent(window.PRESENTATION_BUILD' in r,'renderer asset build token'),
+            ('image.src = `${src}${separator}build=${assetBuild}`;' in r,'renderer cache-safe image URL'),
+            ('female-average-refresh-2' not in c,'old fixed body refresh removed'),
+            ('image.src = `${path}?build=${bodyBuild}`;' in c,'new-game body refresh shares build token'),
+            ("20260928-character-body-assets-v3" in n,'presentation build bump'),
+            ('name.js?v=14' in i and 'characterCreation.js?v=8' in i,'top-level cache bust'),
+          ]
+          failed=[label for ok,label in checks if not ok]
+          if failed: raise SystemExit('Failed verification: '+', '.join(failed))
+          print('Humanoid body asset cache fix verified')
+          PY
           git diff --check
 
       - name: Commit production fix and remove one-shot workflow
         shell: bash
         run: |
-          rm .github/workflows/fix-humanoid-body-cache-once.yml
+          git rm .github/workflows/fix-humanoid-body-cache-once.yml
           git config user.name 'OpenAI ChatGPT'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add humanoidRenderer.js characterCreation.js name.js index.html .github/workflows/fix-humanoid-body-cache-once.yml
+          git add humanoidRenderer.js characterCreation.js name.js index.html
           git commit -m 'Keep humanoid body assets cache-safe'
           git push origin HEAD:development
