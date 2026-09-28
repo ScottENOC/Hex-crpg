@@ -76,7 +76,7 @@ if (!window.__npcProgressionModuleLoaded) {
 // appearance chatter, and the elf Keen Hearing passive one cache-busted module.
 if (!window.__dialogueHearingModuleLoaded) {
     window.__dialogueHearingModuleLoaded = true;
-    document.write('<script src="dialogueHearing.js?build=20260929-dialogue-hearing-v1"><\/script>');
+    document.write('<script src="dialogueHearing.js?build=20260929-dialogue-hearing-v2"><\/script>');
 }
 
 // Declarative hints for NPC/AI skill spending. Existing gameplay prereq fields
