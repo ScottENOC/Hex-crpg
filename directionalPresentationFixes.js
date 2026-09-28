@@ -5,7 +5,7 @@
 (() => {
     'use strict';
 
-    const BUILD = '20260928-character-presentation-v4';
+    const BUILD = '20260928-character-presentation-v5';
     const processed = new WeakSet();
     let registryReady = false;
     let clothingAssetsRefreshed = false;
@@ -69,6 +69,13 @@
         const out = document.createElement('canvas');
         out.width = w;
         out.height = h;
+        // spriteRecolor's hair path predates these packed directional canvases
+        // and treats complete/naturalWidth/naturalHeight as the readiness
+        // contract for an image. Preserve that contract on the packed canvas so
+        // the existing, otherwise-correct standalone hair recolourer can tint it.
+        out.complete = true;
+        out.naturalWidth = w;
+        out.naturalHeight = h;
         out.src = `${source.src || 'canvas'}#${BUILD}-${tag}`;
         out.__presentationPacked = true;
 
@@ -184,8 +191,8 @@
         const hair = window.pickHairPreset?.(`${identity}:hair`);
         if (hair) {
             entity.hairHue = hair.hue;
-            entity.hairLightMult = hair.light ?? 1;
-            entity.hairSatMult = hair.sat ?? 1;
+            entity.hairLightMult = hair.lightMult ?? 1;
+            entity.hairSatMult = hair.satMult ?? 1;
         }
         const styles = entity.gender === 'female' ? ['brown_1','braid','curly'] : ['brown_1','curly','brown_1'];
         entity.hairStyle = styles[hash(`${identity}:style`)%styles.length];
