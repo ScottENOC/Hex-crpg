@@ -1,0 +1,97 @@
+name: Reapply female side/back transparency
+
+on:
+  push:
+    branches: [development]
+    paths:
+      - '.github/workflows/reapply-female-side-back-transparency.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check pillow
+      - name: Remove only background and detached debris
+        run: |
+          python - <<'PY'
+          from PIL import Image
+          from collections import deque
+          from pathlib import Path
+
+          def clean(path, expected_height, expected_min_pixels):
+              im=Image.open(path).convert('RGBA')
+              w,h=im.size
+              if (w,h)!=(1024,1024):
+                  raise SystemExit(f'{path}: unexpected size {(w,h)}')
+              px=im.load(); bg=bytearray(w*h); q=deque()
+              def candidate(x,y):
+                  r,g,b,a=px[x,y]
+                  return a>0 and max(r,g,b)-min(r,g,b) <= 22 and (r+g+b)/3 >= 205
+              for x in range(w):
+                  for y in (0,h-1):
+                      i=y*w+x
+                      if not bg[i] and candidate(x,y): bg[i]=1; q.append((x,y))
+              for y in range(h):
+                  for x in (0,w-1):
+                      i=y*w+x
+                      if not bg[i] and candidate(x,y): bg[i]=1; q.append((x,y))
+              while q:
+                  x,y=q.popleft()
+                  for nx,ny in ((x-1,y),(x+1,y),(x,y-1),(x,y+1)):
+                      if 0<=nx<w and 0<=ny<h:
+                          i=ny*w+nx
+                          if not bg[i] and candidate(nx,ny):
+                              bg[i]=1; q.append((nx,ny))
+              data=list(im.getdata())
+              for i,(r,g,b,a) in enumerate(data):
+                  if bg[i]: data[i]=(0,0,0,0)
+              stage=Image.new('RGBA',(w,h)); stage.putdata(data)
+              spx=stage.load(); seen=bytearray(w*h); comps=[]
+              for y in range(h):
+                  for x in range(w):
+                      i=y*w+x
+                      if seen[i] or spx[x,y][3]==0: continue
+                      seen[i]=1; cq=deque([(x,y)]); inds=[]
+                      minx=maxx=x; miny=maxy=y
+                      while cq:
+                          cx,cy=cq.popleft(); inds.append(cy*w+cx)
+                          minx=min(minx,cx); maxx=max(maxx,cx); miny=min(miny,cy); maxy=max(maxy,cy)
+                          for nx,ny in ((cx-1,cy),(cx+1,cy),(cx,cy-1),(cx,cy+1)):
+                              if 0<=nx<w and 0<=ny<h:
+                                  ni=ny*w+nx
+                                  if not seen[ni] and spx[nx,ny][3]>0:
+                                      seen[ni]=1; cq.append((nx,ny))
+                      comps.append((len(inds),inds,(minx,miny,maxx+1,maxy+1)))
+              comps.sort(key=lambda c:c[0],reverse=True)
+              if not comps or comps[0][0] < expected_min_pixels:
+                  raise SystemExit(f'{path}: dominant component unexpectedly small')
+              keep=set(comps[0][1]); outdata=list(stage.getdata())
+              for i,(r,g,b,a) in enumerate(outdata):
+                  if a and i not in keep: outdata[i]=(0,0,0,0)
+                  elif not a: outdata[i]=(0,0,0,0)
+              bbox=comps[0][2]; height=bbox[3]-bbox[1]
+              if abs(height-expected_height)>3:
+                  raise SystemExit(f'{path}: unexpected character bbox {bbox}')
+              out=Image.new('RGBA',(w,h)); out.putdata(outdata); out.save(path,optimize=True)
+              print(f'{path}: pixels={comps[0][0]} bbox={bbox} height={height}')
+
+          clean(Path('images/characters/human_female/body_side.png'),844,80000)
+          clean(Path('images/characters/human_female/body_back.png'),845,125000)
+          PY
+      - name: Commit transparency fix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add images/characters/human_female/body_side.png images/characters/human_female/body_back.png
+          git commit -m 'Restore transparent female side and back sprites'
+          git push origin HEAD:development
