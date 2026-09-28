@@ -1,7 +1,7 @@
 // Explicit garment layers: one authored image per colourable part.
 (() => {
   'use strict';
-  const BUILD='20260929-clothing-layers-v13';
+  const BUILD='20260929-clothing-layers-v14';
   const slots=['underwear','bra','pants','shirt'];
   const preloadSlots=['shirt','pants','bra','underwear'];
   const labels={underwear:'Underwear',bra:'Bra',pants:'Pants',shirt:'Shirt / Dress'};
@@ -26,6 +26,22 @@
       bra:{x:.20,y:.30,w:.60,h:.18},underwear:{x:.20,y:.50,w:.60,h:.18},
     },
   };
+
+
+  // The old aspect-preserving fit was height-limited, leaving shirts only
+  // ~30-55% as wide as the body at the shoulders/chest. Keep authored height,
+  // but give outerwear a minimum horizontal envelope. The upper-body values put
+  // close clothing near the measured average-body width while leaving a small
+  // gap to heavy armour; looser garments and lower-body items get progressively
+  // more room. Underwear/bra deliberately keep their compact aspect-preserving fit.
+  const OUTERWEAR_WIDTH_USAGE={
+    top_blouse:.82,top_dress:.82,top_shirt:.82,top_tunic:.84,
+    pants_baggy_wraps:.74,pants_breeches:.70,pants_hose:.62,pants_trousers:.66,
+  };
+  function outerwearWidthUsage(slot,itemId){
+    if(slot!=='shirt'&&slot!=='pants') return null;
+    return OUTERWEAR_WIDTH_USAGE[itemId] ?? (slot==='shirt'?.82:.66);
+  }
 
   const singleLayer=(slot,path,label)=>({slot,layers:[{id:'base',label,defaultColor:{hue:110,saturation:55,value:62,opacity:1},views:{front:path,side:path,back:path}}]});
   const twoToneGarment=(slot,views,labelDark,labelLight)=>({slot,layers:[
@@ -240,7 +256,10 @@
     const targetX=bounds.left+target.x*bounds.width,targetY=bounds.top+target.y*bounds.height;
     const targetW=target.w*bounds.width,targetH=target.h*bounds.height;
     const scale=Math.min(targetW/trim.w,targetH/trim.h);
-    let dw=trim.w*scale,dh=trim.h*scale,dx=targetX+(targetW-dw)/2;
+    let dw=trim.w*scale,dh=trim.h*scale;
+    const widthUsage=outerwearWidthUsage(slot,itemId);
+    if(widthUsage!==null) dw=Math.max(dw,Math.min(targetW,targetW*widthUsage));
+    let dx=targetX+(targetW-dw)/2;
     // Ordinary tops remain bottom-aligned to the waist seam. A dress occupies a
     // taller envelope, so bottom-aligning it makes the neckline hang too low;
     // top-align the dress to the same authored top edge as shirts/armour instead.
