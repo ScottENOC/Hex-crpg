@@ -91,6 +91,11 @@ function buildNPC({ name, title, race, gender, hex, classLevels, skillPicks, equ
     });
     ent.attributes = attributes;
     ent.level = (classLevels || []).length || 1;
+    // Keep the genuine class history as data. The observation-driven Monster
+    // Manual can then aggregate repeated *encountered* builds into a fuzzy
+    // training tendency without reverse-engineering skills or inventing a
+    // class for creatures that were never built through the class system.
+    ent.classLevels = [...(classLevels || [])];
 
     // Purchase skills from the pool (mirrors the real spend logic: decrement
     // the skill's tree, falling back to wildcard).
@@ -146,6 +151,19 @@ setInterval(() => {
     script.src = `directionalPresentationFixes.js?build=20260928-character-presentation-v6`;
     script.async = false;
     script.dataset.directionalPresentationFixes = 'true';
+    document.head.appendChild(script);
+})();
+
+// The Monster Manual is deliberately self-contained and loaded from an
+// already-established game script, so its UI/knowledge system does not add
+// another eager asset to the title-screen critical path. Its own build token
+// also avoids iOS Safari serving an older version after a deployment.
+(() => {
+    if (document.querySelector('script[data-monster-manual]')) return;
+    const script = document.createElement('script');
+    script.src = `monsterManual.js?build=20260929-observation-v1`;
+    script.async = false;
+    script.dataset.monsterManual = 'true';
     document.head.appendChild(script);
 })();
 
