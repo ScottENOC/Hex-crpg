@@ -5,7 +5,7 @@
 (() => {
     'use strict';
 
-    const BUILD = '20260928-character-presentation-v5';
+    const BUILD = '20260928-character-presentation-v6';
     const processed = new WeakSet();
     let registryReady = false;
     let clothingAssetsRefreshed = false;
@@ -69,10 +69,6 @@
         const out = document.createElement('canvas');
         out.width = w;
         out.height = h;
-        // spriteRecolor's hair path predates these packed directional canvases
-        // and treats complete/naturalWidth/naturalHeight as the readiness
-        // contract for an image. Preserve that contract on the packed canvas so
-        // the existing, otherwise-correct standalone hair recolourer can tint it.
         out.complete = true;
         out.naturalWidth = w;
         out.naturalHeight = h;
@@ -204,11 +200,11 @@
     }
 
     function ensureFemaleBaseRecolor() {
-        if (window.__femaleBaseClothingRecolorV3Installed || document.querySelector('script[data-female-base-clothing-recolor-v3]')) return;
+        if (window.__femaleBaseClothingRecolorV4Installed || document.querySelector('script[data-female-base-clothing-recolor-v4]')) return;
         const script=document.createElement('script');
         script.src=`femaleBaseClothingRecolor.js?build=${BUILD}`;
         script.async=false;
-        script.dataset.femaleBaseClothingRecolorV3='true';
+        script.dataset.femaleBaseClothingRecolorV4='true';
         document.head.appendChild(script);
     }
 
@@ -256,7 +252,7 @@
     install();
     const timer=setInterval(() => {
         install();
-        if (registryReady && window.CLOTHING_VISUALS && clothingAssetsRefreshed && window.__femaleBaseClothingRecolorV3Installed) {
+        if (registryReady && window.CLOTHING_VISUALS && clothingAssetsRefreshed && window.__femaleBaseClothingRecolorV4Installed) {
             clearInterval(timer);
             setInterval(applyNpcAppearances,1000);
         }
