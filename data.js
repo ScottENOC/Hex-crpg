@@ -67,5 +67,5 @@ window.classData = classData;
 if (!window.__npcProgressionModuleLoaded) {
     window.__npcProgressionModuleLoaded = true;
     document.write('<script src="npcProgression.js?build=20260929-pc-style-npcs-v1"><\/script>');
-    document.write('<script src="npcProgressionPolicy.js?build=20260929-package-policy-v1"><\/script>');
+    document.write('<script src="npcProgressionPolicy.js?build=20260929-package-policy-v2"><\/script>');
 }
