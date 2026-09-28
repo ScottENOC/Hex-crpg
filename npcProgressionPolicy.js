@@ -59,6 +59,23 @@
         return null;
     }
 
+    function makeEquipmentLegalPackage(race, packageDef, equipmentIds) {
+        let minLevel = minimumEquipmentLevel(race, packageDef, equipmentIds);
+        if (minLevel != null) return { ...packageDef, minimumEquipmentLevel: minLevel };
+
+        // Preserve the authored priority class but add Fighter when the build's
+        // supplied armour can never be trained legally otherwise. This is a
+        // class choice, not a free proficiency: the NPC still has to reach the
+        // Fighter level and spend the Strength points on Light -> Medium -> Heavy.
+        if (!packageDef.classes.includes('fighter')) {
+            const classes = [...packageDef.classes, 'fighter'];
+            const augmented = { id: classes.join('/'), classes, primary: packageDef.primary };
+            minLevel = minimumEquipmentLevel(race, augmented, equipmentIds);
+            if (minLevel != null) return { ...augmented, minimumEquipmentLevel: minLevel };
+        }
+        return { ...packageDef, minimumEquipmentLevel: 1 };
+    }
+
     function choosePopulationPackage(race, equipmentIds, seed) {
         const progression = window.NPCProgression;
         const rows = progression?.RACE_PROFILES?.[race]?.packages || [['fighter', 1]];
@@ -71,7 +88,7 @@
         });
         const pool = eligible.length ? eligible : rows.map(([id, weight]) => {
             const classes = String(id).split('/').filter(Boolean);
-            return { packageDef: { id, classes, primary: classes[0] || 'fighter', minimumEquipmentLevel: 1 }, weight: Number(weight || 0) };
+            return { packageDef: makeEquipmentLegalPackage(race, { id, classes, primary: classes[0] || 'fighter' }, equipmentIds), weight: Number(weight || 0) };
         });
         const rng = seededRandom(seed);
         const total = pool.reduce((sum, row) => sum + row.weight, 0) || 1;
@@ -136,11 +153,12 @@
             const entity = previous(spec);
             if (!entity?.npcClassPackage || !Array.isArray(spec.classLevels) || spec.classLevels.length === 0) return entity;
 
-            const packageDef = classPackageFromLevels(spec.classLevels);
+            let packageDef = classPackageFromLevels(spec.classLevels);
             const equipmentIds = Array.isArray(spec.equipment) ? spec.equipment : [];
+            packageDef = makeEquipmentLegalPackage(entity.race, packageDef, equipmentIds);
             const preferredSkills = preferredMapFromSpec(spec);
             const target = Math.max(1, countSkillPicks(preferredSkills));
-            const gearMinimum = minimumEquipmentLevel(entity.race, packageDef, equipmentIds) || 1;
+            const gearMinimum = packageDef.minimumEquipmentLevel || 1;
             // A multiclass package must reach at least one level in every class;
             // after that the package cycles from its priority class, so a
             // Fighter/Cleric 3 becomes Fighter 2 / Cleric 1.
@@ -170,6 +188,7 @@
     window.NPCProgressionPolicy = {
         choosePopulationPackage,
         minimumEquipmentLevel,
+        makeEquipmentLegalPackage,
         classPackageFromLevels,
         initialise,
     };
