@@ -8,6 +8,7 @@
     const BUILD = '20260928-character-presentation-v2';
     const processed = new WeakSet();
     let registryReady = false;
+    let clothingAssetsRefreshed = false;
 
     function imageReady(img) {
         return !!img && ((img.complete && img.naturalWidth > 0 && img.naturalHeight > 0)
@@ -85,10 +86,6 @@
             ctx.drawImage(source,trim.trimLeft,trim.trimTop,trim.trimWidth,trim.trimHeight,dx,dy,dw,dh);
         }
         ctx.restore();
-        // The startup poll may inspect the registry again before clothingSystem
-        // finishes loading. Mark the replacement itself as processed so a side
-        // hairstyle cannot be mirrored a second time and accidentally restored
-        // to the wrong orientation.
         processed.add(out);
         return out;
     }
@@ -208,10 +205,29 @@
         document.head.appendChild(script);
     }
 
+    function refreshClothingAssets() {
+        const target = window.CLOTHING_ASSETS?.traveler_garb;
+        if (!target || clothingAssetsRefreshed) return false;
+        const paths = {
+            front:'images/equipment/clothing/traveler_garb_front.svg',
+            side:'images/equipment/clothing/traveler_garb_side.svg',
+            back:'images/equipment/clothing/traveler_garb_back.svg',
+        };
+        for (const [view,path] of Object.entries(paths)) {
+            const img = new Image();
+            img.addEventListener('load', () => { window.drawMap?.(); window.renderEntities?.(); });
+            img.src = `${path}?build=${BUILD}`;
+            target[view] = img;
+        }
+        clothingAssetsRefreshed = true;
+        return true;
+    }
+
     function install() {
         ensureClothingSystem();
         normaliseDirectionalAssets();
         applyNpcAppearances();
+        refreshClothingAssets();
         window.drawMap?.();
         window.refreshDirectionalTurnPortraits?.();
     }
@@ -223,9 +239,7 @@
     install();
     const timer=setInterval(() => {
         install();
-        if (registryReady && window.CLOTHING_VISUALS) {
-            // Keep the light NPC appearance pass alive for newly spawned NPCs,
-            // but stop repeatedly touching directional asset setup.
+        if (registryReady && window.CLOTHING_VISUALS && clothingAssetsRefreshed) {
             clearInterval(timer);
             setInterval(applyNpcAppearances,1000);
         }
