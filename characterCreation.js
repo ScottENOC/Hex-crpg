@@ -207,7 +207,7 @@ if (!document.querySelector('script[data-northwatch-siege-spawn]')) {
 // before inventory UI setup finishes.
 if (!document.querySelector('script[data-layered-clothing]')) {
   const clothingScript = document.createElement('script');
-  clothingScript.src = 'clothingSystem.js?build=20260928-clothing-v6';
+  clothingScript.src = 'clothingSystem.js?build=20260928-clothing-v7';
   clothingScript.dataset.layeredClothing = 'true';
   clothingScript.async = false;
   document.head.appendChild(clothingScript);

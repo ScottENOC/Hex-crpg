@@ -150,10 +150,12 @@
     };
 
     const ARMOUR_TARGETS = {
-        front:{x:.03,y:.225,w:.94,h:.770},
-        side: {x:.18,y:.225,w:.64,h:.770},
+        // Slightly taller than the old .225-.995 envelope: cover collarbones
+        // and toes without changing the approved widths or body-shape profile.
+        front:{x:.03,y:.205,w:.94,h:.810},
+        side: {x:.18,y:.205,w:.64,h:.810},
         // Rear-specific art should occupy the same visible envelope as front art.
-        back: {x:.03,y:.225,w:.94,h:.770},
+        back: {x:.03,y:.205,w:.94,h:.810},
     };
 
     // Optional local width shaping. Values are multipliers relative to the

@@ -1,27 +1,28 @@
 // Explicit garment layers: one authored image per colourable part.
 (() => {
   'use strict';
-  const BUILD='20260928-clothing-layers-v10';
+  const BUILD='20260928-clothing-layers-v11';
   const slots=['underwear','bra','pants','shirt'];
   const preloadSlots=['shirt','pants','bra','underwear'];
   const labels={underwear:'Underwear',bra:'Bra',pants:'Pants',shirt:'Shirt / Dress'};
   const images=new Map(), tinted=new Map();
   const opaqueBoundsCache=new WeakMap(), toneBoundsCache=new WeakMap();
+  const undergarmentFitMetrics=new WeakMap();
 
   // Outer clothing stays inside the heavy-armour envelope. Underwear uses its
   // own compact torso/pelvis envelopes instead of being stretched across the
   // full character bounds. All fitted layers preserve their authored aspect.
   const CLOTHING_TARGETS={
     front:{
-      shirt:{x:.077,y:.225,w:.846,h:.3465},pants:{x:.077,y:.5715,w:.846,h:.4235},dress:{x:.077,y:.225,w:.846,h:.770},
+      shirt:{x:.077,y:.205,w:.846,h:.3665},pants:{x:.077,y:.5715,w:.846,h:.4435},dress:{x:.077,y:.205,w:.846,h:.810},
       bra:{x:.20,y:.30,w:.60,h:.18},underwear:{x:.20,y:.50,w:.60,h:.18},
     },
     side:{
-      shirt:{x:.212,y:.225,w:.576,h:.3465},pants:{x:.212,y:.5715,w:.576,h:.4235},dress:{x:.212,y:.225,w:.576,h:.770},
+      shirt:{x:.212,y:.205,w:.576,h:.3665},pants:{x:.212,y:.5715,w:.576,h:.4435},dress:{x:.212,y:.205,w:.576,h:.810},
       bra:{x:.34,y:.30,w:.32,h:.18},underwear:{x:.34,y:.50,w:.32,h:.18},
     },
     back:{
-      shirt:{x:.077,y:.225,w:.846,h:.3465},pants:{x:.077,y:.5715,w:.846,h:.4235},dress:{x:.077,y:.225,w:.846,h:.770},
+      shirt:{x:.077,y:.205,w:.846,h:.3665},pants:{x:.077,y:.5715,w:.846,h:.4435},dress:{x:.077,y:.205,w:.846,h:.810},
       bra:{x:.20,y:.30,w:.60,h:.18},underwear:{x:.20,y:.50,w:.60,h:.18},
     },
   };
@@ -223,15 +224,27 @@
     return null;
   }
 
-  function drawFittedGarment(ctx,source,trim,target,bounds,slot){
+  function drawFittedGarment(ctx,source,trim,target,bounds,slot,entity){
     if(!trim?.w||!trim?.h)return false;
     const targetX=bounds.left+target.x*bounds.width,targetY=bounds.top+target.y*bounds.height;
     const targetW=target.w*bounds.width,targetH=target.h*bounds.height;
     const scale=Math.min(targetW/trim.w,targetH/trim.h);
-    const dw=trim.w*scale,dh=trim.h*scale,dx=targetX+(targetW-dw)/2;
+    let dw=trim.w*scale,dh=trim.h*scale,dx=targetX+(targetW-dw)/2;
     // Tops sit on the waist seam, pants begin at it; compact undergarments are
     // centred in their torso/pelvis envelopes so source padding cannot make them huge.
-    const dy=slot==='shirt'?targetY+(targetH-dh):(slot==='pants'?targetY:targetY+(targetH-dh)/2);
+    let dy=slot==='shirt'?targetY+(targetH-dh):(slot==='pants'?targetY:targetY+(targetH-dh)/2);
+    if(slot==='underwear'){
+      const briefsRise=dh/3,oldWidth=dw;
+      dw*=1.10;
+      dx-=(dw-oldWidth)/2;
+      dy-=briefsRise;
+      if(entity) undergarmentFitMetrics.set(entity,{briefsRise});
+    }else if(slot==='bra'){
+      // Tie the bra adjustment to the briefs' actual fitted opaque height.
+      // drawDirectionalHumanoidInBounds always paints underwear immediately before bra.
+      const briefsRise=undergarmentFitMetrics.get(entity)?.briefsRise ?? dh/3;
+      dy-=briefsRise*1.8;
+    }
     ctx.drawImage(source,trim.x,trim.y,trim.w,trim.h,dx,dy,dw,dh);
     return true;
   }
@@ -243,7 +256,7 @@
       const src=sourceForLayer(l,v),img=load(src);if(!img?.complete||!img.naturalWidth)continue;
       const rendered=l.tint?tint(img,colour(e,itemId,l),l):img,target=clothingTarget(slot,itemId,v);
       const trim=l.sourceTone?toneBounds(img):opaqueBounds(img);
-      if(target) drew=drawFittedGarment(ctx,rendered,trim,target,bounds,slot)||drew;
+      if(target) drew=drawFittedGarment(ctx,rendered,trim,target,bounds,slot,e)||drew;
       else {ctx.drawImage(rendered,bounds.left,bounds.top,bounds.width,bounds.height);drew=true;}
     }
     return drew;
