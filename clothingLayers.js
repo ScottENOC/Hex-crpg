@@ -159,6 +159,8 @@
     for(const slot of preloadSlots){const itemId=e?.equipped?.[slot],s=itemId&&spec(itemId);if(!s)continue;for(const l of s.layers){const src=sourceForLayer(l,v);if(src)load(src);}}
   }
   function visibleSlotsReady(e,v='front'){
+    // Clothing is optional decoration. Preload it, but never hold the entire humanoid
+    // renderer hostage while an individual garment is still loading or has failed.
     if(e?.displayClothes!==false) preloadOutfit(e,v);
     return true;
   }
@@ -181,32 +183,35 @@
     x.putImageData(d,0,0);tinted.set(key,out);return out;
   }
 
-  function sourceBounds(img,l=null){
-    const tone=l?.sourceTone||null;
-    if(!tone){
-      if(opaqueBoundsCache.has(img)) return opaqueBoundsCache.get(img);
-    }else{
-      let byTone=toneBoundsCache.get(img);
-      if(byTone?.has(tone)) return byTone.get(tone);
-    }
+  function opaqueBounds(img){
+    if(opaqueBoundsCache.has(img)) return opaqueBoundsCache.get(img);
     const w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;
     let result={x:0,y:0,w,h};
     try{
       const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(img,0,0);
       const p=x.getImageData(0,0,w,h).data;let left=w,top=h,right=-1,bottom=-1;
+      for(let yy=0;yy<h;yy++) for(let xx=0;xx<w;xx++) if(p[(yy*w+xx)*4+3]>=8){if(xx<left)left=xx;if(xx>right)right=xx;if(yy<top)top=yy;if(yy>bottom)bottom=yy;}
+      if(right>=left&&bottom>=top) result={x:left,y:top,w:right-left+1,h:bottom-top+1};
+    }catch(_){/* Fall back to the complete source rectangle. */}
+    opaqueBoundsCache.set(img,result);return result;
+  }
+
+  function toneBounds(img){
+    if(toneBoundsCache.has(img)) return toneBoundsCache.get(img);
+    const w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;
+    let result=opaqueBounds(img);
+    try{
+      const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(img,0,0);
+      const p=x.getImageData(0,0,w,h).data;let left=w,top=h,right=-1,bottom=-1;
       for(let yy=0;yy<h;yy++) for(let xx=0;xx<w;xx++){
-        const i=(yy*w+xx)*4,a=p[i+3];
-        if(a<8) continue;
-        if(tone&&!pixelMatchesTone(p[i],p[i+1],p[i+2],a,tone)) continue;
-        if(xx<left)left=xx;if(xx>right)right=xx;if(yy<top)top=yy;if(yy>bottom)bottom=yy;
+        const i=(yy*w+xx)*4,r=p[i],g=p[i+1],b=p[i+2],a=p[i+3];
+        if(pixelMatchesTone(r,g,b,a,'darkGreen')||pixelMatchesTone(r,g,b,a,'lightGreen')){
+          if(xx<left)left=xx;if(xx>right)right=xx;if(yy<top)top=yy;if(yy>bottom)bottom=yy;
+        }
       }
       if(right>=left&&bottom>=top) result={x:left,y:top,w:right-left+1,h:bottom-top+1};
-    }catch(_){/* fall back to complete source rectangle */}
-    if(!tone) opaqueBoundsCache.set(img,result);
-    else{
-      let byTone=toneBoundsCache.get(img);if(!byTone){byTone=new Map();toneBoundsCache.set(img,byTone);}byTone.set(tone,result);
-    }
-    return result;
+    }catch(_){/* Keep alpha bounds when source pixels cannot be inspected. */}
+    toneBoundsCache.set(img,result);return result;
   }
 
   function clothingTarget(slot,itemId,v){
@@ -219,12 +224,16 @@
   }
 
   function drawFittedGarment(ctx,source,trim,target,bounds,slot){
+    if(!trim?.w||!trim?.h)return false;
     const targetX=bounds.left+target.x*bounds.width,targetY=bounds.top+target.y*bounds.height;
     const targetW=target.w*bounds.width,targetH=target.h*bounds.height;
     const scale=Math.min(targetW/trim.w,targetH/trim.h);
     const dw=trim.w*scale,dh=trim.h*scale,dx=targetX+(targetW-dw)/2;
-    const dy=slot==='shirt'?targetY+(targetH-dh):targetY;
+    // Tops sit on the waist seam, pants begin at it; compact undergarments are
+    // centred in their torso/pelvis envelopes so source padding cannot make them huge.
+    const dy=slot==='shirt'?targetY+(targetH-dh):(slot==='pants'?targetY:targetY+(targetH-dh)/2);
     ctx.drawImage(source,trim.x,trim.y,trim.w,trim.h,dx,dy,dw,dh);
+    return true;
   }
 
   function drawSlot(ctx,e,slot,v,bounds){
@@ -233,9 +242,9 @@
     for(const l of s.layers){
       const src=sourceForLayer(l,v),img=load(src);if(!img?.complete||!img.naturalWidth)continue;
       const rendered=l.tint?tint(img,colour(e,itemId,l),l):img,target=clothingTarget(slot,itemId,v);
-      if(target) drawFittedGarment(ctx,rendered,sourceBounds(img,l),target,bounds,slot);
-      else ctx.drawImage(rendered,bounds.left,bounds.top,bounds.width,bounds.height);
-      drew=true;
+      const trim=l.sourceTone?toneBounds(img):opaqueBounds(img);
+      if(target) drew=drawFittedGarment(ctx,rendered,trim,target,bounds,slot)||drew;
+      else {ctx.drawImage(rendered,bounds.left,bounds.top,bounds.width,bounds.height);drew=true;}
     }
     return drew;
   }
@@ -245,6 +254,6 @@
   setInterval(()=>{for(const e of window.entities||[])ensureDefaultOutfit(e,{player:e?.side==='player'});if(window.player)ensureDefaultOutfit(window.player,{player:true});},1000);
   if(document.readyState==='complete')install();else window.addEventListener('load',install,{once:true});
 
-  window.clothingSystem={build:BUILD,slots,preloadSlots,slotLabels:labels,builtinGarments:GARMENTS,playerDefault:PLAYER_DEFAULT,getItemSpec:spec,migrateLegacyEquipment:migrate,ensureDefaultOutfit,preloadOutfit,visibleSlotsReady,getLayerColour:colour,setLayerColour:setColour,drawSlot,tintWholeLayer:tint,registerBuiltinItems};
+  window.clothingSystem={build:BUILD,slots,preloadSlots,slotLabels:labels,builtinGarments:GARMENTS,clothingTargets:CLOTHING_TARGETS,playerDefault:PLAYER_DEFAULT,getItemSpec:spec,migrateLegacyEquipment:migrate,ensureDefaultOutfit,preloadOutfit,visibleSlotsReady,getLayerColour:colour,setLayerColour:setColour,drawSlot,tintWholeLayer:tint,registerBuiltinItems};
   window.CLOTHING_SLOTS=slots;
 })();
