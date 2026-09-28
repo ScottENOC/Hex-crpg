@@ -5,7 +5,7 @@
 (() => {
     'use strict';
 
-    const BUILD = '20260928-character-presentation-v3';
+    const BUILD = '20260928-character-presentation-v4';
     const processed = new WeakSet();
     let registryReady = false;
     let clothingAssetsRefreshed = false;
@@ -118,11 +118,6 @@
             return;
         }
         processed.add(source);
-        // Screenshot validation showed the authored side asset already matches the
-        // canonical body-side direction. The previous v2 pass mirrored it here,
-        // which made the character read as if the back of the head faced us.
-        // Leave canonical side hair untouched; the compositor itself mirrors the
-        // whole character for the opposite facing.
         const widthScale = HAIR_STYLE_WIDTH[style]?.[view] || 1;
         hairSlot[view] = packIntoCrop(source,crop,{mirror:false,pad:0.01,widthScale,tag:`hair-${style}-${view}`});
     }
@@ -202,11 +197,11 @@
     }
 
     function ensureFemaleBaseRecolor() {
-        if (window.__femaleBaseClothingRecolorV2Installed || document.querySelector('script[data-female-base-clothing-recolor-v2]')) return;
+        if (window.__femaleBaseClothingRecolorV3Installed || document.querySelector('script[data-female-base-clothing-recolor-v3]')) return;
         const script=document.createElement('script');
         script.src=`femaleBaseClothingRecolor.js?build=${BUILD}`;
         script.async=false;
-        script.dataset.femaleBaseClothingRecolorV2='true';
+        script.dataset.femaleBaseClothingRecolorV3='true';
         document.head.appendChild(script);
     }
 
@@ -254,7 +249,7 @@
     install();
     const timer=setInterval(() => {
         install();
-        if (registryReady && window.CLOTHING_VISUALS && clothingAssetsRefreshed && window.__femaleBaseClothingRecolorV2Installed) {
+        if (registryReady && window.CLOTHING_VISUALS && clothingAssetsRefreshed && window.__femaleBaseClothingRecolorV3Installed) {
             clearInterval(timer);
             setInterval(applyNpcAppearances,1000);
         }
