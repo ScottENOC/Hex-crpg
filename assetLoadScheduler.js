@@ -1,7 +1,8 @@
 // assetLoadScheduler.js
 // Keep character-creator image traffic bounded. While the creator is open we
 // can use spare network time to warm likely gameplay art; once the player
-// starts, speculative queued work is discarded and gameplay requests take over.
+// starts, gameplay requests take priority without abandoning Image objects
+// that the renderer has already created and cached.
 (() => {
     'use strict';
 
@@ -11,7 +12,11 @@
     const nativeSrc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
     if (!nativeSrc || typeof nativeSrc.set !== 'function' || typeof nativeSrc.get !== 'function') return;
 
-    const MAX_CONCURRENT = 6;
+    // Keep speculative creator traffic conservative. At Start, allow extra
+    // slots so gameplay can begin immediately even if a few warmups are still
+    // in flight; HTTP/2 still remains far below the old unbounded Promise.all.
+    const CREATOR_MAX_CONCURRENT = 4;
+    const GAME_MAX_CONCURRENT = 8;
     let active = 0;
     let gameStarted = false;
     const queue = [];
@@ -37,9 +42,13 @@
         }
     }
 
+    function concurrencyLimit() {
+        return gameStarted ? GAME_MAX_CONCURRENT : CREATOR_MAX_CONCURRENT;
+    }
+
     function priorityFor(path) {
-        // Once gameplay starts, every newly requested image outranks creator
-        // warmups that happened to begin earlier.
+        // Once gameplay starts, every newly requested image outranks all
+        // creator-time warmups still waiting in the queue.
         if (gameStarted) return -10;
         if (/\/body_front\.png$/.test(path)) return 0;
         if (/\/hair_[^/]+_front\.png$/.test(path)) return 0;
@@ -49,7 +58,8 @@
     }
 
     function pump() {
-        while (active < MAX_CONCURRENT && queue.length) {
+        const limit = concurrencyLimit();
+        while (active < limit && queue.length) {
             queue.sort((a, b) => a.priority - b.priority || a.order - b.order);
             const job = queue.shift();
             active++;
@@ -85,12 +95,14 @@
         if (gameStarted) return;
         gameStarted = true;
 
-        // Drop speculative creator-time work that has not started. In-flight
-        // requests are allowed to finish rather than being aborted mid-transfer;
-        // at most MAX_CONCURRENT of those can exist. New gameplay requests are
-        // inserted at the highest priority as soon as a slot is available.
-        for (let i = queue.length - 1; i >= 0; i--) {
-            if (queue[i].queuedBeforeGameStart) queue.splice(i, 1);
+        // Do not delete queued requests: humanoidRenderer.js creates/caches
+        // Image objects before first use, so abandoning one would strand that
+        // sprite forever. Instead move every creator-time warmup behind future
+        // gameplay requests. Raising the concurrency ceiling from 4 to 8 also
+        // gives gameplay four immediate transfer slots even if all creator
+        // slots were occupied at the instant Start was pressed.
+        for (const job of queue) {
+            if (job.queuedBeforeGameStart) job.priority = 50;
         }
         pump();
     }
@@ -118,7 +130,7 @@
     });
 
     // Capture phase runs before main.js's normal click/touch handlers call
-    // startGame, so the speculative queue is gone before scene loading begins.
+    // startGame, so gameplay priority is active before scene loading begins.
     document.addEventListener('click', event => {
         if (event.target?.id === 'createCharacterButton') beginGameplayLoading();
     }, true);
@@ -127,7 +139,8 @@
     }, true);
 
     window.__assetLoadScheduler = {
-        maxConcurrent: MAX_CONCURRENT,
+        creatorMaxConcurrent: CREATOR_MAX_CONCURRENT,
+        gameMaxConcurrent: GAME_MAX_CONCURRENT,
         suppressed: [...SUPPRESSED],
         beginGameplayLoading,
         get gameStarted() { return gameStarted; },
