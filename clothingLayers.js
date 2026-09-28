@@ -1,16 +1,16 @@
 // Explicit garment layers: one authored image per colourable part.
 (() => {
   'use strict';
-  const BUILD='20260928-clothing-layers-v6';
+  const BUILD='20260928-clothing-layers-v7';
   const slots=['underwear','bra','pants','shirt'];
   const preloadSlots=['shirt','pants','bra','underwear'];
   const labels={underwear:'Underwear',bra:'Bra',pants:'Pants',shirt:'Shirt / Dress'};
   const images=new Map(), tinted=new Map();
 
-  const singleLayer=(slot,path,label)=>({slot,layers:[{id:'base',label,defaultColor:{hue:110,saturation:55,value:62},views:{front:path,side:path,back:path}}]});
+  const singleLayer=(slot,path,label)=>({slot,layers:[{id:'base',label,defaultColor:{hue:110,saturation:55,value:62,opacity:1},views:{front:path,side:path,back:path}}]});
   const twoToneGarment=(slot,views,labelDark,labelLight)=>({slot,layers:[
-    {id:'dark',label:labelDark,defaultColor:{hue:110,saturation:60,value:42},views,sourceTone:'darkGreen'},
-    {id:'light',label:labelLight,defaultColor:{hue:110,saturation:45,value:72},views,sourceTone:'lightGreen'},
+    {id:'dark',label:labelDark,defaultColor:{hue:110,saturation:60,value:42,opacity:1},views,sourceTone:'darkGreen'},
+    {id:'light',label:labelLight,defaultColor:{hue:110,saturation:45,value:72,opacity:1},views,sourceTone:'lightGreen'},
   ]});
 
   const GARMENTS={
@@ -38,7 +38,7 @@
 
   function legacy(itemId){
     if(itemId!=='traveler_garb') return null;
-    return {slot:'shirt',layers:[{id:'base',label:'Base',defaultColor:{hue:28,saturation:76,value:70},views:{
+    return {slot:'shirt',layers:[{id:'base',label:'Base',defaultColor:{hue:28,saturation:76,value:70,opacity:1},views:{
       front:'images/equipment/clothing/traveler_garb_front.svg',
       side:'images/equipment/clothing/traveler_garb_side.svg',
       back:'images/equipment/clothing/traveler_garb_back.svg',
@@ -49,7 +49,7 @@
     const c=raw.defaultColor||raw.color||{};
     return {id:String(raw.id||raw.key||`part${i+1}`),label:String(raw.label||raw.name||`Part ${i+1}`),tint:raw.tint!==false,
       views:raw.views||{},sourceTone:raw.sourceTone||null,
-      defaultColor:{hue:Number(c.hue??30),saturation:Number(c.saturation??70),value:Number(c.value??70)}};
+      defaultColor:{hue:Number(c.hue??30),saturation:Number(c.saturation??70),value:Number(c.value??70),opacity:Math.max(0,Math.min(1,Number(c.opacity??1)))}};
   }
 
   function spec(itemId){
@@ -59,7 +59,7 @@
     const slot=item?.clothingSlot||source?.slot||(item?.type==='clothes'?'shirt':null);
     if(!slots.includes(slot)) return null;
     const raw=(Array.isArray(item?.clothingLayers)&&item.clothingLayers.length)?item.clothingLayers:
-      (source?.layers||[{id:'base',label:'Base',views:item?.clothingViews||{},defaultColor:{hue:30,saturation:70,value:70}}]);
+      (source?.layers||[{id:'base',label:'Base',views:item?.clothingViews||{},defaultColor:{hue:30,saturation:70,value:70,opacity:1}}]);
     return {slot,layers:raw.map(layer)};
   }
 
@@ -84,16 +84,13 @@
   function hash(text){let h=2166136261;for(const ch of String(text||'')){h^=ch.charCodeAt(0);h=Math.imul(h,16777619);}return h>>>0;}
   function eligible(e){return !!e&&HUMANOID_RACES.has(e.race)&&!!e.gender;}
   function hasFeminineBody(e){return e?.gender==='female';}
-  function deterministicColour(seed,offset=0){const h=hash(`${seed}|${offset}`);return {hue:h%360,saturation:48+((h>>>9)%38),value:48+((h>>>16)%32)};}
+  function deterministicColour(seed,offset=0){const h=hash(`${seed}|${offset}`);return {hue:h%360,saturation:48+((h>>>9)%38),value:48+((h>>>16)%32),opacity:1};}
 
   function ensureDefaultOutfit(e,{player=false}={}){
     if(!e?.equipped||!eligible(e)) return false;
     migrate(e); registerBuiltinItems();
     const seed=e.name||`${e.race}_${e.gender}`;
 
-    // Defaults are bootstrap state, not an invariant. Once the outfit has been
-    // initialised, a null slot means the player deliberately unequipped it and
-    // must stay null. This keeps shirt/pants/bra/underwear fully independent.
     if(e.clothingDefaultsApplied!==true){
       if(!e.equipped.shirt) e.equipped.shirt=player?PLAYER_DEFAULT.shirt:TOPS[hash(`${seed}|top`)%TOPS.length];
       if(!e.equipped.pants) e.equipped.pants=player?PLAYER_DEFAULT.pants:PANTS[hash(`${seed}|pants`)%PANTS.length];
@@ -110,13 +107,29 @@
       for(const l of s.layers){
         const all=e.clothingColors[itemId]||(e.clothingColors[itemId]={});
         if(!all[l.id]) all[l.id]=player?{...l.defaultColor}:deterministicColour(seed,offset+(l.id==='light'?17:0));
+        else if(all[l.id].opacity===undefined) all[l.id].opacity=1;
       }
     }
     return true;
   }
 
-  function colour(e,itemId,l){migrate(e);const all=e.clothingColors[itemId]||(e.clothingColors[itemId]={});return all[l.id]||(all[l.id]={...l.defaultColor});}
-  function setColour(e,itemId,layerId,next){migrate(e);const all=e.clothingColors[itemId]||(e.clothingColors[itemId]={}),prev=all[layerId]||{hue:30,saturation:70,value:70};all[layerId]={hue:Number(next.hue??prev.hue),saturation:Number(next.saturation??prev.saturation),value:Number(next.value??prev.value)};}
+  function colour(e,itemId,l){
+    migrate(e);
+    const all=e.clothingColors[itemId]||(e.clothingColors[itemId]={});
+    const c=all[l.id]||(all[l.id]={...l.defaultColor});
+    if(c.opacity===undefined) c.opacity=1;
+    return c;
+  }
+  function setColour(e,itemId,layerId,next){
+    migrate(e);
+    const all=e.clothingColors[itemId]||(e.clothingColors[itemId]={}),prev=all[layerId]||{hue:30,saturation:70,value:70,opacity:1};
+    all[layerId]={
+      hue:Number(next.hue??prev.hue),
+      saturation:Number(next.saturation??prev.saturation),
+      value:Number(next.value??prev.value),
+      opacity:Math.max(0,Math.min(1,Number(next.opacity??prev.opacity??1))),
+    };
+  }
 
   function load(src){if(!src)return null;if(images.has(src))return images.get(src);const img=new Image();img.src=`${src}${src.includes('?')?'&':'?'}build=${BUILD}`;img.onload=()=>{window.renderEntities?.();window.refreshDirectionalTurnPortraits?.();};images.set(src,img);return img;}
   function view(v){return(v==='up'||v==='back')?'back':(v==='left'||v==='right'||v==='side')?'side':'front';}
@@ -137,9 +150,16 @@
   function pixelMatchesTone(r,g,b,a,tone){if(!a||!tone)return false;const max=Math.max(r,g,b),avg=(r+g+b)/3,greenDominant=g>=r+7&&g>=b+7&&g>=45;if(!greenDominant)return false;const light=max>=150||avg>=118;if(tone==='darkGreen')return !light;if(tone==='lightGreen')return light;return true;}
 
   function tint(img,c,l=null){
-    if(!img?.complete||!img.naturalWidth)return img;const tone=l?.sourceTone||'all',key=`${img.src}|${c.hue}|${c.saturation}|${c.value}|${tone}`;if(tinted.has(key))return tinted.get(key);
+    if(!img?.complete||!img.naturalWidth)return img;
+    const tone=l?.sourceTone||'all',opacity=Math.max(0,Math.min(1,Number(c.opacity??1))),key=`${img.src}|${c.hue}|${c.saturation}|${c.value}|${opacity}|${tone}`;
+    if(tinted.has(key))return tinted.get(key);
     const target=hsvHsl(c),out=document.createElement('canvas');out.width=img.naturalWidth;out.height=img.naturalHeight;const x=out.getContext('2d',{willReadFrequently:true});x.drawImage(img,0,0);const d=x.getImageData(0,0,out.width,out.height),p=d.data;
-    for(let i=0;i<p.length;i+=4){if(!p[i+3])continue;if(l?.sourceTone&&!pixelMatchesTone(p[i],p[i+1],p[i+2],p[i+3],l.sourceTone)){p[i+3]=0;continue;}const lum=(Math.max(p[i],p[i+1],p[i+2])+Math.min(p[i],p[i+1],p[i+2]))/510,lightness=Math.max(.02,Math.min(.98,target.lightness+(lum-.5)*.78)),rgb=hslRgb(target.hue,target.saturation,lightness);p[i]=rgb[0];p[i+1]=rgb[1];p[i+2]=rgb[2];}
+    for(let i=0;i<p.length;i+=4){
+      if(!p[i+3])continue;
+      if(l?.sourceTone&&!pixelMatchesTone(p[i],p[i+1],p[i+2],p[i+3],l.sourceTone)){p[i+3]=0;continue;}
+      const lum=(Math.max(p[i],p[i+1],p[i+2])+Math.min(p[i],p[i+1],p[i+2]))/510,lightness=Math.max(.02,Math.min(.98,target.lightness+(lum-.5)*.78)),rgb=hslRgb(target.hue,target.saturation,lightness);
+      p[i]=rgb[0];p[i+1]=rgb[1];p[i+2]=rgb[2];p[i+3]=Math.round(p[i+3]*opacity);
+    }
     x.putImageData(d,0,0);tinted.set(key,out);return out;
   }
 
