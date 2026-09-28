@@ -69,3 +69,19 @@ if (!window.__npcProgressionModuleLoaded) {
     document.write('<script src="npcProgression.js?build=20260929-pc-style-npcs-v1"><\/script>');
     document.write('<script src="npcProgressionPolicy.js?build=20260929-package-policy-v3"><\/script>');
 }
+
+// Declarative hints for NPC/AI skill spending. Existing gameplay prereq fields
+// remain authoritative; these simply make equipment relationships explicit so
+// future generators/tools do not have to infer everything from descriptions.
+document.addEventListener('DOMContentLoaded', () => {
+    Object.entries(window.skills || {}).forEach(([skillId, skill]) => {
+        const weaponMatch = skillId.match(/^(sword|axe|bow|spear|dagger|club)_(?:hit|dmg|parry|parry_cost|parry_chance|riposte|feint)/);
+        if (weaponMatch) skill.npcEquipmentWeapon = weaponMatch[1];
+    });
+    ['shield_proficiency', 'shield_bash', 'shield_other'].forEach(id => {
+        if (window.skills?.[id]) window.skills[id].npcRequiresShield = true;
+    });
+    ['riding', 'riding_druid', 'riding_paladin'].forEach(id => {
+        if (window.skills?.[id]) window.skills[id].npcRequiresMount = true;
+    });
+});
