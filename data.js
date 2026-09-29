@@ -147,7 +147,7 @@ if (!window.__companionAffinityModuleLoaded) {
 // can recover the signed withdrawal order and strengthen the evidence.
 if (!window.__aldricBrokenVigilModuleLoaded) {
     window.__aldricBrokenVigilModuleLoaded = true;
-    document.write('<script src="aldricBrokenVigil.js?build=20260930-aldric-broken-vigil-v1"><\/script>');
+    document.write('<script src="aldricBrokenVigil.js?build=20260930-aldric-broken-vigil-v2"><\/script>');
 }
 
 // Romance agreements interpret affinity rather than replacing it. Commitment,
