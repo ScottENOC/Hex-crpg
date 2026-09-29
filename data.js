@@ -91,12 +91,13 @@ if (!window.__appearancePresetsModuleLoaded) {
     document.write('<script src="appearancePresets.js?build=20260929-appearance-presets-v1"><\/script>');
 }
 
-// Companions now have persistent familiarity/trust/approval state. Clothing
-// controls consult familiarity + trust (never approval/romance), preserve each
-// companion's initial coverage as a boundary, and allow authored stricter limits.
+// Companions keep the game's established companionAttitude approval meter and
+// add persistent familiarity + trust alongside it. Clothing controls consult
+// familiarity + trust (never approval/romance), preserve each companion's
+// initial coverage as a boundary, and allow authored stricter limits.
 if (!window.__companionRelationshipsModuleLoaded) {
     window.__companionRelationshipsModuleLoaded = true;
-    document.write('<script src="companionRelationships.js?build=20260929-companion-relationships-v1"><\/script>');
+    document.write('<script src="companionRelationships.js?build=20260929-companion-relationships-v2"><\/script>');
 }
 
 // Declarative hints for NPC/AI skill spending. Existing gameplay prereq fields
