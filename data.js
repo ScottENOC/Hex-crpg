@@ -116,7 +116,7 @@ if (!window.__companionRelationshipProgressionModuleLoaded) {
 // and richer evidence without making any one skill mandatory.
 if (!window.__wrenParentsInvestigationModuleLoaded) {
     window.__wrenParentsInvestigationModuleLoaded = true;
-    document.write('<script src="wrenParentsInvestigation.js?build=20260929-wren-parents-investigation-v1"><\/script>');
+    document.write('<script src="wrenParentsInvestigation.js?build=20260929-wren-parents-investigation-v2"><\/script>');
 }
 
 // Declarative hints for NPC/AI skill spending. Existing gameplay prereq fields
