@@ -137,7 +137,16 @@ if (!window.__wrenCharacterArcModuleLoaded) {
 // pronouns are never used as an attraction shortcut.
 if (!window.__companionAffinityModuleLoaded) {
     window.__companionAffinityModuleLoaded = true;
-    document.write('<script src="companionAffinity.js?build=20260929-companion-affinity-v2"><\/script>');
+    document.write('<script src="companionAffinity.js?build=20260929-companion-affinity-v3"><\/script>');
+}
+
+// Romance agreements interpret affinity rather than replacing it. Commitment,
+// sex and exclusivity are separate authored concepts: some companions are
+// monogamous, some support consensual non-monogamy, and Brother Alden can be
+// romantically exclusive while explicitly allowing a partner sexual freedom.
+if (!window.__companionRomanceModuleLoaded) {
+    window.__companionRomanceModuleLoaded = true;
+    document.write('<script src="companionRomance.js?build=20260929-companion-romance-v1"><\/script>');
 }
 
 // Declarative hints for NPC/AI skill spending. Existing gameplay prereq fields
