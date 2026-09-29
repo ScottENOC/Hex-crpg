@@ -4,8 +4,10 @@ const { createCharacter } = require('./helpers.js');
 async function waitForSystem(page) {
     await page.waitForFunction(() =>
         !!window.companionRelationships &&
-        !!window.clothingSystem &&
-        !!window.equipmentAppearanceSystem
+        !!window.clothingSystem?.setLayerColour?.__companionBoundaryAware &&
+        !!window.equipmentAppearanceSystem?.setSlotVisible?.__companionBoundaryAware &&
+        !!window.equipItem?.__companionBoundaryAware &&
+        !!window.unequipItem?.__companionBoundaryAware
     );
 }
 
