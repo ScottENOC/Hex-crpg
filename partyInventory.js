@@ -26,6 +26,11 @@ function wireSharedInventory(entity, opts = {}) {
     } else if (merge && Array.isArray(entity.inventory) && entity.inventory !== window.partyInventory) {
         window.partyInventory.push(...entity.inventory);
     }
+    // The Bag of Holding used to occupy the accessory slot. Saved games from
+    // that version can still contain the old equipment reference, so clear it
+    // as each party member is wired back onto the shared inventory. The item
+    // itself remains in the shared inventory and therefore keeps working.
+    if (entity.equipped?.accessory === 'magic_backpack') entity.equipped.accessory = null;
     Object.defineProperty(entity, 'inventory', {
         configurable: true,
         enumerable: true,
@@ -46,6 +51,20 @@ const BASE_CARRY_PER_MEMBER = 40;
 const STRONG_BACK_BONUS_PER_RANK = 15;
 const CARRY_PER_OWNED_MOUNT = 40;
 const CARRY_PER_ANIMAL_COMPANION = 20;
+const BAG_OF_HOLDING_WEIGHT_OFFSET = 40;
+
+// A Bag of Holding is inventory infrastructure, not worn equipment. Treat it
+// like Pathfinder-style negative carried weight: simply owning one in the
+// shared inventory offsets 40 weight. `carryBonus: 0` deliberately neutralises
+// the item's old accessory-slot bonus for compatibility with older code/tests.
+if (window.items?.magic_backpack) {
+    Object.assign(window.items.magic_backpack, {
+        type: 'container',
+        weight: -BAG_OF_HOLDING_WEIGHT_OFFSET,
+        carryBonus: 0,
+        description: 'Bigger on the inside. While carried in the shared inventory, it offsets 40 weight of other gear; no equipment slot required.'
+    });
+}
 
 function getItemWeight(id) {
     const item = window.items && window.items[id];
@@ -61,14 +80,15 @@ function getItemWeight(id) {
 window.getItemWeight = getItemWeight;
 
 function getPartyCarryWeight() {
-    return (window.partyInventory || []).reduce((sum, id) => sum + getItemWeight(id), 0);
+    // Negative-weight containers may offset ordinary cargo, but never make
+    // the party's displayed/effective load less than zero.
+    return Math.max(0, (window.partyInventory || []).reduce((sum, id) => sum + getItemWeight(id), 0));
 }
 window.getPartyCarryWeight = getPartyCarryWeight;
 
-// Equipped-item carrying bonuses (magic_backpack, equipment.js) — any
-// party member's own accessory slot, checked generically off a
-// `carryBonus` field rather than hardcoding the backpack's item id, so a
-// future item could grant this the same way without touching this file.
+// Equipped-item carrying bonuses remain generic for any future equipment
+// that genuinely should increase capacity while worn. The Bag of Holding's
+// runtime carryBonus is zero because it now works passively via item weight.
 function getEquippedCarryBonus() {
     return (window.party || []).reduce((sum, p) => {
         const accessoryId = p.equipped?.accessory;
