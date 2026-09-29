@@ -13,10 +13,15 @@
 // choices can move a meter within its cap but can never rewrite the cap. This
 // is important: affection is not mind control and enough dialogue cannot turn
 // an exclusively straight/gay companion into something they are not.
+//
+// Attraction is continuous rather than thresholded: 1 point has a small effect,
+// 30 has a meaningful but limited effect, and 80 has a much stronger one. A low
+// attraction cap therefore still matters, especially alongside a high romantic
+// bond, without pretending modest attraction is equivalent to strong desire.
 (() => {
     'use strict';
 
-    const BUILD = '20260929-companion-affinity-v1';
+    const BUILD = '20260929-companion-affinity-v2';
     const MIN = 0;
     const MAX = 100;
 
@@ -26,11 +31,13 @@
             // Wren is canonically straight, but not at the absolute end of the
             // spectrum. A feminine-presenting protagonist can become someone
             // she deeply loves romantically while her physical attraction stays
-            // below the threshold at which she would want sexual intimacy.
+            // modest rather than being rewritten by enough player choices.
             attractionCaps: Object.freeze({ masculine: 100, feminine: 30, androgynous: 45, unknown: 35 }),
             romanticCaps: Object.freeze({ masculine: 100, feminine: 85, androgynous: 90, unknown: 75 }),
-            physicalInterestThreshold: 50,
-            physicalIntimacyThreshold: 60,
+            // Not a gate for dialogue. Attraction contributes from 1 upward.
+            // This threshold only describes when strong physical desire is a
+            // plausible authored state; it never substitutes for consent.
+            strongPhysicalDesireThreshold: 60,
             friendshipStart: 38,
             romanticBondStart: 0,
             initialAttractionFraction: 0.18,
@@ -123,8 +130,7 @@
         if (!profile) {
             return {
                 orientationLabel: 'unspecified', presentation, genderIdentity: identityFor(player),
-                attractionCap: 100, romanticCap: 100,
-                physicalInterestThreshold: 50, physicalIntimacyThreshold: 60,
+                attractionCap: 100, romanticCap: 100, strongPhysicalDesireThreshold: 60,
             };
         }
         return {
@@ -133,8 +139,7 @@
             genderIdentity: identityFor(player),
             attractionCap: clamp(profile.attractionCaps?.[presentation] ?? profile.attractionCaps?.unknown ?? 100),
             romanticCap: clamp(profile.romanticCaps?.[presentation] ?? profile.romanticCaps?.unknown ?? 100),
-            physicalInterestThreshold: Number(profile.physicalInterestThreshold ?? 50),
-            physicalIntimacyThreshold: Number(profile.physicalIntimacyThreshold ?? 60),
+            strongPhysicalDesireThreshold: Number(profile.strongPhysicalDesireThreshold ?? 60),
         };
     }
 
@@ -184,6 +189,34 @@
         return out === 0 ? 1 : out;
     }
 
+    function attractionBand(value) {
+        const attraction = clamp(value);
+        if (attraction <= 0) return 'none';
+        if (attraction < 20) return 'faint';
+        if (attraction < 40) return 'modest';
+        if (attraction < 60) return 'noticeable';
+        if (attraction < 80) return 'strong';
+        return 'intense';
+    }
+
+    function attractionSignals(attraction, romanticBond, strongPhysicalDesireThreshold = 60) {
+        const a = clamp(attraction);
+        const r = clamp(romanticBond);
+        const physicalAttractionWeight = a / 100;
+        // Emotional affection is primarily romantic, but even low physical
+        // attraction can tint how affection is expressed. This is dialogue
+        // weighting, not consent and not a substitute for attraction.
+        const affectionWeight = Math.min(1, (r / 100) * 0.75 + physicalAttractionWeight * 0.25);
+        return {
+            attractionBand: attractionBand(a),
+            physicallyInterested: a > 0,
+            physicalAttractionWeight,
+            affectionWeight,
+            strongPhysicalDesire: a >= strongPhysicalDesireThreshold,
+            romanticPhysicalTension: r >= 25 && a > 0 && a < strongPhysicalDesireThreshold,
+        };
+    }
+
     function snapshot(companionOrName) {
         const companion = canonicalCompanion(companionOrName);
         const affinity = ensureAffinity(companion);
@@ -200,10 +233,11 @@
             genderIdentity: compatibility.genderIdentity,
             attractionCap: compatibility.attractionCap,
             romanticCap: compatibility.romanticCap,
-            physicalInterestThreshold: compatibility.physicalInterestThreshold,
-            physicalIntimacyThreshold: compatibility.physicalIntimacyThreshold,
-            canDevelopPhysicalInterest: compatibility.attractionCap >= compatibility.physicalInterestThreshold,
-            canDevelopPhysicalIntimacy: compatibility.attractionCap >= compatibility.physicalIntimacyThreshold,
+            strongPhysicalDesireThreshold: compatibility.strongPhysicalDesireThreshold,
+            // Backwards-compatible name, but the semantics are now continuous:
+            // any non-zero attraction cap can matter to dialogue and affection.
+            canDevelopPhysicalInterest: compatibility.attractionCap > 0,
+            canDevelopStrongPhysicalDesire: compatibility.attractionCap >= compatibility.strongPhysicalDesireThreshold,
         };
     }
 
@@ -262,16 +296,20 @@
         if (!state || !rel) return null;
         const emotionallyClose = state.friendship >= 50 && rel.familiarity >= 45 && rel.trust >= 35;
         const romanticFeelings = state.romanticBond >= 25;
-        const physicallyInterested = state.attraction >= state.physicalInterestThreshold;
+        const signals = attractionSignals(state.attraction, state.romanticBond, state.strongPhysicalDesireThreshold);
         return {
             ...state,
+            ...signals,
             emotionallyClose,
             romanticFeelings,
-            physicallyInterested,
-            physicalPathPossible: state.canDevelopPhysicalInterest,
+            // Any non-zero attraction can shape physical/romantic dialogue.
+            // The cap only limits how strong that effect can become.
+            physicalPathPossible: state.attractionCap > 0,
+            strongPhysicalDesirePathPossible: state.canDevelopStrongPhysicalDesire,
             // Emotional romance can be possible even where physical desire is
             // orientation-limited. Explicit consent/status still matters; this
-            // is only availability data, never permission inferred from meters.
+            // is only availability/weighting data, never permission inferred
+            // from meters.
             romanticConversationPossible: emotionallyClose && state.romanticCap >= 25,
         };
     }
@@ -346,6 +384,8 @@
         getAffinity: snapshot,
         adjustAffinity,
         setRomanceState,
+        attractionBand,
+        attractionSignals,
         romanceReadiness,
         syncWrenStoryAffinity,
         syncSkillAttraction,
