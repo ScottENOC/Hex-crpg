@@ -90,7 +90,7 @@ async function renderEquippedHuman(page, gender, facing, { helmet = true } = {})
   }, { gender, facing, helmet });
 }
 
-function expectFrontOrSideOrder(order, headLayer) {
+function expectForegroundShieldOrder(order, headLayer) {
   const body = order.indexOf('body');
   const armour = order.indexOf('armour');
   const head = order.indexOf(headLayer);
@@ -102,6 +102,28 @@ function expectFrontOrSideOrder(order, headLayer) {
   expect(head).toBeGreaterThan(armour);
   expect(shield).toBeGreaterThan(head);
   expect(weapons).toBeGreaterThan(shield);
+
+  for (const clothing of ['underwear','bra','pants','shirt']) {
+    const index = order.indexOf(clothing);
+    if (index >= 0) {
+      expect(index).toBeGreaterThan(body);
+      expect(index).toBeLessThan(armour);
+    }
+  }
+}
+
+function expectRightSideOrder(order, headLayer) {
+  const shield = order.indexOf('shield');
+  const body = order.indexOf('body');
+  const armour = order.indexOf('armour');
+  const head = order.indexOf(headLayer);
+  const weapons = order.indexOf('weapons');
+
+  expect(shield).toBeGreaterThanOrEqual(0);
+  expect(body).toBeGreaterThan(shield);
+  expect(armour).toBeGreaterThan(body);
+  expect(head).toBeGreaterThan(armour);
+  expect(weapons).toBeGreaterThan(head);
 
   for (const clothing of ['underwear','bra','pants','shirt']) {
     const index = order.indexOf(clothing);
@@ -150,7 +172,7 @@ test.describe('direct humanoid compositor', () => {
     }
   });
 
-  test('human female uses the current clothing, armour, head and held-item painter order', async ({ page }) => {
+  test('human female uses facing-aware shield painter order', async ({ page }) => {
     await createCharacter(page, { race:'human', gender:'female' });
     await waitForDirectRenderer(page, 'human_female');
     await waitForRearEquipmentAssets(page);
@@ -158,7 +180,7 @@ test.describe('direct humanoid compositor', () => {
     const down = await renderEquippedHuman(page, 'female', 'down');
     expect(down.rendered).toBe(true);
     expect(down.count).toBeGreaterThan(0);
-    expectFrontOrSideOrder(down.layerOrder, 'helmet');
+    expectForegroundShieldOrder(down.layerOrder, 'helmet');
     expect(down.draw).toEqual({key:'human_female',view:'front',facing:'down'});
     expect(down.armour).toMatchObject({
       view:'front',
@@ -170,7 +192,7 @@ test.describe('direct humanoid compositor', () => {
     expect(down.armour.height).toBeGreaterThan(0);
 
     const right = await renderEquippedHuman(page, 'female', 'right');
-    expectFrontOrSideOrder(right.layerOrder, 'helmet');
+    expectRightSideOrder(right.layerOrder, 'helmet');
     expect(right.draw).toEqual({key:'human_female',view:'side',facing:'right'});
     expect(right.armour).toMatchObject({
       view:'side',
@@ -178,6 +200,10 @@ test.describe('direct humanoid compositor', () => {
       rotation:0,
       shear:false,
     });
+
+    const left = await renderEquippedHuman(page, 'female', 'left');
+    expectForegroundShieldOrder(left.layerOrder, 'helmet');
+    expect(left.draw).toEqual({key:'human_female',view:'side',facing:'left'});
 
     const up = await renderEquippedHuman(page, 'female', 'up');
     expectBackOrder(up.layerOrder, 'helmet');
@@ -190,7 +216,7 @@ test.describe('direct humanoid compositor', () => {
     });
 
     const hair = await renderEquippedHuman(page, 'female', 'down', { helmet:false });
-    expectFrontOrSideOrder(hair.layerOrder, 'hair');
+    expectForegroundShieldOrder(hair.layerOrder, 'hair');
   });
 
   test('human male follows the same current direct-compositor order', async ({ page }) => {
@@ -200,7 +226,7 @@ test.describe('direct humanoid compositor', () => {
     const result = await renderEquippedHuman(page, 'male', 'down');
     expect(result.rendered).toBe(true);
     expect(result.count).toBeGreaterThan(0);
-    expectFrontOrSideOrder(result.layerOrder, 'helmet');
+    expectForegroundShieldOrder(result.layerOrder, 'helmet');
     expect(result.draw).toEqual({key:'human_male',view:'front',facing:'down'});
     expect(result.armour).toMatchObject({
       view:'front',
