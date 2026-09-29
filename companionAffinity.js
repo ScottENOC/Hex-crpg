@@ -21,36 +21,110 @@
 (() => {
     'use strict';
 
-    const BUILD = '20260929-companion-affinity-v2';
+    const BUILD = '20260929-companion-affinity-v3';
     const MIN = 0;
     const MAX = 100;
 
     const PROFILES = Object.freeze({
         'Wren Talbot': Object.freeze({
             orientationLabel: 'straight',
-            // Wren is canonically straight, but not at the absolute end of the
-            // spectrum. A feminine-presenting protagonist can become someone
-            // she deeply loves romantically while her physical attraction stays
-            // modest rather than being rewritten by enough player choices.
             attractionCaps: Object.freeze({ masculine: 100, feminine: 30, androgynous: 45, unknown: 35 }),
             romanticCaps: Object.freeze({ masculine: 100, feminine: 85, androgynous: 90, unknown: 75 }),
-            // Not a gate for dialogue. Attraction contributes from 1 upward.
-            // This threshold only describes when strong physical desire is a
-            // plausible authored state; it never substitutes for consent.
             strongPhysicalDesireThreshold: 60,
             friendshipStart: 38,
             romanticBondStart: 0,
             initialAttractionFraction: 0.18,
-            // Small, one-shot "noticed competence" bonuses. These are taste,
-            // not a build tax: story/dialogue matter much more than skill spend.
+            relationshipStyle: Object.freeze({
+                romanticExclusivity: 'exclusive', sexualExclusivity: 'exclusive',
+                casualSex: false, friendsWithBenefits: false, groupRelationships: false,
+                breachResponse: 'wren',
+            }),
             skillTreeAttraction: Object.freeze({ strength: 2, agility: 2, rogue: 2, nature: 1 }),
             skillAttraction: Object.freeze({
-                keen_perception: 1,
-                insight: 1,
-                druid_knowledge_nature: 1,
-                elf_knowledge_nature: 1,
+                keen_perception: 1, insight: 1,
+                druid_knowledge_nature: 1, elf_knowledge_nature: 1,
                 knowledge_religion: 1,
             }),
+        }),
+        'Ser Aldric Thorne': Object.freeze({
+            orientationLabel: 'straight',
+            attractionCaps: Object.freeze({ masculine: 5, feminine: 100, androgynous: 20, unknown: 20 }),
+            romanticCaps: Object.freeze({ masculine: 10, feminine: 100, androgynous: 30, unknown: 25 }),
+            strongPhysicalDesireThreshold: 60,
+            friendshipStart: 18,
+            romanticBondStart: 0,
+            initialAttractionFraction: 0.10,
+            relationshipStyle: Object.freeze({
+                romanticExclusivity: 'exclusive', sexualExclusivity: 'exclusive',
+                casualSex: false, friendsWithBenefits: false, groupRelationships: false,
+                breachResponse: 'aldric', canReconcileOnce: true,
+            }),
+            skillTreeAttraction: Object.freeze({ strength: 2, endurance: 2, divine: 2 }),
+            skillAttraction: Object.freeze({ knowledge_religion: 2, insight: 1 }),
+        }),
+        'Fenn Oakheart': Object.freeze({
+            orientationLabel: 'bisexual',
+            attractionCaps: Object.freeze({ masculine: 100, feminine: 100, androgynous: 100, unknown: 90 }),
+            romanticCaps: Object.freeze({ masculine: 100, feminine: 100, androgynous: 100, unknown: 95 }),
+            strongPhysicalDesireThreshold: 60,
+            friendshipStart: 16,
+            romanticBondStart: 0,
+            initialAttractionFraction: 0.12,
+            relationshipStyle: Object.freeze({
+                romanticExclusivity: 'open', sexualExclusivity: 'open',
+                casualSex: true, friendsWithBenefits: true, groupRelationships: true,
+                breachResponse: 'cnm',
+            }),
+            skillTreeAttraction: Object.freeze({ nature: 2, endurance: 1, agility: 1 }),
+            skillAttraction: Object.freeze({ druid_knowledge_nature: 2, elf_knowledge_nature: 1, keen_perception: 1 }),
+        }),
+        'Reyna Fletcher': Object.freeze({
+            orientationLabel: 'lesbian',
+            attractionCaps: Object.freeze({ masculine: 5, feminine: 100, androgynous: 75, unknown: 50 }),
+            romanticCaps: Object.freeze({ masculine: 10, feminine: 100, androgynous: 85, unknown: 60 }),
+            strongPhysicalDesireThreshold: 60,
+            friendshipStart: 16,
+            romanticBondStart: 0,
+            initialAttractionFraction: 0.12,
+            relationshipStyle: Object.freeze({
+                romanticExclusivity: 'open', sexualExclusivity: 'open',
+                casualSex: true, friendsWithBenefits: true, groupRelationships: true,
+                breachResponse: 'cnm',
+            }),
+            skillTreeAttraction: Object.freeze({ agility: 2, weapons: 2, endurance: 1 }),
+            skillAttraction: Object.freeze({ keen_perception: 2, insight: 1 }),
+        }),
+        'Mirabel Quill': Object.freeze({
+            orientationLabel: 'bisexual',
+            attractionCaps: Object.freeze({ masculine: 100, feminine: 100, androgynous: 100, unknown: 90 }),
+            romanticCaps: Object.freeze({ masculine: 100, feminine: 100, androgynous: 100, unknown: 95 }),
+            strongPhysicalDesireThreshold: 60,
+            friendshipStart: 12,
+            romanticBondStart: 0,
+            initialAttractionFraction: 0.12,
+            relationshipStyle: Object.freeze({
+                romanticExclusivity: 'open', sexualExclusivity: 'open',
+                casualSex: true, friendsWithBenefits: true, groupRelationships: true,
+                breachResponse: 'cnm',
+            }),
+            skillTreeAttraction: Object.freeze({ arcane: 2, wizard: 2, agility: 1 }),
+            skillAttraction: Object.freeze({ insight: 2, knowledge_religion: 1, keen_perception: 1 }),
+        }),
+        'Brother Alden': Object.freeze({
+            orientationLabel: 'asexual, biromantic',
+            attractionCaps: Object.freeze({ masculine: 0, feminine: 0, androgynous: 0, unknown: 0 }),
+            romanticCaps: Object.freeze({ masculine: 100, feminine: 100, androgynous: 100, unknown: 100 }),
+            strongPhysicalDesireThreshold: 101,
+            friendshipStart: 18,
+            romanticBondStart: 0,
+            initialAttractionFraction: 0,
+            relationshipStyle: Object.freeze({
+                romanticExclusivity: 'exclusive', sexualExclusivity: 'open',
+                casualSex: false, friendsWithBenefits: false, groupRelationships: false,
+                seeksSex: false, breachResponse: 'alden',
+            }),
+            skillTreeAttraction: Object.freeze({}),
+            skillAttraction: Object.freeze({}),
         }),
     });
 
@@ -71,9 +145,6 @@
         'parents_investigation:support': Object.freeze({ friendship: 8, romanticBond: 6, reason: 'stood beside Wren without taking her grief away from her' }),
         'parents_investigation:restore_names': Object.freeze({ friendship: 7, romanticBond: 5, reason: 'helped restore Wren’s parents’ names' }),
         'parents_investigation:closure': Object.freeze({ friendship: 6, romanticBond: 4, reason: 'helped Wren find closure' }),
-        // Love/attachment need not vanish because someone becomes horrifying.
-        // Attraction and closeness take a huge hit, but the remaining romantic
-        // bond can become part of a tragic dark-path relationship.
         'player_became_lich': Object.freeze({ friendship: -22, romanticBond: -18, attraction: -30, reason: 'chose lichdom despite its cost to the people beside them' }),
     });
 
@@ -103,10 +174,6 @@
         return PROFILES[name] || null;
     }
 
-    // Presentation is intentionally separate from identity/pronouns. Today the
-    // game mostly has male/female character art, so gender is the compatibility
-    // fallback. Future character creation can set bodyPresentation explicitly
-    // without changing any companion orientation data.
     function presentationFor(entity = protagonist()) {
         const explicit = String(entity?.bodyPresentation || entity?.presentation || '').toLowerCase();
         if (['masculine', 'feminine', 'androgynous'].includes(explicit)) return explicit;
@@ -117,10 +184,6 @@
     }
 
     function identityFor(entity = protagonist()) {
-        // Pronouns are deliberately not consulted here. If a future companion
-        // has a romantic (rather than physical) gender preference, this gives
-        // that profile a clean identity hook without inferring identity from
-        // pronouns or body art.
         return entity?.genderIdentity || entity?.gender || null;
     }
 
@@ -159,6 +222,7 @@
             attraction: Math.min(compatibility.attractionCap, clamp(existing.attraction ?? initialAttraction)),
             romanceState: existing.romanceState || 'unspoken',
             physicalBoundary: existing.physicalBoundary || 'unspoken',
+            agreement: existing.agreement || null,
             knownEventKeys: Array.isArray(existing.knownEventKeys) ? existing.knownEventKeys : [],
             skillMilestoneKeys: Array.isArray(existing.skillMilestoneKeys) ? existing.skillMilestoneKeys : [],
             history: Array.isArray(existing.history) ? existing.history : [],
@@ -203,9 +267,6 @@
         const a = clamp(attraction);
         const r = clamp(romanticBond);
         const physicalAttractionWeight = a / 100;
-        // Emotional affection is primarily romantic, but even low physical
-        // attraction can tint how affection is expressed. This is dialogue
-        // weighting, not consent and not a substitute for attraction.
         const affectionWeight = Math.min(1, (r / 100) * 0.75 + physicalAttractionWeight * 0.25);
         return {
             attractionBand: attractionBand(a),
@@ -222,20 +283,21 @@
         const affinity = ensureAffinity(companion);
         if (!companion || !affinity) return null;
         const compatibility = compatibilityFor(companion);
+        const profile = profileFor(companion);
         return {
             friendship: affinity.friendship,
             romanticBond: affinity.romanticBond,
             attraction: affinity.attraction,
             romanceState: affinity.romanceState,
             physicalBoundary: affinity.physicalBoundary,
+            agreement: affinity.agreement,
             orientationLabel: compatibility.orientationLabel,
             presentation: compatibility.presentation,
             genderIdentity: compatibility.genderIdentity,
             attractionCap: compatibility.attractionCap,
             romanticCap: compatibility.romanticCap,
             strongPhysicalDesireThreshold: compatibility.strongPhysicalDesireThreshold,
-            // Backwards-compatible name, but the semantics are now continuous:
-            // any non-zero attraction cap can matter to dialogue and affection.
+            relationshipStyle: profile?.relationshipStyle || null,
             canDevelopPhysicalInterest: compatibility.attractionCap > 0,
             canDevelopStrongPhysicalDesire: compatibility.attractionCap >= compatibility.strongPhysicalDesireThreshold,
         };
@@ -302,14 +364,8 @@
             ...signals,
             emotionallyClose,
             romanticFeelings,
-            // Any non-zero attraction can shape physical/romantic dialogue.
-            // The cap only limits how strong that effect can become.
             physicalPathPossible: state.attractionCap > 0,
             strongPhysicalDesirePathPossible: state.canDevelopStrongPhysicalDesire,
-            // Emotional romance can be possible even where physical desire is
-            // orientation-limited. Explicit consent/status still matters; this
-            // is only availability/weighting data, never permission inferred
-            // from meters.
             romanticConversationPossible: emotionallyClose && state.romanticCap >= 25,
         };
     }
@@ -338,16 +394,13 @@
         }, 0);
     }
 
-    function syncSkillAttraction(companionOrName = 'Wren Talbot') {
+    function syncSkillAttraction(companionOrName) {
         const companion = canonicalCompanion(companionOrName);
         const player = protagonist();
         const affinity = ensureAffinity(companion);
         const profile = profileFor(companion);
         if (!companion || !player || !affinity || !profile) return;
 
-        // A few broad competence milestones, rather than +attraction every time
-        // a point is clicked. This keeps build preference as flavour instead of
-        // turning optimal romance into a character-build puzzle.
         Object.entries(profile.skillTreeAttraction || {}).forEach(([tree, amount]) => {
             const rank = treeRank(player, tree);
             [3, 6, 10].forEach(threshold => {
@@ -368,9 +421,11 @@
     }
 
     function ensureAll() {
-        party().slice(1).forEach(member => ensureAffinity(member));
+        party().slice(1).forEach(member => {
+            ensureAffinity(member);
+            syncSkillAttraction(member);
+        });
         syncWrenStoryAffinity();
-        syncSkillAttraction('Wren Talbot');
     }
 
     window.companionAffinity = {
