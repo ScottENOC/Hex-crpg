@@ -4,9 +4,7 @@ const { defineConfig } = require('@playwright/test');
 
 // Some sandboxed environments pre-install only the full Chromium binary, not
 // the separate "headless shell" build @playwright/test defaults to. Fall
-// back to it when present; otherwise let Playwright resolve its own default
-// (a normal `npx playwright install` on a dev machine or in CI already
-// provides the expected binary in its usual location).
+// back to it when present; otherwise let Playwright resolve its own default.
 const sandboxChromium = '/opt/pw-browsers/chromium';
 const launchOptions = fs.existsSync(sandboxChromium) ? { executablePath: sandboxChromium } : {};
 
@@ -14,14 +12,13 @@ module.exports = defineConfig({
     testDir: './tests',
     timeout: 30000,
     fullyParallel: true,
-    // Every test pays a near-identical ~5-7s "boot the whole game" cost via
-    // createCharacter() regardless of what it actually checks, so wall-clock
-    // time scales almost linearly with test count / worker count. Playwright's
-    // default worker count under-uses this machine's 4 cores; pin it explicitly
-    // (leaving 1 core free for the dev server + OS) instead of leaving it to
-    // whatever heuristic picked 2.
+    // Every test pays a sizeable game/bootstrap cost when it calls createCharacter().
+    // Local runs use three workers so one core remains available for the dev server.
     workers: process.env.CI ? undefined : 3,
-    retries: process.env.CI ? 1 : 0,
+    // Broad CI retries doubled the cost of deterministic failures and obscured how
+    // many tests were genuinely stale. Flaky tests should be fixed or explicitly
+    // isolated rather than retrying the entire suite by default.
+    retries: 0,
     reporter: process.env.CI ? 'github' : 'list',
     use: {
         baseURL: 'http://localhost:3000',

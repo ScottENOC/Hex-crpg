@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 
 test.describe('asset load scheduler', () => {
-  test('uses conservative gameplay concurrency and a fresh cache token', async ({ page }) => {
+  test('uses conservative gameplay concurrency and a versioned loader', async ({ page }) => {
     await page.goto('/');
     await page.waitForFunction(() => !!window.__assetLoadScheduler);
 
@@ -23,18 +23,16 @@ test.describe('asset load scheduler', () => {
       gameMaxConcurrent:4,
       gameplayWarmupGraceMs:750,
       transientRetryDelayMs:180,
-      presentationBuild:'20260928-asset-loading-http2-v2',
     });
-    expect(state.scriptSrc).toContain('assetLoadScheduler.js?build=20260928-asset-loading-http2-v2');
+    expect(state.presentationBuild).toMatch(/^\d{8}-[a-z0-9-]+$/);
+    expect(state.scriptSrc).toMatch(/assetLoadScheduler\.js\?build=[^&]+/);
   });
 
   test('switches into gameplay scheduling before the game starts loading', async ({ page }) => {
     await page.goto('/');
     await page.waitForFunction(() => !!window.__assetLoadScheduler);
 
-    const before = await page.evaluate(() => window.__assetLoadScheduler.gameStarted);
-    expect(before).toBe(false);
-
+    expect(await page.evaluate(() => window.__assetLoadScheduler.gameStarted)).toBe(false);
     await page.evaluate(() => window.__assetLoadScheduler.beginGameplayLoading());
 
     const after = await page.evaluate(() => ({

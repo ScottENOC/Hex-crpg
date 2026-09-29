@@ -1,66 +1,37 @@
 // tests/character-creator.spec.js
-// Shirt/pants/hair/skin color sliders on the character creator (see
-// spriteRecolor.js): let the player pick their own appearance before
-// starting, without touching race/gender/shape. The preview canvas is
-// self-contained (doesn't depend on window.gameVisuals/CHAR_CONFIG, which
-// don't exist until after game start).
+// Character creation now owns body/hair/skin appearance only. Clothing colour
+// and garment selection live in the inventory/clothing systems after creation.
 const { test, expect } = require('@playwright/test');
 
-const SLIDER_IDS = ['shirt-hue-slider', 'pants-hue-slider', 'hair-hue-slider', 'skin-tone-slider'];
+const APPEARANCE_SLIDERS = ['hair-hue-slider', 'skin-tone-slider'];
 
-test.describe('character creator appearance sliders', () => {
+test.describe('character creator appearance controls', () => {
     test.beforeEach(async ({ page }) => {
         await page.goto('/');
         await page.waitForSelector('#race-select', { state: 'visible' });
     });
 
-    test('all four sliders and the preview canvas exist with sensible ranges', async ({ page }) => {
-        const canvas = page.locator('#appearance-preview-canvas');
-        await expect(canvas).toBeAttached();
-        for (const id of SLIDER_IDS) {
-            const slider = page.locator(`#${id}`);
-            await expect(slider).toBeAttached();
-            const min = parseInt(await slider.getAttribute('min'), 10);
-            const max = parseInt(await slider.getAttribute('max'), 10);
-            expect(min).toBeGreaterThanOrEqual(0);
-            expect(max).toBeLessThanOrEqual(359);
-            expect(max).toBeGreaterThan(min);
-        }
-        expect(await page.locator('#skin-tone-slider').getAttribute('min')).toBe('0');
-        expect(await page.locator('#skin-tone-slider').getAttribute('max')).toBe('100');
+    test('appearance controls and preview canvas exist with sensible ranges', async ({ page }) => {
+        await expect(page.locator('#appearance-preview-canvas')).toBeAttached();
+
+        const hair = page.locator('#hair-hue-slider');
+        expect(await hair.getAttribute('min')).toBe('0');
+        expect(await hair.getAttribute('max')).toBe('359');
+
+        const skin = page.locator('#skin-tone-slider');
+        expect(await skin.getAttribute('min')).toBe('0');
+        expect(await skin.getAttribute('max')).toBe('100');
+
         await expect(page.locator('#fantasy-skin-check')).toBeAttached();
         await expect(page.locator('#fantasy-skin-controls')).toBeHidden();
+        await expect(page.locator('#skin-hue-slider')).toBeAttached();
         await expect(page.locator('#hair-style-select')).toBeAttached();
         await expect(page.locator('#body-type-select')).toBeAttached();
+        await expect(page.locator('#shirt-hue-slider')).toHaveCount(0);
+        await expect(page.locator('#pants-hue-slider')).toHaveCount(0);
     });
 
-    test('moving the shirt slider redraws the preview with different pixels', async ({ page }) => {
-        await page.selectOption('#race-select', 'human');
-        await page.selectOption('#gender-select', 'male');
-        await page.fill('#shirt-hue-slider', '30');
-        await page.evaluate(() => window.updateAppearancePreview());
-        await page.waitForFunction(() => {
-            const c = document.getElementById('appearance-preview-canvas');
-            const data = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
-            return data.some(v => v !== 0); // not entirely blank/transparent
-        }, { timeout: 5000 });
-
-        const before = await page.evaluate(() => {
-            const c = document.getElementById('appearance-preview-canvas');
-            return Array.from(c.getContext('2d').getImageData(0, 0, c.width, c.height).data);
-        });
-
-        await page.fill('#shirt-hue-slider', '220');
-        await page.evaluate(() => window.updateAppearancePreview());
-
-        const after = await page.evaluate(() => {
-            const c = document.getElementById('appearance-preview-canvas');
-            return Array.from(c.getContext('2d').getImageData(0, 0, c.width, c.height).data);
-        });
-        expect(before.join(',')).not.toBe(after.join(','));
-    });
-
-    test('moving the hair slider alone also changes the preview (the hair overlay is drawn and recolored)', async ({ page }) => {
+    test('moving the hair slider changes the preview', async ({ page }) => {
         await page.selectOption('#race-select', 'human');
         await page.selectOption('#gender-select', 'male');
         await page.evaluate(() => window.updateAppearancePreview());
@@ -85,27 +56,25 @@ test.describe('character creator appearance sliders', () => {
         expect(before.join(',')).not.toBe(after.join(','));
     });
 
-    test('changing race/gender selects a different base sprite for the preview without erroring', async ({ page }) => {
+    test('changing race and gender redraws the preview without erroring', async ({ page }) => {
+        const errors = [];
+        page.on('pageerror', e => errors.push(e.message));
         await page.selectOption('#race-select', 'elf');
         await page.selectOption('#gender-select', 'female');
-        const errors = [];
-        page.on('pageerror', (e) => errors.push(e.message));
         await page.evaluate(() => window.updateAppearancePreview());
         await page.waitForTimeout(200);
         expect(errors).toEqual([]);
     });
 
-    test('all four chosen hues are applied to the created character, not the name-derived defaults', async ({ page }) => {
+    test('chosen hair and skin values are applied to the created character', async ({ page }) => {
         await page.fill('#character-name', 'HueTestChar');
         await page.selectOption('#race-select', 'human');
         await page.selectOption('#gender-select', 'male');
         await page.selectOption('#class-select', 'fighter');
         await page.selectOption('#campaign-select', '2');
-        await page.fill('#shirt-hue-slider', '220');
-        await page.fill('#pants-hue-slider', '10');
         await page.fill('#hair-hue-slider', '300');
         await page.fill('#skin-tone-slider', '60');
-        for (const id of SLIDER_IDS) await page.dispatchEvent(`#${id}`, 'input');
+        for (const id of APPEARANCE_SLIDERS) await page.dispatchEvent(`#${id}`, 'input');
 
         await page.click('#createCharacterButton');
         await page.waitForSelector('#character-screen-modal', { state: 'visible' });
@@ -115,13 +84,13 @@ test.describe('character creator appearance sliders', () => {
         const result = await page.evaluate(() => {
             const ent = window.entities.find(e => e.name === window.party[0].name);
             return {
-                party: { shirt: window.party[0].shirtHue, pants: window.party[0].pantsHue, hair: window.party[0].hairHue, skin: window.party[0].skinHue },
-                entity: ent && { shirt: ent.shirtHue, pants: ent.pantsHue, hair: ent.hairHue, skin: ent.skinHue },
+                party: { hair: window.party[0].hairHue, skin: window.party[0].skinHue },
+                entity: ent && { hair: ent.hairHue, skin: ent.skinHue },
             };
         });
         const expected = await page.evaluate(() => window.naturalSkinToneFromSlider(60));
-        expect(result.party).toEqual({ shirt: 220, pants: 10, hair: 300, skin: expected.hue });
-        expect(result.entity).toEqual({ shirt: 220, pants: 10, hair: 300, skin: expected.hue });
+        expect(result.party).toEqual({ hair: 300, skin: expected.hue });
+        expect(result.entity).toEqual({ hair: 300, skin: expected.hue });
     });
 
     test('natural tones are the default and fantasy mode retains the full hue wheel', async ({ page }) => {

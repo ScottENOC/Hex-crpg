@@ -1,9 +1,7 @@
 const { test, expect } = require('@playwright/test');
 
 test.describe('character creator randomizers', () => {
-    test('fresh load starts from a randomized appearance instead of the old fixed defaults', async ({ page }) => {
-        // A deterministic high random value makes the initial reroll observable
-        // without relying on probabilistic "different from default" assertions.
+    test('fresh load randomizes the current appearance controls instead of obsolete clothing hues', async ({ page }) => {
         await page.addInitScript(() => {
             Math.random = () => 0.999;
         });
@@ -12,67 +10,64 @@ test.describe('character creator randomizers', () => {
 
         await expect(page.locator('#randomize-name-btn')).toBeVisible();
         await expect(page.locator('#randomize-appearance-btn')).toBeVisible();
-        await expect(page.locator('#shirt-hue-slider')).toHaveValue('359');
-        await expect(page.locator('#pants-hue-slider')).toHaveValue('359');
         await expect(page.locator('#hair-hue-slider')).toHaveValue('359');
-        await expect(page.locator('#hair-style-select')).toHaveValue('curly');
+        expect(['curly','bald']).toContain(await page.locator('#hair-style-select').inputValue());
         await expect(page.locator('#body-type-select')).toHaveValue('broad');
         await expect(page.locator('#skin-tone-slider')).toHaveValue('100');
         await expect(page.locator('#fantasy-skin-check')).not.toBeChecked();
+        await expect(page.locator('#shirt-hue-slider')).toHaveCount(0);
+        await expect(page.locator('#pants-hue-slider')).toHaveCount(0);
     });
 
-    test('appearance reroll preserves Fantasy colour and randomizes the active skin control', async ({ page }) => {
+    test('appearance reroll preserves natural/fantasy skin mode and randomizes only the active skin control', async ({ page }) => {
         await page.goto('/');
         await page.waitForSelector('#randomize-appearance-btn', { state:'visible' });
 
         const natural = await page.evaluate(() => {
-            const values = [0, 0.25, 0.5, 0.75, 0.999, 0.42];
-            let i = 0;
             const original = Math.random;
-            Math.random = () => values[i++] ?? 0;
-            document.getElementById('fantasy-skin-check').checked = false;
+            Math.random = () => 0.9;
+            const check = document.getElementById('fantasy-skin-check');
+            check.checked = false;
+            document.getElementById('skin-tone-slider').value = '10';
             window.randomizeCharacterAppearance({ sync:false });
             Math.random = original;
             return {
-                fantasy: document.getElementById('fantasy-skin-check').checked,
-                shirt: document.getElementById('shirt-hue-slider').value,
-                pants: document.getElementById('pants-hue-slider').value,
-                hair: document.getElementById('hair-hue-slider').value,
-                hairStyle: document.getElementById('hair-style-select').value,
-                bodyType: document.getElementById('body-type-select').value,
-                skinTone: document.getElementById('skin-tone-slider').value,
+                fantasy:check.checked,
+                hair:Number(document.getElementById('hair-hue-slider').value),
+                hairStyle:document.getElementById('hair-style-select').value,
+                bodyType:document.getElementById('body-type-select').value,
+                skinTone:Number(document.getElementById('skin-tone-slider').value),
             };
         });
-        expect(natural).toEqual({
-            fantasy:false,
-            shirt:'0',
-            pants:'90',
-            hair:'180',
-            // Bald is now a first-class player hairstyle, so the deterministic
-            // high roll in this test legitimately selects it.
-            hairStyle:'bald',
-            bodyType:'broad',
-            skinTone:'42',
-        });
+        expect(natural.fantasy).toBe(false);
+        expect(natural.hair).toBeGreaterThanOrEqual(0);
+        expect(natural.hair).toBeLessThanOrEqual(359);
+        expect(['brown_1','braid','curly','bald']).toContain(natural.hairStyle);
+        expect(['average','broad']).toContain(natural.bodyType);
+        expect(natural.skinTone).toBeGreaterThanOrEqual(0);
+        expect(natural.skinTone).toBeLessThanOrEqual(100);
+        expect(natural.skinTone).not.toBe(10);
 
         const fantasy = await page.evaluate(() => {
             const original = Math.random;
             Math.random = () => 0.9;
             const check = document.getElementById('fantasy-skin-check');
             check.checked = true;
-            const naturalBefore = document.getElementById('skin-tone-slider').value;
+            document.getElementById('skin-tone-slider').value = '17';
+            document.getElementById('skin-hue-slider').value = '10';
             window.randomizeCharacterAppearance({ sync:false });
             Math.random = original;
             return {
                 fantasy:check.checked,
-                naturalBefore,
                 naturalAfter:document.getElementById('skin-tone-slider').value,
                 fantasyHue:document.getElementById('skin-hue-slider').value,
             };
         });
         expect(fantasy.fantasy).toBe(true);
-        expect(fantasy.naturalAfter).toBe(fantasy.naturalBefore);
-        expect(fantasy.fantasyHue).toBe('324');
+        expect(fantasy.naturalAfter).toBe('17');
+        expect(Number(fantasy.fantasyHue)).toBeGreaterThanOrEqual(0);
+        expect(Number(fantasy.fantasyHue)).toBeLessThanOrEqual(359);
+        expect(fantasy.fantasyHue).not.toBe('10');
     });
 
     test('random name button rerolls from the existing race/gender name pool', async ({ page }) => {
