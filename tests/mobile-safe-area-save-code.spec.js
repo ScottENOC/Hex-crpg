@@ -1,24 +1,8 @@
 // tests/mobile-safe-area-save-code.spec.js
-// B2 (safe-area insets for notched iPhones) and B3 (save export/import
-// code) — see style.css / persistence.js.
-const fs = require('fs');
-const path = require('path');
+// B3 (save export/import code) — safe-area static checks live in
+// tests-unit/mobile-static-contracts.test.js so they do not need a browser.
 const { test, expect } = require('@playwright/test');
 const { createCharacter } = require('./helpers');
-
-test.describe('B2: safe-area insets', () => {
-    test('viewport meta declares viewport-fit=cover', async ({ page }) => {
-        await page.goto('/');
-        const content = await page.locator('meta[name="viewport"]').getAttribute('content');
-        expect(content).toContain('viewport-fit=cover');
-    });
-
-    test('the fixed top bars pad for env(safe-area-inset-*)', () => {
-        const css = fs.readFileSync(path.join(__dirname, '..', 'style.css'), 'utf8');
-        expect(css).toMatch(/#turn-indicator-bar\s*{[^}]*env\(safe-area-inset-top\)/s);
-        expect(css).toMatch(/#gameContainer\s*{[^}]*env\(safe-area-inset-bottom\)/s);
-    });
-});
 
 test.describe('B3: save export/import code', () => {
     test.beforeEach(async ({ page }) => {
