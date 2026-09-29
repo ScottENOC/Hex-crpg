@@ -107,7 +107,16 @@ if (!window.__companionRelationshipsModuleLoaded) {
 // than the generic 10/10 stranger baseline.
 if (!window.__companionRelationshipProgressionModuleLoaded) {
     window.__companionRelationshipProgressionModuleLoaded = true;
-    document.write('<script src="companionRelationshipProgression.js?build=20260929-companion-relationship-progression-v1"><\/script>');
+    document.write('<script src="companionRelationshipProgression.js?build=20260929-companion-relationship-progression-v2"><\/script>');
+}
+
+// Wren's Millbrook personal quest sits on top of the relationship system. It is
+// intentionally build-agnostic: ordinary questioning can always solve it, while
+// Knowledge, Insight/Persuasion, Keen Perception and Stealth open parallel routes
+// and richer evidence without making any one skill mandatory.
+if (!window.__wrenParentsInvestigationModuleLoaded) {
+    window.__wrenParentsInvestigationModuleLoaded = true;
+    document.write('<script src="wrenParentsInvestigation.js?build=20260929-wren-parents-investigation-v1"><\/script>');
 }
 
 // Declarative hints for NPC/AI skill spending. Existing gameplay prereq fields
