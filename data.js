@@ -100,6 +100,16 @@ if (!window.__companionRelationshipsModuleLoaded) {
     document.write('<script src="companionRelationships.js?build=20260929-companion-relationships-v2"><\/script>');
 }
 
+// Relationship progression is intentionally separate from the storage/
+// permission layer above: familiarity grows from unique personal conversations
+// and slow shared time, while trust moves only through explicit authored events.
+// Wren's Campaign 2 start is authored as an existing tavern acquaintance rather
+// than the generic 10/10 stranger baseline.
+if (!window.__companionRelationshipProgressionModuleLoaded) {
+    window.__companionRelationshipProgressionModuleLoaded = true;
+    document.write('<script src="companionRelationshipProgression.js?build=20260929-companion-relationship-progression-v1"><\/script>');
+}
+
 // Declarative hints for NPC/AI skill spending. Existing gameplay prereq fields
 // remain authoritative; these simply make equipment relationships explicit so
 // future generators/tools do not have to infer everything from descriptions.
