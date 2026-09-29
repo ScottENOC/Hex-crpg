@@ -120,7 +120,7 @@
       // Routine NPCs dress for the day once each morning. This deliberately
       // happens before/around their scheduled departure rather than every tick,
       // so clothing doesn't flicker as the seasonal score changes through a day.
-      if(e.isNPC&&e.side==='neutral'&&h>=5&&h<14&&s.lastRoutineDay!==d){
+      if(e.isNPC&&e.side==='neutral'&&(e.prefersRoads||e.destination)&&h>=5&&h<14&&s.lastRoutineDay!==d){
         reconsider(e);
         s.lastRoutineDay=d;
       }
