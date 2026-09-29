@@ -604,12 +604,14 @@
         const cx = bounds.left + bounds.width/2;
         const layerOrder = [];
 
-        const drawHeldLayers = () => {
+        const drawShieldLayer = () => {
             let shieldDrawn = false;
             shieldDrawn = drawHeldItem(ctx, entity, view, bounds, 'off', 'shield') || shieldDrawn;
             shieldDrawn = drawHeldItem(ctx, entity, view, bounds, 'main', 'shield') || shieldDrawn;
             if (shieldDrawn) layerOrder.push('shield');
+        };
 
+        const drawWeaponLayer = () => {
             let weaponDrawn = false;
             weaponDrawn = drawHeldItem(ctx, entity, view, bounds, 'main', 'weapon') || weaponDrawn;
             weaponDrawn = drawHeldItem(ctx, entity, view, bounds, 'off', 'weapon') || weaponDrawn;
@@ -623,9 +625,13 @@
             ctx.translate(-cx, 0);
         }
         try {
-            // Back-view equipment belongs behind the character. Front and side
-            // retain the established body/head/armour then shield/weapons order.
-            if (view === 'back') drawHeldLayers();
+            // Shield depth depends on the actual facing, not just the authored
+            // front/side/back sprite view. Front + left expose the shield arm;
+            // back + right put the shield behind the body/armour. Weapons retain
+            // the existing rear-behind / front-and-side-foreground behaviour.
+            const shieldBehindBody = view === 'back' || facing === 'right';
+            if (shieldBehindBody) drawShieldLayer();
+            if (view === 'back') drawWeaponLayer();
 
             const bodySource = imageReady(bodyImage) ? bodyImage : sourceBody;
             const bodyTarget = BODY_VISIBLE_TARGETS[key]?.[view];
@@ -642,7 +648,8 @@
                 if (drawCropped(ctx, hairImage, layout.hairCrop, layout.hairDest, bounds)) layerOrder.push('hair');
             } else if (hasHelmet && drawHelmet(ctx, entity, view, bounds)) layerOrder.push('helmet');
 
-            if (view !== 'back') drawHeldLayers();
+            if (!shieldBehindBody) drawShieldLayer();
+            if (view !== 'back') drawWeaponLayer();
         } finally {
             ctx.restore();
         }
