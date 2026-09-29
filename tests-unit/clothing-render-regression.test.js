@@ -26,7 +26,7 @@ test('outerwear uses a canonical armour-relative envelope while undergarments st
     contains(rendererSource, 'side: {x:.18,y:.205,w:.64,h:.810}');
     contains(rendererSource, 'armourY:-.010');
 
-    contains(layersSource, "const BUILD='20260929-clothing-layers-v18'");
+    contains(layersSource, "const BUILD='20260929-clothing-layers-v19'");
     contains(layersSource, 'const OUTERWEAR={top:.195,waist:.535,bottom:1.005};');
     contains(layersSource, '...outerwearTargets(.077,.846)');
     contains(layersSource, '...outerwearTargets(.212,.576)');
