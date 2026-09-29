@@ -3,7 +3,7 @@
 // in-game calendar and time of day, with stable per-person temperature taste.
 (() => {
   'use strict';
-  const BUILD='20260929-seasonal-clothing-v1';
+  const BUILD='20260929-seasonal-clothing-v2';
   const SHORTS_ID='pants_shorts';
   const TROUSERS_ID='pants_trousers';
   const AUTO_PANTS=new Set([SHORTS_ID,TROUSERS_ID]);
@@ -16,6 +16,7 @@
   function day(){return Math.floor(Math.max(0,Number(window.worldSeconds)||0)/86400);}
   function hour(){return typeof window.getCurrentHour==='function'?window.getCurrentHour():((Math.max(0,Number(window.worldSeconds)||0)%86400)/3600);}
   function eligible(e){return !!e?.equipped&&['human','elf','dwarf','goblin','orc'].includes(e.race)&&!!e.gender;}
+  function destinationKey(e){const d=e?.destination;return d?`${d.q},${d.r}`:null;}
 
   function registerShorts(){
     const cs=window.clothingSystem;
@@ -100,15 +101,16 @@
   function update(){
     if(!registerShorts()) return;
     patchShortsFit();
-    const d=day(),h=hour();
+    const d=day();
     const seen=new Set();
     const all=[...(window.entities||[])];
     if(window.player&&!all.includes(window.player)) all.push(window.player);
+    const partyHexes=(typeof window.collectPartyHexes==='function')?window.collectPartyHexes():null;
     for(const e of all){
       if(!eligible(e)||seen.has(e)) continue;
       seen.add(e);
       let s=state.get(e);
-      if(!s){s={initialDone:false,lastRoutineDay:null};state.set(e,s);}
+      if(!s){s={initialDone:false,lastDepartureDay:null,lastDestination:null};state.set(e,s);}
 
       // Start/load: choose an appropriate lower garment once. The player can
       // subsequently override it manually; only routine NPCs are reconsidered.
@@ -117,13 +119,29 @@
         s.initialDone=true;
       }
 
-      // Routine NPCs dress for the day once each morning. This deliberately
-      // happens before/around their scheduled departure rather than every tick,
-      // so clothing doesn't flicker as the seasonal score changes through a day.
-      if(e.isNPC&&e.side==='neutral'&&(e.prefersRoads||e.destination)&&h>=5&&h<14&&s.lastRoutineDay!==d){
+      // A routine NPC reconsiders clothing when they actually set off from a
+      // stationary/home state, rather than everyone changing at one clock-time
+      // cutoff. Cap this to once per in-game day, so later errands do not make
+      // someone repeatedly change trousers in the street.
+      const dest=destinationKey(e);
+      const routine=e.isNPC&&e.side==='neutral'&&(e.prefersRoads||dest);
+      const justSetOff=routine&&dest&&!s.lastDestination;
+      if(justSetOff&&s.lastDepartureDay!==d){
         reconsider(e);
-        s.lastRoutineDay=d;
+        s.lastDepartureDay=d;
       }
+
+      // Distant routine NPCs are schedule-snapped instead of being given a
+      // destination. Give those unobserved characters one daily reconsideration
+      // as well; there is no visible mid-walk change because they are dormant.
+      const dormant=routine&&partyHexes&&typeof window.isDormantAmbientNpc==='function'
+        ? window.isDormantAmbientNpc(e,partyHexes)
+        : false;
+      if(dormant&&s.lastDepartureDay!==d){
+        reconsider(e);
+        s.lastDepartureDay=d;
+      }
+      s.lastDestination=dest;
     }
   }
 
