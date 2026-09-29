@@ -12,6 +12,9 @@
         CIVILIAN: 'civilian',
     });
     const EXCLUDED_SKILLS = new Set(['learn_unicorn_summon', 'runesmithing', 'leatherworking']);
+    const SHIELD_SKILLS = new Set(['shield_proficiency', 'shield_bash', 'shield_other']);
+    const RIDING_SKILLS = new Set(['riding', 'riding_druid', 'riding_paladin']);
+    const ARMOR_SKILLS = new Set(['light_armor_training', 'medium_armor_training', 'heavy_armor_training']);
 
     function totalPoints(attributes) {
         return Object.values(attributes || {}).reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0);
@@ -91,15 +94,25 @@
         return new Set(Object.values(window.NPCProgression?.RACE_PROFILES || {}).map(p => p?.racialTree).filter(Boolean));
     }
 
+    function equipmentContext(skillId, skill) {
+        const weapon = skill.npcEquipmentWeapon || skillId.match(/^(sword|axe|bow|spear|dagger|club)_/)?.[1] || null;
+        return {
+            weapon,
+            shield: !!skill.npcRequiresShield || SHIELD_SKILLS.has(skillId),
+            mount: !!skill.npcRequiresMount || RIDING_SKILLS.has(skillId),
+            armor: skill.npcEquipmentRequirement === 'armor' || ARMOR_SKILLS.has(skillId),
+        };
+    }
+
     function contextAllows(entity, skillId, skill) {
         if (!skill || EXCLUDED_SKILLS.has(skillId)) return false;
         if (skill.tree === 'monster_skills') return false;
 
-        const weaponMatch = skill.npcEquipmentWeapon || skillId.match(/^(sword|axe|bow|spear|dagger|club)_/)?.[1];
-        if (weaponMatch && !equippedWeaponIds(entity).includes(weaponMatch)) return false;
-        if (skill.npcRequiresShield && !hasShield(entity)) return false;
-        if (skill.npcRequiresMount && !(entity.riding || entity.npcNeedsRidingSkill)) return false;
-        if (skill.npcEquipmentRequirement === 'armor' && !armorTrainingNeeded(entity).has(skillId)) return false;
+        const context = equipmentContext(skillId, skill);
+        if (context.weapon && !equippedWeaponIds(entity).includes(context.weapon)) return false;
+        if (context.shield && !hasShield(entity)) return false;
+        if (context.mount && !(entity.riding || entity.npcNeedsRidingSkill)) return false;
+        if (context.armor && !armorTrainingNeeded(entity).has(skillId)) return false;
 
         const raceTreeSet = racialTrees();
         if (raceTreeSet.has(skill.tree)) {
@@ -125,9 +138,10 @@
         let score = 0;
         const preferred = Number(entity.npcPreferredSkills?.[skillId]) || 0;
         const current = Number(entity.skills?.[skillId]) || 0;
+        const context = equipmentContext(skillId, skill);
         if (preferred > current) score += 1000 + (preferred - current) * 20;
-        if (skill.npcEquipmentWeapon) score += 180;
-        if (skill.npcRequiresShield || skill.npcRequiresMount || skill.npcEquipmentRequirement) score += 160;
+        if (context.weapon) score += 180;
+        if (context.shield || context.mount || context.armor) score += 160;
         if (current > 0) score += 25; // deepen an existing coherent specialty before branching randomly
         if (/^(health|health_regen|meleeDamage|timePointRate|quickRecovery|initiativeBonus|arcane_mana|divine_mana|nature_mana)$/.test(skillId)) score += 10;
         return score;
