@@ -1,13 +1,12 @@
 // Explicit garment layers: one authored image per colourable part.
 (() => {
   'use strict';
-  const BUILD='20260929-clothing-layers-v16';
+  const BUILD='20260929-clothing-layers-v17';
   const slots=['underwear','bra','pants','shirt'];
   const preloadSlots=['shirt','pants','bra','underwear'];
   const labels={underwear:'Underwear',bra:'Bra',pants:'Pants',shirt:'Shirt / Dress'};
   const images=new Map(), tinted=new Map();
   const opaqueBoundsCache=new WeakMap(), toneBoundsCache=new WeakMap();
-  const undergarmentFitMetrics=new WeakMap();
 
   // Human equipment currently shifts the .205-.1.015 heavy-armour target up by
   // .010, so its visible vertical envelope is .195-.1.005. Outer clothing uses
@@ -246,7 +245,11 @@
 
   function clothingTarget(slot,itemId,v){
     const resolved=view(v),set=CLOTHING_TARGETS[resolved]||CLOTHING_TARGETS.front;
-    if(slot==='shirt') return itemId==='top_dress'?set.dress:set.shirt;
+    if(slot==='shirt'){
+      if(itemId==='top_dress') return set.dress;
+      if(itemId==='top_shirt_f') return {...set.shirt,y:set.shirt.y-.03,h:set.shirt.h+.06};
+      return set.shirt;
+    }
     if(slot==='pants') return set.pants;
     if(slot==='bra') return set.bra;
     if(slot==='underwear') return set.underwear;
@@ -276,12 +279,15 @@
       dw*=1.10;
       dx-=(dw-oldWidth)/2;
       dy-=briefsRise;
-      if(entity) undergarmentFitMetrics.set(entity,{briefsRise});
     }else if(slot==='bra'){
-      // Tie the bra adjustment to the briefs' actual fitted opaque height.
-      // drawDirectionalHumanoidInBounds always paints underwear immediately before bra.
-      const briefsRise=undergarmentFitMetrics.get(entity)?.briefsRise ?? dh/3;
-      dy-=briefsRise*1.8;
+      // Bra placement is body-relative and must not depend on whether briefs are equipped.
+      // Keep the same intended high-torso lift using the stable bra target envelope.
+      dy-=targetH*.60;
+      if(itemId==='underwear_bra'){
+        const oldWidth=dw;
+        dw*=.90;
+        dx+=(oldWidth-dw)/2;
+      }
     }
     ctx.drawImage(source,trim.x,trim.y,trim.w,trim.h,dx,dy,dw,dh);
     return true;
