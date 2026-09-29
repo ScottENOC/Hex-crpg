@@ -104,12 +104,24 @@
         };
     }
 
+    function preferredFallbackWeapon(entity) {
+        const classes = entity.classLevelCounts || classCounts(Array.isArray(entity.classLevels) ? entity.classLevels : []);
+        if ((classes.rogue || 0) > 0) return 'dagger';
+        if ((classes.druid || 0) > 0 || (classes.cleric || 0) > 0) return 'club';
+        if ((classes.wizard || 0) > 0) return 'dagger';
+        return 'sword';
+    }
+
     function contextAllows(entity, skillId, skill) {
         if (!skill || EXCLUDED_SKILLS.has(skillId)) return false;
         if (skill.tree === 'monster_skills') return false;
 
         const context = equipmentContext(skillId, skill);
-        if (context.weapon && !equippedWeaponIds(entity).includes(context.weapon)) return false;
+        const weapons = equippedWeaponIds(entity);
+        // Current weapon strongly constrains training. A character carrying no
+        // weapon at all may still know weapon skills (a disarmed guard, captive,
+        // official, etc.); the scorer below then favours a class-sensible default.
+        if (context.weapon && weapons.length && !weapons.includes(context.weapon)) return false;
         if (context.shield && !hasShield(entity)) return false;
         if (context.mount && !(entity.riding || entity.npcNeedsRidingSkill)) return false;
         if (context.armor && !armorTrainingNeeded(entity).has(skillId)) return false;
@@ -139,8 +151,13 @@
         const preferred = Number(entity.npcPreferredSkills?.[skillId]) || 0;
         const current = Number(entity.skills?.[skillId]) || 0;
         const context = equipmentContext(skillId, skill);
+        const weapons = equippedWeaponIds(entity);
         if (preferred > current) score += 1000 + (preferred - current) * 20;
-        if (context.weapon) score += 180;
+        if (context.weapon) {
+            if (weapons.includes(context.weapon)) score += 220;
+            else if (!weapons.length && context.weapon === preferredFallbackWeapon(entity)) score += 140;
+            else score += 20;
+        }
         if (context.shield || context.mount || context.armor) score += 160;
         if (current > 0) score += 25; // deepen an existing coherent specialty before branching randomly
         if (/^(health|health_regen|meleeDamage|timePointRate|quickRecovery|initiativeBonus|arcane_mana|divine_mana|nature_mana)$/.test(skillId)) score += 10;
