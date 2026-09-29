@@ -21,9 +21,10 @@ test.describe('companion affinity', () => {
         expect(state.friendship).toBe(38);
         expect(state.attraction).toBe(18);
         expect(state.canDevelopPhysicalInterest).toBe(true);
+        expect(state.canDevelopStrongPhysicalDesire).toBe(true);
     });
 
-    test('a feminine protagonist can build deep romance but cannot overwrite Wren physical orientation', async ({ page }) => {
+    test('a feminine protagonist can build deep romance with modest but meaningful attraction', async ({ page }) => {
         await createCharacter(page, { campaign: '2', gender: 'female' });
         await waitForAffinity(page);
 
@@ -44,8 +45,36 @@ test.describe('companion affinity', () => {
         expect(result.affinity.attractionCap).toBe(30);
         expect(result.affinity.romanticCap).toBe(85);
         expect(result.readiness.romanticConversationPossible).toBe(true);
-        expect(result.readiness.physicalPathPossible).toBe(false);
-        expect(result.readiness.physicallyInterested).toBe(false);
+        expect(result.readiness.physicalPathPossible).toBe(true);
+        expect(result.readiness.physicallyInterested).toBe(true);
+        expect(result.readiness.physicalAttractionWeight).toBeCloseTo(0.30, 5);
+        expect(result.readiness.affectionWeight).toBeGreaterThan(0.6);
+        expect(result.readiness.strongPhysicalDesire).toBe(false);
+        expect(result.readiness.strongPhysicalDesirePathPossible).toBe(false);
+        expect(result.readiness.romanticPhysicalTension).toBe(true);
+    });
+
+    test('one point of attraction has a small non-zero effect', async ({ page }) => {
+        await createCharacter(page, { campaign: '2', gender: 'male' });
+        await waitForAffinity(page);
+
+        const result = await page.evaluate(() => {
+            const wren = window.party.find(p => p.name === 'Wren Talbot');
+            wren.playerAffinity.attraction = 1;
+            wren.playerAffinity.romanticBond = 40;
+            const one = window.getCompanionRomanceReadiness(wren);
+            wren.playerAffinity.attraction = 0;
+            const zero = window.getCompanionRomanceReadiness(wren);
+            return { one, zero };
+        });
+
+        expect(result.one.physicallyInterested).toBe(true);
+        expect(result.one.attractionBand).toBe('faint');
+        expect(result.one.physicalAttractionWeight).toBeCloseTo(0.01, 5);
+        expect(result.one.affectionWeight).toBeGreaterThan(result.zero.affectionWeight);
+        expect(result.zero.physicallyInterested).toBe(false);
+        expect(result.zero.attractionBand).toBe('none');
+        expect(result.zero.physicalAttractionWeight).toBe(0);
     });
 
     test('pronouns do not determine attraction while explicit body presentation does', async ({ page }) => {
