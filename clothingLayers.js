@@ -1,7 +1,7 @@
 // Explicit garment layers: one authored image per colourable part.
 (() => {
   'use strict';
-  const BUILD='20260929-clothing-layers-v18';
+  const BUILD='20260929-clothing-layers-v19';
   const slots=['underwear','bra','pants','shirt'];
   const preloadSlots=['shirt','pants','bra','underwear'];
   const labels={underwear:'Underwear',bra:'Bra',pants:'Pants',shirt:'Shirt / Dress'};
@@ -40,7 +40,8 @@
     },
   };
 
-  const singleLayer=(slot,path,label)=>({slot,layers:[{id:'base',label,defaultColor:{hue:110,saturation:55,value:62,opacity:1},views:{front:path,side:path,back:path}}]});
+  const singleLayerViews=(slot,views,label)=>({slot,layers:[{id:'base',label,defaultColor:{hue:110,saturation:55,value:62,opacity:1},views}]});
+  const singleLayer=(slot,path,label)=>singleLayerViews(slot,{front:path,side:path,back:path},label);
   const twoToneGarment=(slot,views,labelDark,labelLight)=>({slot,layers:[
     {id:'dark',label:labelDark,defaultColor:{hue:110,saturation:60,value:42,opacity:1},views,sourceTone:'darkGreen'},
     {id:'light',label:labelLight,defaultColor:{hue:110,saturation:45,value:72,opacity:1},views,sourceTone:'lightGreen'},
@@ -58,7 +59,10 @@
     pants_baggy_wraps:singleLayer('pants','images/equipment/clothing/pants_baggy_wraps.png','Baggy wraps'),
     pants_breeches:singleLayer('pants','images/equipment/clothing/pants_breeches.png','Breeches'),
     pants_hose:singleLayer('pants','images/equipment/clothing/pants_hose.png','Hose'),
-    pants_trousers:singleLayer('pants','images/equipment/clothing/pants_trousers.png','Trousers'),
+    pants_trousers:singleLayerViews('pants',{
+      front:'images/equipment/clothing/pants_trousers.png',
+      back:'images/equipment/clothing/pants_trousers_back.png',
+    },'Trousers'),
     underwear_briefs:twoToneGarment('underwear',{
       front:'images/equipment/clothing/briefs_female_front.png',
       back:'images/equipment/clothing/briefs_female_back.png',
@@ -81,8 +85,8 @@
   const FEMININE_START_TOPS=['top_blouse','top_dress','top_shirt_f'];
   const MASCULINE_START_TOPS=['top_masc_toggle','top_masc_lacework','top_masc_laced','top_masc_buttoned'];
   const RETIRED_TOPS=new Set(['top_shirt','top_tunic']);
-  const PANTS=['pants_baggy_wraps','pants_breeches','pants_hose','pants_trousers'];
-  const PLAYER_DEFAULT={shirt:'top_masc_toggle',pants:'pants_trousers',underwear:'underwear_briefs',bra:'underwear_bra'};
+  const STARTER_PANTS='pants_trousers';
+  const PLAYER_DEFAULT={shirt:'top_masc_toggle',pants:STARTER_PANTS,underwear:'underwear_briefs',bra:'underwear_bra'};
   const HUMANOID_RACES=new Set(['human','elf','dwarf','goblin','orc']);
 
   function legacy(itemId){
@@ -117,7 +121,7 @@
     const names={
       top_blouse:'Blouse',top_dress:'Dress',top_shirt_f:'Fitted Shirt',
       top_masc_toggle:'Toggle Tunic',top_masc_lacework:'Lacework Shirt',top_masc_laced:'Laced Tunic',top_masc_buttoned:'Buttoned Work Shirt',
-      pants_baggy_wraps:'Baggy Wraps',pants_breeches:'Breeches',pants_hose:'Hose',pants_trousers:'Trousers',underwear_briefs:'Briefs',
+      pants_baggy_wraps:'Baggy Wraps',pants_breeches:'Breeches',pants_hose:'Hose',pants_trousers:'Unisex Trousers',underwear_briefs:'Briefs',
       underwear_briefs_gstring:'G-string',underwear_bra:'Bra',underwear_bra_strapless:'Strapless Bra'
     };
     for(const [id,g] of Object.entries(GARMENTS)) if(!window.items[id]) window.items[id]={name:names[id]||id,type:'clothes',clothingSlot:g.slot};
@@ -159,7 +163,7 @@
 
     if(e.clothingDefaultsApplied!==true){
       if(!e.equipped.shirt) e.equipped.shirt=starterTop(e,seed);
-      if(!e.equipped.pants) e.equipped.pants=player?PLAYER_DEFAULT.pants:PANTS[hash(`${seed}|pants`)%PANTS.length];
+      if(!e.equipped.pants) e.equipped.pants=STARTER_PANTS;
       if(player&&!e.equipped.underwear) e.equipped.underwear=PLAYER_DEFAULT.underwear;
       if(player&&hasFeminineBody(e)&&!e.equipped.bra) e.equipped.bra=PLAYER_DEFAULT.bra;
       e.clothingDefaultsApplied=true;
@@ -333,6 +337,6 @@
   setInterval(()=>{for(const e of window.entities||[])ensureDefaultOutfit(e,{player:e?.side==='player'});if(window.player)ensureDefaultOutfit(window.player,{player:true});},1000);
   if(document.readyState==='complete')install();else window.addEventListener('load',install,{once:true});
 
-  window.clothingSystem={build:BUILD,slots,preloadSlots,slotLabels:labels,builtinGarments:GARMENTS,clothingTargets:CLOTHING_TARGETS,outerwearGeometry:{...OUTERWEAR},playerDefault:PLAYER_DEFAULT,starterTops:{feminine:[...FEMININE_START_TOPS],masculine:[...MASCULINE_START_TOPS]},getItemSpec:spec,migrateLegacyEquipment:migrate,ensureDefaultOutfit,preloadOutfit,visibleSlotsReady,getLayerColour:colour,setLayerColour:setColour,drawSlot,tintWholeLayer:tint,registerBuiltinItems};
+  window.clothingSystem={build:BUILD,slots,preloadSlots,slotLabels:labels,builtinGarments:GARMENTS,clothingTargets:CLOTHING_TARGETS,outerwearGeometry:{...OUTERWEAR},playerDefault:PLAYER_DEFAULT,starterTops:{feminine:[...FEMININE_START_TOPS],masculine:[...MASCULINE_START_TOPS]},starterPants:STARTER_PANTS,getItemSpec:spec,migrateLegacyEquipment:migrate,ensureDefaultOutfit,preloadOutfit,visibleSlotsReady,getLayerColour:colour,setLayerColour:setColour,drawSlot,tintWholeLayer:tint,registerBuiltinItems};
   window.CLOTHING_SLOTS=slots;
 })();
