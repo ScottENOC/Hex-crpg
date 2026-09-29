@@ -100,3 +100,17 @@ function costLabel(order) {
     return parts.join(', ');
 }
 window.buildOrderCostLabel = costLabel;
+
+// Prepared traps are a specialised kind of field construction, so load their
+// world-state system from a script that is definitely part of the live index
+// stack. The data marker matches renderPerfTuning.js's defensive loader: if
+// that optional loader is present in another build, the module still loads
+// exactly once.
+(() => {
+    if (document.querySelector('script[data-prepared-trap-system]')) return;
+    const script = document.createElement('script');
+    script.src = 'trapSystem.js?v=1';
+    script.dataset.preparedTrapSystem = 'true';
+    script.async = false;
+    document.head.appendChild(script);
+})();
