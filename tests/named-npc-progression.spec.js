@@ -117,7 +117,8 @@ test.describe('Authored named humanoid progression', () => {
         expect(result.classLevels).toEqual(['druid']);
         expect(result.skills.learn_summon_animal).toBe(1);
         expect(result.skills.learn_tiger_summon).toBe(1);
-        expect(result.skills.riding).toBe(1);
+        expect(result.skills.riding_druid).toBe(1);
+        expect(result.skills.riding || 0).toBe(0);
         expect(result.skills.elf_bow_range || 0).toBe(0);
         expect(result.skills.light_armor_training).toBe(1);
         expect(result.equipmentWarnings).toEqual([]);
