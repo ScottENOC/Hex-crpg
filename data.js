@@ -119,6 +119,16 @@ if (!window.__wrenParentsInvestigationModuleLoaded) {
     document.write('<script src="wrenParentsInvestigation.js?build=20260929-wren-parents-investigation-v2"><\/script>');
 }
 
+// Wren is an origin-character-scale companion rather than a fixed approval
+// dispenser. Campaign choices and direct conversations build a persistent player
+// ethos and slowly shape Wren's own loyalty, mercy and attachment security. Her
+// response to the same protagonist behaviour depends on the relationship already
+// built: high trust means more influence; betrayal can instead push her away.
+if (!window.__wrenCharacterArcModuleLoaded) {
+    window.__wrenCharacterArcModuleLoaded = true;
+    document.write('<script src="wrenCharacterArc.js?build=20260929-wren-character-arc-v1"><\/script>');
+}
+
 // Declarative hints for NPC/AI skill spending. Existing gameplay prereq fields
 // remain authoritative; these simply make equipment relationships explicit so
 // future generators/tools do not have to infer everything from descriptions.
