@@ -12,12 +12,12 @@ module.exports = defineConfig({
     testDir: './tests',
     timeout: 30000,
     fullyParallel: true,
-    // Every test pays a sizeable game/bootstrap cost when it calls createCharacter().
-    // Local runs use three workers so one core remains available for the dev server.
-    workers: process.env.CI ? undefined : 3,
-    // Broad CI retries doubled the cost of deterministic failures and obscured how
-    // many tests were genuinely stale. Flaky tests should be fixed or explicitly
-    // isolated rather than retrying the entire suite by default.
+    // Each worker boots a browser page while the local game server runs alongside it.
+    // GitHub's default was only using two workers per shard; three materially reduces
+    // the long-tail shard without saturating the runner or starving the dev server.
+    workers: 3,
+    // Broad CI retries doubled deterministic failures and hid stale tests. Flaky
+    // tests should be fixed or explicitly isolated rather than retried globally.
     retries: 0,
     reporter: process.env.CI ? 'github' : 'list',
     use: {
