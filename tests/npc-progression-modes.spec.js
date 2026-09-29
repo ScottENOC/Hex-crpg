@@ -1,10 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { createCharacter } = require('./helpers.js');
 
-function sumPoints(attributes) {
-    return Object.values(attributes || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
-}
-
 test.describe('NPC progression modes and canonical companions', () => {
     test.beforeEach(async ({ page }) => {
         await createCharacter(page);
@@ -120,26 +116,29 @@ test.describe('NPC progression modes and canonical companions', () => {
         expect(result.unspent).toBe(0);
     });
 
-    test('pre-recruitment and recruited companion builds share the same canonical class history', async ({ page }) => {
+    test('NPC-side and party-side forms use the same canonical build', async ({ page }) => {
         const result = await page.evaluate(() => {
-            const before = window.entities.find(e => e.name === 'Reyna Fletcher');
-            const beforeSequence = before ? [...(before.classLevels || [])] : null;
-            const beforeSkills = before ? { ...before.skills } : null;
-            window.recruitReyna();
-            const after = window.party.find(p => p.name === 'Reyna Fletcher');
+            const npc = new window.Enemy('Reyna Fletcher', '#6a4a2a', { q: 520, r: 520 }, 10, 10, 0);
+            npc.side = 'neutral';
+            npc.inventory = [];
+            npc.equipped = { weapon: null, offhand: null, armor: null, helmet: null };
+            window.applyCanonicalCompanionEntityBuild(npc, 'Reyna Fletcher');
+            const partyData = window.buildCanonicalCompanionData('Reyna Fletcher');
             return {
-                beforeSequence,
-                afterSequence: after?.classLevelSequence || null,
-                beforeBow: beforeSkills?.bow_hit || 0,
-                afterBow: after?.skills?.bow_hit || 0,
-                afterUnspent: after ? Object.values(after.attributes || {}).reduce((s, n) => s + (Number(n) || 0), 0) : null,
+                npcSequence: [...npc.classLevels],
+                partySequence: partyData.classLevelSequence,
+                npcBow: npc.skills?.bow_hit || 0,
+                partyBow: partyData.skills?.bow_hit || 0,
+                npcUnspent: Object.values(npc.attributes || {}).reduce((s, n) => s + (Number(n) || 0), 0),
+                partyUnspent: Object.values(partyData.attributes || {}).reduce((s, n) => s + (Number(n) || 0), 0),
             };
         });
 
-        expect(result.beforeSequence).toEqual(['fighter']);
-        expect(result.afterSequence).toEqual(['fighter']);
-        expect(result.beforeBow).toBeGreaterThan(0);
-        expect(result.afterBow).toBeGreaterThan(0);
-        expect(result.afterUnspent).toBe(0);
+        expect(result.npcSequence).toEqual(['fighter']);
+        expect(result.partySequence).toEqual(['fighter']);
+        expect(result.npcBow).toBeGreaterThan(0);
+        expect(result.partyBow).toBeGreaterThan(0);
+        expect(result.npcUnspent).toBe(0);
+        expect(result.partyUnspent).toBe(0);
     });
 });
