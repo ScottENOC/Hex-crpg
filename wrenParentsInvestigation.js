@@ -1,11 +1,11 @@
 // wrenParentsInvestigation.js
-// Wren Talbot's Millbrook personal quest: a multi-route investigation where
-// ordinary questioning always works, while Knowledge, Insight/Persuasion,
-// Perception and Stealth open parallel shortcuts and richer evidence.
+// Wren Talbot's Millbrook personal quest: always solvable by ordinary
+// investigation, with Knowledge, Insight/Persuasion, Perception and Stealth
+// opening parallel shortcuts and stronger evidence.
 (() => {
     'use strict';
 
-    const BUILD = '20260929-wren-parents-investigation-v1';
+    const BUILD = '20260929-wren-parents-investigation-v2';
     const QUEST_ID = 'wren_parents';
     const MIN_CLUES_TO_RESOLVE = 4;
     const PARENTS = Object.freeze({ mother: 'Mara Talbot', father: 'Galen Talbot' });
@@ -45,27 +45,15 @@
         },
     });
 
-    function party() {
-        return Array.isArray(window.party) ? window.party : [];
-    }
-
-    function wren() {
-        return party().find((member, index) => index > 0 && member?.name === 'Wren Talbot') || null;
-    }
-
-    function petra() {
-        return (window.entities || []).find(entity => entity?.name === 'Petra Hollis') || null;
-    }
-
-    function maxPartySkill(skillId) {
-        return party().reduce((best, member) => Math.max(best, Number(member?.skills?.[skillId] || 0)), 0);
-    }
+    const party = () => Array.isArray(window.party) ? window.party : [];
+    const wren = () => party().find((member, index) => index > 0 && member?.name === 'Wren Talbot') || null;
+    const petra = () => (window.entities || []).find(entity => entity?.name === 'Petra Hollis') || null;
+    const maxPartySkill = id => party().reduce((best, member) => Math.max(best, Number(member?.skills?.[id] || 0)), 0);
 
     function hasKnowledgeNature() {
         return party().some(member =>
             (typeof window.hasKnowledgeNature === 'function' && window.hasKnowledgeNature(member)) ||
-            member?.skills?.druid_knowledge_nature ||
-            member?.skills?.elf_knowledge_nature
+            member?.skills?.druid_knowledge_nature || member?.skills?.elf_knowledge_nature
         );
     }
 
@@ -83,9 +71,7 @@
         );
     }
 
-    function quest() {
-        return (window.questLog || []).find(entry => entry.id === QUEST_ID) || null;
-    }
+    const quest = () => (window.questLog || []).find(entry => entry.id === QUEST_ID) || null;
 
     function ensureQuest() {
         window.questLog = window.questLog || [];
@@ -103,9 +89,7 @@
                 offeredAt: window.worldSeconds || 0,
             };
             window.questLog.push(q);
-            if (typeof window.showMessage === 'function') {
-                window.showMessage('Companion quest added: The Long Silence.');
-            }
+            window.showMessage?.('Companion quest added: The Long Silence.');
         }
         q.clues = q.clues || {};
         q.clueOrder = q.clueOrder || [];
@@ -126,9 +110,7 @@
         q.description = clueCount(q) >= MIN_CLUES_TO_RESOLVE
             ? 'You have enough evidence to reconstruct what happened to Mara and Galen Talbot. Talk it through with Wren.'
             : `Investigate what happened to Wren’s parents in Millbrook. Evidence found: ${clueCount(q)}/${MIN_CLUES_TO_RESOLVE}.`;
-        if (typeof window.showMessage === 'function') {
-            window.showMessage(`Clue found: ${spec.label}.`);
-        }
+        window.showMessage?.(`Clue found: ${spec.label}.`);
         return true;
     }
 
@@ -140,133 +122,68 @@
     }
 
     function ordinaryPetra(npc) {
-        showResult(
-            npc,
+        showResult(npc,
             '“Mara and Galen Talbot?” Petra frowns, then nods slowly. “Yes. They took winter ledger work for Harl Venn, the freight foreman. Nice pair. Too honest for that job, maybe. They accused him of relief grain going missing, then they were gone within the week.”',
-            'petra_memory',
-            'Petra Hollis'
-        );
+            'petra_memory', 'Petra Hollis');
     }
 
     function ordinaryVillagers(npc) {
-        showResult(
-            npc,
+        showResult(npc,
             'You spend an hour asking older Millbrook residents. Most remember nothing useful, but the retired miller does: Venn’s wagon went north after midnight with two people riding in back. It came home before dawn empty.',
-            'village_gossip',
-            'Millbrook residents'
-        );
+            'village_gossip', 'Millbrook residents');
     }
 
     function ordinaryChapel(npc) {
-        showResult(
-            npc,
+        showResult(npc,
             'The chapel’s oldest burial book is badly water-stained. One entry survives clearly enough: “two unknown travelers, man and wife, recovered after thaw; buried together beside the north wall.” The date is only days after the Talbots vanished.',
-            'chapel_register',
-            'Millbrook chapel register'
-        );
+            'chapel_register', 'Millbrook chapel register');
     }
 
     function ordinaryTrail(npc) {
-        showResult(
-            npc,
+        showResult(npc,
             'At the old north switchback, the place is too weathered to tell a clean story, but the old villagers’ directions lead to a collapsed roadside cairn and the remains of a wagon pull-off. Whatever happened here was hidden away from the main road.',
-            'north_switchback',
-            'Old north switchback'
-        );
+            'north_switchback', 'Old north switchback');
     }
 
     function insightRoute(npc) {
-        showResult(
-            npc,
+        showResult(npc,
             'You let Petra finish, then wait. She looks toward the chapel instead of at Wren. “Fine. There was more. Two bodies came out of the thaw that spring. The old reeve called them strangers and told everyone to leave it alone. Venn had friends with money. People were frightened.”',
-            'insight_coverup',
-            'Insight'
-        );
+            'insight_coverup', 'Insight');
     }
 
     function persuasionRoute(npc) {
-        showResult(
-            npc,
-            'Petra hesitates, then unlocks the council chest. “You didn’t hear this from me.” The old ledger records two unidentified adults recovered at the north switchback in exactly the week Mara and Galen disappeared.',
-            'council_ledger',
-            'Persuasion'
-        );
+        showResult(npc,
+            'With the Talbots already tied to Venn, you press Petra to trust you with the old council record. She hesitates, then unlocks the chest. The ledger records two unidentified adults recovered at the north switchback in exactly the week Mara and Galen disappeared.',
+            'council_ledger', 'Persuasion');
     }
 
     function religionRoute(npc) {
-        showResult(
-            npc,
+        showResult(npc,
             'The burial shorthand means more to you than it would to most. The priest used the old paired-knot notation reserved for spouses whose names were unknown, and noted a mended wedding cord embroidered with a single “T”. This was not a random pair of travelers.',
-            'chapel_register',
-            'Knowledge: Religion'
-        );
+            'chapel_register', 'Knowledge: Religion');
     }
 
     function natureRoute(npc) {
-        showResult(
-            npc,
+        showResult(npc,
             'Years have softened the site, but not erased it. The wagon stopped deliberately on level ground; old axe scars mark where someone fought beside it, and the disturbed slope below is consistent with two bodies dragged away after the struggle. This was an ambush, not a crash or animal attack.',
-            'north_switchback',
-            'Knowledge: Nature'
-        );
+            'north_switchback', 'Knowledge: Nature');
     }
 
     function perceptionRoute(npc) {
-        showResult(
-            npc,
+        showResult(npc,
             'The council ledger looks ordinary until the light catches shallow scratches in the parchment. Beneath the scraped-out “unknown” entry you can still make out the first strokes of two names: M. Talbot and G. Talbot.',
-            'erased_names',
-            'Keen Perception'
-        );
+            'erased_names', 'Keen Perception');
     }
 
     function stealthRoute(npc) {
-        showResult(
-            npc,
+        showResult(npc,
             'After dark you slip into the sealed records store without waking the neighbouring cottages. Behind a false stack of spoiled invoices is Venn’s duplicate freight tally: missing relief grain, false weights, and one final payment to two hired hands marked “two witnesses — silence.”',
-            'hidden_freight_tally',
-            'Stealth'
-        );
+            'hidden_freight_tally', 'Stealth');
     }
 
     function evidenceSummary(q) {
         const ids = q?.clueOrder || [];
-        if (!ids.length) return 'You have not found anything solid yet.';
-        return ids.map(id => `• ${CLUES[id]?.label || id}`).join('\n');
-    }
-
-    function resolveWithWren(npc) {
-        const companion = wren();
-        const q = quest();
-        if (!companion || !q || q.status === 'completed' || clueCount(q) < MIN_CLUES_TO_RESOLVE) return;
-
-        const hasProof = !!q.clues.hidden_freight_tally;
-        const hasCoverup = !!(q.clues.insight_coverup || q.clues.erased_names || q.clues.council_ledger);
-        const fullTruth = hasProof || (clueCount(q) >= 5 && hasCoverup);
-
-        const truth = fullTruth
-            ? 'The pieces finally fit. Mara and Galen discovered Harl Venn was stealing Millbrook’s winter relief grain. They meant to expose him. Venn paid men to stop them at the north switchback; the old reeve buried the scandal along with their names.'
-            : 'The pieces are enough. Mara and Galen did not abandon Wren. They disappeared after challenging Harl Venn, and the unidentified married couple buried after the thaw were almost certainly them. Someone in old Millbrook made sure the record stayed vague.';
-
-        const options = [
-            {
-                label: '“Whatever you want to do with this, I’m with you.”',
-                action: () => completeQuest(companion, q, fullTruth, 'support')
-            },
-            {
-                label: '“We can put their names back in the register.”',
-                action: () => completeQuest(companion, q, fullTruth, 'restore_names')
-            },
-            {
-                label: '“At least you finally know what happened.”',
-                action: () => completeQuest(companion, q, fullTruth, 'closure')
-            },
-        ];
-
-        window.showDialogue(companion,
-            `${truth}\n\nWren is quiet for a long time. “All those years I thought maybe they chose not to come back.”`,
-            options
-        );
+        return ids.length ? ids.map(id => `• ${CLUES[id]?.label || id}`).join('\n') : 'You have not found anything solid yet.';
     }
 
     function completeQuest(companion, q, fullTruth, resolution) {
@@ -282,40 +199,44 @@
         let event;
         let line;
         if (resolution === 'support') {
-            event = {
-                approval: fullTruth ? 7 : 5,
-                trust: fullTruth ? 18 : 14,
-                reason: 'stood beside Wren while uncovering the truth about her parents',
-            };
+            event = { approval: fullTruth ? 7 : 5, trust: fullTruth ? 18 : 14, reason: 'stood beside Wren while uncovering the truth about her parents' };
             line = 'Wren nods once, eyes fixed on the chapel wall. “Then we do it my way. But… stay for this bit.”';
         } else if (resolution === 'restore_names') {
-            event = {
-                approval: fullTruth ? 8 : 6,
-                trust: fullTruth ? 16 : 13,
-                reason: 'helped restore Mara and Galen Talbot’s names to Millbrook’s record',
-            };
+            event = { approval: fullTruth ? 8 : 6, trust: fullTruth ? 16 : 13, reason: 'helped restore Mara and Galen Talbot’s names to Millbrook’s record' };
             line = '“Yeah,” Wren says. “They get their names back. Whatever else happened, they get that.”';
             q.namesRestored = true;
         } else {
-            event = {
-                approval: fullTruth ? 4 : 3,
-                trust: fullTruth ? 14 : 11,
-                reason: 'helped Wren learn what happened to her parents',
-            };
+            event = { approval: fullTruth ? 4 : 3, trust: fullTruth ? 14 : 11, reason: 'helped Wren learn what happened to her parents' };
             line = 'Wren lets out a breath she seems to have been holding for years. “Knowing hurts. Not knowing was worse.”';
         }
 
-        if (typeof window.noteWrenDispositionEvent === 'function') {
-            window.noteWrenDispositionEvent(`parents_investigation:${resolution}`, event);
-        }
-        if (typeof window.adjustCompanionRelationship === 'function') {
-            window.adjustCompanionRelationship(companion, { familiarity: fullTruth ? 5 : 3 }, 'shared Wren parent investigation');
-        }
-        if (typeof window.gainExp === 'function') window.gainExp(fullTruth ? 300 : 200);
-        if (typeof window.showMessage === 'function') {
-            window.showMessage(`Companion quest complete: The Long Silence.${fullTruth ? ' Full truth uncovered.' : ''}`);
-        }
+        window.noteWrenDispositionEvent?.(`parents_investigation:${resolution}`, event);
+        window.adjustCompanionRelationship?.(companion, { familiarity: fullTruth ? 5 : 3 }, 'shared Wren parent investigation');
+        window.gainExp?.(fullTruth ? 300 : 200);
+        window.showMessage?.(`Companion quest complete: The Long Silence.${fullTruth ? ' Full truth uncovered.' : ''}`);
         window.showDialogue(companion, line, [{ label: 'Stay with her a while.', action: () => {} }]);
+    }
+
+    function resolveWithWren(npc) {
+        const companion = wren();
+        const q = quest();
+        if (!companion || !q || q.status === 'completed' || clueCount(q) < MIN_CLUES_TO_RESOLVE) return;
+
+        const hasProof = !!q.clues.hidden_freight_tally;
+        const hasCoverup = !!(q.clues.insight_coverup || q.clues.erased_names || q.clues.council_ledger);
+        const fullTruth = hasProof || (clueCount(q) >= 5 && hasCoverup);
+        const truth = fullTruth
+            ? 'The pieces finally fit. Mara and Galen discovered Harl Venn was stealing Millbrook’s winter relief grain. They meant to expose him. Venn paid men to stop them at the north switchback; the old reeve buried the scandal along with their names.'
+            : 'The pieces are enough. Mara and Galen did not abandon Wren. They disappeared after challenging Harl Venn, and the unidentified married couple buried after the thaw were almost certainly them. Someone in old Millbrook made sure the record stayed vague.';
+
+        window.showDialogue(companion,
+            `${truth}\n\nWren is quiet for a long time. “All those years I thought maybe they chose not to come back.”`,
+            [
+                { label: '“Whatever you want to do with this, I’m with you.”', action: () => completeQuest(companion, q, fullTruth, 'support') },
+                { label: '“We can put their names back in the register.”', action: () => completeQuest(companion, q, fullTruth, 'restore_names') },
+                { label: '“At least you finally know what happened.”', action: () => completeQuest(companion, q, fullTruth, 'closure') },
+            ]
+        );
     }
 
     function openInvestigation(npc = petra()) {
@@ -328,30 +249,24 @@
                 q.namesRestored
                     ? 'Petra has had the chapel and council records amended: Mara and Galen Talbot are no longer listed as unknown.'
                     : 'Petra keeps her voice low. “I’m sorry it took this long for the truth to come out.”',
-                [{ label: 'Thank you.', action: () => {} }]
-            );
+                [{ label: 'Thank you.', action: () => {} }]);
             return true;
         }
 
         const options = [];
-        if (!q.clues.petra_memory) {
-            options.push({ label: 'Ask Petra what she remembers.', action: () => ordinaryPetra(npc) });
-        }
-        if (q.clues.petra_memory && !q.clues.village_gossip) {
-            options.push({ label: 'Ask around among Millbrook’s older residents.', action: () => ordinaryVillagers(npc) });
-        }
-        if (q.clues.village_gossip && !q.clues.chapel_register) {
-            options.push({ label: 'Search the old chapel burial book.', action: () => ordinaryChapel(npc) });
-        }
-        if (q.clues.chapel_register && !q.clues.north_switchback) {
-            options.push({ label: 'Walk the old north switchback and look for the site.', action: () => ordinaryTrail(npc) });
-        }
+        if (!q.clues.petra_memory) options.push({ label: 'Ask Petra what she remembers.', action: () => ordinaryPetra(npc) });
+        if (q.clues.petra_memory && !q.clues.village_gossip) options.push({ label: 'Ask around among Millbrook’s older residents.', action: () => ordinaryVillagers(npc) });
+        if (q.clues.village_gossip && !q.clues.chapel_register) options.push({ label: 'Search the old chapel burial book.', action: () => ordinaryChapel(npc) });
+        if (q.clues.chapel_register && !q.clues.north_switchback) options.push({ label: 'Walk the old north switchback and look for the site.', action: () => ordinaryTrail(npc) });
 
         if (maxPartySkill('insight') > 0 && !q.clues.insight_coverup) {
             options.push({ label: '[Insight] Petra is leaving something out.', action: () => insightRoute(npc) });
         }
-        if (maxPartySkill('persuasion') > 0 && !q.clues.council_ledger) {
-            options.push({ label: '[Persuasion] Convince Petra to open the old council records.', action: () => persuasionRoute(npc) });
+        // Persuasion keeps its existing game-wide rule: it is not a blind
+        // solution. The option only appears once another clue gives the player
+        // a concrete reason to ask Petra for restricted records.
+        if (maxPartySkill('persuasion') > 0 && q.clues.petra_memory && !q.clues.council_ledger) {
+            options.push({ label: '[Persuasion] Ask Petra to trust you with the old council records.', action: () => persuasionRoute(npc) });
         }
         if (hasKnowledgeReligion() && !q.clues.chapel_register) {
             options.push({ label: '[Knowledge: Religion] Read the chapel burial notation properly.', action: () => religionRoute(npc) });
@@ -367,12 +282,8 @@
         }
 
         if (clueCount(q) >= MIN_CLUES_TO_RESOLVE) {
-            options.unshift({
-                label: `Put the evidence together with Wren. (${clueCount(q)} clues)`,
-                action: () => resolveWithWren(npc)
-            });
+            options.unshift({ label: `Put the evidence together with Wren. (${clueCount(q)} clues)`, action: () => resolveWithWren(npc) });
         }
-
         options.push({
             label: 'Review the evidence.',
             action: () => window.showDialogue(companion, evidenceSummary(q), [
@@ -381,11 +292,11 @@
         });
         options.push({ label: 'Leave it for now.', action: () => {} });
 
-        const line = clueCount(q)
-            ? `You have ${clueCount(q)} pieces of evidence. There are several ways to keep digging.`
-            : 'Petra’s expression changes when Wren gives her surname. “Talbot? I haven’t heard that name in years.”';
-
-        window.showDialogue(npc, line, options);
+        window.showDialogue(npc,
+            clueCount(q)
+                ? `You have ${clueCount(q)} pieces of evidence. There are several ways to keep digging.`
+                : 'Petra’s expression changes when Wren gives her surname. “Talbot? I haven’t heard that name in years.”',
+            options);
         return true;
     }
 
@@ -403,20 +314,14 @@
         const wrapped = function(npc) {
             if (!eligibleForInvestigation()) return base.apply(this, arguments);
             const q = quest();
-            const options = [
-                {
-                    label: q?.status === 'completed' ? 'About the Talbots…' : 'We’re looking for Wren’s parents.',
-                    action: () => openInvestigation(npc),
-                },
-                {
-                    label: 'I wanted to ask about something else.',
-                    action: () => base.call(this, npc),
-                },
-            ];
-            const line = q?.status === 'completed'
-                ? 'Petra gives Wren a quieter look than usual. “What do you need?”'
-                : 'Petra looks from you to Wren. “All right. Ask.”';
-            window.showDialogue(npc, line, options);
+            window.showDialogue(npc,
+                q?.status === 'completed'
+                    ? 'Petra gives Wren a quieter look than usual. “What do you need?”'
+                    : 'Petra looks from you to Wren. “All right. Ask.”',
+                [
+                    { label: q?.status === 'completed' ? 'About the Talbots…' : 'We’re looking for Wren’s parents.', action: () => openInvestigation(npc) },
+                    { label: 'I wanted to ask about something else.', action: () => base.call(this, npc) },
+                ]);
         };
         wrapped.__wrenParentsAware = true;
         wrapped.__basePetraHollis = base;
@@ -424,8 +329,17 @@
         return true;
     }
 
+    function chainHas(fn, flag) {
+        let current = fn;
+        for (let i = 0; i < 8 && typeof current === 'function'; i++) {
+            if (current[flag]) return true;
+            current = current.__baseShowDialogue;
+        }
+        return false;
+    }
+
     function installWrenDialogueHook() {
-        if (typeof window.showDialogue !== 'function' || window.showDialogue.__wrenParentsInvestigationAware) return false;
+        if (typeof window.showDialogue !== 'function' || chainHas(window.showDialogue, '__wrenParentsInvestigationAware')) return false;
         const base = window.showDialogue;
         const wrapped = function(npc, text, options) {
             const companion = wren();
@@ -433,31 +347,23 @@
             if (companion && npc?.name === 'Wren Talbot' && text === "What's on your mind?" && Array.isArray(options)) {
                 const q = quest();
                 if (q?.status === 'active') {
-                    nextOptions = [
-                        ...options,
-                        {
-                            label: 'About the search for your parents…',
-                            action: () => {
-                                const p = petra();
-                                if (p) openInvestigation(p);
-                                else window.showDialogue(companion, 'We should ask around once we are back in Millbrook.', [{ label: 'Right.', action: () => {} }]);
-                            },
+                    nextOptions = [...options, {
+                        label: 'About the search for your parents…',
+                        action: () => {
+                            const p = petra();
+                            if (p) openInvestigation(p);
+                            else window.showDialogue(companion, 'We should ask around once we are back in Millbrook.', [{ label: 'Right.', action: () => {} }]);
                         },
-                    ];
+                    }];
                 } else if (q?.status === 'completed') {
-                    nextOptions = [
-                        ...options,
-                        {
-                            label: 'About your parents…',
-                            action: () => window.showDialogue(
-                                companion,
-                                q.namesRestored
-                                    ? '“Seeing their names in the book was strange. Good strange. Like they were real again, not just a story I kept telling myself.”'
-                                    : '“I’m still working out what to do with knowing. But I’d rather have the truth than another ten years of guessing.”',
-                                [{ label: 'I’m here.', action: () => {} }]
-                            ),
-                        },
-                    ];
+                    nextOptions = [...options, {
+                        label: 'About your parents…',
+                        action: () => window.showDialogue(companion,
+                            q.namesRestored
+                                ? '“Seeing their names in the book was strange. Good strange. Like they were real again, not just a story I kept telling myself.”'
+                                : '“I’m still working out what to do with knowing. But I’d rather have the truth than another ten years of guessing.”',
+                            [{ label: 'I’m here.', action: () => {} }]),
+                    }];
                 }
             }
             const args = Array.from(arguments);
@@ -465,6 +371,10 @@
             return base.apply(this, args);
         };
         wrapped.__wrenParentsInvestigationAware = true;
+        // Preserve the relationship module's self-healing marker when this
+        // wrapper sits on top of it, preventing the two periodic hook installers
+        // from wrapping one another forever.
+        if (chainHas(base, '__relationshipProgressionAware')) wrapped.__relationshipProgressionAware = true;
         wrapped.__baseShowDialogue = base;
         window.showDialogue = wrapped;
         return true;
@@ -472,8 +382,7 @@
 
     function maybeStartAtMillbrook() {
         const companion = wren();
-        if (!companion || quest()?.status === 'completed') return;
-        if (!companion.wrenParentsReachedMillbrook) return;
+        if (!companion || quest()?.status === 'completed' || !companion.wrenParentsReachedMillbrook) return;
         ensureQuest();
     }
 
@@ -508,6 +417,5 @@
     refreshHooks();
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', refreshHooks, { once: true });
     setInterval(refreshHooks, 1000);
-
     window.WREN_PARENTS_INVESTIGATION_BUILD = BUILD;
 })();
