@@ -28,10 +28,6 @@
         return image;
     }
 
-    // The main humanoid compositor mirrors the complete side view when facing
-    // left. The authored left-side braid image is already left-facing, so feed
-    // the compositor a pre-mirrored copy; its normal character mirror then puts
-    // the authored orientation back on screen without changing body/equipment.
     function leftRenderSource() {
         const image = ensureSideLeftImage();
         if (!imageReady(image)) return null;
@@ -60,8 +56,6 @@
         return {originalWidth:w, originalHeight:h, trimLeft:0, trimTop:0, trimWidth:w, trimHeight:h};
     }
 
-    // Match the actual opaque width the existing front braid produces after its
-    // historic crop, rather than merely matching source-PNG dimensions.
     function frontOpaqueWidthFraction(frontImage) {
         const layout = window.DIRECTIONAL_CHARACTER_LAYOUT?.front;
         if (!layout || !imageReady(frontImage)) return layout?.hairDest?.w || .56;
@@ -89,12 +83,7 @@
         const sourceAspect = iw / ih;
         const renderAspect = Number(window.HUMAN_FEMALE_RENDER_ASPECT || .48);
         const h = w * renderAspect / Math.max(.01, sourceAspect);
-        return {
-            x:.5 - w / 2,
-            y:view === 'back' ? -.005 : -.010,
-            w,
-            h,
-        };
+        return {x:.5-w/2,y:view==='back'?-.005:-.010,w,h};
     }
 
     function braidSetFor(entity) {
@@ -106,43 +95,28 @@
         if (entity?.hairStyle !== STYLE) return draw();
         const view = window.facingToSpriteView?.(facing) || (facing === 'up' ? 'back' : (facing === 'left' || facing === 'right' ? 'side' : 'front'));
         if (view === 'front') return draw();
-
         const braid = braidSetFor(entity);
         const layout = window.DIRECTIONAL_CHARACTER_LAYOUT?.[view];
         if (!braid || !layout) return draw();
-
         const originalCrop = layout.hairCrop;
         const originalDest = layout.hairDest;
         const originalSide = braid.side;
         const frontImage = braid.front;
         let source = view === 'back' ? braid.back : originalSide;
-
-        if (view === 'side' && facing === 'left') {
-            const left = leftRenderSource();
-            if (left) source = left;
-        }
+        if (view === 'side' && facing === 'left') { const left = leftRenderSource(); if (left) source = left; }
         if (!imageReady(source)) return draw();
-
         if (view === 'side') braid.side = source;
         braid.sideLeft = ensureSideLeftImage();
         layout.hairCrop = {x:0,y:0,w:1,h:1};
         layout.hairDest = fittedDestination(source, view, frontImage) || originalDest;
-
-        try {
-            return draw();
-        } finally {
-            braid.side = originalSide;
-            layout.hairCrop = originalCrop;
-            layout.hairDest = originalDest;
-        }
+        try { return draw(); }
+        finally { braid.side = originalSide; layout.hairCrop = originalCrop; layout.hairDest = originalDest; }
     }
 
     function installDirectionalDrawWrapper() {
         const current = window.drawDirectionalHumanoidInBounds;
         if (typeof current !== 'function' || current.__directionalBraidSupport) return !!current?.__directionalBraidSupport;
-        const wrapped = function(ctx, entity, bounds, facing='down') {
-            return withDirectionalBraid(entity, facing, () => current.apply(this, arguments));
-        };
+        const wrapped = function(ctx, entity, bounds, facing='down') { return withDirectionalBraid(entity, facing, () => current.apply(this, arguments)); };
         wrapped.__directionalBraidSupport = true;
         window.drawDirectionalHumanoidInBounds = wrapped;
         window.drawDirectionalCharacterBase = wrapped;
@@ -154,13 +128,8 @@
         const current = window.drawPlayerCharacter;
         if (typeof current !== 'function' || !current.__directHumanoidCompositor) return false;
         if (current.__directionalBraidSupport) return true;
-        const wrapped = function(ctx, entity) {
-            const facing = entity?.facing || 'down';
-            return withDirectionalBraid(entity, facing, () => current.apply(this, arguments));
-        };
+        const wrapped = function(ctx, entity) { const facing=entity?.facing||'down'; return withDirectionalBraid(entity,facing,()=>current.apply(this,arguments)); };
         wrapped.__directionalBraidSupport = true;
-        // Preserve this marker so humanoidRenderer's installer recognises that
-        // the direct compositor is still the active renderer and does not wrap it again.
         wrapped.__directHumanoidCompositor = true;
         wrapped.__legacyDrawPlayerCharacter = current.__legacyDrawPlayerCharacter || current;
         window.drawPlayerCharacter = wrapped;
@@ -171,16 +140,23 @@
         ensureSideLeftImage();
         const directional = installDirectionalDrawWrapper();
         const world = installWorldDrawWrapper();
-        if (directional && world) {
-            window.__directionalBraidHairReady = true;
-            return true;
-        }
+        if (directional && world) { window.__directionalBraidHairReady = true; return true; }
         return false;
     }
 
-    const timer = setInterval(() => {
-        if (install()) clearInterval(timer);
-    }, 50);
+    const timer = setInterval(() => { if (install()) clearInterval(timer); }, 50);
     if (document.readyState === 'complete') install();
     else window.addEventListener('load', install, {once:true});
+})();
+
+// Shield appearance is kept in its own module, but this file is already part of
+// the deliberately small presentation stack. Load the shield module from here
+// rather than expanding the legacy script list in index.html.
+(() => {
+    if (document.querySelector('script[data-shield-appearance]')) return;
+    const script=document.createElement('script');
+    script.src=`shieldAppearance.js?build=${encodeURIComponent(window.PRESENTATION_BUILD||'20260929-shields-v1')}`;
+    script.dataset.shieldAppearance='true';
+    script.async=false;
+    document.head.appendChild(script);
 })();
