@@ -1,10 +1,10 @@
 // companionRelationships.js
 // Player<->companion relationship state and respectful clothing-boundary gates.
 //
-// Three axes are deliberately separate:
+// The game already owns approval through window.companionAttitude (0..100).
+// This module adds the two dimensions that approval cannot sensibly stand in for:
 //   familiarity: how well the companion knows the player (0..100)
 //   trust:       how safe/reliable the player feels to them (0..100)
-//   approval:    whether they currently like/agree with the player (-100..100)
 //
 // Clothing permissions use familiarity + trust, never approval or romance.
 // A companion can also author a permanent stricter boundary via
@@ -12,9 +12,10 @@
 (() => {
     'use strict';
 
-    const BUILD = '20260929-companion-relationships-v1';
+    const BUILD = '20260929-companion-relationships-v2';
     const CLOTHING_SLOTS = ['shirt', 'pants', 'bra', 'underwear'];
-    const DEFAULT_RELATIONSHIP = Object.freeze({ familiarity: 10, trust: 10, approval: 0 });
+    const DEFAULT_RELATIONSHIP = Object.freeze({ familiarity: 10, trust: 10 });
+    const DEFAULT_APPROVAL = 50;
     const DEFAULT_POLICY = Object.freeze({
         styleFamiliarity: 30,
         revealingFamiliarity: 30,
@@ -63,25 +64,58 @@
         return {
             familiarity: authored.familiarity ?? DEFAULT_RELATIONSHIP.familiarity,
             trust: authored.trust ?? DEFAULT_RELATIONSHIP.trust,
-            approval: authored.approval ?? DEFAULT_RELATIONSHIP.approval,
         };
+    }
+
+    function approvalFor(entity) {
+        const canonical = canonicalPartyMember(entity) || entity;
+        if (!canonical?.name) return DEFAULT_APPROVAL;
+        window.companionAttitude = window.companionAttitude || {};
+
+        if (window.companionAttitude[canonical.name] === undefined) {
+            const authored = canonical.companionRelationshipStart?.approval;
+            const legacy = canonical.playerRelationship?.approval;
+            // v1 briefly stored a second -100..100 approval value on the party
+            // member. If a development save contains it and the canonical meter
+            // has no value yet, migrate it once into the established 0..100
+            // companionAttitude scale, then ensureRelationship removes the copy.
+            if (legacy !== undefined) {
+                window.companionAttitude[canonical.name] = clamp((Number(legacy) + 100) / 2, 0, 100);
+            } else {
+                window.companionAttitude[canonical.name] = clamp(authored ?? DEFAULT_APPROVAL, 0, 100);
+            }
+        }
+        return clamp(window.companionAttitude[canonical.name], 0, 100);
     }
 
     function ensureRelationship(entity) {
         const canonical = canonicalPartyMember(entity) || entity;
         if (!canonical) return null;
+        // Migrate v1 approval before deleting its duplicate field.
+        approvalFor(canonical);
         const seed = relationshipSeed(canonical);
         const current = (canonical.playerRelationship && typeof canonical.playerRelationship === 'object')
             ? canonical.playerRelationship
             : {};
         current.familiarity = clamp(current.familiarity ?? seed.familiarity, 0, 100);
         current.trust = clamp(current.trust ?? seed.trust, 0, 100);
-        current.approval = clamp(current.approval ?? seed.approval, -100, 100);
+        delete current.approval;
         if (!Array.isArray(current.history)) current.history = [];
         if (!Array.isArray(current.knownConversationKeys)) current.knownConversationKeys = [];
         canonical.playerRelationship = current;
         if (canonical !== entity && entity) entity.playerRelationship = JSON.parse(JSON.stringify(current));
         return current;
+    }
+
+    function relationshipSnapshot(entity) {
+        const canonical = canonicalPartyMember(entity) || entity;
+        const rel = ensureRelationship(canonical);
+        if (!rel) return null;
+        return {
+            familiarity: rel.familiarity,
+            trust: rel.trust,
+            approval: approvalFor(canonical),
+        };
     }
 
     function relationshipPolicy(entity) {
@@ -102,49 +136,64 @@
         return 'familiar';
     }
 
-    function commitRelationship(entity, next, reason = null) {
-        const canonical = canonicalPartyMember(entity) || entity;
-        if (!canonical) return null;
-        const current = ensureRelationship(canonical);
-        const previous = {
-            familiarity: current.familiarity,
-            trust: current.trust,
-            approval: current.approval,
-        };
-        current.familiarity = clamp(next.familiarity ?? current.familiarity, 0, 100);
-        current.trust = clamp(next.trust ?? current.trust, 0, 100);
-        current.approval = clamp(next.approval ?? current.approval, -100, 100);
-        if (reason && (previous.familiarity !== current.familiarity || previous.trust !== current.trust || previous.approval !== current.approval)) {
-            current.history.push({
-                reason: String(reason),
-                familiarity: current.familiarity,
-                trust: current.trust,
-                approval: current.approval,
-            });
-            if (current.history.length > 24) current.history.splice(0, current.history.length - 24);
+    function emitRelationshipChange(canonical, previous, reason) {
+        const current = relationshipSnapshot(canonical);
+        const stored = ensureRelationship(canonical);
+        if (reason && current && (
+            previous.familiarity !== current.familiarity ||
+            previous.trust !== current.trust ||
+            previous.approval !== current.approval
+        )) {
+            stored.history.push({ reason: String(reason), ...current });
+            if (stored.history.length > 24) stored.history.splice(0, stored.history.length - 24);
         }
         syncFieldByName(canonical, 'playerRelationship');
         try {
             window.dispatchEvent(new CustomEvent('companionRelationshipChanged', {
-                detail: { companion: canonical, previous, current: { ...current }, reason },
+                detail: { companion: canonical, previous, current: current ? { ...current } : null, reason },
             }));
         } catch (_) { /* CustomEvent can be absent in narrow test harnesses. */ }
         return current;
     }
 
+    // Absolute setter is primarily for authored starts, migrations, dev tools
+    // and deterministic tests. Story approval changes should normally keep
+    // using adjustCompanionAttitude so existing approve/disapprove feedback and
+    // departure-at-zero behaviour stay authoritative.
     function setRelationship(entity, patch, reason = 'authored relationship change') {
-        return commitRelationship(entity, patch || {}, reason);
+        const canonical = canonicalPartyMember(entity) || entity;
+        if (!canonical) return null;
+        const previous = relationshipSnapshot(canonical);
+        const current = ensureRelationship(canonical);
+        patch = patch || {};
+        if (patch.familiarity !== undefined) current.familiarity = clamp(patch.familiarity, 0, 100);
+        if (patch.trust !== undefined) current.trust = clamp(patch.trust, 0, 100);
+        if (patch.approval !== undefined && canonical.name) {
+            window.companionAttitude = window.companionAttitude || {};
+            window.companionAttitude[canonical.name] = clamp(patch.approval, 0, 100);
+        }
+        return emitRelationshipChange(canonical, previous, reason);
     }
 
     function adjustRelationship(entity, delta, reason = 'authored relationship change') {
-        const current = ensureRelationship(entity);
-        if (!current) return null;
+        const canonical = canonicalPartyMember(entity) || entity;
+        if (!canonical) return null;
+        const previous = relationshipSnapshot(canonical);
+        const current = ensureRelationship(canonical);
         delta = delta || {};
-        return commitRelationship(entity, {
-            familiarity: current.familiarity + Number(delta.familiarity || 0),
-            trust: current.trust + Number(delta.trust || 0),
-            approval: current.approval + Number(delta.approval || 0),
-        }, reason);
+        current.familiarity = clamp(current.familiarity + Number(delta.familiarity || 0), 0, 100);
+        current.trust = clamp(current.trust + Number(delta.trust || 0), 0, 100);
+
+        const approvalDelta = Number(delta.approval || 0);
+        if (approvalDelta) {
+            if (typeof window.adjustCompanionAttitude === 'function') {
+                window.adjustCompanionAttitude(canonical.name, approvalDelta, reason);
+            } else {
+                window.companionAttitude = window.companionAttitude || {};
+                window.companionAttitude[canonical.name] = clamp(approvalFor(canonical) + approvalDelta, 0, 100);
+            }
+        }
+        return emitRelationshipChange(canonical, previous, reason);
     }
 
     // Narrative code can award familiarity for genuinely new conversations by
@@ -152,12 +201,12 @@
     function noteConversation(entity, key, gain = 4) {
         const canonical = canonicalPartyMember(entity) || entity;
         const rel = ensureRelationship(canonical);
-        if (!rel || !key) return rel;
+        if (!rel || !key) return relationshipSnapshot(canonical);
         const stableKey = String(key);
-        if (rel.knownConversationKeys.includes(stableKey)) return rel;
+        if (rel.knownConversationKeys.includes(stableKey)) return relationshipSnapshot(canonical);
         rel.knownConversationKeys.push(stableKey);
         if (rel.knownConversationKeys.length > 80) rel.knownConversationKeys.splice(0, rel.knownConversationKeys.length - 80);
-        return commitRelationship(canonical, { familiarity: rel.familiarity + Math.max(0, Number(gain) || 0) }, `conversation:${stableKey}`);
+        return adjustRelationship(canonical, { familiarity: Math.max(0, Number(gain) || 0) }, `conversation:${stableKey}`);
     }
 
     function semanticLayer(layer) {
@@ -168,17 +217,22 @@
         return id || label || 'part';
     }
 
+    function withSystemOverride(fn) {
+        systemBypassDepth++;
+        try { return fn(); }
+        finally { systemBypassDepth--; }
+    }
+
     function captureClothingBaseline(entity, { force = false } = {}) {
         const canonical = canonicalPartyMember(entity) || entity;
         if (!canonical) return null;
         if (canonical.clothingBoundaryBaseline && !force) return canonical.clothingBoundaryBaseline;
         const cs = window.clothingSystem;
         if (!cs) return null;
-        cs.migrateLegacyEquipment?.(canonical);
-        // Party companions already use the player-side clothing defaults. Make
-        // sure those defaults/presets exist before the immutable baseline is
-        // taken, rather than accidentally snapshotting a half-built outfit.
-        cs.ensureDefaultOutfit?.(canonical, { player: true });
+
+        // Capture what the companion actually arrived wearing. Do not invent a
+        // default outfit here: an authored empty slot is itself meaningful.
+        withSystemOverride(() => cs.migrateLegacyEquipment?.(canonical));
         const ea = window.equipmentAppearanceSystem;
         const slots = {};
         for (const slot of CLOTHING_SLOTS) {
@@ -232,7 +286,9 @@
     }
 
     function permission(entity, change = {}) {
-        if (systemBypassDepth > 0 || !isGovernedCompanion(entity)) return { allowed: true, tier: 'unrestricted', reason: null };
+        if (systemBypassDepth > 0 || !isGovernedCompanion(entity)) {
+            return { allowed: true, tier: 'unrestricted', reason: null };
+        }
         const canonical = canonicalPartyMember(entity) || entity;
         const rel = ensureRelationship(canonical);
         const policy = relationshipPolicy(canonical);
@@ -300,7 +356,7 @@
         feedback.at = now;
         const text = boundaryText(canonical, reason);
         if (typeof window.showDialogue === 'function') {
-            window.showDialogue(canonical, text, [{ text: 'Understood.', action: () => {} }]);
+            window.showDialogue(canonical, text, [{ label: 'Understood.', action: () => {} }]);
         } else if (typeof window.showMessage === 'function') {
             window.showMessage(`${canonical.name || 'Companion'}: “${text}”`);
         }
@@ -310,12 +366,6 @@
         const result = permission(entity, change);
         if (!result.allowed) showBoundaryDialogue(canonicalPartyMember(entity) || entity, result.reason);
         return result;
-    }
-
-    function withSystemOverride(fn) {
-        systemBypassDepth++;
-        try { return fn(); }
-        finally { systemBypassDepth--; }
     }
 
     function wrapClothingSystem() {
@@ -406,12 +456,16 @@
 
     const api = {
         build: BUILD,
-        defaults: { relationship: { ...DEFAULT_RELATIONSHIP }, clothingPolicy: { ...DEFAULT_POLICY } },
+        defaults: {
+            relationship: { familiarity: DEFAULT_RELATIONSHIP.familiarity, trust: DEFAULT_RELATIONSHIP.trust, approval: DEFAULT_APPROVAL },
+            clothingPolicy: { ...DEFAULT_POLICY },
+        },
         clothingSlots: [...CLOTHING_SLOTS],
         canonicalPartyMember,
         isGovernedCompanion,
         ensureRelationship,
-        getRelationship: ensureRelationship,
+        getRelationship: relationshipSnapshot,
+        getApproval: approvalFor,
         setRelationship,
         adjustRelationship,
         noteConversation,
@@ -427,7 +481,7 @@
 
     window.companionRelationships = api;
     window.ensureCompanionRelationship = ensureRelationship;
-    window.getCompanionRelationship = ensureRelationship;
+    window.getCompanionRelationship = relationshipSnapshot;
     window.setCompanionRelationship = setRelationship;
     window.adjustCompanionRelationship = adjustRelationship;
     window.noteCompanionConversation = noteConversation;
