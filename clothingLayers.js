@@ -1,7 +1,7 @@
 // Explicit garment layers: one authored image per colourable part.
 (() => {
   'use strict';
-  const BUILD='20260929-clothing-layers-v15';
+  const BUILD='20260929-clothing-layers-v16';
   const slots=['underwear','bra','pants','shirt'];
   const preloadSlots=['shirt','pants','bra','underwear'];
   const labels={underwear:'Underwear',bra:'Bra',pants:'Pants',shirt:'Shirt / Dress'};
@@ -9,39 +9,37 @@
   const opaqueBoundsCache=new WeakMap(), toneBoundsCache=new WeakMap();
   const undergarmentFitMetrics=new WeakMap();
 
-  // Outer clothing stays inside the heavy-armour envelope. Underwear uses its
-  // own compact torso/pelvis envelopes instead of being stretched across the
-  // full character bounds. All fitted layers preserve their authored aspect.
+  // Human equipment currently shifts the .205-.1.015 heavy-armour target up by
+  // .010, so its visible vertical envelope is .195-.1.005. Outer clothing uses
+  // exactly that same envelope. The waist split is deliberately higher than the
+  // old .5715 seam so trousers meet the torso at the character's actual waist.
+  // Front/back and side widths are 90% of the corresponding heavy-armour width.
+  const OUTERWEAR={top:.195,waist:.535,bottom:1.005};
+  function outerwearTargets(x,w){
+    return {
+      shirt:{x,y:OUTERWEAR.top,w,h:OUTERWEAR.waist-OUTERWEAR.top},
+      pants:{x,y:OUTERWEAR.waist,w,h:OUTERWEAR.bottom-OUTERWEAR.waist},
+      dress:{x,y:OUTERWEAR.top,w,h:OUTERWEAR.bottom-OUTERWEAR.top},
+    };
+  }
+
+  // Outerwear is geometry-locked to the character/armour silhouette rather
+  // than depending on the authored PNG aspect ratio. Underwear keeps its own
+  // compact torso/pelvis envelopes and preserves authored aspect.
   const CLOTHING_TARGETS={
     front:{
-      shirt:{x:.077,y:.205,w:.846,h:.3665},pants:{x:.077,y:.5715,w:.846,h:.4435},dress:{x:.077,y:.205,w:.846,h:.810},
+      ...outerwearTargets(.077,.846),
       bra:{x:.20,y:.30,w:.60,h:.18},underwear:{x:.20,y:.50,w:.60,h:.18},
     },
     side:{
-      shirt:{x:.212,y:.205,w:.576,h:.3665},pants:{x:.212,y:.5715,w:.576,h:.4435},dress:{x:.212,y:.205,w:.576,h:.810},
+      ...outerwearTargets(.212,.576),
       bra:{x:.34,y:.30,w:.32,h:.18},underwear:{x:.34,y:.50,w:.32,h:.18},
     },
     back:{
-      shirt:{x:.077,y:.205,w:.846,h:.3665},pants:{x:.077,y:.5715,w:.846,h:.4435},dress:{x:.077,y:.205,w:.846,h:.810},
+      ...outerwearTargets(.077,.846),
       bra:{x:.20,y:.30,w:.60,h:.18},underwear:{x:.20,y:.50,w:.60,h:.18},
     },
   };
-
-
-  // The old aspect-preserving fit was height-limited, leaving shirts only
-  // ~30-55% as wide as the body at the shoulders/chest. Keep authored height,
-  // but give outerwear a minimum horizontal envelope. The upper-body values put
-  // close clothing near the measured average-body width while leaving a small
-  // gap to heavy armour; looser garments and lower-body items get progressively
-  // more room. Underwear/bra deliberately keep their compact aspect-preserving fit.
-  const OUTERWEAR_WIDTH_USAGE={
-    top_blouse:.82,top_dress:.82,top_shirt:.82,top_shirt_f:.82,top_tunic:.84,
-    pants_baggy_wraps:.74,pants_breeches:.70,pants_hose:.62,pants_trousers:.66,
-  };
-  function outerwearWidthUsage(slot,itemId){
-    if(slot!=='shirt'&&slot!=='pants') return null;
-    return OUTERWEAR_WIDTH_USAGE[itemId] ?? (slot==='shirt'?.82:.66);
-  }
 
   const singleLayer=(slot,path,label)=>({slot,layers:[{id:'base',label,defaultColor:{hue:110,saturation:55,value:62,opacity:1},views:{front:path,side:path,back:path}}]});
   const twoToneGarment=(slot,views,labelDark,labelLight)=>({slot,layers:[
@@ -259,16 +257,20 @@
     if(!trim?.w||!trim?.h)return false;
     const targetX=bounds.left+target.x*bounds.width,targetY=bounds.top+target.y*bounds.height;
     const targetW=target.w*bounds.width,targetH=target.h*bounds.height;
+
+    // Shirt/dress/pants assets are authored overlays, not free-standing icons.
+    // Crop their transparent padding, then map the visible garment directly onto
+    // the canonical body-relative rectangle. This makes placement independent of
+    // source resolution/aspect and guarantees shirt+pants share the armour span.
+    if(slot==='shirt'||slot==='pants'){
+      ctx.drawImage(source,trim.x,trim.y,trim.w,trim.h,targetX,targetY,targetW,targetH);
+      return true;
+    }
+
     const scale=Math.min(targetW/trim.w,targetH/trim.h);
     let dw=trim.w*scale,dh=trim.h*scale;
-    const widthUsage=outerwearWidthUsage(slot,itemId);
-    if(widthUsage!==null) dw=Math.max(dw,Math.min(targetW,targetW*widthUsage));
     let dx=targetX+(targetW-dw)/2;
-    // Ordinary tops remain bottom-aligned to the waist seam. A dress occupies a
-    // taller envelope, so bottom-aligning it makes the neckline hang too low;
-    // top-align the dress to the same authored top edge as shirts/armour instead.
-    const topAlignedDress=slot==='shirt'&&itemId==='top_dress';
-    let dy=topAlignedDress?targetY:(slot==='shirt'?targetY+(targetH-dh):(slot==='pants'?targetY:targetY+(targetH-dh)/2));
+    let dy=targetY+(targetH-dh)/2;
     if(slot==='underwear'){
       const briefsRise=dh/3,oldWidth=dw;
       dw*=1.10;
@@ -303,6 +305,6 @@
   setInterval(()=>{for(const e of window.entities||[])ensureDefaultOutfit(e,{player:e?.side==='player'});if(window.player)ensureDefaultOutfit(window.player,{player:true});},1000);
   if(document.readyState==='complete')install();else window.addEventListener('load',install,{once:true});
 
-  window.clothingSystem={build:BUILD,slots,preloadSlots,slotLabels:labels,builtinGarments:GARMENTS,clothingTargets:CLOTHING_TARGETS,playerDefault:PLAYER_DEFAULT,starterTops:{feminine:[...FEMININE_START_TOPS],masculine:[...MASCULINE_START_TOPS]},getItemSpec:spec,migrateLegacyEquipment:migrate,ensureDefaultOutfit,preloadOutfit,visibleSlotsReady,getLayerColour:colour,setLayerColour:setColour,drawSlot,tintWholeLayer:tint,registerBuiltinItems};
+  window.clothingSystem={build:BUILD,slots,preloadSlots,slotLabels:labels,builtinGarments:GARMENTS,clothingTargets:CLOTHING_TARGETS,outerwearGeometry:{...OUTERWEAR},playerDefault:PLAYER_DEFAULT,starterTops:{feminine:[...FEMININE_START_TOPS],masculine:[...MASCULINE_START_TOPS]},getItemSpec:spec,migrateLegacyEquipment:migrate,ensureDefaultOutfit,preloadOutfit,visibleSlotsReady,getLayerColour:colour,setLayerColour:setColour,drawSlot,tintWholeLayer:tint,registerBuiltinItems};
   window.CLOTHING_SLOTS=slots;
 })();
