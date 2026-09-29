@@ -7,13 +7,16 @@ test.describe('pathfinding fast path', () => {
         await page.waitForFunction(() => window.__pathfindingFastPathInstalled && window.performancePathfindingStats);
 
         const result = await page.evaluate(() => {
-            const player = window.entities.find(e => e.alive && e.side === 'player');
+            const player = window.entities.find(e => e.alive && e.side === 'player' && !e.rider);
             if (!player) return { ok: false, reason: 'no player' };
 
             const start = { q: player.hex.q, r: player.hex.r };
-            const target = window.getNeighbors(start.q, start.r)
-                .find(h => !window.getTerrainAtFloor(h.q, h.r, player.floor || 0).impassable);
-            if (!target) return { ok: false, reason: 'no adjacent route' };
+            const target = window.getNeighbors(start.q, start.r).find(h => {
+                const terrain = window.getTerrainAtFloor(h.q, h.r, player.floor || 0);
+                const occupied = window.entities.some(e => e.alive && e.hex?.q === h.q && e.hex?.r === h.r && (e.floor || 0) === (player.floor || 0));
+                return !terrain.impassable && !occupied;
+            });
+            if (!target) return { ok: false, reason: 'no unoccupied adjacent route' };
 
             const savedVisible = window.isVisibleToPlayer;
             const savedExplored = window.isHexExplored;
@@ -31,47 +34,51 @@ test.describe('pathfinding fast path', () => {
             };
 
             const before = { ...window.performancePathfindingStats };
+            // Give the synthetic NPC the minimum real entity state used by
+            // occupancy/path rules. The previous fixture omitted its hex and
+            // could fail before reaching the fast-path behaviour under test.
             const npc = {
-                side: 'neutral', name: 'Path Perf NPC', floor: player.floor || 0,
-                equipped: null, skills: {}, prefersRoads: false
+                side: 'neutral', name: 'Path Perf NPC', alive: true,
+                hex: { ...start }, floor: player.floor || 0,
+                equipped: {}, skills: {}, prefersRoads: false
             };
+            const preferred = [`${start.q},${start.r}`, `${target.q},${target.r}`];
 
-            window.isInCombat = false;
-            const npcPath = window.findPath(start, target, undefined, npc, true,
-                [`${start.q},${start.r}`, `${target.q},${target.r}`]);
-            const npcCounts = { visibleCalls, exploredCalls };
+            try {
+                window.isInCombat = false;
+                const npcPath = window.findPath(start, target, undefined, npc, true, preferred);
+                const npcCounts = { visibleCalls, exploredCalls };
 
-            visibleCalls = 0;
-            exploredCalls = 0;
-            const realtimePlayerPath = window.findPath(start, target, undefined, player, true,
-                [`${start.q},${start.r}`, `${target.q},${target.r}`]);
-            const realtimeCounts = { visibleCalls, exploredCalls };
+                visibleCalls = 0;
+                exploredCalls = 0;
+                const realtimePlayerPath = window.findPath(start, target, undefined, player, true, preferred);
+                const realtimeCounts = { visibleCalls, exploredCalls };
 
-            visibleCalls = 0;
-            exploredCalls = 0;
-            window.isInCombat = true;
-            const combatPlayerPath = window.findPath(start, target, undefined, player, true,
-                [`${start.q},${start.r}`, `${target.q},${target.r}`]);
-            const combatCounts = { visibleCalls, exploredCalls };
+                visibleCalls = 0;
+                exploredCalls = 0;
+                window.isInCombat = true;
+                const combatPlayerPath = window.findPath(start, target, undefined, player, true, preferred);
+                const combatCounts = { visibleCalls, exploredCalls };
 
-            window.isInCombat = savedCombat;
-            window.isVisibleToPlayer = savedVisible;
-            window.isHexExplored = savedExplored;
-
-            const after = window.performancePathfindingStats;
-            return {
-                ok: true,
-                npcPathLength: npcPath?.length || 0,
-                realtimePlayerPathLength: realtimePlayerPath?.length || 0,
-                combatPlayerPathLength: combatPlayerPath?.length || 0,
-                npcCounts,
-                realtimeCounts,
-                combatCounts,
-                optimizedNpcDelta: after.optimizedNpcCalls - before.optimizedNpcCalls,
-                realtimeOptimizedDelta: after.realtimePlayerOptimized - before.realtimePlayerOptimized,
-                combatPlayerDelta: after.combatPlayerCalls - before.combatPlayerCalls,
-                preferredSetDelta: after.preferredSetCalls - before.preferredSetCalls
-            };
+                const after = window.performancePathfindingStats;
+                return {
+                    ok: true,
+                    npcPathLength: npcPath?.length || 0,
+                    realtimePlayerPathLength: realtimePlayerPath?.length || 0,
+                    combatPlayerPathLength: combatPlayerPath?.length || 0,
+                    npcCounts,
+                    realtimeCounts,
+                    combatCounts,
+                    optimizedNpcDelta: after.optimizedNpcCalls - before.optimizedNpcCalls,
+                    realtimeOptimizedDelta: after.realtimePlayerOptimized - before.realtimePlayerOptimized,
+                    combatPlayerDelta: after.combatPlayerCalls - before.combatPlayerCalls,
+                    preferredSetDelta: after.preferredSetCalls - before.preferredSetCalls
+                };
+            } finally {
+                window.isInCombat = savedCombat;
+                window.isVisibleToPlayer = savedVisible;
+                window.isHexExplored = savedExplored;
+            }
         });
 
         expect(result.ok).toBe(true);
