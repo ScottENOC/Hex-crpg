@@ -9,7 +9,7 @@
 (() => {
     'use strict';
 
-    const BUILD = '20260930-aldric-broken-vigil-v1';
+    const BUILD = '20260930-aldric-broken-vigil-v2';
     const ALDRIC_NAME = 'Ser Aldric Thorne';
     const QUEST_ID = 'aldric_broken_vigil';
     const REQUIRED_CLUES = 2;
@@ -439,14 +439,33 @@
         return options;
     }
 
+    function chainHas(fn, flag) {
+        let current = fn;
+        for (let i = 0; i < 16 && typeof current === 'function'; i++) {
+            if (current[flag]) return true;
+            current = current.__baseShowDialogue;
+        }
+        return false;
+    }
+
     function installDialogueHook() {
-        if (typeof window.showDialogue !== 'function') return false;
-        if (window.showDialogue.__aldricBrokenVigilAware) return true;
+        if (typeof window.showDialogue !== 'function' || chainHas(window.showDialogue, '__aldricBrokenVigilAware')) return false;
         const base = window.showDialogue;
         const wrapped = function(npc, text, options) {
             return base.call(this, npc, text, decorateDialogue(npc, text, options));
         };
         wrapped.__aldricBrokenVigilAware = true;
+        // Existing relationship/romance modules also periodically repair their
+        // showDialogue wrappers. Carry their markers through this outer wrapper
+        // so none of the self-healing installers repeatedly wrap one another.
+        [
+            '__relationshipProgressionAware',
+            '__wrenParentsInvestigationAware',
+            '__wrenCharacterArcAware',
+            '__companionRomanceAware',
+        ].forEach(flag => {
+            if (chainHas(base, flag)) wrapped[flag] = true;
+        });
         wrapped.__baseShowDialogue = base;
         window.showDialogue = wrapped;
         return true;
