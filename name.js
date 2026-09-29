@@ -39,7 +39,7 @@ window.generateName = window.getRandomName;
     window.randomizeCharacterAppearance({sync:false});
 })();
 
-const PRESENTATION_BUILD = '20260928-character-body-assets-v3';
+const PRESENTATION_BUILD = '20260930-equipment-interface-v1';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
 const presentationBuildMeta=document.querySelector('meta[name="app-build"]');if(presentationBuildMeta)presentationBuildMeta.content=PRESENTATION_BUILD;
@@ -55,12 +55,6 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 if('serviceWorker'in navigator){navigator.serviceWorker.register(`sw.js?build=${encodeURIComponent(PRESENTATION_BUILD)}`,{updateViaCache:'none'}).catch(err=>console.warn('Service worker registration failed:',err));}
 
 (() => {
-    // Runtime presentation stack is intentionally small. The previous character
-    // path loaded several independent drawImage wrappers (characterRig,
-    // facingSystem, directional tuning and handoff modules) that each tried to
-    // infer which entity a subsequent canvas draw belonged to. Humanoids now use
-    // one explicit compositor with entity context; the old modules remain in the
-    // repository only as migration/history references and are not loaded.
     const scripts = [
         ['assetLoadScheduler.js','assetLoadScheduler'],
         ['movementInputFix.js','movementInputFix'],
@@ -69,6 +63,10 @@ if('serviceWorker'in navigator){navigator.serviceWorker.register(`sw.js?build=${
         ['renderPerfTuning.js','renderPerfTuning'],
         ['raceSkinPalettes.js','raceSkinPalettes'],
         ['humanoidRenderer.js','humanoidRenderer'],
+        ['braidDirectionalHair.js','braidDirectionalHair'],
+        ['shieldAppearance.js','shieldAppearance'],
+        ['shieldAppearanceUI.js','shieldAppearanceUI'],
+        ['equipmentInterface.js','equipmentInterface'],
     ];
     for (const [src,key] of scripts) {
         const attr = `data-${key.replace(/[A-Z]/g,m=>'-'+m.toLowerCase())}`;

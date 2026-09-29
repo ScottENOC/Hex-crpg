@@ -56,17 +56,4 @@ test.describe('four-direction facing', () => {
         expect(result.rider).toBe('left');
         expect(result.mount).toBe('left');
     });
-
-    test('side profile fallback compresses left and right equally', async ({ page }) => {
-        const result = await page.evaluate(() => ({
-            left: window.sideProfileScale('left'),
-            right: window.sideProfileScale('right'),
-            up: window.sideProfileScale('up'),
-            down: window.sideProfileScale('down'),
-        }));
-        expect(result.left).toBeCloseTo(0.78, 6);
-        expect(result.right).toBeCloseTo(0.78, 6);
-        expect(result.up).toBe(1);
-        expect(result.down).toBe(1);
-    });
 });

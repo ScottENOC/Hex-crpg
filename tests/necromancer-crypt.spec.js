@@ -82,6 +82,7 @@ test.describe("The Vessel-Seeker's Crypt", () => {
             offer.options.find(o => o.label.includes("find it and end this")).action();
             const questActiveAfterAccept = window.questLog.find(q => q.id === 'necromancer_hunt')?.status === 'active';
 
+            window.showDialogue = originalShowDialogue;
             return { mentionsCryptBefore, offeredAfterExposing: !!offer, questActiveAfterAccept };
         });
         expect(result.mentionsCryptBefore).toBe(false);
@@ -89,7 +90,7 @@ test.describe("The Vessel-Seeker's Crypt", () => {
         expect(result.questActiveAfterAccept).toBe(true);
     });
 
-    test('defeating Malachar resolves the crypt quest with rewards, once no other enemies remain alive', async ({ page }) => {
+    test('Malachar revives once, then his final defeat resolves the crypt quest and rewards', async ({ page }) => {
         await createCharacter(page);
         const result = await page.evaluate(() => {
             window.questLog = window.questLog || [];
@@ -98,22 +99,38 @@ test.describe("The Vessel-Seeker's Crypt", () => {
             const goldBefore = window.party[0].gold || 0;
             const standingBefore = window.factions.necromancer_cult.standing;
 
-            // Clear every other enemy on the map first (matches the "all
-            // enemies dead" gate every other Campaign 2 fight resolves
-            // through) so only the boss kill triggers the resolution.
-            window.entities.forEach(e => { if (e.side === 'enemy' && e !== window.entities.find(x => x.isNecromancerBoss)) e.alive = false; });
-
+            // Clear every other enemy on the map first so Malachar's final
+            // death is the only remaining gate for the scripted resolution.
             const boss = window.entities.find(e => e.isNecromancerBoss);
-            window.handleLethalDamage(boss, { side: 'player', name: 'Test' });
+            window.entities.forEach(e => { if (e.side === 'enemy' && e !== boss) e.alive = false; });
 
+            // Malachar is a revenant: the first lethal event must spend his
+            // one resurrection rather than completing the quest.
+            window.handleLethalDamage(boss, { side: 'player', name: 'Test' });
+            const afterFirst = {
+                alive: boss.alive,
+                revivedOnce: boss._revivedOnce === true,
+                hp: boss.hp,
+                questCompleted: window.questLog.find(q => q.id === 'necromancer_hunt')?.status === 'completed',
+            };
+
+            // The second lethal event is the actual boss death.
+            window.handleLethalDamage(boss, { side: 'player', name: 'Test' });
             const quest = window.questLog.find(q => q.id === 'necromancer_hunt');
             return {
+                afterFirst,
+                bossAliveAfterSecond: boss.alive,
                 questCompleted: quest?.status === 'completed',
                 necromancerDefeatedFlag: window.necromancerDefeated === true,
                 goldGained: (window.party[0].gold || 0) > goldBefore,
                 standingDropped: window.factions.necromancer_cult.standing < standingBefore,
             };
         });
+        expect(result.afterFirst.alive).toBe(true);
+        expect(result.afterFirst.revivedOnce).toBe(true);
+        expect(result.afterFirst.hp).toBeGreaterThan(0);
+        expect(result.afterFirst.questCompleted).toBe(false);
+        expect(result.bossAliveAfterSecond).toBe(false);
         expect(result.questCompleted).toBe(true);
         expect(result.necromancerDefeatedFlag).toBe(true);
         expect(result.goldGained).toBe(true);

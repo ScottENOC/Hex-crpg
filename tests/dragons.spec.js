@@ -1,9 +1,17 @@
 const { test, expect } = require('@playwright/test');
 const { createCharacter } = require('./helpers.js');
 
+async function waitForDragonArt(page) {
+    await page.waitForFunction(() => {
+        const image = window.gameVisuals?.dragon;
+        return !!image && image.complete && image.naturalWidth > 0;
+    });
+}
+
 test.describe('dragons', () => {
     test('young/adult/ancient dragons scale in size, mana, and breath weapon power', async ({ page }) => {
         await createCharacter(page);
+        await waitForDragonArt(page);
         const result = await page.evaluate(() => {
             const out = {};
             ['dragon_young', 'dragon_adult', 'dragon_ancient'].forEach(type => {
@@ -15,26 +23,19 @@ test.describe('dragons', () => {
                     maxMana: d.maxMana, tags: d.tags, color: d.color
                 };
             });
-            out.dragonImageLoaded = window.gameVisuals.dragon.complete && window.gameVisuals.dragon.naturalWidth > 0;
             return out;
         });
-
-        expect(result.dragonImageLoaded).toBe(true);
 
         expect(result.dragon_young.isFlying).toBe(true);
         expect(result.dragon_young.tags).toContain('dragon');
         expect(result.dragon_young.tags).toContain('flying');
 
-        // Bigger tiers: more hp, more footprint hexes, more mana, stronger breath.
         expect(result.dragon_adult.hp).toBeGreaterThan(result.dragon_young.hp);
         expect(result.dragon_ancient.hp).toBeGreaterThan(result.dragon_adult.hp);
-
         expect(result.dragon_adult.allHexesCount).toBeGreaterThan(result.dragon_young.allHexesCount);
         expect(result.dragon_ancient.allHexesCount).toBeGreaterThan(result.dragon_adult.allHexesCount);
-
         expect(result.dragon_adult.maxMana).toBeGreaterThan(result.dragon_young.maxMana);
         expect(result.dragon_ancient.maxMana).toBeGreaterThan(result.dragon_adult.maxMana);
-
         expect(result.dragon_young.breath).toBeTruthy();
         expect(result.dragon_adult.breath.magnitude).toBeGreaterThan(result.dragon_young.breath.magnitude);
         expect(result.dragon_ancient.breath.magnitude).toBeGreaterThan(result.dragon_adult.breath.magnitude);
@@ -42,6 +43,7 @@ test.describe('dragons', () => {
 
     test('two dragons with different colors recolor to visually distinct tinted sprites', async ({ page }) => {
         await createCharacter(page);
+        await waitForDragonArt(page);
         const result = await page.evaluate(() => {
             const red = window.createMonster('dragon_young', { q: 5, r: 5 }, null, null, 'enemy');
             red.color = '#c0392b';
@@ -59,9 +61,6 @@ test.describe('dragons', () => {
     test('dragon breath weapon deals AOE damage to all enemies in the burst radius', async ({ page }) => {
         await createCharacter(page);
         const result = await page.evaluate(() => {
-            // Adult dragon's extraHexes footprint occupies (5,6)/(6,5)/(6,4)
-            // relative to its (5,5) center — spawn targets clear of that so
-            // the breath's own caster-footprint hexes aren't mistaken for targets.
             const dragon = window.createMonster('dragon_adult', { q: 5, r: 5 }, null, null, 'enemy');
             dragon.currentMana = 100;
             window.entities.push(dragon);

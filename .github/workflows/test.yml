@@ -20,7 +20,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -39,7 +39,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -51,13 +51,14 @@ jobs:
       - name: Run development smoke test
         run: npx playwright test tests/smoke.spec.js
 
-      - name: Upload Playwright smoke report
-        if: always()
+      - name: Upload Playwright smoke failures
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-smoke-report
-          path: playwright-report/
+          name: playwright-smoke-failures
+          path: test-results/
           retention-days: 14
+          if-no-files-found: ignore
 
   playwright:
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
@@ -73,7 +74,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -85,10 +86,11 @@ jobs:
       - name: Run tests
         run: npx playwright test --shard=${{ matrix.shard }}/8
 
-      - name: Upload Playwright report
-        if: always()
+      - name: Upload Playwright failure artifacts
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-${{ matrix.shard }}
-          path: playwright-report/
+          name: playwright-failures-${{ matrix.shard }}
+          path: test-results/
           retention-days: 14
+          if-no-files-found: ignore

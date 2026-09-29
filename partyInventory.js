@@ -184,3 +184,14 @@ function openStorageChest(q, r) {
     window.showDialogue(chestNpc, `A sturdy chest. It holds ${chest.items.length} item${chest.items.length === 1 ? '' : 's'} — as much as you ever put in it, no less.`, options);
 }
 window.openStorageChest = openStorageChest;
+
+// Expedition systems are kept separate from this compatibility layer. Load
+// them with a dated URL so the new module itself is not trapped behind an old
+// mobile-Safari cache entry; it installs after the rest of the page scripts
+// have parsed (or immediately if DOMContentLoaded has already fired).
+if (typeof document !== 'undefined' && !window.expeditionSystem && !document.querySelector('script[data-expedition-system]')) {
+    const expeditionScript = document.createElement('script');
+    expeditionScript.dataset.expeditionSystem = 'true';
+    expeditionScript.src = 'expeditionSystem.js?v=20260929';
+    document.head.appendChild(expeditionScript);
+}

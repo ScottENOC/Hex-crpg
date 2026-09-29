@@ -119,6 +119,55 @@ if (!window.__wrenParentsInvestigationModuleLoaded) {
     document.write('<script src="wrenParentsInvestigation.js?build=20260929-wren-parents-investigation-v2"><\/script>');
 }
 
+// Wren is an origin-character-scale companion rather than a fixed approval
+// dispenser. Campaign choices and direct conversations build a persistent player
+// ethos and slowly shape Wren's own loyalty, mercy and attachment security. Her
+// response to the same protagonist behaviour depends on the relationship already
+// built: high trust means more influence; betrayal can instead push her away.
+if (!window.__wrenCharacterArcModuleLoaded) {
+    window.__wrenCharacterArcModuleLoaded = true;
+    document.write('<script src="wrenCharacterArc.js?build=20260929-wren-character-arc-v1"><\/script>');
+}
+
+// Affinity is separate again from approval/trust/familiarity and from Wren's
+// moral character arc: friendship, romantic feeling and physical attraction can
+// move independently. Canonical orientation is authored as hard attraction and
+// romance caps, so player choices can develop chemistry without rewriting a
+// companion's sexuality. Attraction contributes continuously from 1 upward;
+// pronouns are never used as an attraction shortcut.
+if (!window.__companionAffinityModuleLoaded) {
+    window.__companionAffinityModuleLoaded = true;
+    document.write('<script src="companionAffinity.js?build=20260929-companion-affinity-v3"><\/script>');
+}
+
+// Aldric's first post-recruitment companion quest grows directly from his
+// existing west-road vow dialogue and reuses Reddale's Ironbond/Baron politics.
+// The player can establish why Company support disappeared without requiring a
+// particular skill build, while Persuasion, Insight, Stealth or Ironbond trust
+// can recover the signed withdrawal order and strengthen the evidence.
+if (!window.__aldricBrokenVigilModuleLoaded) {
+    window.__aldricBrokenVigilModuleLoaded = true;
+    document.write('<script src="aldricBrokenVigil.js?build=20260930-aldric-broken-vigil-v2"><\/script>');
+}
+
+// Romance agreements interpret affinity rather than replacing it. Commitment,
+// sex and exclusivity are separate authored concepts: some companions are
+// monogamous, some support consensual non-monogamy, and Brother Alden can be
+// romantically exclusive while explicitly allowing a partner sexual freedom.
+if (!window.__companionRomanceModuleLoaded) {
+    window.__companionRomanceModuleLoaded = true;
+    document.write('<script src="companionRomance.js?build=20260929-companion-romance-v1"><\/script>');
+}
+
+// Wren Chapter 2 reuses Reddale's existing Ironbond/Baron politics and stealth
+// mission framework. It starts after The Long Silence, follows Venn's payment
+// trail through Reddale, and makes the private aftermath react to the friendship,
+// romance, attraction, trust and character development already built with Wren.
+if (!window.__wrenPriceOfSilenceModuleLoaded) {
+    window.__wrenPriceOfSilenceModuleLoaded = true;
+    document.write('<script src="wrenPriceOfSilence.js?build=20260929-wren-price-of-silence-v1"><\/script>');
+}
+
 // Declarative hints for NPC/AI skill spending. Existing gameplay prereq fields
 // remain authoritative; these simply make equipment relationships explicit so
 // future generators/tools do not have to infer everything from descriptions.

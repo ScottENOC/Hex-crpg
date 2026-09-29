@@ -42,7 +42,17 @@ test('outerwear uses a canonical armour-relative envelope while undergarments st
     contains(layersSource, 'dy-=targetH*.60;');
     contains(layersSource, "if(itemId==='underwear_bra'){");
     contains(layersSource, 'const trim=l.sourceTone?toneBounds(img):opaqueBounds(img);');
-    contains(layersSource, 'drawFittedGarment(ctx,rendered,trim,target,bounds,slot,e,itemId)');
+    contains(layersSource, 'drawFittedGarment(ctx,rendered,trim,target,bounds,slot,e,itemId,v,s,img)');
+
+    // Dresses deliberately opt into two independently fitted source bands so
+    // the bodice is not shrunk to the width of a flared skirt. Check the
+    // mechanism rather than pinning whitespace or one exact conditional.
+    contains(layersSource, "fitMode:'dressSplit'");
+    contains(layersSource, 'function dressBands(img,waistFraction=.39)');
+    contains(layersSource, "garmentSpec?.fitMode==='dressSplit'");
+    contains(layersSource, 'const bands=dressBands(geometrySource,garmentSpec.waistFraction),topTarget=set.shirt;');
+    contains(layersSource, 'ctx.drawImage(source,bands.top.x,bands.top.y,bands.top.w,bands.top.h,topX,topY,topW,topH);');
+    contains(layersSource, 'ctx.drawImage(source,bands.skirt.x,bands.skirt.y,bands.skirt.w,bands.skirt.h,skirtX,skirtY,skirtW,skirtH);');
 });
 
 test('masculine starter tops are the four new two-tone PNG overlays', () => {

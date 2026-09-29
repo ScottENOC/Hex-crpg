@@ -1,0 +1,1 @@
+(()=>{'use strict';let serviceDepth=0;const dev=()=>!!(window.devMode||window.debugMode||window.DEV_MODE);window.equipmentAppearanceAccess={isDevMode:dev,canFreelyEdit(){return dev()||serviceDepth>0;},withDesignService(fn){serviceDepth++;try{return fn();}finally{serviceDepth--;}}};})();

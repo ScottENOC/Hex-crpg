@@ -1,12 +1,12 @@
 // Explicit garment layers: one authored image per colourable part.
 (() => {
   'use strict';
-  const BUILD='20260929-clothing-layers-v19';
+  const BUILD='20260929-clothing-layers-v20';
   const slots=['underwear','bra','pants','shirt'];
   const preloadSlots=['shirt','pants','bra','underwear'];
   const labels={underwear:'Underwear',bra:'Bra',pants:'Pants',shirt:'Shirt / Dress'};
   const images=new Map(), tinted=new Map();
-  const opaqueBoundsCache=new WeakMap(), toneBoundsCache=new WeakMap();
+  const opaqueBoundsCache=new WeakMap(), toneBoundsCache=new WeakMap(), dressBandBoundsCache=new WeakMap();
 
   // Human equipment currently shifts the .205-.1.015 heavy-armour target up by
   // .010, so its visible vertical envelope is .195-.1.005. Outer clothing uses
@@ -50,7 +50,7 @@
 
   const GARMENTS={
     top_blouse:twoToneTop('images/equipment/clothing/top_blouse.png'),
-    top_dress:twoToneTop('images/equipment/clothing/top_dress.png'),
+    top_dress:{...twoToneTop('images/equipment/clothing/top_dress.png'),fitMode:'dressSplit',waistFraction:.39,maxSkirtWidth:.98},
     top_shirt_f:twoToneTop('images/equipment/clothing/top_shirt_f.png'),
     top_masc_toggle:twoToneTop('images/equipment/clothing/top_masc_toggle.png'),
     top_masc_lacework:twoToneTop('images/equipment/clothing/top_masc_lacework.png'),
@@ -113,7 +113,13 @@
     if(!slots.includes(slot)) return null;
     const raw=(Array.isArray(item?.clothingLayers)&&item.clothingLayers.length)?item.clothingLayers:
       (source?.layers||[{id:'base',label:'Base',views:item?.clothingViews||{},defaultColor:{hue:30,saturation:70,value:70,opacity:1}}]);
-    return {slot,layers:raw.map(layer)};
+    return {
+      slot,
+      fitMode:item?.clothingFitMode||source?.fitMode||null,
+      waistFraction:Number(item?.clothingWaistFraction??source?.waistFraction??.39),
+      maxSkirtWidth:Number(item?.clothingMaxSkirtWidth??source?.maxSkirtWidth??.98),
+      layers:raw.map(layer),
+    };
   }
 
   function registerBuiltinItems(){
@@ -282,15 +288,53 @@
     return null;
   }
 
-  function drawFittedGarment(ctx,source,trim,target,bounds,slot,entity,itemId){
+  // A dress cannot be fitted from one maximum-width rectangle: a flared hem
+  // would shrink the bodice and sleeves. Cache two source bands instead, each
+  // with its own horizontal opaque bounds, while keeping a shared waist seam.
+  function dressBands(img,waistFraction=.39){
+    let per=dressBandBoundsCache.get(img);if(!per){per=new Map();dressBandBoundsCache.set(img,per);}
+    const fraction=Math.max(.20,Math.min(.70,Number(waistFraction)||.39)),key=fraction.toFixed(4);
+    if(per.has(key))return per.get(key);
+    const full=opaqueBounds(img),bottom=full.y+full.h;
+    const split=Math.max(full.y+1,Math.min(bottom-1,Math.round(full.y+full.h*fraction)));
+    let result={
+      top:{x:full.x,y:full.y,w:full.w,h:split-full.y},
+      skirt:{x:full.x,y:split,w:full.w,h:bottom-split},
+    };
+    try{
+      const w=img.naturalWidth||img.width,h=img.naturalHeight||img.height,c=document.createElement('canvas');c.width=w;c.height=h;
+      const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(img,0,0);const p=x.getImageData(0,0,w,h).data;
+      const xBounds=(y0,y1)=>{let left=w,right=-1;for(let yy=y0;yy<y1;yy++)for(let xx=0;xx<w;xx++)if(p[(yy*w+xx)*4+3]>=8){if(xx<left)left=xx;if(xx>right)right=xx;}return right>=left?{x:left,w:right-left+1}:null;};
+      const topX=xBounds(full.y,split),skirtX=xBounds(split,bottom);
+      if(topX)result.top={x:topX.x,y:full.y,w:topX.w,h:split-full.y};
+      if(skirtX)result.skirt={x:skirtX.x,y:split,w:skirtX.w,h:bottom-split};
+    }catch(_){/* Keep the common opaque width if pixel inspection is unavailable. */}
+    per.set(key,result);return result;
+  }
+
+  function drawFittedGarment(ctx,source,trim,target,bounds,slot,entity,itemId,v,garmentSpec,geometrySource){
     if(!trim?.w||!trim?.h)return false;
     const targetX=bounds.left+target.x*bounds.width,targetY=bounds.top+target.y*bounds.height;
     const targetW=target.w*bounds.width,targetH=target.h*bounds.height;
 
-    // Shirt/dress/pants assets are authored overlays, not free-standing icons.
-    // Crop their transparent padding, then map the visible garment directly onto
-    // the canonical body-relative rectangle. This makes placement independent of
-    // source resolution/aspect and guarantees shirt+pants share the armour span.
+    if(slot==='shirt'&&garmentSpec?.fitMode==='dressSplit'&&geometrySource){
+      const resolved=view(v),set=CLOTHING_TARGETS[resolved]||CLOTHING_TARGETS.front;
+      const bands=dressBands(geometrySource,garmentSpec.waistFraction),topTarget=set.shirt;
+      const topX=bounds.left+topTarget.x*bounds.width,topY=bounds.top+topTarget.y*bounds.height;
+      const topW=topTarget.w*bounds.width,topH=topTarget.h*bounds.height;
+      const authoredFlare=bands.top.w?bands.skirt.w/bands.top.w:1;
+      const maxSkirtW=Math.max(topW,Math.min(bounds.width,Number(garmentSpec.maxSkirtWidth||.98)*bounds.width));
+      const skirtW=Math.min(maxSkirtW,topW*Math.max(1,authoredFlare));
+      const skirtX=bounds.left+(bounds.width-skirtW)/2;
+      const skirtY=bounds.top+OUTERWEAR.waist*bounds.height;
+      const skirtH=(OUTERWEAR.bottom-OUTERWEAR.waist)*bounds.height;
+      ctx.drawImage(source,bands.top.x,bands.top.y,bands.top.w,bands.top.h,topX,topY,topW,topH);
+      ctx.drawImage(source,bands.skirt.x,bands.skirt.y,bands.skirt.w,bands.skirt.h,skirtX,skirtY,skirtW,skirtH);
+      return true;
+    }
+
+    // Ordinary shirts and pants remain geometry-locked to one body-relative
+    // rectangle. Only garments explicitly opting into dressSplit use two bands.
     if(slot==='shirt'||slot==='pants'){
       ctx.drawImage(source,trim.x,trim.y,trim.w,trim.h,targetX,targetY,targetW,targetH);
       return true;
@@ -326,7 +370,7 @@
       const src=sourceForLayer(l,v),img=load(src);if(!img?.complete||!img.naturalWidth)continue;
       const rendered=l.tint?tint(img,colour(e,itemId,l),l):img,target=clothingTarget(slot,itemId,v);
       const trim=l.sourceTone?toneBounds(img):opaqueBounds(img);
-      if(target) drew=drawFittedGarment(ctx,rendered,trim,target,bounds,slot,e,itemId)||drew;
+      if(target) drew=drawFittedGarment(ctx,rendered,trim,target,bounds,slot,e,itemId,v,s,img)||drew;
       else {ctx.drawImage(rendered,bounds.left,bounds.top,bounds.width,bounds.height);drew=true;}
     }
     return drew;
