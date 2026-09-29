@@ -97,6 +97,12 @@
     // population/content modules so it can harden their generated residents too.
     load('script[data-npc-reliability]', 'npcReliability.js', 'npcReliability');
 
+    // Prepared traps are world-state, not combat actions: perception reveals
+    // them, Rogue trapcraft builds/disarms their mundane mechanisms, and
+    // Wizard Arcana can detect/suppress magical tamper wards. The module keeps
+    // the legacy trap_setting key only for save compatibility.
+    load('script[data-prepared-trap-system]', 'trapSystem.js', 'preparedTrapSystem');
+
     // Northwatch and future city sieges share one persistent per-sector model.
     // This wraps the legacy siege functions rather than replacing their public
     // API, so existing quests and scripted assault beats keep working.
