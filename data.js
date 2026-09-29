@@ -63,11 +63,12 @@ window.classData = classData;
 // DOMContentLoaded, after skills/monsters/npcBuilder have been defined. Loading
 // from data.js keeps the branch-compatible index.html script list stable while
 // giving these modules their own iOS-safe cache tokens. Listener registration
-// order matters: the policy layer runs after the core wrapper is installed.
+// order matters: generic progression -> policy -> authored named characters.
 if (!window.__npcProgressionModuleLoaded) {
     window.__npcProgressionModuleLoaded = true;
     document.write('<script src="npcProgression.js?build=20260929-pc-style-npcs-v1"><\/script>');
     document.write('<script src="npcProgressionPolicy.js?build=20260929-package-policy-v3"><\/script>');
+    document.write('<script src="namedNpcProgression.js?build=20260929-authored-npcs-v1"><\/script>');
 }
 
 // Dialogue hearing installs after the rest of the blocking game scripts have
