@@ -149,6 +149,15 @@ if (!window.__companionRomanceModuleLoaded) {
     document.write('<script src="companionRomance.js?build=20260929-companion-romance-v1"><\/script>');
 }
 
+// Wren Chapter 2 reuses Reddale's existing Ironbond/Baron politics and stealth
+// mission framework. It starts after The Long Silence, follows Venn's payment
+// trail through Reddale, and makes the private aftermath react to the friendship,
+// romance, attraction, trust and character development already built with Wren.
+if (!window.__wrenPriceOfSilenceModuleLoaded) {
+    window.__wrenPriceOfSilenceModuleLoaded = true;
+    document.write('<script src="wrenPriceOfSilence.js?build=20260929-wren-price-of-silence-v1"><\/script>');
+}
+
 // Declarative hints for NPC/AI skill spending. Existing gameplay prereq fields
 // remain authoritative; these simply make equipment relationships explicit so
 // future generators/tools do not have to infer everything from descriptions.
