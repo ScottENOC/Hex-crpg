@@ -1,0 +1,145 @@
+const { test, expect } = require('@playwright/test');
+const { createCharacter } = require('./helpers.js');
+
+function sumPoints(attributes) {
+    return Object.values(attributes || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
+}
+
+test.describe('NPC progression modes and canonical companions', () => {
+    test.beforeEach(async ({ page }) => {
+        await createCharacter(page);
+        await page.waitForFunction(() => !!window.NPC_PROGRESSION_MODES && !!window.CANONICAL_COMPANION_BUILDS);
+    });
+
+    test('explicit empty class history means civilian, not a random adventurer', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const npc = window.buildNPC({
+                name: 'Regression Civilian', title: 'Clerk', race: 'human', gender: 'male',
+                hex: { q: 400, r: 400 }, classLevels: [], skillPicks: [], equipment: [], side: 'neutral',
+            });
+            return {
+                mode: npc.npcProgressionMode,
+                classLevels: npc.classLevels,
+                classPackage: npc.npcClassPackage,
+                skills: npc.skills,
+                unspent: Object.values(npc.attributes || {}).reduce((s, n) => s + (Number(n) || 0), 0),
+            };
+        });
+
+        expect(result.mode).toBe('civilian');
+        expect(result.classLevels).toEqual([]);
+        expect(result.classPackage).toBeNull();
+        expect(result.skills).toEqual({});
+        expect(result.unspent).toBe(0);
+    });
+
+    test('authored combatants spend every available point while keeping legal equipment', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const npc = window.buildNPC({
+                name: 'Regression Veteran', race: 'human', gender: 'female', hex: { q: 410, r: 410 },
+                progressionMode: 'authored', level: 4,
+                classLevels: ['fighter', 'fighter', 'fighter', 'fighter'],
+                skillPicks: ['health', 'health', 'sword_hit', 'sword_dmg', 'sword_parry'],
+                equipment: ['sword', 'heavy_armor', 'wooden_shield'], side: 'enemy',
+            });
+            return window.NPCProgression.describeBuild(npc);
+        });
+
+        expect(result.level).toBe(4);
+        expect(result.unspentTotal).toBe(0);
+        expect(result.equipmentWarnings).toEqual([]);
+        expect(result.skills.light_armor_training).toBe(1);
+        expect(result.skills.medium_armor_training).toBe(1);
+        expect(result.skills.heavy_armor_training).toBe(1);
+        expect(result.skills.sword_hit).toBeGreaterThan(0);
+        expect(result.skills.axe_hit || 0).toBe(0);
+    });
+
+    test('population humanoids also finish with zero unspent points', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const builds = [];
+            for (let i = 0; i < 20; i++) {
+                const goblin = window.createMonster('goblin', { q: 500 + i, r: -500 - i }, null, [], 'enemy');
+                builds.push({
+                    mode: goblin.npcProgressionMode,
+                    classes: [...(goblin.classLevels || [])],
+                    unspent: Object.values(goblin.attributes || {}).reduce((s, n) => s + (Number(n) || 0), 0),
+                    warnings: goblin.npcProgressionWarnings || [],
+                });
+            }
+            return builds;
+        });
+
+        expect(result.every(b => b.mode === 'population')).toBe(true);
+        expect(result.every(b => b.classes.length > 0)).toBe(true);
+        expect(result.every(b => b.unspent === 0)).toBe(true);
+        expect(result.every(b => !b.warnings.some(w => w.type === 'unspent_skill_points'))).toBe(true);
+    });
+
+    test('all canonical companions have authored class histories and spend every point', async ({ page }) => {
+        const result = await page.evaluate(() => Object.keys(window.CANONICAL_COMPANION_BUILDS).map(name => {
+            const data = window.buildCanonicalCompanionData(name);
+            return {
+                name,
+                mode: data.npcProgressionMode,
+                sequence: data.classLevelSequence,
+                counts: data.classLevels,
+                unspent: Object.values(data.attributes || {}).reduce((s, n) => s + (Number(n) || 0), 0),
+                warnings: data.npcProgressionWarnings || [],
+                skills: data.skills,
+            };
+        }));
+
+        for (const build of result) {
+            expect(build.mode, build.name).toBe('authored');
+            expect(build.sequence.length, build.name).toBeGreaterThan(0);
+            expect(build.unspent, build.name).toBe(0);
+            expect(build.warnings.some(w => w.type === 'unspent_skill_points'), build.name).toBe(false);
+        }
+    });
+
+    test('Ser Aldric is genuinely Fighter 1 / Cleric 1 and keeps his paladin identity', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const data = window.buildCanonicalCompanionData('Ser Aldric Thorne');
+            return {
+                sequence: data.classLevelSequence,
+                counts: data.classLevels,
+                skills: data.skills,
+                weapon: data.equipped.weapon,
+                offhand: data.equipped.offhand,
+                unspent: Object.values(data.attributes || {}).reduce((s, n) => s + (Number(n) || 0), 0),
+            };
+        });
+
+        expect(result.sequence).toEqual(['fighter', 'cleric']);
+        expect(result.counts).toEqual({ fighter: 1, cleric: 1 });
+        expect(result.skills.learn_heal).toBe(1);
+        expect(result.skills.sword_hit).toBeGreaterThan(0);
+        expect(result.weapon).toBe('sword');
+        expect(result.offhand).toBe('wooden_shield');
+        expect(result.unspent).toBe(0);
+    });
+
+    test('pre-recruitment and recruited companion builds share the same canonical class history', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const before = window.entities.find(e => e.name === 'Reyna Fletcher');
+            const beforeSequence = before ? [...(before.classLevels || [])] : null;
+            const beforeSkills = before ? { ...before.skills } : null;
+            window.recruitReyna();
+            const after = window.party.find(p => p.name === 'Reyna Fletcher');
+            return {
+                beforeSequence,
+                afterSequence: after?.classLevelSequence || null,
+                beforeBow: beforeSkills?.bow_hit || 0,
+                afterBow: after?.skills?.bow_hit || 0,
+                afterUnspent: after ? Object.values(after.attributes || {}).reduce((s, n) => s + (Number(n) || 0), 0) : null,
+            };
+        });
+
+        expect(result.beforeSequence).toEqual(['fighter']);
+        expect(result.afterSequence).toEqual(['fighter']);
+        expect(result.beforeBow).toBeGreaterThan(0);
+        expect(result.afterBow).toBeGreaterThan(0);
+        expect(result.afterUnspent).toBe(0);
+    });
+});
