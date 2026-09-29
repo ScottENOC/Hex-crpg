@@ -1,7 +1,7 @@
 // Per-equipped-item rendering visibility plus weapon and armour material colours.
 (() => {
   'use strict';
-  const BUILD='20260929-equipment-appearance-v2';
+  const BUILD='20260929-equipment-appearance-v3';
   const renderSlots=['weapon','offhand','armor','helmet','shirt','pants','bra','underwear'];
   const slotLabels={weapon:'Main hand',offhand:'Off hand',armor:'Armour',helmet:'Helmet',shirt:'Shirt / Dress',pants:'Pants',bra:'Bra',underwear:'Underwear'};
   const tintCache=new WeakMap();
@@ -16,8 +16,8 @@
 
   function weaponParts(itemId){const item=window.items?.[itemId];if(!item||item.type!=='weapon')return[];const id=String(itemId).toLowerCase();if(id.includes('bow')||id.includes('club')||id.includes('chair')||id.includes('torch'))return['wood'];if(id.includes('axe')||id.includes('pickaxe')||id.includes('spear')||id.includes('sword')||id.includes('dagger'))return['metal','wood'];return['metal'];}
   function defaultWeaponMaterial(part){return part==='wood'?{hue:30,saturation:68,value:55,opacity:1,unlocked:false}:{hue:210,saturation:8,value:72,opacity:1,unlocked:false};}
-  function getWeaponMaterial(e,itemId,part){ensure(e);const item=e.equipmentColors[itemId]||(e.equipmentColors[itemId]={});const c=item[part]||(item[part]=defaultWeaponMaterial(part));if(c.opacity===undefined)c.opacity=1;if(c.unlocked===undefined)c.unlocked=false;return c;}
-  function setWeaponMaterial(e,itemId,part,next){const prev=getWeaponMaterial(e,itemId,part);e.equipmentColors[itemId][part]={hue:Number(next.hue??prev.hue),saturation:Number(next.saturation??prev.saturation),value:Number(next.value??prev.value),opacity:Math.max(0,Math.min(1,Number(next.opacity??prev.opacity??1))),unlocked:!!(next.unlocked??prev.unlocked)};}
+  function getWeaponMaterial(e,itemId,part){ensure(e);const item=e.equipmentColors[itemId]||(e.equipmentColors[itemId]={});const c=item[part]||(item[part]=defaultWeaponMaterial(part));c.opacity=1;if(c.unlocked===undefined)c.unlocked=false;return c;}
+  function setWeaponMaterial(e,itemId,part,next){const prev=getWeaponMaterial(e,itemId,part);e.equipmentColors[itemId][part]={hue:Number(next.hue??prev.hue),saturation:Number(next.saturation??prev.saturation),value:Number(next.value??prev.value),opacity:1,unlocked:!!(next.unlocked??prev.unlocked)};}
 
   function armourTier(itemId){const item=window.items?.[itemId];if(!item||item.type!=='armor'||item.subType==='barding')return null;const reduction=Number(item.reduction||0);return reduction>=3?'heavy':reduction>=2?'medium':'light';}
   function armourParts(itemId){const tier=armourTier(itemId);if(tier==='light')return['leather','trim'];if(tier==='medium')return['metal','cloth','clothTrim'];if(tier==='heavy')return['metal'];return[];}
@@ -34,6 +34,17 @@
   function rgbToHsv(r,g,b){r/=255;g/=255;b/=255;const max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min;let h=0;if(d){if(max===r)h=60*(((g-b)/d)%6);else if(max===g)h=60*((b-r)/d+2);else h=60*((r-g)/d+4);}if(h<0)h+=360;return{h,s:max?d/max:0,v:max};}
   function hsvToRgb(h,s,v){h=((h%360)+360)%360;const c=v*s,x=c*(1-Math.abs((h/60)%2-1)),m=v-c;let a=[0,0,0];if(h<60)a=[c,x,0];else if(h<120)a=[x,c,0];else if(h<180)a=[0,c,x];else if(h<240)a=[0,x,c];else if(h<300)a=[x,0,c];else a=[c,0,x];return a.map(n=>Math.round((n+m)*255));}
   function woodPixel(r,g,b,a){if(!a)return false;const hsv=rgbToHsv(r,g,b);return hsv.s>.16&&hsv.h>=8&&hsv.h<=75&&r>=b*1.05;}
+  function weaponWoodPixel(itemId,r,g,b,a){
+    if(woodPixel(r,g,b,a))return true;
+    if(!a)return false;
+    const id=String(itemId||'').toLowerCase();
+    if(!(id.includes('sword')||id.includes('dagger')))return false;
+    // Sword/dagger grips are much darker and less saturated than the axe haft.
+    // Pick up those warm/dark grip pixels without classifying neutral blade steel
+    // as wood, so the handle and blade remain independently colourable.
+    const hsv=rgbToHsv(r,g,b);
+    return hsv.s>.07&&hsv.h>=0&&hsv.h<=90&&r>=b*.94&&hsv.v<.72;
+  }
   function armourPixelPart(tier,r,g,b,a){
     if(!a)return null;
     if(tier==='heavy')return 'metal';
@@ -43,9 +54,6 @@
       if(hsv.s>.24&&hsv.h>=12&&hsv.h<=78)return 'clothTrim';
       return 'cloth';
     }
-    // Light armour deliberately leaves the authored alpha holes untouched so
-    // the equipped shirt/pants remain visible underneath. Dark/desaturated
-    // leather details form the secondary trim region; the rest is main leather.
     if(hsv.v<.32||hsv.s<.22)return 'trim';
     return 'leather';
   }
@@ -57,7 +65,7 @@
   }
   function applyMaterial(px,i,src,c,part){const m=constrainedMaterial(part,c),v=Math.max(.03,Math.min(1,m.value+(src.v-.5)*.58)),rgb=hsvToRgb(m.hue,m.saturation,v);px[i]=rgb[0];px[i+1]=rgb[1];px[i+2]=rgb[2];px[i+3]=Math.round(px[i+3]*Math.max(0,Math.min(1,c.opacity??1)));}
 
-  function resolveWeaponImage(e,itemId,image){if(!image||!itemId||!weaponParts(itemId).length)return image;const w=image.naturalWidth||image.width,h=image.naturalHeight||image.height;if(!w||!h)return image;const parts=weaponParts(itemId),settings=parts.map(p=>[p,getWeaponMaterial(e,itemId,p)]),key='weapon|'+settings.map(([p,c])=>`${p}:${c.hue}:${c.saturation}:${c.value}:${c.opacity}:${c.unlocked?1:0}`).join('|');let per=tintCache.get(image);if(!per){per=new Map();tintCache.set(image,per);}if(per.has(key))return per.get(key);const out=document.createElement('canvas');out.width=w;out.height=h;const ctx=out.getContext('2d',{willReadFrequently:true});ctx.drawImage(image,0,0,w,h);const d=ctx.getImageData(0,0,w,h),px=d.data;for(let i=0;i<px.length;i+=4){if(!px[i+3])continue;let part=parts[0];if(parts.includes('metal')&&parts.includes('wood'))part=woodPixel(px[i],px[i+1],px[i+2],px[i+3])?'wood':'metal';applyMaterial(px,i,rgbToHsv(px[i],px[i+1],px[i+2]),getWeaponMaterial(e,itemId,part),part);}ctx.putImageData(d,0,0);per.set(key,out);return out;}
+  function resolveWeaponImage(e,itemId,image){if(!image||!itemId||!weaponParts(itemId).length)return image;const w=image.naturalWidth||image.width,h=image.naturalHeight||image.height;if(!w||!h)return image;const parts=weaponParts(itemId),settings=parts.map(p=>[p,getWeaponMaterial(e,itemId,p)]),key='weapon|'+settings.map(([p,c])=>`${p}:${c.hue}:${c.saturation}:${c.value}:${c.unlocked?1:0}`).join('|');let per=tintCache.get(image);if(!per){per=new Map();tintCache.set(image,per);}if(per.has(key))return per.get(key);const out=document.createElement('canvas');out.width=w;out.height=h;const ctx=out.getContext('2d',{willReadFrequently:true});ctx.drawImage(image,0,0,w,h);const d=ctx.getImageData(0,0,w,h),px=d.data;for(let i=0;i<px.length;i+=4){if(!px[i+3])continue;let part=parts[0];if(parts.includes('metal')&&parts.includes('wood'))part=weaponWoodPixel(itemId,px[i],px[i+1],px[i+2],px[i+3])?'wood':'metal';applyMaterial(px,i,rgbToHsv(px[i],px[i+1],px[i+2]),getWeaponMaterial(e,itemId,part),part);}ctx.putImageData(d,0,0);per.set(key,out);return out;}
 
   function resolveArmourImage(e,itemId,image){const tier=armourTier(itemId);if(!image||!tier)return image;const w=image.naturalWidth||image.width,h=image.naturalHeight||image.height;if(!w||!h)return image;const parts=armourParts(itemId),settings=parts.map(p=>[p,getArmourMaterial(e,itemId,p)]),key=`armour:${tier}|`+settings.map(([p,c])=>`${p}:${c.hue}:${c.saturation}:${c.value}:${c.opacity}:${c.unlocked?1:0}`).join('|');let per=tintCache.get(image);if(!per){per=new Map();tintCache.set(image,per);}if(per.has(key))return per.get(key);const out=document.createElement('canvas');out.width=w;out.height=h;const ctx=out.getContext('2d',{willReadFrequently:true});ctx.drawImage(image,0,0,w,h);const d=ctx.getImageData(0,0,w,h),px=d.data;for(let i=0;i<px.length;i+=4){if(!px[i+3])continue;const part=armourPixelPart(tier,px[i],px[i+1],px[i+2],px[i+3]);if(!part)continue;applyMaterial(px,i,rgbToHsv(px[i],px[i+1],px[i+2]),getArmourMaterial(e,itemId,part),part);}ctx.putImageData(d,0,0);per.set(key,out);return out;}
 
@@ -66,9 +74,6 @@
     if(armourRenderSourcesInstalled)return true;
     const visuals=window.gameVisuals,rear=window.REAR_HUMAN_EQUIPMENT_ASSETS?.armour;
     if(!visuals?.humanLight||!visuals?.humanMedium||!visuals?.humanHeavy||!rear)return false;
-    // Swap only the low-quality legacy rear SVGs. The 192px WebP replacements
-    // keep alpha cut-outs (especially on light armour) so equipped clothes can
-    // remain visible underneath, while front/side art keeps its existing fit.
     for(const [tier,path] of Object.entries(rearArmourPaths)){
       const img=new Image();
       img.addEventListener('load',()=>{window.drawMap?.();window.renderEntities?.();window.refreshDirectionalTurnPortraits?.();});
