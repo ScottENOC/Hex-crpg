@@ -129,6 +129,16 @@ if (!window.__wrenCharacterArcModuleLoaded) {
     document.write('<script src="wrenCharacterArc.js?build=20260929-wren-character-arc-v1"><\/script>');
 }
 
+// Affinity is separate again from approval/trust/familiarity and from Wren's
+// moral character arc: friendship, romantic feeling and physical attraction can
+// move independently. Canonical orientation is authored as hard attraction and
+// romance caps, so player choices can develop chemistry without rewriting a
+// companion's sexuality. Pronouns are never used as an attraction shortcut.
+if (!window.__companionAffinityModuleLoaded) {
+    window.__companionAffinityModuleLoaded = true;
+    document.write('<script src="companionAffinity.js?build=20260929-companion-affinity-v1"><\/script>');
+}
+
 // Declarative hints for NPC/AI skill spending. Existing gameplay prereq fields
 // remain authoritative; these simply make equipment relationships explicit so
 // future generators/tools do not have to infer everything from descriptions.
