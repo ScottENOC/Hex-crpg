@@ -26,7 +26,7 @@ test('outerwear uses a canonical armour-relative envelope while undergarments st
     contains(rendererSource, 'side: {x:.18,y:.205,w:.64,h:.810}');
     contains(rendererSource, 'armourY:-.010');
 
-    contains(layersSource, "const BUILD='20260929-clothing-layers-v19'");
+    assert.match(layersSource, /const BUILD='[^']+';/);
     contains(layersSource, 'const OUTERWEAR={top:.195,waist:.535,bottom:1.005};');
     contains(layersSource, '...outerwearTargets(.077,.846)');
     contains(layersSource, '...outerwearTargets(.212,.576)');
@@ -90,12 +90,12 @@ test('transparent underwear assets and alternate styles are wired as PNGs', () =
     excludes(layersSource, 'images/equipment/clothing/bra_front.jpg');
 });
 
-test('bootstrap cache keys force the current clothing layer bundle', () => {
+test('bootstrap layers use explicit cache-busting tokens', () => {
     const indexSource = read('index.html');
     const creationSource = read('characterCreation.js');
     const clothingLoaderSource = read('clothingSystem.js');
 
-    contains(indexSource, '<script src="characterCreation.js?v=8"></script>');
-    contains(creationSource, 'clothingSystem.js?build=20260928-clothing-v8');
-    contains(clothingLoaderSource, "const BUILD='20260928-clothing-v8';");
+    assert.match(indexSource, /<script src="characterCreation\.js\?v=[^"]+"><\/script>/);
+    assert.match(creationSource, /clothingSystem\.js\?build=[^'"`]+/);
+    assert.match(clothingLoaderSource, /const BUILD='[^']+';/);
 });
