@@ -150,6 +150,15 @@ if (!window.__aldricBrokenVigilModuleLoaded) {
     document.write('<script src="aldricBrokenVigil.js?build=20260930-aldric-broken-vigil-v2"><\/script>');
 }
 
+// Mirabel's first post-recruitment chapter follows the damaged magical folio
+// she joined the party to recover from the spider ruin. It develops her own
+// curiosity-vs-restraint and flight-vs-rootedness arcs while tying the book's
+// echo-anchoring theory into Silverhart scholarship and the necromancer thread.
+if (!window.__mirabelUnquietConcordanceModuleLoaded) {
+    window.__mirabelUnquietConcordanceModuleLoaded = true;
+    document.write('<script src="mirabelUnquietConcordance.js?build=20260930-mirabel-unquiet-concordance-v1"><\/script>');
+}
+
 // Romance agreements interpret affinity rather than replacing it. Commitment,
 // sex and exclusivity are separate authored concepts: some companions are
 // monogamous, some support consensual non-monogamy, and Brother Alden can be
