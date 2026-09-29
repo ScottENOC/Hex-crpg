@@ -168,6 +168,24 @@ if (!window.__fennLivingBoundaryModuleLoaded) {
     document.write('<script src="fennLivingBoundary.js?build=20260930-fenn-living-boundary-v1"><\/script>');
 }
 
+// Reyna's first post-recruitment chapter grows directly out of Eyes on the
+// Border / Northwatch. Missing civilian trackers have been leaking route data to
+// the raiders under coercion, forcing Reyna to confront her own reflexive
+// self-reliance and decide how much trust she puts in people and institutions.
+if (!window.__reynaEmptyBlindModuleLoaded) {
+    window.__reynaEmptyBlindModuleLoaded = true;
+    document.write('<script src="reynaEmptyBlind.js?build=20260930-reyna-empty-blind-v1"><\/script>');
+}
+
+// Companion stories also feed back into major quests. The Vessel-Seeker / lich
+// arc can now surface party-specific counsel whose wording depends on personal
+// quest outcomes and evolving companion values, and companions who actually
+// clear the crypt with the player remember having done so.
+if (!window.__companionMajorQuestReactivityModuleLoaded) {
+    window.__companionMajorQuestReactivityModuleLoaded = true;
+    document.write('<script src="companionMajorQuestReactivity.js?build=20260930-companion-major-quest-reactivity-v1"><\/script>');
+}
+
 // Romance agreements interpret affinity rather than replacing it. Commitment,
 // sex and exclusivity are separate authored concepts: some companions are
 // monogamous, some support consensual non-monogamy, and Brother Alden can be
