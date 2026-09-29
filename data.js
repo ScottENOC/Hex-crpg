@@ -83,6 +83,14 @@ if (!window.__dialogueHearingModuleLoaded) {
     document.write('<script src="dialogueHearing.js?build=20260929-dialogue-hearing-v2"><\/script>');
 }
 
+// Optional authored appearance presets install after the progression wrappers,
+// then decorate final character/NPC builds without changing the random/default
+// path for anyone who does not have a preset.
+if (!window.__appearancePresetsModuleLoaded) {
+    window.__appearancePresetsModuleLoaded = true;
+    document.write('<script src="appearancePresets.js?build=20260929-appearance-presets-v1"><\/script>');
+}
+
 // Declarative hints for NPC/AI skill spending. Existing gameplay prereq fields
 // remain authoritative; these simply make equipment relationships explicit so
 // future generators/tools do not have to infer everything from descriptions.
