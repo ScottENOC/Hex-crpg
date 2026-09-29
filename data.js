@@ -62,7 +62,8 @@ window.classData = classData;
 // Humanoid NPC progression is loaded early but defers its wrappers until
 // DOMContentLoaded, after skills/monsters/npcBuilder/campaign content have been
 // defined. Listener order is deliberate: generic generator -> conversion
-// policy -> named authored builds -> final mode/invariant layer -> companions.
+// policy -> named authored builds -> final mode/invariant layer -> companions
+// -> developer inspector.
 if (!window.__npcProgressionModuleLoaded) {
     window.__npcProgressionModuleLoaded = true;
     document.write('<script src="npcProgression.js?build=20260929-pc-style-npcs-v1"><\/script>');
@@ -70,6 +71,7 @@ if (!window.__npcProgressionModuleLoaded) {
     document.write('<script src="namedNpcProgression.js?build=20260929-authored-npcs-v1"><\/script>');
     document.write('<script src="npcProgressionModes.js?build=20260929-progression-modes-v2"><\/script>');
     document.write('<script src="companionProgression.js?build=20260929-canonical-companions-v1"><\/script>');
+    document.write('<script src="devNpcInspector.js?build=20260929-dev-npc-inspector-v1"><\/script>');
 }
 
 // Dialogue hearing installs after the rest of the blocking game scripts have
