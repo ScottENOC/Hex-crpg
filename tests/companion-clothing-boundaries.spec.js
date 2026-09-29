@@ -16,7 +16,9 @@ async function addCompanion(page, name = 'Boundary Test Companion') {
         const companion = window.createCharacterData('human', 'fighter', companionName, 'female', 'pc_1');
         companion.side = 'player';
         window.party.push(companion);
-        window.clothingSystem.ensureDefaultOutfit(companion, { player: true });
+        window.withSystemCompanionClothingOverride(() => {
+            window.clothingSystem.ensureDefaultOutfit(companion, { player: true });
+        });
         window.captureCompanionClothingBaseline(companion);
         return {
             name: companion.name,
@@ -36,34 +38,41 @@ test.describe('Companion relationships and clothing boundaries', () => {
         await page.evaluate(() => { window.showDialogue = () => {}; });
     });
 
-    test('keeps familiarity, trust and approval separate', async ({ page }) => {
+    test('keeps familiarity, trust and the existing approval meter separate', async ({ page }) => {
         await addCompanion(page, 'Relationship Axes');
         const result = await page.evaluate(() => {
             const c = window.party.find(p => p.name === 'Relationship Axes');
             const initial = { ...window.getCompanionRelationship(c) };
-            window.setCompanionRelationship(c, { familiarity: 40, trust: 25, approval: -100 }, 'test');
+            window.setCompanionRelationship(c, { familiarity: 40, trust: 25, approval: 0 }, 'test');
             const disliked = {
                 rel: { ...window.getCompanionRelationship(c) },
+                canonicalApproval: window.companionAttitude['Relationship Axes'],
                 tier: window.companionRelationships.getTier(c),
                 reveal: window.companionRelationships.canUseRevealingControls(c),
             };
             window.setCompanionRelationship(c, { approval: 100 }, 'test');
             const liked = {
                 rel: { ...window.getCompanionRelationship(c) },
+                canonicalApproval: window.companionAttitude['Relationship Axes'],
                 tier: window.companionRelationships.getTier(c),
                 reveal: window.companionRelationships.canUseRevealingControls(c),
+                storedDuplicateApproval: Object.prototype.hasOwnProperty.call(c.playerRelationship || {}, 'approval'),
             };
             return { initial, disliked, liked };
         });
 
         expect(result.initial.familiarity).toBe(10);
         expect(result.initial.trust).toBe(10);
-        expect(result.initial.approval).toBe(0);
+        expect(result.initial.approval).toBe(50);
+        expect(result.disliked.rel.approval).toBe(0);
+        expect(result.disliked.canonicalApproval).toBe(0);
         expect(result.disliked.tier).toBe('familiar');
         expect(result.disliked.reveal).toBe(false);
+        expect(result.liked.rel.approval).toBe(100);
+        expect(result.liked.canonicalApproval).toBe(100);
         expect(result.liked.tier).toBe('familiar');
         expect(result.liked.reveal).toBe(false);
-        expect(result.liked.rel.approval).toBe(100);
+        expect(result.liked.storedDuplicateApproval).toBe(false);
     });
 
     test('new companions refuse player-directed clothing edits', async ({ page }) => {
@@ -141,6 +150,24 @@ test.describe('Companion relationships and clothing boundaries', () => {
         expect(result.afterVisible).toBe(true);
         expect(result.unequipAllowed).toBe(false);
         expect(result.shirtAfterUnequip).toBe(result.shirtBeforeUnequip);
+    });
+
+    test('high approval alone never unlocks revealing controls', async ({ page }) => {
+        await addCompanion(page, 'Popular Stranger');
+        const result = await page.evaluate(() => {
+            const c = window.party.find(p => p.name === 'Popular Stranger');
+            window.setCompanionRelationship(c, { familiarity: 40, trust: 20, approval: 100 }, 'test');
+            const permission = window.getCompanionClothingPermission(c, { type: 'unequip', slot: 'shirt' });
+            return {
+                relationship: window.getCompanionRelationship(c),
+                permission,
+            };
+        });
+
+        expect(result.relationship.approval).toBe(100);
+        expect(result.relationship.trust).toBe(20);
+        expect(result.permission.allowed).toBe(false);
+        expect(result.permission.reason).toBe('needs_trust');
     });
 
     test('high trust allows revealing controls without making trust equal blanket consent', async ({ page }) => {
