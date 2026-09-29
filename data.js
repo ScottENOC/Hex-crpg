@@ -159,6 +159,15 @@ if (!window.__mirabelUnquietConcordanceModuleLoaded) {
     document.write('<script src="mirabelUnquietConcordance.js?build=20260930-mirabel-unquiet-concordance-v1"><\/script>');
 }
 
+// Fenn's first post-recruitment chapter reuses Emberwood Grove and Old Mac's
+// pasture. A changed watercourse creates a real farm-vs-wetland conflict with no
+// mandatory skill gate, while Nature/Perception can reveal the old channel and
+// Fenn develops his own preservation-vs-stewardship and independence axes.
+if (!window.__fennLivingBoundaryModuleLoaded) {
+    window.__fennLivingBoundaryModuleLoaded = true;
+    document.write('<script src="fennLivingBoundary.js?build=20260930-fenn-living-boundary-v1"><\/script>');
+}
+
 // Romance agreements interpret affinity rather than replacing it. Commitment,
 // sex and exclusivity are separate authored concepts: some companions are
 // monogamous, some support consensual non-monogamy, and Brother Alden can be
