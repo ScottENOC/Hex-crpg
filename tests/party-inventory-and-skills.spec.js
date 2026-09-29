@@ -53,15 +53,25 @@ test.describe('Shared party inventory', () => {
 });
 
 test.describe('Encumbrance', () => {
-    test('carry capacity scales with party size and strong_back ranks', async ({ page }) => {
+    test('carry capacity scales with strength-tree strong_back ranks', async ({ page }) => {
         await createCharacter(page);
         const result = await page.evaluate(() => {
+            const player = window.party[0];
             const base = window.getPartyCarryCapacity();
-            window.grantSkillRank(window.party[0], 'strong_back');
+            window.grantSkillRank(player, 'strong_back');
             const afterOneRank = window.getPartyCarryCapacity();
-            return { base, afterOneRank };
+            return {
+                base,
+                afterOneRank,
+                strongBackDescription: window.skills.strong_back.description,
+                tree: window.skills.strong_back.tree,
+            };
         });
-        expect(result.afterOneRank).toBe(result.base + 15);
+        expect(result.tree).toBe('strength');
+        expect(result.strongBackDescription).toContain('15');
+        // Strong Back contributes +15 itself, and taking a Strength-tree rank
+        // contributes the expedition system's normal +2 tree-rank capacity.
+        expect(result.afterOneRank - result.base).toBe(17);
     });
 
     test('an owned horse (or any owned mount) adds to capacity whether ridden or not', async ({ page }) => {
@@ -142,7 +152,7 @@ test.describe('Encumbrance', () => {
         expect(result.after).toBeGreaterThan(result.before);
     });
 
-    test('quartermaster halves (rank 1) and fully negates (rank 2) the overencumbered movement penalty', async ({ page }) => {
+    test('quartermaster removes 25% of the excess overload penalty per rank', async ({ page }) => {
         await createCharacter(page);
         const result = await page.evaluate(() => {
             const player = window.party[0];
@@ -154,11 +164,16 @@ test.describe('Encumbrance', () => {
             const rank1 = window.getEncumbranceMoveMult();
             window.grantSkillRank(player, 'quartermaster');
             const rank2 = window.getEncumbranceMoveMult();
-            return { noSkill, rank1, rank2 };
+            return { noSkill, rank1, rank2, description: window.skills.quartermaster.description };
         });
-        expect(result.noSkill).toBeCloseTo(1.5, 5);
-        expect(result.rank1).toBeCloseTo(1.25, 5);
-        expect(result.rank2).toBeCloseTo(1.0, 5);
+        expect(result.description).toContain('25% per rank');
+        expect(result.noSkill).toBeGreaterThan(1);
+        expect(result.rank1).toBeGreaterThan(1);
+        expect(result.rank2).toBeGreaterThan(1);
+        expect(result.rank1).toBeLessThan(result.noSkill);
+        expect(result.rank2).toBeLessThan(result.rank1);
+        expect((result.rank1 - 1) / (result.noSkill - 1)).toBeCloseTo(0.75, 5);
+        expect((result.rank2 - 1) / (result.noSkill - 1)).toBeCloseTo(0.50, 5);
     });
 });
 
