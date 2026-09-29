@@ -68,7 +68,7 @@ if (!window.__npcProgressionModuleLoaded) {
     document.write('<script src="npcProgression.js?build=20260929-pc-style-npcs-v1"><\/script>');
     document.write('<script src="npcProgressionPolicy.js?build=20260929-package-policy-v3"><\/script>');
     document.write('<script src="namedNpcProgression.js?build=20260929-authored-npcs-v1"><\/script>');
-    document.write('<script src="npcProgressionModes.js?build=20260929-progression-modes-v1"><\/script>');
+    document.write('<script src="npcProgressionModes.js?build=20260929-progression-modes-v2"><\/script>');
     document.write('<script src="companionProgression.js?build=20260929-canonical-companions-v1"><\/script>');
 }
 
