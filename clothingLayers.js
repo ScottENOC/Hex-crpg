@@ -1,7 +1,7 @@
 // Explicit garment layers: one authored image per colourable part.
 (() => {
   'use strict';
-  const BUILD='20260929-clothing-layers-v17';
+  const BUILD='20260929-clothing-layers-v18';
   const slots=['underwear','bra','pants','shirt'];
   const preloadSlots=['shirt','pants','bra','underwear'];
   const labels={underwear:'Underwear',bra:'Bra',pants:'Pants',shirt:'Shirt / Dress'};
@@ -51,8 +51,10 @@
     top_blouse:twoToneTop('images/equipment/clothing/top_blouse.png'),
     top_dress:twoToneTop('images/equipment/clothing/top_dress.png'),
     top_shirt_f:twoToneTop('images/equipment/clothing/top_shirt_f.png'),
-    top_shirt:singleLayer('shirt','images/equipment/clothing/top_shirt.png','Shirt'),
-    top_tunic:singleLayer('shirt','images/equipment/clothing/top_tunic.png','Tunic'),
+    top_masc_toggle:twoToneTop('images/equipment/clothing/top_masc_toggle.png'),
+    top_masc_lacework:twoToneTop('images/equipment/clothing/top_masc_lacework.png'),
+    top_masc_laced:twoToneTop('images/equipment/clothing/top_masc_laced.png'),
+    top_masc_buttoned:twoToneTop('images/equipment/clothing/top_masc_buttoned.png'),
     pants_baggy_wraps:singleLayer('pants','images/equipment/clothing/pants_baggy_wraps.png','Baggy wraps'),
     pants_breeches:singleLayer('pants','images/equipment/clothing/pants_breeches.png','Breeches'),
     pants_hose:singleLayer('pants','images/equipment/clothing/pants_hose.png','Hose'),
@@ -77,9 +79,10 @@
     },'Main','Trim'),
   };
   const FEMININE_START_TOPS=['top_blouse','top_dress','top_shirt_f'];
-  const MASCULINE_START_TOPS=['top_shirt'];
+  const MASCULINE_START_TOPS=['top_masc_toggle','top_masc_lacework','top_masc_laced','top_masc_buttoned'];
+  const RETIRED_TOPS=new Set(['top_shirt','top_tunic']);
   const PANTS=['pants_baggy_wraps','pants_breeches','pants_hose','pants_trousers'];
-  const PLAYER_DEFAULT={shirt:'top_shirt',pants:'pants_trousers',underwear:'underwear_briefs',bra:'underwear_bra'};
+  const PLAYER_DEFAULT={shirt:'top_masc_toggle',pants:'pants_trousers',underwear:'underwear_briefs',bra:'underwear_bra'};
   const HUMANOID_RACES=new Set(['human','elf','dwarf','goblin','orc']);
 
   function legacy(itemId){
@@ -111,10 +114,20 @@
 
   function registerBuiltinItems(){
     if(!window.items) return false;
-    const names={top_blouse:'Blouse',top_dress:'Dress',top_shirt_f:'Fitted Shirt',top_shirt:'Shirt',top_tunic:'Tunic',pants_baggy_wraps:'Baggy Wraps',
-      pants_breeches:'Breeches',pants_hose:'Hose',pants_trousers:'Trousers',underwear_briefs:'Briefs',
-      underwear_briefs_gstring:'G-string',underwear_bra:'Bra',underwear_bra_strapless:'Strapless Bra'};
+    const names={
+      top_blouse:'Blouse',top_dress:'Dress',top_shirt_f:'Fitted Shirt',
+      top_masc_toggle:'Toggle Tunic',top_masc_lacework:'Lacework Shirt',top_masc_laced:'Laced Tunic',top_masc_buttoned:'Buttoned Work Shirt',
+      pants_baggy_wraps:'Baggy Wraps',pants_breeches:'Breeches',pants_hose:'Hose',pants_trousers:'Trousers',underwear_briefs:'Briefs',
+      underwear_briefs_gstring:'G-string',underwear_bra:'Bra',underwear_bra_strapless:'Strapless Bra'
+    };
     for(const [id,g] of Object.entries(GARMENTS)) if(!window.items[id]) window.items[id]={name:names[id]||id,type:'clothes',clothingSlot:g.slot};
+    // Classification is for starter-outfit selection/UI only. It is deliberately
+    // not consulted by equip logic, so every garment remains wearable by anyone.
+    for(const id of FEMININE_START_TOPS) if(window.items[id]) window.items[id].clothingGender='female';
+    for(const id of MASCULINE_START_TOPS) if(window.items[id]) window.items[id].clothingGender='male';
+    // These were the last pre-overlay top sprites. Their arm geometry no longer
+    // matches the direct character compositor, so do not expose them as items.
+    for(const id of RETIRED_TOPS) delete window.items[id];
     return true;
   }
 
@@ -139,6 +152,11 @@
     migrate(e); registerBuiltinItems();
     const seed=e.name||`${e.race}_${e.gender}`;
 
+    // Existing saves/NPCs can still point at the two retired top sprites. Move
+    // them deterministically into the appropriate starting pool without making
+    // any garment body-restricted after character creation.
+    if(RETIRED_TOPS.has(e.equipped.shirt)) e.equipped.shirt=starterTop(e,seed);
+
     if(e.clothingDefaultsApplied!==true){
       if(!e.equipped.shirt) e.equipped.shirt=starterTop(e,seed);
       if(!e.equipped.pants) e.equipped.pants=player?PLAYER_DEFAULT.pants:PANTS[hash(`${seed}|pants`)%PANTS.length];
@@ -147,8 +165,12 @@
       e.clothingDefaultsApplied=true;
     }
 
-    if(player&&Array.isArray(e.inventory)){
-      for(const slot of slots){const id=e.equipped[slot];if(id&&!e.inventory.includes(id)) e.inventory.push(id);}
+    if(Array.isArray(e.inventory)){
+      for(const retired of RETIRED_TOPS){
+        let i;
+        while((i=e.inventory.indexOf(retired))!==-1) e.inventory.splice(i,1);
+      }
+      if(player) for(const slot of slots){const id=e.equipped[slot];if(id&&!e.inventory.includes(id)) e.inventory.push(id);}
     }
     for(const [slot,offset] of [['shirt',1],['pants',2],['underwear',3],['bra',4]]){
       const itemId=e.equipped[slot],s=itemId&&spec(itemId); if(!s) continue;

@@ -14,7 +14,7 @@ test.describe('explicit clothing rendering regression', () => {
     expect(rendererSource).toContain('side: {x:.18,y:.205,w:.64,h:.810}');
     expect(rendererSource).toContain('armourY:-.010');
 
-    expect(layersSource).toContain("const BUILD='20260929-clothing-layers-v16'");
+    expect(layersSource).toContain("const BUILD='20260929-clothing-layers-v18'");
     expect(layersSource).toContain('const OUTERWEAR={top:.195,waist:.535,bottom:1.005};');
     expect(layersSource).toContain('...outerwearTargets(.077,.846)');
     expect(layersSource).toContain('...outerwearTargets(.212,.576)');
@@ -26,8 +26,32 @@ test.describe('explicit clothing rendering regression', () => {
     expect(layersSource).toContain("if(slot==='bra') return set.bra;");
     expect(layersSource).toContain('bra:{x:.20,y:.30,w:.60,h:.18},underwear:{x:.20,y:.50,w:.60,h:.18}');
     expect(layersSource).toContain('bra:{x:.34,y:.30,w:.32,h:.18},underwear:{x:.34,y:.50,w:.32,h:.18}');
+    expect(layersSource).toContain("if(itemId==='top_shirt_f') return {...set.shirt,y:set.shirt.y-.03,h:set.shirt.h+.06};");
+    expect(layersSource).toContain('dy-=targetH*.60;');
+    expect(layersSource).toContain("if(itemId==='underwear_bra'){");
     expect(layersSource).toContain('const trim=l.sourceTone?toneBounds(img):opaqueBounds(img);');
     expect(layersSource).toContain('drawFittedGarment(ctx,rendered,trim,target,bounds,slot,e,itemId)');
+  });
+
+  test('masculine starter tops are the four new two-tone PNG overlays', async ({ page }) => {
+    const layersSource = await page.request.get(`${ROOT}/clothingLayers.js`).then(r => r.text());
+    const masculineAssets = [
+      'top_masc_toggle.png',
+      'top_masc_lacework.png',
+      'top_masc_laced.png',
+      'top_masc_buttoned.png',
+    ];
+
+    for (const asset of masculineAssets) {
+      expect(layersSource).toContain(`images/equipment/clothing/${asset}`);
+    }
+    expect(layersSource).toContain("const MASCULINE_START_TOPS=['top_masc_toggle','top_masc_lacework','top_masc_laced','top_masc_buttoned'];");
+    expect(layersSource).toContain("const FEMININE_START_TOPS=['top_blouse','top_dress','top_shirt_f'];");
+    expect(layersSource).toContain("const RETIRED_TOPS=new Set(['top_shirt','top_tunic']);");
+    expect(layersSource).toContain("for(const id of MASCULINE_START_TOPS) if(window.items[id]) window.items[id].clothingGender='male';");
+    expect(layersSource).toContain("for(const id of FEMININE_START_TOPS) if(window.items[id]) window.items[id].clothingGender='female';");
+    expect(layersSource).not.toContain("top_shirt:singleLayer('shirt'");
+    expect(layersSource).not.toContain("top_tunic:singleLayer('shirt'");
   });
 
   test('transparent underwear assets and alternate styles are wired as PNGs', async ({ page }) => {
