@@ -133,10 +133,11 @@ if (!window.__wrenCharacterArcModuleLoaded) {
 // moral character arc: friendship, romantic feeling and physical attraction can
 // move independently. Canonical orientation is authored as hard attraction and
 // romance caps, so player choices can develop chemistry without rewriting a
-// companion's sexuality. Pronouns are never used as an attraction shortcut.
+// companion's sexuality. Attraction contributes continuously from 1 upward;
+// pronouns are never used as an attraction shortcut.
 if (!window.__companionAffinityModuleLoaded) {
     window.__companionAffinityModuleLoaded = true;
-    document.write('<script src="companionAffinity.js?build=20260929-companion-affinity-v1"><\/script>');
+    document.write('<script src="companionAffinity.js?build=20260929-companion-affinity-v2"><\/script>');
 }
 
 // Declarative hints for NPC/AI skill spending. Existing gameplay prereq fields
