@@ -140,6 +140,16 @@ if (!window.__companionAffinityModuleLoaded) {
     document.write('<script src="companionAffinity.js?build=20260929-companion-affinity-v3"><\/script>');
 }
 
+// Aldric's first post-recruitment companion quest grows directly from his
+// existing west-road vow dialogue and reuses Reddale's Ironbond/Baron politics.
+// The player can establish why Company support disappeared without requiring a
+// particular skill build, while Persuasion, Insight, Stealth or Ironbond trust
+// can recover the signed withdrawal order and strengthen the evidence.
+if (!window.__aldricBrokenVigilModuleLoaded) {
+    window.__aldricBrokenVigilModuleLoaded = true;
+    document.write('<script src="aldricBrokenVigil.js?build=20260930-aldric-broken-vigil-v1"><\/script>');
+}
+
 // Romance agreements interpret affinity rather than replacing it. Commitment,
 // sex and exclusivity are separate authored concepts: some companions are
 // monogamous, some support consensual non-monogamy, and Brother Alden can be
