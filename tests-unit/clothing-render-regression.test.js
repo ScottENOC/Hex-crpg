@@ -42,7 +42,11 @@ test('outerwear uses a canonical armour-relative envelope while undergarments st
     contains(layersSource, 'dy-=targetH*.60;');
     contains(layersSource, "if(itemId==='underwear_bra'){");
     contains(layersSource, 'const trim=l.sourceTone?toneBounds(img):opaqueBounds(img);');
-    contains(layersSource, 'drawFittedGarment(ctx,rendered,trim,target,bounds,slot,e,itemId)');
+    contains(layersSource, 'drawFittedGarment(ctx,rendered,trim,target,bounds,slot,e,itemId,v,s,img)');
+    contains(layersSource, "if(slot==='top' && garmentSpec?.fitMode==='dressSplit'){");
+    contains(layersSource, 'const split=splitTrimAtRatio(sourceImage||source,bands?.sourceBodiceRatio);');
+    contains(layersSource, 'const bodiceDrawn=drawPiece(split.top,bodiceTarget,false);');
+    contains(layersSource, 'const skirtDrawn=drawPiece(split.bottom,skirtTarget,true);');
 });
 
 test('masculine starter tops are the four new two-tone PNG overlays', () => {
