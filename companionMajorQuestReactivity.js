@@ -6,11 +6,12 @@
 // Aldric's Broken Vigil affects how he judges followers versus commanders,
 // Mirabel's Concordance work changes what magical risks she notices, Fenn's
 // stewardship shapes how he talks about death and intervention, Wren's loyalty /
-// mercy state changes her emphasis, and Reyna can bring lessons from the border.
+// mercy state changes her emphasis, Reyna can bring lessons from the border, and
+// Alden's uncounted Northwatch dead make corpse-taking personal rather than abstract.
 (() => {
     'use strict';
 
-    const BUILD = '20260930-companion-major-quest-reactivity-v1';
+    const BUILD = '20260930-companion-major-quest-reactivity-v2';
     let suppressDecoration = 0;
 
     const party = () => Array.isArray(window.party) ? window.party : [];
@@ -142,6 +143,31 @@
         return null;
     }
 
+    function lineForAlden(stage) {
+        const companion = member('Brother Alden');
+        if (!companion) return null;
+        const aq = quest('alden_uncounted');
+        const state = window.aldenUncounted?.getArcState?.();
+        if (stage === 'hunt') {
+            if (aq?.clues?.necromancy_parallel || window.aldenNecromancerBodyTrail) {
+                return 'Alden’s expression hardens. “One of Northwatch’s uncounted dead vanished between the fort and the cathedral. At the time it was easy to call that paperwork. It is less easy now. If this cult has been acquiring bodies, I want to know whether that person became one of them.”';
+            }
+            if (state?.particularity >= 10) {
+                return '“Do not let the dead become ingredients simply because we cannot name them,” Alden says. “If there are records, tokens, anything that tells us who was used here, preserve them before we destroy the ritual.”';
+            }
+            return 'Alden folds his hands. “A body is not the whole person. That does not make it ownerless. Whatever the necromancer believes, death is not consent.”';
+        }
+        if (stage === 'lich') {
+            return '“A phylactery is attachment made literal,” Alden says. “Not love. Not memory. A refusal to permit the self to end. Find the object he has made into a chain and break the chain before the body.”';
+        }
+        if (stage === 'parley') {
+            return state?.engagement >= 10
+                ? 'Alden steps closer rather than retreating. “I understand wanting more time. I understand fearing an ending. Understanding a desire does not require obeying it. If you choose this, choose it knowing what he has made other people into to get there.”'
+                : 'Alden’s voice stays level. “The monastery taught that clinging creates suffering. He is offering you the most absolute form of clinging I can imagine.”';
+        }
+        return null;
+    }
+
     function counselLines(stage) {
         return [
             ['Ser Aldric Thorne', lineForAldric(stage)],
@@ -149,6 +175,7 @@
             ['Fenn Oakheart', lineForFenn(stage)],
             ['Wren Talbot', lineForWren(stage)],
             ['Reyna Fletcher', lineForReyna(stage)],
+            ['Brother Alden', lineForAlden(stage)],
         ].filter(([, text]) => !!text).map(([name, text]) => ({ name, text }));
     }
 
@@ -156,7 +183,7 @@
         const lines = counselLines(stage);
         if (!lines.length || typeof window.showDialogue !== 'function') return false;
         const options = lines.map(line => ({
-            label: `Hear ${line.name === 'Ser Aldric Thorne' ? 'Aldric' : line.name.split(' ')[0]}.`,
+            label: `Hear ${line.name === 'Ser Aldric Thorne' ? 'Aldric' : line.name === 'Brother Alden' ? 'Alden' : line.name.split(' ')[0]}.`,
             action: () => {
                 const speaker = member(line.name) || { name: line.name };
                 withSuppressedDecoration(() => window.showDialogue(speaker, line.text, [
@@ -248,6 +275,11 @@
             window.adjustCompanionRelationship?.(reynaCompanion, { approval: 4, trust: 4, familiarity: 2 }, 'cleared the Vessel-Seeker crypt together');
             window.adjustCompanionAffinity?.(reynaCompanion, { friendship: 2 }, 'faced the crypt together', 'major_quest:necromancer_hunt:reyna');
         }
+        const aldenCompanion = member('Brother Alden');
+        if (aldenCompanion) {
+            window.adjustCompanionRelationship?.(aldenCompanion, { approval: 6, trust: 6, familiarity: 2 }, 'faced the misuse of the dead in the Vessel-Seeker crypt together');
+            window.adjustCompanionAffinity?.(aldenCompanion, { friendship: 3, romanticBond: 1 }, 'faced the necromancer threat together', 'major_quest:necromancer_hunt:alden');
+        }
         return true;
     }
 
@@ -258,9 +290,22 @@
         return !!window.mirabelUnquietConcordance?.recordCultParallel?.('active Vessel-Seeker investigation');
     }
 
+    function syncAldenNecromancyLink() {
+        const hunt = quest('necromancer_hunt');
+        const aq = quest('alden_uncounted');
+        if (!member('Brother Alden') || !hunt || !aq || !aq.clues?.cathedral_receipt || aq.clues?.necromancy_parallel) return false;
+        const linked = !!window.aldenUncounted?.syncNecromancyParallel?.();
+        if (linked) {
+            hunt.aldenBodyTrail = true;
+            hunt.description = String(hunt.description || '') + ' Alden’s Northwatch burial records suggest at least one missing corpse may belong to the same pattern.';
+        }
+        return linked;
+    }
+
     function refresh() {
         installDialogueHook();
         syncMirabelNecromancyLink();
+        syncAldenNecromancyLink();
         applyHuntCompletionReactivity();
     }
 
@@ -270,6 +315,7 @@
         showCounsel,
         appendCounselOption,
         syncMirabelNecromancyLink,
+        syncAldenNecromancyLink,
         applyHuntCompletionReactivity,
         refresh,
     };
