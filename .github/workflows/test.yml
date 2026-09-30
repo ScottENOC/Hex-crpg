@@ -29,6 +29,7 @@ jobs:
           git pull --rebase origin development
           sed -i "s/20260930-clothing-v12/20260930-clothing-v13/" scripts/apply_visibility_fix.py
           python scripts/apply_visibility_fix.py
+          git restore scripts/apply_visibility_fix.py
           git config user.name 'ScottENOC'
           git config user.email 'bales.scott@gmail.com'
           git add clothingLayers.js clothingSystem.js characterCreation.js humanoidRenderer.js braidDirectionalHair.js name.js index.html
