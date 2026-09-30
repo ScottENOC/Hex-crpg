@@ -1,7 +1,7 @@
 // Explicit garment layers: one authored image per colourable part.
 (() => {
   'use strict';
-  const BUILD=window.PRESENTATION_BUILD||'20260930-fitted-shirt-fit-v2';
+  const BUILD=window.PRESENTATION_BUILD||'20260930-fitted-shirt-fit-v3';
   const slots=['underwear','bra','pants','shirt'];
   const preloadSlots=['shirt','pants','bra','underwear'];
   const labels={underwear:'Underwear',bra:'Bra',pants:'Pants',shirt:'Shirt / Dress'};
@@ -383,7 +383,10 @@
         continue;
       }
       const srcCentreW=trim.w*centreSource,srcOuterW=(trim.w-srcCentreW)/2;
-      const centreDestW=Math.min(dw*.72,dw*centreSource*expansion),outerDestW=(dw-centreDestW)/2;
+      // Let the central body section use the requested expansion all the way up
+      // to the full garment width. The old 72% clamp flattened larger fit values;
+      // this 100% safety clamp only prevents the outer sleeve zones going negative.
+      const centreDestW=Math.min(dw,dw*centreSource*expansion),outerDestW=(dw-centreDestW)/2;
       const sxCentre=trim.x+srcOuterW,sxRight=sxCentre+srcCentreW;
       ctx.drawImage(source,trim.x,sy0,srcOuterW,sy1-sy0,dx,dy0,outerDestW,dy1-dy0+.15);
       ctx.drawImage(source,sxCentre,sy0,srcCentreW,sy1-sy0,dx+outerDestW,dy0,centreDestW,dy1-dy0+.15);
