@@ -182,13 +182,17 @@
         kite:{front:'images/equipment/shields/kite.png',back:'images/equipment/shields/kite_back.png'},
     };
 
+    // Armour is renderer-owned directional art, just like shields. Front and
+    // side share the authored front face; back uses the matching rear face.
+    // Keeping each pair together prevents mixing legacy PNG fronts with newer SVG backs.
+    const ARMOUR_PATHS = {
+        light:{front:'images/humanlightarmour_front.svg',back:'images/humanlightarmour_back.svg'},
+        medium:{front:'images/humanmediumarmour_front.svg',back:'images/humanmediumarmour_back.svg'},
+        heavy:{front:'images/humanheavyarmour_front.svg',back:'images/humanheavyarmour_back.svg'},
+    };
+
     const REAR_EQUIPMENT_PATHS = {
         helmet:'images/nasalHelm_back.svg',
-        armour:{
-            light:'images/humanlightarmour_back.svg',
-            medium:'images/humanmediumarmour_back.svg',
-            heavy:'images/humanheavyarmour_back.svg',
-        },
     };
 
     const ITEM_GRIPS = {
@@ -258,13 +262,14 @@
         .map(([key, paths]) => [key, loadSet(paths)]));
     const SHIELD_ASSETS = Object.fromEntries(Object.entries(SHIELD_PATHS)
         .map(([visual, paths]) => [visual, {front:loadImage(paths.front), back:loadImage(paths.back)}]));
+    const ARMOUR_ASSETS = Object.fromEntries(Object.entries(ARMOUR_PATHS)
+        .map(([tier, paths]) => [tier, {front:loadImage(paths.front), back:loadImage(paths.back)}]));
     const REAR_EQUIPMENT_ASSETS = {
-        // Compatibility alias for existing readiness checks and any legacy
-        // consumers that still expect the ordinary wooden shield rear here.
+        // Compatibility aliases for existing readiness checks and legacy consumers.
         shield:SHIELD_ASSETS.round.back,
         helmet:loadImage(REAR_EQUIPMENT_PATHS.helmet),
-        armour:Object.fromEntries(Object.entries(REAR_EQUIPMENT_PATHS.armour)
-            .map(([tier, src]) => [tier, loadImage(src)])),
+        armour:Object.fromEntries(Object.entries(ARMOUR_ASSETS)
+            .map(([tier, views]) => [tier, views.back])),
     };
 
     function facingFromHexDelta(dq, dr) {
@@ -384,8 +389,12 @@
         const reduction = Number(item?.reduction || 0);
         const visuals = window.gameVisuals || {};
         const tier = reduction >= 3 ? 'heavy' : reduction >= 2 ? 'medium' : 'light';
-        const generic = tier === 'heavy' ? visuals.humanHeavy : tier === 'medium' ? visuals.humanMedium : visuals.humanLight;
-        let image = rearPreferred(view, REAR_EQUIPMENT_ASSETS.armour[tier], generic);
+        const authored = view === 'back' ? ARMOUR_ASSETS[tier]?.back : ARMOUR_ASSETS[tier]?.front;
+        // The old PNG remains a load-failure fallback only. Normal rendering uses a
+        // matched SVG pair, and gold tint is applied after choosing the view so the
+        // same recolour path is used for front, side and back.
+        const legacy = tier === 'heavy' ? visuals.humanHeavy : tier === 'medium' ? visuals.humanMedium : visuals.humanLight;
+        let image = imageReady(authored) ? authored : legacy;
         if (!image) return null;
         if (entity.goldGear && window.getGoldTintedSprite) image = window.getGoldTintedSprite(image) || image;
         return image;
@@ -823,6 +832,7 @@
     };
     window.REAR_HUMAN_EQUIPMENT_ASSETS = REAR_EQUIPMENT_ASSETS;
     window.SHIELD_VISUAL_ASSETS = SHIELD_ASSETS;
+    window.ARMOUR_VISUAL_ASSETS = ARMOUR_ASSETS;
     window.ITEM_GRIPS = ITEM_GRIPS;
     window.facingToSpriteView = facingToView;
     window.facingFromHexDelta = facingFromHexDelta;
