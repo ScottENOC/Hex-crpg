@@ -4,7 +4,7 @@
 (() => {
   'use strict';
 
-  const BUILD = window.PRESENTATION_BUILD || '20261001-sprite-alignment-v1';
+  const BUILD = window.PRESENTATION_BUILD || '20261001-sprite-alignment-v2';
   const PANTS_TOP = .500;
   const PANTS_BOTTOM = 1.005;
   const BRAID_TOP = -.035;
@@ -20,23 +20,30 @@
   function applyPantsAlignment() {
     const cs = window.clothingSystem;
     const targets = cs?.clothingTargets;
-    if (!targets?.front?.pants || !targets?.side?.pants || !targets?.back?.pants) return false;
+    if (!targets?.front?.pants || !targets?.side?.pants || !targets?.back?.pants) {
+      return {ready:false,changed:false};
+    }
 
     // Pants and briefs share the same waist reference. Keep the established
     // bottom extent, so long trousers still reach the same point; only lift the
     // waistband. Shirts retain their existing lower edge and naturally overlap
     // the waistband because shirts render after pants.
+    let changed = false;
     for (const view of ['front','side','back']) {
       const target = targets[view].pants;
-      target.y = PANTS_TOP;
-      target.h = PANTS_BOTTOM - PANTS_TOP;
+      const nextH = PANTS_BOTTOM - PANTS_TOP;
+      if (Math.abs(Number(target.y)-PANTS_TOP) > 1e-6 || Math.abs(Number(target.h)-nextH) > 1e-6) {
+        target.y = PANTS_TOP;
+        target.h = nextH;
+        changed = true;
+      }
     }
 
     if (cs.outerwearGeometry && typeof cs.outerwearGeometry === 'object') {
       cs.outerwearGeometry.pantsTop = PANTS_TOP;
     }
     window.__pantsWaistAlignment = {top:PANTS_TOP,bottom:PANTS_BOTTOM,build:BUILD};
-    return true;
+    return {ready:true,changed};
   }
 
   function directWorldBounds(entity, x, y, z=1, flyOff=0) {
@@ -185,12 +192,12 @@
       wrapDirectional('drawHumanFemaleDirectionalBase'),
     ].some(Boolean);
     const world = [wrapWorld('drawPlayerCharacter'),wrapWorld('drawHumanoidCharacter')].some(Boolean);
-    if (pants) {
+    if (pants.changed) {
       window.drawMap?.();
       window.renderEntities?.();
       window.refreshDirectionalTurnPortraits?.();
     }
-    window.__spriteAlignmentFixesReady = !!(pants && (directional || world));
+    window.__spriteAlignmentFixesReady = !!(pants.ready && (directional || world));
     return window.__spriteAlignmentFixesReady;
   }
 
