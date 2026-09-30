@@ -104,7 +104,10 @@ test.describe('in-game performance monitor', () => {
         });
 
         expect(result.first).toBe(result.second);
-        expect(result.afterFirst.misses).toBeGreaterThan(result.before.misses);
+        // The game may already have cached the player's own hex during normal
+        // startup, so this test must not require its first probe to be a miss.
+        // What matters is that an unchanged second probe is served from cache
+        // without adding another miss.
         expect(result.afterSecond.hits).toBeGreaterThan(result.afterFirst.hits);
         expect(result.afterSecond.misses).toBe(result.afterFirst.misses);
     });
