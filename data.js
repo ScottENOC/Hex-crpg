@@ -100,6 +100,18 @@ if (!window.__companionRelationshipsModuleLoaded) {
     document.write('<script src="companionRelationships.js?build=20260929-companion-relationships-v2"><\/script>');
 }
 
+// Important non-companions can now use the same conceptual relationship depth
+// without inheriting party membership. Their existing personal NPC standing is
+// retained as Approval; Trust/Familiarity/Friendship persist on the protagonist,
+// while Romance/Attraction only become live for characters whose authored
+// profile has actually been developed that far. The dialogue bridge lets
+// existing quest choices feed these memories without rewriting every tree.
+if (!window.__persistentCharacterRelationshipsModuleLoaded) {
+    window.__persistentCharacterRelationshipsModuleLoaded = true;
+    document.write('<script src="persistentCharacterRelationships.js?build=20260930-persistent-character-relationships-v1"><\/script>');
+    document.write('<script src="persistentCharacterDialogueHooks.js?build=20260930-persistent-character-dialogue-hooks-v1"><\/script>');
+}
+
 // Relationship progression is intentionally separate from the storage/
 // permission layer above: familiarity grows from unique personal conversations
 // and slow shared time, while trust moves only through explicit authored events.
