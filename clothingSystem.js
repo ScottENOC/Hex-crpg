@@ -2,7 +2,7 @@
 // Compatibility loader for the explicit garment-layer model.
 (() => {
   'use strict';
-  const BUILD=window.PRESENTATION_BUILD||'20261001-sprite-alignment-v1';
+  const BUILD=window.PRESENTATION_BUILD||'20261001-footwear-v1';
   const RETIRED_GARMENTS=new Set(['fine_tunic','noble_doublet','scholars_robe']);
 
   function load(src,key){
@@ -49,6 +49,7 @@
   load('clothingLayers.js','explicit-clothing-layers');
   load('equipmentAppearance.js','equipment-appearance');
   load('clothingInventoryUI.js','clothing-inventory-ui');
+  load('footwearSystem.js','footwear-system');
   load('seasonalClothing.js','seasonal-clothing');
   load('skirtClothing.js','skirt-clothing');
   load('pantsVariantFixes.js','pants-variant-fixes');
