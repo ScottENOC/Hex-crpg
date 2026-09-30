@@ -1,0 +1,1 @@
+Temporary CI trigger for the 2026-10-01 full-suite validation of the development branch. No game code or test behaviour is changed.
