@@ -77,13 +77,18 @@ test.describe('monster art: distinct sprites and dialogue portraits', () => {
 
     test('showDialogue gives a monster with customImage its own portrait instead of the elf.png fallback', async ({ page }) => {
         await createCharacter(page, { campaign: '1' });
-        const result = await page.evaluate(() => {
+        await page.evaluate(() => {
             const harpy = window.createMonster('harpy', { q: 0, r: 0 });
             window.showDialogue(harpy, 'test line');
-            const portrait = document.getElementById('dialogue-portrait');
-            const img = portrait.querySelector('img');
-            return { src: img ? img.src : null };
         });
-        expect(result.src).toContain('harpy.svg');
+        // Portrait assignment can complete asynchronously under the speculative
+        // asset loader. Test the eventual visible portrait rather than reading
+        // the img element in the same JavaScript turn as showDialogue().
+        await page.waitForFunction(() => {
+            const img = document.querySelector('#dialogue-portrait img');
+            return !!img?.src && img.src.includes('harpy.svg');
+        }, null, { timeout: 5000 });
+        const src = await page.locator('#dialogue-portrait img').getAttribute('src');
+        expect(src).toContain('harpy.svg');
     });
 });
