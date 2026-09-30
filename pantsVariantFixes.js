@@ -3,13 +3,14 @@
 // trousers source art and the skirt's extra shape parameters.
 (() => {
   'use strict';
-  const BUILD=window.PRESENTATION_BUILD||'20260930-pants-variants-v1';
+  const BUILD=window.PRESENTATION_BUILD||'20260930-pants-variants-v2';
   const TROUSERS_ID='pants_trousers';
   const SKIRT_ID='pants_skirt';
   const SKIRT_WIDTH_SCALE=.85;
   const TROUSERS_RENDER_MAX=256;
   const images=new Map();
   const rendered=new WeakMap();
+  const equippedSkirtInstances=new WeakMap();
   let installed=false;
 
   const clone=v=>v==null?v:JSON.parse(JSON.stringify(v));
@@ -19,27 +20,50 @@
     shape.flare=Math.max(0,Math.min(.30,Number(shape.flare??.15)));
     return shape;
   }
+  function sameShape(a,b){
+    return !!a&&!!b&&Math.abs(Number(a.length)-Number(b.length))<1e-6&&Math.abs(Number(a.flare)-Number(b.flare))<1e-6;
+  }
 
   function syncPhysicalShapes(e){
     if(!e)return;
     e.clothingShape=e.clothingShape&&typeof e.clothingShape==='object'?e.clothingShape:{};
     const skirts=(e.physicalEquipment||[]).filter(x=>x?.itemId===SKIRT_ID),wearsSkirt=e?.equipped?.pants===SKIRT_ID;
-    if(!skirts.length&&!wearsSkirt)return;
+    if(!skirts.length&&!wearsSkirt){equippedSkirtInstances.delete(e);return;}
+
     let existing=e.clothingShape[SKIRT_ID];
     if(!existing&&window.skirtClothing?.ensureShape)existing=window.skirtClothing.ensureShape(e);
     const fallback=normaliseShape(clone(existing)||{length:.62,flare:.15});
+
+    // Every physical skirt owns its own shape, just as it owns its own colour.
     for(const inst of skirts){
       inst.appearance=inst.appearance||{};
       if(!inst.appearance.clothingShape)inst.appearance.clothingShape=clone(fallback);
       normaliseShape(inst.appearance.clothingShape);
     }
+
     const equipped=e.equippedInstances?.pants;
     if(wearsSkirt&&equipped?.itemId===SKIRT_ID){
       equipped.appearance=equipped.appearance||{};
       if(!equipped.appearance.clothingShape)equipped.appearance.clothingShape=clone(fallback);
-      e.clothingShape[SKIRT_ID]=normaliseShape(equipped.appearance.clothingShape);
-    }else if(skirts.length&&!e.clothingShape[SKIRT_ID]){
-      e.clothingShape[SKIRT_ID]=fallback;
+      normaliseShape(equipped.appearance.clothingShape);
+
+      const previous=equippedSkirtInstances.get(e);
+      if(previous!==equipped){
+        // A newly equipped skirt restores its own saved shape into the legacy
+        // entity field used by the world renderer and existing slider controls.
+        e.clothingShape[SKIRT_ID]=clone(equipped.appearance.clothingShape);
+        equippedSkirtInstances.set(e,equipped);
+      }else{
+        // While the same physical skirt remains equipped, slider edits land in
+        // e.clothingShape first. Mirror those edits back into the instance so
+        // save data, stacking and inventory previews all see the new shape.
+        const local=normaliseShape(clone(e.clothingShape[SKIRT_ID])||clone(equipped.appearance.clothingShape));
+        if(!sameShape(local,equipped.appearance.clothingShape))equipped.appearance.clothingShape=clone(local);
+        e.clothingShape[SKIRT_ID]=clone(equipped.appearance.clothingShape);
+      }
+    }else{
+      equippedSkirtInstances.delete(e);
+      if(skirts.length&&!e.clothingShape[SKIRT_ID])e.clothingShape[SKIRT_ID]=fallback;
     }
   }
 
@@ -52,7 +76,12 @@
       const retry=attempt?`&assetRetry=${attempt}-${Date.now()}`:'';
       img.src=`${src}${sep}build=${encodeURIComponent(BUILD)}${retry}`;
     };
-    img.addEventListener('load',()=>{window.drawMap?.();window.renderEntities?.();window.refreshDirectionalTurnPortraits?.();});
+    img.addEventListener('load',()=>{
+      window.drawMap?.();
+      window.renderEntities?.();
+      window.refreshDirectionalTurnPortraits?.();
+      window.renderEquipmentInterface?.();
+    });
     img.addEventListener('error',()=>{if(attempt>=retryDelays.length)return;const delay=retryDelays[attempt++];setTimeout(assign,delay);});
     images.set(src,img);assign();return img;
   }
@@ -100,6 +129,14 @@
     const result={canvas,crop};per.set(key,result);return result;
   }
 
+  function getTrousersPreview(colour){
+    const cs=window.clothingSystem,spec=cs?.getItemSpec?.(TROUSERS_ID),part=spec?.layers?.[0];
+    if(!part)return null;
+    const src=sourceFor(part,'front'),img=load(src);
+    if(!ready(img))return null;
+    return renderTrousersSource(img,colour||part.defaultColor||{});
+  }
+
   function drawTrousers(ctx,e,v,bounds){
     const cs=window.clothingSystem,spec=cs?.getItemSpec?.(TROUSERS_ID),part=spec?.layers?.[0];
     if(!part||e?.displayClothes===false||window.equipmentAppearanceSystem?.isSlotVisible?.(e,'pants')===false)return false;
@@ -135,5 +172,5 @@
   }
   const timer=setInterval(()=>{tick();if(installed)clearInterval(timer);},50);
   if(document.readyState==='complete')tick();else window.addEventListener('load',tick,{once:true});
-  window.pantsVariantFixes={build:BUILD,syncPhysicalShapes,drawTrousers};
+  window.pantsVariantFixes={build:BUILD,syncPhysicalShapes,drawTrousers,getTrousersPreview};
 })();
