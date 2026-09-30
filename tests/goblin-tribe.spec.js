@@ -29,14 +29,14 @@ test.describe('the Skarn-tooth goblin camp', () => {
                 allNeutralByDefault: window.entities.filter(e => ['Chief Skarnub', 'Nix Sharpear', 'Gralk the Bonecaster'].includes(e.name)).every(e => e.side === 'neutral'),
             };
         });
-        expect(result.distanceFromCrossroads).toBeGreaterThan(120); // "a long way" — 1.5 world-hexes out on the east road
+        expect(result.distanceFromCrossroads).toBeGreaterThan(120);
         expect(result.found).toEqual({ 'Chief Skarnub': true, 'Nix Sharpear': true, 'Gralk the Bonecaster': true, 'Ser Aldric Thorne': true });
         expect(result.guardCount).toBeGreaterThanOrEqual(3);
         expect(result.dirtAtCenter).toBe('Dirt');
         expect(result.hasHuts).toBe(true);
         expect(result.hasChiefHut).toBe(true);
         expect(result.chiefFaction).toBe('goblin_tribe');
-        expect(result.allNeutralByDefault).toBe(true); // assault/stealth/diplomacy all still open
+        expect(result.allNeutralByDefault).toBe(true);
     });
 
     test('Elder Marta only introduces the goblin threat after 2+ Hollowmere quests are completed', async ({ page }) => {
@@ -114,7 +114,7 @@ test.describe('goblin tribe resolution paths', () => {
         const nixMessage = await page.evaluate(() => document.getElementById('dialogue-message').innerText);
         expect(nixMessage.toLowerCase()).toContain('killed him');
 
-        await page.click('#dialogue-options button'); // "Take your people and go."
+        await page.click('#dialogue-options button');
         const result = await page.evaluate(() => {
             const aldric = window.entities.find(e => e.name === 'Ser Aldric Thorne');
             const aldricState = window.aldricIndependentRecruitment.state();
@@ -139,7 +139,7 @@ test.describe('goblin tribe resolution paths', () => {
         await page.evaluate(() => {
             const chief = window.entities.find(e => e.name === 'Chief Skarnub');
             window.handleChiefAssassination(chief);
-            window.checkGoblinAssaultResolution(); // should no-op — diedByAssassination guards it
+            window.checkGoblinAssaultResolution();
         });
         const resolution = await page.evaluate(() => window.questLog.find(q => q.id === 'goblin_threat').resolution);
         expect(resolution).toBeUndefined();
@@ -147,9 +147,9 @@ test.describe('goblin tribe resolution paths', () => {
 
     test('goblin-reputation diplomacy: enough favors unlock a peaceful departure and frees Aldric without silently recruiting him', async ({ page }) => {
         await page.evaluate(() => window.npcDialogueTrees.chief_skarnub(window.entities.find(e => e.name === 'Chief Skarnub')));
-        await page.click('#dialogue-options button'); // "I could help you, for the right price."
-        await page.click('#dialogue-options button'); // "What do you need?"
-        await page.click('#dialogue-options button'); // "Scout the human village's patrols for you."
+        await page.click('#dialogue-options button');
+        await page.click('#dialogue-options button');
+        await page.click('#dialogue-options button');
 
         const afterFavor = await page.evaluate(() => ({
             goblin: window.factions.goblin_tribe.standing,
@@ -159,14 +159,12 @@ test.describe('goblin tribe resolution paths', () => {
         expect(afterFavor.goblin).toBeGreaterThan(0);
         expect(afterFavor.human).toBeLessThan(5);
 
-        // Push goblin standing to the diplomacy threshold directly (repeating the favor
-        // dialogue flow many times would be equivalent but slower/flakier to drive).
         await page.evaluate(() => window.adjustReputation(window.factions.goblin_tribe, 40, 0));
         await page.evaluate(() => window.npcDialogueTrees.chief_skarnub(window.entities.find(e => e.name === 'Chief Skarnub')));
         const offerMsg = await page.evaluate(() => document.getElementById('dialogue-message').innerText);
         expect(offerMsg.toLowerCase()).toContain('move on');
 
-        await page.click('#dialogue-options button'); // "Agreed. Take what you need and go."
+        await page.click('#dialogue-options button');
         const result = await page.evaluate(() => {
             const aldric = window.entities.find(e => e.name === 'Ser Aldric Thorne');
             const aldricState = window.aldricIndependentRecruitment.state();
@@ -190,8 +188,8 @@ test.describe('goblin tribe resolution paths', () => {
     test('betrayal: helping the goblins raid Hollowmere devastates human reputation and makes recruited Aldric leave immediately', async ({ page }) => {
         await page.evaluate(() => {
             window.rescuePaladin();
-            window.recruitAldric(); // betrayal behaviour only applies once he has actually chosen to join
-            window.adjustReputation(window.factions.goblin_tribe, 25, 0); // clears the raid option's rep gate
+            window.recruitAldric();
+            window.adjustReputation(window.factions.goblin_tribe, 25, 0);
         });
         const before = await page.evaluate(() => ({ human: window.factions.silverhart_kingdom.standing }));
         const result = await page.evaluate(() => {
@@ -207,7 +205,7 @@ test.describe('goblin tribe resolution paths', () => {
         expect(result.resolution).toBe('betrayal');
         expect(result.human).toBeLessThan(before.human - 30);
         expect(result.attitude).toBe(0);
-        expect(result.paladinInParty).toBe(false); // he leaves immediately, regardless of prior attitude
+        expect(result.paladinInParty).toBe(false);
     });
 });
 
@@ -221,7 +219,7 @@ test.describe('Ser Aldric Thorne: rescue, construction, and attitude', () => {
             window.npcDialogueTrees.ser_aldric_captive(window.entities.find(e => e.name === 'Ser Aldric Thorne' && e.tiedUp));
         });
         await page.waitForFunction(() => document.getElementById('dialogue-modal').style.display === 'block');
-        await page.getByRole('button', { name: "I'll free you now." }).click();
+        await page.getByRole('button', { name: /free you now/i }).click();
 
         const freed = await page.evaluate(() => ({
             inParty: window.party.some(p => p.name === 'Ser Aldric Thorne'),
@@ -232,7 +230,7 @@ test.describe('Ser Aldric Thorne: rescue, construction, and attitude', () => {
         expect(freed.tiedUp).toBe(false);
         expect(freed.stage).toBe('camp');
 
-        await page.getByRole('button', { name: 'Come with me.' }).click();
+        await page.getByRole('button', { name: /come with me/i }).click();
         const paladin = await page.evaluate(() => {
             const p = window.party.find(p2 => p2.name === 'Ser Aldric Thorne');
             const ent = window.entities.find(e => e.name === 'Ser Aldric Thorne');
@@ -263,10 +261,10 @@ test.describe('Ser Aldric Thorne: rescue, construction, and attitude', () => {
             window.questLog.push({ id: 'goblin_threat', title: 'The Skarn-tooth Tribe', giver: 'Elder Marta Wynfield', status: 'active', description: '' });
             window.companionAttitude['Ser Aldric Thorne'] = 60;
 
-            window.tickCompanionPatience(24 * 3600); // 1 in-game day
+            window.tickCompanionPatience(24 * 3600);
             const after1Day = window.companionAttitude['Ser Aldric Thorne'];
 
-            window.tickCompanionPatience(24 * 3600 * 500); // 500 more in-game days — should exhaust patience
+            window.tickCompanionPatience(24 * 3600 * 500);
             return {
                 after1Day,
                 afterALongTime: window.companionAttitude['Ser Aldric Thorne'],
@@ -274,7 +272,7 @@ test.describe('Ser Aldric Thorne: rescue, construction, and attitude', () => {
             };
         });
         expect(result.after1Day).toBeLessThan(60);
-        expect(result.after1Day).toBeGreaterThan(58); // "very slow" — not a meaningful drop in one day
+        expect(result.after1Day).toBeGreaterThan(58);
         expect(result.afterALongTime).toBe(0);
         expect(result.stillInParty).toBe(false);
     });
@@ -288,19 +286,19 @@ test.describe('Ser Aldric Thorne: rescue, construction, and attitude', () => {
             window.tickCompanionPatience(24 * 3600 * 1000);
             return window.companionAttitude['Ser Aldric Thorne'];
         });
-        expect(result).toBe(60); // unchanged — resolved, nothing left to be impatient about
+        expect(result).toBe(60);
     });
 
     test('regression: attitude decay also stops once the chief is assassinated, even before the succession conversation with Nix happens', async ({ page }) => {
         const result = await page.evaluate(() => {
             window.rescuePaladin();
             window.recruitAldric();
-            window.questLog = [{ id: 'goblin_threat', status: 'active', chiefAssassinated: true }]; // no .resolution yet
+            window.questLog = [{ id: 'goblin_threat', status: 'active', chiefAssassinated: true }];
             window.companionAttitude['Ser Aldric Thorne'] = 60;
             window.tickCompanionPatience(24 * 3600 * 1000);
             return window.companionAttitude['Ser Aldric Thorne'];
         });
-        expect(result).toBe(60); // the goblin problem is effectively dealt with; decay isn't a debt to pay off later
+        expect(result).toBe(60);
     });
 
     test('the attitude meter is visible in the Quest Log UI once Aldric is recruited', async ({ page }) => {
