@@ -12,6 +12,10 @@
     const HUMAN_RENDER_ASPECT = 0.48;
     const previousHex = new WeakMap();
     const trimCache = new WeakMap();
+    // Several humanoid rigs intentionally share the same authored hair paths.
+    // Keep one HTMLImageElement per source so a failed request/retry cannot leave
+    // one race's private copy broken while another copy of the same file succeeds.
+    const rendererImageCache = new Map();
     let legacyDrawPlayerCharacter = null;
     let installed = false;
     let creatorLegacy = null;
@@ -231,7 +235,11 @@
 
     function loadImage(src) {
         if (typeof Image === 'undefined') return null;
+        if (rendererImageCache.has(src)) return rendererImageCache.get(src);
         const image = new Image();
+        // Cache before assigning src so every consumer immediately shares the same
+        // in-flight request and, importantly, the same later retry/recovered image.
+        rendererImageCache.set(src, image);
         const assetBuild = encodeURIComponent(window.PRESENTATION_BUILD || 'direct-humanoid-assets-v1');
         const retryDelays = [100, 350, 900];
         let attempt = 0;
