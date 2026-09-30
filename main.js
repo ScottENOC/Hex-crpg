@@ -71,9 +71,6 @@ document.addEventListener("DOMContentLoaded", () => {
             {key: 'arenaannouncer', src: 'images/arenaannouncer.png'},
             {key: 'arenamercenary', src: 'images/arenamercenary.png'},
             {key: 'arenashopkeeper', src: 'images/arenashopkeeper.png'},
-            {key: 'playerBase', src: 'images/elf.png'},
-            {key: 'leatherArmor', src: 'images/elfleatherarmour.png'},
-            {key: 'chainArmor', src: 'images/elfchainarmour.png'},
             {key: 'monsterDefault', src: 'images/goblin.png'},
             {key: 'orcBase', src: 'images/orc.png'},
             {key: 'humanLight', src: 'images/humanlightarmour.png'},
@@ -216,6 +213,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
     }
+    window.addEventListener('click', handleMenuDropdownToggle);
 
     // .dropdown-content has no explicit left/right, so it inherits whatever
     // static position its trigger button ends up at in the wrapped #top-menu
