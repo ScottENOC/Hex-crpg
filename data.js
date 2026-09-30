@@ -177,6 +177,15 @@ if (!window.__ilsaWatchCaptainModuleLoaded) {
     document.write('<script src="ilsaWatchCaptain.js?build=20260930-ilsa-watch-captain-v1"><\/script>');
 }
 
+// Thrain already has enough authored story that another quest would be noise.
+// His persistent pass joins the two runesmithing trust/teaching quests to his
+// Last Hold counsel: dwarven tradition is a chain of custody, not a museum piece
+// or a blood-based exemption from standards, and outsiders can earn stewardship.
+if (!window.__thrainRuneKeeperModuleLoaded) {
+    window.__thrainRuneKeeperModuleLoaded = true;
+    document.write('<script src="thrainRuneKeeper.js?build=20260930-thrain-rune-keeper-v1"><\/script>');
+}
+
 // Relationship progression is intentionally separate from the storage/
 // permission layer above: familiarity grows from unique personal conversations
 // and slow shared time, while trust moves only through explicit authored events.
