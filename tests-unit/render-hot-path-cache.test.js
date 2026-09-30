@@ -8,7 +8,9 @@ const read = file => fs.readFileSync(path.join(ROOT, file), 'utf8');
 
 test('runtime hot-path cache is loaded by the presentation bundle', () => {
   const name = read('name.js');
-  assert.match(name, /const PRESENTATION_BUILD = '[^']+';/);
+  const index = read('index.html');
+  assert.match(index, /<meta name="app-build" content="\d{8}-[a-z0-9-]+">/);
+  assert.ok(name.includes('document.querySelector(\'meta[name="app-build"]\')?.content'));
   assert.ok(name.includes('window.PRESENTATION_BUILD = PRESENTATION_BUILD;'));
   assert.ok(name.includes("['renderHotPathCache.js','renderHotPathCache']"));
 });

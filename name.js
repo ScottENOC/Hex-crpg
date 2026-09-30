@@ -39,12 +39,11 @@ window.generateName = window.getRandomName;
     window.randomizeCharacterAppearance({sync:false});
 })();
 
-const PRESENTATION_BUILD = '20260930-shared-asset-manager-v1';
+const PRESENTATION_BUILD = document.querySelector('meta[name="app-build"]')?.content || 'unversioned-dev-build';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
-const presentationBuildMeta=document.querySelector('meta[name="app-build"]');if(presentationBuildMeta)presentationBuildMeta.content=PRESENTATION_BUILD;
 
-async function fetchRemotePresentationBuild(){const response=await fetch(`name.js?app-update-check=${Date.now()}`,{cache:'no-store'});if(!response.ok)return null;const source=await response.text();const match=source.match(/const\s+PRESENTATION_BUILD\s*=\s*['\"]([^'\"]+)['\"]/);return match?.[1]||null;}
+async function fetchRemotePresentationBuild(){const response=await fetch(`index.html?app-update-check=${Date.now()}`,{cache:'no-store'});if(!response.ok)return null;const source=await response.text();const match=source.match(/<meta\s+name=["']app-build["']\s+content=["']([^"']+)["']/i);return match?.[1]||null;}
 window.fetchRemotePresentationBuild=fetchRemotePresentationBuild;
 let appBuildCheckInFlight=null;
 window.checkForAppUpdate=function({reload=false}={}){if(appBuildCheckInFlight)return appBuildCheckInFlight;appBuildCheckInFlight=(async()=>{try{const remoteBuild=await fetchRemotePresentationBuild();if(!remoteBuild||remoteBuild===PRESENTATION_BUILD){window.__appUpdateAvailable=null;return false;}window.__appUpdateAvailable=remoteBuild;window.dispatchEvent(new CustomEvent('appupdateavailable',{detail:{build:remoteBuild}}));if(reload){if('caches'in window){const keys=await caches.keys();await Promise.all(keys.map(key=>caches.delete(key)));}const target=new URL(window.location.href);target.searchParams.set('build',remoteBuild);window.location.replace(target.href);}return true;}catch(err){console.warn('App update check failed',err);return false;}finally{appBuildCheckInFlight=null;}})();return appBuildCheckInFlight;};
@@ -56,8 +55,8 @@ if('serviceWorker'in navigator){navigator.serviceWorker.register(`sw.js?build=${
 
 (() => {
     const scripts = [
-        // assetLoadScheduler.js is installed synchronously by data.js before any
-        // other game script. Do not request it a second time here.
+        // assetLoadScheduler.js is an explicit parser-time entry in index.html,
+        // before data.js and all dynamically installed render modules.
         ['movementInputFix.js','movementInputFix'],
         ['spriteRigging.js','spriteRigging'],
         ['scenario5ArmourLab.js','scenario5ArmourLab'],

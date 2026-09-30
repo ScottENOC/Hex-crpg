@@ -1,13 +1,7 @@
 // data.js
 
-// data.js is the first game script in index.html. Install the asset scheduler
-// synchronously here so every later Image.src assignment is redirected,
-// prioritised and concurrency-limited before any renderer/game code can run.
-// document.write is safe in this narrow parser-time use: this file is loaded by
-// a normal blocking <script> while the document is still being parsed.
-if (!window.__assetLoadSchedulerInstalled) {
-    document.write('<script src="assetLoadScheduler.js?v=3"><\/script>');
-}
+// assetLoadScheduler.js is loaded explicitly by index.html before data.js.
+// Standalone harnesses that need managed art must load the scheduler explicitly too.
 
 const raceData = {
     human: {

@@ -4,7 +4,7 @@
 (() => {
     'use strict';
 
-    const SCHEDULER_VERSION = '5';
+    const SCHEDULER_VERSION = '6';
     if (window.__assetLoadSchedulerInstalled && window.__assetLoadSchedulerVersion === SCHEDULER_VERSION) return;
     // index.html loads this before the other game scripts in a normal page load.
     if (window.__assetLoadSchedulerInstalled) return;
@@ -171,6 +171,7 @@
     const queue = [];
     const phaseCritical = new Set();
     const managerRecords = new Map();
+    const domBindingTokens = new WeakMap();
 
     function normalise(src) {
         try {
@@ -192,7 +193,7 @@
     }
 
     function currentBuild() {
-        return window.PRESENTATION_BUILD || document.querySelector('meta[name="app-build"]')?.content || 'asset-manager-v4';
+        return document.querySelector('meta[name="app-build"]')?.content || window.PRESENTATION_BUILD || 'asset-manager-v6';
     }
 
     function managedUrl(value, {retry=0, freshReason='retry'}={}) {
@@ -403,6 +404,30 @@
         return loadManaged(value,opts);
     }
 
+    function bindManagedElement(element,value,{priority=-20,onError=null}={}) {
+        if (!(element instanceof HTMLImageElement)) throw new TypeError('assetManager.bind expects an HTMLImageElement');
+        if (!value) return element;
+        const token=Symbol('managed-dom-image');
+        domBindingTokens.set(element,token);
+        element.dataset.assetManagerPath=canonicalPath(value);
+        loadManaged(value,{priority,immediate:true}).then(source=>{
+            if(domBindingTokens.get(element)!==token)return;
+            const resolved=source.currentSrc || nativeSrc.get.call(source);
+            if(resolved) nativeSrc.set.call(element,resolved);
+        }).catch(error=>{
+            if(domBindingTokens.get(element)!==token)return;
+            element.removeAttribute('src');
+            if(typeof onError==='function')onError(error,element);
+        });
+        return element;
+    }
+
+    function createManagedDOMImage(value=null,opts={}) {
+        const element=document.createElement('img');
+        if(value)bindManagedElement(element,value,opts);
+        return element;
+    }
+
     async function preloadManaged(values,opts={}) {
         return Promise.allSettled([...new Set(values.map(recordKey))].map(path=>loadManaged(path,opts)));
     }
@@ -421,6 +446,8 @@
         load:loadManaged,
         wait:waitManaged,
         whenReady,
+        bind:bindManagedElement,
+        createDOMImage:createManagedDOMImage,
         preload:preloadManaged,
         canonicalPathFor:canonicalPath,
         urlFor:managedUrl,
