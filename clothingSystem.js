@@ -2,7 +2,7 @@
 // Compatibility loader for the explicit garment-layer model.
 (() => {
   'use strict';
-  const BUILD='20260930-clothing-v12';
+  const BUILD='20260930-clothing-v13';
 
   function load(src,key){
     const attr=`data-${key}`;
@@ -25,6 +25,7 @@
   load('clothingInventoryUI.js','clothing-inventory-ui');
   load('seasonalClothing.js','seasonal-clothing');
   load('skirtClothing.js','skirt-clothing');
+  load('fashionMarket.js','silverhart-fashion-market');
 
   window.applyClothingPreset=function(entity,itemId){
     if(!entity||!itemId) return;
