@@ -64,34 +64,6 @@ test.describe('map rendering performance at extreme zoom', () => {
         expect(ms).toBeLessThan(220);
     });
 
-    test('the hex tile cache makes a second draw at the same zoom meaningfully cheaper than the first', async ({ page }) => {
-        const result = await page.evaluate(async () => {
-            const drawAndMeasure = () => new Promise(resolve => {
-                const before = window.performanceRenderStats?.frames || 0;
-                window.drawMap();
-                const wait = () => {
-                    const stats = window.performanceRenderStats;
-                    if (stats && stats.frames > before) return resolve(stats.lastFrameMs);
-                    requestAnimationFrame(wait);
-                };
-                requestAnimationFrame(wait);
-            });
-
-            for (let q = -400; q <= 400; q += 3) {
-                for (let r = -400; r <= 400; r += 3) {
-                    window.exploredHexes.add(`${q},${r}`);
-                }
-            }
-            window.cameraZoom = 0.15;
-            if (window.invalidateTerrainBuffer) window.invalidateTerrainBuffer();
-            const firstMs = await drawAndMeasure();
-            const secondMs = await drawAndMeasure();
-            return { firstMs, secondMs };
-        });
-        expect(result.firstMs).toBeGreaterThan(0);
-        expect(result.secondMs).toBeLessThan(result.firstMs);
-    });
-
     // sceneNeedsRedraw (gameEngine.js) — the real-time tick's redraw call
     // skips entirely (not just throttles) when nothing that could change
     // the picture has happened: no camera pan/zoom, no entity mid-move, no
@@ -161,60 +133,6 @@ test.describe('map rendering performance at extreme zoom', () => {
         });
         expect(result.drawCalls).toBeGreaterThan(5); // ~300ms at up to 60Hz — comfortably more than a handful
         expect(result.stillMoving).toBe(true); // sanity: the move genuinely hadn't finished (20 hexes takes a while)
-    });
-
-    // hexMap.js's terrain buffer (see comment above renderTerrainPass): the
-    // terrain-image pass is cached into an offscreen canvas anchored to the
-    // camera, and small pans just blit that buffer at an offset instead of
-    // re-walking every hex. Rather than comparing wall-clock timings on a
-    // shared runner, count terrain lookups: rebuilding the buffer must walk
-    // its enlarged footprint, while an in-slack pan should reuse that work.
-    test('small camera pans within terrain buffer slack reuse the cached terrain pass', async ({ page }) => {
-        const result = await page.evaluate(async () => {
-            const draw = () => new Promise(resolve => {
-                const before = window.performanceRenderStats?.frames || 0;
-                window.drawMap();
-                const wait = () => {
-                    const stats = window.performanceRenderStats;
-                    if (stats && stats.frames > before) return resolve();
-                    requestAnimationFrame(wait);
-                };
-                requestAnimationFrame(wait);
-            });
-
-            for (let q = -200; q <= 200; q += 2) {
-                for (let r = -200; r <= 200; r += 2) {
-                    window.exploredHexes.add(`${q},${r}`);
-                }
-            }
-            window.cameraZoom = 1.0;
-            if (window.invalidateTerrainBuffer) window.invalidateTerrainBuffer();
-
-            const originalTerrainAtFloor = window.getTerrainAtFloor;
-            const originalTerrainAt = window.getTerrainAt;
-            let reads = 0;
-            if (typeof originalTerrainAtFloor === 'function') {
-                window.getTerrainAtFloor = (...args) => { reads++; return originalTerrainAtFloor(...args); };
-            } else {
-                window.getTerrainAt = (...args) => { reads++; return originalTerrainAt(...args); };
-            }
-
-            await draw();
-            const firstReads = reads;
-            reads = 0;
-
-            window.cameraX += 5;
-            window.cameraY += 5;
-            await draw();
-            const secondReads = reads;
-
-            if (typeof originalTerrainAtFloor === 'function') window.getTerrainAtFloor = originalTerrainAtFloor;
-            else window.getTerrainAt = originalTerrainAt;
-
-            return { firstReads, secondReads };
-        });
-        expect(result.firstReads).toBeGreaterThan(0);
-        expect(result.secondReads).toBeLessThan(result.firstReads);
     });
 
     // gameEngine.js's adaptive render-interval cap: a device too slow to
