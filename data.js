@@ -6,7 +6,7 @@
 // document.write is safe in this narrow parser-time use: this file is loaded by
 // a normal blocking <script> while the document is still being parsed.
 if (!window.__assetLoadSchedulerInstalled) {
-    document.write('<script src="assetLoadScheduler.js?v=2"><\/script>');
+    document.write('<script src="assetLoadScheduler.js?v=3"><\/script>');
 }
 
 const raceData = {
