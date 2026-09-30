@@ -37,6 +37,12 @@ jobs:
         run: npx playwright test tests/asset-load-scheduler.spec.js tests/app-update.spec.js
       - name: Commit validated source
         run: |
+          python - <<'PY'
+          from pathlib import Path
+          path=Path('ui.js')
+          lines=path.read_text().splitlines()
+          path.write_text('\n'.join(line.rstrip() for line in lines)+'\n')
+          PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add index.html spriteRigPreview.html assetLoadScheduler.js data.js name.js ui.js equipmentInterface.js tests-unit/asset-manager-coverage.test.js tests-unit/render-hot-path-cache.test.js tests-unit/clothing-render-regression.test.js tests/app-update.spec.js tests/asset-load-scheduler.spec.js
