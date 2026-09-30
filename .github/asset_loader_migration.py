@@ -240,7 +240,7 @@ write('ui.js', ui)
 write(
     'tests-unit/asset-manager-coverage.test.js',
     textwrap.dedent(
-        r'''\
+        r'''
         const test = require('node:test');
         const assert = require('node:assert/strict');
         const fs = require('node:fs');
