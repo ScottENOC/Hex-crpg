@@ -34,18 +34,15 @@
     }
 
     function loadSource(src) {
-        if (!src) return null;
-        if (sourceImages.has(src)) return sourceImages.get(src);
-        const img = new Image();
-        sourceImages.set(src, img);
-        img.addEventListener('load', requestRedraw);
-        img.addEventListener('error', () => console.warn('Shirt hot-path asset failed:', src));
-        const separator = src.includes('?') ? '&' : '?';
-        img.src = `${src}${separator}build=${encodeURIComponent(root.PRESENTATION_BUILD || BUILD)}`;
-        return img;
-    }
+    if (!src) return null;
+    if (sourceImages.has(src)) return sourceImages.get(src);
+    const img = window.assetManager.request(src);
+    sourceImages.set(src, img);
+    window.assetManager.whenReady(src).then(requestRedraw).catch(() => console.warn('Shirt hot-path asset failed:', src));
+    return img;
+  }
 
-    function imageReady(img) {
+  function imageReady(img) {
         return !!img && ((img.complete && img.naturalWidth > 0 && img.naturalHeight > 0)
             || (img.width > 0 && img.height > 0));
     }

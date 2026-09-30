@@ -1,13 +1,12 @@
 // assetLoadScheduler.js
-// Shared image loading, phase-aware preload gates and a temporary compatibility
-// path redirector for legacy callers. The redirector deliberately does NOT own
-// retries: AssetManager owns network/cache/retry work for all local images.
+// Shared image loading and phase-aware preload gates. AssetManager is the sole
+// owner of local image network requests, decoding, cache reuse and retries.
 (() => {
     'use strict';
 
-    const SCHEDULER_VERSION = '4';
+    const SCHEDULER_VERSION = '5';
     if (window.__assetLoadSchedulerInstalled && window.__assetLoadSchedulerVersion === SCHEDULER_VERSION) return;
-    // data.js loads this before any other game script in a normal page load.
+    // index.html loads this before the other game scripts in a normal page load.
     if (window.__assetLoadSchedulerInstalled) return;
     window.__assetLoadSchedulerInstalled = true;
     window.__assetLoadSchedulerVersion = SCHEDULER_VERSION;
@@ -170,10 +169,8 @@
     let pumpScheduled = false;
     let startGateRunning = false;
     const queue = [];
-    const deferred = [];
     const phaseCritical = new Set();
     const managerRecords = new Map();
-    const assignmentVersions = new WeakMap();
 
     function normalise(src) {
         try {
@@ -192,19 +189,6 @@
     function canonicalPath(value) {
         const requested = normalise(value);
         return LEGACY_ASSET_REDIRECTS.get(requested) || requested;
-    }
-
-    function isLocalAsset(value) {
-        const raw=String(value||'');
-        if (/^(?:data:|blob:)/i.test(raw)) return false;
-        try {
-            const url=new URL(raw,document.baseURI);
-            const baseDir=new URL('.',document.baseURI);
-            const basePath=baseDir.pathname.endsWith('/')?baseDir.pathname:`${baseDir.pathname}/`;
-            return url.origin===baseDir.origin && url.pathname.startsWith(basePath);
-        } catch (_) {
-            return true;
-        }
     }
 
     function currentBuild() {
@@ -316,32 +300,15 @@
         schedulePump();
     }
 
-    function dispatchSyntheticError(img,path,reason) {
-        queueMicrotask(() => {
-            const event = new Event('error');
-            event.assetLoadSchedulerReason = reason;
-            event.assetPath = path;
-            try { img.dispatchEvent(event); } catch (_) {}
-        });
-    }
-
-    function deferImage(img, value, requestedPath, canonical) {
-        const previous = deferred.findIndex(entry => entry.img === img);
-        if (previous >= 0) deferred.splice(previous,1);
-        deferred.push({img,value,requestedPath,canonical});
-    }
-
-    function releaseDeferred(predicate = () => true) {
-        for (let i=deferred.length-1;i>=0;i--) {
-            const entry = deferred[i];
-            if (!predicate(entry.canonical)) continue;
-            deferred.splice(i,1);
-            queueImageAssignment(entry.img,entry.value,entry.requestedPath,entry.canonical);
-        }
+    function recordKey(value) {
+        const requested = normalise(value);
+        return SUPPRESSED.has(requested) ? requested : canonicalPath(value);
     }
 
     function recordFor(value) {
-        const path = canonicalPath(value);
+        const requested = normalise(value);
+        const suppressed = SUPPRESSED.has(requested);
+        const path = suppressed ? requested : canonicalPath(value);
         let record = managerRecords.get(path);
         if (record) return record;
         const image = new Image();
@@ -350,9 +317,13 @@
         promise.catch(() => {});
         record = {
             path,image,promise,resolve:resolvePromise,reject:rejectPromise,
-            status:'idle',queued:false,attempt:0,error:null,
+            status:suppressed?'suppressed':'idle',queued:false,attempt:0,error:null,
         };
         managerRecords.set(path,record);
+        if (suppressed) {
+            record.error = new Error(`Suppressed obsolete asset: ${requested}`);
+            record.reject(record.error);
+        }
         return record;
     }
 
@@ -402,7 +373,7 @@
 
     function requestManaged(value,{priority=null,immediate=false}={}) {
         const record=recordFor(value);
-        if (record.status==='ready' || record.status==='loading' || record.queued || record.status==='error') return record.image;
+        if (record.status==='ready' || record.status==='loading' || record.queued || record.status==='error' || record.status==='suppressed') return record.image;
         const start=() => {
             if (record.status!=='idle') return;
             record.queued=true;
@@ -424,12 +395,16 @@
         return ensureManagedStarted(value,opts).promise;
     }
 
+    function waitManaged(value) {
+        return recordFor(value).promise;
+    }
+
     function whenReady(value,opts={}) {
         return loadManaged(value,opts);
     }
 
     async function preloadManaged(values,opts={}) {
-        return Promise.allSettled([...new Set(values.map(canonicalPath))].map(path=>loadManaged(path,opts)));
+        return Promise.allSettled([...new Set(values.map(recordKey))].map(path=>loadManaged(path,opts)));
     }
 
     function releaseManagedDeferred(predicate=()=>true) {
@@ -444,51 +419,15 @@
         version:SCHEDULER_VERSION,
         request:requestManaged,
         load:loadManaged,
+        wait:waitManaged,
         whenReady,
         preload:preloadManaged,
         canonicalPathFor:canonicalPath,
         urlFor:managedUrl,
-        get(path){return managerRecords.get(canonicalPath(path))?.image || null;},
-        status(path){return managerRecords.get(canonicalPath(path))?.status || 'unrequested';},
+        get(path){return managerRecords.get(recordKey(path))?.image || null;},
+        status(path){return managerRecords.get(recordKey(path))?.status || 'unrequested';},
         get cacheSize(){return managerRecords.size;},
     };
-
-    // Temporary compatibility entrance for old `new Image(); image.src=...`
-    // callers. The shared manager performs the only network request/retry cycle;
-    // the caller's Image is pointed at the hot cached URL after that succeeds.
-    function queueImageAssignment(img, requestedValue, requestedPath, canonical) {
-        const version=(assignmentVersions.get(img)||0)+1;
-        assignmentVersions.set(img,version);
-        loadManaged(canonical,{priority:priorityFor(canonical),immediate:true}).then(shared => {
-            if (assignmentVersions.get(img)!==version) return;
-            const hotUrl=shared.currentSrc || shared.src || managedUrl(canonical === requestedPath ? requestedValue : canonical);
-            nativeSrc.set.call(img,hotUrl);
-        }).catch(() => {
-            if (assignmentVersions.get(img)!==version) return;
-            dispatchSyntheticError(img,canonical,'asset-manager-exhausted');
-        });
-    }
-
-    Object.defineProperty(HTMLImageElement.prototype, 'src', {
-        configurable:nativeSrc.configurable,
-        enumerable:nativeSrc.enumerable,
-        get:nativeSrc.get,
-        set(value) {
-            const img = this;
-            if (!isLocalAsset(value)) { nativeSrc.set.call(img,value); return; }
-            const requestedPath = normalise(value);
-            if (SUPPRESSED.has(requestedPath)) {
-                dispatchSyntheticError(img,requestedPath,'obsolete-unused-asset');
-                return;
-            }
-            const canonical = LEGACY_ASSET_REDIRECTS.get(requestedPath) || requestedPath;
-            if (!mayStartNow(canonical)) {
-                deferImage(img,value,requestedPath,canonical);
-                return;
-            }
-            queueImageAssignment(img,value,requestedPath,canonical);
-        },
-    });
 
     function hash(text) {
         let h=2166136261;
@@ -554,7 +493,7 @@
 
     function gameManifest() {
         const scenario = selectedCampaign()==='1' ? [...ARENA_CRITICAL,...ARENA_SOON] : [...CAMPAIGN2_NEARBY];
-        const deferredArt = deferred.map(entry=>entry.canonical).filter(path=>path?.startsWith('images/'));
+        const deferredArt = [...managerRecords.values()].filter(record=>record.status==='deferred').map(record=>record.path).filter(path=>path?.startsWith('images/'));
         return [...new Set([...currentCreatorCharacterAssets(true),...currentClothingAssets(true),...currentStartingEquipmentAssets(),...scenario,...deferredArt])];
     }
 
@@ -685,7 +624,6 @@
             if (!gateResult.complete) console.warn('Starting game with art assets still unavailable:',gateResult.failed);
             phase='game';
             beginGameplayLoading();
-            releaseDeferred();
             if (typeof window.startGame==='function') window.startGame();
             requestAnimationFrame(hideOverlay);
         } catch (error) {
@@ -726,7 +664,7 @@
         get gameStarted(){return gameStarted;},
         get phase(){return phase;},
         get queued(){return queue.length;},
-        get deferred(){return deferred.length;},
+        get deferred(){return [...managerRecords.values()].filter(record=>record.status==='deferred').length;},
         get active(){return active;},
         get cacheSize(){return managerRecords.size;},
     };
