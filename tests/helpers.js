@@ -11,6 +11,14 @@
  */
 async function createCharacter(page, { race = 'human', gender = 'male', cls = 'fighter', campaign = '2', difficulty = 'normal' } = {}) {
     await page.goto('/');
+
+    // The real UI is deliberately unavailable until the character-creator art
+    // gate has completed. Playwright can otherwise find/select form controls
+    // underneath the full-screen loading overlay before a human could interact
+    // with them, then race the creator gate against the gameplay gate. Apart
+    // from being unrealistic, doing that hundreds of times in parallel made
+    // CI spend most of its time waiting on overlapping image queues.
+    await page.waitForFunction(() => !window.__assetLoadScheduler || window.__assetLoadScheduler.phase === 'creator-ready');
     await page.waitForSelector('#race-select', { state: 'visible' });
     await page.selectOption('#race-select', race);
     await page.selectOption('#gender-select', gender);
@@ -19,6 +27,11 @@ async function createCharacter(page, { race = 'human', gender = 'male', cls = 'f
     const difficultySelect = page.locator('#difficulty-select');
     if (await difficultySelect.count()) await difficultySelect.selectOption(difficulty);
     await page.click('#createCharacterButton');
+
+    // startGame is now phase-gated on the selected character/scenario assets.
+    // Wait for that gate explicitly so failures point at loading rather than at
+    // an unrelated modal assertion later in the helper.
+    await page.waitForFunction(() => !window.__assetLoadScheduler || window.__assetLoadScheduler.phase === 'game');
     await page.waitForSelector('#character-screen-modal', { state: 'visible' });
     await page.click('#character-screen-modal .close-btn');
     await page.waitForFunction(() => window.entities && window.entities.length > 0);
