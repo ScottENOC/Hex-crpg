@@ -100,9 +100,10 @@ test('transparent underwear assets and alternate styles are wired as PNGs', () =
     excludes(layersSource, 'images/equipment/clothing/bra_front.jpg');
 });
 
-test('trousers use the current front and back PNG assets', () => {
+test('trousers use the current directional PNG assets', () => {
     const layersSource = read('clothingLayers.js');
-    contains(layersSource, "front:'images/equipment/clothing/pants_trousers.png'");
+    contains(layersSource, "front:'images/equipment/clothing/pants_trousers_front.png'");
+    contains(layersSource, "side:'images/equipment/clothing/pants_trousers_front.png'");
     contains(layersSource, "back:'images/equipment/clothing/pants_trousers_back.png'");
 });
 
