@@ -23,7 +23,7 @@ const items = {
     'nasal_helm': { id: 'nasal_helm', name: 'Nasal Helm', type: 'helmet', reduction: 1, buyPrice: 30 },
     'torch': { id: 'torch', name: 'Torch', type: 'weapon', subType: 'tool', damage: 0, range: 0, lightRadius: 10, canOffhand: true, buyPrice: 5 },
     
-    'wooden_shield': { id: 'wooden_shield', name: 'Wooden Shield', type: 'shield', reduction: 1, hands: 1, buyPrice: 20 },
+    'wooden_shield': { id: 'wooden_shield', name: 'Wooden Shield', type: 'shield', shieldVisual: 'round', reduction: 1, hands: 1, buyPrice: 20 },
 
     // Mining tool — a weak weapon in a pinch, but its real job is unlocking
     // ore-node harvesting for the whole party just by being carried (see
@@ -92,7 +92,7 @@ const items = {
     'stormcaller_spear': { id: 'stormcaller_spear', name: "Stormcaller Spear", type: 'weapon', subType: 'melee', damage: 1, range: 1, hands: 2, buyPrice: 450, lightRadius: 4, description: 'Crackles with faint static in a storm — sheds a little light besides.' },
     'nightowl_bow': { id: 'nightowl_bow', name: "Nightowl Bow", type: 'weapon', subType: 'ranged', damage: 1, range: 20, hands: 2, buyPrice: 400, skills: { 'keen_night_sight': 1 }, description: 'Strung with owl feathers; sharpens your eyes after dark.' },
     'featherweight_dagger': { id: 'featherweight_dagger', name: "Featherweight Dagger", type: 'weapon', subType: 'melee', damage: 1, range: 8, hands: 1, canOffhand: true, buyPrice: 220, skills: { 'silent_step': 1 }, description: "So light it barely disturbs the air — steps taken while it's drawn are hard to hear." },
-    'bulwark_shield': { id: 'bulwark_shield', name: "Bulwark of the Steadfast", type: 'shield', reduction: 1, hands: 1, buyPrice: 260, skills: { 'shield_bash': 1 }, description: 'A shield forged for holding a line, not just blocking blows.' },
+    'bulwark_shield': { id: 'bulwark_shield', name: "Bulwark of the Steadfast", type: 'shield', shieldVisual: 'kite', reduction: 1, hands: 1, buyPrice: 260, skills: { 'shield_bash': 1 }, description: 'A shield forged for holding a line, not just blocking blows.' },
     'ashenwood_club': { id: 'ashenwood_club', name: "Ashenwood Club", type: 'weapon', subType: 'melee', damage: 2, range: 0, hands: 1, buyPrice: 240, auraTag: 'goblin', auraRadius: 5, description: 'Charred wood from a burned goblin camp — it prickles when their kin are close.' },
     'travelers_cloakpin': { id: 'travelers_cloakpin', name: "Traveler's Cloakpin", type: 'accessory', buyPrice: 90, skills: { 'sure_footed': 1 }, description: "Keeps a cloak from snagging — the wearer rarely stumbles on rough ground." },
     'moonlit_armor': { id: 'moonlit_armor', name: "Moonlit Chain", type: 'armor', reduction: 2, buyPrice: 320, lightRadius: 3, description: 'Faintly luminous links, like captured moonlight — dim, but never quite dark around you.' },

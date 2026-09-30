@@ -177,8 +177,12 @@
     };
     const SHIELD_OPAQUE_HEIGHT_DROP = .10;
 
+    const SHIELD_PATHS = {
+        round:{front:'images/equipment/shields/round.png',back:'images/equipment/shields/round_back.svg'},
+        kite:{front:'images/equipment/shields/kite.png',back:'images/equipment/shields/kite_back.png'},
+    };
+
     const REAR_EQUIPMENT_PATHS = {
-        shield:'images/shield_back.svg',
         helmet:'images/nasalHelm_back.svg',
         armour:{
             light:'images/humanlightarmour_back.svg',
@@ -252,8 +256,12 @@
 
     const CHARACTER_ASSETS = Object.fromEntries(Object.entries(CHARACTER_PATHS)
         .map(([key, paths]) => [key, loadSet(paths)]));
+    const SHIELD_ASSETS = Object.fromEntries(Object.entries(SHIELD_PATHS)
+        .map(([visual, paths]) => [visual, {front:loadImage(paths.front), back:loadImage(paths.back)}]));
     const REAR_EQUIPMENT_ASSETS = {
-        shield:loadImage(REAR_EQUIPMENT_PATHS.shield),
+        // Compatibility alias for existing readiness checks and any legacy
+        // consumers that still expect the ordinary wooden shield rear here.
+        shield:SHIELD_ASSETS.round.back,
         helmet:loadImage(REAR_EQUIPMENT_PATHS.helmet),
         armour:Object.fromEntries(Object.entries(REAR_EQUIPMENT_PATHS.armour)
             .map(([tier, src]) => [tier, loadImage(src)])),
@@ -408,7 +416,9 @@
         if (!id) return null;
         const item = window.items?.[id];
         if (item?.type === 'shield') {
-            return {image:rearPreferred(view, REAR_EQUIPMENT_ASSETS.shield, window.gameVisuals?.shield),kind:'shield',scale:.73,itemId:id};
+            const shieldSet = SHIELD_ASSETS[item.shieldVisual] || SHIELD_ASSETS.round;
+            const front = imageReady(shieldSet?.front) ? shieldSet.front : window.gameVisuals?.shield;
+            return {image:rearPreferred(view, shieldSet?.back, front),kind:'shield',scale:.73,itemId:id};
         }
         const spec = weaponSpec(id);
         return spec ? {...spec,itemId:id} : null;
@@ -464,9 +474,16 @@
         if (!anchorPoint) return false;
         const anchor = point(bounds, anchorPoint);
         const grip = ITEM_GRIPS[spec.kind] || ITEM_GRIPS.sword;
-        let size;
-        if (spec.kind === 'shield') size = bounds.width * spec.scale;
-        else {
+        let drawWidth, drawHeight;
+        if (spec.kind === 'shield') {
+            // Shield art is not required to live on a square canvas. Treat the
+            // configured scale as its displayed height and preserve the authored
+            // aspect ratio so tightly cropped kite/tower shields stay narrow.
+            drawHeight = bounds.width * spec.scale;
+            const imageWidth = image.naturalWidth || image.width || 1;
+            const imageHeight = image.naturalHeight || image.height || 1;
+            drawWidth = drawHeight * imageWidth / imageHeight;
+        } else {
             // Derive held-item size from the compositor bounds rather than the
             // world camera. World rendering is unchanged because those bounds
             // are themselves built from hexSize*z, while 100px initiative
@@ -474,15 +491,16 @@
             const rig = CHARACTER_RIGS[keyFor(entity)];
             const bodyHeightUnits = rig?.bodyH || 1;
             const basePixel = bounds.height / bodyHeightUnits;
-            size = basePixel * (rig?.heightScale || 1) * spec.scale;
+            drawHeight = basePixel * (rig?.heightScale || 1) * spec.scale;
+            drawWidth = drawHeight;
         }
 
-        let itemY = anchor.y - grip.y*size;
+        let itemY = anchor.y - grip.y*drawHeight;
         if (spec.kind === 'shield') {
             const trim = alphaTrim(image);
             const opaqueHeight = trim?.trimHeight && trim?.originalHeight
-                ? size * trim.trimHeight / trim.originalHeight
-                : size;
+                ? drawHeight * trim.trimHeight / trim.originalHeight
+                : drawHeight;
             itemY += opaqueHeight * SHIELD_OPAQUE_HEIGHT_DROP;
         }
 
@@ -493,10 +511,10 @@
             ctx.save();
             ctx.translate(anchor.x, anchor.y);
             ctx.scale(-1, 1);
-            ctx.drawImage(image, -grip.x*size, -grip.y*size, size, size);
+            ctx.drawImage(image, -grip.x*drawWidth, -grip.y*drawHeight, drawWidth, drawHeight);
             ctx.restore();
         } else {
-            ctx.drawImage(image, anchor.x - grip.x*size, itemY, size, size);
+            ctx.drawImage(image, anchor.x - grip.x*drawWidth, itemY, drawWidth, drawHeight);
         }
         return true;
     }
@@ -804,6 +822,7 @@
         hair:CHARACTER_ASSETS.elf_female.hair,
     };
     window.REAR_HUMAN_EQUIPMENT_ASSETS = REAR_EQUIPMENT_ASSETS;
+    window.SHIELD_VISUAL_ASSETS = SHIELD_ASSETS;
     window.ITEM_GRIPS = ITEM_GRIPS;
     window.facingToSpriteView = facingToView;
     window.facingFromHexDelta = facingFromHexDelta;
