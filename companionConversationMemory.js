@@ -9,7 +9,7 @@
 (() => {
     'use strict';
 
-    const BUILD = '20260930-companion-conversation-memory-v1';
+    const BUILD = '20261001-companion-conversation-memory-v2';
     const DAY = 24 * 60 * 60;
     const DEFAULT_LIMIT = 4;
     const registry = new Map();
@@ -27,12 +27,11 @@
     function ensureMemory(entityOrName) {
         const companion = canonicalCompanion(entityOrName);
         if (!companion) return null;
-        // This call also performs any relationship migration/seed logic.
         window.getCompanionRelationship?.(companion);
         companion.playerRelationship = companion.playerRelationship || { familiarity: 10, trust: 10, history: [], knownConversationKeys: [] };
         const existing = companion.playerRelationship.conversationMemory || {};
         companion.playerRelationship.conversationMemory = {
-            version: 1,
+            version: 2,
             topics: existing.topics && typeof existing.topics === 'object' ? existing.topics : {},
             history: Array.isArray(existing.history) ? existing.history : [],
             lastMeaningful: existing.lastMeaningful || null,
@@ -82,9 +81,7 @@
         try {
             const result = typeof value === 'function' ? value(ctx, state) : value;
             return Number.isFinite(Number(result)) ? Number(result) : fallback;
-        } catch (_) {
-            return fallback;
-        }
+        } catch (_) { return fallback; }
     }
 
     function boolValue(value, ctx, state, fallback = true) {
@@ -134,26 +131,30 @@
         try {
             const label = typeof topic.label === 'function' ? topic.label(ctx, state) : topic.label;
             return String(label || 'Talk about something.');
-        } catch (_) {
-            return 'Talk about something.';
-        }
+        } catch (_) { return 'Talk about something.'; }
     }
 
-    function recordUse(companion, topic, state, rendered) {
+    function recordUse(companion, topic, state, rendered, ctx) {
         const memory = ensureMemory(companion);
         if (!memory) return;
         state.uses = Number(state.uses || 0) + 1;
         state.lastAt = now();
         state.lastVariant = Number(rendered?.variantIndex ?? state.lastVariant ?? -1);
-        const entry = {
-            topicId: topic.id,
-            subject: String(rendered?.subject || topic.subject || topic.id),
-            at: state.lastAt,
-            use: state.uses,
-        };
+        const entry = { topicId: topic.id, subject: String(rendered?.subject || topic.subject || topic.id), at: state.lastAt, use: state.uses };
         memory.lastMeaningful = entry;
         memory.history.push(entry);
         if (memory.history.length > 40) memory.history.splice(0, memory.history.length - 40);
+
+        // Authored topics may reveal progressively clearer personality clues.
+        // This is deliberately informational: it does not award approval/trust.
+        const clues = rendered?.personalityClues ?? topic.personalityClues;
+        const list = Array.isArray(clues) ? clues : (clues ? [clues] : []);
+        for (const clue of list) {
+            if (!clue) continue;
+            if (typeof clue === 'string') window.learnCompanionPersonality?.(companion.name, clue, 1, topic.id);
+            else if (clue.trait) window.learnCompanionPersonality?.(companion.name, clue.trait, clue.amount || 1, topic.id);
+        }
+        try { topic.onDiscuss?.(ctx, state, rendered); } catch (_) {}
     }
 
     function defaultOptions(companion) {
@@ -171,10 +172,9 @@
         const state = topicState(companion, topic.id);
         if (!isAvailable(topic, ctx, state)) return false;
         let rendered;
-        try { rendered = topic.render(ctx, state) || {}; }
-        catch (_) { return false; }
+        try { rendered = topic.render(ctx, state) || {}; } catch (_) { return false; }
         if (!rendered.text) return false;
-        recordUse(companion, topic, state, rendered);
+        recordUse(companion, topic, state, rendered, ctx);
         const options = Array.isArray(rendered.options) && rendered.options.length
             ? [...rendered.options, ...(rendered.noReturn ? [] : [{ label: 'Talk about something else.', action: () => openHub(companion) }])]
             : defaultOptions(companion);
@@ -195,18 +195,13 @@
             );
             return true;
         }
-        const options = subjects.map(({ topic, state, ctx }) => ({
-            label: displayLabel(topic, ctx, state),
-            action: () => playTopic(companion, topic.id),
-        }));
+        const options = subjects.map(({ topic, state, ctx }) => ({ label: displayLabel(topic, ctx, state), action: () => playTopic(companion, topic.id) }));
         options.push({ label: 'Never mind.', action: () => {} });
         window.showDialogue?.(companion, 'What do you want to talk about?', options);
         return true;
     }
 
-    function lastMeaningful(entityOrName) {
-        return ensureMemory(entityOrName)?.lastMeaningful || null;
-    }
+    function lastMeaningful(entityOrName) { return ensureMemory(entityOrName)?.lastMeaningful || null; }
 
     function installDialogueEntry(dialogueId, companionName) {
         const trees = window.npcDialogueTrees;
@@ -223,22 +218,16 @@
                     first = false;
                     const available = availableTopics(companionName, DEFAULT_LIMIT);
                     if (available.length && !options.some(o => o?.__conversationMemoryEntry)) {
-                        const addition = {
-                            label: 'Talk for a while.',
-                            __conversationMemoryEntry: true,
-                            action: () => openHub(companionName),
-                        };
+                        const addition = { label: 'Talk for a while.', __conversationMemoryEntry: true, action: () => openHub(companionName) };
                         const next = [...options];
                         const exit = next.findIndex(o => /never mind|goodbye|leave/i.test(String(o?.label || '')));
-                        if (exit >= 0) next.splice(exit, 0, addition);
-                        else next.push(addition);
+                        if (exit >= 0) next.splice(exit, 0, addition); else next.push(addition);
                         return baseShow.call(this, speaker, text, next);
                     }
                 }
                 return baseShow.apply(this, arguments);
             };
-            try { return original.apply(this, arguments); }
-            finally { window.showDialogue = baseShow; }
+            try { return original.apply(this, arguments); } finally { window.showDialogue = baseShow; }
         };
         wrapped[marker] = true;
         wrapped.__previous = original;
@@ -246,19 +235,7 @@
         return true;
     }
 
-    const api = {
-        build: BUILD,
-        daySeconds: DAY,
-        registerTopics,
-        ensureMemory,
-        topicState,
-        contextFor,
-        availableTopics,
-        playTopic,
-        openHub,
-        lastMeaningful,
-        installDialogueEntry,
-    };
+    const api = { build: BUILD, daySeconds: DAY, registerTopics, ensureMemory, topicState, contextFor, availableTopics, playTopic, openHub, lastMeaningful, installDialogueEntry };
     window.companionConversationMemory = api;
     window.COMPANION_CONVERSATION_MEMORY_BUILD = BUILD;
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
