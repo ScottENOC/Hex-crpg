@@ -118,6 +118,8 @@
         'images/overlay skull.png':'images/props/effects/skull_overlay.png',
         'images/corpse_marker.svg':'images/props/effects/corpse_marker.svg',
         'images/spiderweb.png':'images/props/effects/spiderweb.png',
+        // Keep stale callers harmless while the renamed front-view trousers propagate.
+        'images/equipment/clothing/pants_trousers.png':'images/equipment/clothing/pants_trousers_front.png',
     }));
 
     const SUPPRESSED = new Set([
@@ -385,7 +387,7 @@
         // final name can choose a different starter top, so gameplay must have the
         // whole gender-appropriate starter pool ready before the gate opens.
         const selectedTops=allViews ? tops : [tops[hash(`${race}_${gender}|top`)%tops.length]];
-        const paths=[...selectedTops.map(top=>`images/equipment/clothing/${top}.png`),'images/equipment/clothing/pants_trousers.png'];
+        const paths=[...selectedTops.map(top=>`images/equipment/clothing/${top}.png`),'images/equipment/clothing/pants_trousers_front.png'];
         if (allViews) paths.push('images/equipment/clothing/pants_trousers_back.png');
         paths.push('images/equipment/clothing/briefs_female_front.png');
         if (allViews) paths.push('images/equipment/clothing/briefs_female_back.png');
@@ -424,7 +426,7 @@
                 .hex-loading-card{width:min(520px,92vw);padding:28px;border:1px solid #8f7445;border-radius:10px;background:#201d19;box-shadow:0 18px 60px #000a;text-align:center}
                 .hex-loading-title{font-size:1.55rem;margin:0 0 14px}.hex-loading-count{font-size:1rem;margin:0 0 14px;color:#d7c9a7}
                 .hex-loading-track{height:12px;border-radius:999px;overflow:hidden;background:#0d0c0a;border:1px solid #5f5037}.hex-loading-bar{height:100%;width:0;background:#b89a5c;transition:width .12s linear}
-                .hex-loading-error{margin-top:14px;color:#efb0a8;word-break:break-word}.hex-loading-retry{margin-top:12px;padding:9px 16px;cursor:pointer}
+                .hex-loading-error{margin-top:14px;color:#efb0a8;word-break:break-word}.hex-loading-actions{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}.hex-loading-retry,.hex-loading-continue{margin-top:12px;padding:9px 16px;cursor:pointer}
             `;
             document.head.appendChild(style);
         }
@@ -432,7 +434,7 @@
         if (!overlay) {
             overlay=document.createElement('div');
             overlay.id='hex-loading-gate';
-            overlay.innerHTML='<div class="hex-loading-card"><h2 class="hex-loading-title"></h2><p class="hex-loading-count"></p><div class="hex-loading-track"><div class="hex-loading-bar"></div></div><div class="hex-loading-error" hidden></div><button class="hex-loading-retry" hidden>Retry failed assets</button></div>';
+            overlay.innerHTML='<div class="hex-loading-card"><h2 class="hex-loading-title"></h2><p class="hex-loading-count"></p><div class="hex-loading-track"><div class="hex-loading-bar"></div></div><div class="hex-loading-error" hidden></div><div class="hex-loading-actions"><button class="hex-loading-retry" hidden>Retry failed assets</button><button class="hex-loading-continue" hidden>Start game anyway</button></div></div>';
             document.body.appendChild(overlay);
         }
         return overlay;
@@ -445,6 +447,7 @@
         updateOverlay(loaded,total);
         overlay.querySelector('.hex-loading-error').hidden=true;
         overlay.querySelector('.hex-loading-retry').hidden=true;
+        overlay.querySelector('.hex-loading-continue').hidden=true;
         return overlay;
     }
 
@@ -470,7 +473,7 @@
         });
     }
 
-    async function runGate(title,manifest) {
+    async function runGate(title,manifest,{allowBypass=false}={}) {
         const paths=[...new Set(manifest.map(canonicalPath))];
         paths.forEach(path=>phaseCritical.add(path));
         // Keep renderer-owned image elements deferred while the gate probes warm
@@ -478,32 +481,50 @@
         const loadedPaths=new Set();
         let pending=[...paths];
         let attempt=0;
+        let bypassedFailures=[];
         const overlay=showOverlay(title,paths.length,0);
 
-        while (pending.length) {
-            const results=await Promise.allSettled(pending.map(path=>loadOne(path,attempt>0).then(value=>{
-                loadedPaths.add(value);
-                updateOverlay(loadedPaths.size,paths.length);
-                return value;
-            })));
-            const failed=results.filter(r=>r.status==='rejected').map(r=>r.reason);
-            if (!failed.length) break;
+        try {
+            while (pending.length) {
+                const results=await Promise.allSettled(pending.map(path=>loadOne(path,attempt>0).then(value=>{
+                    loadedPaths.add(value);
+                    updateOverlay(loadedPaths.size,paths.length);
+                    return value;
+                })));
+                const failed=results.filter(r=>r.status==='rejected').map(r=>r.reason);
+                if (!failed.length) break;
 
-            const error=overlay.querySelector('.hex-loading-error');
-            const retry=overlay.querySelector('.hex-loading-retry');
-            const names=failed.slice(0,4).map(path=>path.split('/').pop()).join(', ');
-            error.textContent=`Could not load ${failed.length} art asset${failed.length===1?'':'s'}${names?`: ${names}`:''}. Retry will bypass the browser cache.`;
-            error.hidden=false;
-            retry.hidden=false;
-            await new Promise(resolve=>retry.onclick=resolve);
-            retry.hidden=true;
-            error.hidden=true;
-            pending=failed;
-            attempt++;
+                const error=overlay.querySelector('.hex-loading-error');
+                const retry=overlay.querySelector('.hex-loading-retry');
+                const continueButton=overlay.querySelector('.hex-loading-continue');
+                const names=failed.slice(0,4).map(path=>path.split('/').pop()).join(', ');
+                error.textContent=`Could not load ${failed.length} art asset${failed.length===1?'':'s'}${names?`: ${names}`:''}. Retry will bypass the browser cache.${allowBypass?' You can also start the game with the missing art.':''}`;
+                error.hidden=false;
+                retry.hidden=false;
+                continueButton.hidden=!allowBypass;
+
+                const action=await new Promise(resolve=>{
+                    retry.onclick=()=>resolve('retry');
+                    continueButton.onclick=()=>resolve('continue');
+                });
+                retry.onclick=null;
+                continueButton.onclick=null;
+                retry.hidden=true;
+                continueButton.hidden=true;
+                error.hidden=true;
+
+                if (action==='continue') {
+                    bypassedFailures=failed;
+                    break;
+                }
+                pending=failed;
+                attempt++;
+            }
+        } finally {
+            paths.forEach(path=>phaseCritical.delete(path));
         }
 
-        paths.forEach(path=>phaseCritical.delete(path));
-        return true;
+        return {complete:bypassedFailures.length===0,failed:bypassedFailures};
     }
 
     function beginGameplayLoading() {
@@ -530,7 +551,10 @@
         startGateRunning=true;
         phase='game-loading';
         try {
-            await runGate('Loading game…',gameManifest());
+            const gateResult=await runGate('Loading game…',gameManifest(),{allowBypass:true});
+            if (!gateResult.complete) {
+                console.warn('Starting game with art assets still unavailable:',gateResult.failed);
+            }
             phase='game';
             beginGameplayLoading();
             releaseDeferred();
