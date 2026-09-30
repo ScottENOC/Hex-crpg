@@ -48,6 +48,10 @@ test.describe('canonical human armour assets', () => {
       const out = {};
       for (const [tier, id] of Object.entries({ light:'light_armor', medium:'medium_armor', heavy:'heavy_armor' })) {
         p.equipped = { ...(p.equipped || {}), armor:id };
+        // The live equipment UI correctly prefers the physical instance for an
+        // equipped slot. This test is deliberately swapping base armour tiers,
+        // so clear the previously equipped instance or it would mask the new ID.
+        if (p.equippedInstances) delete p.equippedInstances.armor;
         window.renderEquipmentInterface();
         const armourSlot = [...document.querySelectorAll('#inventory-content button')]
           .find(button => button.textContent?.includes('Armour'));
