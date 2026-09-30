@@ -7,6 +7,8 @@ on:
       - development
     paths:
       - 'humanoidRenderer.js'
+      - 'rendererAssetRecovery.js'
+      - 'equipmentInterface.js'
       - 'clothingLayers.js'
       - 'clothingSystem.js'
       - 'characterCreation.js'
@@ -17,8 +19,10 @@ on:
       - 'tests/human-female-direct-render.spec.js'
       - 'tests/clothing-render-regression.spec.js'
       - 'tests/humanoid-body-fallback-regression.spec.js'
+      - 'tests/armour-asset-consistency.spec.js'
       - 'images/characters/elf_female/**'
       - 'images/equipment/clothing/**'
+      - 'images/equipment/armour/**'
       - '.github/workflows/human-female-render-diagnostic.yml'
 
 concurrency:
@@ -39,5 +43,5 @@ jobs:
         run: npm ci
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Run focused humanoid and clothing rendering regressions
-        run: npx playwright test tests/human-female-direct-render.spec.js tests/clothing-render-regression.spec.js tests/humanoid-body-fallback-regression.spec.js --reporter=line
+      - name: Run focused humanoid, clothing and armour rendering regressions
+        run: npx playwright test tests/human-female-direct-render.spec.js tests/clothing-render-regression.spec.js tests/humanoid-body-fallback-regression.spec.js tests/armour-asset-consistency.spec.js --reporter=line
