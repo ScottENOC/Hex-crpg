@@ -7,8 +7,10 @@
 
     const MAX_RETRIES = 3;
     const RETRY_DELAYS_MS = [100, 350, 900];
+    const GATE_RECHECK_DELAY_MS = 1000;
     const watched = new WeakSet();
     const retryCounts = new WeakMap();
+    const gateRechecks = new WeakSet();
 
     function redraw() {
         window.drawMap?.();
@@ -28,14 +30,41 @@
         return url.href;
     }
 
+    function loadingGateOwnsRetries() {
+        const phase = window.__assetLoadScheduler?.phase;
+        return phase === 'creator-loading' || phase === 'game-loading';
+    }
+
+    function scheduleAfterGate(image) {
+        if (gateRechecks.has(image)) return;
+        gateRechecks.add(image);
+        setTimeout(() => {
+            gateRechecks.delete(image);
+            if (image.naturalWidth > 0 && image.naturalHeight > 0) return;
+            scheduleRetry(image);
+        }, GATE_RECHECK_DELAY_MS);
+    }
+
     function scheduleRetry(image) {
         if (!(image instanceof HTMLImageElement)) return;
+        // The phase-aware asset scheduler owns transient retries while a loading
+        // gate is active. Do not stack renderer recovery requests on top of it.
+        // Re-check after the gate so genuinely broken renderer elements can still
+        // recover once the scheduler has finished warming the required assets.
+        if (loadingGateOwnsRetries()) {
+            scheduleAfterGate(image);
+            return;
+        }
         const attempt = (retryCounts.get(image) || 0) + 1;
         if (attempt > MAX_RETRIES) return;
         retryCounts.set(image, attempt);
         const delay = RETRY_DELAYS_MS[attempt - 1] || RETRY_DELAYS_MS.at(-1);
         setTimeout(() => {
             if (image.naturalWidth > 0 && image.naturalHeight > 0) return;
+            if (loadingGateOwnsRetries()) {
+                scheduleAfterGate(image);
+                return;
+            }
             const next = retryUrl(image, attempt);
             if (!next) return;
             console.warn(`Retrying renderer image load (${attempt}/${MAX_RETRIES})`, image.src);
@@ -63,6 +92,7 @@
         image.addEventListener('error', () => scheduleRetry(image));
         image.addEventListener('load', () => {
             retryCounts.delete(image);
+            gateRechecks.delete(image);
             armourReady();
             redraw();
         });
