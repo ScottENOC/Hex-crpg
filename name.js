@@ -30,7 +30,7 @@ window.generateName = window.getRandomName;
 (() => {
     function randomInt(min, max) { return min + Math.floor(Math.random() * (max - min + 1)); }
     function setRandomSlider(id) { const el=document.getElementById(id); if(!el)return; el.value=String(randomInt(Number(el.min||0),Number(el.max||100))); }
-    function setRandomSelect(id) { const el=document.getElementById(id); if(!el||!el.options.length)return; const options=Array.from(el.options).filter(option=>!option.disabled); if(!options.length)return; el.value=options[randomInt(0,options.length-1)].value; }
+    function setRandomSelect(id) { const el=document.getElementById(id); if(!el||!el.options.length)return; const options=Array.from(el.options).filter(option=>!option.disabled);if(!options.length)return; el.value=options[randomInt(0,options.length-1)].value; }
     window.randomizeCharacterAppearance=function({sync=true}={}){setRandomSlider('shirt-hue-slider');setRandomSlider('pants-hue-slider');setRandomSlider('hair-hue-slider');setRandomSelect('hair-style-select');setRandomSelect('body-type-select');const fantasy=!!document.getElementById('fantasy-skin-check')?.checked;setRandomSlider(fantasy?'skin-hue-slider':'skin-tone-slider');if(window.updateSkinToneControlMode)window.updateSkinToneControlMode();if(window.updateAppearancePreview)window.updateAppearancePreview();if(sync&&window.syncCharacterToServer)window.syncCharacterToServer();};
     window.randomizeCharacterName=function(){const input=document.getElementById('character-name');const race=document.getElementById('race-select')?.value||'human';const gender=document.getElementById('gender-select')?.value||'female';if(!input||!window.getRandomName)return;input.value=window.getRandomName(race,gender);input.dispatchEvent(new Event('input',{bubbles:true}));};
     function creatorButton(id,text,onclick){const button=document.createElement('button');button.id=id;button.type='button';button.textContent=text;button.style.fontSize='0.78em';button.style.padding='6px 9px';button.style.backgroundColor='#546e7a';button.style.color='white';button.style.flexShrink='0';button.addEventListener('click',onclick);return button;}
@@ -39,7 +39,7 @@ window.generateName = window.getRandomName;
     window.randomizeCharacterAppearance({sync:false});
 })();
 
-const PRESENTATION_BUILD = '20260930-equipment-interface-v1';
+const PRESENTATION_BUILD = '20260930-character-render-fix-v1';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
 const presentationBuildMeta=document.querySelector('meta[name="app-build"]');if(presentationBuildMeta)presentationBuildMeta.content=PRESENTATION_BUILD;
