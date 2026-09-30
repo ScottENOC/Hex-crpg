@@ -7,7 +7,7 @@
 (() => {
     'use strict';
 
-    const BUILD = '20260930-persistent-character-dialogue-hooks-v1';
+    const BUILD = '20260930-persistent-character-dialogue-hooks-v2';
 
     const DIALOGUE_CHARACTERS = Object.freeze({
         silverhart_queen: 'Queen Seraphine Corrin',
@@ -29,13 +29,87 @@
         );
     }
 
+    function seraphinePersonalResponse(npc) {
+        const rel = window.getPersistentCharacterRelationship?.(npc) || { trust: 0, friendship: 0 };
+        let line;
+        if (rel.trust < 20) {
+            line = "Concern is kind. It's also how half this court tries to get a ruler to lower her guard. I'm managing — that will have to do for now.";
+        } else if (rel.friendship < 15) {
+            line = "Tired. There — you've extracted a state secret. The crown is mostly paperwork, funerals, and people asking for certainty from someone who has very little of it to spare.";
+        } else if (rel.friendship < 35) {
+            line = "Tired, and angrier than I ought to be some days. You asked about me rather than the crown, though. I noticed. Court teaches you to notice things like that.";
+        } else {
+            line = "Tired. Frightened, occasionally. Don't repeat that last part — half this court would turn a bad night's sleep into a succession crisis. Still... it's good to be asked as Seraphine once in a while.";
+        }
+        window.notePersistentCharacterConversation?.(
+            npc,
+            'seraphine:personal_burden',
+            { familiarity: 2, trust: 1, friendship: 4 }
+        );
+        window.showDialogue(npc, line, [{ label: "Your secret's safe with me.", action: () => {} }]);
+    }
+
+    function decorateSeraphineTopLevel(npc, options) {
+        if (!Array.isArray(options)) return options;
+        const topicKeys = new Map([
+            ['What of the greenskins?', 'seraphine:topic:greenskins'],
+            ['What of the Ironbond Company?', 'seraphine:topic:ironbond'],
+            ['Rumors of necromancy in Reddale?', 'seraphine:topic:necromancy'],
+        ]);
+        const decorated = options.map(option => {
+            const key = topicKeys.get(option?.label);
+            if (!key || typeof option.action !== 'function') return option;
+            const baseAction = option.action;
+            return {
+                ...option,
+                action: function() {
+                    window.notePersistentCharacterConversation?.(npc, key, { familiarity: 1 });
+                    return baseAction.apply(this, arguments);
+                },
+            };
+        });
+
+        const rel = window.getPersistentCharacterRelationship?.(npc);
+        if ((rel?.familiarity ?? 0) >= 9 && !decorated.some(o => o?.label === 'And you, Your Majesty? How are you holding up?')) {
+            decorated.push({
+                label: 'And you, Your Majesty? How are you holding up?',
+                action: () => seraphinePersonalResponse(npc),
+            });
+        }
+        return decorated;
+    }
+
     function wrapDialogueTree(dialogueId, characterName) {
         const trees = window.npcDialogueTrees;
         const base = trees?.[dialogueId];
         if (typeof base !== 'function' || base.__persistentCharacterAware) return false;
         const wrapped = function(npc) {
             noteAudience(characterName, dialogueId);
-            return base.apply(this, arguments);
+            if (dialogueId !== 'silverhart_queen' || typeof window.showDialogue !== 'function') {
+                return base.apply(this, arguments);
+            }
+
+            // The Queen's existing tree owns all of its political/quest logic.
+            // Intercept only the one top-level showDialogue call made during
+            // that synchronous tree build, decorate its options, then restore
+            // immediately. Nested option actions run later against the normal
+            // showDialogue function, so this is intentionally a tiny surface.
+            const originalShowDialogue = window.showDialogue;
+            let firstQueenDialogue = true;
+            window.showDialogue = function(speaker, text, options) {
+                if (firstQueenDialogue && speaker?.name === characterName) {
+                    firstQueenDialogue = false;
+                    const args = [...arguments];
+                    args[2] = decorateSeraphineTopLevel(npc, options);
+                    return originalShowDialogue.apply(this, args);
+                }
+                return originalShowDialogue.apply(this, arguments);
+            };
+            try {
+                return base.apply(this, arguments);
+            } finally {
+                window.showDialogue = originalShowDialogue;
+            }
         };
         wrapped.__persistentCharacterAware = true;
         wrapped.__basePersistentCharacterDialogue = base;
