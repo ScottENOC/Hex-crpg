@@ -1,0 +1,1 @@
+Temporary branch-only marker used to run the current asset-manager coverage audit before migration.
