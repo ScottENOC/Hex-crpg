@@ -101,12 +101,39 @@ test.describe('map rendering performance at extreme zoom', () => {
     test('drawMap/renderEntities are skipped entirely while the scene is truly idle', async ({ page }) => {
         const result = await page.evaluate(async () => {
             window._resetRenderPacing();
+
+            // Campaign 2 deliberately starts ambient NPC schedules. Those NPCs
+            // can have destinations immediately after character creation, which
+            // means the normal scene is not actually idle. Isolate the local
+            // player and settle every transient so this test exercises the
+            // idle-pacing contract rather than the town simulation.
+            const player = window.entities.find(e => e.side === 'player' && !e.rider);
+            window.entities = player ? [player] : [];
+            for (const e of window.entities) {
+                e.destination = null;
+                e.moveCooldown = 0;
+                e.moveTotalTime = 0;
+                e.startQ = e.hex.q;
+                e.startR = e.hex.r;
+                e.visualQ = e.hex.q;
+                e.visualR = e.hex.r;
+            }
+            window.projectiles = [];
+            window.floatingTexts = [];
+            window._screenShakeUntil = 0;
+
+            // Establish one rendered frame with the settled state before
+            // observing the subsequent real-time ticks.
+            window.drawMap();
+            window.renderEntities();
+            await new Promise(r => requestAnimationFrame(() => r()));
+            window._resetRenderPacing();
+
             let drawCalls = 0, renderCalls = 0;
             const realDraw = window.drawMap, realRender = window.renderEntities;
             window.drawMap = (...a) => { drawCalls++; return realDraw(...a); };
             window.renderEntities = (...a) => { renderCalls++; return realRender(...a); };
 
-            // Let a few ticks pass with the player stationary and nothing animating.
             await new Promise(r => setTimeout(r, 300));
 
             window.drawMap = realDraw;
@@ -139,18 +166,17 @@ test.describe('map rendering performance at extreme zoom', () => {
     // hexMap.js's terrain buffer (see comment above renderTerrainPass): the
     // terrain-image pass is cached into an offscreen canvas anchored to the
     // camera, and small pans just blit that buffer at an offset instead of
-    // re-walking every hex. This is the fix for "panning the camera feels
-    // terrible on a phone even though the idle-skip already helps standing
-    // still" — a small in-buffer pan should cost meaningfully less than the
-    // first draw that had to build the buffer from scratch.
-    test('small camera pans within the terrain buffer slack are cheaper than the draw that built it', async ({ page }) => {
+    // re-walking every hex. Rather than comparing wall-clock timings on a
+    // shared runner, count terrain lookups: rebuilding the buffer must walk
+    // its enlarged footprint, while an in-slack pan should reuse that work.
+    test('small camera pans within terrain buffer slack reuse the cached terrain pass', async ({ page }) => {
         const result = await page.evaluate(async () => {
-            const drawAndMeasure = () => new Promise(resolve => {
+            const draw = () => new Promise(resolve => {
                 const before = window.performanceRenderStats?.frames || 0;
                 window.drawMap();
                 const wait = () => {
                     const stats = window.performanceRenderStats;
-                    if (stats && stats.frames > before) return resolve(stats.lastFrameMs);
+                    if (stats && stats.frames > before) return resolve();
                     requestAnimationFrame(wait);
                 };
                 requestAnimationFrame(wait);
@@ -163,16 +189,32 @@ test.describe('map rendering performance at extreme zoom', () => {
             }
             window.cameraZoom = 1.0;
             if (window.invalidateTerrainBuffer) window.invalidateTerrainBuffer();
-            const firstMs = await drawAndMeasure(); // builds the terrain buffer from scratch
 
-            window.cameraX += 5; // small pan, well within the buffer's slack margin
+            const originalTerrainAtFloor = window.getTerrainAtFloor;
+            const originalTerrainAt = window.getTerrainAt;
+            let reads = 0;
+            if (typeof originalTerrainAtFloor === 'function') {
+                window.getTerrainAtFloor = (...args) => { reads++; return originalTerrainAtFloor(...args); };
+            } else {
+                window.getTerrainAt = (...args) => { reads++; return originalTerrainAt(...args); };
+            }
+
+            await draw();
+            const firstReads = reads;
+            reads = 0;
+
+            window.cameraX += 5;
             window.cameraY += 5;
-            const secondMs = await drawAndMeasure(); // should just blit the existing buffer
+            await draw();
+            const secondReads = reads;
 
-            return { firstMs, secondMs };
+            if (typeof originalTerrainAtFloor === 'function') window.getTerrainAtFloor = originalTerrainAtFloor;
+            else window.getTerrainAt = originalTerrainAt;
+
+            return { firstReads, secondReads };
         });
-        expect(result.firstMs).toBeGreaterThan(0);
-        expect(result.secondMs).toBeLessThan(result.firstMs);
+        expect(result.firstReads).toBeGreaterThan(0);
+        expect(result.secondReads).toBeLessThan(result.firstReads);
     });
 
     // gameEngine.js's adaptive render-interval cap: a device too slow to
