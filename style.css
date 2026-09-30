@@ -467,8 +467,8 @@ button:hover { background-color: #3f51b5; }
     display: flex;
     align-items: center;
     background-color: #333;
-    border: 1px solid #555;
-    border-radius: 5px;
+    border: none;
+    border-radius: 0;
     padding: 2px 8px;
     margin: 0 4px;
     color: #eee;
@@ -480,8 +480,7 @@ button:hover { background-color: #3f51b5; }
 }
 
 .turn-indicator-item.current-turn {
-    border-color: #ffeb3b; /* Highlight current turn entity */
-    box-shadow: 0 0 8px #ffeb3b;
+    box-shadow: none;
 }
 
 .turn-indicator-portrait {
@@ -490,9 +489,23 @@ button:hover { background-color: #3f51b5; }
     position: relative;
     margin-right: 10px;
     background-color: #444;
-    border-radius: 4px;
+    border: 1px solid #777;
+    border-radius: 0;
     overflow: hidden;
     flex-shrink: 0;
+    box-sizing: border-box;
+}
+
+.turn-indicator-item.current-turn .turn-indicator-portrait {
+    border-color: #ffeb3b;
+    box-shadow: 0 0 6px #ffeb3b;
+}
+
+/* Direct humanoid portraits are fully composited on their canvas. Hide the
+   superseded legacy image stack once that canvas exists so there is exactly
+   one visual portrait surface instead of overlapping/broken-image rectangles. */
+.turn-indicator-portrait:has(canvas[data-direct-humanoid="true"]) > img.portrait-layer {
+    display: none;
 }
 
 .portrait-layer {
