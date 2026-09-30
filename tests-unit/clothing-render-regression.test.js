@@ -100,12 +100,21 @@ test('transparent underwear assets and alternate styles are wired as PNGs', () =
     excludes(layersSource, 'images/equipment/clothing/bra_front.jpg');
 });
 
-test('bootstrap layers use explicit cache-busting tokens', () => {
+test('trousers use the current front and back PNG assets', () => {
+    const layersSource = read('clothingLayers.js');
+    contains(layersSource, "front:'images/equipment/clothing/pants_trousers.png'");
+    contains(layersSource, "back:'images/equipment/clothing/pants_trousers_back.png'");
+});
+
+test('bootstrap layers use aligned explicit cache-busting tokens', () => {
     const indexSource = read('index.html');
     const creationSource = read('characterCreation.js');
     const clothingLoaderSource = read('clothingSystem.js');
 
     assert.match(indexSource, /<script src="characterCreation\.js\?v=[^"]+"><\/script>/);
-    assert.match(creationSource, /clothingSystem\.js\?build=[^'"`]+/);
-    assert.match(clothingLoaderSource, /const BUILD='[^']+';/);
+    const requestedBuild = creationSource.match(/clothingSystem\.js\?build=([^'"`]+)/)?.[1];
+    const declaredBuild = clothingLoaderSource.match(/const BUILD='([^']+)'/)?.[1];
+    assert.ok(requestedBuild, 'Expected characterCreation.js to request clothingSystem.js with a build token');
+    assert.ok(declaredBuild, 'Expected clothingSystem.js to declare a build token');
+    assert.equal(requestedBuild, declaredBuild, 'Clothing loader URL must match the loader BUILD so stale child assets cannot survive a clothing revision');
 });
