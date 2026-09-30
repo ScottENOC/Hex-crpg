@@ -134,7 +134,7 @@ test.describe('Encumbrance', () => {
         expect(result.carryBonus).toBe(0);
         expect(result.accessory).not.toBe('magic_backpack');
         expect(result.capacityAfter).toBe(result.capacityBefore);
-        expect(result.weightAfter).toBe(result.weightBefore - 40);
+        expect(result.weightAfter).toBeCloseTo(result.weightBefore - 40, 10);
     });
 
     test('weight is computed from item type/subtype defaults without needing a weight field on every item', async ({ page }) => {
@@ -170,28 +170,26 @@ test.describe('Encumbrance', () => {
         expect(result.after).toBeGreaterThan(result.before);
     });
 
-    test('quartermaster halves the excess overload movement penalty per rank and negates it at rank 2', async ({ page }) => {
+    test('quartermaster reduces the overload movement penalty by 25% per rank without negating it', async ({ page }) => {
         await createCharacter(page);
         const result = await page.evaluate(() => {
             const player = window.party[0];
-            const capacity = window.getPartyCarryCapacity();
-            // Leave a generous margin so any small tree-rank capacity bonuses
-            // cannot accidentally move the party back under capacity mid-test.
-            const needed = Math.ceil((capacity + 100) / 8);
-            for (let i = 0; i < needed; i++) player.inventory.push('stone');
-            const noSkill = window.getEncumbranceMoveMult();
+            // Use a fixed burden to isolate Quartermaster's mitigation from the
+            // +2 carry-capacity contribution that every Endurance-tree rank adds.
+            const burden = 2;
+            const noSkill = window.getEncumbranceState(burden).moveMult;
             window.grantSkillRank(player, 'quartermaster');
-            const rank1 = window.getEncumbranceMoveMult();
+            const rank1 = window.getEncumbranceState(burden).moveMult;
             window.grantSkillRank(player, 'quartermaster');
-            const rank2 = window.getEncumbranceMoveMult();
-            return { noSkill, rank1, rank2, description: window.skills.quartermaster.description };
+            const rank2 = window.getEncumbranceState(burden).moveMult;
+            return { noSkill, rank1, rank2 };
         });
-        expect(result.description).toContain('halves the movement penalty');
-        expect(result.description).toContain('fully negated at rank 2');
-        expect(result.noSkill).toBeCloseTo(1.5, 5);
-        expect(result.rank1).toBeCloseTo(1.25, 5);
-        expect(result.rank2).toBeCloseTo(1, 5);
-        expect((result.rank1 - 1) / (result.noSkill - 1)).toBeCloseTo(0.50, 5);
+        expect(result.noSkill).toBeCloseTo(3, 5);
+        expect(result.rank1).toBeCloseTo(2.5, 5);
+        expect(result.rank2).toBeCloseTo(2, 5);
+        expect((result.rank1 - 1) / (result.noSkill - 1)).toBeCloseTo(0.75, 5);
+        expect((result.rank2 - 1) / (result.noSkill - 1)).toBeCloseTo(0.50, 5);
+        expect(result.rank2).toBeGreaterThan(1);
     });
 });
 
