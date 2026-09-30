@@ -1,3 +1,4 @@
+# Registered workflow trigger: patch the current development head once.
 name: One-off Visibility Asset Fix
 
 on:
@@ -30,16 +31,9 @@ jobs:
                   raise SystemExit(f'{label}: expected exactly one match, found {text.count(old)}')
               return text.replace(old, new, 1)
 
-          # Clothing: one cache token, explicit trousers side fallback, and retries
-          # for transient image failures instead of permanently caching a broken Image.
           p = Path('clothingLayers.js')
           text = p.read_text()
-          text = replace_once(
-              text,
-              "  const BUILD='20260929-clothing-layers-v20';",
-              "  const BUILD=window.PRESENTATION_BUILD||'20260930-visibility-assets-v1';",
-              'clothingLayers BUILD',
-          )
+          text = replace_once(text, "  const BUILD='20260929-clothing-layers-v20';", "  const BUILD=window.PRESENTATION_BUILD||'20260930-visibility-assets-v1';", 'clothingLayers BUILD')
           text = replace_once(
               text,
               "    pants_trousers:singleLayerViews('pants',{\n      front:'images/equipment/clothing/pants_trousers.png',\n      back:'images/equipment/clothing/pants_trousers_back.png',\n    },'Trousers'),",
@@ -81,22 +75,10 @@ jobs:
           )
           p.write_text(text)
 
-          # The loader and its caller must use the same presentation build, otherwise
-          # iOS can retain an old clothing stack after the renderer has advanced.
           p = Path('clothingSystem.js')
           text = p.read_text()
-          text = replace_once(
-              text,
-              "  const BUILD='20260930-clothing-v12';",
-              "  const BUILD=window.PRESENTATION_BUILD||'20260930-visibility-assets-v1';",
-              'clothingSystem BUILD',
-          )
-          text = replace_once(
-              text,
-              "    s.src=`${src}?build=${BUILD}`;",
-              "    s.src=`${src}?build=${encodeURIComponent(BUILD)}`;",
-              'clothingSystem child URL',
-          )
+          text = replace_once(text, "  const BUILD='20260930-clothing-v12';", "  const BUILD=window.PRESENTATION_BUILD||'20260930-visibility-assets-v1';", 'clothingSystem BUILD')
+          text = replace_once(text, "    s.src=`${src}?build=${BUILD}`;", "    s.src=`${src}?build=${encodeURIComponent(BUILD)}`;", 'clothingSystem child URL')
           p.write_text(text)
 
           p = Path('characterCreation.js')
@@ -109,8 +91,6 @@ jobs:
           )
           p.write_text(text)
 
-          # Native support for the tightly cropped braid side/back art. These files
-          # are not 1254px framed sheets, so the generic hair crop cuts them away.
           p = Path('humanoidRenderer.js')
           text = p.read_text()
           needle = """        trimCache.set(image, trim);
@@ -183,17 +163,9 @@ jobs:
           text = replace_once(text, old_draw, new_draw, 'native braid draw')
           p.write_text(text)
 
-          # The braid module now only owns the genuinely separate left-side source.
-          # Right/back sizing belongs to the compositor itself so internal draw paths
-          # cannot bypass it. Give the left image the same transient-failure recovery.
           p = Path('braidDirectionalHair.js')
           text = p.read_text()
-          text = replace_once(
-              text,
-              "    const BUILD = '20260929-directional-braid-v1';",
-              "    const BUILD = window.PRESENTATION_BUILD || '20260930-visibility-assets-v1';",
-              'braid BUILD',
-          )
+          text = replace_once(text, "    const BUILD = '20260929-directional-braid-v1';", "    const BUILD = window.PRESENTATION_BUILD || '20260930-visibility-assets-v1';", 'braid BUILD')
           pattern = re.compile(r"    function ensureSideLeftImage\(\) \{.*?\n    \}\n\n    function leftRenderSource\(\)", re.S)
           replacement = """    function ensureSideLeftImage() {
         if (sideLeftImage || typeof Image === 'undefined') return sideLeftImage;
@@ -226,7 +198,6 @@ jobs:
           text, count = pattern.subn(replacement, text, count=1)
           if count != 1:
               raise SystemExit(f'braid left loader: expected one match, found {count}')
-
           pattern = re.compile(r"    function withDirectionalBraid\(entity, facing, draw\) \{.*?\n    \}\n\n    function installDirectionalDrawWrapper\(\)", re.S)
           replacement = """    function withDirectionalBraid(entity, facing, draw) {
         // The direct compositor now natively handles the tightly cropped braid
@@ -250,16 +221,9 @@ jobs:
               raise SystemExit(f'braid wrapper: expected one match, found {count}')
           p.write_text(text)
 
-          # One build identity for this presentation change, plus static loader bumps
-          # so regular iOS tabs cannot keep the old name/characterCreation scripts.
           p = Path('name.js')
           text = p.read_text()
-          text = replace_once(
-              text,
-              "const PRESENTATION_BUILD = '20260930-canonical-armour-v3';",
-              "const PRESENTATION_BUILD = '20260930-visibility-assets-v1';",
-              'presentation build',
-          )
+          text = replace_once(text, "const PRESENTATION_BUILD = '20260930-canonical-armour-v3';", "const PRESENTATION_BUILD = '20260930-visibility-assets-v1';", 'presentation build')
           p.write_text(text)
 
           p = Path('index.html')
