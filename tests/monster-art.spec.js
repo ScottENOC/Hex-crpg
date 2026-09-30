@@ -1,18 +1,24 @@
 const { test, expect } = require('@playwright/test');
 const { createCharacter } = require('./helpers.js');
 
+async function waitForVisuals(page, keys) {
+    await page.waitForFunction((requiredKeys) => requiredKeys.every(key => {
+        const img = window.gameVisuals?.[key];
+        return !!img && img.complete && img.naturalWidth > 0;
+    }), keys, { timeout: 5000 });
+}
+
 test.describe('monster art: distinct sprites and dialogue portraits', () => {
     test('harpy, elite goblin, wraith, basilisk, and minotaur each get their own registered, loaded image', async ({ page }) => {
         await createCharacter(page, { campaign: '1' });
-        const result = await page.evaluate(() => {
-            const keys = ['elite_goblin', 'harpy', 'wraith', 'basilisk', 'minotaur'];
-            return keys.map(k => ({
-                key: k,
-                exists: !!window.gameVisuals[k],
-                complete: window.gameVisuals[k]?.complete,
-                naturalWidth: window.gameVisuals[k]?.naturalWidth,
-            }));
-        });
+        const keys = ['elite_goblin', 'harpy', 'wraith', 'basilisk', 'minotaur'];
+        await waitForVisuals(page, keys);
+        const result = await page.evaluate((requiredKeys) => requiredKeys.map(k => ({
+            key: k,
+            exists: !!window.gameVisuals[k],
+            complete: window.gameVisuals[k]?.complete,
+            naturalWidth: window.gameVisuals[k]?.naturalWidth,
+        })), keys);
         result.forEach(r => {
             expect(r.exists).toBe(true);
             expect(r.complete).toBe(true);
@@ -27,12 +33,13 @@ test.describe('monster art: distinct sprites and dialogue portraits', () => {
             const plain = ['goblin', 'wolf'].map(t => window.createMonster(t, { q: 0, r: 0 }).customImage);
             return { distinct, plain };
         });
-        result.distinct.forEach((c, i) => expect(c).toBeTruthy());
+        result.distinct.forEach(c => expect(c).toBeTruthy());
         result.plain.forEach(c => expect(c).toBeFalsy());
     });
 
     test('revenant uses the layered CHAR_CONFIG body renderer via race/gender + revenantBase, not the flat customImage path', async ({ page }) => {
         await createCharacter(page, { campaign: '1' });
+        await waitForVisuals(page, ['revenantBase']);
         const result = await page.evaluate(() => {
             const m = window.createMonster('revenant', { q: 0, r: 0 });
             return {
@@ -40,7 +47,7 @@ test.describe('monster art: distinct sprites and dialogue portraits', () => {
                 race: m.race,
                 gender: m.gender,
                 hasConfig: !!window.CHAR_CONFIG[`${m.race}_${m.gender}`],
-                revenantBaseLoaded: window.gameVisuals.revenantBase?.complete,
+                revenantBaseLoaded: window.gameVisuals.revenantBase?.complete && window.gameVisuals.revenantBase?.naturalWidth > 0,
             };
         });
         expect(result.customImage).toBeFalsy();
@@ -50,11 +57,12 @@ test.describe('monster art: distinct sprites and dialogue portraits', () => {
 
     test('a goblin player/NPC uses the layered CHAR_CONFIG body renderer via race/gender + monsterDefault, not the flat-circle fallback', async ({ page }) => {
         await createCharacter(page, { race: 'goblin', campaign: '2' });
+        await waitForVisuals(page, ['monsterDefault']);
         const result = await page.evaluate(() => ({
             hasConfigMale: !!window.CHAR_CONFIG['goblin_male'],
             hasConfigFemale: !!window.CHAR_CONFIG['goblin_female'],
             baseKey: window.CHAR_CONFIG['goblin_male'].baseKey,
-            monsterDefaultLoaded: window.gameVisuals.monsterDefault?.complete,
+            monsterDefaultLoaded: window.gameVisuals.monsterDefault?.complete && window.gameVisuals.monsterDefault?.naturalWidth > 0,
         }));
         expect(result.hasConfigMale).toBe(true);
         expect(result.hasConfigFemale).toBe(true);
@@ -81,9 +89,8 @@ test.describe('monster art: distinct sprites and dialogue portraits', () => {
             const harpy = window.createMonster('harpy', { q: 0, r: 0 });
             window.showDialogue(harpy, 'test line');
         });
-        // Portrait assignment can complete asynchronously under the speculative
-        // asset loader. Test the eventual visible portrait rather than reading
-        // the img element in the same JavaScript turn as showDialogue().
+        // Dialogue may open before the speculative image request completes.
+        // The UI must update to the monster's real portrait once it is ready.
         await page.waitForFunction(() => {
             const img = document.querySelector('#dialogue-portrait img');
             return !!img?.src && img.src.includes('harpy.svg');
