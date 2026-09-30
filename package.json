@@ -9,6 +9,7 @@
   },
   "scripts": {
     "start": "node server.js",
+    "validate:png": "node scripts/validate-png-assets.mjs",
     "test": "playwright test",
     "test:unit": "node --test tests-unit/*.test.js",
     "test:ui": "playwright test --ui",
