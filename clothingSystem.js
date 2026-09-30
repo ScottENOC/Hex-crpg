@@ -2,7 +2,7 @@
 // Compatibility loader for the explicit garment-layer model.
 (() => {
   'use strict';
-  const BUILD='20260929-clothing-v10';
+  const BUILD='20260930-clothing-v11';
 
   function load(src,key){
     const attr=`data-${key}`;
