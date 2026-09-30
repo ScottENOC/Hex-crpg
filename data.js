@@ -30,7 +30,7 @@ const raceData = {
     // opposite lean from goblin's agile-skirmisher build. Heavy endurance
     // plus strength/weapons rather than agility.
     orc: {
-        bonus: { orc: 1, strength: 2, endurance: 1, weapons: 1 }
+        bonus: { orc: 1, strength: 2, endurance: 1 }
     }
 };
 
