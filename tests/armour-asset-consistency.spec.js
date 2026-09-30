@@ -45,17 +45,21 @@ test.describe('canonical human armour assets', () => {
     await page.waitForFunction(() => typeof window.renderEquipmentInterface === 'function');
     const inventorySources = await page.evaluate(() => {
       const p = window.player;
-      for (const id of ['light_armor','medium_armor','heavy_armor']) {
-        if (!p.inventory.includes(id)) p.inventory.push(id);
+      const out = {};
+      for (const [tier, id] of Object.entries({ light:'light_armor', medium:'medium_armor', heavy:'heavy_armor' })) {
+        p.equipped = { ...(p.equipped || {}), armor:id };
+        window.renderEquipmentInterface();
+        const armourSlot = [...document.querySelectorAll('#inventory-content button')]
+          .find(button => button.textContent?.includes('Armour'));
+        const image = armourSlot?.querySelector('img');
+        out[tier] = image ? new URL(image.src, document.baseURI).pathname : null;
       }
-      window.renderEquipmentInterface();
-      return [...document.querySelectorAll('#inventory-content img')]
-        .map(img => new URL(img.src, document.baseURI).pathname)
-        .filter(path => path.includes('/images/equipment/armour/human/'));
+      return out;
     });
 
-    for (const paths of Object.values(expected)) {
-      expect(inventorySources.some(path => endsWithCanonical(path, paths.front)), `inventory uses ${paths.front}`).toBe(true);
+    for (const [tier, paths] of Object.entries(expected)) {
+      expect(inventorySources[tier], `${tier} inventory image exists`).toBeTruthy();
+      expect(endsWithCanonical(inventorySources[tier], paths.front), `inventory uses ${paths.front}`).toBe(true);
     }
   });
 });
