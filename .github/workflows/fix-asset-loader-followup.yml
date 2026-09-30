@@ -12,16 +12,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Repair generated unit-test preamble if needed
+      - name: Repair bootstrap assertion in generated unit test
         run: |
           python - <<'PY'
           from pathlib import Path
           path=Path('.github/asset_loader_migration.py')
           source=path.read_text()
-          old="        r'''\\\n        const test = require('node:test');"
-          new="        r'''\n        const test = require('node:test');"
+          old="          assert.ok(!data.includes('assetLoadScheduler.js'), 'data.js must not install the scheduler itself');"
+          new="          assert.ok(!data.includes('document.write('), 'data.js must not inject scripts');\n          assert.ok(!data.includes('__assetLoadSchedulerInstalled'), 'data.js must not own scheduler installation');"
           if old not in source:
-              print('Migration generator already repaired.')
+              print('Bootstrap assertion already repaired.')
               raise SystemExit(0)
           path.write_text(source.replace(old,new))
           PY
@@ -29,5 +29,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .github/asset_loader_migration.py
-          git commit -m "chore: fix generated asset-manager test"
+          git commit -m "chore: narrow asset-loader bootstrap guard"
           git push origin HEAD:asset-loader-followup
