@@ -1,7 +1,7 @@
 // Explicit garment layers: one authored image per colourable part.
 (() => {
   'use strict';
-  const BUILD=window.PRESENTATION_BUILD||'20260930-visibility-assets-v1';
+  const BUILD=window.PRESENTATION_BUILD||'20260930-fitted-shirt-fit-v1';
   const slots=['underwear','bra','pants','shirt'];
   const preloadSlots=['shirt','pants','bra','underwear'];
   const labels={underwear:'Underwear',bra:'Bra',pants:'Pants',shirt:'Shirt / Dress'};
@@ -322,7 +322,13 @@
     const resolved=view(v),set=CLOTHING_TARGETS[resolved]||CLOTHING_TARGETS.front;
     if(slot==='shirt'){
       if(itemId==='top_dress') return set.dress;
-      if(itemId==='top_shirt_f') return {...set.shirt,y:set.shirt.y-.03,h:set.shirt.h+.06};
+      if(itemId==='top_shirt_f'){
+        // Its visible top must match the same heavy-armour envelope used by all
+        // outerwear. Widen the fitted shirt by 10% around centre only; because
+        // ordinary outerwear is 90% of armour width, this remains just inside it.
+        const w=set.shirt.w*1.10;
+        return {...set.shirt,x:set.shirt.x-(w-set.shirt.w)/2,w};
+      }
       return set.shirt;
     }
     if(slot==='pants') return set.pants;
