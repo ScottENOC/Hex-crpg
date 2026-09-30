@@ -47,7 +47,7 @@
             // huntress identity through real bow/riding/nature picks instead.
             skillPicks: [
                 'learn_summon_animal', 'learn_tiger_summon',
-                'nature_mana', 'nature_mana', 'bow_hit', 'riding',
+                'nature_mana', 'nature_mana', 'bow_hit', 'riding_druid',
                 'health', 'health'
             ]
         }
@@ -170,8 +170,6 @@
     }
 
     function configureArenaBosses() {
-        // arenaBosses is a top-level lexical binding in monsters.js rather than
-        // a window property, but later classic scripts can still reference it.
         if (typeof arenaBosses === 'undefined') return;
         Object.entries(ARENA_BUILDS).forEach(([name, build]) => {
             const config = arenaBosses[name];
@@ -180,9 +178,6 @@
             config.gender = config.gender || build.gender || 'male';
             config.classLevels = [...build.classLevels];
             config.skillPicks = [...build.skillPicks];
-            // Keep the old encounter-specific HP/mana/spell/equipment tuning;
-            // only the progression underneath it changes. Preserve the old base
-            // template's XP value now that gameEngine takes the buildNPC path.
             if (config.expValue == null && config.base && window.monsterTemplates?.[config.base]) {
                 config.expValue = window.monsterTemplates[config.base].expValue || 0;
             }
@@ -193,10 +188,6 @@
         CAMPAIGN_MONSTER_BUILDS.forEach(({ globalKey, build }) => {
             const spec = window[globalKey];
             if (!spec || !spec.customSkills) return;
-            // Make the authored model visible in the data object even though the
-            // legacy campaign2World helper still passes customSkills into
-            // createMonster. The non-enumerable marker lets the wrapper below
-            // recognise that exact skills object without polluting skill ranks.
             spec.race = build.race;
             spec.classLevels = [...build.classLevels];
             spec.skillPicks = [...build.skillPicks];
@@ -264,9 +255,6 @@
     window.applyAuthoredNamedNpcBuild = applyAuthoredBuild;
     window.initialiseNamedNpcProgression = initialise;
 
-    // NPCProgression and its policy both register DOMContentLoaded from data.js
-    // before this module. Registering here means our narrow authored wrapper is
-    // installed last, outside the generic population/legacy-conversion wrappers.
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initialise, { once: true });
     else initialise();
 })();
