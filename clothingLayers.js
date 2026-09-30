@@ -1,7 +1,7 @@
 // Explicit garment layers: one authored image per colourable part.
 (() => {
   'use strict';
-  const BUILD=window.PRESENTATION_BUILD||'20260930-fitted-shirt-fit-v1';
+  const BUILD=window.PRESENTATION_BUILD||'20260930-fitted-shirt-fit-v2';
   const slots=['underwear','bra','pants','shirt'];
   const preloadSlots=['shirt','pants','bra','underwear'];
   const labels={underwear:'Underwear',bra:'Bra',pants:'Pants',shirt:'Shirt / Dress'};
@@ -49,7 +49,7 @@
   const FEMININE_TOP_FIT={
     top_blouse:{chest:1.08,waist:1.14},
     top_dress:{chest:1.11,waist:1.20},
-    top_shirt_f:{chest:1.10,waist:1.18},
+    top_shirt_f:{chest:1.30,waist:1.38},
     default:{chest:1.06,waist:1.10},
   };
 
@@ -323,10 +323,11 @@
     if(slot==='shirt'){
       if(itemId==='top_dress') return set.dress;
       if(itemId==='top_shirt_f'){
-        // Its visible top must match the same heavy-armour envelope used by all
-        // outerwear. Widen the fitted shirt by 10% around centre only; because
-        // ordinary outerwear is 90% of armour width, this remains just inside it.
-        const w=set.shirt.w*1.10;
+        // The fitted-shirt source has a much wider authored silhouette than the
+        // generic clothing box. Make its whole target 20% wider than the prior
+        // 1.10 fit while preserving its centre point; torso shaping below then
+        // restores the still-wider body section without equally inflating sleeves.
+        const w=set.shirt.w*1.32;
         return {...set.shirt,x:set.shirt.x-(w-set.shirt.w)/2,w};
       }
       return set.shirt;
