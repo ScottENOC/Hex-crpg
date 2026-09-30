@@ -49,7 +49,7 @@
   const FEMININE_TOP_FIT={
     top_blouse:{chest:1.08,waist:1.14},
     top_dress:{chest:1.11,waist:1.20},
-    top_shirt_f:{chest:1.30,waist:1.38},
+    top_shirt_f:{chest:1.73,waist:1.84},
     default:{chest:1.06,waist:1.10},
   };
 
