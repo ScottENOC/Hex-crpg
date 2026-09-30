@@ -237,7 +237,6 @@
             pump();
         }, delay + 1);
     }
-
     function pump() {
         const limit = concurrencyLimit();
         while (active < limit && queue.length) {
@@ -474,7 +473,8 @@
     async function runGate(title,manifest) {
         const paths=[...new Set(manifest.map(canonicalPath))];
         paths.forEach(path=>phaseCritical.add(path));
-        releaseDeferred(path=>phaseCritical.has(path));
+        // Keep renderer-owned image elements deferred while the gate probes warm
+        // the cache. Releasing them here duplicates every critical network request.
         const loadedPaths=new Set();
         let pending=[...paths];
         let attempt=0;
