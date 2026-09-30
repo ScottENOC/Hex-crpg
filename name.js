@@ -68,6 +68,10 @@ if('serviceWorker'in navigator){navigator.serviceWorker.register(`sw.js?build=${
         ['shieldAppearance.js','shieldAppearance'],
         ['shieldAppearanceUI.js','shieldAppearanceUI'],
         ['equipmentInterface.js','equipmentInterface'],
+        // Footwear used to rely only on clothingSystem.js's nested loader. Keep
+        // the same data-footwear-system marker, but bootstrap it here too so a
+        // stale/missed clothing child load cannot silently remove all shoes.
+        ['footwearSystem.js','footwearSystem'],
         ['renderHotPathCache.js','renderHotPathCache'],
     ];
     for (const [src,key] of scripts) {
