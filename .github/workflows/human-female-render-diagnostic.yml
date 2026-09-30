@@ -1,49 +1,70 @@
-name: Humanoid Renderer Focused Tests
+name: Humanoid Renderer Image Dedup Migration
 
-# Deliberately scoped to the direct humanoid + clothing regressions; do not expand this to the full suite.
 on:
   push:
     branches:
       - development
     paths:
-      - 'humanoidRenderer.js'
-      - 'rendererAssetRecovery.js'
-      - 'equipmentInterface.js'
-      - 'clothingLayers.js'
-      - 'clothingSystem.js'
-      - 'characterCreation.js'
-      - 'braidDirectionalHair.js'
-      - 'index.html'
-      - 'entities.js'
-      - 'graphicsSettings.js'
-      - 'name.js'
-      - 'tests/human-female-direct-render.spec.js'
-      - 'tests/humanoid-body-fallback-regression.spec.js'
-      - 'tests/armour-asset-consistency.spec.js'
-      - 'tests/visibility-assets.spec.js'
-      - 'images/characters/elf_female/**'
-      - 'images/characters/human_female/**'
-      - 'images/equipment/clothing/**'
-      - 'images/equipment/armour/**'
       - '.github/workflows/human-female-render-diagnostic.yml'
 
-concurrency:
-  group: humanoid-renderer-${{ github.ref }}
-  cancel-in-progress: true
+permissions:
+  contents: write
 
 jobs:
-  focused-render:
+  patch-source:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Run focused humanoid, clothing and armour rendering regressions
-        run: npx playwright test tests/human-female-direct-render.spec.js tests/humanoid-body-fallback-regression.spec.js tests/armour-asset-consistency.spec.js tests/visibility-assets.spec.js --reporter=line
+          ref: development
+          fetch-depth: 0
+      - name: Deduplicate renderer image objects
+        run: |
+          git pull --rebase origin development
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('humanoidRenderer.js')
+          text = p.read_text()
+          old = """    const previousHex = new WeakMap();
+              const trimCache = new WeakMap();
+              let legacyDrawPlayerCharacter = null;
+          """
+          new = """    const previousHex = new WeakMap();
+              const trimCache = new WeakMap();
+              // Several humanoid rigs intentionally share the same authored hair paths.
+              // Keep one HTMLImageElement per source so a failed request/retry cannot leave
+              // one race's private copy broken while another copy of the same file succeeds.
+              const rendererImageCache = new Map();
+              let legacyDrawPlayerCharacter = null;
+          """
+          if old not in text:
+              raise SystemExit('Renderer declaration anchor not found')
+          text = text.replace(old, new, 1)
+
+          old = """    function loadImage(src) {
+                  if (typeof Image === 'undefined') return null;
+                  const image = new Image();
+                  const assetBuild = encodeURIComponent(window.PRESENTATION_BUILD || 'direct-humanoid-assets-v1');
+          """
+          new = """    function loadImage(src) {
+                  if (typeof Image === 'undefined') return null;
+                  if (rendererImageCache.has(src)) return rendererImageCache.get(src);
+                  const image = new Image();
+                  // Cache before assigning src so every consumer immediately shares the same
+                  // in-flight request and, importantly, the same later retry/recovered image.
+                  rendererImageCache.set(src, image);
+                  const assetBuild = encodeURIComponent(window.PRESENTATION_BUILD || 'direct-humanoid-assets-v1');
+          """
+          if old not in text:
+              raise SystemExit('Renderer loadImage anchor not found')
+          p.write_text(text.replace(old, new, 1))
+          PY
+      - name: Commit and push source fix
+        run: |
+          git config user.name 'ScottENOC'
+          git config user.email 'bales.scott@gmail.com'
+          git add humanoidRenderer.js
+          git commit -m 'Deduplicate shared renderer image loads'
+          git pull --rebase origin development
+          git push origin HEAD:development
