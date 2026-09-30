@@ -213,7 +213,6 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
     }
-    window.addEventListener('click', handleMenuDropdownToggle);
 
     // .dropdown-content has no explicit left/right, so it inherits whatever
     // static position its trigger button ends up at in the wrapped #top-menu
