@@ -28,6 +28,10 @@ test.describe('Queen Seraphine Corrin: gold-tinted heavy armor and helm', () => 
 
     test('getGoldTintedSprite pushes a near-grayscale armor image to a strong gold hue instead of leaving it unchanged', async ({ page }) => {
         await createCharacter(page, { campaign: '1' });
+        await page.waitForFunction(() => {
+            const img = window.gameVisuals?.humanHeavy;
+            return !!img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0;
+        }, null, { timeout: 5000 });
         const result = await page.evaluate(() => {
             const img = window.gameVisuals.humanHeavy;
             const tinted = window.getGoldTintedSprite(img);
