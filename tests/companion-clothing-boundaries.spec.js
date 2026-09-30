@@ -2,18 +2,27 @@ const { test, expect } = require('@playwright/test');
 const { createCharacter } = require('./helpers.js');
 
 async function waitForSystem(page) {
-    await page.waitForFunction(() =>
-        !!window.companionRelationships &&
-        typeof window.getCompanionRelationship === 'function' &&
-        typeof window.setCompanionRelationship === 'function' &&
-        typeof window.getCompanionClothingPermission === 'function' &&
-        typeof window.withSystemCompanionClothingOverride === 'function' &&
-        typeof window.captureCompanionClothingBaseline === 'function' &&
-        typeof window.clothingSystem?.setLayerColour === 'function' &&
-        typeof window.equipmentAppearanceSystem?.setSlotVisible === 'function' &&
-        typeof window.equipItem === 'function' &&
-        typeof window.unequipItem === 'function'
-    );
+    await page.waitForFunction(() => {
+        const ready =
+            !!window.companionRelationships &&
+            typeof window.companionRelationships.refreshHooks === 'function' &&
+            typeof window.getCompanionRelationship === 'function' &&
+            typeof window.setCompanionRelationship === 'function' &&
+            typeof window.getCompanionClothingPermission === 'function' &&
+            typeof window.withSystemCompanionClothingOverride === 'function' &&
+            typeof window.captureCompanionClothingBaseline === 'function' &&
+            typeof window.clothingSystem?.setLayerColour === 'function' &&
+            typeof window.equipmentAppearanceSystem?.setSlotVisible === 'function' &&
+            typeof window.equipItem === 'function' &&
+            typeof window.unequipItem === 'function';
+        if (!ready) return false;
+        // clothingSystem/equipmentAppearance are injected dynamically. Ask the
+        // relationship module through its public refresh API to attach consent
+        // gates now that every dependency is present, rather than asserting on
+        // private wrapper-marker properties.
+        window.companionRelationships.refreshHooks();
+        return true;
+    });
 }
 
 async function addCompanion(page, name = 'Boundary Test Companion') {
