@@ -32,6 +32,10 @@ test.describe('seasonal leaf tint and rarer wilderness resources', () => {
 
     test('a tinted foliage sprite remains drawable at the source aspect ratio regardless of recolour backing type', async ({ page }) => {
         await createCharacter(page);
+        await page.waitForFunction(() => {
+            const img = window.gameVisuals?.tree_small;
+            return !!img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0;
+        }, null, { timeout: 5000 });
         const result = await page.evaluate(() => {
             const img = window.gameVisuals.tree_small;
             const tint = window.getSeasonalLeafTint();
