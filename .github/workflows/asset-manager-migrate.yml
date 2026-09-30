@@ -1,0 +1,44 @@
+name: Asset manager migration
+
+on:
+  push:
+    branches: [asset-manager-cleanup]
+    paths:
+      - 'scripts/migrate-asset-manager.mjs'
+      - '.github/workflows/asset-manager-migrate.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    if: ${{ !contains(github.event.head_commit.message, '[asset-manager-migrated]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: asset-manager-cleanup
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Apply guarded migration
+        run: node scripts/migrate-asset-manager.mjs
+      - name: Validate syntax
+        run: |
+          for f in assetLoadScheduler.js gameEngine.js humanoidRenderer.js main.js pantsVariantFixes.js skirtClothing.js braidDirectionalHair.js clothingLayers.js equipmentInterface.js facingSystem.js npcBuilder.js equipmentAppearance.js directionalPresentationFixes.js shieldAppearance.js scenario5ArmourLab.js spriteRigPreview.js raceSkinPalettes.js renderHotPathCache.js; do
+            node --check "$f"
+          done
+      - run: npm run validate:png
+      - run: npm run test:unit
+      - name: Remove migration-only files
+        run: rm -f asset-manager-audit-trigger.txt scripts/migrate-asset-manager.mjs .github/workflows/asset-manager-migrate.yml
+      - name: Commit migrated source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'refactor: centralise runtime image loading [asset-manager-migrated]'
+          git push origin HEAD:asset-manager-cleanup
