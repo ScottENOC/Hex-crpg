@@ -186,9 +186,12 @@
 
     function turnKey(entity) {
         if (!entity || typeof entity !== 'object') return String(entity);
-        if (entity.id !== undefined && entity.id !== null) return `id:${entity.id}`;
-        if (entity.networkId) return `net:${entity.networkId}`;
-        if (!turnEntityKeys.has(entity)) turnEntityKeys.set(entity, `obj:${++turnEntitySerial}`);
+        if (!turnEntityKeys.has(entity)) {
+            const stableHint = entity.id !== undefined && entity.id !== null
+                ? `id:${entity.id}`
+                : (entity.networkId ? `net:${entity.networkId}` : 'entity');
+            turnEntityKeys.set(entity, `${stableHint}|obj:${++turnEntitySerial}`);
+        }
         return turnEntityKeys.get(entity);
     }
 
@@ -199,6 +202,7 @@
 
     function appearanceKey(entity) {
         return safeJson({
+            name: entity.name, side: entity.side,
             race: entity.race, gender: entity.gender, bodyType: entity.bodyType,
             hairStyle: entity.hairStyle, hairHue: entity.hairHue,
             hairLightMult: entity.hairLightMult, hairSatMult: entity.hairSatMult,
