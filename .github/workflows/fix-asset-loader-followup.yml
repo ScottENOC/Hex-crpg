@@ -12,21 +12,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Repair Python helper if needed
+      - name: Repair generated unit-test preamble if needed
         run: |
           python - <<'PY'
           from pathlib import Path
-          path=Path('.github/workflows/asset-loader-followup.yml')
+          path=Path('.github/asset_loader_migration.py')
           source=path.read_text()
-          bad="'''.replace(/^          /gm,''))"
-          if bad not in source:
-              print('Migration helper already repaired.')
+          old="        r'''\\\n        const test = require('node:test');"
+          new="        r'''\n        const test = require('node:test');"
+          if old not in source:
+              print('Migration generator already repaired.')
               raise SystemExit(0)
-          path.write_text(source.replace(bad,"''')"))
+          path.write_text(source.replace(old,new))
           PY
           if git diff --quiet; then exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/workflows/asset-loader-followup.yml
-          git commit -m "chore: fix asset-loader migration helper"
+          git add .github/asset_loader_migration.py
+          git commit -m "chore: fix generated asset-manager test"
           git push origin HEAD:asset-loader-followup
