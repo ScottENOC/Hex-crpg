@@ -4,10 +4,15 @@ const { createCharacter } = require('./helpers.js');
 async function waitForSystem(page) {
     await page.waitForFunction(() =>
         !!window.companionRelationships &&
-        !!window.clothingSystem?.setLayerColour?.__companionBoundaryAware &&
-        !!window.equipmentAppearanceSystem?.setSlotVisible?.__companionBoundaryAware &&
-        !!window.equipItem?.__companionBoundaryAware &&
-        !!window.unequipItem?.__companionBoundaryAware
+        typeof window.getCompanionRelationship === 'function' &&
+        typeof window.setCompanionRelationship === 'function' &&
+        typeof window.getCompanionClothingPermission === 'function' &&
+        typeof window.withSystemCompanionClothingOverride === 'function' &&
+        typeof window.captureCompanionClothingBaseline === 'function' &&
+        typeof window.clothingSystem?.setLayerColour === 'function' &&
+        typeof window.equipmentAppearanceSystem?.setSlotVisible === 'function' &&
+        typeof window.equipItem === 'function' &&
+        typeof window.unequipItem === 'function'
     );
 }
 
