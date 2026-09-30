@@ -38,6 +38,24 @@ test.describe('Bag of Holding encumbrance', () => {
         expect(result.carryBonus).toBe(0);
     });
 
+    test('multiple Bags of Holding stack their full weight offsets', async ({ page }) => {
+        await createCharacter(page);
+        const result = await page.evaluate(() => {
+            window.partyInventory.length = 0;
+            for (let i = 0; i < 20; i++) window.partyInventory.push('stone');
+            const loadedWeight = window.getPartyCarryWeight();
+            window.partyInventory.push('magic_backpack', 'magic_backpack');
+            return {
+                loadedWeight,
+                withTwoBagsWeight: window.getPartyCarryWeight(),
+            };
+        });
+
+        expect(result.loadedWeight).toBe(160);
+        expect(result.loadedWeight - result.withTwoBagsWeight).toBe(80);
+        expect(result.withTwoBagsWeight).toBe(80);
+    });
+
     test('negative carried weight never makes effective party weight less than zero', async ({ page }) => {
         await createCharacter(page);
         const weight = await page.evaluate(() => {
@@ -46,5 +64,27 @@ test.describe('Bag of Holding encumbrance', () => {
             return window.getPartyCarryWeight();
         });
         expect(weight).toBe(0);
+    });
+
+    test('dev all-items cheat grants 20 bags but still only two of ordinary items', async ({ page }) => {
+        await createCharacter(page);
+        const added = await page.evaluate(() => {
+            const inventory = window.player.inventory;
+            const count = id => inventory.filter(itemId => itemId === id).length;
+            const before = {
+                bags: count('magic_backpack'),
+                daggers: count('dagger'),
+            };
+
+            window.addAllEquipment();
+
+            return {
+                bags: count('magic_backpack') - before.bags,
+                daggers: count('dagger') - before.daggers,
+            };
+        });
+
+        expect(added.bags).toBe(20);
+        expect(added.daggers).toBe(2);
     });
 });
