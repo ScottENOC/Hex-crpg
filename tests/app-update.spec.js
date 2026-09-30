@@ -12,10 +12,10 @@ test.describe('Home Screen build refresh', () => {
         expect(current.meta).toBe(current.runtime);
         expect(current.runtime).toMatch(/^\d{8}-[a-z0-9-]+$/);
 
-        await page.route('**/name.js?app-update-check=*', route => route.fulfill({
+        await page.route('**/index.html?app-update-check=*', route => route.fulfill({
             status:200,
-            contentType:'application/javascript',
-            body:"const PRESENTATION_BUILD = 'future-build';",
+            contentType:'text/html',
+            body:'<meta name="app-build" content="future-build">',
         }));
         expect(await page.evaluate(() => window.checkForAppUpdate({ reload:false }))).toBe(true);
     });

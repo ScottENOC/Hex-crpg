@@ -297,8 +297,8 @@ function itemImage(raw,size=54){
 
   const path=imagePath(raw);
   if(path){
-    const img=document.createElement('img');
-    img.src=`${path}?build=${encodeURIComponent(BUILD)}`;
+    const img=window.assetManager.createDOMImage();
+    window.assetManager.bind(img,path,{priority:-20,onError:()=>img.onerror?.()});
     img.alt='';
     img.style.cssText=`max-width:${size}px;max-height:${size}px;object-fit:contain;`;
     img.onerror=()=>{

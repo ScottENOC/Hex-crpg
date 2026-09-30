@@ -118,7 +118,8 @@ test('bootstrap clothing layers all consume the shared presentation build token'
     contains(creationSource, 'clothingSystem.js?build=${encodeURIComponent(window.PRESENTATION_BUILD');
     contains(clothingLoaderSource, 'const BUILD=window.PRESENTATION_BUILD||');
     contains(layersSource, 'const BUILD=window.PRESENTATION_BUILD||');
-    assert.match(nameSource, /const PRESENTATION_BUILD = '[^']+';/);
+    contains(indexSource, '<meta name="app-build" content="');
+    contains(nameSource, 'document.querySelector(\'meta[name="app-build"]\')?.content');
     contains(nameSource, 'window.PRESENTATION_BUILD = PRESENTATION_BUILD;');
     contains(nameSource, "['renderHotPathCache.js','renderHotPathCache']");
 });

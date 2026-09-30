@@ -15,6 +15,7 @@ test.describe('asset load scheduler', () => {
         transientRetryDelayMs:scheduler.transientRetryDelayMs,
         scriptSrc:script?.src || '',
         presentationBuild:window.PRESENTATION_BUILD,
+        schedulerVersion:scheduler.version,
       };
     });
 
@@ -25,7 +26,9 @@ test.describe('asset load scheduler', () => {
       transientRetryDelayMs:180,
     });
     expect(state.presentationBuild).toMatch(/^\d{8}-[a-z0-9-]+$/);
-    expect(state.scriptSrc).toMatch(/assetLoadScheduler\.js\?build=[^&]+/);
+    const scriptUrl = new URL(state.scriptSrc);
+    expect(scriptUrl.pathname).toMatch(/assetLoadScheduler\.js$/);
+    expect(scriptUrl.searchParams.get('v')).toBe(state.schedulerVersion);
   });
 
   test('switches into gameplay scheduling before the game starts loading', async ({ page }) => {
