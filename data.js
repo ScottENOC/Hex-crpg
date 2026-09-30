@@ -177,6 +177,15 @@ if (!window.__reynaEmptyBlindModuleLoaded) {
     document.write('<script src="reynaEmptyBlind.js?build=20260930-reyna-empty-blind-v1"><\/script>');
 }
 
+// Alden's first post-recruitment chapter follows the people erased from
+// Northwatch's official memorial into the Grand Cathedral burial register. It
+// develops his detachment-vs-engagement philosophy, restores individual names
+// where possible, and leaves a missing-body breadcrumb for the necromancer arc.
+if (!window.__aldenUncountedModuleLoaded) {
+    window.__aldenUncountedModuleLoaded = true;
+    document.write('<script src="aldenUncounted.js?build=20260930-alden-uncounted-v1"><\/script>');
+}
+
 // Companion stories also feed back into major quests. The Vessel-Seeker / lich
 // arc can now surface party-specific counsel whose wording depends on personal
 // quest outcomes and evolving companion values, and companions who actually
