@@ -130,6 +130,16 @@ if (!window.__balrikLastHoldModuleLoaded) {
     document.write('<script src="balrikLastHold.js?build=20260930-balrik-last-hold-v1"><\/script>');
 }
 
+// Thessaly already intersects A Noble's Grudge and Mirabel's Concordance, so
+// her first persistent-character pass deepens those consequences instead of
+// inventing another quest. Her personal theme is responsible institutional
+// memory: secrecy can be necessary, but deliberately forgetting dangerous work
+// merely forces the next generation to rediscover old mistakes without context.
+if (!window.__thessalyCourtWizardModuleLoaded) {
+    window.__thessalyCourtWizardModuleLoaded = true;
+    document.write('<script src="thessalyCourtWizard.js?build=20260930-thessaly-court-wizard-v1"><\/script>');
+}
+
 // Relationship progression is intentionally separate from the storage/
 // permission layer above: familiarity grows from unique personal conversations
 // and slow shared time, while trust moves only through explicit authored events.
