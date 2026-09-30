@@ -3,7 +3,7 @@
 (() => {
 'use strict';
 const root = typeof window !== 'undefined' ? window : globalThis;
-const BUILD = '20261001-personality-knowledge-v2';
+const BUILD = '20261001-personality-knowledge-v3';
 const CLUES = {
  'Wren Talbot': {
   authority:['Wren is wary of people who expect obedience just because of rank.','Wren dislikes inherited or unearned authority, but respects leadership that proves useful and protects people.','Wren responds best to authority that is accountable and chosen; coercive loyalty is likely to push her away.'],
@@ -41,8 +41,28 @@ const TOPIC_TRAITS = {
  'Reyna Fletcher': {values_trust:'trust',values_institutions:'justice'},
  'Brother Alden': {values_compassion:'engagement',values_names:'dignity'}
 };
-function player(){ return root.player || (Array.isArray(root.party) ? root.party[0] : null); }
-function state(){ const p=player(); if(!p)return null; return p.companionPersonalityKnowledge ||= {}; }
+function player(){ return (Array.isArray(root.party) && root.party[0]) || root.player || null; }
+function mergeStore(target,source){
+ if(!source||source===target)return target;
+ for(const [name,traits] of Object.entries(source)){
+  if(!traits||typeof traits!=='object')continue;
+  const dest=target[name] ||= {};
+  for(const [trait,value] of Object.entries(traits)){
+   if(!value||typeof value!=='object')continue;
+   if((Number(value.level)||0)>(Number(dest[trait]?.level)||0))dest[trait]={...value};
+  }
+ }
+ return target;
+}
+function state(){
+ const p=player(); if(!p)return null;
+ const store=p.companionPersonalityKnowledge ||= {};
+ // Early builds used the currently controlled character (`window.player`) as
+ // the owner. Fold any such knowledge into the stable lead character so party
+ // switching cannot split what the human player has learned.
+ if(Array.isArray(root.party))for(const member of root.party)if(member&&member!==p)mergeStore(store,member.companionPersonalityKnowledge);
+ return store;
+}
 function learn(name,trait,amount=1,source=''){
  const levels=CLUES[name]?.[trait], store=state(); if(!levels||!store)return null;
  const char=store[name] ||= {}, previous=Number(char[trait]?.level)||0;
