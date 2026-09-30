@@ -1,0 +1,42 @@
+name: Asset loader follow-up
+
+on:
+  push:
+    branches: [asset-loader-followup]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect loader/bootstrap references
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          print('=== HTML data.js / scheduler references ===')
+          for p in Path('.').rglob('*.html'):
+              s=p.read_text(errors='ignore')
+              if 'data.js' in s or 'assetLoadScheduler.js' in s:
+                  print(p)
+                  for i,line in enumerate(s.splitlines(),1):
+                      if 'data.js' in line or 'assetLoadScheduler.js' in line or 'app-build' in line:
+                          print(f'  {i}: {line.strip()}')
+          print('\n=== PRESENTATION_BUILD references ===')
+          for p in Path('.').rglob('*'):
+              if not p.is_file() or any(part in {'.git','node_modules'} for part in p.parts):
+                  continue
+              try:s=p.read_text()
+              except:continue
+              if 'PRESENTATION_BUILD' in s:
+                  for i,line in enumerate(s.splitlines(),1):
+                      if 'PRESENTATION_BUILD' in line:
+                          print(f'{p}:{i}: {line.strip()}')
+          print('\n=== tests mentioning scheduler URL ===')
+          for root in ('tests','tests-unit'):
+              for p in Path(root).rglob('*.js'):
+                  s=p.read_text(errors='ignore')
+                  if 'assetLoadScheduler.js' in s:
+                      for i,line in enumerate(s.splitlines(),1):
+                          if 'assetLoadScheduler.js' in line:
+                              print(f'{p}:{i}: {line.strip()}')
+          PY
