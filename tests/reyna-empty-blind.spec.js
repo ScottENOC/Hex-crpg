@@ -141,15 +141,26 @@ test.describe('Reyna companion quest: The Empty Blind', () => {
     test('relationship combinations produce Reyna-specific casual, FWB, romantic and friend modes', async ({ page }) => {
         const modes = await page.evaluate(() => {
             const reyna = window.party.find(p => p.name === 'Reyna Fletcher');
-            const affinity = window.companionAffinity.ensureAffinity(reyna);
+            // Reyna is lesbian, so use a feminine protagonist for this test of
+            // the high-attraction branches. A masculine protagonist is
+            // correctly capped at very low attraction by companionAffinity.
+            window.party[0].gender = 'female';
+            window.party[0].bodyPresentation = 'female';
+            let affinity = window.companionAffinity.ensureAffinity(reyna);
             const rel = window.companionRelationships.ensureRelationship(reyna);
 
             affinity.friendship = 20; affinity.romanticBond = 5; affinity.attraction = 75; rel.trust = 30;
             const casual = window.reynaEmptyBlind.aftermathMode();
+
+            affinity = window.companionAffinity.ensureAffinity(reyna);
             affinity.friendship = 70; affinity.romanticBond = 10; affinity.attraction = 75;
             const fwb = window.reynaEmptyBlind.aftermathMode();
+
+            affinity = window.companionAffinity.ensureAffinity(reyna);
             affinity.friendship = 65; affinity.romanticBond = 55; affinity.attraction = 75; rel.trust = 60;
             const romantic = window.reynaEmptyBlind.aftermathMode();
+
+            affinity = window.companionAffinity.ensureAffinity(reyna);
             affinity.friendship = 60; affinity.romanticBond = 5; affinity.attraction = 10;
             const closeFriend = window.reynaEmptyBlind.aftermathMode();
             return { casual, fwb, romantic, closeFriend };
