@@ -7,7 +7,7 @@ on:
       - '.github/workflows/oneoff-fix-kite-shield.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   clean-kite-shield:
@@ -23,7 +23,6 @@ jobs:
         shell: bash
         run: |
           cat > /tmp/fix_kite.py <<'PY'
-          from collections import deque
           from pathlib import Path
           import json
           import numpy as np
@@ -40,9 +39,8 @@ jobs:
           rgb = arr[..., :3].astype(np.int16)
           original_alpha = arr[..., 3]
 
-          # Learn the apparent background from a narrow border strip.  The source
-          # has a fake transparency/checker background, so several border colours
-          # can all represent the same connected background.
+          # Learn the apparent background from a narrow border strip. Several
+          # pale checker colours can all represent the same fake transparency.
           strip = max(2, min(w, h) // 100)
           border = np.concatenate([
               rgb[:strip].reshape(-1, 3), rgb[-strip:].reshape(-1, 3),
@@ -61,8 +59,6 @@ jobs:
                   break
           palette = np.stack(palette)
 
-          # A generous RGB tolerance catches anti-aliased checker edges, but the
-          # subsequent flood fill means similar colours inside the shield remain.
           min_dist2 = np.full((h, w), 1 << 30, dtype=np.int32)
           for colour in palette:
               d = rgb - colour
@@ -70,15 +66,16 @@ jobs:
               np.minimum(min_dist2, dist2, out=min_dist2)
           candidate_bg = (min_dist2 <= 34 * 34) | (original_alpha <= 8)
 
-          # Only erase candidate pixels connected to the canvas edge.
-          bg, _ = ndimage.label(candidate_bg, structure=np.ones((3, 3), dtype=np.uint8))
-          edge_labels = np.unique(np.concatenate([bg[0], bg[-1], bg[:, 0], bg[:, -1]]))
+          # Only erase candidate background connected to the canvas edge.
+          bg_labels, _ = ndimage.label(candidate_bg, structure=np.ones((3, 3), dtype=np.uint8))
+          edge_labels = np.unique(np.concatenate([
+              bg_labels[0], bg_labels[-1], bg_labels[:, 0], bg_labels[:, -1]
+          ]))
           edge_labels = edge_labels[edge_labels != 0]
-          background = np.isin(bg, edge_labels)
+          background = np.isin(bg_labels, edge_labels)
 
-          # Keep the largest connected non-background opaque component. This
-          # removes any tiny checker artefacts that were not close enough to the
-          # learned border palette without eating internal shield detail.
+          # Keep the largest connected opaque component. This drops any tiny
+          # checker artefacts without erasing similarly coloured shield detail.
           rough_fg = (~background) & (original_alpha > 8)
           labels, count = ndimage.label(rough_fg, structure=np.ones((3, 3), dtype=np.uint8))
           if count == 0:
@@ -97,10 +94,8 @@ jobs:
           if not (0.03 <= foreground_fraction <= 0.80 and bbox_fraction <= 0.90):
               raise RuntimeError(f'Implausible segmentation: foreground={foreground_fraction:.3f}, bbox={bbox_fraction:.3f}')
 
-          cleaned_alpha = np.where(foreground, original_alpha, 0).astype(np.uint8)
-          arr[..., 3] = cleaned_alpha
+          arr[..., 3] = np.where(foreground, original_alpha, 0).astype(np.uint8)
           cleaned = Image.fromarray(arr, 'RGBA')
-
           margin = max(4, round(max(x1-x0, y1-y0) * 0.015))
           crop_box = (
               max(0, x0-margin), max(0, y0-margin),
@@ -109,9 +104,9 @@ jobs:
           cleaned = cleaned.crop(crop_box)
           cleaned.save(OUT / 'kite.png', optimize=True)
 
-          # Generate the rear from the exact cleaned silhouette so front/back
-          # occupy identical bounds. It echoes round_back.svg: warm wood,
-          # dark iron rim, leather retaining straps and rivets.
+          # Rear art uses the exact cleaned front silhouette, so the front and
+          # back occupy identical bounds. Visual language follows round_back.svg:
+          # warm wood, dark iron rim, leather retaining straps and rivets.
           cw, ch = cleaned.size
           alpha = cleaned.getchannel('A')
           yy, xx = np.mgrid[0:ch, 0:cw]
@@ -125,7 +120,6 @@ jobs:
           wood[..., 3] = np.asarray(alpha)
           back = Image.fromarray(wood, 'RGBA')
 
-          # Wood plank seams, clipped to the silhouette.
           detail = Image.new('RGBA', (cw, ch), (0,0,0,0))
           draw = ImageDraw.Draw(detail)
           for frac in (0.22, 0.39, 0.57, 0.74):
@@ -135,7 +129,6 @@ jobs:
           detail.putalpha(ImageChops.multiply(detail.getchannel('A'), alpha))
           back = Image.alpha_composite(back, detail)
 
-          # Inset iron rim follows the actual front silhouette.
           solid = alpha.point(lambda p: 255 if p >= 24 else 0)
           k = max(3, (round(min(cw,ch)*0.045) | 1))
           eroded = solid.filter(ImageFilter.MinFilter(k))
@@ -144,13 +137,11 @@ jobs:
           rim_layer.putalpha(ImageChops.multiply(rim, alpha))
           back = Image.alpha_composite(back, rim_layer)
 
-          # Two practical leather straps and simple iron rivets.
           straps = Image.new('RGBA', (cw,ch), (0,0,0,0))
           sd = ImageDraw.Draw(straps)
           leather = (84,53,35,235)
           leather_edge = (40,27,19,245)
-          straps_spec = [(.17,.34,.83,.43), (.25,.57,.76,.655)]
-          for left, top, right, bottom in straps_spec:
+          for left, top, right, bottom in [(.17,.34,.83,.43), (.25,.57,.76,.655)]:
               box=(round(cw*left),round(ch*top),round(cw*right),round(ch*bottom))
               radius=max(3, round((box[3]-box[1])*.28))
               sd.rounded_rectangle(box, radius=radius, fill=leather, outline=leather_edge, width=max(2,cw//180))
@@ -177,6 +168,18 @@ jobs:
           print(json.dumps(report, indent=2))
           PY
           python /tmp/fix_kite.py
+      - name: Commit repaired assets
+        shell: bash
+        run: |
+          cp kite-shield-output/kite.png images/equipment/shields/kite.png
+          cp kite-shield-output/kite_back.png images/equipment/shields/kite_back.png
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add images/equipment/shields/kite.png images/equipment/shields/kite_back.png
+          if ! git diff --cached --quiet; then
+            git commit -m 'Fix kite shield transparency, crop and rear art [skip ci]'
+            git push origin HEAD:development
+          fi
       - name: Upload repaired assets
         uses: actions/upload-artifact@v4
         with:
