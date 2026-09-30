@@ -70,6 +70,16 @@ function registerWrenMercyTopic(memory, maxUses = 3) {
   }]);
 }
 
+test('discoverable personality set stays compact and companion-specific', () => {
+  const { knowledge } = freshSystem();
+  assert.deepEqual(knowledge.discoverableTraits('Wren Talbot'), ['authority', 'mercy', 'attachment', 'pragmatism']);
+  assert.deepEqual(knowledge.discoverableTraits('Ser Aldric Thorne'), ['duty', 'burden', 'justice']);
+  assert.deepEqual(knowledge.discoverableTraits('Mirabel Quill'), ['curiosity', 'roots', 'responsibility']);
+  assert.deepEqual(knowledge.discoverableTraits('Fenn Oakheart'), ['stewardship', 'independence', 'reciprocity']);
+  assert.deepEqual(knowledge.discoverableTraits('Reyna Fletcher'), ['trust', 'justice', 'interdependence']);
+  assert.deepEqual(knowledge.discoverableTraits('Brother Alden'), ['engagement', 'dignity', 'impermanence']);
+});
+
 test('mapped value conversations immediately become player-known personality clues', () => {
   const { hero, wren, knowledge, memory } = freshSystem();
   registerWrenMercyTopic(memory);
