@@ -109,7 +109,7 @@ if (!window.__companionRelationshipsModuleLoaded) {
 if (!window.__persistentCharacterRelationshipsModuleLoaded) {
     window.__persistentCharacterRelationshipsModuleLoaded = true;
     document.write('<script src="persistentCharacterRelationships.js?build=20260930-persistent-character-relationships-v1"><\/script>');
-    document.write('<script src="persistentCharacterDialogueHooks.js?build=20260930-persistent-character-dialogue-hooks-v1"><\/script>');
+    document.write('<script src="persistentCharacterDialogueHooks.js?build=20260930-persistent-character-dialogue-hooks-v2"><\/script>');
 }
 
 // Relationship progression is intentionally separate from the storage/
