@@ -26,7 +26,9 @@ function computeIndoorLightMult() {
     if (!region) return 1.0;
 
     // An open door lets daylight spill in — boosted by how bright it is
-    // outside right now, not just a flat indoor floor value.
+    // outside right now, not just a flat indoor floor value. Because
+    // getLightLevel() includes weather, overcast/stormy daylight also spills
+    // less strongly into interiors without dimming artificial light sources.
     const doorOpen = region.doorHex && window.getTerrainAt(region.doorHex.q, region.doorHex.r).name !== 'Wall';
     const daylightSpill = doorOpen ? getLightLevel() * 0.5 : 0;
     return Math.min(1, region.lightMult + daylightSpill);
@@ -183,7 +185,7 @@ function updateTime(delta) {
         if (window.tickFactionAgendas) window.tickFactionAgendas(delta);
 
         // The lich hunt (lichHunt.js): crownAwareness climbs on its own once
-        // the player becomes a lich, same "the world doesn't wait" principle.
+        // playerIsLich has been true, same "the world doesn't wait" principle.
         if (window.tickLichHunt) window.tickLichHunt(delta);
 
         // Region security/prosperity decay toward their (parent-influenced)
@@ -217,6 +219,7 @@ function updateTime(delta) {
         });
     }
 
+    if (window.weatherSystem?.refresh) window.weatherSystem.refresh();
     renderTime();
 }
 
@@ -236,13 +239,47 @@ function getLightLevel() {
     const noon = 12 * 3600;
 
     const distFromNoon = Math.abs(timeOfDay - noon);
-    
-    if (distFromNoon < halfDayLength * 0.8) return 1.0; // Full day
-    if (distFromNoon > halfDayLength * 1.2) return 0.2; // Full night
+    let baseLight;
+    if (distFromNoon < halfDayLength * 0.8) {
+        baseLight = 1.0; // Full day
+    } else if (distFromNoon > halfDayLength * 1.2) {
+        baseLight = 0.2; // Full night
+    } else {
+        // Transition (Dawn/Dusk)
+        const t = (distFromNoon - halfDayLength * 0.8) / (halfDayLength * 0.4);
+        baseLight = 1.0 - (t * 0.8);
+    }
 
-    // Transition (Dawn/Dusk)
-    const t = (distFromNoon - halfDayLength * 0.8) / (halfDayLength * 0.4);
-    return 1.0 - (t * 0.8); // Smoothly slide from 1.0 to 0.2
+    // Weather changes the amount of natural light reaching the world. Cloud
+    // cover is the main term, so a dry overcast day is still visibly dull;
+    // active rain/snow adds a smaller extinction term. Precipitation also
+    // implies a minimum effective cloud deck for lighting purposes even if
+    // the deterministic weather hash happened to roll a low cloudiness value.
+    // At night the effect is intentionally much weaker: a storm can make an
+    // already-dark night murkier, but never crush the 0.2 night floor toward
+    // unusable blackness.
+    const weather = typeof window.getWeatherStateAt === 'function'
+        ? window.getWeatherStateAt(totalS)
+        : window.currentWeather;
+    if (!weather) return baseLight;
+
+    const cloudiness = Math.max(0, Math.min(1, Number(weather.cloudiness) || 0));
+    const intensity = Math.max(0, Math.min(1, Number(weather.intensity) || 0));
+    const precipitation = weather.precipitation || 'none';
+    const effectiveCloudiness = precipitation === 'none'
+        ? cloudiness
+        : Math.max(cloudiness, Math.min(1, 0.62 + intensity * 0.28));
+    const cloudDimming = effectiveCloudiness * 0.30;
+    const precipDimming = precipitation === 'rain'
+        ? 0.06 + intensity * 0.08
+        : precipitation === 'snow' ? 0.025 + intensity * 0.045 : 0;
+
+    // 25% of the weather effect remains at full night, scaling smoothly to
+    // 100% in daylight. This preserves night readability while still letting
+    // dawn/dusk and stormy afternoons feel materially darker.
+    const daylightWeight = 0.25 + 0.75 * Math.max(0, Math.min(1, (baseLight - 0.2) / 0.8));
+    const weatherMultiplier = Math.max(0.58, 1 - (cloudDimming + precipDimming) * daylightWeight);
+    return baseLight * weatherMultiplier;
 }
 
 // Fractional hour-of-day (e.g. 13.5 = 1:30pm) — used by the NPC daily
@@ -342,10 +379,36 @@ function getFormattedTime() {
 function renderTime() {
     const timeDiv = document.getElementById("world-time-display");
     if (timeDiv) {
-        timeDiv.innerText = getFormattedTime();
+        const weather = window.currentWeather;
+        const weatherText = weather
+            ? ` • ${Math.round(weather.temperatureC)}°C${weather.precipitation === 'rain' ? ' • Rain' : weather.precipitation === 'snow' ? ' • Snow' : ''}`
+            : '';
+        timeDiv.innerText = getFormattedTime() + weatherText;
     }
 }
 
 window.updateTime = updateTime;
 window.getFormattedTime = getFormattedTime;
 window.getLightLevel = getLightLevel;
+
+// Keep weather in its own module, but load it from worldTime.js so the feature
+// is active in both browser and Capacitor builds without another fragile
+// index.html script-order dependency. Seasonal clothing follows only after
+// weather is ready so its temperature choices can consume the same state.
+(function loadWeatherModules() {
+    if (typeof document === 'undefined') return;
+    if (document.querySelector('script[data-weather-system]')) return;
+    const weatherScript = document.createElement('script');
+    weatherScript.src = 'weatherSystem.js?v=1';
+    weatherScript.async = false;
+    weatherScript.dataset.weatherSystem = 'true';
+    weatherScript.addEventListener('load', () => {
+        if (document.querySelector('script[data-seasonal-clothing]')) return;
+        const clothingScript = document.createElement('script');
+        clothingScript.src = 'seasonalClothing.js?v=3';
+        clothingScript.async = false;
+        clothingScript.dataset.seasonalClothing = 'true';
+        document.head.appendChild(clothingScript);
+    }, { once: true });
+    document.head.appendChild(weatherScript);
+})();

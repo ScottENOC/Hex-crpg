@@ -1,9 +1,9 @@
 // seasonalClothing.js
 // Adds unisex shorts and lets routine NPCs choose shorts/trousers from the
-// in-game calendar and time of day, with stable per-person temperature taste.
+// live outdoor temperature at their own location, with stable per-person taste.
 (() => {
   'use strict';
-  const BUILD='20260929-seasonal-clothing-v2';
+  const BUILD='20260930-weather-temperature-v4';
   const SHORTS_ID='pants_shorts';
   const TROUSERS_ID='pants_trousers';
   const AUTO_PANTS=new Set([SHORTS_ID,TROUSERS_ID]);
@@ -50,30 +50,37 @@
     return true;
   }
 
-  function seasonalWarmth(){
-    // worldTime.js uses a 360-day year; its summer daylight peak is month 5
-    // (day ~165) and winter trough month 11. A smooth curve avoids one hard
-    // calendar day where the whole town changes clothes at once.
+  function fallbackTemperatureC(){
+    // Compatibility fallback if this module is ever loaded without
+    // weatherSystem.js: preserves the old seasonal/day-night behaviour but
+    // expresses it in degrees so the clothing decision uses one scale.
     const doy=((day()%360)+360)%360;
     const seasonal=Math.cos(((doy-165)/360)*Math.PI*2);
-    // The same date feels cooler in the morning/evening than mid-afternoon.
-    const diurnal=Math.cos(((hour()-14)/24)*Math.PI*2)*.12;
-    return seasonal+diurnal;
+    const diurnal=Math.cos(((hour()-14)/24)*Math.PI*2);
+    return 14 + seasonal*10 + diurnal*5;
   }
 
-  function shortsThreshold(e){
-    // Range -0.25..1.05: some people keep shorts well into shoulder seasons,
-    // while others prefer trousers almost all year. Stable for each character.
+  function outdoorFeelsLikeC(e){
+    // Weather is spatial now: lower-r/northern NPCs genuinely experience a
+    // colder version of the same weather front, so their clothing choice must
+    // use their own hex rather than the player's current local temperature.
+    if(typeof window.getFeelsLikeTemperatureC==='function') return window.getFeelsLikeTemperatureC(undefined,e?.hex);
+    return fallbackTemperatureC();
+  }
+
+  function shortsThresholdC(e){
+    // Roughly 13..26 C: some people reach for shorts on the first mild day;
+    // others keep trousers on until it is genuinely hot. Stable per person.
     const u=(hash(`${seed(e)}|shorts-tolerance`)%10001)/10000;
-    return -.25+u*1.30;
+    return 13+u*13;
   }
 
   function choosePants(e){
     const d=day();
-    // Tiny stable day-to-day variation stops two otherwise identical dates
-    // around a person's cutoff from always resolving the same way.
-    const daily=(((hash(`${seed(e)}|pants-weather|${d}`)%10001)/10000)-.5)*.16;
-    return seasonalWarmth()+daily>=shortsThreshold(e)?SHORTS_ID:TROUSERS_ID;
+    // Small stable day-to-day personal variation prevents identical threshold
+    // temperatures from making a character flip at exactly the same degree.
+    const personalDaily=(((hash(`${seed(e)}|pants-weather|${d}`)%10001)/10000)-.5)*1.5;
+    return outdoorFeelsLikeC(e)+personalDaily>=shortsThresholdC(e)?SHORTS_ID:TROUSERS_ID;
   }
 
   function copyColour(e,oldId,newId){
@@ -157,5 +164,5 @@
   const timer=setInterval(()=>{install();if(installed)clearInterval(timer);},50);
   if(document.readyState==='complete') install(); else window.addEventListener('load',install,{once:true});
 
-  window.seasonalClothing={build:BUILD,choosePants,reconsider,update};
+  window.seasonalClothing={build:BUILD,choosePants,reconsider,update,outdoorFeelsLikeC};
 })();
