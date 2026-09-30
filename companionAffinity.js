@@ -176,10 +176,22 @@
 
     function presentationFor(entity = protagonist()) {
         const explicit = String(entity?.bodyPresentation || entity?.presentation || '').toLowerCase();
-        if (['masculine', 'feminine', 'androgynous'].includes(explicit)) return explicit;
-        const body = String(entity?.bodyType || entity?.gender || '').toLowerCase();
+        if (explicit === 'male' || explicit === 'masculine') return 'masculine';
+        if (explicit === 'female' || explicit === 'feminine') return 'feminine';
+        if (explicit === 'androgynous') return 'androgynous';
+
+        // bodyType is a build key such as "average" or "broad", not a gender
+        // presentation. Only use it when an older save actually stored a
+        // presentation-like value there, then fall back to the legacy gender
+        // body-art key.
+        const body = String(entity?.bodyType || '').toLowerCase();
         if (body === 'male' || body === 'masculine') return 'masculine';
         if (body === 'female' || body === 'feminine') return 'feminine';
+        if (body === 'androgynous') return 'androgynous';
+
+        const gender = String(entity?.gender || '').toLowerCase();
+        if (gender === 'male' || gender === 'masculine') return 'masculine';
+        if (gender === 'female' || gender === 'feminine') return 'feminine';
         return 'unknown';
     }
 
