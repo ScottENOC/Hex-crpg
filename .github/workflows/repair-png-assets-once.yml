@@ -1,0 +1,47 @@
+name: Repair malformed PNG assets once
+
+on:
+  push:
+    branches:
+      - development
+    paths:
+      - scripts/repair-malformed-pngs.mjs
+      - .github/workflows/repair-png-assets-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Fast-forward to latest development
+        run: git pull --ff-only origin development
+
+      - name: Repair safely recoverable PNG framing
+        run: node scripts/repair-malformed-pngs.mjs
+
+      - name: Validate repaired PNG assets
+        run: node scripts/validate-png-assets.mjs
+
+      - name: Commit repaired PNGs
+        run: |
+          if git diff --quiet -- images; then
+            echo "No PNG repairs were required."
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add images
+          git commit -m "Repair malformed PNG chunk framing"
+          git push origin HEAD:development
