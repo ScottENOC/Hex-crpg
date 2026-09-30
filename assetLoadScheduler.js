@@ -187,6 +187,13 @@
         return LEGACY_ASSET_REDIRECTS.get(requested) || requested;
     }
 
+    function cacheBusted(value, reason='retry') {
+        const raw=String(value);
+        if (/^(?:data:|blob:)/i.test(raw)) return raw;
+        const separator=raw.includes('?')?'&':'?';
+        return `${raw}${separator}assetRetry=${encodeURIComponent(reason)}-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+    }
+
     function selectedCampaign() {
         return document.getElementById('campaign-select')?.value || '1';
     }
@@ -275,13 +282,13 @@
     function queueImageAssignment(img, requestedValue, requestedPath, canonical) {
         const targetSrc = canonical === requestedPath ? requestedValue : canonical;
         enqueue(canonical, done => {
-            let retriesRemaining = 1;
+            let attempt = 0;
             const armAttempt = () => {
                 const onLoad = () => { cleanup(); done(); };
                 const onError = event => {
                     cleanup();
-                    if (retriesRemaining > 0) {
-                        retriesRemaining--;
+                    if (attempt < 1) {
+                        attempt++;
                         event?.preventDefault?.();
                         event?.stopImmediatePropagation?.();
                         setTimeout(armAttempt, TRANSIENT_RETRY_DELAY_MS);
@@ -295,7 +302,7 @@
                 };
                 img.addEventListener('load', onLoad, {once:true,capture:true});
                 img.addEventListener('error', onError, {once:true,capture:true});
-                nativeSrc.set.call(img, targetSrc);
+                nativeSrc.set.call(img, attempt ? cacheBusted(targetSrc,'automatic') : targetSrc);
             };
             armAttempt();
         });
@@ -418,7 +425,7 @@
                 .hex-loading-card{width:min(520px,92vw);padding:28px;border:1px solid #8f7445;border-radius:10px;background:#201d19;box-shadow:0 18px 60px #000a;text-align:center}
                 .hex-loading-title{font-size:1.55rem;margin:0 0 14px}.hex-loading-count{font-size:1rem;margin:0 0 14px;color:#d7c9a7}
                 .hex-loading-track{height:12px;border-radius:999px;overflow:hidden;background:#0d0c0a;border:1px solid #5f5037}.hex-loading-bar{height:100%;width:0;background:#b89a5c;transition:width .12s linear}
-                .hex-loading-error{margin-top:14px;color:#efb0a8}.hex-loading-retry{margin-top:12px;padding:9px 16px;cursor:pointer}
+                .hex-loading-error{margin-top:14px;color:#efb0a8;word-break:break-word}.hex-loading-retry{margin-top:12px;padding:9px 16px;cursor:pointer}
             `;
             document.head.appendChild(style);
         }
@@ -426,7 +433,7 @@
         if (!overlay) {
             overlay=document.createElement('div');
             overlay.id='hex-loading-gate';
-            overlay.innerHTML='<div class="hex-loading-card"><h2 class="hex-loading-title"></h2><p class="hex-loading-count"></p><div class="hex-loading-track"><div class="hex-loading-bar"></div></div><div class="hex-loading-error" hidden></div><button class="hex-loading-retry" hidden>Retry</button></div>';
+            overlay.innerHTML='<div class="hex-loading-card"><h2 class="hex-loading-title"></h2><p class="hex-loading-count"></p><div class="hex-loading-track"><div class="hex-loading-bar"></div></div><div class="hex-loading-error" hidden></div><button class="hex-loading-retry" hidden>Retry failed assets</button></div>';
             document.body.appendChild(overlay);
         }
         return overlay;
@@ -453,14 +460,14 @@
         if (overlay) overlay.hidden=true;
     }
 
-    function loadOne(path) {
+    function loadOne(path, forceFresh=false) {
         return new Promise((resolve,reject) => {
             const img=new Image();
             phaseImages.add(img);
             const cleanup=()=>phaseImages.delete(img);
             img.onload=()=>{cleanup();resolve(path);};
             img.onerror=()=>{cleanup();reject(path);};
-            img.src=path;
+            img.src=forceFresh ? cacheBusted(path,'gate') : path;
         });
     }
 
@@ -468,22 +475,35 @@
         const paths=[...new Set(manifest.map(canonicalPath))];
         paths.forEach(path=>phaseCritical.add(path));
         releaseDeferred(path=>phaseCritical.has(path));
-        let loaded=0;
+        const loadedPaths=new Set();
+        let pending=[...paths];
+        let attempt=0;
         const overlay=showOverlay(title,paths.length,0);
-        const results=await Promise.allSettled(paths.map(path=>loadOne(path).then(value=>{loaded++;updateOverlay(loaded,paths.length);return value;})));
-        const failed=results.filter(r=>r.status==='rejected').map(r=>r.reason);
-        if (!failed.length) {
-            paths.forEach(path=>phaseCritical.delete(path));
-            return true;
+
+        while (pending.length) {
+            const results=await Promise.allSettled(pending.map(path=>loadOne(path,attempt>0).then(value=>{
+                loadedPaths.add(value);
+                updateOverlay(loadedPaths.size,paths.length);
+                return value;
+            })));
+            const failed=results.filter(r=>r.status==='rejected').map(r=>r.reason);
+            if (!failed.length) break;
+
+            const error=overlay.querySelector('.hex-loading-error');
+            const retry=overlay.querySelector('.hex-loading-retry');
+            const names=failed.slice(0,4).map(path=>path.split('/').pop()).join(', ');
+            error.textContent=`Could not load ${failed.length} art asset${failed.length===1?'':'s'}${names?`: ${names}`:''}. Retry will bypass the browser cache.`;
+            error.hidden=false;
+            retry.hidden=false;
+            await new Promise(resolve=>retry.onclick=resolve);
+            retry.hidden=true;
+            error.hidden=true;
+            pending=failed;
+            attempt++;
         }
-        const error=overlay.querySelector('.hex-loading-error');
-        const retry=overlay.querySelector('.hex-loading-retry');
-        error.textContent=`Could not load ${failed.length} art asset${failed.length===1?'':'s'}.`;
-        error.hidden=false;
-        retry.hidden=false;
-        await new Promise(resolve=>retry.onclick=resolve);
+
         paths.forEach(path=>phaseCritical.delete(path));
-        return runGate(title,paths);
+        return true;
     }
 
     function beginGameplayLoading() {
