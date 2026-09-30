@@ -72,6 +72,7 @@ if('serviceWorker'in navigator){navigator.serviceWorker.register(`sw.js?build=${
         // the same data-footwear-system marker, but bootstrap it here too so a
         // stale/missed clothing child load cannot silently remove all shoes.
         ['footwearSystem.js','footwearSystem'],
+        ['footwearEquipmentUI.js','footwearEquipmentUI'],
         ['renderHotPathCache.js','renderHotPathCache'],
     ];
     for (const [src,key] of scripts) {
