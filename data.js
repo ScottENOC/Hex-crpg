@@ -206,6 +206,16 @@ if (!window.__companionRelationshipProgressionModuleLoaded) {
     document.write('<script src="companionRelationshipProgression.js?build=20260929-companion-relationship-progression-v2"><\/script>');
 }
 
+// Unrecruited companions should not freeze forever at their first recruitment
+// hex. This intentionally small agency layer relocates only companions whose
+// existing dialogue has a clean deferred-recruitment moment. It stores authored
+// recruitment-location stages on the protagonist save, moves them between a few
+// existing landmarks, and never resolves their personal or main quests off-screen.
+if (!window.__companionWorldAgencyModuleLoaded) {
+    window.__companionWorldAgencyModuleLoaded = true;
+    document.write('<script src="companionWorldAgency.js?build=20260930-companion-world-agency-v1"><\/script>');
+}
+
 // Wren's Millbrook personal quest sits on top of the relationship system. It is
 // intentionally build-agnostic: ordinary questioning can always solve it, while
 // Knowledge, Insight/Persuasion, Keen Perception and Stealth open parallel routes
