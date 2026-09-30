@@ -66,18 +66,26 @@ test.describe('visibility asset regressions', () => {
     });
 
     await createCharacter(page, { race:'human', gender:'female' });
-    await expect.poll(async () => {
-      const readiness = await page.evaluate(() => {
-        const set = window.DIRECTIONAL_CHARACTER_ASSETS?.human_female?.hair?.braid;
-        return {
-          rendererReady: !!window.__humanoidRendererReady,
-          front: set?.front?.naturalWidth || 0,
-          side: set?.side?.naturalWidth || 0,
-          back: set?.back?.naturalWidth || 0,
-        };
-      });
-      return { ...readiness, sideRequests, backRequests };
-    }, { timeout: 10000 }).toMatchObject({ rendererReady:true, front:1254, side:175, back:192 });
+    await page.waitForFunction(() => window.__humanoidRendererReady === true);
+    // The renderer's complete retry schedule is 100 + 350 + 900 ms. Give it well
+    // beyond that, then report both image readiness and actual network request counts
+    // explicitly if recovery failed; this distinguishes retry wiring from PNG decode.
+    await page.waitForTimeout(3000);
+    const readiness = await page.evaluate(() => {
+      const set = window.DIRECTIONAL_CHARACTER_ASSETS?.human_female?.hair?.braid;
+      return {
+        front: set?.front?.naturalWidth || 0,
+        side: set?.side?.naturalWidth || 0,
+        back: set?.back?.naturalWidth || 0,
+        sideSrc: set?.side?.src || null,
+        backSrc: set?.back?.src || null,
+      };
+    });
+    const retryState = { ...readiness, sideRequests, backRequests };
+    if (readiness.front !== 1254 || readiness.side !== 175 || readiness.back !== 192) {
+      throw new Error(`Braid recovery state: ${JSON.stringify(retryState)}`);
+    }
+
     await page.evaluate(() => {
       const entity = (window.entities || []).find(e =>
         e?.alive && e.side === 'player' && e.race === 'human' && e.gender === 'female'
