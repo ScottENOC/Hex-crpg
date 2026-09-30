@@ -349,6 +349,18 @@ if (!window.__wrenCrownQuietHandModuleLoaded) {
     document.write('<script src="wrenCrownQuietHand.js?build=20260930-wren-crown-quiet-hand-v1"><\/script>');
 }
 
+// Late-game companion conversation stays authored without becoming exhaustible.
+// A generic memory/salience layer remembers discussed subjects and applies
+// in-world cooldowns; Wren and Aldric are the pilot pools with milestone,
+// reactive, evergreen and finite personal-history conversations. It loads after
+// their story wrappers so the single "Talk for a while" entry decorates the final
+// companion dialogue tree rather than competing with quest-specific menus.
+if (!window.__companionConversationMemoryModuleLoaded) {
+    window.__companionConversationMemoryModuleLoaded = true;
+    document.write('<script src="companionConversationMemory.js?build=20260930-companion-conversation-memory-v1"><\/script>');
+    document.write('<script src="wrenAldricEvergreenDialogue.js?build=20260930-wren-aldric-evergreen-v1"><\/script>');
+}
+
 // Declarative hints for NPC/AI skill spending. Existing gameplay prereq fields
 // remain authoritative; these simply make equipment relationships explicit so
 // future generators/tools do not have to infer everything from descriptions.
