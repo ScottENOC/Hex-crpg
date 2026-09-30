@@ -39,7 +39,7 @@ window.generateName = window.getRandomName;
     window.randomizeCharacterAppearance({sync:false});
 })();
 
-const PRESENTATION_BUILD = '20260930-render-hotpath-cache-v1';
+const PRESENTATION_BUILD = '20260930-shared-asset-manager-v1';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
 const presentationBuildMeta=document.querySelector('meta[name="app-build"]');if(presentationBuildMeta)presentationBuildMeta.content=PRESENTATION_BUILD;
@@ -56,7 +56,8 @@ if('serviceWorker'in navigator){navigator.serviceWorker.register(`sw.js?build=${
 
 (() => {
     const scripts = [
-        ['assetLoadScheduler.js','assetLoadScheduler'],
+        // assetLoadScheduler.js is installed synchronously by data.js before any
+        // other game script. Do not request it a second time here.
         ['movementInputFix.js','movementInputFix'],
         ['spriteRigging.js','spriteRigging'],
         ['scenario5ArmourLab.js','scenario5ArmourLab'],
