@@ -2,7 +2,7 @@
 // Authored companion conversation memory, salience, cooldowns and personality clues.
 (() => {
 'use strict';
-const BUILD='20261001-companion-conversation-memory-v6', DAY=86400, DEFAULT_LIMIT=4, registry=new Map();
+const BUILD='20261001-companion-conversation-memory-v7', DAY=86400, DEFAULT_LIMIT=4, registry=new Map();
 const now=()=>Number(window.worldSeconds||0), party=()=>Array.isArray(window.party)?window.party:[], quest=id=>(window.questLog||[]).find(q=>q?.id===id)||null;
 function canonical(x){const n=typeof x==='string'?x:x?.name;return n?party().find((m,i)=>i>0&&m?.name===n)||null:null;}
 function ensureMemory(x){const c=canonical(x);if(!c)return null;window.getCompanionRelationship?.(c);c.playerRelationship ||= {familiarity:10,trust:10,history:[],knownConversationKeys:[]};const e=c.playerRelationship.conversationMemory||{};return c.playerRelationship.conversationMemory={version:3,topics:e.topics&&typeof e.topics==='object'?e.topics:{},history:Array.isArray(e.history)?e.history:[],lastMeaningful:e.lastMeaningful||null};}
@@ -33,5 +33,6 @@ if(typeof document!=='undefined'&&!window.__companionPersonalityKnowledgeModuleL
  load('companionPersonalityKnowledge.js?build=20261001-personality-knowledge-v4');
  load('companionPersonalityConversations.js?build=20260930-companion-personality-conversations-v1');
  load('companionEvergreenPersonalityClues.js?build=20260930-evergreen-personality-clues-v2');
+ load('companionDecisionAnticipation.js?build=20261001-companion-decision-anticipation-v1');
 }
 })();
