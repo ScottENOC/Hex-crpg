@@ -186,6 +186,16 @@ if (!window.__thrainRuneKeeperModuleLoaded) {
     document.write('<script src="thrainRuneKeeper.js?build=20260930-thrain-rune-keeper-v1"><\/script>');
 }
 
+// The persistent cast should form a social/political network, not nine isolated
+// sophisticated dialogue trees. Existing direct links above remain authoritative;
+// this pass fills only the strongest missing circles: Seraphine/Thessaly/Adelram
+// around dangerous supernatural knowledge, and Seraphine/Petra/Ilsa around
+// Ironbond evidence, witnesses, institutional continuity and accountability.
+if (!window.__persistentCharacterCrossReactivityModuleLoaded) {
+    window.__persistentCharacterCrossReactivityModuleLoaded = true;
+    document.write('<script src="persistentCharacterCrossReactivity.js?build=20260930-persistent-cross-reactivity-v1"><\/script>');
+}
+
 // Relationship progression is intentionally separate from the storage/
 // permission layer above: familiarity grows from unique personal conversations
 // and slow shared time, while trust moves only through explicit authored events.
