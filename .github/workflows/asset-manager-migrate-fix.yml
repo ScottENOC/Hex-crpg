@@ -46,6 +46,14 @@ jobs:
             if(!s.includes(from)) throw new Error('Expected compact armour lab loader not found');
             fs.writeFileSync(p,s.replace(from,to));
           }
+          {
+            const p='main.js';
+            let s=fs.readFileSync(p,'utf8');
+            const from='            if (_loadedKeys.has(asset.key)) return Promise.resolve(); // already loaded (or in flight) via an earlier tier / a race-select change';
+            const to='            if (_loadedKeys.has(asset.key)) return Promise.resolve();';
+            if(!s.includes(from)) throw new Error('Expected main preload comment line not found');
+            fs.writeFileSync(p,s.replace(from,to));
+          }
           NODE
       - name: Apply guarded migration
         run: node scripts/migrate-asset-manager.mjs
