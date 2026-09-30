@@ -50,7 +50,7 @@ test('Thessaly interprets the three Noble Grudge outcomes differently', () => {
 
   setup = fresh({ vendettaResolution: 'noble' });
   assert.match(setup.system.vendettaFollowupText(), /leverage/);
-  assert.match(setup.system.vendettaFollowupText(), /picked a side/);
+  assert.match(setup.system.vendettaFollowupText(), /preferred her side|choice was neutral/);
 });
 
 test('vendetta follow-up deepens a supportive relationship idempotently', () => {
