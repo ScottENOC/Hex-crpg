@@ -1,7 +1,7 @@
 // Explicit garment layers: one authored image per colourable part.
 (() => {
   'use strict';
-  const BUILD='20260929-clothing-layers-v20';
+  const BUILD=window.PRESENTATION_BUILD||'20260930-visibility-assets-v1';
   const slots=['underwear','bra','pants','shirt'];
   const preloadSlots=['shirt','pants','bra','underwear'];
   const labels={underwear:'Underwear',bra:'Bra',pants:'Pants',shirt:'Shirt / Dress'};
@@ -61,6 +61,9 @@
     pants_hose:singleLayer('pants','images/equipment/clothing/pants_hose.png','Hose'),
     pants_trousers:singleLayerViews('pants',{
       front:'images/equipment/clothing/pants_trousers.png',
+      // No separately authored side file exists; make the intentional front-art
+      // fallback explicit so every directional consumer resolves the same source.
+      side:'images/equipment/clothing/pants_trousers.png',
       back:'images/equipment/clothing/pants_trousers_back.png',
     },'Trousers'),
     underwear_briefs:twoToneGarment('underwear',{
@@ -211,7 +214,34 @@
     };
   }
 
-  function load(src){if(!src)return null;if(images.has(src))return images.get(src);const img=new Image();img.src=`${src}${src.includes('?')?'&':'?'}build=${BUILD}`;img.onload=()=>{window.renderEntities?.();window.refreshDirectionalTurnPortraits?.();};images.set(src,img);return img;}
+  function load(src){
+    if(!src)return null;
+    if(images.has(src))return images.get(src);
+    const img=new Image();
+    let attempt=0;
+    const retryDelays=[100,350,900];
+    const assign=()=>{
+      const separator=src.includes('?')?'&':'?';
+      const retry=attempt?`&assetRetry=${attempt}-${Date.now()}`:'';
+      img.src=`${src}${separator}build=${encodeURIComponent(BUILD)}${retry}`;
+    };
+    const redraw=()=>{
+      window.drawMap?.();
+      window.renderEntities?.();
+      window.refreshDirectionalTurnPortraits?.();
+      window.updateAppearancePreview?.();
+    };
+    img.addEventListener('load',redraw);
+    img.addEventListener('error',()=>{
+      if(attempt>=retryDelays.length)return;
+      const delay=retryDelays[attempt];
+      attempt+=1;
+      setTimeout(assign,delay);
+    });
+    images.set(src,img);
+    assign();
+    return img;
+  }
   function view(v){return(v==='up'||v==='back')?'back':(v==='left'||v==='right'||v==='side')?'side':'front';}
   function sourceForLayer(l,v){const resolved=view(v);if(l.views?.[resolved])return l.views[resolved];if(resolved==='side')return l.views?.front||l.views?.back||null;return l.views?.front||null;}
 

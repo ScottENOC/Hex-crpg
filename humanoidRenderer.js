@@ -360,6 +360,33 @@
         return trim;
     }
 
+    function frontHairOpaqueWidthFraction(frontImage) {
+        const layout = DIRECTIONAL_LAYOUT.front;
+        if (!layout || !imageReady(frontImage)) return layout?.hairDest?.w || .56;
+        const trim = alphaTrim(frontImage);
+        const iw = frontImage.naturalWidth || frontImage.width || 1;
+        const cropLeft = layout.hairCrop.x * iw;
+        const cropRight = (layout.hairCrop.x + layout.hairCrop.w) * iw;
+        const trimLeft = trim.trimLeft;
+        const trimRight = trim.trimLeft + trim.trimWidth;
+        const visibleOpaque = Math.max(0, Math.min(trimRight, cropRight) - Math.max(trimLeft, cropLeft));
+        const cropWidth = Math.max(1, layout.hairCrop.w * iw);
+        return visibleOpaque ? layout.hairDest.w * (visibleOpaque / cropWidth) : layout.hairDest.w;
+    }
+
+    function tightDirectionalHairDestination(image, view, frontImage) {
+        if (!imageReady(image)) return null;
+        const trim = alphaTrim(image);
+        const iw = image.naturalWidth || image.width || 1;
+        const ih = image.naturalHeight || image.height || 1;
+        const opaqueFraction = Math.max(.01, trim.trimWidth / iw);
+        const wantedOpaqueWidth = frontHairOpaqueWidthFraction(frontImage);
+        const w = wantedOpaqueWidth / opaqueFraction;
+        const sourceAspect = iw / ih;
+        const h = w * HUMAN_RENDER_ASPECT / Math.max(.01, sourceAspect);
+        return {x:.5-w/2,y:view === 'back' ? -.005 : -.010,w,h};
+    }
+
     function drawVisibleFit(ctx, image, bounds, target) {
         if (!imageReady(image)) return false;
         const trim = alphaTrim(image);
@@ -621,7 +648,9 @@
         if (!imageReady(sourceBody)) return false;
 
         const layout = DIRECTIONAL_LAYOUT[view];
-        const sourceHair = set?.hair?.[entity.hairStyle || 'brown_1']?.[view] || set?.hair?.brown_1?.[view];
+        const hairStyle = entity.hairStyle || 'brown_1';
+        const hairSet = set?.hair?.[hairStyle] || set?.hair?.brown_1;
+        const sourceHair = hairSet?.[view] || set?.hair?.brown_1?.[view];
         const bodyImage = resolvedBodyImage(entity, sourceBody);
         const hairImage = resolvedHairImage(entity, sourceHair);
         const hasHelmet = !!entity.equipped?.helmet && equipmentSlotVisible(entity,'helmet');
@@ -671,7 +700,24 @@
             if (entity.displayArmour !== false && equipmentSlotVisible(entity,'armor') && entity.equipped?.armor && drawArmour(ctx, entity, view, bounds)) layerOrder.push('armour');
             if (typeof window.drawFacialHairLayer === 'function' && window.drawFacialHairLayer(ctx,entity,view,bounds)) layerOrder.push('facialHair');
             if (!hasHelmet && imageReady(hairImage)) {
-                if (drawCropped(ctx, hairImage, layout.hairCrop, layout.hairDest, bounds)) layerOrder.push('hair');
+                const tightDirectional = hairStyle === 'braid' && view !== 'front';
+                const tightDest = tightDirectional
+                    ? tightDirectionalHairDestination(sourceHair, view, hairSet?.front)
+                    : null;
+                const hairCrop = tightDest ? {x:0,y:0,w:1,h:1} : layout.hairCrop;
+                const hairDest = tightDest || layout.hairDest;
+                const hairDrawn = drawCropped(ctx, hairImage, hairCrop, hairDest, bounds);
+                if (hairDrawn) layerOrder.push('hair');
+                window.__humanoidRendererLastHair = {
+                    style:hairStyle,
+                    view,
+                    tightDirectional:!!tightDest,
+                    crop:{...hairCrop},
+                    dest:{...hairDest},
+                    sourceWidth:sourceHair?.naturalWidth || sourceHair?.width || 0,
+                    sourceHeight:sourceHair?.naturalHeight || sourceHair?.height || 0,
+                    drew:!!hairDrawn,
+                };
             } else if (hasHelmet && drawHelmet(ctx, entity, view, bounds)) layerOrder.push('helmet');
 
             if (!shieldBehindBody) drawShieldLayer();

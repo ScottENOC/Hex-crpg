@@ -2,7 +2,7 @@
 (() => {
     'use strict';
 
-    const BUILD = '20260929-directional-braid-v1';
+    const BUILD = window.PRESENTATION_BUILD || '20260930-visibility-assets-v1';
     const STYLE = 'braid';
     const SIDE_LEFT_PATH = 'images/characters/human_female/hair_braid_side_left.png';
     let sideLeftImage = null;
@@ -16,15 +16,27 @@
     function ensureSideLeftImage() {
         if (sideLeftImage || typeof Image === 'undefined') return sideLeftImage;
         const image = new Image();
+        let attempt = 0;
+        const retryDelays = [100, 350, 900];
+        const assign = () => {
+            const build = encodeURIComponent(window.PRESENTATION_BUILD || BUILD);
+            const retry = attempt ? `&assetRetry=${attempt}-${Date.now()}` : '';
+            image.src = `${SIDE_LEFT_PATH}?build=${build}${retry}`;
+        };
         image.addEventListener('load', () => {
             sideLeftRenderSource = null;
             window.drawMap?.();
             window.renderEntities?.();
             window.refreshDirectionalTurnPortraits?.();
         });
-        const build = encodeURIComponent(window.PRESENTATION_BUILD || BUILD);
-        image.src = `${SIDE_LEFT_PATH}?build=${build}`;
+        image.addEventListener('error', () => {
+            if (attempt >= retryDelays.length) return;
+            const delay = retryDelays[attempt];
+            attempt += 1;
+            setTimeout(assign, delay);
+        });
         sideLeftImage = image;
+        assign();
         return image;
     }
 
@@ -92,25 +104,16 @@
     }
 
     function withDirectionalBraid(entity, facing, draw) {
-        if (entity?.hairStyle !== STYLE) return draw();
-        const view = window.facingToSpriteView?.(facing) || (facing === 'up' ? 'back' : (facing === 'left' || facing === 'right' ? 'side' : 'front'));
-        if (view === 'front') return draw();
+        if (entity?.hairStyle !== STYLE || facing !== 'left') return draw();
         const braid = braidSetFor(entity);
-        const layout = window.DIRECTIONAL_CHARACTER_LAYOUT?.[view];
-        if (!braid || !layout) return draw();
-        const originalCrop = layout.hairCrop;
-        const originalDest = layout.hairDest;
+        if (!braid) return draw();
         const originalSide = braid.side;
-        const frontImage = braid.front;
-        let source = view === 'back' ? braid.back : originalSide;
-        if (view === 'side' && facing === 'left') { const left = leftRenderSource(); if (left) source = left; }
-        if (!imageReady(source)) return draw();
-        if (view === 'side') braid.side = source;
+        const left = leftRenderSource();
         braid.sideLeft = ensureSideLeftImage();
-        layout.hairCrop = {x:0,y:0,w:1,h:1};
-        layout.hairDest = fittedDestination(source, view, frontImage) || originalDest;
+        if (!imageReady(left)) return draw();
+        braid.side = left;
         try { return draw(); }
-        finally { braid.side = originalSide; layout.hairCrop = originalCrop; layout.hairDest = originalDest; }
+        finally { braid.side = originalSide; }
     }
 
     function installDirectionalDrawWrapper() {

@@ -2,13 +2,13 @@
 // Compatibility loader for the explicit garment-layer model.
 (() => {
   'use strict';
-  const BUILD='20260930-clothing-v13';
+  const BUILD=window.PRESENTATION_BUILD||'20260930-visibility-assets-v1';
 
   function load(src,key){
     const attr=`data-${key}`;
     if(document.querySelector(`script[${attr}]`)) return;
     const s=document.createElement('script');
-    s.src=`${src}?build=${BUILD}`;
+    s.src=`${src}?build=${encodeURIComponent(BUILD)}`;
     s.async=false;
     s.setAttribute(attr,'true');
     document.head.appendChild(s);
