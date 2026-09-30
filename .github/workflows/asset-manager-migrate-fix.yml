@@ -49,10 +49,37 @@ jobs:
           {
             const p='main.js';
             let s=fs.readFileSync(p,'utf8');
-            const from='            if (_loadedKeys.has(asset.key)) return Promise.resolve(); // already loaded (or in flight) via an earlier tier / a race-select change';
-            const to='            if (_loadedKeys.has(asset.key)) return Promise.resolve();';
-            if(!s.includes(from)) throw new Error('Expected main preload comment line not found');
-            fs.writeFileSync(p,s.replace(from,to));
+            const loadStart='        function load(asset) {';
+            const loadEnd='\n\n        // Re-prioritizable on demand';
+            const a=s.indexOf(loadStart), b=s.indexOf(loadEnd,a);
+            if(a<0||b<0) throw new Error('Expected nested main preload function not found');
+            const normalLoad=`function load(asset) {
+    if (_loadedKeys.has(asset.key)) return Promise.resolve();
+    _loadedKeys.add(asset.key);
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => { window.gameVisuals[asset.key] = img; resolve(); };
+        img.onerror = () => { console.warn("Failed:", asset.src); resolve(); };
+        img.src = asset.src;
+    });
+}`;
+            s=s.slice(0,a)+normalLoad+s.slice(b);
+            const previewStart='    function loadAppearancePreviewImage(src) {';
+            const previewEnd='\n    window.updateSkinToneControlMode = function() {';
+            const c=s.indexOf(previewStart), d=s.indexOf(previewEnd,c);
+            if(c<0||d<0) throw new Error('Expected nested appearance preview loader not found');
+            const normalPreview=`function loadAppearancePreviewImage(src) {
+    let img = _appearancePreviewImages[src];
+    if (!img) {
+        img = new Image();
+        img.onload = () => window.updateAppearancePreview();
+        img.src = src;
+        _appearancePreviewImages[src] = img;
+    }
+    return img;
+}`;
+            s=s.slice(0,c)+normalPreview+s.slice(d);
+            fs.writeFileSync(p,s);
           }
           NODE
       - name: Apply guarded migration
