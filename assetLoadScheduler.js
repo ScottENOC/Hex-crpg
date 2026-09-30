@@ -412,7 +412,12 @@
 
     function gameManifest() {
         const scenario = selectedCampaign()==='1' ? [...ARENA_CRITICAL,...ARENA_SOON] : [...CAMPAIGN2_NEARBY];
-        return [...new Set([...currentCreatorCharacterAssets(true),...currentClothingAssets(true),...currentStartingEquipmentAssets(),...scenario])];
+        // Anything the renderer/game code already asked for during character creation
+        // is a stronger signal than another hand-maintained guess at the opening scene.
+        // Warm those deferred requests behind the loading gate, then release the actual
+        // renderer-owned Image elements into a hot browser cache when gameplay begins.
+        const deferredArt = deferred.map(entry=>entry.canonical).filter(path=>path?.startsWith('images/'));
+        return [...new Set([...currentCreatorCharacterAssets(true),...currentClothingAssets(true),...currentStartingEquipmentAssets(),...scenario,...deferredArt])];
     }
 
     function ensureOverlay() {
