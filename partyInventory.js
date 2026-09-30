@@ -66,6 +66,31 @@ if (window.items?.magic_backpack) {
     });
 }
 
+// The ordinary dev cheat deliberately gives two of every item. Bags of
+// Holding are the one exception: having a deep stack available makes it easy
+// to test encumbrance thresholds, while normal loot/shop placement still
+// controls how many exist in an actual playthrough. ui.js defines the base
+// function later in the page, so install this small override once all classic
+// scripts have finished parsing.
+function installDevInventoryCheatOverride() {
+    if (typeof window.addAllEquipment !== 'function') return;
+    window.addAllEquipment = function addAllEquipmentWithBagStack() {
+        if (!window.player) return;
+        for (const itemId in window.items) {
+            const copies = itemId === 'magic_backpack' ? 20 : 2;
+            for (let i = 0; i < copies; i++) window.player.inventory.push(itemId);
+        }
+        window.showMessage('Cheat: Added 2 of every item and 20 Bags of Holding to inventory.');
+        if (document.getElementById('inventory-modal')?.style.display === 'block' && window.showInventoryScreen) {
+            window.showInventoryScreen();
+        }
+    };
+}
+if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installDevInventoryCheatOverride);
+    else installDevInventoryCheatOverride();
+}
+
 function getItemWeight(id) {
     const item = window.items && window.items[id];
     if (!item) return 1;
