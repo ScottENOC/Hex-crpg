@@ -17,42 +17,42 @@ function excludes(source, text) {
     assert.ok(!source.includes(text), `Expected source not to contain: ${text}`);
 }
 
-test('outerwear uses a canonical armour-relative envelope while undergarments stay compact', () => {
+test('outerwear keeps a canonical armour-relative envelope while runtime tops use the cached stretch renderer', () => {
     const rendererSource = read('humanoidRenderer.js');
     const layersSource = read('clothingLayers.js');
+    const hotPathSource = read('renderHotPathCache.js');
 
     excludes(rendererSource, '!window.clothingSystem.visibleSlotsReady(entity,view)');
     contains(rendererSource, 'front:{x:.03,y:.205,w:.94,h:.810}');
     contains(rendererSource, 'side: {x:.18,y:.205,w:.64,h:.810}');
     contains(rendererSource, 'armourY:-.010');
 
-    assert.match(layersSource, /const BUILD='[^']+';/);
+    // Clothing assets share the presentation build token; the exact fallback
+    // string is intentionally not a renderer contract.
+    contains(layersSource, 'const BUILD=window.PRESENTATION_BUILD||');
     contains(layersSource, 'const OUTERWEAR={top:.195,waist:.535,bottom:1.005};');
     contains(layersSource, '...outerwearTargets(.077,.846)');
     contains(layersSource, '...outerwearTargets(.212,.576)');
-    contains(layersSource, "if(slot==='shirt'||slot==='pants'){");
-    contains(layersSource, 'ctx.drawImage(source,trim.x,trim.y,trim.w,trim.h,targetX,targetY,targetW,targetH);');
-    excludes(layersSource, 'OUTERWEAR_WIDTH_USAGE');
 
+    // Tops are deliberately intercepted before the historical complex fitter:
+    // compose colour layers once, crop to the authored alpha bounds once, then
+    // stretch the resulting image into the target rectangle with one drawImage.
+    contains(hotPathSource, "if (slot !== 'shirt') return originalDrawSlot.apply(this, arguments);");
+    contains(hotPathSource, 'const trim = alphaBounds(img);');
+    contains(hotPathSource, 'ctx.drawImage(rendered, trim.x, trim.y, trim.w, trim.h, dx, dy, dw, dh);');
+    contains(hotPathSource, 'ctx.drawImage(composite, bounds.left, bounds.top, bounds.width, bounds.height);');
+    contains(hotPathSource, 'shirtCompositeCache');
+    contains(hotPathSource, "const isLongGarment = spec?.fitMode === 'dressSplit' || itemId === 'top_dress';");
+    contains(hotPathSource, "if (itemId === 'top_shirt_f') target = { ...target, y: target.y - 0.03, h: target.h + 0.06 };");
+
+    // Undergarments and pants still use the established fitting path; this
+    // performance change is intentionally limited to shirts/dresses.
     contains(layersSource, "if(slot==='underwear') return set.underwear;");
     contains(layersSource, "if(slot==='bra') return set.bra;");
     contains(layersSource, 'bra:{x:.20,y:.30,w:.60,h:.18},underwear:{x:.20,y:.50,w:.60,h:.18}');
     contains(layersSource, 'bra:{x:.34,y:.30,w:.32,h:.18},underwear:{x:.34,y:.50,w:.32,h:.18}');
-    contains(layersSource, "if(itemId==='top_shirt_f') return {...set.shirt,y:set.shirt.y-.03,h:set.shirt.h+.06};");
     contains(layersSource, 'dy-=targetH*.60;');
     contains(layersSource, "if(itemId==='underwear_bra'){");
-    contains(layersSource, 'const trim=l.sourceTone?toneBounds(img):opaqueBounds(img);');
-    contains(layersSource, 'drawFittedGarment(ctx,rendered,trim,target,bounds,slot,e,itemId,v,s,img)');
-
-    // Dresses deliberately opt into two independently fitted source bands so
-    // the bodice is not shrunk to the width of a flared skirt. Check the
-    // mechanism rather than pinning whitespace or one exact conditional.
-    contains(layersSource, "fitMode:'dressSplit'");
-    contains(layersSource, 'function dressBands(img,waistFraction=.39)');
-    contains(layersSource, "garmentSpec?.fitMode==='dressSplit'");
-    contains(layersSource, 'const bands=dressBands(geometrySource,garmentSpec.waistFraction),topTarget=set.shirt;');
-    contains(layersSource, 'ctx.drawImage(source,bands.top.x,bands.top.y,bands.top.w,bands.top.h,topX,topY,topW,topH);');
-    contains(layersSource, 'ctx.drawImage(source,bands.skirt.x,bands.skirt.y,bands.skirt.w,bands.skirt.h,skirtX,skirtY,skirtW,skirtH);');
 });
 
 test('masculine starter tops are the four new two-tone PNG overlays', () => {
@@ -106,15 +106,17 @@ test('trousers use the current front and back PNG assets', () => {
     contains(layersSource, "back:'images/equipment/clothing/pants_trousers_back.png'");
 });
 
-test('bootstrap layers use aligned explicit cache-busting tokens', () => {
+test('bootstrap clothing layers all consume the shared presentation build token', () => {
     const indexSource = read('index.html');
     const creationSource = read('characterCreation.js');
     const clothingLoaderSource = read('clothingSystem.js');
+    const layersSource = read('clothingLayers.js');
+    const nameSource = read('name.js');
 
     assert.match(indexSource, /<script src="characterCreation\.js\?v=[^"]+"><\/script>/);
-    const requestedBuild = creationSource.match(/clothingSystem\.js\?build=([^'"`]+)/)?.[1];
-    const declaredBuild = clothingLoaderSource.match(/const BUILD='([^']+)'/)?.[1];
-    assert.ok(requestedBuild, 'Expected characterCreation.js to request clothingSystem.js with a build token');
-    assert.ok(declaredBuild, 'Expected clothingSystem.js to declare a build token');
-    assert.equal(requestedBuild, declaredBuild, 'Clothing loader URL must match the loader BUILD so stale child assets cannot survive a clothing revision');
+    contains(creationSource, 'clothingSystem.js?build=${encodeURIComponent(window.PRESENTATION_BUILD');
+    contains(clothingLoaderSource, 'const BUILD=window.PRESENTATION_BUILD||');
+    contains(layersSource, 'const BUILD=window.PRESENTATION_BUILD||');
+    contains(nameSource, "const PRESENTATION_BUILD = '20260930-render-hotpath-cache-v1';");
+    contains(nameSource, "['renderHotPathCache.js','renderHotPathCache']");
 });
