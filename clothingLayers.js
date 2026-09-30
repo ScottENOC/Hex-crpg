@@ -230,29 +230,11 @@
   function load(src){
     if(!src)return null;
     if(images.has(src))return images.get(src);
-    const img=new Image();
-    let attempt=0;
-    const retryDelays=[100,350,900];
-    const assign=()=>{
-      const separator=src.includes('?')?'&':'?';
-      const retry=attempt?`&assetRetry=${attempt}-${Date.now()}`:'';
-      img.src=`${src}${separator}build=${encodeURIComponent(BUILD)}${retry}`;
-    };
-    const redraw=()=>{
-      window.drawMap?.();
-      window.renderEntities?.();
-      window.refreshDirectionalTurnPortraits?.();
-      window.updateAppearancePreview?.();
-    };
-    img.addEventListener('load',redraw);
-    img.addEventListener('error',()=>{
-      if(attempt>=retryDelays.length)return;
-      const delay=retryDelays[attempt];
-      attempt+=1;
-      setTimeout(assign,delay);
-    });
+    const img=window.assetManager.request(src);
     images.set(src,img);
-    assign();
+    window.assetManager.whenReady(src).then(()=>{
+      window.drawMap?.();window.renderEntities?.();window.refreshDirectionalTurnPortraits?.();window.updateAppearancePreview?.();
+    }).catch(()=>{});
     return img;
   }
   function view(v){return(v==='up'||v==='back')?'back':(v==='left'||v==='right'||v==='side')?'side':'front';}

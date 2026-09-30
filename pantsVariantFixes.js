@@ -70,20 +70,15 @@
   function load(src){
     if(!src)return null;
     if(images.has(src))return images.get(src);
-    const img=new Image();let attempt=0;const retryDelays=[100,350,900];
-    const assign=()=>{
-      const sep=src.includes('?')?'&':'?';
-      const retry=attempt?`&assetRetry=${attempt}-${Date.now()}`:'';
-      img.src=`${src}${sep}build=${encodeURIComponent(BUILD)}${retry}`;
-    };
-    img.addEventListener('load',()=>{
+    const img=window.assetManager.request(src);
+    images.set(src,img);
+    window.assetManager.whenReady(src).then(()=>{
       window.drawMap?.();
       window.renderEntities?.();
       window.refreshDirectionalTurnPortraits?.();
       window.renderEquipmentInterface?.();
-    });
-    img.addEventListener('error',()=>{if(attempt>=retryDelays.length)return;const delay=retryDelays[attempt++];setTimeout(assign,delay);});
-    images.set(src,img);assign();return img;
+    }).catch(()=>{});
+    return img;
   }
   function ready(img){return !!img&&img.complete&&img.naturalWidth>0&&img.naturalHeight>0;}
   function view(v){return(v==='up'||v==='back')?'back':(v==='left'||v==='right'||v==='side')?'side':'front';}

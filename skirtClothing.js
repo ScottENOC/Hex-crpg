@@ -59,10 +59,9 @@
 
   function load(src){
     if(images.has(src)) return images.get(src);
-    const img=new Image();
-    img.src=`${src}${src.includes('?')?'&':'?'}build=${BUILD}`;
-    img.onload=()=>redraw(window.player);
+    const img=window.assetManager.request(src);
     images.set(src,img);
+    window.assetManager.whenReady(src).then(()=>redraw(window.player)).catch(()=>{});
     return img;
   }
   function ready(img){return !!img&&img.complete&&img.naturalWidth>0&&img.naturalHeight>0;}

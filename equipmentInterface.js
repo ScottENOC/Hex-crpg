@@ -141,20 +141,18 @@ function stableAppearance(v){
 function previewImage(src,notify){
   let entry=clothingPreviewImages.get(src);
   if(!entry){
-    const img=new Image();
+    const img=window.assetManager.request(src);
     entry={img,ready:false,failed:false,listeners:new Set()};
     clothingPreviewImages.set(src,entry);
-    img.addEventListener('load',()=>{
+    window.assetManager.whenReady(src).then(()=>{
       entry.ready=true;
       for(const fn of entry.listeners)fn();
       entry.listeners.clear();
-    });
-    img.addEventListener('error',()=>{
+    }).catch(()=>{
       entry.failed=true;
       for(const fn of entry.listeners)fn();
       entry.listeners.clear();
     });
-    img.src=`${src}${src.includes('?')?'&':'?'}build=${encodeURIComponent(BUILD)}`;
   }
   if(notify&&!entry.ready&&!entry.failed)entry.listeners.add(notify);
   return entry;

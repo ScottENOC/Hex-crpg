@@ -2,7 +2,7 @@
 
 // iOS/mobile-friendly image diagnostics. Console logs are easy to miss on-device,
 // so persistent image failures are also surfaced in the in-game message log.
-// The global capture listener sees failures from detached `new Image()` objects
+// The global capture listener sees failures from detached image-loader objects
 // as well as ordinary <img> elements. Existing retry code gets time to recover
 // first, so a transient GitHub Pages/cache hiccup does not immediately spam chat.
 (() => {

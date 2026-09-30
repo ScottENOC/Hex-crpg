@@ -14,29 +14,15 @@
     }
 
     function ensureSideLeftImage() {
-        if (sideLeftImage || typeof Image === 'undefined') return sideLeftImage;
-        const image = new Image();
-        let attempt = 0;
-        const retryDelays = [100, 350, 900];
-        const assign = () => {
-            const build = encodeURIComponent(window.PRESENTATION_BUILD || BUILD);
-            const retry = attempt ? `&assetRetry=${attempt}-${Date.now()}` : '';
-            image.src = `${SIDE_LEFT_PATH}?build=${build}${retry}`;
-        };
-        image.addEventListener('load', () => {
+        if (sideLeftImage) return sideLeftImage;
+        const image = window.assetManager.request(SIDE_LEFT_PATH);
+        sideLeftImage = image;
+        window.assetManager.whenReady(SIDE_LEFT_PATH).then(() => {
             sideLeftRenderSources.clear();
             window.drawMap?.();
             window.renderEntities?.();
             window.refreshDirectionalTurnPortraits?.();
-        });
-        image.addEventListener('error', () => {
-            if (attempt >= retryDelays.length) return;
-            const delay = retryDelays[attempt];
-            attempt += 1;
-            setTimeout(assign, delay);
-        });
-        sideLeftImage = image;
-        assign();
+        }).catch(() => {});
         return image;
     }
 
