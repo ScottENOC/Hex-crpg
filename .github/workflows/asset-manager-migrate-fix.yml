@@ -53,31 +53,35 @@ jobs:
             const loadEnd='\n\n        // Re-prioritizable on demand';
             const a=s.indexOf(loadStart), b=s.indexOf(loadEnd,a);
             if(a<0||b<0) throw new Error('Expected nested main preload function not found');
-            const normalLoad=`function load(asset) {
-    if (_loadedKeys.has(asset.key)) return Promise.resolve();
-    _loadedKeys.add(asset.key);
-    return new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => { window.gameVisuals[asset.key] = img; resolve(); };
-        img.onerror = () => { console.warn("Failed:", asset.src); resolve(); };
-        img.src = asset.src;
-    });
-}`;
+            const normalLoad=[
+              'function load(asset) {',
+              '    if (_loadedKeys.has(asset.key)) return Promise.resolve();',
+              '    _loadedKeys.add(asset.key);',
+              '    return new Promise((resolve) => {',
+              '        const img = new Image();',
+              '        img.onload = () => { window.gameVisuals[asset.key] = img; resolve(); };',
+              '        img.onerror = () => { console.warn("Failed:", asset.src); resolve(); };',
+              '        img.src = asset.src;',
+              '    });',
+              '}'
+            ].join('\n');
             s=s.slice(0,a)+normalLoad+s.slice(b);
             const previewStart='    function loadAppearancePreviewImage(src) {';
             const previewEnd='\n    window.updateSkinToneControlMode = function() {';
             const c=s.indexOf(previewStart), d=s.indexOf(previewEnd,c);
             if(c<0||d<0) throw new Error('Expected nested appearance preview loader not found');
-            const normalPreview=`function loadAppearancePreviewImage(src) {
-    let img = _appearancePreviewImages[src];
-    if (!img) {
-        img = new Image();
-        img.onload = () => window.updateAppearancePreview();
-        img.src = src;
-        _appearancePreviewImages[src] = img;
-    }
-    return img;
-}`;
+            const normalPreview=[
+              'function loadAppearancePreviewImage(src) {',
+              '    let img = _appearancePreviewImages[src];',
+              '    if (!img) {',
+              '        img = new Image();',
+              '        img.onload = () => window.updateAppearancePreview();',
+              '        img.src = src;',
+              '        _appearancePreviewImages[src] = img;',
+              '    }',
+              '    return img;',
+              '}'
+            ].join('\n');
             s=s.slice(0,c)+normalPreview+s.slice(d);
             fs.writeFileSync(p,s);
           }
