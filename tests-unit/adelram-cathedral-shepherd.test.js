@@ -76,9 +76,10 @@ test('Adelram treats evidence as capable of correcting old religious texts', () 
   assert.ok(trustChange({ crimson: true }) > 0);
 });
 
-test('alliance with Ashgrave is a major trust rupture rather than a curiosity disagreement', () => {
-  const { system } = fresh({ lich: 'allied' });
-  assert.ok(trustChange({ lich: 'allied' }) < -20);
+test('alliance with Ashgrave bottoms Adelram trust rather than becoming a curiosity disagreement', () => {
+  const { system, relationships } = fresh({ lich: 'allied' });
+  system.syncStoryEvents();
+  assert.equal(relationships.getRelationship('High Cleric Adelram').trust, 0);
   assert.match(system.necromancyText(), /chose to learn from Ashgrave rather than end him/);
   assert.match(system.necromancyText(), /study becomes use/);
 });
