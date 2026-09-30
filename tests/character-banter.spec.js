@@ -24,6 +24,7 @@ test.describe('character banter', () => {
         await isolateAldricBanter(page);
         await page.evaluate(() => {
             window.rescuePaladin();
+            window.recruitAldric();
             window.characterBanterAccum = 999;
             window.checkCharacterBanter(0);
         });
@@ -44,6 +45,7 @@ test.describe('character banter', () => {
         await isolateAldricBanter(page);
         const result = await page.evaluate(() => {
             window.rescuePaladin();
+            window.recruitAldric();
             window.characterBanterAccum = 999;
             window.checkCharacterBanter(0);
             const countAfterFirst = document.querySelectorAll('#message-log > div').length;
@@ -58,7 +60,7 @@ test.describe('character banter', () => {
 
     test('a bark whose condition is false never fires', async ({ page }) => {
         const fired = await page.evaluate(() => {
-            // Ser Aldric isn't rescued in this test, so the two-party-member banter's condition is false.
+            // Ser Aldric isn't recruited in this test, so the two-party-member banter's condition is false.
             window.characterBanterAccum = 999;
             window.checkCharacterBanter(0);
             return window.firedBanterIds['wren_aldric_banter_faith'];
@@ -70,6 +72,7 @@ test.describe('character banter', () => {
         await isolateAldricBanter(page);
         const result = await page.evaluate(() => {
             window.rescuePaladin();
+            window.recruitAldric();
             window.characterBanterAccum = 0;
             window.checkCharacterBanter(1); // under the 5s threshold
             const firedTooSoon = window.firedBanterIds['wren_aldric_banter_faith'];
