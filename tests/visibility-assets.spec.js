@@ -51,15 +51,30 @@ test.describe('visibility asset regressions', () => {
     expect(trousersRequests).toBeGreaterThanOrEqual(2);
   });
 
-  test('braid uses its tight directional art when facing right and back', async ({ page }) => {
-    await createCharacter(page, { race:'human', gender:'female' });
-    await page.waitForFunction(() => {
-      const set = window.DIRECTIONAL_CHARACTER_ASSETS?.human_female?.hair?.braid;
-      return window.__humanoidRendererReady
-        && set?.front?.naturalWidth > 0
-        && set?.side?.naturalWidth > 0
-        && set?.back?.naturalWidth > 0;
+  test('braid recovers its side/back images and uses tight directional art', async ({ page }) => {
+    let sideRequests = 0;
+    let backRequests = 0;
+    await page.route('**/images/characters/human_female/hair_braid_side.png*', async route => {
+      sideRequests += 1;
+      if (sideRequests === 1) await route.abort('failed');
+      else await route.continue();
     });
+    await page.route('**/images/characters/human_female/hair_braid_back.png*', async route => {
+      backRequests += 1;
+      if (backRequests === 1) await route.abort('failed');
+      else await route.continue();
+    });
+
+    await createCharacter(page, { race:'human', gender:'female' });
+    await expect.poll(async () => page.evaluate(() => {
+      const set = window.DIRECTIONAL_CHARACTER_ASSETS?.human_female?.hair?.braid;
+      return {
+        rendererReady: !!window.__humanoidRendererReady,
+        front: set?.front?.naturalWidth || 0,
+        side: set?.side?.naturalWidth || 0,
+        back: set?.back?.naturalWidth || 0,
+      };
+    }), { timeout: 10000 }).toEqual({ rendererReady:true, front:1254, side:175, back:192 });
     await page.evaluate(() => {
       const entity = (window.entities || []).find(e =>
         e?.alive && e.side === 'player' && e.race === 'human' && e.gender === 'female'
@@ -83,5 +98,7 @@ test.describe('visibility asset regressions', () => {
     expect(back.hair.crop).toEqual({ x:0, y:0, w:1, h:1 });
     expect(back.hair.sourceWidth).toBeGreaterThan(0);
     expect(back.hair.sourceWidth).toBeLessThan(400);
+    expect(sideRequests).toBeGreaterThanOrEqual(2);
+    expect(backRequests).toBeGreaterThanOrEqual(2);
   });
 });

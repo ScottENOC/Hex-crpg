@@ -232,16 +232,33 @@
     function loadImage(src) {
         if (typeof Image === 'undefined') return null;
         const image = new Image();
+        const assetBuild = encodeURIComponent(window.PRESENTATION_BUILD || 'direct-humanoid-assets-v1');
+        const retryDelays = [100, 350, 900];
+        let attempt = 0;
+        const assign = () => {
+            const separator = src.includes('?') ? '&' : '?';
+            const retry = attempt ? `&assetRetry=${attempt}-${Date.now()}` : '';
+            image.src = `${src}${separator}build=${assetBuild}${retry}`;
+        };
         image.addEventListener('load', () => {
             window.drawMap?.();
             window.renderEntities?.();
             queuePortraitRefresh();
         });
+        image.addEventListener('error', () => {
+            if (attempt >= retryDelays.length) return;
+            const delay = retryDelays[attempt];
+            attempt += 1;
+            setTimeout(() => {
+                if (image.naturalWidth > 0 && image.naturalHeight > 0) return;
+                assign();
+            }, delay);
+        });
         // Renderer-owned art uses the compositor build token so fresh clothing JS
         // can never be paired with a stale/broken cached body image on iOS Safari.
-        const assetBuild = encodeURIComponent(window.PRESENTATION_BUILD || 'direct-humanoid-assets-v1');
-        const separator = src.includes('?') ? '&' : '?';
-        image.src = `${src}${separator}build=${assetBuild}`;
+        // Retry here, where the Image is created, rather than relying on the later
+        // recovery module to attach an error handler before a fast failure occurs.
+        assign();
         return image;
     }
 
