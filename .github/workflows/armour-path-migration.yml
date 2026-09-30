@@ -1,0 +1,80 @@
+name: Canonical Armour Path Cleanup
+
+on:
+  push:
+    branches:
+      - development
+    paths:
+      - '.github/workflows/armour-path-migration.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-armour-paths:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+      - name: Replace legacy armour asset paths
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          renderer = Path('humanoidRenderer.js')
+          text = renderer.read_text()
+          old = """    // Armour is renderer-owned directional art, just like shields. Front and
+              // side share the authored front face; back uses the matching rear face.
+              // Keeping each pair together prevents mixing legacy PNG fronts with newer SVG backs.
+              const ARMOUR_PATHS = {
+                  light:{front:'images/humanlightarmour_front.svg',back:'images/humanlightarmour_back.svg'},
+                  medium:{front:'images/humanmediumarmour_front.svg',back:'images/humanmediumarmour_back.svg'},
+                  heavy:{front:'images/humanheavyarmour_front.svg',back:'images/humanheavyarmour_back.svg'},
+              };
+          """
+          new = """    // Armour is renderer-owned directional art, just like shields. Front and
+              // side share the canonical high-quality front PNG; back uses the matching
+              // rear WebP from the same organised equipment folder.
+              const ARMOUR_PATHS = {
+                  light:{front:'images/equipment/armour/human/light.png',back:'images/equipment/armour/human/light_back.webp'},
+                  medium:{front:'images/equipment/armour/human/medium.png',back:'images/equipment/armour/human/medium_back.webp'},
+                  heavy:{front:'images/equipment/armour/human/heavy.png',back:'images/equipment/armour/human/heavy_back.webp'},
+              };
+          """
+          if old not in text:
+              raise SystemExit('Expected legacy ARMOUR_PATHS block not found')
+          text = text.replace(old, new, 1)
+          text = text.replace(
+              "        // The old PNG remains a load-failure fallback only. Normal rendering uses a\n        // matched SVG pair, and gold tint is applied after choosing the view so the\n        // same recolour path is used for front, side and back.\n",
+              "        // The canonical organised pair is the normal rendering source. Keep the\n        // compatibility preload as a temporary load-failure fallback only.\n",
+              1,
+          )
+          renderer.write_text(text)
+
+          main = Path('main.js')
+          text = main.read_text()
+          replacements = {
+              "{key: 'humanLight', src: 'images/humanlightarmour.png'}": "{key: 'humanLight', src: 'images/equipment/armour/human/light.png'}",
+              "{key: 'humanMedium', src: 'images/humanmediumarmour.png'}": "{key: 'humanMedium', src: 'images/equipment/armour/human/medium.png'}",
+              "{key: 'humanHeavy', src: 'images/humanheavyarmour.png'}": "{key: 'humanHeavy', src: 'images/equipment/armour/human/heavy.png'}",
+          }
+          for old_path, new_path in replacements.items():
+              if old_path not in text:
+                  raise SystemExit(f'Expected legacy preload not found: {old_path}')
+              text = text.replace(old_path, new_path, 1)
+          main.write_text(text)
+          PY
+      - name: Commit canonical paths
+        run: |
+          if git diff --quiet; then
+            echo 'No changes required'
+            exit 0
+          fi
+          git config user.name 'ScottENOC'
+          git config user.email 'bales.scott@gmail.com'
+          git add humanoidRenderer.js main.js
+          git commit -m 'Use canonical armour asset paths'
+          git pull --rebase origin development
+          git push origin HEAD:development
