@@ -12,6 +12,7 @@ jobs:
       - name: Inspect loader/bootstrap references
         run: |
           python - <<'PY'
+          import re
           from pathlib import Path
           print('=== HTML data.js / scheduler references ===')
           for p in Path('.').rglob('*.html'):
@@ -21,22 +22,25 @@ jobs:
                   for i,line in enumerate(s.splitlines(),1):
                       if 'data.js' in line or 'assetLoadScheduler.js' in line or 'app-build' in line:
                           print(f'  {i}: {line.strip()}')
-          print('\n=== PRESENTATION_BUILD references ===')
-          for p in Path('.').rglob('*'):
-              if not p.is_file() or any(part in {'.git','node_modules'} for part in p.parts):
+          print('\n=== unmanaged image-construction candidates ===')
+          patterns=[
+              re.compile(r'\bnew\s+(?:window\.)?Image\s*\('),
+              re.compile(r'document\.createElement\s*\(\s*[\'\"]img[\'\"]\s*\)', re.I),
+              re.compile(r'fetch\s*\([^\n]*(?:images/|\.png|\.jpg|\.jpeg|\.svg|\.webp)', re.I),
+          ]
+          for p in Path('.').rglob('*.js'):
+              if any(part in {'.git','node_modules','tests','tests-unit','test-results','playwright-report','appstore'} for part in p.parts):
                   continue
-              try:s=p.read_text()
-              except:continue
-              if 'PRESENTATION_BUILD' in s:
-                  for i,line in enumerate(s.splitlines(),1):
-                      if 'PRESENTATION_BUILD' in line:
-                          print(f'{p}:{i}: {line.strip()}')
+              s=p.read_text(errors='ignore')
+              for i,line in enumerate(s.splitlines(),1):
+                  if any(pattern.search(line) for pattern in patterns):
+                      print(f'{p}:{i}: {line.strip()}')
           print('\n=== tests mentioning scheduler URL ===')
           for root in ('tests','tests-unit'):
               for p in Path(root).rglob('*.js'):
                   s=p.read_text(errors='ignore')
-                  if 'assetLoadScheduler.js' in s:
+                  if 'assetLoadScheduler.js' in s or 'PRESENTATION_BUILD' in s:
                       for i,line in enumerate(s.splitlines(),1):
-                          if 'assetLoadScheduler.js' in line:
+                          if 'assetLoadScheduler.js' in line or 'PRESENTATION_BUILD' in line:
                               print(f'{p}:{i}: {line.strip()}')
           PY
