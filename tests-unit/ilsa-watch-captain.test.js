@@ -77,8 +77,9 @@ test('Ilsa articulates why guaranteed punishment can make institutions blind', (
 });
 
 test('Ilsa treats alliance with Ashgrave as an operational betrayal', () => {
-  const { system } = fresh({ lich: 'allied' });
-  assert.ok(trustChange({ lich: 'allied' }) < -25);
+  const { system, relationships } = fresh({ lich: 'allied' });
+  system.syncStoryEvents();
+  assert.equal(relationships.getRelationship('Captain Ilsa Rennick').trust, 0);
   const text = system.necromancerText();
   assert.match(text, /used that access to join him/);
   assert.match(text, /operational fact/);
