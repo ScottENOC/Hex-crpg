@@ -140,6 +140,25 @@ if (!window.__thessalyCourtWizardModuleLoaded) {
     document.write('<script src="thessalyCourtWizard.js?build=20260930-thessaly-court-wizard-v1"><\/script>');
 }
 
+// Nessa's first persistent-character pass grows from stories she already owns:
+// the Silver Trail, Fenn's Living Boundary and Aelwen's Living Accord. Her
+// stewardship is neither blanket preservation nor blanket intervention: choices
+// create responsibility, and another creature's trust is never hers to grant.
+if (!window.__nessaGroveWardenModuleLoaded) {
+    window.__nessaGroveWardenModuleLoaded = true;
+    document.write('<script src="nessaGroveWarden.js?build=20260930-nessa-grove-warden-v1"><\/script>');
+}
+
+// Petra's first pass likewise deepens existing Ironbond material rather than
+// adding another side quest. She remembers Wren's murder-payment trail and
+// Aldric's broken contract, balancing institutional accountability against the
+// livelihoods of current workers — while admitting how convenient that defence
+// can be for the factor currently sitting behind the desk.
+if (!window.__petraIronbondFactorModuleLoaded) {
+    window.__petraIronbondFactorModuleLoaded = true;
+    document.write('<script src="petraIronbondFactor.js?build=20260930-petra-ironbond-factor-v1"><\/script>');
+}
+
 // Relationship progression is intentionally separate from the storage/
 // permission layer above: familiarity grows from unique personal conversations
 // and slow shared time, while trust moves only through explicit authored events.
