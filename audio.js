@@ -278,7 +278,7 @@ function getTrack(name) {
     if (!def) return null;
     const m = manager();
     if (!m) {
-        console.error('audioManager.js must load before audio.js');
+        console.error('audioManager bootstrap missing');
         return null;
     }
     return m.getMedia(`track:${name}`, def.path, { loop: def.loop, preload: 'auto' });
@@ -298,7 +298,13 @@ function unlockAudioTracks() {
     m.unlock();
     if (audioTracksUnlocked) return;
     audioTracksUnlocked = true;
-    const elements = Object.keys(TRACK_DEFS).map(getTrack).filter(Boolean);
+    // Constant starts audibly below in this same gesture, so do not include
+    // it in the muted unlock pass (whose async completion would otherwise
+    // pause it again after playback had begun).
+    const elements = Object.keys(TRACK_DEFS)
+        .filter(name => name !== 'constant')
+        .map(getTrack)
+        .filter(Boolean);
     m.unlockMediaElements(elements);
 }
 window.unlockAudioTracks = unlockAudioTracks;
