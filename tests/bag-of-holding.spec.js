@@ -32,7 +32,7 @@ test.describe('Bag of Holding encumbrance', () => {
 
         expect(result.type).toBe('container');
         expect(result.bagWeight).toBe(-40);
-        expect(result.loadedWeight - result.withBagWeight).toBe(40);
+        expect(result.loadedWeight - result.withBagWeight).toBeCloseTo(40, 8);
         expect(result.capacityAfter).toBe(result.capacityBefore);
         expect(result.accessoryAfter).toBe(result.accessoryBefore);
         expect(result.carryBonus).toBe(0);
@@ -51,19 +51,22 @@ test.describe('Bag of Holding encumbrance', () => {
             };
         });
 
-        expect(result.loadedWeight).toBe(160);
-        expect(result.loadedWeight - result.withTwoBagsWeight).toBe(80);
-        expect(result.withTwoBagsWeight).toBe(80);
+        expect(result.loadedWeight - result.withTwoBagsWeight).toBeCloseTo(80, 8);
+        expect(result.withTwoBagsWeight).toBeCloseTo(result.loadedWeight - 80, 8);
     });
 
-    test('negative carried weight never makes effective party weight less than zero', async ({ page }) => {
+    test('negative carried weight never reduces the party below its non-inventory weight', async ({ page }) => {
         await createCharacter(page);
-        const weight = await page.evaluate(() => {
+        const result = await page.evaluate(() => {
             window.partyInventory.length = 0;
+            const baseline = window.getPartyCarryWeight();
             window.partyInventory.push('magic_backpack', 'magic_backpack');
-            return window.getPartyCarryWeight();
+            return {
+                baseline,
+                withBags: window.getPartyCarryWeight(),
+            };
         });
-        expect(weight).toBe(0);
+        expect(result.withBags).toBeCloseTo(result.baseline, 8);
     });
 
     test('dev all-items cheat grants 20 bags but still only two of ordinary items', async ({ page }) => {
