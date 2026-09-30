@@ -25,6 +25,11 @@
             bodyDest: { ...layout[view].bodyDest },
         }]));
 
+        // Direction changes must not move the hairline vertically. Rear art has
+        // different transparent framing, but its rendered top anchor should be
+        // the same as the front view; only crop/shape changes with direction.
+        base.back.hairDest.y = base.front.hairDest.y;
+
         const styleLayouts = {
             braid: {
                 front: {
@@ -37,7 +42,7 @@
                 },
                 back: {
                     hairCrop: { x:0.300, y:0.120, w:0.400, h:0.535 },
-                    hairDest: { x:0.195, y:-0.030, w:0.610, h:0.465 },
+                    hairDest: { x:0.195, y:-0.035, w:0.610, h:0.465 },
                 },
             },
             curly: {
@@ -51,7 +56,7 @@
                 },
                 back: {
                     hairCrop: { ...base.back.hairCrop },
-                    hairDest: { ...base.back.hairDest, y:base.back.hairDest.y - 0.070 },
+                    hairDest: { ...base.back.hairDest, y:base.front.hairDest.y - 0.075 },
                 },
             },
         };
