@@ -183,12 +183,12 @@
     };
 
     // Armour is renderer-owned directional art, just like shields. Front and
-    // side share the authored front face; back uses the matching rear face.
-    // Keeping each pair together prevents mixing legacy PNG fronts with newer SVG backs.
+    // side share the canonical high-quality front PNG; back uses the matching
+    // rear WebP from the same organised equipment folder.
     const ARMOUR_PATHS = {
-        light:{front:'images/humanlightarmour_front.svg',back:'images/humanlightarmour_back.svg'},
-        medium:{front:'images/humanmediumarmour_front.svg',back:'images/humanmediumarmour_back.svg'},
-        heavy:{front:'images/humanheavyarmour_front.svg',back:'images/humanheavyarmour_back.svg'},
+        light:{front:'images/equipment/armour/human/light.png',back:'images/equipment/armour/human/light_back.webp'},
+        medium:{front:'images/equipment/armour/human/medium.png',back:'images/equipment/armour/human/medium_back.webp'},
+        heavy:{front:'images/equipment/armour/human/heavy.png',back:'images/equipment/armour/human/heavy_back.webp'},
     };
 
     const REAR_EQUIPMENT_PATHS = {
@@ -390,9 +390,8 @@
         const visuals = window.gameVisuals || {};
         const tier = reduction >= 3 ? 'heavy' : reduction >= 2 ? 'medium' : 'light';
         const authored = view === 'back' ? ARMOUR_ASSETS[tier]?.back : ARMOUR_ASSETS[tier]?.front;
-        // The old PNG remains a load-failure fallback only. Normal rendering uses a
-        // matched SVG pair, and gold tint is applied after choosing the view so the
-        // same recolour path is used for front, side and back.
+        // The canonical organised pair is the normal rendering source. Keep the
+        // compatibility preload as a temporary load-failure fallback only.
         const legacy = tier === 'heavy' ? visuals.humanHeavy : tier === 'medium' ? visuals.humanMedium : visuals.humanLight;
         let image = imageReady(authored) ? authored : legacy;
         if (!image) return null;
