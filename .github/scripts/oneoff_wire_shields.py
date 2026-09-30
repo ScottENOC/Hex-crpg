@@ -1,0 +1,285 @@
+from pathlib import Path
+
+
+def replace_once(text, old, new, label):
+    count = text.count(old)
+    if count != 1:
+        raise RuntimeError(f'{label}: expected exactly one match, found {count}')
+    return text.replace(old, new, 1)
+
+
+equipment_path = Path('equipment.js')
+equipment = equipment_path.read_text()
+equipment = replace_once(
+    equipment,
+    "    'wooden_shield': { id: 'wooden_shield', name: 'Wooden Shield', type: 'shield', reduction: 1, hands: 1, buyPrice: 20 },",
+    "    'wooden_shield': { id: 'wooden_shield', name: 'Wooden Shield', type: 'shield', shieldVisual: 'round', reduction: 1, hands: 1, buyPrice: 20 },",
+    'wooden shield visual',
+)
+equipment = replace_once(
+    equipment,
+    "    'bulwark_shield': { id: 'bulwark_shield', name: \"Bulwark of the Steadfast\", type: 'shield', reduction: 1, hands: 1, buyPrice: 260, skills: { 'shield_bash': 1 }, description: 'A shield forged for holding a line, not just blocking blows.' },",
+    "    'bulwark_shield': { id: 'bulwark_shield', name: \"Bulwark of the Steadfast\", type: 'shield', shieldVisual: 'kite', reduction: 1, hands: 1, buyPrice: 260, skills: { 'shield_bash': 1 }, description: 'A shield forged for holding a line, not just blocking blows.' },",
+    'bulwark shield visual',
+)
+equipment_path.write_text(equipment)
+
+renderer_path = Path('humanoidRenderer.js')
+renderer = renderer_path.read_text()
+renderer = replace_once(
+    renderer,
+    """    const REAR_EQUIPMENT_PATHS = {
+        shield:'images/shield_back.svg',
+        helmet:'images/nasalHelm_back.svg',
+""",
+    """    const SHIELD_PATHS = {
+        round:{front:'images/equipment/shields/round.png',back:'images/equipment/shields/round_back.svg'},
+        kite:{front:'images/equipment/shields/kite.png',back:'images/equipment/shields/kite_back.png'},
+    };
+
+    const REAR_EQUIPMENT_PATHS = {
+        helmet:'images/nasalHelm_back.svg',
+""",
+    'shield path table',
+)
+renderer = replace_once(
+    renderer,
+    """    const REAR_EQUIPMENT_ASSETS = {
+        shield:loadImage(REAR_EQUIPMENT_PATHS.shield),
+        helmet:loadImage(REAR_EQUIPMENT_PATHS.helmet),
+        armour:Object.fromEntries(Object.entries(REAR_EQUIPMENT_PATHS.armour)
+            .map(([tier, src]) => [tier, loadImage(src)])),
+    };
+""",
+    """    const SHIELD_ASSETS = Object.fromEntries(Object.entries(SHIELD_PATHS)
+        .map(([visual, paths]) => [visual, {front:loadImage(paths.front), back:loadImage(paths.back)}]));
+    const REAR_EQUIPMENT_ASSETS = {
+        // Compatibility alias for existing readiness checks and any legacy
+        // consumers that still expect the ordinary wooden shield rear here.
+        shield:SHIELD_ASSETS.round.back,
+        helmet:loadImage(REAR_EQUIPMENT_PATHS.helmet),
+        armour:Object.fromEntries(Object.entries(REAR_EQUIPMENT_PATHS.armour)
+            .map(([tier, src]) => [tier, loadImage(src)])),
+    };
+""",
+    'shield asset preload table',
+)
+renderer = replace_once(
+    renderer,
+    """        if (item?.type === 'shield') {
+            return {image:rearPreferred(view, REAR_EQUIPMENT_ASSETS.shield, window.gameVisuals?.shield),kind:'shield',scale:.73,itemId:id};
+        }
+""",
+    """        if (item?.type === 'shield') {
+            const shieldSet = SHIELD_ASSETS[item.shieldVisual] || SHIELD_ASSETS.round;
+            const front = imageReady(shieldSet?.front) ? shieldSet.front : window.gameVisuals?.shield;
+            return {image:rearPreferred(view, shieldSet?.back, front),kind:'shield',scale:.73,itemId:id};
+        }
+""",
+    'shield item selection',
+)
+renderer = replace_once(
+    renderer,
+    """        let size;
+        if (spec.kind === 'shield') size = bounds.width * spec.scale;
+        else {
+            // Derive held-item size from the compositor bounds rather than the
+            // world camera. World rendering is unchanged because those bounds
+            // are themselves built from hexSize*z, while 100px initiative
+            // portraits now scale weapons down with the character.
+            const rig = CHARACTER_RIGS[keyFor(entity)];
+            const bodyHeightUnits = rig?.bodyH || 1;
+            const basePixel = bounds.height / bodyHeightUnits;
+            size = basePixel * (rig?.heightScale || 1) * spec.scale;
+        }
+
+        let itemY = anchor.y - grip.y*size;
+        if (spec.kind === 'shield') {
+            const trim = alphaTrim(image);
+            const opaqueHeight = trim?.trimHeight && trim?.originalHeight
+                ? size * trim.trimHeight / trim.originalHeight
+                : size;
+            itemY += opaqueHeight * SHIELD_OPAQUE_HEIGHT_DROP;
+        }
+
+        const mirrorOffhandWeapon = slot === 'off' && spec.kind !== 'shield';
+        if (mirrorOffhandWeapon) {
+            // Mirror around the grip itself: the hilt stays on the off-hand anchor
+            // while the weapon points the opposite way to the main-hand copy.
+            ctx.save();
+            ctx.translate(anchor.x, anchor.y);
+            ctx.scale(-1, 1);
+            ctx.drawImage(image, -grip.x*size, -grip.y*size, size, size);
+            ctx.restore();
+        } else {
+            ctx.drawImage(image, anchor.x - grip.x*size, itemY, size, size);
+        }
+""",
+    """        let drawWidth, drawHeight;
+        if (spec.kind === 'shield') {
+            // Shield art is not required to live on a square canvas. Treat the
+            // configured scale as its displayed height and preserve the authored
+            // aspect ratio so tightly cropped kite/tower shields stay narrow.
+            drawHeight = bounds.width * spec.scale;
+            const imageWidth = image.naturalWidth || image.width || 1;
+            const imageHeight = image.naturalHeight || image.height || 1;
+            drawWidth = drawHeight * imageWidth / imageHeight;
+        } else {
+            // Derive held-item size from the compositor bounds rather than the
+            // world camera. World rendering is unchanged because those bounds
+            // are themselves built from hexSize*z, while 100px initiative
+            // portraits now scale weapons down with the character.
+            const rig = CHARACTER_RIGS[keyFor(entity)];
+            const bodyHeightUnits = rig?.bodyH || 1;
+            const basePixel = bounds.height / bodyHeightUnits;
+            drawHeight = basePixel * (rig?.heightScale || 1) * spec.scale;
+            drawWidth = drawHeight;
+        }
+
+        let itemY = anchor.y - grip.y*drawHeight;
+        if (spec.kind === 'shield') {
+            const trim = alphaTrim(image);
+            const opaqueHeight = trim?.trimHeight && trim?.originalHeight
+                ? drawHeight * trim.trimHeight / trim.originalHeight
+                : drawHeight;
+            itemY += opaqueHeight * SHIELD_OPAQUE_HEIGHT_DROP;
+        }
+
+        const mirrorOffhandWeapon = slot === 'off' && spec.kind !== 'shield';
+        if (mirrorOffhandWeapon) {
+            // Mirror around the grip itself: the hilt stays on the off-hand anchor
+            // while the weapon points the opposite way to the main-hand copy.
+            ctx.save();
+            ctx.translate(anchor.x, anchor.y);
+            ctx.scale(-1, 1);
+            ctx.drawImage(image, -grip.x*drawWidth, -grip.y*drawHeight, drawWidth, drawHeight);
+            ctx.restore();
+        } else {
+            ctx.drawImage(image, anchor.x - grip.x*drawWidth, itemY, drawWidth, drawHeight);
+        }
+""",
+    'shield aspect-preserving draw',
+)
+renderer = replace_once(
+    renderer,
+    "    window.REAR_HUMAN_EQUIPMENT_ASSETS = REAR_EQUIPMENT_ASSETS;\n",
+    "    window.REAR_HUMAN_EQUIPMENT_ASSETS = REAR_EQUIPMENT_ASSETS;\n    window.SHIELD_VISUAL_ASSETS = SHIELD_ASSETS;\n",
+    'shield asset debug export',
+)
+renderer_path.write_text(renderer)
+
+test_path = Path('tests/human-female-direct-render.spec.js')
+tests = test_path.read_text()
+tests = replace_once(
+    tests,
+    """async function waitForRearEquipmentAssets(page) {
+  await page.waitForFunction(() => {
+    const rear = window.REAR_HUMAN_EQUIPMENT_ASSETS;
+    return rear?.shield?.naturalWidth > 0
+      && rear?.helmet?.naturalWidth > 0
+      && rear?.armour?.light?.naturalWidth > 0
+      && rear?.armour?.medium?.naturalWidth > 0
+      && rear?.armour?.heavy?.naturalWidth > 0;
+  });
+}
+""",
+    """async function waitForRearEquipmentAssets(page) {
+  await page.waitForFunction(() => {
+    const rear = window.REAR_HUMAN_EQUIPMENT_ASSETS;
+    const shields = window.SHIELD_VISUAL_ASSETS;
+    return rear?.shield?.naturalWidth > 0
+      && shields?.round?.front?.naturalWidth > 0
+      && shields?.round?.back?.naturalWidth > 0
+      && shields?.kite?.front?.naturalWidth > 0
+      && shields?.kite?.back?.naturalWidth > 0
+      && rear?.helmet?.naturalWidth > 0
+      && rear?.armour?.light?.naturalWidth > 0
+      && rear?.armour?.medium?.naturalWidth > 0
+      && rear?.armour?.heavy?.naturalWidth > 0;
+  });
+}
+""",
+    'rear equipment readiness',
+)
+
+marker = "  test('human female uses facing-aware shield painter order', async ({ page }) => {"
+new_test = r'''  test('shield items select their own front/rear art and preserve shield aspect ratio', async ({ page }) => {
+    await createCharacter(page, { race:'human', gender:'female' });
+    await waitForDirectRenderer(page, 'human_female');
+    await waitForRearEquipmentAssets(page);
+
+    const result = await page.evaluate(() => {
+      const entity = (window.entities || []).find(e => e.alive && e.race === 'human' && e.gender === 'female' && e.side === 'player');
+      if (!entity) throw new Error('No player-side human female entity found');
+      const shields = window.SHIELD_VISUAL_ASSETS;
+
+      function renderShield(itemId, facing) {
+        entity.equipped = { ...(entity.equipped || {}), armor:null, helmet:null, weapon:null, offhand:itemId };
+        entity.displayArmour = false;
+        entity.displayClothes = false;
+        entity.facing = facing;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 240;
+        canvas.height = 300;
+        const ctx = canvas.getContext('2d');
+        const height = 240;
+        const width = height * (window.HUMAN_FEMALE_RENDER_ASPECT || 0.48);
+        const originalDraw = CanvasRenderingContext2D.prototype.drawImage;
+        let capture = null;
+
+        CanvasRenderingContext2D.prototype.drawImage = function(image, ...args) {
+          let label = null;
+          for (const [visual, pair] of Object.entries(shields || {})) {
+            if (pair.front === image) label = `${visual}.front`;
+            if (pair.back === image) label = `${visual}.back`;
+          }
+          if (this === ctx && label && args.length === 4) {
+            capture = {
+              label,
+              width:Math.abs(args[2]),
+              height:Math.abs(args[3]),
+              sourceRatio:(image.naturalWidth || image.width) / (image.naturalHeight || image.height),
+            };
+          }
+          return originalDraw.call(this, image, ...args);
+        };
+        try {
+          window.drawDirectionalHumanoidInBounds(
+            ctx,
+            entity,
+            { left:(canvas.width-width)/2, top:20, width, height },
+            facing,
+          );
+        } finally {
+          CanvasRenderingContext2D.prototype.drawImage = originalDraw;
+        }
+        return capture;
+      }
+
+      return {
+        itemVisuals:{
+          wooden:window.items.wooden_shield.shieldVisual,
+          bulwark:window.items.bulwark_shield.shieldVisual,
+        },
+        woodenFront:renderShield('wooden_shield','down'),
+        woodenBack:renderShield('wooden_shield','up'),
+        bulwarkFront:renderShield('bulwark_shield','down'),
+        bulwarkBack:renderShield('bulwark_shield','up'),
+      };
+    });
+
+    expect(result.itemVisuals).toEqual({wooden:'round',bulwark:'kite'});
+    expect(result.woodenFront.label).toBe('round.front');
+    expect(result.woodenBack.label).toBe('round.back');
+    expect(result.bulwarkFront.label).toBe('kite.front');
+    expect(result.bulwarkBack.label).toBe('kite.back');
+    expect(result.bulwarkFront.width / result.bulwarkFront.height).toBeCloseTo(result.bulwarkFront.sourceRatio, 5);
+    expect(result.bulwarkBack.width / result.bulwarkBack.height).toBeCloseTo(result.bulwarkBack.sourceRatio, 5);
+  });
+
+'''
+if tests.count(marker) != 1:
+    raise RuntimeError(f'shield regression insertion marker count={tests.count(marker)}')
+tests = tests.replace(marker, new_test + marker, 1)
+test_path.write_text(tests)
