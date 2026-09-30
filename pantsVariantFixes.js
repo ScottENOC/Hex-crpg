@@ -23,19 +23,22 @@
   function syncPhysicalShapes(e){
     if(!e)return;
     e.clothingShape=e.clothingShape&&typeof e.clothingShape==='object'?e.clothingShape:{};
-    const fallback=normaliseShape(clone(e.clothingShape[SKIRT_ID])||{length:.62,flare:.15});
-    const skirts=(e.physicalEquipment||[]).filter(x=>x?.itemId===SKIRT_ID);
+    const skirts=(e.physicalEquipment||[]).filter(x=>x?.itemId===SKIRT_ID),wearsSkirt=e?.equipped?.pants===SKIRT_ID;
+    if(!skirts.length&&!wearsSkirt)return;
+    let existing=e.clothingShape[SKIRT_ID];
+    if(!existing&&window.skirtClothing?.ensureShape)existing=window.skirtClothing.ensureShape(e);
+    const fallback=normaliseShape(clone(existing)||{length:.62,flare:.15});
     for(const inst of skirts){
       inst.appearance=inst.appearance||{};
       if(!inst.appearance.clothingShape)inst.appearance.clothingShape=clone(fallback);
       normaliseShape(inst.appearance.clothingShape);
     }
     const equipped=e.equippedInstances?.pants;
-    if(e?.equipped?.pants===SKIRT_ID&&equipped?.itemId===SKIRT_ID){
+    if(wearsSkirt&&equipped?.itemId===SKIRT_ID){
       equipped.appearance=equipped.appearance||{};
       if(!equipped.appearance.clothingShape)equipped.appearance.clothingShape=clone(fallback);
       e.clothingShape[SKIRT_ID]=normaliseShape(equipped.appearance.clothingShape);
-    }else if(!e.clothingShape[SKIRT_ID]){
+    }else if(skirts.length&&!e.clothingShape[SKIRT_ID]){
       e.clothingShape[SKIRT_ID]=fallback;
     }
   }
