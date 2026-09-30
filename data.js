@@ -121,6 +121,15 @@ if (!window.__aelwenLivingAccordModuleLoaded) {
     document.write('<script src="aelwenLivingAccord.js?build=20260930-aelwen-living-accord-v1"><\/script>');
 }
 
+// King Balrik's first persistent-character pass grows from the existing
+// Deepholds infestation and the sealed Sunken Deep. The old warning forces a
+// real policy choice between preservation, controlled study and tightly bounded
+// reclamation, with Thrain and Mirabel able to contribute independent views.
+if (!window.__balrikLastHoldModuleLoaded) {
+    window.__balrikLastHoldModuleLoaded = true;
+    document.write('<script src="balrikLastHold.js?build=20260930-balrik-last-hold-v1"><\/script>');
+}
+
 // Relationship progression is intentionally separate from the storage/
 // permission layer above: familiarity grows from unique personal conversations
 // and slow shared time, while trust moves only through explicit authored events.
