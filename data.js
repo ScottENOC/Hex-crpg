@@ -30,7 +30,7 @@ const raceData = {
     // opposite lean from goblin's agile-skirmisher build. Heavy endurance
     // plus strength/weapons rather than agility.
     orc: {
-        bonus: { orc: 1, strength: 2, endurance: 1 }
+        bonus: { orc: 1, strength: 2, endurance: 1, weapons: 1 }
     }
 };
 
@@ -266,6 +266,16 @@ if (!window.__aldricBrokenVigilModuleLoaded) {
     document.write('<script src="aldricBrokenVigil.js?build=20260930-aldric-broken-vigil-v2"><\/script>');
 }
 
+// Aldric Chapter 2 asks what his own vows require once there is no corrupt
+// counterparty to blame. The Silver Vigil genuinely needs a warden at Saint
+// Orra's Hospice; Aldric can obey literally, negotiate bounded service, seek an
+// honest release, or make the choice himself while developing discernment and
+// his willingness to share burdens rather than martyr himself to them.
+if (!window.__aldricMeasureOfOathModuleLoaded) {
+    window.__aldricMeasureOfOathModuleLoaded = true;
+    document.write('<script src="aldricMeasureOfOath.js?build=20260930-aldric-measure-of-oath-v1"><\/script>');
+}
+
 // Mirabel's first post-recruitment chapter follows the damaged magical folio
 // she joined the party to recover from the spider ruin. It develops her own
 // curiosity-vs-restraint and flight-vs-rootedness arcs while tying the book's
@@ -327,6 +337,16 @@ if (!window.__companionRomanceModuleLoaded) {
 if (!window.__wrenPriceOfSilenceModuleLoaded) {
     window.__wrenPriceOfSilenceModuleLoaded = true;
     document.write('<script src="wrenPriceOfSilence.js?build=20260929-wren-price-of-silence-v1"><\/script>');
+}
+
+// Wren Chapter 3 follows the exact Silverhart lead left by The Price of Silence.
+// The Crown did not order Mara and Galen's murder; an old Transport Office
+// knowingly reimbursed and buried the payment afterwards to protect a fragile
+// relief contract. The investigation resolves Wren's parents' official record
+// while pushing her security arc from fear-bound staying toward chosen loyalty.
+if (!window.__wrenCrownQuietHandModuleLoaded) {
+    window.__wrenCrownQuietHandModuleLoaded = true;
+    document.write('<script src="wrenCrownQuietHand.js?build=20260930-wren-crown-quiet-hand-v1"><\/script>');
 }
 
 // Declarative hints for NPC/AI skill spending. Existing gameplay prereq fields
