@@ -9,7 +9,15 @@
  * Creates a character and gets past the character-screen modal into the
  * running game. Defaults to a human fighter starting Campaign 2 (Hollowmere).
  */
-async function createCharacter(page, { race = 'human', gender = 'male', cls = 'fighter', campaign = '2', difficulty = 'normal' } = {}) {
+async function createCharacter(page, {
+    race = 'human',
+    gender = 'male',
+    cls = 'fighter',
+    campaign = '2',
+    difficulty = 'normal',
+    hairStyle = null,
+    bodyType = null,
+} = {}) {
     await page.goto('/');
 
     // The real UI is deliberately unavailable until the character-creator art
@@ -24,6 +32,8 @@ async function createCharacter(page, { race = 'human', gender = 'male', cls = 'f
     await page.selectOption('#gender-select', gender);
     await page.selectOption('#class-select', cls);
     await page.selectOption('#campaign-select', campaign);
+    if (hairStyle) await page.selectOption('#hair-style-select', hairStyle);
+    if (bodyType) await page.selectOption('#body-type-select', bodyType);
     const difficultySelect = page.locator('#difficulty-select');
     if (await difficultySelect.count()) await difficultySelect.selectOption(difficulty);
     await page.click('#createCharacterButton');
