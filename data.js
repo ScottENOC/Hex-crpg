@@ -159,6 +159,24 @@ if (!window.__petraIronbondFactorModuleLoaded) {
     document.write('<script src="petraIronbondFactor.js?build=20260930-petra-ironbond-factor-v1"><\/script>');
 }
 
+// Adelram's first pass connects the Crimson Court, Alden's burial-register
+// investigation and the necromancer/lich arc. His faith is deliberately not
+// certainty: doctrine can guide inquiry, but rites and mystery must never become
+// respectable language for losing track of what happened to actual people.
+if (!window.__adelramCathedralShepherdModuleLoaded) {
+    window.__adelramCathedralShepherdModuleLoaded = true;
+    document.write('<script src="adelramCathedralShepherd.js?build=20260930-adelram-cathedral-shepherd-v1"><\/script>');
+}
+
+// Ilsa's first pass deepens the investigations she already commands in Reddale:
+// missing patrols, border scouting, Reyna's compromised trackers and Ashgrave.
+// Her law-and-order view is about preserving truthful information as much as
+// punishment; an institution people are terrified to approach makes itself blind.
+if (!window.__ilsaWatchCaptainModuleLoaded) {
+    window.__ilsaWatchCaptainModuleLoaded = true;
+    document.write('<script src="ilsaWatchCaptain.js?build=20260930-ilsa-watch-captain-v1"><\/script>');
+}
+
 // Relationship progression is intentionally separate from the storage/
 // permission layer above: familiarity grows from unique personal conversations
 // and slow shared time, while trust moves only through explicit authored events.
