@@ -192,7 +192,7 @@ if (!window.__aldenUncountedModuleLoaded) {
 // clear the crypt with the player remember having done so.
 if (!window.__companionMajorQuestReactivityModuleLoaded) {
     window.__companionMajorQuestReactivityModuleLoaded = true;
-    document.write('<script src="companionMajorQuestReactivity.js?build=20260930-companion-major-quest-reactivity-v1"><\/script>');
+    document.write('<script src="companionMajorQuestReactivity.js?build=20260930-companion-major-quest-reactivity-v2"><\/script>');
 }
 
 // Romance agreements interpret affinity rather than replacing it. Commitment,
