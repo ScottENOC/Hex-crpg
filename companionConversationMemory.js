@@ -1,242 +1,34 @@
 // companionConversationMemory.js
-// Reusable authored-conversation memory for companions.
-//
-// The goal is not procedural dialogue generation. Authors register topics with
-// explicit conditions, cooldowns, priorities and renderers. The system remembers
-// what was discussed, selects only the most salient currently-relevant subjects,
-// and stores that memory on the companion's existing playerRelationship object so
-// normal party save/load persists it automatically.
+// Authored companion conversation memory, salience, cooldowns and personality clues.
 (() => {
-    'use strict';
+'use strict';
+const BUILD='20261001-companion-conversation-memory-v3', DAY=86400, DEFAULT_LIMIT=4, registry=new Map();
+const now=()=>Number(window.worldSeconds||0), party=()=>Array.isArray(window.party)?window.party:[], quest=id=>(window.questLog||[]).find(q=>q?.id===id)||null;
+function canonical(x){const n=typeof x==='string'?x:x?.name;return n?party().find((m,i)=>i>0&&m?.name===n)||null:null;}
+function ensureMemory(x){const c=canonical(x);if(!c)return null;window.getCompanionRelationship?.(c);c.playerRelationship ||= {familiarity:10,trust:10,history:[],knownConversationKeys:[]};const e=c.playerRelationship.conversationMemory||{};return c.playerRelationship.conversationMemory={version:3,topics:e.topics&&typeof e.topics==='object'?e.topics:{},history:Array.isArray(e.history)?e.history:[],lastMeaningful:e.lastMeaningful||null};}
+function topicState(c,id){const m=ensureMemory(c);if(!m)return null;return m.topics[id] ||= {uses:0,lastAt:null,lastVariant:-1};}
+function contextFor(x){const c=canonical(x);if(!c)return null;return {companion:c,player:party()[0]||null,party:party(),partyNames:new Set(party().map(m=>m?.name).filter(Boolean)),relationship:window.getCompanionRelationship?.(c)||{},affinity:window.getCompanionAffinity?.(c)||c.playerAffinity||{},romance:window.companionRomance?.interpretRelationship?.(c)||null,worldSeconds:now(),quest,memory:ensureMemory(c)};}
+function registerTopics(name,topics){if(!name||!Array.isArray(topics))return false;const cur=registry.get(name)||new Map();for(const t of topics)if(t?.id&&typeof t.render==='function')cur.set(String(t.id),{...t,id:String(t.id)});registry.set(name,cur);return true;}
+function num(v,c,s,f=0){try{const r=typeof v==='function'?v(c,s):v;return Number.isFinite(Number(r))?Number(r):f}catch{return f}}
+function bool(v,c,s,f=true){if(v===undefined)return f;try{return typeof v==='function'?!!v(c,s):!!v}catch{return false}}
+function available(t,c,s){if(!t||!c||!s||!bool(t.condition,c,s,true))return false;const max=t.maxUses==null?Infinity:Math.max(0,Number(t.maxUses));if(s.uses>=max)return false;if(s.uses>0&&s.lastAt!=null){const cd=num(t.cooldownSeconds,c,s,num(t.cooldownDays,c,s,0)*DAY);if(cd>0&&c.worldSeconds-Number(s.lastAt||0)<cd)return false;}return true;}
+function score(t,c,s){let n=num(t.priority,c,s,20);if(!s.uses)n+=15;n-=Math.min(18,s.uses*3);if(t.reactive)n+=10;if(t.milestone)n+=18;return n;}
+function availableTopics(x,limit=DEFAULT_LIMIT){const c=contextFor(x), map=registry.get(c?.companion?.name);if(!c||!map)return[];const out=[];for(const t of map.values()){const s=topicState(c.companion,t.id);if(available(t,c,s))out.push({topic:t,state:s,ctx:c,score:score(t,c,s)});}return out.sort((a,b)=>b.score-a.score||a.topic.id.localeCompare(b.topic.id)).slice(0,Math.max(1,Number(limit)||DEFAULT_LIMIT));}
+function label(t,c,s){try{return String((typeof t.label==='function'?t.label(c,s):t.label)||'Talk about something.')}catch{return'Talk about something.'}}
+function recordUse(c,t,s,r,ctx){const m=ensureMemory(c);if(!m)return;s.uses=Number(s.uses||0)+1;s.lastAt=now();s.lastVariant=Number(r?.variantIndex??s.lastVariant??-1);const e={topicId:t.id,subject:String(r?.subject||t.subject||t.id),at:s.lastAt,use:s.uses};m.lastMeaningful=e;m.history.push(e);if(m.history.length>40)m.history.splice(0,m.history.length-40);const clues=r?.personalityClues??t.personalityClues;for(const clue of(Array.isArray(clues)?clues:(clues?[clues]:[]))){if(typeof clue==='string')window.learnCompanionPersonality?.(c.name,clue,1,t.id);else if(clue?.trait)window.learnCompanionPersonality?.(c.name,clue.trait,clue.amount||1,t.id);}try{t.onDiscuss?.(ctx,s,r)}catch{}}
+function openHub(x,limit=DEFAULT_LIMIT){const c=canonical(x);if(!c)return false;const subjects=availableTopics(c,limit);if(!subjects.length){window.showDialogue?.(c,'Nothing urgent comes to mind. Quiet company is all right too.',[{label:'Stay a while.',action:()=>{}}]);return true;}const opts=subjects.map(({topic,state,ctx})=>({label:label(topic,ctx,state),action:()=>playTopic(c,topic.id)}));opts.push({label:'Never mind.',action:()=>{}});window.showDialogue?.(c,'What do you want to talk about?',opts);return true;}
+function playTopic(x,id){const ctx=contextFor(x),c=ctx?.companion,t=registry.get(c?.name)?.get(String(id));if(!ctx||!c||!t)return false;const s=topicState(c,t.id);if(!available(t,ctx,s))return false;let r;try{r=t.render(ctx,s)||{}}catch{return false}if(!r.text)return false;recordUse(c,t,s,r,ctx);const opts=Array.isArray(r.options)&&r.options.length?[...r.options,...(r.noReturn?[]:[{label:'Talk about something else.',action:()=>openHub(c)}])]:[{label:'Talk about something else.',action:()=>openHub(c)},{label:'That’s enough for now.',action:()=>{}}];window.showDialogue?.(c,r.text,opts);return true;}
+function lastMeaningful(x){return ensureMemory(x)?.lastMeaningful||null;}
+function installDialogueEntry(id,name){const trees=window.npcDialogueTrees,orig=trees?.[id];if(typeof orig!=='function')return false;const marker=`__conversationMemory_${id}`;if(orig[marker])return true;const wrapped=function(npc){if(typeof window.showDialogue!=='function')return orig.apply(this,arguments);const base=window.showDialogue;let first=true;window.showDialogue=function(speaker,text,options){if(first&&speaker?.name===name&&Array.isArray(options)){first=false;if(availableTopics(name).length&&!options.some(o=>o?.__conversationMemoryEntry)){const add={label:'Talk for a while.',__conversationMemoryEntry:true,action:()=>openHub(name)},next=[...options],exit=next.findIndex(o=>/never mind|goodbye|leave/i.test(String(o?.label||'')));if(exit>=0)next.splice(exit,0,add);else next.push(add);return base.call(this,speaker,text,next);}}return base.apply(this,arguments)};try{return orig.apply(this,arguments)}finally{window.showDialogue=base}};wrapped[marker]=true;wrapped.__previous=orig;trees[id]=wrapped;return true;}
+const api={build:BUILD,daySeconds:DAY,registerTopics,ensureMemory,topicState,contextFor,availableTopics,playTopic,openHub,lastMeaningful,installDialogueEntry};window.companionConversationMemory=api;window.COMPANION_CONVERSATION_MEMORY_BUILD=BUILD;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 
-    const BUILD = '20261001-companion-conversation-memory-v2';
-    const DAY = 24 * 60 * 60;
-    const DEFAULT_LIMIT = 4;
-    const registry = new Map();
-
-    const now = () => Number(window.worldSeconds || 0);
-    const party = () => Array.isArray(window.party) ? window.party : [];
-    const quest = id => (window.questLog || []).find(q => q?.id === id) || null;
-
-    function canonicalCompanion(entityOrName) {
-        const name = typeof entityOrName === 'string' ? entityOrName : entityOrName?.name;
-        if (!name) return null;
-        return party().find((member, index) => index > 0 && member?.name === name) || null;
-    }
-
-    function ensureMemory(entityOrName) {
-        const companion = canonicalCompanion(entityOrName);
-        if (!companion) return null;
-        window.getCompanionRelationship?.(companion);
-        companion.playerRelationship = companion.playerRelationship || { familiarity: 10, trust: 10, history: [], knownConversationKeys: [] };
-        const existing = companion.playerRelationship.conversationMemory || {};
-        companion.playerRelationship.conversationMemory = {
-            version: 2,
-            topics: existing.topics && typeof existing.topics === 'object' ? existing.topics : {},
-            history: Array.isArray(existing.history) ? existing.history : [],
-            lastMeaningful: existing.lastMeaningful || null,
-        };
-        return companion.playerRelationship.conversationMemory;
-    }
-
-    function topicState(companion, topicId) {
-        const memory = ensureMemory(companion);
-        if (!memory) return null;
-        memory.topics[topicId] = memory.topics[topicId] || { uses: 0, lastAt: null, lastVariant: -1 };
-        return memory.topics[topicId];
-    }
-
-    function contextFor(entityOrName) {
-        const companion = canonicalCompanion(entityOrName);
-        if (!companion) return null;
-        const relationship = window.getCompanionRelationship?.(companion) || {};
-        const affinity = window.getCompanionAffinity?.(companion) || companion.playerAffinity || {};
-        const romance = window.companionRomance?.interpretRelationship?.(companion) || null;
-        return {
-            companion,
-            player: party()[0] || null,
-            party: party(),
-            partyNames: new Set(party().map(m => m?.name).filter(Boolean)),
-            relationship,
-            affinity,
-            romance,
-            worldSeconds: now(),
-            quest,
-            memory: ensureMemory(companion),
-        };
-    }
-
-    function registerTopics(companionName, topics) {
-        if (!companionName || !Array.isArray(topics)) return false;
-        const current = registry.get(companionName) || new Map();
-        for (const topic of topics) {
-            if (!topic?.id || typeof topic.render !== 'function') continue;
-            current.set(String(topic.id), { ...topic, id: String(topic.id) });
-        }
-        registry.set(companionName, current);
-        return true;
-    }
-
-    function numberValue(value, ctx, state, fallback = 0) {
-        try {
-            const result = typeof value === 'function' ? value(ctx, state) : value;
-            return Number.isFinite(Number(result)) ? Number(result) : fallback;
-        } catch (_) { return fallback; }
-    }
-
-    function boolValue(value, ctx, state, fallback = true) {
-        if (value === undefined) return fallback;
-        try { return typeof value === 'function' ? !!value(ctx, state) : !!value; }
-        catch (_) { return false; }
-    }
-
-    function isAvailable(topic, ctx, state) {
-        if (!topic || !ctx || !state) return false;
-        if (!boolValue(topic.condition, ctx, state, true)) return false;
-        const maxUses = topic.maxUses == null ? Infinity : Math.max(0, Number(topic.maxUses));
-        if (state.uses >= maxUses) return false;
-        if (state.uses > 0 && state.lastAt != null) {
-            const cooldown = numberValue(topic.cooldownSeconds, ctx, state,
-                numberValue(topic.cooldownDays, ctx, state, 0) * DAY);
-            if (cooldown > 0 && ctx.worldSeconds - Number(state.lastAt || 0) < cooldown) return false;
-        }
-        return true;
-    }
-
-    function salience(topic, ctx, state) {
-        let score = numberValue(topic.priority, ctx, state, 20);
-        if (state.uses === 0) score += 15;
-        score -= Math.min(18, state.uses * 3);
-        if (topic.reactive) score += 10;
-        if (topic.milestone) score += 18;
-        return score;
-    }
-
-    function availableTopics(entityOrName, limit = DEFAULT_LIMIT) {
-        const ctx = contextFor(entityOrName);
-        if (!ctx) return [];
-        const topics = registry.get(ctx.companion.name);
-        if (!topics) return [];
-        const available = [];
-        for (const topic of topics.values()) {
-            const state = topicState(ctx.companion, topic.id);
-            if (!isAvailable(topic, ctx, state)) continue;
-            available.push({ topic, state, ctx, score: salience(topic, ctx, state) });
-        }
-        available.sort((a, b) => b.score - a.score || a.topic.id.localeCompare(b.topic.id));
-        return available.slice(0, Math.max(1, Number(limit) || DEFAULT_LIMIT));
-    }
-
-    function displayLabel(topic, ctx, state) {
-        try {
-            const label = typeof topic.label === 'function' ? topic.label(ctx, state) : topic.label;
-            return String(label || 'Talk about something.');
-        } catch (_) { return 'Talk about something.'; }
-    }
-
-    function recordUse(companion, topic, state, rendered, ctx) {
-        const memory = ensureMemory(companion);
-        if (!memory) return;
-        state.uses = Number(state.uses || 0) + 1;
-        state.lastAt = now();
-        state.lastVariant = Number(rendered?.variantIndex ?? state.lastVariant ?? -1);
-        const entry = { topicId: topic.id, subject: String(rendered?.subject || topic.subject || topic.id), at: state.lastAt, use: state.uses };
-        memory.lastMeaningful = entry;
-        memory.history.push(entry);
-        if (memory.history.length > 40) memory.history.splice(0, memory.history.length - 40);
-
-        // Authored topics may reveal progressively clearer personality clues.
-        // This is deliberately informational: it does not award approval/trust.
-        const clues = rendered?.personalityClues ?? topic.personalityClues;
-        const list = Array.isArray(clues) ? clues : (clues ? [clues] : []);
-        for (const clue of list) {
-            if (!clue) continue;
-            if (typeof clue === 'string') window.learnCompanionPersonality?.(companion.name, clue, 1, topic.id);
-            else if (clue.trait) window.learnCompanionPersonality?.(companion.name, clue.trait, clue.amount || 1, topic.id);
-        }
-        try { topic.onDiscuss?.(ctx, state, rendered); } catch (_) {}
-    }
-
-    function defaultOptions(companion) {
-        return [
-            { label: 'Talk about something else.', action: () => openHub(companion) },
-            { label: 'That’s enough for now.', action: () => {} },
-        ];
-    }
-
-    function playTopic(entityOrName, topicId) {
-        const ctx = contextFor(entityOrName);
-        const companion = ctx?.companion;
-        const topic = registry.get(companion?.name)?.get(String(topicId));
-        if (!ctx || !companion || !topic) return false;
-        const state = topicState(companion, topic.id);
-        if (!isAvailable(topic, ctx, state)) return false;
-        let rendered;
-        try { rendered = topic.render(ctx, state) || {}; } catch (_) { return false; }
-        if (!rendered.text) return false;
-        recordUse(companion, topic, state, rendered, ctx);
-        const options = Array.isArray(rendered.options) && rendered.options.length
-            ? [...rendered.options, ...(rendered.noReturn ? [] : [{ label: 'Talk about something else.', action: () => openHub(companion) }])]
-            : defaultOptions(companion);
-        window.showDialogue?.(companion, rendered.text, options);
-        return true;
-    }
-
-    function openHub(entityOrName, limit = DEFAULT_LIMIT) {
-        const companion = canonicalCompanion(entityOrName);
-        if (!companion) return false;
-        const subjects = availableTopics(companion, limit);
-        if (!subjects.length) {
-            window.showDialogue?.(companion,
-                companion.name === 'Ser Aldric Thorne'
-                    ? 'Aldric considers it, then gives a small shake of his head. “Nothing urgent. Quiet company is not a problem.”'
-                    : '“Nothing clever comes to mind,” Wren says. “We can just be quiet for a bit. That’s allowed.”',
-                [{ label: 'Stay a while.', action: () => {} }]
-            );
-            return true;
-        }
-        const options = subjects.map(({ topic, state, ctx }) => ({ label: displayLabel(topic, ctx, state), action: () => playTopic(companion, topic.id) }));
-        options.push({ label: 'Never mind.', action: () => {} });
-        window.showDialogue?.(companion, 'What do you want to talk about?', options);
-        return true;
-    }
-
-    function lastMeaningful(entityOrName) { return ensureMemory(entityOrName)?.lastMeaningful || null; }
-
-    function installDialogueEntry(dialogueId, companionName) {
-        const trees = window.npcDialogueTrees;
-        const original = trees?.[dialogueId];
-        if (typeof original !== 'function') return false;
-        const marker = `__conversationMemory_${dialogueId}`;
-        if (original[marker]) return true;
-        const wrapped = function(npc) {
-            if (typeof window.showDialogue !== 'function') return original.apply(this, arguments);
-            const baseShow = window.showDialogue;
-            let first = true;
-            window.showDialogue = function(speaker, text, options) {
-                if (first && speaker?.name === companionName && Array.isArray(options)) {
-                    first = false;
-                    const available = availableTopics(companionName, DEFAULT_LIMIT);
-                    if (available.length && !options.some(o => o?.__conversationMemoryEntry)) {
-                        const addition = { label: 'Talk for a while.', __conversationMemoryEntry: true, action: () => openHub(companionName) };
-                        const next = [...options];
-                        const exit = next.findIndex(o => /never mind|goodbye|leave/i.test(String(o?.label || '')));
-                        if (exit >= 0) next.splice(exit, 0, addition); else next.push(addition);
-                        return baseShow.call(this, speaker, text, next);
-                    }
-                }
-                return baseShow.apply(this, arguments);
-            };
-            try { return original.apply(this, arguments); } finally { window.showDialogue = baseShow; }
-        };
-        wrapped[marker] = true;
-        wrapped.__previous = original;
-        trees[dialogueId] = wrapped;
-        return true;
-    }
-
-    const api = { build: BUILD, daySeconds: DAY, registerTopics, ensureMemory, topicState, contextFor, availableTopics, playTopic, openHub, lastMeaningful, installDialogueEntry };
-    window.companionConversationMemory = api;
-    window.COMPANION_CONVERSATION_MEMORY_BUILD = BUILD;
-    if (typeof module !== 'undefined' && module.exports) module.exports = api;
+// Keep the personality-learning layer beside the conversation system so the
+// feature cannot silently exist in the repository without being loaded. These
+// scripts are authored data/knowledge only; they do not grant approval points.
+if(typeof document!=='undefined'&&!window.__companionPersonalityKnowledgeModuleLoaded){
+ window.__companionPersonalityKnowledgeModuleLoaded=true;
+ const load=src=>{const s=document.createElement('script');s.src=src;s.async=false;(document.head||document.documentElement).appendChild(s);};
+ load('companionPersonalityKnowledge.js?build=20261001-personality-knowledge-v2');
+ load('companionPersonalityConversations.js?build=20260930-companion-personality-conversations-v1');
+}
 })();
