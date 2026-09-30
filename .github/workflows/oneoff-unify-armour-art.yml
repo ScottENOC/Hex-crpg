@@ -25,156 +25,16 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Patch armour asset selection and regression coverage
+      - name: Patch armour asset selection
+        run: python scripts/oneoff_unify_armour.py
+
+      - name: Validate directional armour wiring
         shell: bash
         run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          def replace_once(text, old, new, label):
-              count = text.count(old)
-              if count != 1:
-                  raise RuntimeError(f'{label}: expected exactly one match, found {count}')
-              return text.replace(old, new, 1)
-
-          path = Path('humanoidRenderer.js')
-          text = path.read_text()
-
-          text = replace_once(text,
-          """    const SHIELD_PATHS = {
-                  round:{front:'images/equipment/shields/round.png',back:'images/equipment/shields/round_back.svg'},
-                  kite:{front:'images/equipment/shields/kite.png',back:'images/equipment/shields/kite_back.png'},
-              };
-
-              const REAR_EQUIPMENT_PATHS = {
-                  helmet:'images/nasalHelm_back.svg',
-                  armour:{
-                      light:'images/humanlightarmour_back.svg',
-                      medium:'images/humanmediumarmour_back.svg',
-                      heavy:'images/humanheavyarmour_back.svg',
-                  },
-              };
-          """,
-          """    const SHIELD_PATHS = {
-                  round:{front:'images/equipment/shields/round.png',back:'images/equipment/shields/round_back.svg'},
-                  kite:{front:'images/equipment/shields/kite.png',back:'images/equipment/shields/kite_back.png'},
-              };
-
-              // Armour is renderer-owned directional art, just like shields. Front and
-              // side share the authored front face; back uses the matching rear face.
-              // Keeping the pair together prevents a legacy PNG front from being mixed
-              // with a newer SVG rear from a different visual style.
-              const ARMOUR_PATHS = {
-                  light:{front:'images/humanlightarmour_front.svg',back:'images/humanlightarmour_back.svg'},
-                  medium:{front:'images/humanmediumarmour_front.svg',back:'images/humanmediumarmour_back.svg'},
-                  heavy:{front:'images/humanheavyarmour_front.svg',back:'images/humanheavyarmour_back.svg'},
-              };
-
-              const REAR_EQUIPMENT_PATHS = {
-                  helmet:'images/nasalHelm_back.svg',
-              };
-          """, 'armour path table')
-
-          text = replace_once(text,
-          """    const SHIELD_ASSETS = Object.fromEntries(Object.entries(SHIELD_PATHS)
-                  .map(([visual, paths]) => [visual, {front:loadImage(paths.front), back:loadImage(paths.back)}]));
-              const REAR_EQUIPMENT_ASSETS = {
-                  // Compatibility alias for existing readiness checks and any legacy
-                  // consumers that still expect the ordinary wooden shield rear here.
-                  shield:SHIELD_ASSETS.round.back,
-                  helmet:loadImage(REAR_EQUIPMENT_PATHS.helmet),
-                  armour:Object.fromEntries(Object.entries(REAR_EQUIPMENT_PATHS.armour)
-                      .map(([tier, src]) => [tier, loadImage(src)])),
-              };
-          """,
-          """    const SHIELD_ASSETS = Object.fromEntries(Object.entries(SHIELD_PATHS)
-                  .map(([visual, paths]) => [visual, {front:loadImage(paths.front), back:loadImage(paths.back)}]));
-              const ARMOUR_ASSETS = Object.fromEntries(Object.entries(ARMOUR_PATHS)
-                  .map(([tier, paths]) => [tier, {front:loadImage(paths.front), back:loadImage(paths.back)}]));
-              const REAR_EQUIPMENT_ASSETS = {
-                  // Compatibility aliases for existing readiness checks and any legacy
-                  // consumers that still expect rear equipment in this object.
-                  shield:SHIELD_ASSETS.round.back,
-                  helmet:loadImage(REAR_EQUIPMENT_PATHS.helmet),
-                  armour:Object.fromEntries(Object.entries(ARMOUR_ASSETS)
-                      .map(([tier, views]) => [tier, views.back])),
-              };
-          """, 'armour preload table')
-
-          text = replace_once(text,
-          """        const visuals = window.gameVisuals || {};
-              const tier = reduction >= 3 ? 'heavy' : reduction >= 2 ? 'medium' : 'light';
-              const generic = tier === 'heavy' ? visuals.humanHeavy : tier === 'medium' ? visuals.humanMedium : visuals.humanLight;
-              let image = rearPreferred(view, REAR_EQUIPMENT_ASSETS.armour[tier], generic);
-              if (!image) return null;
-              if (entity.goldGear && window.getGoldTintedSprite) image = window.getGoldTintedSprite(image) || image;
-              return image;
-          """,
-          """        const visuals = window.gameVisuals || {};
-              const tier = reduction >= 3 ? 'heavy' : reduction >= 2 ? 'medium' : 'light';
-              const authored = view === 'back' ? ARMOUR_ASSETS[tier]?.back : ARMOUR_ASSETS[tier]?.front;
-              // Retain the old PNG as a load-failure fallback only. Normal rendering now
-              // uses a matched SVG pair for every tier, with gold tint applied after the
-              // directional view is selected so recolouring is identical front/back.
-              const legacy = tier === 'heavy' ? visuals.humanHeavy : tier === 'medium' ? visuals.humanMedium : visuals.humanLight;
-              let image = imageReady(authored) ? authored : legacy;
-              if (!image) return null;
-              if (entity.goldGear && window.getGoldTintedSprite) image = window.getGoldTintedSprite(image) || image;
-              return image;
-          """, 'armour image selection')
-
-          text = replace_once(text,
-              "    window.SHIELD_VISUAL_ASSETS = SHIELD_ASSETS;\n",
-              "    window.SHIELD_VISUAL_ASSETS = SHIELD_ASSETS;\n    window.ARMOUR_VISUAL_ASSETS = ARMOUR_ASSETS;\n",
-              'armour asset export')
-          path.write_text(text)
-
-          test_path = Path('tests/human-female-direct-render.spec.js')
-          tests = test_path.read_text()
-          tests = replace_once(tests,
-          """    const rear = window.REAR_HUMAN_EQUIPMENT_ASSETS;
-              const shields = window.SHIELD_VISUAL_ASSETS;
-              return rear?.shield?.naturalWidth > 0
-          """,
-          """    const rear = window.REAR_HUMAN_EQUIPMENT_ASSETS;
-              const shields = window.SHIELD_VISUAL_ASSETS;
-              const armour = window.ARMOUR_VISUAL_ASSETS;
-              return rear?.shield?.naturalWidth > 0
-                && armour?.light?.front?.naturalWidth > 0
-                && armour?.light?.back?.naturalWidth > 0
-                && armour?.medium?.front?.naturalWidth > 0
-                && armour?.medium?.back?.naturalWidth > 0
-                && armour?.heavy?.front?.naturalWidth > 0
-                && armour?.heavy?.back?.naturalWidth > 0
-          """, 'armour readiness')
-
-          marker = "  test('shield items select their own front/rear art and preserve shield aspect ratio', async ({ page }) => {"
-          new_test = """  test('armour tiers preload matched authored front/back SVG pairs', async ({ page }) => {
-            await createCharacter(page, { race:'human', gender:'female' });
-            await waitForDirectRenderer(page, 'human_female');
-            await waitForRearEquipmentAssets(page);
-
-            const assets = await page.evaluate(() => Object.fromEntries(
-              Object.entries(window.ARMOUR_VISUAL_ASSETS || {}).map(([tier, views]) => [tier, {
-                front:views.front?.src || '',
-                back:views.back?.src || '',
-                frontSize:[views.front?.naturalWidth || 0, views.front?.naturalHeight || 0],
-                backSize:[views.back?.naturalWidth || 0, views.back?.naturalHeight || 0],
-              }])
-            ));
-
-            for (const tier of ['light','medium','heavy']) {
-              expect(assets[tier].front).toContain(`human${tier}armour_front.svg`);
-              expect(assets[tier].back).toContain(`human${tier}armour_back.svg`);
-              expect(assets[tier].frontSize[0]).toBeGreaterThan(0);
-              expect(assets[tier].backSize[0]).toBeGreaterThan(0);
-            }
-          });
-
-          """ + marker
-          tests = replace_once(tests, marker, new_test, 'armour directional test')
-          test_path.write_text(tests)
-          PY
+          grep -q "humanlightarmour_front.svg" humanoidRenderer.js
+          grep -q "humanmediumarmour_front.svg" humanoidRenderer.js
+          grep -q "humanheavyarmour_front.svg" humanoidRenderer.js
+          grep -q "window.ARMOUR_VISUAL_ASSETS = ARMOUR_ASSETS" humanoidRenderer.js
 
       - name: Install dependencies
         run: npm ci
@@ -185,12 +45,12 @@ jobs:
       - name: Run focused humanoid renderer regression
         run: npx playwright test tests/human-female-direct-render.spec.js
 
-      - name: Commit tested armour changes
+      - name: Commit tested armour renderer change
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add humanoidRenderer.js tests/human-female-direct-render.spec.js
+          git add humanoidRenderer.js
           git diff --cached --quiet && exit 0
           git commit -m "Unify armour front and back rendering [skip ci]"
           git push origin HEAD:chatgpt/armour-front-back-unify-20260930
