@@ -152,7 +152,7 @@ test.describe('Mirabel companion quest: The Unquiet Concordance', () => {
     test('relationship combinations produce different Mirabel aftermath modes', async ({ page }) => {
         const modes = await page.evaluate(() => {
             const mirabel = window.party.find(p => p.name === 'Mirabel Quill');
-            const affinity = window.companionAffinity.ensureAffinity(mirabel);
+            let affinity = window.companionAffinity.ensureAffinity(mirabel);
             const rel = window.companionRelationships.ensureRelationship(mirabel);
 
             affinity.friendship = 20;
@@ -161,17 +161,23 @@ test.describe('Mirabel companion quest: The Unquiet Concordance', () => {
             rel.trust = 30;
             const casual = window.mirabelUnquietConcordance.aftermathMode();
 
+            // aftermathMode() reads a normalised affinity snapshot, and that
+            // normalisation replaces companion.playerAffinity. Reacquire the
+            // live canonical state before setting up each independent case.
+            affinity = window.companionAffinity.ensureAffinity(mirabel);
             affinity.friendship = 70;
             affinity.romanticBond = 10;
             affinity.attraction = 70;
             const fwb = window.mirabelUnquietConcordance.aftermathMode();
 
+            affinity = window.companionAffinity.ensureAffinity(mirabel);
             affinity.friendship = 70;
             affinity.romanticBond = 55;
             affinity.attraction = 40;
             rel.trust = 60;
             const romantic = window.mirabelUnquietConcordance.aftermathMode();
 
+            affinity = window.companionAffinity.ensureAffinity(mirabel);
             affinity.friendship = 65;
             affinity.romanticBond = 5;
             affinity.attraction = 10;
