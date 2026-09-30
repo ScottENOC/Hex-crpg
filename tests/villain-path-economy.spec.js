@@ -57,6 +57,10 @@ test.describe('Villain-path commerce gating and alternatives', () => {
     test('the same human merchants work normally for an unaligned player', async ({ page }) => {
         await createCharacter(page);
         const result = await page.evaluate(() => {
+            // This test is about alignment gating, not opening hours. Put the
+            // clothier squarely inside her daytime shop schedule so a closed
+            // shop cannot masquerade as a commerce-alignment failure.
+            window.worldSeconds = 14 * 3600;
             let openedShop = false;
             window.openShop = () => { openedShop = true; };
             let calls = null;
