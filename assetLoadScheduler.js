@@ -1,12 +1,16 @@
 // assetLoadScheduler.js
-// Phase-aware image scheduler. Character creation and gameplay each have an
-// explicit loading gate; non-critical art is deferred instead of competing for
-// GitHub Pages connections before it is needed.
+// Shared image loading, phase-aware preload gates and a temporary compatibility
+// path redirector for legacy callers. The redirector deliberately does NOT own
+// retries: AssetManager owns network/cache/retry work for all local images.
 (() => {
     'use strict';
 
+    const SCHEDULER_VERSION = '4';
+    if (window.__assetLoadSchedulerInstalled && window.__assetLoadSchedulerVersion === SCHEDULER_VERSION) return;
+    // data.js loads this before any other game script in a normal page load.
     if (window.__assetLoadSchedulerInstalled) return;
     window.__assetLoadSchedulerInstalled = true;
+    window.__assetLoadSchedulerVersion = SCHEDULER_VERSION;
 
     const nativeSrc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
     if (!nativeSrc || typeof nativeSrc.set !== 'function' || typeof nativeSrc.get !== 'function') return;
@@ -118,7 +122,6 @@
         'images/overlay skull.png':'images/props/effects/skull_overlay.png',
         'images/corpse_marker.svg':'images/props/effects/corpse_marker.svg',
         'images/spiderweb.png':'images/props/effects/spiderweb.png',
-        // Keep stale callers harmless while the renamed front-view trousers propagate.
         'images/equipment/clothing/pants_trousers.png':'images/equipment/clothing/pants_trousers_front.png',
     }));
 
@@ -128,7 +131,8 @@
     ]);
     const CREATOR_MAX_CONCURRENT = 4;
     const GAME_MAX_CONCURRENT = 4;
-    const TRANSIENT_RETRY_DELAY_MS = 180;
+    const MANAGER_MAX_RETRIES = 2;
+    const MANAGER_RETRY_DELAYS_MS = [180, 600];
     const GAMEPLAY_WARMUP_GRACE_MS = 750;
 
     const ARENA_CRITICAL = [
@@ -168,7 +172,8 @@
     const queue = [];
     const deferred = [];
     const phaseCritical = new Set();
-    const phaseImages = new Set();
+    const managerRecords = new Map();
+    const assignmentVersions = new WeakMap();
 
     function normalise(src) {
         try {
@@ -189,11 +194,44 @@
         return LEGACY_ASSET_REDIRECTS.get(requested) || requested;
     }
 
-    function cacheBusted(value, reason='retry') {
-        const raw=String(value);
+    function isLocalAsset(value) {
+        const raw=String(value||'');
+        if (/^(?:data:|blob:)/i.test(raw)) return false;
+        try {
+            const url=new URL(raw,document.baseURI);
+            const baseDir=new URL('.',document.baseURI);
+            const basePath=baseDir.pathname.endsWith('/')?baseDir.pathname:`${baseDir.pathname}/`;
+            return url.origin===baseDir.origin && url.pathname.startsWith(basePath);
+        } catch (_) {
+            return true;
+        }
+    }
+
+    function currentBuild() {
+        return window.PRESENTATION_BUILD || document.querySelector('meta[name="app-build"]')?.content || 'asset-manager-v4';
+    }
+
+    function managedUrl(value, {retry=0, freshReason='retry'}={}) {
+        const raw = String(value || '');
         if (/^(?:data:|blob:)/i.test(raw)) return raw;
-        const separator=raw.includes('?')?'&':'?';
-        return `${raw}${separator}assetRetry=${encodeURIComponent(reason)}-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+        const requestedPath = normalise(raw);
+        const canonical = LEGACY_ASSET_REDIRECTS.get(requestedPath) || requestedPath;
+        let url;
+        try {
+            url = new URL(raw, document.baseURI);
+            const baseDir = new URL('.', document.baseURI);
+            const basePath = baseDir.pathname.endsWith('/') ? baseDir.pathname : `${baseDir.pathname}/`;
+            if (url.origin !== baseDir.origin || !url.pathname.startsWith(basePath)) return raw;
+            const original = url;
+            url = new URL(canonical, baseDir);
+            for (const [key,val] of original.searchParams.entries()) url.searchParams.append(key,val);
+            url.searchParams.set('build', currentBuild());
+            if (retry) url.searchParams.set('assetRetry', `${freshReason}-${retry}`);
+            return url.href;
+        } catch (_) {
+            const sep = canonical.includes('?') ? '&' : '?';
+            return `${canonical}${sep}build=${encodeURIComponent(currentBuild())}${retry ? `&assetRetry=${encodeURIComponent(freshReason)}-${retry}` : ''}`;
+        }
     }
 
     function selectedCampaign() {
@@ -239,12 +277,13 @@
             pump();
         }, delay + 1);
     }
+
     function pump() {
         const limit = concurrencyLimit();
         while (active < limit && queue.length) {
             queue.sort((a,b) => a.priority - b.priority || a.order - b.order);
             const job = queue[0];
-            if (gameStarted && job.queuedBeforeGameStart && performance.now() < gameplayWarmupResumeAt) {
+            if (gameStarted && job.queuedBeforeGameStart && performance.now() < gameplayWarmupResumeAt && job.priority > -100) {
                 scheduleWarmupResume();
                 return;
             }
@@ -266,8 +305,14 @@
         });
     }
 
-    function enqueue(path, start) {
-        queue.push({path,start,priority:priorityFor(path),order:order++,queuedBeforeGameStart:!gameStarted});
+    function enqueue(path, start, priorityOverride=null) {
+        queue.push({
+            path,
+            start,
+            priority:priorityOverride ?? priorityFor(path),
+            order:order++,
+            queuedBeforeGameStart:!gameStarted,
+        });
         schedulePump();
     }
 
@@ -277,35 +322,6 @@
             event.assetLoadSchedulerReason = reason;
             event.assetPath = path;
             try { img.dispatchEvent(event); } catch (_) {}
-        });
-    }
-
-    function queueImageAssignment(img, requestedValue, requestedPath, canonical) {
-        const targetSrc = canonical === requestedPath ? requestedValue : canonical;
-        enqueue(canonical, done => {
-            let attempt = 0;
-            const armAttempt = () => {
-                const onLoad = () => { cleanup(); done(); };
-                const onError = event => {
-                    cleanup();
-                    if (attempt < 1) {
-                        attempt++;
-                        event?.preventDefault?.();
-                        event?.stopImmediatePropagation?.();
-                        setTimeout(armAttempt, TRANSIENT_RETRY_DELAY_MS);
-                        return;
-                    }
-                    done();
-                };
-                const cleanup = () => {
-                    img.removeEventListener('load', onLoad, true);
-                    img.removeEventListener('error', onError, true);
-                };
-                img.addEventListener('load', onLoad, {once:true,capture:true});
-                img.addEventListener('error', onError, {once:true,capture:true});
-                nativeSrc.set.call(img, attempt ? cacheBusted(targetSrc,'automatic') : targetSrc);
-            };
-            armAttempt();
         });
     }
 
@@ -324,12 +340,142 @@
         }
     }
 
+    function recordFor(value) {
+        const path = canonicalPath(value);
+        let record = managerRecords.get(path);
+        if (record) return record;
+        const image = new Image();
+        let resolvePromise, rejectPromise;
+        const promise = new Promise((resolve,reject) => { resolvePromise=resolve; rejectPromise=reject; });
+        promise.catch(() => {});
+        record = {
+            path,image,promise,resolve:resolvePromise,reject:rejectPromise,
+            status:'idle',queued:false,attempt:0,error:null,
+        };
+        managerRecords.set(path,record);
+        return record;
+    }
+
+    function settleLoaded(record) {
+        const finish = () => {
+            if (record.status === 'ready') return;
+            record.status='ready';
+            record.error=null;
+            record.resolve(record.image);
+        };
+        if (typeof record.image.decode === 'function') record.image.decode().then(finish, finish);
+        else finish();
+    }
+
+    function startManagerRecord(record, done) {
+        record.queued=false;
+        record.status='loading';
+        const attemptLoad = () => {
+            const cleanup = () => {
+                record.image.removeEventListener('load', onLoad, true);
+                record.image.removeEventListener('error', onError, true);
+            };
+            const onLoad = () => {
+                cleanup();
+                settleLoaded(record);
+                done();
+            };
+            const onError = () => {
+                cleanup();
+                if (record.attempt < MANAGER_MAX_RETRIES) {
+                    const delay = MANAGER_RETRY_DELAYS_MS[record.attempt] || MANAGER_RETRY_DELAYS_MS.at(-1);
+                    record.attempt += 1;
+                    setTimeout(attemptLoad, delay);
+                    return;
+                }
+                record.status='error';
+                record.error=new Error(`Failed to load image: ${record.path}`);
+                record.reject(record.error);
+                done();
+            };
+            record.image.addEventListener('load',onLoad,{once:true,capture:true});
+            record.image.addEventListener('error',onError,{once:true,capture:true});
+            nativeSrc.set.call(record.image, managedUrl(record.path,{retry:record.attempt,freshReason:'manager'}));
+        };
+        attemptLoad();
+    }
+
+    function requestManaged(value,{priority=null,immediate=false}={}) {
+        const record=recordFor(value);
+        if (record.status==='ready' || record.status==='loading' || record.queued || record.status==='error') return record.image;
+        const start=() => {
+            if (record.status!=='idle') return;
+            record.queued=true;
+            enqueue(record.path, done=>startManagerRecord(record,done), priority);
+        };
+        if (immediate || mayStartNow(record.path)) start();
+        else record.status='deferred';
+        return record.image;
+    }
+
+    function ensureManagedStarted(value,opts={}) {
+        const record=recordFor(value);
+        if (record.status==='deferred') record.status='idle';
+        requestManaged(value,{...opts,immediate:true});
+        return record;
+    }
+
+    function loadManaged(value,opts={}) {
+        return ensureManagedStarted(value,opts).promise;
+    }
+
+    function whenReady(value,opts={}) {
+        return loadManaged(value,opts);
+    }
+
+    async function preloadManaged(values,opts={}) {
+        return Promise.allSettled([...new Set(values.map(canonicalPath))].map(path=>loadManaged(path,opts)));
+    }
+
+    function releaseManagedDeferred(predicate=()=>true) {
+        for (const record of managerRecords.values()) {
+            if (record.status!=='deferred' || !predicate(record.path)) continue;
+            record.status='idle';
+            requestManaged(record.path,{immediate:true});
+        }
+    }
+
+    window.assetManager = {
+        version:SCHEDULER_VERSION,
+        request:requestManaged,
+        load:loadManaged,
+        whenReady,
+        preload:preloadManaged,
+        canonicalPathFor:canonicalPath,
+        urlFor:managedUrl,
+        get(path){return managerRecords.get(canonicalPath(path))?.image || null;},
+        status(path){return managerRecords.get(canonicalPath(path))?.status || 'unrequested';},
+        get cacheSize(){return managerRecords.size;},
+    };
+
+    // Temporary compatibility entrance for old `new Image(); image.src=...`
+    // callers. The shared manager performs the only network request/retry cycle;
+    // the caller's Image is pointed at the hot cached URL after that succeeds.
+    function queueImageAssignment(img, requestedValue, requestedPath, canonical) {
+        const version=(assignmentVersions.get(img)||0)+1;
+        assignmentVersions.set(img,version);
+        loadManaged(canonical,{priority:priorityFor(canonical),immediate:true}).then(shared => {
+            if (assignmentVersions.get(img)!==version) return;
+            const hotUrl=shared.currentSrc || shared.src || managedUrl(canonical === requestedPath ? requestedValue : canonical);
+            nativeSrc.set.call(img,hotUrl);
+        }).catch(() => {
+            if (assignmentVersions.get(img)!==version) return;
+            dispatchSyntheticError(img,canonical,'asset-manager-exhausted');
+        });
+    }
+
     Object.defineProperty(HTMLImageElement.prototype, 'src', {
         configurable:nativeSrc.configurable,
         enumerable:nativeSrc.enumerable,
         get:nativeSrc.get,
         set(value) {
             const img = this;
+            if (!isLocalAsset(value)) { nativeSrc.set.call(img,value); return; }
             const requestedPath = normalise(value);
             if (SUPPRESSED.has(requestedPath)) {
                 dispatchSyntheticError(img,requestedPath,'obsolete-unused-asset');
@@ -383,9 +529,6 @@
         const tops=feminine
             ? ['top_blouse','top_dress','top_shirt_f']
             : ['top_masc_toggle','top_masc_lacework','top_masc_laced','top_masc_buttoned'];
-        // Creator preview has a deterministic race/gender seed. The live player's
-        // final name can choose a different starter top, so gameplay must have the
-        // whole gender-appropriate starter pool ready before the gate opens.
         const selectedTops=allViews ? tops : [tops[hash(`${race}_${gender}|top`)%tops.length]];
         const paths=[...selectedTops.map(top=>`images/equipment/clothing/${top}.png`),'images/equipment/clothing/pants_trousers_front.png'];
         if (allViews) paths.push('images/equipment/clothing/pants_trousers_back.png');
@@ -402,7 +545,6 @@
         const cls=document.getElementById('class-select')?.value||'fighter';
         if (cls==='cleric') return ['images/equipment/weapons/club.svg','images/equipment/shields/round.png'];
         if (cls==='druid') return ['images/equipment/weapons/club.svg'];
-        // Dagger currently shares the sword paper-doll art; fighter uses it directly.
         return ['images/equipment/weapons/sword.png'];
     }
 
@@ -412,10 +554,6 @@
 
     function gameManifest() {
         const scenario = selectedCampaign()==='1' ? [...ARENA_CRITICAL,...ARENA_SOON] : [...CAMPAIGN2_NEARBY];
-        // Anything the renderer/game code already asked for during character creation
-        // is a stronger signal than another hand-maintained guess at the opening scene.
-        // Warm those deferred requests behind the loading gate, then release the actual
-        // renderer-owned Image elements into a hot browser cache when gameplay begins.
         const deferredArt = deferred.map(entry=>entry.canonical).filter(path=>path?.startsWith('images/'));
         return [...new Set([...currentCreatorCharacterAssets(true),...currentClothingAssets(true),...currentStartingEquipmentAssets(),...scenario,...deferredArt])];
     }
@@ -467,43 +605,29 @@
         if (overlay) overlay.hidden=true;
     }
 
-    function loadOne(path, forceFresh=false) {
-        return new Promise((resolve,reject) => {
-            const img=new Image();
-            phaseImages.add(img);
-            const cleanup=()=>phaseImages.delete(img);
-            img.onload=()=>{cleanup();resolve(path);};
-            img.onerror=()=>{cleanup();reject(path);};
-            img.src=forceFresh ? cacheBusted(path,'gate') : path;
-        });
-    }
-
     async function runGate(title,manifest,{allowBypass=false}={}) {
         const paths=[...new Set(manifest.map(canonicalPath))];
         paths.forEach(path=>phaseCritical.add(path));
-        // Keep renderer-owned image elements deferred while the gate probes warm
-        // the cache. Releasing them here duplicates every critical network request.
-        const loadedPaths=new Set();
+        let loaded=0;
         let pending=[...paths];
-        let attempt=0;
         let bypassedFailures=[];
         const overlay=showOverlay(title,paths.length,0);
 
         try {
             while (pending.length) {
-                const results=await Promise.allSettled(pending.map(path=>loadOne(path,attempt>0).then(value=>{
-                    loadedPaths.add(value);
-                    updateOverlay(loadedPaths.size,paths.length);
-                    return value;
+                const results=await Promise.allSettled(pending.map(path=>loadManaged(path,{priority:-100,immediate:true}).then(()=>{
+                    loaded+=1;
+                    updateOverlay(Math.min(loaded,paths.length),paths.length);
+                    return path;
                 })));
-                const failed=results.filter(r=>r.status==='rejected').map(r=>r.reason);
+                const failed=results.map((result,i)=>result.status==='rejected'?pending[i]:null).filter(Boolean);
                 if (!failed.length) break;
 
                 const error=overlay.querySelector('.hex-loading-error');
                 const retry=overlay.querySelector('.hex-loading-retry');
                 const continueButton=overlay.querySelector('.hex-loading-continue');
                 const names=failed.slice(0,4).map(path=>path.split('/').pop()).join(', ');
-                error.textContent=`Could not load ${failed.length} art asset${failed.length===1?'':'s'}${names?`: ${names}`:''}. Retry will bypass the browser cache.${allowBypass?' You can also start the game with the missing art.':''}`;
+                error.textContent=`Could not load ${failed.length} art asset${failed.length===1?'':'s'}${names?`: ${names}`:''}.${allowBypass?' You can also start the game with the missing art.':''}`;
                 error.hidden=false;
                 retry.hidden=false;
                 continueButton.hidden=!allowBypass;
@@ -522,8 +646,8 @@
                     bypassedFailures=failed;
                     break;
                 }
+                for (const path of failed) managerRecords.delete(path);
                 pending=failed;
-                attempt++;
             }
         } finally {
             paths.forEach(path=>phaseCritical.delete(path));
@@ -536,7 +660,8 @@
         if (gameStarted) return;
         gameStarted=true;
         gameplayWarmupResumeAt=performance.now()+GAMEPLAY_WARMUP_GRACE_MS;
-        for (const job of queue) if (job.queuedBeforeGameStart) job.priority=50;
+        for (const job of queue) if (job.queuedBeforeGameStart) job.priority=Math.max(job.priority,50);
+        releaseManagedDeferred();
         pump();
     }
 
@@ -557,9 +682,7 @@
         phase='game-loading';
         try {
             const gateResult=await runGate('Loading game…',gameManifest(),{allowBypass:true});
-            if (!gateResult.complete) {
-                console.warn('Starting game with art assets still unavailable:',gateResult.failed);
-            }
+            if (!gateResult.complete) console.warn('Starting game with art assets still unavailable:',gateResult.failed);
             phase='game';
             beginGameplayLoading();
             releaseDeferred();
@@ -588,10 +711,11 @@
     else loadCreator();
 
     window.__assetLoadScheduler={
+        version:SCHEDULER_VERSION,
         creatorMaxConcurrent:CREATOR_MAX_CONCURRENT,
         gameMaxConcurrent:GAME_MAX_CONCURRENT,
         gameplayWarmupGraceMs:GAMEPLAY_WARMUP_GRACE_MS,
-        transientRetryDelayMs:TRANSIENT_RETRY_DELAY_MS,
+        transientRetryDelayMs:MANAGER_RETRY_DELAYS_MS[0],
         suppressed:[...SUPPRESSED],
         legacyRedirectCount:LEGACY_ASSET_REDIRECTS.size,
         canonicalPathFor:canonicalPath,
@@ -604,5 +728,6 @@
         get queued(){return queue.length;},
         get deferred(){return deferred.length;},
         get active(){return active;},
+        get cacheSize(){return managerRecords.size;},
     };
 })();
