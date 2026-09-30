@@ -44,13 +44,15 @@ test.describe('visibility asset regressions', () => {
   });
 
   test('braid uses its side and back directional art in the live renderer', async ({ page }) => {
-    await createCharacter(page, { race:'human', gender:'female' });
+    // Make braid part of the character's authoritative creator state. Setting
+    // only entity.hairStyle after creation races the normal appearance sync and
+    // can be overwritten by the creator's random initial hair selection.
+    await createCharacter(page, { race:'human', gender:'female', hairStyle:'braid' });
     await page.waitForFunction(() => window.__humanoidRendererReady === true);
     await page.evaluate(() => {
       const entity = (window.entities || []).find(e =>
         e?.alive && e.side === 'player' && e.race === 'human' && e.gender === 'female'
       );
-      entity.hairStyle = 'braid';
       entity.equipped = { ...(entity.equipped || {}), helmet:null };
     });
 
