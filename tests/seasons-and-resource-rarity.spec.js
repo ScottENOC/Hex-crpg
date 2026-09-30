@@ -30,24 +30,40 @@ test.describe('seasonal leaf tint and rarer wilderness resources', () => {
         expect(result.tint.sat).toBeLessThan(0.7);
     });
 
-    test('a tinted foliage sprite is a canvas (not the original <img>), and reading its aspect ratio from the original image still works', async ({ page }) => {
+    test('a tinted foliage sprite remains drawable at the source aspect ratio regardless of recolour backing type', async ({ page }) => {
         await createCharacter(page);
         const result = await page.evaluate(() => {
             const img = window.gameVisuals.tree_small;
             const tint = window.getSeasonalLeafTint();
             const tinted = window.getRecoloredHairSprite(img, tint.hue, tint.light, tint.sat);
+            const sourceWidth = img.naturalWidth || img.width || 0;
+            const sourceHeight = img.naturalHeight || img.height || 0;
+            const tintedWidth = tinted?.naturalWidth || tinted?.width || 0;
+            const tintedHeight = tinted?.naturalHeight || tinted?.height || 0;
             return {
-                isCanvas: tinted instanceof HTMLCanvasElement,
-                originalHasNaturalSize: img.naturalWidth > 0 && img.naturalHeight > 0,
+                hasTintedSprite: !!tinted,
+                sourceWidth,
+                sourceHeight,
+                tintedWidth,
+                tintedHeight,
             };
         });
-        expect(result.isCanvas).toBe(true);
-        expect(result.originalHasNaturalSize).toBe(true);
+        expect(result.hasTintedSprite).toBe(true);
+        expect(result.sourceWidth).toBeGreaterThan(0);
+        expect(result.sourceHeight).toBeGreaterThan(0);
+        expect(result.tintedWidth).toBe(result.sourceWidth);
+        expect(result.tintedHeight).toBe(result.sourceHeight);
     });
 
     test('the apple sprite asset is registered and loads', async ({ page }) => {
         await createCharacter(page);
-        const loaded = await page.evaluate(() => window.gameVisuals.apple && window.gameVisuals.apple.complete && window.gameVisuals.apple.naturalWidth > 0);
+        // Apple is a speculative/non-blocking asset, so character creation no
+        // longer guarantees that its network load has completed synchronously.
+        await page.waitForFunction(() => {
+            const apple = window.gameVisuals?.apple;
+            return !!apple && apple.complete && apple.naturalWidth > 0;
+        }, null, { timeout: 5000 });
+        const loaded = await page.evaluate(() => window.gameVisuals.apple.complete && window.gameVisuals.apple.naturalWidth > 0);
         expect(loaded).toBe(true);
     });
 
