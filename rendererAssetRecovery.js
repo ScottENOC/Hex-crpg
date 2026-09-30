@@ -39,7 +39,10 @@
             const next = retryUrl(image, attempt);
             if (!next) return;
             console.warn(`Retrying renderer image load (${attempt}/${MAX_RETRIES})`, image.src);
-            image.src = next;
+            // assetLoadScheduler already performs its own transient retry before this
+            // recovery handler sees the error. Bypass its overridden .src setter here
+            // so a renderer recovery attempt cannot start a nested scheduler retry loop.
+            image.setAttribute('src', next);
         }, delay);
     }
 
