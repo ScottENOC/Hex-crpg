@@ -1,7 +1,7 @@
 // Explicit garment layers: one authored image per colourable part.
 (() => {
   'use strict';
-  const BUILD=window.PRESENTATION_BUILD||'20260930-fitted-shirt-fit-v3';
+  const BUILD=window.PRESENTATION_BUILD||'20260930-fitted-shirt-fit-v4';
   const slots=['underwear','bra','pants','shirt'];
   const preloadSlots=['shirt','pants','bra','underwear'];
   const labels={underwear:'Underwear',bra:'Bra',pants:'Pants',shirt:'Shirt / Dress'};
@@ -48,7 +48,9 @@
   // already correct and follows a separate aspect-preserving path.
   const FEMININE_TOP_FIT={
     top_blouse:{chest:1.08,waist:1.14},
-    top_dress:{chest:1.11,waist:1.20},
+    // The dress as a whole is 1.75x wider below; 1.7143 here makes the visible
+    // front/back waist body section about 2.5x its previous width.
+    top_dress:{chest:1.11,waist:1.7143},
     top_shirt_f:{chest:1.73,waist:1.84},
     default:{chest:1.06,waist:1.10},
   };
@@ -314,7 +316,12 @@
       }
       return set.shirt;
     }
-    if(slot==='pants') return set.pants;
+    if(slot==='pants'){
+      // Move every pants-slot garment upward without changing its dimensions.
+      // Two per cent of the common pants target height gives a small waistband rise.
+      const rise=set.pants.h*.02;
+      return {...set.pants,y:set.pants.y-rise};
+    }
     if(slot==='bra') return set.bra;
     if(slot==='underwear') return set.underwear;
     return null;
@@ -403,11 +410,17 @@
     if(slot==='shirt'&&garmentSpec?.fitMode==='dressSplit'&&geometrySource){
       const resolved=view(v),set=CLOTHING_TARGETS[resolved]||CLOTHING_TARGETS.front;
       const bands=dressBands(geometrySource,garmentSpec.waistFraction),topTarget=set.shirt;
-      const topX=bounds.left+topTarget.x*bounds.width,topY=bounds.top+topTarget.y*bounds.height;
-      const topW=topTarget.w*bounds.width,topH=topTarget.h*bounds.height;
+      const baseTopW=topTarget.w*bounds.width,topH=topTarget.h*bounds.height;
+      const dressWidthScale=itemId==='top_dress'?1.75:1;
+      const topW=baseTopW*dressWidthScale;
+      const baseTopX=bounds.left+topTarget.x*bounds.width;
+      const topX=baseTopX-(topW-baseTopW)/2,topY=bounds.top+topTarget.y*bounds.height;
       const authoredFlare=bands.top.w?bands.skirt.w/bands.top.w:1;
-      const maxSkirtW=Math.max(topW,Math.min(bounds.width,Number(garmentSpec.maxSkirtWidth||.98)*bounds.width));
-      const skirtW=Math.min(maxSkirtW,topW*Math.max(1,authoredFlare));
+      // First reproduce the old skirt width, including its authored-flare/cap rules,
+      // then enlarge that result by 75% so the requested bottom increase is exact.
+      const baseMaxSkirtW=Math.max(baseTopW,Math.min(bounds.width,Number(garmentSpec.maxSkirtWidth||.98)*bounds.width));
+      const baseSkirtW=Math.min(baseMaxSkirtW,baseTopW*Math.max(1,authoredFlare));
+      const skirtW=baseSkirtW*dressWidthScale;
       const skirtX=bounds.left+(bounds.width-skirtW)/2;
       const skirtY=bounds.top+OUTERWEAR.waist*bounds.height;
       const skirtH=(OUTERWEAR.bottom-OUTERWEAR.waist)*bounds.height;
