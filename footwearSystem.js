@@ -4,7 +4,7 @@
 (() => {
   'use strict';
 
-  const BUILD = window.PRESENTATION_BUILD || '20261001-footwear-v1';
+  const BUILD = window.PRESENTATION_BUILD || '20261001-footwear-v2';
   const SLOT = 'shoes';
   const ITEM_ID = 'boots';
   const VIEWS = {
@@ -13,6 +13,7 @@
     back: 'images/equipment/clothing/boots_back.png',
   };
   const DEFAULT_COLOR = {hue:110,saturation:55,value:62,opacity:1};
+  const PLAYER_DEFAULT_COLOR = {hue:28,saturation:68,value:32,opacity:1};
   const HUMANOID_RACES = new Set(['human','elf','dwarf','goblin','orc']);
   const imageCache = new Map();
   const boundsCache = new WeakMap();
@@ -22,8 +23,10 @@
   let unequipWrapped = false;
 
   // Deliberately public tuning: footwear can be nudged without redrawing art.
-  // spread is the centre-to-centre distance between the two boots as a fraction
-  // of the humanoid render bounds. Increase it if a body rig has wider-set feet.
+  // spread is the pre-existing centre-to-centre distance between the two boots
+  // as a fraction of humanoid render bounds. scale enlarges each rendered boot
+  // relative to the approved v1 fit, and outwardShift then moves each boot away
+  // from the character centre by that fraction of its NEW rendered width.
   const tuning = window.FOOTWEAR_RENDER_TUNING = window.FOOTWEAR_RENDER_TUNING || {
     bottom: 1.006,
     height: 0.22,
@@ -31,6 +34,8 @@
     backSpread: 0.24,
     maxBootWidth: 0.25,
     sideMaxWidth: 0.34,
+    scale: 1.30,
+    outwardShift: 0.40,
   };
 
   function view(v) {
@@ -81,6 +86,13 @@
     return !!e?.equipped && HUMANOID_RACES.has(e.race) && !!e.gender;
   }
 
+  function isMainCharacter(e) {
+    if (!e) return false;
+    const main = window.party?.[0];
+    if (main) return e === main || (!!main.name && e.name === main.name);
+    return e === window.player;
+  }
+
   function ensureDefaultFootwear(e) {
     if (!eligible(e) || !window.clothingSystem) return false;
     window.clothingSystem.migrateLegacyEquipment(e);
@@ -88,6 +100,17 @@
       if (!e.equipped[SLOT]) e.equipped[SLOT] = ITEM_ID;
       e.footwearDefaultsApplied = true;
     }
+
+    // The authored asset stays green so the normal clothing tint system can
+    // recolour it. Only the player's initial pair gets a dark-brown leather
+    // default, and never overwrite a colour already chosen/saved by the player.
+    if (isMainCharacter(e) && e.equipped[SLOT] === ITEM_ID) {
+      if (!e.clothingColors || typeof e.clothingColors !== 'object') e.clothingColors = {};
+      const colours = e.clothingColors[ITEM_ID] || (e.clothingColors[ITEM_ID] = {});
+      if (!colours.base) colours.base = {...PLAYER_DEFAULT_COLOR};
+      else if (colours.base.opacity === undefined) colours.base.opacity = 1;
+    }
+
     if (e === window.player && Array.isArray(e.inventory)
         && e.equipped[SLOT] === ITEM_ID && !e.inventory.includes(ITEM_ID)) {
       e.inventory.push(ITEM_ID);
@@ -166,10 +189,16 @@
     return result;
   }
 
-  function drawContained(ctx, source, src, cx, bottom, maxW, maxH) {
-    const scale = Math.min(maxW/src.w, maxH/src.h);
-    const dw = src.w*scale, dh = src.h*scale;
-    ctx.drawImage(source,src.x,src.y,src.w,src.h,cx-dw/2,bottom-dh,dw,dh);
+  function containedSize(src,maxW,maxH,scaleMultiplier=1) {
+    const baseScale = Math.min(maxW/src.w, maxH/src.h);
+    const scale = baseScale * Math.max(0,Number(scaleMultiplier)||1);
+    return {w:src.w*scale,h:src.h*scale};
+  }
+
+  function drawContained(ctx, source, src, cx, bottom, maxW, maxH, scaleMultiplier=1) {
+    const size = containedSize(src,maxW,maxH,scaleMultiplier);
+    ctx.drawImage(source,src.x,src.y,src.w,src.h,cx-size.w/2,bottom-size.h,size.w,size.h);
+    return size;
   }
 
   function drawFootwear(ctx,e,v,bounds) {
@@ -193,6 +222,7 @@
     const rendered = layer.tint === false ? img : cs.tintWholeLayer(img,colour,layer);
     const bottom = bounds.top + Number(tuning.bottom ?? 1.006) * bounds.height;
     const maxH = Number(tuning.height ?? .22) * bounds.height;
+    const renderScale = Math.max(0,Number(tuning.scale ?? 1.30)) || 1.30;
 
     if (resolved === 'side') {
       const trim = opaqueBounds(img);
@@ -201,7 +231,8 @@
         bounds.left + bounds.width/2,
         bottom,
         Number(tuning.sideMaxWidth ?? .34) * bounds.width,
-        maxH
+        maxH,
+        renderScale
       );
       return true;
     }
@@ -209,15 +240,30 @@
     const halves = splitBootBounds(img);
     if (!halves) {
       const trim = opaqueBounds(img);
-      drawContained(ctx,rendered,trim,bounds.left+bounds.width/2,bottom,bounds.width*.55,maxH);
+      drawContained(ctx,rendered,trim,bounds.left+bounds.width/2,bottom,bounds.width*.55,maxH,renderScale);
       return true;
     }
 
     const spread = Number(resolved === 'back' ? tuning.backSpread : tuning.frontSpread) || .24;
     const maxW = Number(tuning.maxBootWidth ?? .25) * bounds.width;
     const centre = bounds.left + bounds.width/2;
-    drawContained(ctx,rendered,halves.left,centre-spread*bounds.width/2,bottom,maxW,maxH);
-    drawContained(ctx,rendered,halves.right,centre+spread*bounds.width/2,bottom,maxW,maxH);
+    const halfSpread = spread*bounds.width/2;
+    const outwardShift = Math.max(0,Number(tuning.outwardShift ?? .40));
+    const leftSize = containedSize(halves.left,maxW,maxH,renderScale);
+    const rightSize = containedSize(halves.right,maxW,maxH,renderScale);
+
+    // Keep the established foot anchors, then move each enlarged boot outward by
+    // exactly 40% of that individual boot's new rendered width.
+    drawContained(
+      ctx,rendered,halves.left,
+      centre-halfSpread-outwardShift*leftSize.w,
+      bottom,maxW,maxH,renderScale
+    );
+    drawContained(
+      ctx,rendered,halves.right,
+      centre+halfSpread+outwardShift*rightSize.w,
+      bottom,maxW,maxH,renderScale
+    );
     return true;
   }
 
