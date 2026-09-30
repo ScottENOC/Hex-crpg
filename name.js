@@ -39,7 +39,7 @@ window.generateName = window.getRandomName;
     window.randomizeCharacterAppearance({sync:false});
 })();
 
-const PRESENTATION_BUILD = '20260930-character-render-fix-v1';
+const PRESENTATION_BUILD = '20260930-directional-assets-v2';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
 const presentationBuildMeta=document.querySelector('meta[name="app-build"]');if(presentationBuildMeta)presentationBuildMeta.content=PRESENTATION_BUILD;
@@ -63,6 +63,7 @@ if('serviceWorker'in navigator){navigator.serviceWorker.register(`sw.js?build=${
         ['renderPerfTuning.js','renderPerfTuning'],
         ['raceSkinPalettes.js','raceSkinPalettes'],
         ['humanoidRenderer.js','humanoidRenderer'],
+        ['rendererAssetRecovery.js','rendererAssetRecovery'],
         ['braidDirectionalHair.js','braidDirectionalHair'],
         ['shieldAppearance.js','shieldAppearance'],
         ['shieldAppearanceUI.js','shieldAppearanceUI'],
