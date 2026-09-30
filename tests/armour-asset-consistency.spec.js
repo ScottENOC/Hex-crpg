@@ -21,9 +21,8 @@ function endsWithCanonical(pathname, suffix) {
 }
 
 test.describe('canonical human armour assets', () => {
-  test('direct renderer and inventory use the organised equipment armour art', async ({ page }) => {
+  test('direct renderer uses the organised equipment armour art', async ({ page }) => {
     await createCharacter(page, { race:'human', gender:'female' });
-
     await page.waitForFunction(() => window.__canonicalArmourAssetsReady === true, { timeout:10000 });
 
     const direct = await page.evaluate(() => Object.fromEntries(
@@ -41,29 +40,31 @@ test.describe('canonical human armour assets', () => {
       expect(endsWithCanonical(direct[tier].front, paths.front), `${tier} front source`).toBe(true);
       expect(endsWithCanonical(direct[tier].back, paths.back), `${tier} back source`).toBe(true);
     }
+  });
 
-    await page.waitForFunction(() => typeof window.renderEquipmentInterface === 'function');
-    const inventorySources = await page.evaluate(() => {
-      const p = window.player;
-      const out = {};
-      for (const [tier, id] of Object.entries({ light:'light_armor', medium:'medium_armor', heavy:'heavy_armor' })) {
-        p.equipped = { ...(p.equipped || {}), armor:id };
-        // The live equipment UI correctly prefers the physical instance for an
-        // equipped slot. This test is deliberately swapping base armour tiers,
-        // so clear the previously equipped instance or it would mask the new ID.
-        if (p.equippedInstances) delete p.equippedInstances.armor;
-        window.renderEquipmentInterface();
-        const armourSlot = [...document.querySelectorAll('#inventory-content button')]
-          .find(button => button.textContent?.includes('Armour'));
-        const image = armourSlot?.querySelector('img');
-        out[tier] = image ? new URL(image.src, document.baseURI).pathname : null;
-      }
-      return out;
+  test('renderer, preload and inventory contain no legacy root armour paths', async ({ page }) => {
+    await page.goto('/');
+    const sources = await page.evaluate(async () => {
+      const read = async path => {
+        const response = await fetch(`${path}?armour-source-check=${Date.now()}`, { cache:'no-store' });
+        if (!response.ok) throw new Error(`Unable to fetch ${path}: ${response.status}`);
+        return response.text();
+      };
+      return {
+        renderer:await read('humanoidRenderer.js'),
+        preload:await read('main.js'),
+        inventory:await read('equipmentInterface.js'),
+      };
     });
 
-    for (const [tier, paths] of Object.entries(expected)) {
-      expect(inventorySources[tier], `${tier} inventory image exists`).toBeTruthy();
-      expect(endsWithCanonical(inventorySources[tier], paths.front), `inventory uses ${paths.front}`).toBe(true);
+    const legacyRootArmour = /images\/human(?:light|medium|heavy)armour(?:_front|_back)?\.(?:png|svg|webp)/;
+    for (const [name, source] of Object.entries(sources)) {
+      expect(source, `${name} has no legacy root armour source`).not.toMatch(legacyRootArmour);
     }
+
+    expect(sources.renderer).toContain("images/equipment/armour/human/light.png");
+    expect(sources.renderer).toContain("images/equipment/armour/human/light_back.webp");
+    expect(sources.preload).toContain("images/equipment/armour/human/light.png");
+    expect(sources.inventory).toContain('images/equipment/armour/human/${tier}.png');
   });
 });
