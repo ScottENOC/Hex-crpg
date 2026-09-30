@@ -9,8 +9,8 @@
 // Existing NPC reputation remains authoritative for the broad "approval"
 // question. npc.reputation.standing is -100..100, while this API exposes the
 // same 0..100 approval scale used by companion-facing code. The deeper axes
-// below are stored separately and persist even when an NPC is not currently
-// spawned in window.entities.
+// below live on the protagonist's saved party record, so they persist even when
+// an NPC is not currently spawned in window.entities.
 (() => {
     'use strict';
 
@@ -95,7 +95,29 @@
         return PROFILES[nameFor(entityOrName)] || null;
     }
 
+    function protagonist() {
+        if (Array.isArray(root.party) && root.party[0]) return root.party[0];
+        return root.player || null;
+    }
+
     function stateStore() {
+        const pc = protagonist();
+        if (pc) {
+            if (!pc.persistentCharacterRelationships || typeof pc.persistentCharacterRelationships !== 'object') {
+                pc.persistentCharacterRelationships = {};
+            }
+            // Anything authored before party creation (mostly narrow tests or a
+            // very early script call) is migrated once into the protagonist's
+            // ordinary party record. The party already participates in normal
+            // save/load, so this avoids another bespoke persistence channel.
+            if (root.persistentCharacterRelationshipState && root.persistentCharacterRelationshipState !== pc.persistentCharacterRelationships) {
+                Object.entries(root.persistentCharacterRelationshipState).forEach(([name, state]) => {
+                    if (pc.persistentCharacterRelationships[name] === undefined) pc.persistentCharacterRelationships[name] = state;
+                });
+            }
+            root.persistentCharacterRelationshipState = pc.persistentCharacterRelationships;
+            return pc.persistentCharacterRelationships;
+        }
         if (!root.persistentCharacterRelationshipState || typeof root.persistentCharacterRelationshipState !== 'object') {
             root.persistentCharacterRelationshipState = {};
         }
