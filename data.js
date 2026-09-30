@@ -216,6 +216,16 @@ if (!window.__companionWorldAgencyModuleLoaded) {
     document.write('<script src="companionWorldAgency.js?build=20260930-companion-world-agency-v1"><\/script>');
 }
 
+// Aldric is the one recruitment hook that originally treated physical rescue
+// and party recruitment as the same action. Keep his special case separate from
+// the generic relocation layer: cutting him loose no longer conscripts him, and
+// a deferred Aldric can move to Reddale / the Vessel-Seeker investigation while
+// all decisive Broken Vigil and necromancer choices still wait for the player.
+if (!window.__aldricIndependentRecruitmentModuleLoaded) {
+    window.__aldricIndependentRecruitmentModuleLoaded = true;
+    document.write('<script src="aldricIndependentRecruitment.js?build=20260930-aldric-independent-recruitment-v1"><\/script>');
+}
+
 // Wren's Millbrook personal quest sits on top of the relationship system. It is
 // intentionally build-agnostic: ordinary questioning can always solve it, while
 // Knowledge, Insight/Persuasion, Keen Perception and Stealth open parallel routes
