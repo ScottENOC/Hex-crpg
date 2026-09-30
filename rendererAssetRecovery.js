@@ -1,78 +1,21 @@
 // rendererAssetRecovery.js
-// Renderer-owned image loads can fail transiently on mobile/Safari or GitHub Pages.
-// A failed HTMLImageElement stays broken for the rest of the session unless its
-// src is reassigned, so retry a small number of times with a fresh cache key.
+// Health/diagnostic observer for renderer-owned images.
+//
+// Network retries now belong to assetLoadScheduler.js / window.assetManager.
+// This module intentionally does not reassign Image.src: stacking a second retry
+// state machine here was one of the causes of duplicate requests and cache-bust
+// churn on iOS/GitHub Pages.
 (() => {
     'use strict';
 
-    const MAX_RETRIES = 3;
-    const RETRY_DELAYS_MS = [100, 350, 900];
-    const GATE_RECHECK_DELAY_MS = 1000;
     const watched = new WeakSet();
-    const retryCounts = new WeakMap();
-    const gateRechecks = new WeakSet();
+    const reportedFailures = new WeakSet();
 
     function redraw() {
         window.drawMap?.();
         window.renderEntities?.();
         window.refreshDirectionalTurnPortraits?.();
         window.updateAppearancePreview?.();
-    }
-
-    function retryUrl(image, attempt) {
-        const source = image.currentSrc || image.src;
-        if (!source) return null;
-        const url = new URL(source, document.baseURI);
-        url.searchParams.set(
-            'assetRetry',
-            `${window.PRESENTATION_BUILD || 'renderer-assets'}-${attempt}-${Date.now()}`,
-        );
-        return url.href;
-    }
-
-    function loadingGateOwnsRetries() {
-        const phase = window.__assetLoadScheduler?.phase;
-        return phase === 'creator-loading' || phase === 'game-loading';
-    }
-
-    function scheduleAfterGate(image) {
-        if (gateRechecks.has(image)) return;
-        gateRechecks.add(image);
-        setTimeout(() => {
-            gateRechecks.delete(image);
-            if (image.naturalWidth > 0 && image.naturalHeight > 0) return;
-            scheduleRetry(image);
-        }, GATE_RECHECK_DELAY_MS);
-    }
-
-    function scheduleRetry(image) {
-        if (!(image instanceof HTMLImageElement)) return;
-        // The phase-aware asset scheduler owns transient retries while a loading
-        // gate is active. Do not stack renderer recovery requests on top of it.
-        // Re-check after the gate so genuinely broken renderer elements can still
-        // recover once the scheduler has finished warming the required assets.
-        if (loadingGateOwnsRetries()) {
-            scheduleAfterGate(image);
-            return;
-        }
-        const attempt = (retryCounts.get(image) || 0) + 1;
-        if (attempt > MAX_RETRIES) return;
-        retryCounts.set(image, attempt);
-        const delay = RETRY_DELAYS_MS[attempt - 1] || RETRY_DELAYS_MS.at(-1);
-        setTimeout(() => {
-            if (image.naturalWidth > 0 && image.naturalHeight > 0) return;
-            if (loadingGateOwnsRetries()) {
-                scheduleAfterGate(image);
-                return;
-            }
-            const next = retryUrl(image, attempt);
-            if (!next) return;
-            console.warn(`Retrying renderer image load (${attempt}/${MAX_RETRIES})`, image.src);
-            // assetLoadScheduler already performs its own transient retry before this
-            // recovery handler sees the error. Bypass its overridden .src setter here
-            // so a renderer recovery attempt cannot start a nested scheduler retry loop.
-            image.setAttribute('src', next);
-        }, delay);
     }
 
     function armourReady() {
@@ -86,18 +29,31 @@
         return ready;
     }
 
+    function reportFailure(image,event) {
+        if (reportedFailures.has(image)) return;
+        reportedFailures.add(image);
+        const source=image.currentSrc || image.src || event?.assetPath || '(unknown image)';
+        const reason=event?.assetLoadSchedulerReason || 'image-error';
+        console.warn('Renderer asset unavailable after shared loader retries:', source, reason);
+        window.dispatchEvent(new CustomEvent('rendererasseterror', {
+            detail:{src:source,reason},
+        }));
+    }
+
     function watchImage(image) {
         if (!(image instanceof HTMLImageElement) || watched.has(image)) return;
         watched.add(image);
-        image.addEventListener('error', () => scheduleRetry(image));
+        image.addEventListener('error', event => reportFailure(image,event));
         image.addEventListener('load', () => {
-            retryCounts.delete(image);
-            gateRechecks.delete(image);
+            reportedFailures.delete(image);
             armourReady();
             redraw();
         });
-        // If the failure happened before this recovery module loaded, recover it now.
-        if (image.complete && (!image.naturalWidth || !image.naturalHeight)) scheduleRetry(image);
+        // An image can have failed before this observer was appended. Report it,
+        // but do not start another retry loop; AssetManager is the retry owner.
+        if (image.complete && (!image.naturalWidth || !image.naturalHeight) && image.src) {
+            reportFailure(image,{assetLoadSchedulerReason:'already-failed'});
+        }
     }
 
     function walk(value, seen = new WeakSet()) {
@@ -119,13 +75,13 @@
         armourReady();
     }
 
-    // humanoidRenderer runs immediately before this module, but keep a short scan
-    // window because the presentation stack itself is dynamically appended.
     scan();
     const scanTimer = setInterval(scan, 500);
     setTimeout(() => clearInterval(scanTimer), 5000);
     window.addEventListener('load', scan, { once:true });
 
+    // Keep the old public hook for callers/tests. It now re-scans and reports;
+    // actual retry decisions remain centralised in AssetManager.
     window.retryBrokenRendererAssets = scan;
     window.__rendererAssetRecoveryReady = true;
 })();
