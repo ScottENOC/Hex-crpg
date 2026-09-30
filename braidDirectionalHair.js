@@ -6,7 +6,7 @@
     const STYLE = 'braid';
     const SIDE_LEFT_PATH = 'images/characters/human_female/hair_braid_side_left.png';
     let sideLeftImage = null;
-    let sideLeftRenderSource = null;
+    const sideLeftRenderSources = new Map();
 
     function imageReady(image) {
         return !!image && ((image.complete && image.naturalWidth > 0 && image.naturalHeight > 0)
@@ -24,7 +24,7 @@
             image.src = `${SIDE_LEFT_PATH}?build=${build}${retry}`;
         };
         image.addEventListener('load', () => {
-            sideLeftRenderSource = null;
+            sideLeftRenderSources.clear();
             window.drawMap?.();
             window.renderEntities?.();
             window.refreshDirectionalTurnPortraits?.();
@@ -40,20 +40,35 @@
         return image;
     }
 
-    function leftRenderSource() {
+    function leftRenderSource(entity) {
         const image = ensureSideLeftImage();
         if (!imageReady(image)) return null;
-        if (sideLeftRenderSource) return sideLeftRenderSource;
-        const w = image.naturalWidth || image.width;
-        const h = image.naturalHeight || image.height;
+
+        // The left-facing braid is genuinely asymmetric, so it has its own art.
+        // Recolour that authored image BEFORE turning it into the mirrored canvas
+        // consumed by the directional compositor. The generic hair recolour cache
+        // is image-oriented and could otherwise leave this canvas at source colour.
+        const hue = entity?.hairHue ?? 25;
+        const light = entity?.hairLightMult || 1;
+        const sat = entity?.hairSatMult || 1;
+        const cacheKey = `${hue}|${light}|${sat}`;
+        if (sideLeftRenderSources.has(cacheKey)) return sideLeftRenderSources.get(cacheKey);
+
+        const recoloured = window.getRecoloredCharacterHairSprite
+            ? (window.getRecoloredCharacterHairSprite(image, hue, light, sat) || image)
+            : image;
+        if (!imageReady(recoloured)) return null;
+
+        const w = recoloured.naturalWidth || recoloured.width;
+        const h = recoloured.naturalHeight || recoloured.height;
         const canvas = document.createElement('canvas');
         canvas.width = w;
         canvas.height = h;
         const ctx = canvas.getContext('2d');
         ctx.translate(w, 0);
         ctx.scale(-1, 1);
-        ctx.drawImage(image, 0, 0);
-        sideLeftRenderSource = canvas;
+        ctx.drawImage(recoloured, 0, 0);
+        sideLeftRenderSources.set(cacheKey, canvas);
         return canvas;
     }
 
@@ -95,7 +110,7 @@
         const sourceAspect = iw / ih;
         const renderAspect = Number(window.HUMAN_FEMALE_RENDER_ASPECT || .48);
         const h = w * renderAspect / Math.max(.01, sourceAspect);
-        return {x:.5-w/2,y:view==='back'?-.005:-.010,w,h};
+        return {x:.5-w/2,y:-.010,w,h};
     }
 
     function braidSetFor(entity) {
@@ -108,7 +123,7 @@
         const braid = braidSetFor(entity);
         if (!braid) return draw();
         const originalSide = braid.side;
-        const left = leftRenderSource();
+        const left = leftRenderSource(entity);
         braid.sideLeft = ensureSideLeftImage();
         if (!imageReady(left)) return draw();
         braid.side = left;
