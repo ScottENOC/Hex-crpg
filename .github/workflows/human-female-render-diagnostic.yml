@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  patch-and-restore:
+  patch-source:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -136,66 +136,12 @@ jobs:
           if old_tail not in text:
               raise SystemExit('Expected braid regression tail not found')
           test.write_text(text.replace(old_tail, new_tail, 1))
-
-          workflow = '''name: Humanoid Renderer Focused Tests
-
-          # Deliberately scoped to the direct humanoid + clothing regressions; do not expand this to the full suite.
-          on:
-            push:
-              branches:
-                - development
-              paths:
-                - 'humanoidRenderer.js'
-                - 'rendererAssetRecovery.js'
-                - 'equipmentInterface.js'
-                - 'clothingLayers.js'
-                - 'clothingSystem.js'
-                - 'characterCreation.js'
-                - 'braidDirectionalHair.js'
-                - 'index.html'
-                - 'entities.js'
-                - 'graphicsSettings.js'
-                - 'name.js'
-                - 'tests/human-female-direct-render.spec.js'
-                - 'tests/humanoid-body-fallback-regression.spec.js'
-                - 'tests/armour-asset-consistency.spec.js'
-                - 'tests/visibility-assets.spec.js'
-                - 'images/characters/elf_female/**'
-                - 'images/characters/human_female/**'
-                - 'images/equipment/clothing/**'
-                - 'images/equipment/armour/**'
-                - '.github/workflows/human-female-render-diagnostic.yml'
-
-          concurrency:
-            group: humanoid-renderer-${{ github.ref }}
-            cancel-in-progress: true
-
-          jobs:
-            focused-render:
-              runs-on: ubuntu-latest
-              timeout-minutes: 10
-              steps:
-                - uses: actions/checkout@v4
-                - uses: actions/setup-node@v4
-                  with:
-                    node-version: '22'
-                    cache: npm
-                - name: Install dependencies
-                  run: npm ci
-                - name: Install Chromium
-                  run: npx playwright install --with-deps chromium
-                - name: Run focused humanoid, clothing and armour rendering regressions
-                  run: npx playwright test tests/human-female-direct-render.spec.js tests/humanoid-body-fallback-regression.spec.js tests/armour-asset-consistency.spec.js tests/visibility-assets.spec.js --reporter=line
-          '''
-          # Dedent the embedded restored workflow without depending on extra packages.
-          import textwrap
-          Path('.github/workflows/human-female-render-diagnostic.yml').write_text(textwrap.dedent(workflow))
           PY
       - name: Commit and push source fix
         run: |
           git config user.name 'ScottENOC'
           git config user.email 'bales.scott@gmail.com'
-          git add humanoidRenderer.js tests/visibility-assets.spec.js .github/workflows/human-female-render-diagnostic.yml
+          git add humanoidRenderer.js tests/visibility-assets.spec.js
           git commit -m 'Retry renderer-owned assets at load source'
           git pull --rebase origin development
           git push origin HEAD:development
