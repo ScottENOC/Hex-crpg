@@ -2,7 +2,7 @@
 // Authored companion conversation memory, salience, cooldowns and personality clues.
 (() => {
 'use strict';
-const BUILD='20261001-companion-conversation-memory-v9', DAY=86400, DEFAULT_LIMIT=4, registry=new Map();
+const BUILD='20261001-companion-conversation-memory-v10', DAY=86400, DEFAULT_LIMIT=4, registry=new Map();
 const now=()=>Number(window.worldSeconds||0), party=()=>Array.isArray(window.party)?window.party:[], quest=id=>(window.questLog||[]).find(q=>q?.id===id)||null;
 function canonical(x){const n=typeof x==='string'?x:x?.name;return n?party().find((m,i)=>i>0&&m?.name===n)||null:null;}
 function ensureMemory(x){const c=canonical(x);if(!c)return null;window.getCompanionRelationship?.(c);c.playerRelationship ||= {familiarity:10,trust:10,history:[],knownConversationKeys:[]};const e=c.playerRelationship.conversationMemory||{};return c.playerRelationship.conversationMemory={version:3,topics:e.topics&&typeof e.topics==='object'?e.topics:{},history:Array.isArray(e.history)?e.history:[],lastMeaningful:e.lastMeaningful||null};}
@@ -24,8 +24,8 @@ function lastMeaningful(x){return ensureMemory(x)?.lastMeaningful||null;}
 function installDialogueEntry(id,name){const trees=window.npcDialogueTrees,orig=trees?.[id];if(typeof orig!=='function')return false;const marker=`__conversationMemory_${id}`;if(orig[marker])return true;const wrapped=function(npc){if(typeof window.showDialogue!=='function')return orig.apply(this,arguments);const base=window.showDialogue;let first=true;window.showDialogue=function(speaker,text,options){if(first&&speaker?.name===name&&Array.isArray(options)){first=false;if((availableTopics(name).length||knownPersonality(name).length)&&!options.some(o=>o?.__conversationMemoryEntry)){const add={label:'Talk for a while.',__conversationMemoryEntry:true,action:()=>openHub(name)},next=[...options],exit=next.findIndex(o=>/never mind|goodbye|leave/i.test(String(o?.label||'')));if(exit>=0)next.splice(exit,0,add);else next.push(add);return base.call(this,speaker,text,next);}}return base.apply(this,arguments)};try{return orig.apply(this,arguments)}finally{window.showDialogue=base}};wrapped[marker]=true;wrapped.__previous=orig;trees[id]=wrapped;return true;}
 const api={build:BUILD,daySeconds:DAY,registerTopics,ensureMemory,topicState,contextFor,availableTopics,knownPersonality,showKnownPersonality,playTopic,openHub,lastMeaningful,installDialogueEntry};window.companionConversationMemory=api;window.COMPANION_CONVERSATION_MEMORY_BUILD=BUILD;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 
-// Keep companion conversation/knowledge systems together so authored modules
-// cannot silently exist in the repository without being loaded.
+// Keep companion conversation/knowledge and recurring-character systems together
+// so authored modules cannot silently exist in the repository without being loaded.
 if(typeof document!=='undefined'&&!window.__companionPersonalityKnowledgeModuleLoaded){
  window.__companionPersonalityKnowledgeModuleLoaded=true;
  const load=src=>{const s=document.createElement('script');s.src=src;s.async=false;(document.head||document.documentElement).appendChild(s);};
@@ -35,5 +35,6 @@ if(typeof document!=='undefined'&&!window.__companionPersonalityKnowledgeModuleL
  load('companionObservedPersonality.js?build=20261001-companion-observed-personality-v1');
  load('companionDecisionAnticipation.js?build=20261001-companion-decision-anticipation-v1');
  load('companionQuestChains.js?build=20261001-companion-quest-chains-v1');
+ load('seraphineArc.js?build=20261001-seraphine-arc-v1');
 }
 })();
