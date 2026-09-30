@@ -1,0 +1,101 @@
+name: Cleanup human male sprite backgrounds
+
+on:
+  push:
+    branches: [development]
+    paths:
+      - '.github/workflows/cleanup-human-male-background.yml'
+      - 'images/characters/human_male/body_front.png'
+      - 'images/characters/human_male/body_side.png'
+      - 'images/characters/human_male/body_back.png'
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pillow
+      - name: Inspect and clean PNG backgrounds
+        run: |
+          python - <<'PY'
+          from PIL import Image
+          from collections import Counter, deque
+          from pathlib import Path
+
+          paths = [
+              Path('images/characters/human_male/body_front.png'),
+              Path('images/characters/human_male/body_side.png'),
+              Path('images/characters/human_male/body_back.png'),
+          ]
+
+          def dist2(a, b):
+              return sum((int(a[i]) - int(b[i])) ** 2 for i in range(3))
+
+          for path in paths:
+              im = Image.open(path).convert('RGBA')
+              w, h = im.size
+              px = im.load()
+              border = []
+              for x in range(w):
+                  border.append(px[x, 0][:3]); border.append(px[x, h-1][:3])
+              for y in range(h):
+                  border.append(px[0, y][:3]); border.append(px[w-1, y][:3])
+              counts = Counter(border)
+              palette = [rgb for rgb, n in counts.most_common(8) if n >= max(4, len(border)//100)]
+              if not palette:
+                  palette = [counts.most_common(1)[0][0]]
+              threshold2 = 24 * 24
+              def is_bg(x, y):
+                  r, g, b, a = px[x, y]
+                  if a == 0:
+                      return True
+                  rgb = (r, g, b)
+                  return any(dist2(rgb, p) <= threshold2 for p in palette)
+
+              q = deque()
+              seen = bytearray(w*h)
+              def seed(x,y):
+                  i=y*w+x
+                  if not seen[i] and is_bg(x,y):
+                      seen[i]=1; q.append((x,y))
+              for x in range(w):
+                  seed(x,0); seed(x,h-1)
+              for y in range(h):
+                  seed(0,y); seed(w-1,y)
+              removed = 0
+              while q:
+                  x,y=q.popleft(); removed += 1
+                  r,g,b,a=px[x,y]
+                  px[x,y]=(r,g,b,0)
+                  for nx,ny in ((x-1,y),(x+1,y),(x,y-1),(x,y+1)):
+                      if 0 <= nx < w and 0 <= ny < h:
+                          i=ny*w+nx
+                          if not seen[i] and is_bg(nx,ny):
+                              seen[i]=1; q.append((nx,ny))
+
+              alphas = [a for *_, a in im.getdata()]
+              opaque = sum(a > 0 for a in alphas)
+              transparent = w*h - opaque
+              print(f'{path.name}: {w}x{h}; border palette={palette}; removed={removed}; transparent={transparent}/{w*h}')
+              im.save(path, optimize=True)
+          PY
+      - name: Commit cleaned sprites if changed
+        run: |
+          if git diff --quiet -- images/characters/human_male/body_front.png images/characters/human_male/body_side.png images/characters/human_male/body_back.png; then
+            echo 'No image changes needed.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add images/characters/human_male/body_front.png images/characters/human_male/body_side.png images/characters/human_male/body_back.png
+          git commit -m 'Make human male sprite backgrounds transparent'
+          git push origin HEAD:development
