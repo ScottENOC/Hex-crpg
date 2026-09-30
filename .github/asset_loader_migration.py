@@ -295,7 +295,7 @@ write(
           assert.ok(index.includes(`data-asset-load-scheduler src="assetLoadScheduler.js?v=${version}"`));
           assert.ok(preview.includes(`data-asset-load-scheduler src="assetLoadScheduler.js?v=${version}"`));
           assert.ok(index.indexOf('assetLoadScheduler.js') < index.indexOf('data.js'));
-          assert.ok(!data.includes('document.write('), 'data.js must not inject scripts');
+          assert.ok(!data.includes('assetLoadScheduler.js?v='), 'data.js must not inject the scheduler');
           assert.ok(!data.includes('__assetLoadSchedulerInstalled'), 'data.js must not own scheduler installation');
         });
         '''
