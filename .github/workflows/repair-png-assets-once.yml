@@ -6,6 +6,7 @@ on:
       - development
     paths:
       - scripts/repair-malformed-pngs.mjs
+      - scripts/salvage-png-assets.py
       - .github/workflows/repair-png-assets-once.yml
 
 permissions:
@@ -14,7 +15,7 @@ permissions:
 jobs:
   repair:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,11 +26,22 @@ jobs:
         with:
           node-version: 22
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       - name: Fast-forward to latest development
         run: git pull --ff-only origin development
 
-      - name: Repair safely recoverable PNG framing
+      - name: Try lossless PNG framing recovery first
+        continue-on-error: true
         run: node scripts/repair-malformed-pngs.mjs
+
+      - name: Install Pillow for truncated-image recovery
+        run: python -m pip install --disable-pip-version-check Pillow==11.3.0
+
+      - name: Salvage the known malformed PNGs
+        run: python scripts/salvage-png-assets.py
 
       - name: Validate repaired PNG assets
         run: node scripts/validate-png-assets.mjs
@@ -43,5 +55,5 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add images
-          git commit -m "Repair malformed PNG chunk framing"
+          git commit -m "Repair malformed PNG assets"
           git push origin HEAD:development
