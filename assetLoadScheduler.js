@@ -375,8 +375,11 @@
         const tops=feminine
             ? ['top_blouse','top_dress','top_shirt_f']
             : ['top_masc_toggle','top_masc_lacework','top_masc_laced','top_masc_buttoned'];
-        const top=tops[hash(`${race}_${gender}|top`)%tops.length];
-        const paths=[`images/equipment/clothing/${top}.png`,'images/equipment/clothing/pants_trousers.png'];
+        // Creator preview has a deterministic race/gender seed. The live player's
+        // final name can choose a different starter top, so gameplay must have the
+        // whole gender-appropriate starter pool ready before the gate opens.
+        const selectedTops=allViews ? tops : [tops[hash(`${race}_${gender}|top`)%tops.length]];
+        const paths=[...selectedTops.map(top=>`images/equipment/clothing/${top}.png`),'images/equipment/clothing/pants_trousers.png'];
         if (allViews) paths.push('images/equipment/clothing/pants_trousers_back.png');
         paths.push('images/equipment/clothing/briefs_female_front.png');
         if (allViews) paths.push('images/equipment/clothing/briefs_female_back.png');
@@ -387,13 +390,21 @@
         return paths;
     }
 
+    function currentStartingEquipmentAssets() {
+        const cls=document.getElementById('class-select')?.value||'fighter';
+        if (cls==='cleric') return ['images/equipment/weapons/club.svg','images/equipment/shields/round.png'];
+        if (cls==='druid') return ['images/equipment/weapons/club.svg'];
+        // Dagger currently shares the sword paper-doll art; fighter uses it directly.
+        return ['images/equipment/weapons/sword.png'];
+    }
+
     function creatorManifest() {
         return [...new Set([...currentCreatorCharacterAssets(false),...currentClothingAssets(false)])];
     }
 
     function gameManifest() {
         const scenario = selectedCampaign()==='1' ? [...ARENA_CRITICAL,...ARENA_SOON] : [...CAMPAIGN2_NEARBY];
-        return [...new Set([...currentCreatorCharacterAssets(true),...currentClothingAssets(true),...scenario])];
+        return [...new Set([...currentCreatorCharacterAssets(true),...currentClothingAssets(true),...currentStartingEquipmentAssets(),...scenario])];
     }
 
     function ensureOverlay() {
