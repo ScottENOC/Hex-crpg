@@ -29,10 +29,14 @@ jobs:
           {
             const p='scripts/migrate-asset-manager.mjs';
             let s=fs.readFileSync(p,'utf8');
-            const from="['clothingLayers.js', '  function load(src){', '  function ready(img){',";
-            const to="['clothingLayers.js', '  function load(src){', '  function view(v){',";
-            if(!s.includes(from)) throw new Error('Expected clothing migration marker not found');
-            fs.writeFileSync(p,s.replace(from,to));
+            const clothingFrom="['clothingLayers.js', '  function load(src){', '  function ready(img){',";
+            const clothingTo="['clothingLayers.js', '  function load(src){', '  function view(v){',";
+            if(!s.includes(clothingFrom)) throw new Error('Expected clothing migration marker not found');
+            s=s.replace(clothingFrom,clothingTo);
+            const spriteFrom='function loadImage\\(src\\) \\{[\\s\\S]*?\\n\\}\\n(?=\\nfunction )';
+            const spriteTo='    function loadImage\\(src\\) \\{[\\s\\S]*?\\n    \\}\\n(?=\\n    function )';
+            if(!s.includes(spriteFrom)) throw new Error('Expected sprite migration regex not found');
+            fs.writeFileSync(p,s.replace(spriteFrom,spriteTo));
           }
           {
             const p='scenario5ArmourLab.js';
