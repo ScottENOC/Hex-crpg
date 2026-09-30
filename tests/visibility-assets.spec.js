@@ -66,15 +66,18 @@ test.describe('visibility asset regressions', () => {
     });
 
     await createCharacter(page, { race:'human', gender:'female' });
-    await expect.poll(async () => page.evaluate(() => {
-      const set = window.DIRECTIONAL_CHARACTER_ASSETS?.human_female?.hair?.braid;
-      return {
-        rendererReady: !!window.__humanoidRendererReady,
-        front: set?.front?.naturalWidth || 0,
-        side: set?.side?.naturalWidth || 0,
-        back: set?.back?.naturalWidth || 0,
-      };
-    }), { timeout: 10000 }).toEqual({ rendererReady:true, front:1254, side:175, back:192 });
+    await expect.poll(async () => {
+      const readiness = await page.evaluate(() => {
+        const set = window.DIRECTIONAL_CHARACTER_ASSETS?.human_female?.hair?.braid;
+        return {
+          rendererReady: !!window.__humanoidRendererReady,
+          front: set?.front?.naturalWidth || 0,
+          side: set?.side?.naturalWidth || 0,
+          back: set?.back?.naturalWidth || 0,
+        };
+      });
+      return { ...readiness, sideRequests, backRequests };
+    }, { timeout: 10000 }).toMatchObject({ rendererReady:true, front:1254, side:175, back:192 });
     await page.evaluate(() => {
       const entity = (window.entities || []).find(e =>
         e?.alive && e.side === 'player' && e.race === 'human' && e.gender === 'female'
