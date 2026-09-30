@@ -112,6 +112,15 @@ if (!window.__persistentCharacterRelationshipsModuleLoaded) {
     document.write('<script src="persistentCharacterDialogueHooks.js?build=20260930-persistent-character-dialogue-hooks-v2"><\/script>');
 }
 
+// Queen Aelwen is the first foreign sovereign to get a character-specific pass
+// on top of the persistent-character layer. The Living Accord follows the
+// existing Silver Accord into a practical forest-boundary dispute with
+// Seraphine, while Fenn/Nessa can contribute their already-developed views.
+if (!window.__aelwenLivingAccordModuleLoaded) {
+    window.__aelwenLivingAccordModuleLoaded = true;
+    document.write('<script src="aelwenLivingAccord.js?build=20260930-aelwen-living-accord-v1"><\/script>');
+}
+
 // Relationship progression is intentionally separate from the storage/
 // permission layer above: familiarity grows from unique personal conversations
 // and slow shared time, while trust moves only through explicit authored events.
