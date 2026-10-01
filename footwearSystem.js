@@ -4,7 +4,7 @@
 (() => {
   'use strict';
 
-  const BUILD = window.PRESENTATION_BUILD || '20261001-footwear-v2';
+  const BUILD = window.PRESENTATION_BUILD || '20261001-footwear-v3';
   const SLOT = 'shoes';
   const ITEM_ID = 'boots';
   const VIEWS = {
@@ -19,7 +19,6 @@
   const boundsCache = new WeakMap();
   const splitBoundsCache = new WeakMap();
   let drawWrapped = false;
-  let inventoryWrapped = false;
   let unequipWrapped = false;
 
   // Deliberately public tuning: footwear can be nudged without redrawing art.
@@ -312,48 +311,6 @@
     return true;
   }
 
-  function injectSlotRow() {
-    const host = document.getElementById('inventory-content');
-    const p = window.player;
-    if (!host || !p || host.querySelector('[data-footwear-slot-row]')) return;
-    ensureDefaultFootwear(p);
-
-    const heading = [...host.querySelectorAll('h3')]
-      .find(h => h.textContent.trim().toLowerCase() === 'equipped');
-    if (!heading) return;
-
-    const row = document.createElement('div');
-    row.dataset.footwearSlotRow = 'true';
-    row.style.marginBottom = '5px';
-    const strong = document.createElement('strong');
-    strong.textContent = 'Shoes:';
-    row.append(strong, document.createTextNode(` ${window.items?.[p.equipped?.[SLOT]]?.name || 'None'} `));
-    if (p.equipped?.[SLOT]) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.textContent = 'Unequip';
-      b.style.cssText = 'font-size:0.8em;margin-left:10px;';
-      b.onclick = () => window.unequipItem?.(SLOT);
-      row.appendChild(b);
-    }
-
-    let next = heading.nextElementSibling;
-    while (next && next.tagName !== 'H3') next = next.nextElementSibling;
-    host.insertBefore(row,next || null);
-  }
-
-  function wrapInventory() {
-    if (inventoryWrapped || typeof window.showInventoryScreen !== 'function') return false;
-    const base = window.showInventoryScreen;
-    window.showInventoryScreen = function() {
-      const r = base.apply(this,arguments);
-      queueMicrotask(injectSlotRow);
-      return r;
-    };
-    inventoryWrapped = true;
-    return true;
-  }
-
   function install() {
     if (!registerSlot()) return false;
     for (const e of window.entities || []) ensureDefaultFootwear(e);
@@ -361,13 +318,12 @@
     if (window.player) ensureDefaultFootwear(window.player);
     wrapClothingDraw();
     wrapUnequip();
-    wrapInventory();
     return true;
   }
 
   const timer = setInterval(() => {
     install();
-    if (registerSlot() && drawWrapped && inventoryWrapped && unequipWrapped) clearInterval(timer);
+    if (registerSlot() && drawWrapped && unequipWrapped) clearInterval(timer);
   },50);
 
   setInterval(() => {
