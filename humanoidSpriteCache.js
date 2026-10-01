@@ -109,8 +109,28 @@
         return true;
     }
 
-    window.HumanoidSpriteCache = { install, stats, CACHE_PAD_HEXES };
+    function installReportStats() {
+        const current = window.getPerformanceReport;
+        if (typeof current !== 'function') return false;
+        if (current.__npcSpriteCacheStats) return true;
+        const wrapped = function(...args) {
+            const report = current.apply(this, args);
+            const s = window.humanoidSpriteCacheStats || {};
+            const lookups = Number(s.hits || 0) + Number(s.misses || 0);
+            const hitRate = lookups ? (100 * Number(s.hits || 0) / lookups).toFixed(1) : '0.0';
+            return `${report}\n\nNPC HUMANOID COMPOSITE CACHE\n============================\nInstalled: ${!!s.installed} | hits=${s.hits || 0} misses=${s.misses || 0} hitRate=${hitRate}%\nBuilds=${s.builds || 0} failedBuilds=${s.failedBuilds || 0} bypasses=${s.bypasses || 0}`;
+        };
+        wrapped.__npcSpriteCacheStats = true;
+        wrapped.__original = current;
+        window.getPerformanceReport = wrapped;
+        return true;
+    }
+
+    window.HumanoidSpriteCache = { install, installReportStats, stats, CACHE_PAD_HEXES };
     if (!install()) {
         const timer = setInterval(() => { if (install()) clearInterval(timer); }, INSTALL_RETRY_MS);
+    }
+    if (!installReportStats()) {
+        const reportTimer = setInterval(() => { if (installReportStats()) clearInterval(reportTimer); }, INSTALL_RETRY_MS);
     }
 })();
