@@ -1,186 +1,49 @@
-name: One-off Known-good Offline and Sprite Recovery
+name: Humanoid Renderer Focused Tests
 
+# Deliberately scoped to the direct humanoid + clothing regressions; do not expand this to the full suite.
 on:
   push:
     branches:
       - development
     paths:
+      - 'humanoidRenderer.js'
+      - 'rendererAssetRecovery.js'
+      - 'equipmentInterface.js'
+      - 'clothingLayers.js'
+      - 'clothingSystem.js'
+      - 'characterCreation.js'
+      - 'braidDirectionalHair.js'
+      - 'index.html'
+      - 'entities.js'
+      - 'graphicsSettings.js'
+      - 'name.js'
+      - 'tests/human-female-direct-render.spec.js'
+      - 'tests/humanoid-body-fallback-regression.spec.js'
+      - 'tests/armour-asset-consistency.spec.js'
+      - 'tests/visibility-assets.spec.js'
+      - 'images/characters/elf_female/**'
+      - 'images/characters/human_female/**'
+      - 'images/equipment/clothing/**'
+      - 'images/equipment/armour/**'
       - '.github/workflows/human-female-render-diagnostic.yml'
 
-permissions:
-  contents: write
+concurrency:
+  group: humanoid-renderer-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  recover:
+  focused-render:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          fetch-depth: 0
-      - name: Restore proven offline core and unblock sprite loading
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-
-          # Preserve the normal focused-render workflow, then patch the latest
-          # development HEAD so unrelated parallel work is not rolled back.
-          git show HEAD^:.github/workflows/human-female-render-diagnostic.yml > /tmp/original-humanoid-workflow.yml
-          git fetch origin development
-          git checkout -B development origin/development
-
-          # Restore only the offline subsystem from the last build the phone
-          # actually proved could install, update and run in Airplane Mode.
-          git show c7508ca9ea4ffac141491b75541508fb42234d21:offlineCache.js > offlineCache.js
-          git show c7508ca9ea4ffac141491b75541508fb42234d21:offlineServiceWorker.js > offlineServiceWorker.js
-
-          python - <<'PY'
-          from pathlib import Path
-          import re
-
-          # Re-issue the proven v10 logic under a brand-new version so iOS/Safari
-          # cannot execute an older cached v16 launcher or worker.
-          p = Path('offlineCache.js')
-          s = p.read_text()
-          required = [
-              ("const VERSION = '10';", "const VERSION = '17';"),
-              ("const SW_URL = 'offlineServiceWorker.js?v=10';", "const SW_URL = 'offlineServiceWorker.js?v=17';"),
-              ("hex-offline-reloaded-commit-v10", "hex-offline-reloaded-commit-v17"),
-          ]
-          for old, new in required:
-              if old not in s:
-                  raise SystemExit(f'offlineCache recovery anchor missing: {old}')
-              s = s.replace(old, new)
-          p.write_text(s)
-
-          p = Path('offlineServiceWorker.js')
-          s = p.read_text()
-          old = "const SW_VERSION = '10';"
-          if old not in s:
-              raise SystemExit('service-worker v10 anchor missing')
-          p.write_text(s.replace(old, "const SW_VERSION = '17';", 1))
-
-          # Make the page fetch the recovery build under fresh URLs. Keep every
-          # unrelated current script/version exactly as-is.
-          p = Path('index.html')
-          s = p.read_text()
-          s, n1 = re.subn(r'<meta name="app-build" content="[^"]+">',
-                          '<meta name="app-build" content="20261002-pwa-offline-cache-v17-known-good">', s, count=1)
-          s, n2 = re.subn(r'<script src="offlineCache\.js\?v=[^"]+"></script>',
-                          '<script src="offlineCache.js?v=17-known-good"></script>', s, count=1)
-          s, n3 = re.subn(r'<script data-asset-load-scheduler src="assetLoadScheduler\.js\?v=[^"]+"></script>',
-                          '<script data-asset-load-scheduler src="assetLoadScheduler.js?v=10"></script>', s, count=1)
-          if (n1, n2, n3) != (1, 1, 1):
-              raise SystemExit(f'index recovery anchors: app-build={n1}, offline={n2}, scheduler={n3}')
-          p.write_text(s)
-
-          # Character rendering must never stay blank indefinitely because an
-          # offline-cache bootstrap promise stalls. Keep the existing retries,
-          # but release deferred art after a bounded startup grace period.
-          p = Path('assetLoadScheduler.js')
-          s = p.read_text()
-          if "const SCHEDULER_VERSION = '9';" not in s:
-              raise SystemExit('asset scheduler version anchor missing')
-          s = s.replace("const SCHEDULER_VERSION = '9';", "const SCHEDULER_VERSION = '10';", 1)
-          old = """    let offlineStartupPending = Boolean(window.__hexOfflineReady && typeof window.__hexOfflineReady.then === 'function');
-    if (offlineStartupPending) {
-        window.__hexOfflineReady.finally(() => {
-            offlineStartupPending = false;
-            // Requests made while the full local copy was being prepared were
-            // deliberately parked as `deferred`. Wake every one now: otherwise
-            // renderer-owned Image objects can remain blank forever even though
-            // their bytes are already safely present in Cache Storage.
-            releaseManagedDeferred();
-            schedulePump();
-        });
-    }
-"""
-          new = """    const OFFLINE_STARTUP_DEFER_MAX_MS = 8000;
-    let offlineStartupPending = Boolean(window.__hexOfflineReady && typeof window.__hexOfflineReady.then === 'function');
-    if (offlineStartupPending) {
-        let startupReleased = false;
-        const releaseOfflineStartup = (reason = 'ready') => {
-            if (startupReleased) return;
-            startupReleased = true;
-            offlineStartupPending = false;
-            // Never let a cache bootstrap problem permanently blank humanoids.
-            // Once released, the normal managed-image retry path can use either
-            // the active service-worker cache or the network.
-            releaseManagedDeferred();
-            schedulePump();
-            if (reason === 'timeout') console.warn('Offline startup did not settle promptly; releasing deferred art loads.');
-        };
-        window.__hexOfflineReady.finally(() => releaseOfflineStartup('ready'));
-        setTimeout(() => releaseOfflineStartup('timeout'), OFFLINE_STARTUP_DEFER_MAX_MS);
-    }
-"""
-          if old not in s:
-              raise SystemExit('offline image-barrier anchor missing')
-          p.write_text(s.replace(old, new, 1))
-
-          # Persist a small contract test so future cache rewrites cannot silently
-          # reintroduce the exact coupling that blanked character sprites.
-          test = Path('tests-unit/offline-known-good-contract.test.js')
-          test.write_text(r'''const test = require('node:test');
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-
-const launcher = fs.readFileSync('offlineCache.js', 'utf8');
-const worker = fs.readFileSync('offlineServiceWorker.js', 'utf8');
-const html = fs.readFileSync('index.html', 'utf8');
-const scheduler = fs.readFileSync('assetLoadScheduler.js', 'utf8');
-
-test('offline recovery versions are deliberately synchronised', () => {
-  assert.match(launcher, /const VERSION = '17'/);
-  assert.match(launcher, /offlineServiceWorker\.js\?v=17/);
-  assert.match(worker, /const SW_VERSION = '17'/);
-  assert.match(html, /offlineCache\.js\?v=17-known-good/);
-  assert.match(html, /pwa-offline-cache-v17-known-good/);
-});
-
-test('character art cannot wait forever on offline bootstrap', () => {
-  assert.match(scheduler, /OFFLINE_STARTUP_DEFER_MAX_MS = 8000/);
-  assert.match(scheduler, /releaseOfflineStartup\('timeout'\)/);
-  assert.match(html, /assetLoadScheduler\.js\?v=10/);
-  assert.match(html, /humanoidRenderer\.js\?v=/);
-});
-''')
-          PY
-
-          # Targeted validation: JS syntax, transient image recovery, the new
-          # cache/renderer contract, and every literal art file used directly by
-          # the current humanoid compositor.
-          node --check offlineCache.js
-          node --check offlineServiceWorker.js
-          node --check assetLoadScheduler.js
-          node --check humanoidRenderer.js
-          node --test tests-unit/asset-manager-recovery.test.js tests-unit/offline-known-good-contract.test.js
-          python - <<'PY'
-          from pathlib import Path
-          import re
-          src = Path('humanoidRenderer.js').read_text()
-          refs = sorted(set(re.findall(r"['\"](images/[^'\"?]+\.(?:png|svg|jpg|jpeg|webp))['\"]", src, flags=re.I)))
-          missing = [p for p in refs if not Path(p).is_file()]
-          if missing:
-              raise SystemExit('Missing direct humanoid art:\n' + '\n'.join(missing))
-          print(f'Validated {len(refs)} direct humanoid art paths')
-          PY
-          grep -Fq '<script src="humanoidRenderer.js?v=' index.html
-          git diff --check
-
-          # Put the normal focused-render workflow back; the recovery commit
-          # contains only production code/tests, not one-shot tooling.
-          cp /tmp/original-humanoid-workflow.yml .github/workflows/human-female-render-diagnostic.yml
-          git add offlineCache.js offlineServiceWorker.js assetLoadScheduler.js index.html tests-unit/offline-known-good-contract.test.js .github/workflows/human-female-render-diagnostic.yml
-          git diff --cached --check
-          git commit -m 'Restore proven offline mode and unblock character art'
-
-          # Preserve any development commits that landed while this job ran.
-          git pull --rebase origin development
-          node --check offlineCache.js
-          node --check offlineServiceWorker.js
-          node --check assetLoadScheduler.js
-          node --test tests-unit/asset-manager-recovery.test.js tests-unit/offline-known-good-contract.test.js
-          git push origin HEAD:development
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run focused humanoid, clothing and armour rendering regressions
+        run: npx playwright test tests/human-female-direct-render.spec.js tests/humanoid-body-fallback-regression.spec.js tests/armour-asset-consistency.spec.js tests/visibility-assets.spec.js --reporter=line

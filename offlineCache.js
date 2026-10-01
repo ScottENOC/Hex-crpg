@@ -5,12 +5,12 @@
 (() => {
     'use strict';
 
-    const VERSION = '16';
+    const VERSION = '10';
     const OWNER = 'ScottENOC';
     const REPO = 'Hex-crpg';
     const BRANCH = 'development';
     const API_BASE = `https://api.github.com/repos/${OWNER}/${REPO}`;
-    const SW_URL = 'offlineServiceWorker.js?v=16';
+    const SW_URL = 'offlineServiceWorker.js?v=10';
     const BRANCH_CACHE_MS = 15000;
     const REQUEST_TIMEOUT_MS = 25000;
     const WORKER_STALL_TIMEOUT_MS = 45000;
@@ -307,7 +307,7 @@
                     if (settled) return;
                     settled = true;
                     close();
-                    reject(Object.assign(new Error(`The local-cache worker made no progress for ${Math.round(timeout / 1000)} seconds.`), { kind: 'worker-stalled' }));
+                    reject(Object.assign(new Error('The local-cache worker made no progress for 45 seconds.'), { kind: 'worker-stalled' }));
                 }, timeout);
             };
 
@@ -340,8 +340,9 @@
         return workerRequest(worker, { type: 'HEX_CACHE_STATUS' }, { timeout: STARTUP_WORKER_TIMEOUT_MS });
     }
 
-    function isRuntimePath(path) {
-        if (!path) return false;
+    function isRuntimeFile(entry) {
+        if (!entry || entry.type !== 'blob' || !entry.path) return false;
+        const path = entry.path;
         if (path === 'index.html' || path === 'manifest.webmanifest' || path === 'appstore/icon-1024.png') return true;
         if (/^(?:images|audio|vendor)\//.test(path)) return true;
         if (!path.includes('/') && /\.(?:js|css)$/i.test(path)) {
@@ -350,417 +351,11 @@
         return false;
     }
 
-    function isRuntimeFile(entry) {
-        return !!entry && entry.type === 'blob' && isRuntimePath(entry.path);
-    }
-
     function runtimeFilesFromTree(tree) {
         return (tree || [])
             .filter(isRuntimeFile)
             .map(entry => ({ path: entry.path, sha: entry.sha, size: Number(entry.size) || 0 }))
             .sort((a, b) => a.path.localeCompare(b.path));
-    }
-
-    async function getChangedRuntimePaths(baseCommit, targetCommit) {
-        if (!/^[0-9a-f]{40}$/i.test(baseCommit || '') || !/^[0-9a-f]{40}$/i.test(targetCommit || '') || baseCommit === targetCommit) return null;
-        try {
-            const compare = await fetchJsonWithRetries(
-                `${API_BASE}/compare/${encodeURIComponent(baseCommit)}...${encodeURIComponent(targetCommit)}`,
-                'GitHub changed-file check'
-            );
-            const changedFiles = Array.isArray(compare?.files) ? compare.files : null;
-            // GitHub's compare endpoint caps the file list. Never treat a capped
-            // list as exhaustive; fall back to manifest SHA comparison instead.
-            if (!changedFiles || changedFiles.length >= 300) return null;
-            const changed = new Set();
-            for (const file of changedFiles) {
-                if (isRuntimePath(file?.filename)) changed.add(file.filename);
-                if (isRuntimePath(file?.previous_filename)) changed.add(file.previous_filename);
-            }
-            return [...changed];
-        } catch (error) {
-            console.warn('Changed-file comparison unavailable; falling back to manifest SHAs.', error);
-            return null;
-        }
-    }
-
-    async function getLatestRuntimeFiles() {
-        const branchInfo = await getBranchInfo();
-        const commit = branchInfo?.commit?.sha;
-        const treeSha = branchInfo?.commit?.commit?.tree?.sha;
-        if (!commit || !treeSha) throw Object.assign(new Error('GitHub returned branch information without a commit/tree SHA.'), { kind: 'github-data' });
-        const treeResult = await fetchJsonWithRetries(`${API_BASE}/git/trees/${treeSha}?recursive=1`, 'GitHub game-file list');
-        if (treeResult?.truncated) throw Object.assign(new Error('GitHub returned an incomplete file list.'), { kind: 'file-list-truncated' });
-        const files = runtimeFilesFromTree(treeResult?.tree);
-        if (!files.length) throw Object.assign(new Error('No runtime game files were found.'), { kind: 'file-list-empty' });
-        return { commit, files };
-    }
-
-    async function inspectLocalCopy() {
-        const scopeUrl = new URL('./', location.href).href;
-        const metaKey = new URL('__hex_offline_meta__/active.json', scopeUrl).href;
-        const manifestKey = new URL('__hex_offline_meta__/manifest.json', scopeUrl).href;
-        const metaCacheName = 'hex-game-meta';
-
-        let lastStep = 'Starting local-cache inspection';
-        const diagnosticAwait = async (label, operation, {
-            timeoutMs = 5000,
-            processed = 0,
-            total = 0,
-            current = '',
-        } = {}) => {
-            lastStep = label;
-            const startedAt = Date.now();
-            const push = () => {
-                const seconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
-                emit({
-                    phase: 'diagnostic',
-                    processed,
-                    total,
-                    current,
-                    message: seconds > 0 ? `${label} · waiting ${seconds}s…` : label,
-                });
-            };
-            push();
-            const heartbeat = setInterval(push, 1000);
-            let timeoutId = null;
-            try {
-                return await Promise.race([
-                    Promise.resolve().then(operation),
-                    new Promise((_, reject) => {
-                        timeoutId = setTimeout(() => {
-                            const error = new Error(`${label} did not answer within ${Math.round(timeoutMs / 1000)} seconds.`);
-                            error.kind = 'diagnostic-timeout';
-                            error.stage = label;
-                            reject(error);
-                        }, timeoutMs);
-                    }),
-                ]);
-            } finally {
-                clearInterval(heartbeat);
-                if (timeoutId) clearTimeout(timeoutId);
-            }
-        };
-
-        let workerVersion = null;
-        try {
-            const registration = await diagnosticAwait(
-                '0/6 · Checking offline worker registration',
-                () => navigator.serviceWorker.getRegistration('./'),
-                { timeoutMs: 3000 }
-            );
-            const worker = navigator.serviceWorker.controller || registration?.active || registration?.waiting || registration?.installing;
-            if (worker?.scriptURL) workerVersion = new URL(worker.scriptURL).searchParams.get('v');
-        } catch (_) {}
-
-        emit({ phase: 'diagnostic', processed: 0, total: 0, current: '', message: '1/6 · Opening local metadata index…' });
-        const metaCache = await diagnosticAwait(
-            '1/6 · Opening local metadata index',
-            () => caches.open(metaCacheName),
-            { timeoutMs: 5000 }
-        );
-        let metaResponse = await diagnosticAwait(
-            '2/6 · Reading active local-cache pointer',
-            () => metaCache.match(metaKey),
-            { timeoutMs: 5000 }
-        );
-        let meta = null;
-        let metaSource = metaCacheName;
-        let discoveredCacheNames = [];
-
-        if (metaResponse) {
-            meta = await diagnosticAwait(
-                '2/6 · Decoding active local-cache pointer',
-                () => metaResponse.clone().json(),
-                { timeoutMs: 2000 }
-            );
-        }
-
-        if (!meta?.cacheName) {
-            const cacheNames = await diagnosticAwait(
-                '2/6 · Active pointer missing; listing local cache names',
-                () => caches.keys(),
-                { timeoutMs: 8000 }
-            );
-            const legacyMetaNames = [
-                'hex-game-meta-v11', 'hex-game-meta-v10', 'hex-game-meta-v9', 'hex-game-meta-v8',
-                'hex-game-meta-v7', 'hex-game-meta-v6', 'hex-game-meta-v5', 'hex-game-meta-v4',
-                'hex-game-meta-v3', 'hex-game-meta-v2', 'hex-game-meta-v1',
-            ];
-            for (const legacyMetaName of legacyMetaNames.filter(name => cacheNames.includes(name))) {
-                const legacyMetaCache = await diagnosticAwait(
-                    `2/6 · Checking older metadata: ${legacyMetaName}`,
-                    () => caches.open(legacyMetaName),
-                    { timeoutMs: 4000, current: legacyMetaName }
-                );
-                const response = await diagnosticAwait(
-                    `2/6 · Reading older pointer: ${legacyMetaName}`,
-                    () => legacyMetaCache.match(metaKey),
-                    { timeoutMs: 4000, current: legacyMetaName }
-                );
-                if (!response) continue;
-                const candidateMeta = await diagnosticAwait(
-                    `2/6 · Decoding older pointer: ${legacyMetaName}`,
-                    () => response.clone().json(),
-                    { timeoutMs: 2000, current: legacyMetaName }
-                );
-                if (candidateMeta?.cacheName) {
-                    meta = candidateMeta;
-                    metaSource = legacyMetaName;
-                    break;
-                }
-            }
-
-            if (!meta?.cacheName) {
-                const prefixes = [
-                    'hex-game-cache-', 'hex-game-v11-', 'hex-game-v10-', 'hex-game-v9-', 'hex-game-v8-',
-                    'hex-game-v7-', 'hex-game-v6-', 'hex-game-v5-', 'hex-game-v4-', 'hex-game-v3-',
-                    'hex-game-v2-', 'hex-game-v1-',
-                ];
-                const rank = name => {
-                    const index = prefixes.findIndex(prefix => name.startsWith(prefix));
-                    return index < 0 ? Number.MAX_SAFE_INTEGER : index;
-                };
-                // Older v15 first installs could promote a fully complete cache
-                // whose name still contains "patch". Do not hide those here:
-                // incomplete staging caches have no completion manifest and are
-                // rejected below, while completed ones are safe to recover.
-                const candidates = cacheNames
-                    .filter(name => prefixes.some(prefix => name.startsWith(prefix)))
-                    .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
-                discoveredCacheNames = candidates.slice(0, 8);
-                emit({
-                    phase: 'diagnostic', processed: 0, total: candidates.length, current: '',
-                    message: `2/6 · Pointer missing; found ${candidates.length} game-cache candidate${candidates.length === 1 ? '' : 's'}. Checking manifests…`,
-                });
-
-                const limit = Math.min(16, candidates.length);
-                for (let i = 0; i < limit; i++) {
-                    const name = candidates[i];
-                    const candidateCache = await diagnosticAwait(
-                        `2/6 · Candidate ${i + 1}/${limit}: opening ${name}`,
-                        () => caches.open(name),
-                        { timeoutMs: 5000, processed: i, total: limit, current: name }
-                    );
-                    const manifestResponse = await diagnosticAwait(
-                        `2/6 · Candidate ${i + 1}/${limit}: reading completion manifest`,
-                        () => candidateCache.match(manifestKey),
-                        { timeoutMs: 5000, processed: i, total: limit, current: name }
-                    );
-                    if (!manifestResponse) continue;
-                    let candidateManifest = null;
-                    try {
-                        candidateManifest = await diagnosticAwait(
-                            `2/6 · Candidate ${i + 1}/${limit}: decoding completion manifest`,
-                            () => manifestResponse.clone().json(),
-                            { timeoutMs: 2500, processed: i, total: limit, current: name }
-                        );
-                    } catch (_) {
-                        continue;
-                    }
-                    if (!candidateManifest?.commit || !Array.isArray(candidateManifest.files) || !candidateManifest.files.length) continue;
-                    meta = { cacheName: name, commit: candidateManifest.commit };
-                    metaSource = 'discovered cache manifest (active pointer missing)';
-                    emit({
-                        phase: 'diagnostic', processed: i + 1, total: limit, current: name,
-                        message: `2/6 · Orphaned local game cache found: ${name} · ${candidateManifest.files.length} manifest files`,
-                    });
-                    break;
-                }
-            }
-        }
-
-        const cacheName = meta?.cacheName || null;
-        if (!cacheName) {
-            const namesText = discoveredCacheNames.length ? discoveredCacheNames.join(', ') : 'none';
-            return {
-                workerVersion,
-                metaSource,
-                cacheName: null,
-                cacheExists: false,
-                savedCommit: null,
-                manifestFiles: 0,
-                expectedFiles: 0,
-                shaCompared: false,
-                shaSame: 0,
-                shaDifferent: 0,
-                noSavedSha: 0,
-                probeCount: 0,
-                probePresent: 0,
-                probeMissing: 0,
-                probeTimeouts: 0,
-                lastStep: `No active pointer and no readable game-cache manifest was found. Candidate cache names: ${namesText}`,
-            };
-        }
-
-        const cacheExists = await diagnosticAwait(
-            `3/6 · Checking saved cache ${cacheName}`,
-            () => caches.has(cacheName),
-            { timeoutMs: 5000, current: cacheName }
-        );
-        if (!cacheExists) {
-            return {
-                workerVersion,
-                metaSource,
-                cacheName,
-                cacheExists: false,
-                savedCommit: meta?.commit || null,
-                manifestFiles: 0,
-                expectedFiles: 0,
-                shaCompared: false,
-                shaSame: 0,
-                shaDifferent: 0,
-                noSavedSha: 0,
-                probeCount: 0,
-                probePresent: 0,
-                probeMissing: 0,
-                probeTimeouts: 0,
-                lastStep: 'Metadata points to a cache that does not exist',
-            };
-        }
-        const cache = await diagnosticAwait(
-            `3/6 · Opening saved cache ${cacheName}`,
-            () => caches.open(cacheName),
-            { timeoutMs: 5000, current: cacheName }
-        );
-        const manifestResponse = await diagnosticAwait(
-            '4/6 · Reading saved game manifest',
-            () => cache.match(manifestKey),
-            { timeoutMs: 5000, current: cacheName }
-        );
-        const manifest = manifestResponse
-            ? await diagnosticAwait('4/6 · Decoding saved game manifest', () => manifestResponse.clone().json(), { timeoutMs: 2500 })
-            : null;
-        const manifestFiles = Array.isArray(manifest?.files) ? manifest.files.filter(file => file?.path && file?.sha) : [];
-
-        let latest = null;
-        let comparisonError = null;
-        if (navigator.onLine !== false) {
-            try {
-                latest = await diagnosticAwait(
-                    '5/6 · Getting current GitHub file list for SHA comparison',
-                    () => getLatestRuntimeFiles(),
-                    { timeoutMs: 20000 }
-                );
-            } catch (error) {
-                comparisonError = error?.message || String(error);
-                emit({ phase: 'diagnostic', processed: 0, total: 0, current: '', message: `5/6 · SHA comparison skipped: ${comparisonError}` });
-            }
-        } else {
-            comparisonError = 'Phone is offline';
-            emit({ phase: 'diagnostic', processed: 0, total: 0, current: '', message: '5/6 · Offline: skipping GitHub SHA comparison' });
-        }
-
-        const expectedFiles = Array.isArray(latest?.files) ? latest.files : manifestFiles;
-        const savedShaByPath = new Map(manifestFiles.map(file => [file.path, file.sha]));
-        let shaSame = 0;
-        let shaDifferent = 0;
-        let noSavedSha = 0;
-        if (latest?.files) {
-            emit({ phase: 'diagnostic', processed: 0, total: latest.files.length, current: '', message: `5/6 · Comparing ${latest.files.length} Git blob SHAs…` });
-            for (const file of latest.files) {
-                const savedSha = savedShaByPath.get(file.path);
-                if (!savedSha) noSavedSha++;
-                else if (savedSha === file.sha) shaSame++;
-                else shaDifferent++;
-            }
-        }
-
-        const probeSource = manifestFiles.length ? manifestFiles : expectedFiles;
-        const probeLimit = Math.min(24, probeSource.length);
-        const probeFiles = [];
-        if (probeLimit) {
-            const seen = new Set();
-            for (let i = 0; i < probeLimit; i++) {
-                const index = probeLimit === 1 ? 0 : Math.round(i * (probeSource.length - 1) / (probeLimit - 1));
-                const file = probeSource[index];
-                if (file && !seen.has(file.path)) {
-                    seen.add(file.path);
-                    probeFiles.push(file);
-                }
-            }
-        }
-
-        let probePresent = 0;
-        let probeMissing = 0;
-        let probeTimeouts = 0;
-        let consecutiveTimeouts = 0;
-        for (let i = 0; i < probeFiles.length; i++) {
-            const file = probeFiles[i];
-            const label = `6/6 · Probe ${i + 1}/${probeFiles.length}: ${file.path}`;
-            try {
-                const response = await diagnosticAwait(
-                    label,
-                    () => cache.match(new Request(new URL(file.path.split('/').map(part => encodeURIComponent(part)).join('/'), scopeUrl).href), { ignoreSearch: true }),
-                    { timeoutMs: 3500, processed: i, total: probeFiles.length, current: file.path }
-                );
-                consecutiveTimeouts = 0;
-                if (response) probePresent++;
-                else probeMissing++;
-                emit({
-                    phase: 'diagnostic',
-                    processed: i + 1,
-                    total: probeFiles.length,
-                    current: file.path,
-                    message: response ? `${label} · present` : `${label} · MISSING`,
-                });
-            } catch (error) {
-                if (error?.kind !== 'diagnostic-timeout') throw error;
-                probeTimeouts++;
-                consecutiveTimeouts++;
-                emit({
-                    phase: 'diagnostic',
-                    processed: i + 1,
-                    total: probeFiles.length,
-                    current: file.path,
-                    message: `${label} · TIMED OUT`,
-                });
-                if (consecutiveTimeouts >= 2) {
-                    lastStep = `${label} · stopped after two consecutive Cache Storage timeouts`;
-                    break;
-                }
-            }
-        }
-
-        return {
-            workerVersion,
-            metaSource,
-            cacheName,
-            cacheExists: true,
-            savedCommit: manifest?.commit || meta?.commit || null,
-            latestCommit: latest?.commit || null,
-            manifestFiles: manifestFiles.length,
-            expectedFiles: expectedFiles.length,
-            shaCompared: Boolean(latest?.files),
-            shaSame,
-            shaDifferent,
-            noSavedSha,
-            comparisonError,
-            probeCount: probeFiles.length,
-            probePresent,
-            probeMissing,
-            probeTimeouts,
-            lastStep,
-        };
-    }
-
-    function shortCommit(value) {
-        return value ? String(value).slice(0, 8) : 'none';
-    }
-
-    function formatCacheDiagnostic(d) {
-        if (!d) return 'Cache diagnostic returned no data.';
-        const cacheText = d.cacheName || 'none';
-        const probeCompleted = (d.probePresent || 0) + (d.probeMissing || 0) + (d.probeTimeouts || 0);
-        const probeText = d.probeCount
-            ? `physical probes ${d.probePresent || 0}/${probeCompleted || d.probeCount} present${d.probeMissing ? ` · ${d.probeMissing} missing` : ''}${d.probeTimeouts ? ` · ${d.probeTimeouts} timed out` : ''}`
-            : 'physical probes unavailable';
-        const shaText = d.shaCompared === false
-            ? `SHA comparison skipped${d.comparisonError ? ` (${d.comparisonError})` : ''}`
-            : `SHA: ${d.shaSame || 0} same, ${d.shaDifferent || 0} different, ${d.noSavedSha || 0} without saved SHA`;
-        const lastText = d.lastStep ? ` · last step: ${d.lastStep}` : '';
-        return `Diagnostic: engine v${d.workerVersion || '?'} · cache ${cacheText} · saved commit ${shortCommit(d.savedCommit)} · ` +
-            `${probeText} · ${shaText} · manifest ${d.manifestFiles || 0}/${d.expectedFiles || 0} files · metadata ${d.metaSource || 'none'}${lastText}.`;
     }
 
     function emitWorkerProgress(progress) {
@@ -779,7 +374,7 @@
         });
     }
 
-    async function runWorkerCache(worker, commit, files, changedPaths = null) {
+    async function runWorkerCache(worker, commit, files) {
         return workerRequest(worker, {
             type: 'HEX_CACHE_GAME',
             commit,
@@ -787,7 +382,6 @@
             owner: OWNER,
             repo: REPO,
             files,
-            changedPaths: Array.isArray(changedPaths) ? changedPaths : null,
         }, {
             timeout: WORKER_STALL_TIMEOUT_MS,
             onProgress: emitWorkerProgress,
@@ -796,6 +390,26 @@
 
     function isStandaloneWebApp() {
         return window.matchMedia?.('(display-mode: standalone)')?.matches || navigator.standalone === true;
+    }
+
+    async function cleanupSafariOfflineControl() {
+        // Normal Safari should remain a plain website. Its storage context is
+        // separate from an installed Home Screen web app, so clearing Hex
+        // service-worker state here does not delete the installed app copy.
+        try {
+            const registrations = await navigator.serviceWorker?.getRegistrations?.() || [];
+            await Promise.all(registrations.map(registration => registration.unregister()));
+        } catch (error) {
+            console.warn('Could not unregister old Safari service worker', error);
+        }
+        try {
+            const names = await caches.keys();
+            await Promise.all(names
+                .filter(name => name.startsWith('hex-game-'))
+                .map(name => caches.delete(name)));
+        } catch (error) {
+            console.warn('Could not clear old Safari Hex caches', error);
+        }
     }
 
     async function storageDiagnostic() {
@@ -876,42 +490,12 @@
             return { complete: false, failures: [errorInfo(error)], hasActiveCache: Boolean(before.valid) };
         }
 
-        // A complete cache was integrity-checked when each file was originally
-        // stored, and statusResult has just confirmed every manifest path is
-        // still physically present. If GitHub reports the same commit there is
-        // nothing to download or re-walk: return immediately. Missing entries
-        // still fall through to the repair path below.
-        if (before.valid && before.healthy !== false && before.activeCommit === commit) {
-            const fileCount = before.fileCount || 0;
-            emit({
-                phase: 'ready', stored: fileCount, processed: fileCount, total: fileCount,
-                downloaded: 0, reused: fileCount, retried: 0, failed: 0,
-                totalBytes: before.totalBytes || 0,
-                message: `Already up to date — ${fileCount} local files reused, 0 downloaded.`,
-            });
-            return {
-                complete: true, changed: false, upToDate: true, usingExisting: true,
-                downloaded: 0, reused: fileCount, retried: 0, removed: 0,
-                stored: fileCount, total: fileCount, fileCount,
-                totalBytes: before.totalBytes || 0,
-                commit, activeCommit: commit, previousCommit: commit,
-                hasActiveCache: true,
-            };
-        }
+        // Do not short-circuit merely because the commit SHA matches. Explicit
+        // Check for updates also verifies every cached response against the
+        // manifest and repairs holes/stale entries. Existing healthy files are
+        // reused in place, so this is cheap and does not duplicate the game.
         if (before.valid && before.activeCommit === commit) {
-            emit({ phase: 'checking', message: 'Build is current, but the saved copy needs repair…' });
-        }
-
-        let changedPaths = null;
-        if (before.valid && before.activeCommit && before.activeCommit !== commit) {
-            emit({ phase: 'checking', message: 'Finding which game files actually changed…' });
-            changedPaths = await getChangedRuntimePaths(before.activeCommit, commit);
-            if (changedPaths) {
-                emit({
-                    phase: 'checking',
-                    message: `${changedPaths.length} runtime file${changedPaths.length === 1 ? '' : 's'} changed since the saved build. Unchanged files will stay on the phone.`,
-                });
-            }
+            emit({ phase: 'checking', message: 'Build is current. Verifying the local game files…' });
         }
 
         // A valid existing copy does not need another storage-capacity probe.
@@ -950,14 +534,12 @@
             retried: 0,
             failed: 0,
             totalBytes,
-            message: before.valid
-                ? `Comparing ${files.length} game files with the saved copy…`
-                : `Saving ${files.length} game files (${formatBytes(totalBytes)}) to this device…`,
+            message: `Saving ${files.length} game files (${formatBytes(totalBytes)}) to this device…`,
         });
 
         let result;
         try {
-            result = await runWorkerCache(worker, commit, files, changedPaths);
+            result = await runWorkerCache(worker, commit, files);
         } catch (error) {
             return { complete: false, failures: [errorInfo(error, 'worker')], hasActiveCache: Boolean(before.valid), activeCommit: before.activeCommit || null };
         }
@@ -969,7 +551,7 @@
             });
             await sleep(AUTO_RETRY_DELAY_MS);
             try {
-                result = await runWorkerCache(worker, commit, files, changedPaths);
+                result = await runWorkerCache(worker, commit, files);
             } catch (error) {
                 return { complete: false, failures: [errorInfo(error, 'worker')], hasActiveCache: Boolean(before.valid), activeCommit: before.activeCommit || null };
             }
@@ -1035,7 +617,7 @@
         if (!gate) {
             gate = document.createElement('div');
             gate.id = 'hex-offline-gate';
-            gate.innerHTML = '<div class="hex-offline-card"><h2 class="hex-offline-title">Preparing local game copy…</h2><p class="hex-offline-count">Starting…</p><div class="hex-offline-track"><div class="hex-offline-bar"></div></div><p class="hex-offline-detail"></p><div class="hex-offline-error" hidden></div><div class="hex-offline-actions"><button class="hex-offline-launch" hidden>Launch now</button><button class="hex-offline-update" hidden>Check for updates</button><button class="hex-offline-inspect" hidden>Inspect local copy</button><button class="hex-offline-retry" hidden>Retry</button><button class="hex-offline-continue" hidden>Continue</button></div></div>';
+            gate.innerHTML = '<div class="hex-offline-card"><h2 class="hex-offline-title">Preparing local game copy…</h2><p class="hex-offline-count">Starting…</p><div class="hex-offline-track"><div class="hex-offline-bar"></div></div><p class="hex-offline-detail"></p><div class="hex-offline-error" hidden></div><div class="hex-offline-actions"><button class="hex-offline-launch" hidden>Launch now</button><button class="hex-offline-update" hidden>Check for updates</button><button class="hex-offline-retry" hidden>Retry</button><button class="hex-offline-continue" hidden>Continue</button></div></div>';
             document.body.appendChild(gate);
         }
         return gate;
@@ -1048,30 +630,18 @@
         const bar = gate.querySelector('.hex-offline-bar');
         const detail = gate.querySelector('.hex-offline-detail');
         if (progress.phase === 'storage-check') title.textContent = 'Checking iPhone storage…';
-        else if (progress.phase === 'diagnostic') title.textContent = 'Inspecting local cache…';
         else if (progress.phase === 'checking') title.textContent = 'Checking local game copy…';
         else if (progress.phase === 'recovering') title.textContent = 'Recovering failed downloads…';
         else if (progress.phase === 'ready') title.textContent = 'Local game copy ready';
         else title.textContent = 'Preparing local game copy…';
 
-        if (progress.phase === 'diagnostic') {
-            const checked = Math.max(0, progress.processed || 0);
-            count.textContent = progress.total > 0
-                ? `Local cache probe ${checked} / ${progress.total}`
-                : (progress.message || 'Inspecting local cache…');
-            bar.style.width = progress.total > 0
-                ? `${Math.max(0, Math.min(100, Math.round(checked * 100 / progress.total)))}%`
-                : '0%';
-            detail.textContent = [progress.message, progress.current].filter(Boolean).join(' · ');
-            return;
-        }
-
         if (progress.total > 0) {
-            const checked = Math.max(progress.processed || 0, progress.stored || 0);
-            count.textContent = `Checked ${checked} / ${progress.total} files · ${progress.downloaded || 0} downloaded · ${progress.reused || 0} reused`;
-            bar.style.width = `${Math.max(0, Math.min(100, Math.round(checked * 100 / progress.total)))}%`;
+            count.textContent = `Stored ${progress.stored || 0} / ${progress.total} files locally`;
+            bar.style.width = `${Math.max(0, Math.min(100, Math.round((progress.stored || 0) * 100 / progress.total)))}%`;
             const parts = [];
             if (progress.message) parts.push(progress.message);
+            if (progress.downloaded) parts.push(`${progress.downloaded} downloaded`);
+            if (progress.reused) parts.push(`${progress.reused} reused`);
             if (progress.retried) parts.push(`${progress.retried} retries`);
             if (progress.failed) parts.push(`${progress.failed} still failed`);
             if (progress.totalBytes) parts.push(formatBytes(progress.totalBytes));
@@ -1175,7 +745,6 @@
         const bar = gate.querySelector('.hex-offline-bar');
         const launchButton = gate.querySelector('.hex-offline-launch');
         const updateButton = gate.querySelector('.hex-offline-update');
-        const inspectButton = gate.querySelector('.hex-offline-inspect');
         const errorBox = gate.querySelector('.hex-offline-error');
 
         title.textContent = 'Silverhart Saga';
@@ -1184,33 +753,27 @@
             : local.healthy === false
                 ? `${local.availableCount || 0} / ${local.fileCount || 0} game files available locally`
                 : `${local.fileCount || 0} game files available locally`;
-        const choiceMessage = message || (local.healthy === false
+        const choiceMessage = local.healthy === false
             ? `${local.missingCount || 0} local file${local.missingCount === 1 ? ' is' : 's are'} missing. Launch is available, but Check for updates will repair the saved copy.`
-            : 'Ready to play from the copy stored on this phone.');
+            : message;
         const engineText = local.workerVersion ? `Offline engine v${local.workerVersion}` : 'Offline engine version unknown';
         detail.textContent = `${choiceMessage} · ${engineText}`;
         bar.style.width = '100%';
         errorBox.hidden = true;
         launchButton.hidden = false;
         updateButton.hidden = false;
-        inspectButton.hidden = false;
         updateButton.disabled = navigator.onLine === false;
-        inspectButton.disabled = false;
         updateButton.textContent = navigator.onLine === false ? 'Check for updates (offline)' : 'Check for updates';
 
         return new Promise(resolve => {
             launchButton.onclick = () => resolve('launch');
             updateButton.onclick = () => resolve('update');
-            inspectButton.onclick = () => resolve('inspect');
         }).finally(() => {
             launchButton.onclick = null;
             updateButton.onclick = null;
-            inspectButton.onclick = null;
             launchButton.hidden = true;
             updateButton.hidden = true;
-            inspectButton.hidden = true;
             updateButton.disabled = false;
-            inspectButton.disabled = false;
         });
     }
 
@@ -1228,13 +791,13 @@
 
     async function restartForUpdatedBuild(gate, result) {
         if (!result.changed || !result.commit) return false;
-        const reloadKey = 'hex-offline-reloaded-commit-v15';
+        const reloadKey = 'hex-offline-reloaded-commit-v10';
         let alreadyReloaded = null;
         try { alreadyReloaded = sessionStorage.getItem(reloadKey); } catch (_) {}
         if (alreadyReloaded === result.commit) return false;
         try { sessionStorage.setItem(reloadKey, result.commit); } catch (_) {}
         gate.querySelector('.hex-offline-title').textContent = 'Update complete';
-        gate.querySelector('.hex-offline-count').textContent = `${result.downloaded || 0} changed file${result.downloaded === 1 ? '' : 's'} downloaded · ${result.reused || 0} reused${result.removed ? ` · ${result.removed} removed` : ''}. Restarting once…`;
+        gate.querySelector('.hex-offline-count').textContent = 'Restarting once so the updated game runs from the phone…';
         gate.querySelector('.hex-offline-bar').style.width = '100%';
         await sleep(300);
         location.reload();
@@ -1245,12 +808,8 @@
         // Never let the offline/PWA layer block the ordinary Safari website.
         // Only the installed Home Screen app owns and uses the local game copy.
         if (!isStandaloneWebApp()) {
-            // Ordinary Safari should not run the Home Screen app's offline launcher,
-            // but it must also never unregister workers or delete hex-game-* caches.
-            // On current iOS versions Safari and the installed Home Screen app can
-            // expose shared service-worker/Cache Storage state, so destructive
-            // cleanup here can erase the installed app's complete local copy.
             releaseReadyBarrier({ complete: true, browserMode: true, hasActiveCache: false });
+            Promise.resolve().then(cleanupSafariOfflineControl).catch(() => {});
             return;
         }
 
@@ -1296,16 +855,6 @@
                     launchLocalCopy(gate, local);
                     return;
                 }
-                if (choice === 'inspect') {
-                    try {
-                        const diagnostic = await inspectLocalCopy();
-                        choiceMessage = formatCacheDiagnostic(diagnostic);
-                        if (diagnostic?.workerVersion) local = { ...local, workerVersion: diagnostic.workerVersion };
-                    } catch (error) {
-                        choiceMessage = `Cache diagnostic failed: ${error?.message || error}`;
-                    }
-                    continue;
-                }
 
                 // Explicit user action only: GitHub and storage checks happen here.
                 emit({ phase: 'checking', message: 'Checking GitHub for a newer development build…' });
@@ -1326,7 +875,7 @@
                 }
                 if (!local.valid) throw Object.assign(new Error('The saved local copy could not be reopened after the update check.'), { kind: 'local-status' });
                 choiceMessage = updateResult.upToDate || updateResult.changed === false
-                    ? `No newer build found. ${updateResult.reused || local.fileCount || 0} local files reused; 0 downloaded.`
+                    ? 'No newer build found. Your local copy is ready.'
                     : 'Update check complete. Your local copy is ready.';
             }
         } catch (error) {
