@@ -2,10 +2,10 @@
 // Atomic, integrity-checked local game cache for the development branch.
 'use strict';
 
-const SW_VERSION = '8';
+const SW_VERSION = '9';
 const META_CACHE = `hex-game-meta-v${SW_VERSION}`;
 const GAME_CACHE_PREFIX = `hex-game-v${SW_VERSION}-`;
-const LEGACY_GAME_CACHE_PREFIXES = ['hex-game-v7-', 'hex-game-v6-', 'hex-game-v5-', 'hex-game-v4-', 'hex-game-v3-', 'hex-game-v2-', 'hex-game-v1-'];
+const LEGACY_GAME_CACHE_PREFIXES = ['hex-game-v8-', 'hex-game-v7-', 'hex-game-v6-', 'hex-game-v5-', 'hex-game-v4-', 'hex-game-v3-', 'hex-game-v2-', 'hex-game-v1-'];
 const SCOPE_URL = self.registration.scope;
 const META_KEY = new URL('__hex_offline_meta__/active.json', SCOPE_URL).href;
 const MANIFEST_KEY = new URL('__hex_offline_meta__/manifest.json', SCOPE_URL).href;
@@ -327,9 +327,9 @@ async function cleanupLegacyCaches(keepNames = []) {
     await Promise.all(names
         .filter(name => !keep.has(name) && (
             name === 'hex-game-meta-v1' || name === 'hex-game-meta-v2' || name === 'hex-game-meta-v3' ||
-            name === 'hex-game-meta-v4' || name === 'hex-game-meta-v5' || name === 'hex-game-meta-v6' || name === 'hex-game-meta-v7' ||
+            name === 'hex-game-meta-v4' || name === 'hex-game-meta-v5' || name === 'hex-game-meta-v6' || name === 'hex-game-meta-v7' || name === 'hex-game-meta-v8' ||
             name.startsWith('hex-game-v1-') || name.startsWith('hex-game-v2-') || name.startsWith('hex-game-v3-') ||
-            name.startsWith('hex-game-v4-') || name.startsWith('hex-game-v5-') || name.startsWith('hex-game-v6-') || name.startsWith('hex-game-v7-')
+            name.startsWith('hex-game-v4-') || name.startsWith('hex-game-v5-') || name.startsWith('hex-game-v6-') || name.startsWith('hex-game-v7-') || name.startsWith('hex-game-v8-')
         ))
         .map(name => caches.delete(name)));
 }
@@ -345,7 +345,23 @@ async function cacheGame(message, port) {
     }
 
     const totalBytes = files.reduce((sum, file) => sum + (Number(file.size) || 0), 0);
-    const before = await statusResult();
+
+    // CacheStorage.keys() can be unusually slow on iOS. Keep the page-side
+    // watchdog informed while that single scan is in progress so a slow local
+    // database is not mistaken for a dead service worker.
+    let before;
+    const statusHeartbeat = () => port.postMessage({
+        type: 'progress', phase: 'checking', current: 'Inspecting saved local files…',
+        processed: 0, stored: 0, total: files.length, downloaded: 0, reused: 0, retried: 0, failed: 0,
+        totalBytes, message: 'Inspecting the saved local game file list…',
+    });
+    statusHeartbeat();
+    const statusHeartbeatTimer = setInterval(statusHeartbeat, 5000);
+    try {
+        before = await statusResult();
+    } finally {
+        clearInterval(statusHeartbeatTimer);
+    }
     if (!before.valid) {
         port.postMessage({
             type: 'progress', phase: 'storage-check', current: 'Testing a local Cache Storage write…',
@@ -376,6 +392,7 @@ async function cacheGame(message, port) {
     const activeCache = activeCacheName ? await caches.open(activeCacheName) : null;
     const activeManifest = activeCacheName ? await readCacheManifest(activeCacheName) : null;
     const activeShaByPath = new Map((activeManifest?.files || []).map(file => [file.path, file.sha]));
+    const missingActivePaths = new Set(before.missingPaths || []);
     const newPaths = new Set(files.map(file => file.path));
 
     const patchCacheName = `${GAME_CACHE_PREFIX}patch-${commit}`;
@@ -400,20 +417,19 @@ async function cacheGame(message, port) {
     async function cacheOne(file) {
         const request = new Request(localUrl(file.path));
 
-        // Unchanged files stay exactly where they already are. No second copy.
-        if (activeCache && activeShaByPath.get(file.path) === file.sha) {
-            const existing = await activeCache.match(request, { ignoreSearch: true });
-            // The manifest SHA and the response's own SHA marker must agree.
-            // This turns Check for updates into a repair pass for missing/stale
-            // cache entries instead of blindly trusting metadata.
-            if (existing && existing.headers.get('X-Hex-Blob-Sha') === file.sha) {
-                reused++;
-                stored++;
-                return;
-            }
+        // inspectGameCache() already performed the expensive exact-path scan.
+        // If the manifest SHA matches and that exact URL was physically present,
+        // the file is reusable. Do NOT call cache.match() again for every one of
+        // ~421 unchanged files: concurrent CacheStorage reads can stall WebKit.
+        if (activeCache && activeShaByPath.get(file.path) === file.sha && !missingActivePaths.has(file.path)) {
+            reused++;
+            stored++;
+            return;
         }
 
-        // Resume a partially downloaded patch without re-fetching good files.
+        // Only changed/missing files reach the staging cache. Report this read
+        // before asking iOS for it so the watchdog and the user can see progress.
+        sendProgress(file.path, 'storing', `Checking repair staging for ${file.path}…`);
         const staged = await patchCache.match(request, { ignoreSearch: true });
         if (staged && staged.headers.get('X-Hex-Blob-Sha') === file.sha) {
             reused++;
@@ -478,8 +494,10 @@ async function cacheGame(message, port) {
         // All changed files are already verified. Applying the patch now only
         // touches changed/new files plus removals, rather than duplicating the
         // entire game. If a prior patch had no changes this loop is effectively free.
+        sendProgress('', 'storing', 'Applying verified repaired files to the local copy…');
         const patchRequests = await patchCache.keys();
         for (const request of patchRequests) {
+            sendProgress(decodeURIComponent(new URL(request.url).pathname.split('/').pop() || ''), 'storing', 'Applying verified repaired files…');
             const response = await patchCache.match(request);
             if (response) await activeCache.put(request, response.clone());
         }
