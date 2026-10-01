@@ -175,6 +175,16 @@ if (!document.querySelector('script[data-identity-presentation]')) {
   document.head.appendChild(identityScript);
 }
 
+// Facial hair is a separate cosmetic presentation layer: front/side only,
+// colourable like hair, and independently selectable in the creator.
+if (!document.querySelector('script[data-facial-hair-system]')) {
+  const facialHairScript = document.createElement('script');
+  facialHairScript.src = `facialHairSystem.js?build=${encodeURIComponent(window.PRESENTATION_BUILD || '20261001-facial-hair-v1')}`;
+  facialHairScript.dataset.facialHairSystem = 'true';
+  facialHairScript.async = false;
+  document.head.appendChild(facialHairScript);
+}
+
 // Northwatch defenders exist in the persistent Campaign 2 world, but the
 // attacking siege force must not exist until an explicit siege dialogue/cheat
 // path activates it. This compatibility module wraps world setup + activation
