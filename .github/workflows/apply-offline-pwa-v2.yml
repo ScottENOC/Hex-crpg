@@ -1,0 +1,57 @@
+name: Apply offline cache v2 fix
+
+on:
+  push:
+    branches: [development]
+    paths:
+      - 'scripts/apply-offline-pwa-v2.mjs'
+      - '.github/workflows/apply-offline-pwa-v2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[offline-pwa-v2-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+
+      - name: Move to latest development
+        run: |
+          git fetch origin development
+          git reset --hard origin/development
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Apply fix
+        run: node scripts/apply-offline-pwa-v2.mjs
+
+      - name: Syntax check changed JavaScript
+        run: |
+          node --check offlineCache.js
+          node --check offlineServiceWorker.js
+          node --check assetLoadScheduler.js
+
+      - name: Verify v2 wiring
+        run: |
+          grep -q "offlineServiceWorker.js?v=2" offlineCache.js
+          grep -q "WORKER_STALL_TIMEOUT_MS" offlineCache.js
+          grep -q "FILE_FETCH_TIMEOUT_MS" offlineServiceWorker.js
+          grep -q "offlineStartupPending" assetLoadScheduler.js
+          grep -q "localCopyReady" assetLoadScheduler.js
+
+      - name: Commit fix and remove one-off patcher
+        run: |
+          rm -f scripts/apply-offline-pwa-v2.mjs .github/workflows/apply-offline-pwa-v2.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add offlineCache.js offlineServiceWorker.js assetLoadScheduler.js scripts/apply-offline-pwa-v2.mjs .github/workflows/apply-offline-pwa-v2.yml
+          git commit -m "Fix iOS offline cache startup [offline-pwa-v2-applied]"
+          git pull --rebase origin development
+          git push origin HEAD:development
