@@ -2,7 +2,7 @@
 // Atomic, integrity-checked local game cache for the development branch.
 'use strict';
 
-const SW_VERSION = '13';
+const SW_VERSION = '14';
 // These names are intentionally NOT versioned. Worker implementation versions
 // may change without making the stored game copy foreign to the next worker.
 const META_CACHE = 'hex-game-meta';

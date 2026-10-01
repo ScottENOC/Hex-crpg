@@ -5,12 +5,12 @@
 (() => {
     'use strict';
 
-    const VERSION = '13';
+    const VERSION = '14';
     const OWNER = 'ScottENOC';
     const REPO = 'Hex-crpg';
     const BRANCH = 'development';
     const API_BASE = `https://api.github.com/repos/${OWNER}/${REPO}`;
-    const SW_URL = 'offlineServiceWorker.js?v=13';
+    const SW_URL = 'offlineServiceWorker.js?v=14';
     const BRANCH_CACHE_MS = 15000;
     const REQUEST_TIMEOUT_MS = 25000;
     const WORKER_STALL_TIMEOUT_MS = 45000;
@@ -397,9 +397,9 @@
     }
 
     async function inspectLocalCopy() {
-        emit({ phase: 'checking', message: 'Inspecting local cache without downloading anything…' });
-        const registration = await ensureRegistration({ allowUpdate: true });
-        const worker = registration.active || registration.waiting || registration.installing;
+        emit({ phase: 'diagnostic', message: 'Inspecting the cache already stored on this phone…' });
+        const registration = await ensureRegistration();
+        const worker = registration.active || navigator.serviceWorker.controller || registration.waiting || registration.installing;
         const latest = await getLatestRuntimeFiles();
         return workerRequest(worker, { type: 'HEX_CACHE_DIAGNOSTICS', files: latest.files }, { timeout: 20000 });
     }
@@ -722,6 +722,7 @@
         const bar = gate.querySelector('.hex-offline-bar');
         const detail = gate.querySelector('.hex-offline-detail');
         if (progress.phase === 'storage-check') title.textContent = 'Checking iPhone storage…';
+        else if (progress.phase === 'diagnostic') title.textContent = 'Inspecting local cache…';
         else if (progress.phase === 'checking') title.textContent = 'Checking local game copy…';
         else if (progress.phase === 'recovering') title.textContent = 'Recovering failed downloads…';
         else if (progress.phase === 'ready') title.textContent = 'Local game copy ready';
@@ -845,9 +846,9 @@
             : local.healthy === false
                 ? `${local.availableCount || 0} / ${local.fileCount || 0} game files available locally`
                 : `${local.fileCount || 0} game files available locally`;
-        const choiceMessage = local.healthy === false
+        const choiceMessage = message || (local.healthy === false
             ? `${local.missingCount || 0} local file${local.missingCount === 1 ? ' is' : 's are'} missing. Launch is available, but Check for updates will repair the saved copy.`
-            : message;
+            : 'Ready to play from the copy stored on this phone.');
         const engineText = local.workerVersion ? `Offline engine v${local.workerVersion}` : 'Offline engine version unknown';
         detail.textContent = `${choiceMessage} · ${engineText}`;
         bar.style.width = '100%';
@@ -889,7 +890,7 @@
 
     async function restartForUpdatedBuild(gate, result) {
         if (!result.changed || !result.commit) return false;
-        const reloadKey = 'hex-offline-reloaded-commit-v13';
+        const reloadKey = 'hex-offline-reloaded-commit-v14';
         let alreadyReloaded = null;
         try { alreadyReloaded = sessionStorage.getItem(reloadKey); } catch (_) {}
         if (alreadyReloaded === result.commit) return false;
@@ -957,12 +958,9 @@
                     try {
                         const diagnostic = await inspectLocalCopy();
                         choiceMessage = formatCacheDiagnostic(diagnostic);
+                        if (diagnostic?.workerVersion) local = { ...local, workerVersion: diagnostic.workerVersion };
                     } catch (error) {
                         choiceMessage = `Cache diagnostic failed: ${error?.message || error}`;
-                    }
-                    local = await readLocalCopyStatus();
-                    if (!local.valid && local.statusUnavailable && local.hasWorker) {
-                        local = { ...local, valid: true, unverified: true, fileCount: null };
                     }
                     continue;
                 }
