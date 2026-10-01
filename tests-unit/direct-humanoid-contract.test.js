@@ -44,7 +44,7 @@ test('direct humanoid compositor owns the runtime renderer stack', () => {
   contains(rendererSource, 'const SHIELD_OPAQUE_HEIGHT_DROP = .10;');
   contains(rendererSource, "round:{front:'images/equipment/shields/round.png',back:'images/equipment/shields/round_back.svg'}");
   contains(rendererSource, "kite:{front:'images/equipment/shields/kite.png',back:'images/equipment/shields/kite_back.png'}");
-  contains(rendererSource, "helmet:'images/nasalHelm_back.svg'");
+  contains(rendererSource, "helmet:'images/equipment/helmets/nasal_helm_back.svg'");
   contains(rendererSource, "heldItems:{sword:{inward:0,y:.171336564429012}}");
   contains(rendererSource, "front:'images/characters/human_male/body_broad_front.png'");
   contains(rendererSource, "side:'images/characters/human_male/body_broad_side.png'");
