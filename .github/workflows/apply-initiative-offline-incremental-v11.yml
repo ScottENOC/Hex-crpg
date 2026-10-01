@@ -1,0 +1,83 @@
+name: Apply initiative portraits and offline incremental v11
+
+on:
+  push:
+    branches: [development]
+    paths:
+      - 'scripts/apply-initiative-offline-incremental-v11.py'
+      - '.github/workflows/apply-initiative-offline-incremental-v11.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Move to latest development
+        run: |
+          git fetch origin development
+          git checkout development
+          git pull --ff-only origin development
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply fixes
+        run: python3 scripts/apply-initiative-offline-incremental-v11.py
+
+      - name: Validate JavaScript and wiring
+        run: |
+          node --check humanoidRenderer.js
+          node --check offlineCache.js
+          node --check offlineServiceWorker.js
+          python3 - <<'PY'
+          from pathlib import Path
+
+          html = Path('index.html').read_text()
+          css = Path('style.css').read_text()
+          renderer = Path('humanoidRenderer.js').read_text()
+          cache = Path('offlineCache.js').read_text()
+          worker = Path('offlineServiceWorker.js').read_text()
+
+          assert 'offlineCache.js?v=11' in html
+          assert 'humanoidRenderer.js?v=2' in html
+          assert '20261001-pwa-offline-cache-v11' in html
+          assert "const VERSION = '11';" in cache
+          assert "const SW_VERSION = '11';" in worker
+          assert 'hex-game-meta-v10' in worker
+          assert 'recoveredFromMeta' in worker
+          assert 'before.healthy !== false && before.activeCommit === commit' in cache
+          assert '0 downloaded' in cache
+          assert 'downloaded · ${progress.reused || 0} reused' in cache
+          assert 'data-direct-humanoid-canvas' in renderer
+          assert "portrait.classList.toggle('direct-humanoid-ready', !!rendered)" in renderer
+          assert '.turn-indicator-portrait.direct-humanoid-ready > img.portrait-layer' in css
+          assert ':has(canvas[data-direct-humanoid="true"])' not in css
+          print('Validated initiative fallback and incremental updater v11 wiring')
+          PY
+          git diff --check
+
+      - name: Remove temporary patch machinery
+        run: |
+          rm -f scripts/apply-initiative-offline-incremental-v11.py
+          rm -f .github/workflows/apply-initiative-offline-incremental-v11.yml
+
+      - name: Commit and push
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html style.css humanoidRenderer.js offlineCache.js offlineServiceWorker.js scripts/apply-initiative-offline-incremental-v11.py .github/workflows/apply-initiative-offline-incremental-v11.yml
+          if git diff --cached --quiet; then
+            echo 'Nothing to commit'
+            exit 0
+          fi
+          git commit -m 'Fix initiative portraits and reuse offline files'
+          git pull --rebase --autostash origin development
+          git push origin development
