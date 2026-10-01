@@ -2,7 +2,7 @@
 'use strict';
 
 const BUILD = '20261001-camp-deploy-v1';
-const SEARCH_RADIUS = 5;
+const CAMP_DEPLOYMENT_SEARCH_RADIUS = 8;
 const TENT_ASSET = 'images/camp/tent_deployed.png?v=20261001-camp3';
 const BEDROLL_ASSET = 'images/camp/bedroll_deployed.png?v=20261001-camp3';
 const BLOCKED_TERRAIN = /\b(deep water|shallow water|water|river|lake|ocean|sea|lava|forest|foliage|rocky outcrop|mountain|rubble|pedestal|wall|palisade wall|climbable wall|keep wall|void)\b/i;
@@ -48,7 +48,7 @@ function isClearHex(hex, reserved, movers) {
   );
   return !occupied;
 }
-function candidateHexes(anchor, minRadius = 1, maxRadius = SEARCH_RADIUS) {
+function candidateHexes(anchor, minRadius = 1, maxRadius = CAMP_DEPLOYMENT_SEARCH_RADIUS) {
   const result = [];
   for (let dq = -maxRadius; dq <= maxRadius; dq++) {
     for (let dr = -maxRadius; dr <= maxRadius; dr++) {
