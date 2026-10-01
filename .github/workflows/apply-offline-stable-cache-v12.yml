@@ -1,0 +1,76 @@
+name: Apply stable offline cache v12
+
+on:
+  push:
+    branches: [development]
+    paths:
+      - 'scripts/apply-offline-stable-cache-v12.py'
+      - '.github/workflows/apply-offline-stable-cache-v12.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Move to latest development
+        run: |
+          git fetch origin development
+          git checkout development
+          git pull --ff-only origin development
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply v12 patch
+        run: python3 scripts/apply-offline-stable-cache-v12.py
+
+      - name: Validate JavaScript and migration wiring
+        run: |
+          node --check offlineCache.js
+          node --check offlineServiceWorker.js
+          python3 - <<'PY'
+          from pathlib import Path
+          oc = Path('offlineCache.js').read_text()
+          sw = Path('offlineServiceWorker.js').read_text()
+          html = Path('index.html').read_text()
+          assert "const VERSION = '12';" in oc
+          assert "offlineServiceWorker.js?v=12" in oc
+          assert 'getChangedRuntimePaths' in oc
+          assert 'changedPaths: Array.isArray(changedPaths)' in oc
+          assert "const SW_VERSION = '12';" in sw
+          assert "const META_CACHE = 'hex-game-meta';" in sw
+          assert "const GAME_CACHE_PREFIX = 'hex-game-cache-';" in sw
+          assert "'hex-game-meta-v11'" in sw
+          assert "'hex-game-v11-'" in sw
+          assert 'compareSaysUnchanged' in sw
+          assert 'changedHintCount' in sw
+          assert 'offlineCache.js?v=12' in html
+          print('v12 stable metadata + changed-file reuse wiring validated')
+          PY
+          git diff --check
+
+      - name: Remove temporary patch machinery
+        run: |
+          rm -f scripts/apply-offline-stable-cache-v12.py
+          rm -f .github/workflows/apply-offline-stable-cache-v12.yml
+
+      - name: Commit and push
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add offlineCache.js offlineServiceWorker.js index.html scripts/apply-offline-stable-cache-v12.py .github/workflows/apply-offline-stable-cache-v12.yml
+          if git diff --cached --quiet; then
+            echo 'Nothing to commit'
+            exit 0
+          fi
+          git commit -m 'Keep offline cache identity stable across worker updates'
+          git pull --rebase origin development
+          git push origin development
