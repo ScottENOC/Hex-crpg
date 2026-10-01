@@ -504,7 +504,7 @@ button:hover { background-color: #3f51b5; }
 /* Direct humanoid portraits are fully composited on their canvas. Hide the
    superseded legacy image stack once that canvas exists so there is exactly
    one visual portrait surface instead of overlapping/broken-image rectangles. */
-.turn-indicator-portrait:has(canvas[data-direct-humanoid="true"]) > img.portrait-layer {
+.turn-indicator-portrait.direct-humanoid-ready > img.portrait-layer {
     display: none;
 }
 

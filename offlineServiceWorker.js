@@ -2,10 +2,11 @@
 // Atomic, integrity-checked local game cache for the development branch.
 'use strict';
 
-const SW_VERSION = '10';
+const SW_VERSION = '11';
 const META_CACHE = `hex-game-meta-v${SW_VERSION}`;
 const GAME_CACHE_PREFIX = `hex-game-v${SW_VERSION}-`;
-const LEGACY_GAME_CACHE_PREFIXES = ['hex-game-v9-', 'hex-game-v8-', 'hex-game-v7-', 'hex-game-v6-', 'hex-game-v5-', 'hex-game-v4-', 'hex-game-v3-', 'hex-game-v2-', 'hex-game-v1-'];
+const LEGACY_GAME_CACHE_PREFIXES = ['hex-game-v10-', 'hex-game-v9-', 'hex-game-v8-', 'hex-game-v7-', 'hex-game-v6-', 'hex-game-v5-', 'hex-game-v4-', 'hex-game-v3-', 'hex-game-v2-', 'hex-game-v1-'];
+const LEGACY_META_CACHES = ['hex-game-meta-v10', 'hex-game-meta-v9', 'hex-game-meta-v8', 'hex-game-meta-v7', 'hex-game-meta-v6', 'hex-game-meta-v5', 'hex-game-meta-v4', 'hex-game-meta-v3', 'hex-game-meta-v2', 'hex-game-meta-v1'];
 const SCOPE_URL = self.registration.scope;
 const META_KEY = new URL('__hex_offline_meta__/active.json', SCOPE_URL).href;
 const MANIFEST_KEY = new URL('__hex_offline_meta__/manifest.json', SCOPE_URL).href;
@@ -132,16 +133,45 @@ async function statusResult() {
     const meta = await readActiveMeta(true);
     if (meta?.cacheName) {
         const direct = await inspectGameCache(meta.cacheName, meta.commit || null);
-        if (direct?.valid) return { ...direct, recovered: false };
+        if (direct?.valid) return { ...direct, recovered: false, recoveredFromMeta: META_CACHE };
     }
 
-    // The large game cache may survive even if iOS loses/restores the tiny
-    // metadata pointer separately. Recover from the real cache instead of
-    // re-downloading every file.
+    // Every worker version uses a new metadata cache. Read the previous
+    // version's active pointer before guessing from CacheStorage insertion
+    // order. That pointer identifies the exact complete cache the player was
+    // using, so SHA comparison can reuse unchanged files instead of comparing
+    // against an arbitrary older cache and downloading them again.
+    for (const metaCacheName of LEGACY_META_CACHES) {
+        try {
+            const legacyMetaCache = await caches.open(metaCacheName);
+            const legacyMeta = await readJsonResponse(await legacyMetaCache.match(META_KEY));
+            if (!legacyMeta?.cacheName) continue;
+            const recovered = await inspectGameCache(legacyMeta.cacheName, legacyMeta.commit || null);
+            if (!recovered?.valid) continue;
+            await writeActiveMeta({
+                version: SW_VERSION,
+                cacheName: recovered.cacheName,
+                commit: recovered.activeCommit,
+                fileCount: recovered.fileCount,
+                totalBytes: recovered.totalBytes,
+                recoveredAt: Date.now(),
+                recoveredFromMeta: metaCacheName,
+            });
+            return { ...recovered, recovered: true, recoveredFromMeta: metaCacheName };
+        } catch (_) {}
+    }
+
+    // Last-resort recovery if metadata was lost. Prefer the newest cache
+    // namespace deterministically rather than whatever order WebKit returns.
     const names = await caches.keys();
-    const candidates = names.filter(name =>
-        name.startsWith(GAME_CACHE_PREFIX) || LEGACY_GAME_CACHE_PREFIXES.some(prefix => name.startsWith(prefix))
-    );
+    const prefixRank = name => {
+        if (name.startsWith(GAME_CACHE_PREFIX)) return 0;
+        const legacyIndex = LEGACY_GAME_CACHE_PREFIXES.findIndex(prefix => name.startsWith(prefix));
+        return legacyIndex < 0 ? Number.MAX_SAFE_INTEGER : legacyIndex + 1;
+    };
+    const candidates = names
+        .filter(name => name.startsWith(GAME_CACHE_PREFIX) || LEGACY_GAME_CACHE_PREFIXES.some(prefix => name.startsWith(prefix)))
+        .sort((a, b) => prefixRank(a) - prefixRank(b) || a.localeCompare(b));
     for (const name of candidates) {
         const recovered = await inspectGameCache(name);
         if (!recovered?.valid) continue;
@@ -153,7 +183,7 @@ async function statusResult() {
             totalBytes: recovered.totalBytes,
             recoveredAt: Date.now(),
         });
-        return { ...recovered, recovered: true };
+        return { ...recovered, recovered: true, recoveredFromMeta: null };
     }
 
     return { valid: false, activeCommit: null, fileCount: 0, cacheName: null, recovered: false };
@@ -326,10 +356,8 @@ async function cleanupLegacyCaches(keepNames = []) {
     const names = await caches.keys();
     await Promise.all(names
         .filter(name => !keep.has(name) && (
-            name === 'hex-game-meta-v1' || name === 'hex-game-meta-v2' || name === 'hex-game-meta-v3' ||
-            name === 'hex-game-meta-v4' || name === 'hex-game-meta-v5' || name === 'hex-game-meta-v6' || name === 'hex-game-meta-v7' || name === 'hex-game-meta-v8' || name === 'hex-game-meta-v9' || name === 'hex-game-meta-v8' ||
-            name.startsWith('hex-game-v1-') || name.startsWith('hex-game-v2-') || name.startsWith('hex-game-v3-') ||
-            name.startsWith('hex-game-v4-') || name.startsWith('hex-game-v5-') || name.startsWith('hex-game-v6-') || name.startsWith('hex-game-v7-') || name.startsWith('hex-game-v8-') || name.startsWith('hex-game-v9-') || name.startsWith('hex-game-v8-')
+            LEGACY_META_CACHES.includes(name) ||
+            LEGACY_GAME_CACHE_PREFIXES.some(prefix => name.startsWith(prefix))
         ))
         .map(name => caches.delete(name)));
 }
@@ -403,6 +431,7 @@ async function cacheGame(message, port) {
     let downloaded = 0;
     let reused = 0;
     let retried = 0;
+    let removed = 0;
     const failures = [];
     let cursor = 0;
     let quotaFailure = false;
@@ -505,7 +534,7 @@ async function cacheGame(message, port) {
         // Remove runtime files that no longer exist in the new build.
         for (const oldFile of (activeManifest?.files || [])) {
             if (!newPaths.has(oldFile.path)) {
-                await activeCache.delete(new Request(localUrl(oldFile.path)), { ignoreSearch: true });
+                if (await activeCache.delete(new Request(localUrl(oldFile.path)), { ignoreSearch: true })) removed++;
             }
         }
 
@@ -540,7 +569,7 @@ async function cacheGame(message, port) {
         type: 'result',
         result: {
             complete: true, failures: [], stored: files.length, total: files.length,
-            downloaded, reused, retried, activeCommit: commit, fileCount: files.length,
+            downloaded, reused, retried, removed, activeCommit: commit, fileCount: files.length,
             totalBytes, changed: before.activeCommit !== commit,
         },
     });

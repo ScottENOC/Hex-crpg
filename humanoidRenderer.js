@@ -840,11 +840,11 @@
                 const src = img.getAttribute('src') || '';
                 if (/images\/human(?:female|male)(?:hair)?\.png/.test(src)) img.remove();
             });
-            let canvas = portrait.querySelector('canvas[data-direct-humanoid="true"]');
+            let canvas = portrait.querySelector('canvas[data-direct-humanoid-canvas="true"]');
             if (!canvas) {
                 canvas = document.createElement('canvas');
                 canvas.width=100; canvas.height=100;
-                canvas.dataset.directHumanoid='true';
+                canvas.dataset.directHumanoidCanvas='true';
                 canvas.classList.add('portrait-layer');
                 canvas.style.cssText='width:100%;height:100%;left:0;top:0;';
                 portrait.insertBefore(canvas, portrait.firstChild);
@@ -852,7 +852,15 @@
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0,0,100,100);
             const height=92,width=height*HUMAN_RENDER_ASPECT;
-            drawDirectionalHumanoidInBounds(ctx,entity,{left:(100-width)/2,top:4,width,height},'down');
+            const rendered = drawDirectionalHumanoidInBounds(ctx,entity,{left:(100-width)/2,top:4,width,height},'down');
+            // Do not suppress the established IMG portrait until this frame has
+            // actually drawn. Image decoding is asynchronous on iOS; tagging an
+            // empty canvas as authoritative made the tracker blank even though
+            // the same entity rendered correctly on the map a moment later.
+            portrait.classList.toggle('direct-humanoid-ready', !!rendered);
+            canvas.style.display = rendered ? 'block' : 'none';
+            if (rendered) canvas.dataset.directHumanoid='true';
+            else delete canvas.dataset.directHumanoid;
         });
     }
 

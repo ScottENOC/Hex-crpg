@@ -5,12 +5,12 @@
 (() => {
     'use strict';
 
-    const VERSION = '10';
+    const VERSION = '11';
     const OWNER = 'ScottENOC';
     const REPO = 'Hex-crpg';
     const BRANCH = 'development';
     const API_BASE = `https://api.github.com/repos/${OWNER}/${REPO}`;
-    const SW_URL = 'offlineServiceWorker.js?v=10';
+    const SW_URL = 'offlineServiceWorker.js?v=11';
     const BRANCH_CACHE_MS = 15000;
     const REQUEST_TIMEOUT_MS = 25000;
     const WORKER_STALL_TIMEOUT_MS = 45000;
@@ -490,12 +490,30 @@
             return { complete: false, failures: [errorInfo(error)], hasActiveCache: Boolean(before.valid) };
         }
 
-        // Do not short-circuit merely because the commit SHA matches. Explicit
-        // Check for updates also verifies every cached response against the
-        // manifest and repairs holes/stale entries. Existing healthy files are
-        // reused in place, so this is cheap and does not duplicate the game.
+        // A complete cache was integrity-checked when each file was originally
+        // stored, and statusResult has just confirmed every manifest path is
+        // still physically present. If GitHub reports the same commit there is
+        // nothing to download or re-walk: return immediately. Missing entries
+        // still fall through to the repair path below.
+        if (before.valid && before.healthy !== false && before.activeCommit === commit) {
+            const fileCount = before.fileCount || 0;
+            emit({
+                phase: 'ready', stored: fileCount, processed: fileCount, total: fileCount,
+                downloaded: 0, reused: fileCount, retried: 0, failed: 0,
+                totalBytes: before.totalBytes || 0,
+                message: `Already up to date — ${fileCount} local files reused, 0 downloaded.`,
+            });
+            return {
+                complete: true, changed: false, upToDate: true, usingExisting: true,
+                downloaded: 0, reused: fileCount, retried: 0, removed: 0,
+                stored: fileCount, total: fileCount, fileCount,
+                totalBytes: before.totalBytes || 0,
+                commit, activeCommit: commit, previousCommit: commit,
+                hasActiveCache: true,
+            };
+        }
         if (before.valid && before.activeCommit === commit) {
-            emit({ phase: 'checking', message: 'Build is current. Verifying the local game files…' });
+            emit({ phase: 'checking', message: 'Build is current, but the saved copy needs repair…' });
         }
 
         // A valid existing copy does not need another storage-capacity probe.
@@ -534,7 +552,9 @@
             retried: 0,
             failed: 0,
             totalBytes,
-            message: `Saving ${files.length} game files (${formatBytes(totalBytes)}) to this device…`,
+            message: before.valid
+                ? `Comparing ${files.length} game files with the saved copy…`
+                : `Saving ${files.length} game files (${formatBytes(totalBytes)}) to this device…`,
         });
 
         let result;
@@ -636,12 +656,11 @@
         else title.textContent = 'Preparing local game copy…';
 
         if (progress.total > 0) {
-            count.textContent = `Stored ${progress.stored || 0} / ${progress.total} files locally`;
-            bar.style.width = `${Math.max(0, Math.min(100, Math.round((progress.stored || 0) * 100 / progress.total)))}%`;
+            const checked = Math.max(progress.processed || 0, progress.stored || 0);
+            count.textContent = `Checked ${checked} / ${progress.total} files · ${progress.downloaded || 0} downloaded · ${progress.reused || 0} reused`;
+            bar.style.width = `${Math.max(0, Math.min(100, Math.round(checked * 100 / progress.total)))}%`;
             const parts = [];
             if (progress.message) parts.push(progress.message);
-            if (progress.downloaded) parts.push(`${progress.downloaded} downloaded`);
-            if (progress.reused) parts.push(`${progress.reused} reused`);
             if (progress.retried) parts.push(`${progress.retried} retries`);
             if (progress.failed) parts.push(`${progress.failed} still failed`);
             if (progress.totalBytes) parts.push(formatBytes(progress.totalBytes));
@@ -791,13 +810,13 @@
 
     async function restartForUpdatedBuild(gate, result) {
         if (!result.changed || !result.commit) return false;
-        const reloadKey = 'hex-offline-reloaded-commit-v10';
+        const reloadKey = 'hex-offline-reloaded-commit-v11';
         let alreadyReloaded = null;
         try { alreadyReloaded = sessionStorage.getItem(reloadKey); } catch (_) {}
         if (alreadyReloaded === result.commit) return false;
         try { sessionStorage.setItem(reloadKey, result.commit); } catch (_) {}
         gate.querySelector('.hex-offline-title').textContent = 'Update complete';
-        gate.querySelector('.hex-offline-count').textContent = 'Restarting once so the updated game runs from the phone…';
+        gate.querySelector('.hex-offline-count').textContent = `${result.downloaded || 0} changed file${result.downloaded === 1 ? '' : 's'} downloaded · ${result.reused || 0} reused${result.removed ? ` · ${result.removed} removed` : ''}. Restarting once…`;
         gate.querySelector('.hex-offline-bar').style.width = '100%';
         await sleep(300);
         location.reload();
@@ -875,7 +894,7 @@
                 }
                 if (!local.valid) throw Object.assign(new Error('The saved local copy could not be reopened after the update check.'), { kind: 'local-status' });
                 choiceMessage = updateResult.upToDate || updateResult.changed === false
-                    ? 'No newer build found. Your local copy is ready.'
+                    ? `No newer build found. ${updateResult.reused || local.fileCount || 0} local files reused; 0 downloaded.`
                     : 'Update check complete. Your local copy is ready.';
             }
         } catch (error) {
