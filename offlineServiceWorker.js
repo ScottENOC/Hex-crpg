@@ -2,9 +2,10 @@
 // Atomic, integrity-checked local game cache for the development branch.
 'use strict';
 
-const SW_VERSION = '2';
+const SW_VERSION = '3';
 const META_CACHE = `hex-game-meta-v${SW_VERSION}`;
 const GAME_CACHE_PREFIX = `hex-game-v${SW_VERSION}-`;
+const LEGACY_GAME_CACHE_PREFIXES = ['hex-game-v2-', 'hex-game-v1-'];
 const SCOPE_URL = self.registration.scope;
 const META_KEY = new URL('__hex_offline_meta__/active.json', SCOPE_URL).href;
 const MANIFEST_KEY = new URL('__hex_offline_meta__/manifest.json', SCOPE_URL).href;
@@ -84,32 +85,57 @@ async function writeCacheManifest(cache, commit, files) {
     }));
 }
 
+async function inspectGameCache(cacheName, expectedCommit = null) {
+    if (!cacheName) return null;
+    try {
+        const manifest = await readCacheManifest(cacheName);
+        if (!manifest?.commit || !Array.isArray(manifest.files) || !manifest.files.length) return null;
+        if (expectedCommit && manifest.commit !== expectedCommit) return null;
+        const cache = await caches.open(cacheName);
+        const keys = await cache.keys();
+        const expectedCount = manifest.files.length;
+        if (keys.length < expectedCount + 1) return null;
+        return {
+            valid: true,
+            activeCommit: manifest.commit,
+            fileCount: expectedCount,
+            totalBytes: manifest.files.reduce((sum, file) => sum + (Number(file.size) || 0), 0),
+            cacheName,
+        };
+    } catch (_) {
+        return null;
+    }
+}
+
 async function statusResult() {
     const meta = await readActiveMeta(true);
-    if (!meta?.cacheName || !meta?.commit) {
-        return { valid: false, activeCommit: null, fileCount: 0, cacheName: null };
+    if (meta?.cacheName) {
+        const direct = await inspectGameCache(meta.cacheName, meta.commit || null);
+        if (direct) return { ...direct, recovered: false };
     }
-    try {
-        const cache = await caches.open(meta.cacheName);
-        const manifest = await readCacheManifest(meta.cacheName);
-        const keys = await cache.keys();
-        const expectedCount = Number(meta.fileCount) || Number(manifest?.files?.length) || 0;
-        const valid = Boolean(
-            manifest?.commit === meta.commit &&
-            expectedCount > 0 &&
-            manifest.files?.length === expectedCount &&
-            keys.length >= expectedCount + 1
-        );
-        return {
-            valid,
-            activeCommit: meta.commit,
-            fileCount: expectedCount,
-            totalBytes: meta.totalBytes || 0,
-            cacheName: meta.cacheName,
-        };
-    } catch (error) {
-        return { valid: false, activeCommit: meta.commit, fileCount: meta.fileCount || 0, cacheName: meta.cacheName, error: error.message };
+
+    // The large game cache may survive even if iOS loses/restores the tiny
+    // metadata pointer separately. Recover from the real cache instead of
+    // re-downloading every file.
+    const names = await caches.keys();
+    const candidates = names.filter(name =>
+        name.startsWith(GAME_CACHE_PREFIX) || LEGACY_GAME_CACHE_PREFIXES.some(prefix => name.startsWith(prefix))
+    );
+    for (const name of candidates) {
+        const recovered = await inspectGameCache(name);
+        if (!recovered) continue;
+        await writeActiveMeta({
+            version: SW_VERSION,
+            cacheName: recovered.cacheName,
+            commit: recovered.activeCommit,
+            fileCount: recovered.fileCount,
+            totalBytes: recovered.totalBytes,
+            recoveredAt: Date.now(),
+        });
+        return { ...recovered, recovered: true };
     }
+
+    return { valid: false, activeCommit: null, fileCount: 0, cacheName: null, recovered: false };
 }
 
 function mimeTypeFor(path) {
@@ -273,7 +299,7 @@ async function assertCacheStorageWorks() {
 async function cleanupLegacyCaches() {
     const names = await caches.keys();
     await Promise.all(names
-        .filter(name => name === 'hex-game-meta-v1' || name.startsWith('hex-game-v1-'))
+        .filter(name => name === 'hex-game-meta-v1' || name === 'hex-game-meta-v2' || name.startsWith('hex-game-v1-') || name.startsWith('hex-game-v2-'))
         .map(name => caches.delete(name)));
 }
 

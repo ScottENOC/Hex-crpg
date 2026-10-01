@@ -5,12 +5,12 @@
 (() => {
     'use strict';
 
-    const VERSION = '2';
+    const VERSION = '3';
     const OWNER = 'ScottENOC';
     const REPO = 'Hex-crpg';
     const BRANCH = 'development';
     const API_BASE = `https://api.github.com/repos/${OWNER}/${REPO}`;
-    const SW_URL = 'offlineServiceWorker.js?v=2';
+    const SW_URL = 'offlineServiceWorker.js?v=3';
     const BRANCH_CACHE_MS = 15000;
     const REQUEST_TIMEOUT_MS = 25000;
     const WORKER_STALL_TIMEOUT_MS = 45000;
@@ -188,8 +188,8 @@
                 if (!registration.active) await navigator.serviceWorker.ready;
 
                 const activeUrl = registration.active?.scriptURL || '';
-                if (!registration.active || !activeUrl.includes('offlineServiceWorker.js') || !activeUrl.includes('v=2')) {
-                    const error = new Error('The v2 offline worker is not active yet.');
+                if (!registration.active || !activeUrl.includes('offlineServiceWorker.js') || !activeUrl.includes('v=3')) {
+                    const error = new Error('The v3 offline worker is not active yet.');
                     error.kind = 'worker-version';
                     throw error;
                 }
@@ -311,11 +311,23 @@
         const mode = isStandaloneWebApp() ? 'Home Screen app' : 'Safari tab';
         if (!navigator.storage?.estimate) return { message: `${mode} · iOS storage estimate unavailable` };
         try {
-            const estimate = await navigator.storage.estimate();
+            // Diagnostic only: no StorageManager call may block app startup forever.
+            const estimate = await Promise.race([
+                navigator.storage.estimate(),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('storage estimate timed out')), 1500)),
+            ]);
             let persisted = false;
-            try { persisted = Boolean(await navigator.storage.persisted?.()); } catch (_) {}
+            if (navigator.storage.persisted) {
+                try {
+                    persisted = Boolean(await Promise.race([
+                        navigator.storage.persisted(),
+                        new Promise(resolve => setTimeout(() => resolve(false), 600)),
+                    ]));
+                } catch (_) {}
+            }
+            // Persistence is useful but optional. Ask in the background only.
             if (isStandaloneWebApp() && !persisted && navigator.storage.persist) {
-                try { persisted = Boolean(await navigator.storage.persist()); } catch (_) {}
+                Promise.resolve().then(() => navigator.storage.persist()).catch(() => {});
             }
             const quota = Number(estimate?.quota) || 0;
             const usage = Number(estimate?.usage) || 0;
@@ -325,14 +337,13 @@
                 message: `${mode} · ${formatBytes(available)} available locally${persisted ? ' · persistent storage' : ''}`,
             };
         } catch (error) {
-            return { message: `${mode} · storage check failed: ${error?.message || error}` };
+            return { message: `${mode} · storage estimate skipped: ${error?.message || error}` };
         }
     }
 
     async function syncInternal() {
-        emit({ phase: 'registering', stored: 0, processed: 0, total: 0, message: 'Starting local storage…' });
-        const storage = await storageDiagnostic();
-        emit({ phase: 'storage-check', stored: 0, processed: 0, total: 0, message: storage.message });
+        // Check an existing complete cache before any disk-space diagnostic.
+        emit({ phase: 'checking', stored: 0, processed: 0, total: 0, message: 'Checking local game copy…' });
         let registration;
         try {
             registration = await ensureRegistration();
@@ -392,6 +403,9 @@
             };
         }
 
+        // Only an actual update/new install needs a quota estimate.
+        const storage = await storageDiagnostic();
+        emit({ phase: 'storage-check', message: storage.message });
         emit({ phase: 'listing', message: 'Getting the list of game files…' });
         let treeResult;
         try {
@@ -616,7 +630,7 @@
             }
 
             if (result.changed && result.commit) {
-                const reloadKey = 'hex-offline-reloaded-commit-v2';
+                const reloadKey = 'hex-offline-reloaded-commit-v3';
                 let alreadyReloaded = null;
                 try { alreadyReloaded = sessionStorage.getItem(reloadKey); } catch (_) {}
                 if (alreadyReloaded !== result.commit) {
