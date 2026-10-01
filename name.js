@@ -63,6 +63,9 @@ if('serviceWorker'in navigator){navigator.serviceWorker.register(`sw.js?build=${
         ['renderPerfTuning.js','renderPerfTuning'],
         ['raceSkinPalettes.js','raceSkinPalettes'],
         ['humanoidRenderer.js','humanoidRenderer'],
+        // The bridge owns real-time held/sheathed weapon presentation and the
+        // stable tactical binding. Load it before readiness decorates that path.
+        ['humanoidRendererBridge.js','humanoidRendererBridge'],
         ['rendererAssetRecovery.js','rendererAssetRecovery'],
         ['braidDirectionalHair.js','braidDirectionalHair'],
         ['shieldAppearance.js','shieldAppearance'],
