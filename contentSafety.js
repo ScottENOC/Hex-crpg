@@ -5,15 +5,18 @@
 (() => {
   'use strict';
 
-  const BUILD = '20261001-content-safety-v1';
+  const BUILD = '20261001-content-safety-v2-performance';
   const STORAGE_KEY = 'rpg_adult_content_enabled';
   const COVERAGE_EPSILON = 0.02;
   const BASE_COVERAGE_SLOTS = ['underwear', 'bra', 'pants', 'shirt'];
   const watchedAssetSources = new Set();
   const readinessCache = new WeakMap();
+  const hotReadinessCache = new WeakMap();
   const planCache = new WeakMap();
   let portraitObserver = null;
   let installedStyle = false;
+  let preloadSource = null;
+  let preloadCache = BASE_COVERAGE_SLOTS;
 
   function storedAdultPreference() {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -24,6 +27,10 @@
 
   function isAdultContentEnabled() {
     return window.adultContentEnabled !== false;
+  }
+
+  function syncModeClass() {
+    document.body?.classList.toggle('content-safety-safe', !isAdultContentEnabled());
   }
 
   function invalidateCaches() {
@@ -43,11 +50,13 @@
     window.adultContentEnabled = !!enabled;
     localStorage.setItem(STORAGE_KEY, window.adultContentEnabled ? 'true' : 'false');
     invalidateCaches();
+    syncModeClass();
     syncSettingsUI();
-    // Hide portrait canvases before rebuilding them under the new policy. This
-    // prevents one stale adult frame remaining visible when safe mode is enabled.
-    document.querySelectorAll?.('canvas[data-direct-humanoid-canvas="true"]')
-      .forEach(canvas => canvas.classList.remove('content-safety-frame-ready'));
+    if (!isAdultContentEnabled()) {
+      document.querySelectorAll?.('canvas[data-direct-humanoid-canvas="true"]')
+        .forEach(canvas => canvas.classList.remove('content-safety-frame-ready'));
+    }
+    installAll();
     window.dispatchEvent?.(new CustomEvent('contentmodechange', {
       detail: { adultContentEnabled: window.adultContentEnabled }
     }));
@@ -60,7 +69,6 @@
   function injectSettingsUI() {
     const settings = document.getElementById('settings-content');
     if (!settings || document.getElementById('adult-content-toggle')) return !!settings;
-
     const section = document.createElement('div');
     section.id = 'content-safety-settings';
     section.innerHTML = `
@@ -69,12 +77,10 @@
         <label><input type="checkbox" id="adult-content-toggle"> 18+ content</label>
         <small style="color:#aaa;display:block;margin-top:3px;">On by default. Turn off to enforce visible underwear and outer clothing without changing equipped items.</small>
       </div>`;
-
     const headings = Array.from(settings.querySelectorAll('h3'));
     const saveHeading = headings.find(h => h.textContent.trim() === 'Save Code');
     if (saveHeading) settings.insertBefore(section, saveHeading);
     else settings.appendChild(section);
-
     const toggle = document.getElementById('adult-content-toggle');
     toggle?.addEventListener('change', () => setAdultContentEnabled(toggle.checked));
     syncSettingsUI();
@@ -85,7 +91,6 @@
     const toggle = document.getElementById('adult-content-toggle');
     if (toggle) toggle.checked = isAdultContentEnabled();
   }
-
   window.syncContentSafetySettingsUI = syncSettingsUI;
 
   function installPortraitStyle() {
@@ -94,10 +99,10 @@
     const style = document.createElement('style');
     style.id = 'content-safety-atomic-portrait-style';
     style.textContent = `
-      #turn-indicator-bar canvas[data-direct-humanoid-canvas="true"]:not(.content-safety-frame-ready) {
+      body.content-safety-safe #turn-indicator-bar canvas[data-direct-humanoid-canvas="true"]:not(.content-safety-frame-ready) {
         visibility: hidden !important;
       }
-      #appearance-preview-canvas.content-safety-frame-pending {
+      body.content-safety-safe #appearance-preview-canvas.content-safety-frame-pending {
         visibility: hidden !important;
       }`;
     document.head.appendChild(style);
@@ -121,11 +126,8 @@
       watchedAssetSources.add(src);
       window.assetManager.whenReady(src).then(() => {
         invalidateCaches();
-        requestRedraw();
-      }).catch(() => {
-        // Keep the character hidden rather than exposing an incomplete frame.
-        // assetManager owns retries and the in-game asset-failure diagnostics.
-      });
+        if (!isAdultContentEnabled()) requestRedraw();
+      }).catch(() => {});
     }
     return image;
   }
@@ -164,8 +166,7 @@
   function visibleCoverageGarment(entity, slot, itemId) {
     if (!itemId || !slotVisible(entity, slot)) return false;
     const spec = specFor(itemId);
-    if (!spec) return false;
-    return coverageOpacity(entity, itemId, spec) > COVERAGE_EPSILON;
+    return !!spec && coverageOpacity(entity, itemId, spec) > COVERAGE_EPSILON;
   }
 
   function fullBodyOuterGarment(itemId) {
@@ -178,21 +179,23 @@
   function planSignature(entity) {
     const equipped = entity?.equipped || {};
     const visibility = entity?.equipmentVisibility || {};
-    const parts = [
-      isAdultContentEnabled() ? 'adult' : 'safe',
-      entity?.gender || '', entity?.displayClothes === false ? 'hide' : 'show',
-      ...BASE_COVERAGE_SLOTS.map(slot => `${slot}:${equipped[slot] || '-'}:${visibility[slot] === false ? 0 : 1}`)
-    ];
-    if (!isAdultContentEnabled()) {
-      for (const slot of BASE_COVERAGE_SLOTS) {
-        const id = equipped[slot];
-        parts.push(`${slot}Covered:${visibleCoverageGarment(entity, slot, id) ? 1 : 0}`);
-      }
+    const parts = ['safe', entity?.gender || '', entity?.displayClothes === false ? 'hide' : 'show'];
+    for (const slot of BASE_COVERAGE_SLOTS) {
+      const id = equipped[slot];
+      parts.push(`${slot}:${id || '-'}:${visibility[slot] === false ? 0 : 1}`);
+      parts.push(`${slot}Covered:${visibleCoverageGarment(entity, slot, id) ? 1 : 0}`);
     }
     return parts.join('|');
   }
 
+  const EMPTY_SET = Object.freeze(new Set());
+
   function resolveCoveragePlan(entity) {
+    // Adult mode needs no fallback planning at all. This is the main hot-path
+    // optimisation: the default mode now exits before string/array allocation.
+    if (isAdultContentEnabled()) {
+      return { items: entity?.equipped || {}, forceOpaque: EMPTY_SET, forceVisible: EMPTY_SET, signature: 'adult' };
+    }
     const signature = planSignature(entity);
     const cached = planCache.get(entity);
     if (cached?.signature === signature) return cached.plan;
@@ -201,45 +204,40 @@
     const items = Object.fromEntries(BASE_COVERAGE_SLOTS.map(slot => [slot, equipped[slot] || null]));
     const forceOpaque = new Set();
     const forceVisible = new Set();
+    const female = entity?.gender === 'female';
 
-    if (!isAdultContentEnabled()) {
-      const female = entity?.gender === 'female';
-      if (!visibleCoverageGarment(entity, 'underwear', items.underwear)) {
-        items.underwear = 'underwear_briefs';
-        forceOpaque.add('underwear');
-        forceVisible.add('underwear');
-      }
+    if (!visibleCoverageGarment(entity, 'underwear', items.underwear)) {
+      items.underwear = 'underwear_briefs';
+      forceOpaque.add('underwear');
+      forceVisible.add('underwear');
+    }
+    if (female && !visibleCoverageGarment(entity, 'bra', items.bra)) {
+      items.bra = 'underwear_bra';
+      forceOpaque.add('bra');
+      forceVisible.add('bra');
+    }
 
-      if (female && !visibleCoverageGarment(entity, 'bra', items.bra)) {
-        items.bra = 'underwear_bra';
-        forceOpaque.add('bra');
-        forceVisible.add('bra');
-      }
-
-      const shirtVisible = visibleCoverageGarment(entity, 'shirt', items.shirt);
-      const dressCoversAll = shirtVisible && fullBodyOuterGarment(items.shirt);
-      const pantsVisible = visibleCoverageGarment(entity, 'pants', items.pants);
-
-      if (female) {
-        // Female safe presentation: dress OR visible top + visible lower outerwear.
-        if (!dressCoversAll) {
-          if (!shirtVisible) {
-            items.shirt = 'top_shirt_f';
-            forceOpaque.add('shirt');
-            forceVisible.add('shirt');
-          }
-          if (!pantsVisible) {
-            items.pants = 'pants_trousers';
-            forceOpaque.add('pants');
-            forceVisible.add('pants');
-          }
+    const shirtVisible = visibleCoverageGarment(entity, 'shirt', items.shirt);
+    const dressCoversAll = shirtVisible && fullBodyOuterGarment(items.shirt);
+    const pantsVisible = visibleCoverageGarment(entity, 'pants', items.pants);
+    if (female) {
+      if (!dressCoversAll) {
+        if (!shirtVisible) {
+          items.shirt = 'top_shirt_f';
+          forceOpaque.add('shirt');
+          forceVisible.add('shirt');
         }
-      } else if (!dressCoversAll && !pantsVisible) {
-        // Male safe presentation deliberately permits a bare chest.
-        items.pants = 'pants_trousers';
-        forceOpaque.add('pants');
-        forceVisible.add('pants');
+        if (!pantsVisible) {
+          items.pants = 'pants_trousers';
+          forceOpaque.add('pants');
+          forceVisible.add('pants');
+        }
       }
+    } else if (!dressCoversAll && !pantsVisible) {
+      // Male safe presentation deliberately permits a bare chest.
+      items.pants = 'pants_trousers';
+      forceOpaque.add('pants');
+      forceVisible.add('pants');
     }
 
     const plan = { items, forceOpaque, forceVisible, signature };
@@ -255,7 +253,6 @@
     proxy.equipped = { ...(entity?.equipped || {}), [slot]: itemId };
     proxy.equipmentVisibility = { ...(entity?.equipmentVisibility || {}), [slot]: true };
     proxy.clothingColors = { ...(entity?.clothingColors || {}) };
-
     if (forceOpaque && itemId) {
       const spec = specFor(itemId);
       const original = entity?.clothingColors?.[itemId] || {};
@@ -273,7 +270,6 @@
     const current = system?.drawSlot;
     if (!system || typeof current !== 'function') return false;
     if (current.__contentSafetyDraw) return true;
-
     const wrapped = function contentSafetyDrawSlot(ctx, entity, slot, view, bounds) {
       if (isAdultContentEnabled() || entity?.__contentSafetyRenderProxy || !BASE_COVERAGE_SLOTS.includes(slot)) {
         return current.apply(this, arguments);
@@ -292,30 +288,32 @@
     return true;
   }
 
+  function preloadSlots() {
+    const source = window.clothingSystem?.preloadSlots;
+    if (source === preloadSource) return preloadCache;
+    preloadSource = source;
+    preloadCache = Array.from(new Set(source || BASE_COVERAGE_SLOTS));
+    return preloadCache;
+  }
+
   function clothingFrameReady(entity, view) {
     const system = window.clothingSystem;
     if (!system) return false;
     system.migrateLegacyEquipment?.(entity);
     system.ensureDefaultOutfit?.(entity, { player: entity?.side === 'player' });
-
-    const plan = isAdultContentEnabled() ? null : resolveCoveragePlan(entity);
-    const slots = Array.from(new Set(system.preloadSlots || BASE_COVERAGE_SLOTS));
+    const plan = resolveCoveragePlan(entity);
     let ready = true;
-    for (const slot of slots) {
-      const planned = plan?.items?.[slot];
+    for (const slot of preloadSlots()) {
+      const planned = plan.items?.[slot];
       const itemId = planned !== undefined ? planned : entity?.equipped?.[slot];
       if (!itemId) continue;
-      const forced = !!plan?.forceVisible?.has(slot);
+      const forced = !!plan.forceVisible?.has(slot);
       if (!forced && !slotVisible(entity, slot)) continue;
       const spec = specFor(itemId);
       if (!spec) continue;
       for (const layer of spec.layers || []) {
         const src = layerSource(layer, view);
-        if (!src) continue;
-        // Request every layer before deciding the frame is blocked. This keeps
-        // a shirt + trousers + underwear outfit loading in parallel rather than
-        // serialising requests behind the first missing image.
-        if (!imageReady(watchAsset(src))) ready = false;
+        if (src && !imageReady(watchAsset(src))) ready = false;
       }
     }
     return ready;
@@ -323,7 +321,6 @@
 
   function equipmentFrameReady(entity, view) {
     const visible = slot => window.equipmentAppearanceSystem?.isSlotVisible?.(entity, slot) !== false;
-
     if (entity?.displayArmour !== false && entity?.equipped?.armor && visible('armor')) {
       const item = window.items?.[entity.equipped.armor];
       const reduction = Number(item?.reduction || 0);
@@ -335,7 +332,6 @@
         : tier === 'medium' ? window.gameVisuals?.humanMedium : window.gameVisuals?.humanLight;
       if (!imageReady(authored) && !imageReady(legacy)) return false;
     }
-
     if (entity?.equipped?.helmet && visible('helmet')) {
       const front = window.gameVisuals?.nasal_helm;
       const rear = window.REAR_HUMAN_EQUIPMENT_ASSETS?.helmet;
@@ -343,7 +339,6 @@
         if (!imageReady(rear) && !imageReady(front)) return false;
       } else if (!imageReady(front)) return false;
     }
-
     return true;
   }
 
@@ -355,7 +350,6 @@
     const bodyType = entity.bodyType || 'average';
     const body = (assets.body?.[bodyType] || assets.body?.average)?.[view];
     if (!imageReady(body)) return false;
-
     const hasVisibleHelmet = !!entity?.equipped?.helmet
       && window.equipmentAppearanceSystem?.isSlotVisible?.(entity, 'helmet') !== false;
     if (!hasVisibleHelmet) {
@@ -368,36 +362,48 @@
   }
 
   function readinessSignature(entity, facing) {
-    const system = window.clothingSystem;
     const view = viewForFacing(facing);
-    const slots = Array.from(new Set(system?.preloadSlots || BASE_COVERAGE_SLOTS));
     const visibility = entity?.equipmentVisibility || {};
     const equipped = entity?.equipped || {};
-    const plan = isAdultContentEnabled() ? null : resolveCoveragePlan(entity);
-    return [
-      window.__contentSafetyRevision || 0, view,
-      isAdultContentEnabled() ? 'adult' : plan?.signature || 'safe',
+    const plan = resolveCoveragePlan(entity);
+    const parts = [
+      window.__contentSafetyRevision || 0, view, plan.signature,
       entity?.bodyType || 'average', entity?.hairStyle || 'brown_1',
-      entity?.displayClothes === false ? 0 : 1, entity?.displayArmour === false ? 0 : 1,
-      ...slots.map(slot => `${slot}:${plan?.items?.[slot] ?? equipped[slot] ?? '-'}:${visibility[slot] === false ? 0 : 1}`),
-      `armor:${equipped.armor || '-'}:${visibility.armor === false ? 0 : 1}`,
-      `helmet:${equipped.helmet || '-'}:${visibility.helmet === false ? 0 : 1}`
-    ].join('|');
+      entity?.displayClothes === false ? 0 : 1, entity?.displayArmour === false ? 0 : 1
+    ];
+    for (const slot of preloadSlots()) {
+      parts.push(`${slot}:${plan.items?.[slot] ?? equipped[slot] ?? '-'}:${visibility[slot] === false ? 0 : 1}`);
+    }
+    parts.push(`armor:${equipped.armor || '-'}:${visibility.armor === false ? 0 : 1}`);
+    parts.push(`helmet:${equipped.helmet || '-'}:${visibility.helmet === false ? 0 : 1}`);
+    return parts.join('|');
   }
 
   function isHumanoidFrameReady(entity, facing = 'down') {
     if (!entity) return false;
+    // Atomic coverage is a PG-mode safety requirement. In the default 18+
+    // mode there is no reason to scan clothing/body readiness every frame.
+    if (isAdultContentEnabled()) return true;
     const key = entity.race && entity.gender ? `${entity.race}_${entity.gender}` : '';
     if (!window.DIRECT_HUMANOID_RIGS?.[key]) return true;
+
+    const now = performance.now();
+    const revision = window.__contentSafetyRevision || 0;
+    const hot = hotReadinessCache.get(entity);
+    if (hot && hot.facing === facing && hot.revision === revision && now - hot.at < 4) return hot.ready;
+
     const signature = readinessSignature(entity, facing);
     const cached = readinessCache.get(entity);
-    if (cached?.signature === signature && cached.ready) return true;
-
+    if (cached?.signature === signature && cached.ready) {
+      hotReadinessCache.set(entity, { facing, revision, at: now, ready: true });
+      return true;
+    }
     const view = viewForFacing(facing);
     const ready = bodyAndHairReady(entity, facing)
       && clothingFrameReady(entity, view)
       && equipmentFrameReady(entity, view);
     if (ready) readinessCache.set(entity, { signature, ready: true });
+    hotReadinessCache.set(entity, { facing, revision, at: now, ready });
     return ready;
   }
 
@@ -406,12 +412,13 @@
     const current = window.drawPlayerCharacter;
     if (typeof current !== 'function') return false;
     if (current.__contentSafetyAtomicFrame) return true;
-
     const wrapped = function atomicHumanoidFrame(ctx, entity, x, y, z, flyOff) {
-      const key = entity?.race && entity?.gender ? `${entity.race}_${entity.gender}` : '';
-      if (window.DIRECT_HUMANOID_RIGS?.[key]) {
-        const facing = entity?.facing || 'down';
-        if (!isHumanoidFrameReady(entity, facing)) return;
+      if (!isAdultContentEnabled()) {
+        const key = entity?.race && entity?.gender ? `${entity.race}_${entity.gender}` : '';
+        if (window.DIRECT_HUMANOID_RIGS?.[key]) {
+          const facing = entity?.facing || 'down';
+          if (!isHumanoidFrameReady(entity, facing)) return;
+        }
       }
       return current.apply(this, arguments);
     };
@@ -426,7 +433,7 @@
       const current = window[name];
       if (typeof current !== 'function' || current.__contentSafetyAtomicFrame) continue;
       const wrapped = function(ctx, entity, bounds, facing = 'down') {
-        if (!isHumanoidFrameReady(entity, facing)) return true;
+        if (!isAdultContentEnabled() && !isHumanoidFrameReady(entity, facing)) return true;
         return current.apply(this, arguments);
       };
       wrapped.__contentSafetyAtomicFrame = true;
@@ -456,10 +463,12 @@
     if (current.__contentSafetyAtomicFrame) return true;
     const wrapped = function atomicAppearancePreview() {
       const canvas = document.getElementById('appearance-preview-canvas');
-      const probe = makeCreatorProbe();
-      if (probe && !isHumanoidFrameReady(probe, 'down')) {
-        canvas?.classList.add('content-safety-frame-pending');
-        return;
+      if (!isAdultContentEnabled()) {
+        const probe = makeCreatorProbe();
+        if (probe && !isHumanoidFrameReady(probe, 'down')) {
+          canvas?.classList.add('content-safety-frame-pending');
+          return;
+        }
       }
       const result = current.apply(this, arguments);
       canvas?.classList.remove('content-safety-frame-pending');
@@ -482,20 +491,31 @@
   function syncPortraitSafety() {
     const bar = document.getElementById('turn-indicator-bar');
     if (!bar) return;
-    const entities = visibleTurnEntities();
     const cards = [...bar.querySelectorAll('.turn-indicator-item')];
+    if (isAdultContentEnabled()) {
+      for (const card of cards) {
+        card.querySelector('canvas[data-direct-humanoid-canvas="true"]')?.classList.add('content-safety-frame-ready');
+      }
+      return;
+    }
+    const entities = visibleTurnEntities();
     cards.forEach((card, index) => {
       const canvas = card.querySelector('canvas[data-direct-humanoid-canvas="true"]');
       if (!canvas) return;
       const entity = entities[index];
-      const ready = !!entity && isHumanoidFrameReady(entity, 'down');
-      canvas.classList.toggle('content-safety-frame-ready', ready);
+      canvas.classList.toggle('content-safety-frame-ready', !!entity && isHumanoidFrameReady(entity, 'down'));
     });
   }
 
   function installPortraitObserver() {
     const bar = document.getElementById('turn-indicator-bar');
     if (!bar) return false;
+    if (isAdultContentEnabled()) {
+      portraitObserver?.disconnect();
+      portraitObserver = null;
+      syncPortraitSafety();
+      return true;
+    }
     if (!portraitObserver) {
       portraitObserver = new MutationObserver(() => queueMicrotask(syncPortraitSafety));
       portraitObserver.observe(bar, { childList: true, subtree: true });
@@ -505,6 +525,7 @@
   }
 
   function installAll() {
+    syncModeClass();
     injectSettingsUI();
     installPortraitStyle();
     installSafeClothingDraw();
@@ -526,15 +547,11 @@
   };
 
   installAll();
-  const installTimer = setInterval(installAll, 50);
-  // Presentation modules intentionally install compatibility wrappers after one
-  // another during startup. Re-wrap briefly, then keep a cheap once-per-second
-  // marker check in case a late compatibility module replaces a wrapped hook.
-  setTimeout(() => {
-    clearInterval(installTimer);
-    setInterval(installAll, 1000);
-  }, 15000);
+  // Compatibility modules install in a known startup window. A handful of
+  // delayed retries catches those races without a permanent 20 Hz/1 Hz poll.
+  [50, 150, 500, 1500, 5000].forEach(delay => setTimeout(installAll, delay));
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', installAll, { once: true });
   }
+  window.addEventListener?.('load', () => setTimeout(installAll, 0), { once: true });
 })();
