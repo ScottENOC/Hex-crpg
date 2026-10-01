@@ -11,6 +11,10 @@ function reset(terrain='Grass') {
 function plan(members, tents, bedrolls, fireLit=true){
   return {ok:true,site:{indoor:false},anchorHex:{q:0,r:0},members,tents,bedrolls,fireLit};
 }
+function dist(hex){
+  const dq=hex.q, dr=hex.r;
+  return (Math.abs(dq)+Math.abs(dr)+Math.abs(dq+dr))/2;
+}
 reset();
 let fps = mod.tentFootprints({q:1,r:0});
 assert.strictEqual(fps.length,6);
@@ -49,6 +53,16 @@ assert.strictEqual(layout.ok,false);
 assert.match(layout.reason,/clear ground nearby/i);
 assert.match(layout.reason,/trees, rocky ground, water/i);
 
+// Search must genuinely extend past the old five-hex limit. Everything at
+// radius <=5 is forest; the first usable camp ground is radius 6-8.
+reset();
+global.getTerrainAt=(q,r)=>({name:dist({q,r})<=5?'Forest':'Grass'});
+global.entities=[...two];
+layout=mod.buildDeploymentLayout(plan(two,[{occupants:two}],two,true));
+assert.strictEqual(layout.ok,true);
+assert.ok(layout.tents[0].footprint.every(h=>dist(h)>5));
+assert.ok(dist(layout.fire)>5);
+
 reset();
 global.entities=[...two];
 global.invalidateTileLightsCache=()=>{};
@@ -61,4 +75,4 @@ assert.strictEqual(global.tileObjects[`${layout.fire.q},${layout.fire.r}`].type,
 assert.strictEqual(global.tileObjects[`${layout.fire.q},${layout.fire.r}`].lit,true);
 mod.removeDeployment();
 assert.strictEqual(global.tileObjects[`${layout.fire.q},${layout.fire.r}`],undefined);
-console.log('camp deployment tests: 8 passed');
+console.log('camp deployment tests: 9 passed');
