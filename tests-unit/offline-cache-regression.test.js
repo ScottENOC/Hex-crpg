@@ -1,18 +1,4 @@
-from pathlib import Path
-
-cache_path = Path('offlineCache.js')
-text = cache_path.read_text(encoding='utf-8')
-start_marker = '    async function cleanupSafariOfflineControl() {'
-end_marker = '    async function storageDiagnostic() {'
-if start_marker not in text:
-    raise SystemExit('cleanupSafariOfflineControl block not found')
-start = text.index(start_marker)
-end = text.index(end_marker, start)
-text = text[:start] + text[end:]
-cache_path.write_text(text, encoding='utf-8')
-
-test_path = Path('tests-unit/offline-cache-regression.test.js')
-test_path.write_text(r'''const test = require('node:test');
+const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -98,4 +84,3 @@ test('worker reuses manifest-SHA matches before any changed-file download', () =
     assert.match(cacheOne, /!reportedMissingPaths\.has\(file\.path\)/,
         'A recorded runtime miss must still force repair');
 });
-''', encoding='utf-8')

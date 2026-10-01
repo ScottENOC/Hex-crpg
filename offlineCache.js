@@ -795,26 +795,6 @@
         return window.matchMedia?.('(display-mode: standalone)')?.matches || navigator.standalone === true;
     }
 
-    async function cleanupSafariOfflineControl() {
-        // Normal Safari should remain a plain website. Its storage context is
-        // separate from an installed Home Screen web app, so clearing Hex
-        // service-worker state here does not delete the installed app copy.
-        try {
-            const registrations = await navigator.serviceWorker?.getRegistrations?.() || [];
-            await Promise.all(registrations.map(registration => registration.unregister()));
-        } catch (error) {
-            console.warn('Could not unregister old Safari service worker', error);
-        }
-        try {
-            const names = await caches.keys();
-            await Promise.all(names
-                .filter(name => name.startsWith('hex-game-'))
-                .map(name => caches.delete(name)));
-        } catch (error) {
-            console.warn('Could not clear old Safari Hex caches', error);
-        }
-    }
-
     async function storageDiagnostic() {
         const mode = isStandaloneWebApp() ? 'Home Screen app' : 'Safari tab';
         if (!navigator.storage?.estimate) return { message: `${mode} · iOS storage estimate unavailable` };
