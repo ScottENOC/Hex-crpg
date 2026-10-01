@@ -175,7 +175,7 @@ test.describe('Fenn companion quest: The Living Boundary', () => {
             const fenn = window.party.find(p => p.name === 'Fenn Oakheart');
             const affinity = window.companionAffinity.ensureAffinity(fenn);
             const rel = window.companionRelationships.ensureRelationship(fenn);
-            const capture = () => document.querySelector('#dialogueText')?.textContent || document.querySelector('.dialogue-text')?.textContent || '';
+            const capture = () => document.querySelector('#dialogue-message')?.textContent || '';
 
             affinity.friendship = 20; affinity.romanticBond = 5; affinity.attraction = 70; rel.trust = 30;
             window.fennLivingBoundary.openAftermath();
