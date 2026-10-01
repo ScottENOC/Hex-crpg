@@ -90,20 +90,28 @@ test.describe('generated civilian visual diversity', () => {
 
   test('race palettes give generated orcs and goblins greenskin tones while humans stay on the natural human ramp', async ({ page }) => {
     const result = await page.evaluate(() => {
-      const pop = window.GeneratedCivilianPopulation;
       const visuals = window.CivilianVisualDiversity;
-      window.entities.filter(e => e.side === 'player').forEach(p => { p.hex = { q: 5000, r: 5000 }; });
-      pop.clearGeneratedPopulation();
-      pop.ensurePopulation(500);
-      const records = [...pop.records.values()];
-      const chosen = ['human', 'orc', 'goblin'].map(race => records.find(r => r.race === race));
+      const chosen = ['human', 'orc', 'goblin'].map((race, index) => ({
+        race,
+        gender: 'male',
+        occupation: 'labourer',
+        prop: null,
+        seed: `palette-${race}`,
+        appearance: {
+          skinVariant: index,
+          clothing: 'plain',
+          hair: 'cropped',
+          build: 'average',
+          heightScale: 1,
+          ageBand: 'adult',
+        },
+      }));
       return chosen.map(record => {
         const fake = {
           isGeneratedCivilian: true,
           race: record.race,
           gender: record.gender,
           occupation: record.occupation,
-          ambientProp: record.prop,
           equipped: {},
         };
         visuals.styleEntity(fake, record);
@@ -134,11 +142,21 @@ test.describe('generated civilian visual diversity', () => {
       let alphaPixels = 0;
       for (let i = 3; i < pixels.length; i += 4) if (pixels[i] > 0) alphaPixels++;
 
-      const pop = window.GeneratedCivilianPopulation;
-      window.entities.filter(e => e.side === 'player').forEach(p => { p.hex = { q: 5000, r: 5000 }; });
-      pop.clearGeneratedPopulation();
-      pop.ensurePopulation(300);
-      const record = [...pop.records.values()].find(r => r.prop);
+      const record = {
+        race: 'human',
+        gender: 'male',
+        occupation: 'smith',
+        prop: 'hammer',
+        seed: 'occupation-prop-test',
+        appearance: {
+          skinVariant: 0,
+          clothing: 'workwear',
+          hair: 'cropped',
+          build: 'average',
+          heightScale: 1,
+          ageBand: 'adult',
+        },
+      };
       const fake = {
         isGeneratedCivilian: true,
         race: record.race,
@@ -158,7 +176,7 @@ test.describe('generated civilian visual diversity', () => {
 
     expect(result.everyShapeDrawn).toBe(true);
     expect(result.alphaPixels).toBeGreaterThan(20);
-    expect(result.ambientProp).toBeTruthy();
+    expect(result.ambientProp).toBe('hammer');
     expect(result.weapon).toBeNull();
     expect(result.offhand).toBeNull();
   });
