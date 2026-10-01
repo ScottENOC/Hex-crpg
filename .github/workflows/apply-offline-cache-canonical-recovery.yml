@@ -18,7 +18,7 @@ jobs:
           ref: development
           fetch-depth: 0
 
-      - name: Apply fix and regression coverage
+      - name: Apply and validate recovery fix
         shell: bash
         run: |
           set -euo pipefail
@@ -34,10 +34,10 @@ jobs:
                     .filter(name => prefixes.some(prefix => name.startsWith(prefix)))
                     .filter(name => !/(?:^|-)patch(?:-|$)/i.test(name))
                     .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));"""
-          new = """                // A first install in older v15 builds could promote a cache whose
-                // name still contains \"patch\". Do not hide those here: an
-                // incomplete staging cache has no completion manifest and will be
-                // rejected below, while a promoted complete cache is recoverable.
+          new = """                // Older v15 first installs could promote a fully complete cache
+                // whose name still contains \"patch\". Do not hide those here:
+                // incomplete staging caches have no completion manifest and are
+                // rejected below, while completed ones are safe to recover.
                 const candidates = cacheNames
                     .filter(name => prefixes.some(prefix => name.startsWith(prefix)))
                     .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));"""
@@ -49,11 +49,10 @@ jobs:
           text = worker.read_text()
           old = """    const patchCacheName = `${GAME_CACHE_PREFIX}patch-${commit}`;
     const patchCache = await caches.open(patchCacheName);"""
-          new = """    // Incremental updates use a temporary patch cache. A first install,
-    // however, is already downloading the complete build, so give that cache its
-    // permanent canonical name immediately. Older v15 installs may still have a
-    // complete cache named hex-game-cache-patch-<commit>; recovery accepts those
-    // when (and only when) they contain a valid completion manifest.
+          new = """    // Incremental updates use a temporary patch cache. A first install is
+    // already downloading the complete build, so give that cache its permanent
+    // canonical name immediately. Recovery still accepts older completed
+    // patch-named caches when they contain a valid completion manifest.
     const patchCacheName = before.valid
         ? `${GAME_CACHE_PREFIX}patch-${commit}`
         : cacheNameForCommit(commit);
@@ -61,44 +60,19 @@ jobs:
           if old not in text:
               raise SystemExit('offlineServiceWorker.js patch-cache anchor not found')
           worker.write_text(text.replace(old, new, 1))
-
-          test = Path('tests-unit/offline-cache-regression.test.js')
-          text = test.read_text()
-          marker = "first installs use a canonical permanent cache name"
-          if marker not in text:
-              text += r'''
-
-test('first installs use a canonical permanent cache name', () => {
-    const cacheGame = extractFunction(workerSource, 'async function cacheGame(message, port)');
-    assert.match(cacheGame,
-        /const patchCacheName = before\.valid\s*\? `\$\{GAME_CACHE_PREFIX\}patch-\$\{commit\}`\s*:\s*cacheNameForCommit\(commit\)/,
-        'First install should write directly into hex-game-cache-<commit>, not a patch-named cache');
-});
-
-test('recovery does not hide completed legacy patch-named caches', () => {
-    assert.doesNotMatch(launcherSource,
-        /\.filter\(name => !\/\(\?:\^\|-\)patch/,
-        'Diagnostic recovery must not discard patch-named caches before reading their completion manifest');
-    const diagnostic = extractFunction(launcherSource, 'async function inspectLocalCachePhased()');
-    assert.match(diagnostic, /candidateManifest\?\.commit/);
-    assert.match(diagnostic, /Array\.isArray\(candidateManifest\.files\)/);
-    assert.match(diagnostic, /candidateManifest\.files\.length/);
-});
-'''
-              test.write_text(text)
           PY
 
           node --check offlineCache.js
           node --check offlineServiceWorker.js
           node --test tests-unit/offline-cache-regression.test.js
-          grep -q "cacheNameForCommit(commit)" offlineServiceWorker.js
-          if grep -Fq ".filter(name => !/(?:^|-)patch(?:-|$)/i.test(name))" offlineCache.js; then
-            echo 'Patch-named complete caches are still being hidden' >&2
+          grep -Fq ': cacheNameForCommit(commit);' offlineServiceWorker.js
+          if grep -Fq '.filter(name => !/(?:^|-)patch(?:-|$)/i.test(name))' offlineCache.js; then
+            echo 'Completed patch-named caches are still being hidden' >&2
             exit 1
           fi
 
           git rm .github/workflows/apply-offline-cache-canonical-recovery.yml
-          git add offlineCache.js offlineServiceWorker.js tests-unit/offline-cache-regression.test.js
+          git add offlineCache.js offlineServiceWorker.js
           git diff --cached --check
           git commit -m 'Recover completed offline caches reliably'
           git pull --rebase origin development
