@@ -1,0 +1,60 @@
+name: Apply offline cache hardening
+
+on:
+  push:
+    branches:
+      - development
+    paths:
+      - 'scripts/apply-offline-cache-hardening.py'
+      - '.github/workflows/apply-offline-cache-hardening.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-offline-cache-hardening
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+
+      - name: Refresh current development HEAD
+        run: |
+          git fetch origin development
+          git checkout development
+          git pull --ff-only origin development
+
+      - name: Apply cleanup and regression test
+        run: python scripts/apply-offline-cache-hardening.py
+
+      - name: Validate targeted change
+        run: |
+          node --check offlineCache.js
+          node --check offlineServiceWorker.js
+          node --test tests-unit/offline-cache-regression.test.js
+          git diff --check
+          ! grep -q 'cleanupSafariOfflineControl' offlineCache.js
+
+      - name: Remove temporary patch machinery
+        run: |
+          rm scripts/apply-offline-cache-hardening.py
+          rm .github/workflows/apply-offline-cache-hardening.yml
+
+      - name: Commit and push
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add offlineCache.js tests-unit/offline-cache-regression.test.js scripts/apply-offline-cache-hardening.py .github/workflows/apply-offline-cache-hardening.yml
+          if git diff --cached --quiet; then
+            echo 'No changes to commit'
+            exit 0
+          fi
+          git commit -m 'Harden offline cache regression coverage'
+          git pull --rebase origin development
+          git push origin development
