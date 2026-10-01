@@ -1,0 +1,45 @@
+name: Apply offline launch choice v4
+on:
+  push:
+    branches: [development]
+    paths:
+      - 'scripts/apply-offline-launch-choice-v4.py'
+      - '.github/workflows/apply-offline-launch-choice-v4.yml'
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+      - name: Move to latest development
+        run: git pull --ff-only origin development
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply patch
+        run: python3 scripts/apply-offline-launch-choice-v4.py
+      - name: Syntax check
+        run: |
+          node --check offlineCache.js
+          node --check offlineServiceWorker.js
+      - name: Verify v4 wiring
+        run: |
+          grep -q "const VERSION = '4'" offlineCache.js
+          grep -q "offlineServiceWorker.js?v=4" offlineCache.js
+          grep -q "Launch now" offlineCache.js
+          grep -q "Check for updates" offlineCache.js
+          grep -q "const SW_VERSION = '4'" offlineServiceWorker.js
+          grep -q "hex-game-v3-" offlineServiceWorker.js
+          grep -q "offlineCache.js?v=4" index.html
+      - name: Commit fix and remove one-off patcher
+        run: |
+          rm scripts/apply-offline-launch-choice-v4.py .github/workflows/apply-offline-launch-choice-v4.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add offlineCache.js offlineServiceWorker.js index.html scripts/apply-offline-launch-choice-v4.py .github/workflows/apply-offline-launch-choice-v4.yml
+          git commit -m "Make offline launch explicit and updates optional"
+          git push origin HEAD:development
