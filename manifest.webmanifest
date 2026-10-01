@@ -1,0 +1,18 @@
+{
+  "name": "Silverhart Saga",
+  "short_name": "Silverhart",
+  "description": "Silverhart Saga - offline-capable development build",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#151515",
+  "theme_color": "#201d19",
+  "icons": [
+    {
+      "src": "appstore/icon-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
