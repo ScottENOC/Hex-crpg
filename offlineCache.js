@@ -5,12 +5,12 @@
 (() => {
     'use strict';
 
-    const VERSION = '11';
+    const VERSION = '12';
     const OWNER = 'ScottENOC';
     const REPO = 'Hex-crpg';
     const BRANCH = 'development';
     const API_BASE = `https://api.github.com/repos/${OWNER}/${REPO}`;
-    const SW_URL = 'offlineServiceWorker.js?v=11';
+    const SW_URL = 'offlineServiceWorker.js?v=12';
     const BRANCH_CACHE_MS = 15000;
     const REQUEST_TIMEOUT_MS = 25000;
     const WORKER_STALL_TIMEOUT_MS = 45000;
@@ -340,9 +340,8 @@
         return workerRequest(worker, { type: 'HEX_CACHE_STATUS' }, { timeout: STARTUP_WORKER_TIMEOUT_MS });
     }
 
-    function isRuntimeFile(entry) {
-        if (!entry || entry.type !== 'blob' || !entry.path) return false;
-        const path = entry.path;
+    function isRuntimePath(path) {
+        if (!path) return false;
         if (path === 'index.html' || path === 'manifest.webmanifest' || path === 'appstore/icon-1024.png') return true;
         if (/^(?:images|audio|vendor)\//.test(path)) return true;
         if (!path.includes('/') && /\.(?:js|css)$/i.test(path)) {
@@ -351,11 +350,38 @@
         return false;
     }
 
+    function isRuntimeFile(entry) {
+        return !!entry && entry.type === 'blob' && isRuntimePath(entry.path);
+    }
+
     function runtimeFilesFromTree(tree) {
         return (tree || [])
             .filter(isRuntimeFile)
             .map(entry => ({ path: entry.path, sha: entry.sha, size: Number(entry.size) || 0 }))
             .sort((a, b) => a.path.localeCompare(b.path));
+    }
+
+    async function getChangedRuntimePaths(baseCommit, targetCommit) {
+        if (!/^[0-9a-f]{40}$/i.test(baseCommit || '') || !/^[0-9a-f]{40}$/i.test(targetCommit || '') || baseCommit === targetCommit) return null;
+        try {
+            const compare = await fetchJsonWithRetries(
+                `${API_BASE}/compare/${encodeURIComponent(baseCommit)}...${encodeURIComponent(targetCommit)}`,
+                'GitHub changed-file check'
+            );
+            const changedFiles = Array.isArray(compare?.files) ? compare.files : null;
+            // GitHub's compare endpoint caps the file list. Never treat a capped
+            // list as exhaustive; fall back to manifest SHA comparison instead.
+            if (!changedFiles || changedFiles.length >= 300) return null;
+            const changed = new Set();
+            for (const file of changedFiles) {
+                if (isRuntimePath(file?.filename)) changed.add(file.filename);
+                if (isRuntimePath(file?.previous_filename)) changed.add(file.previous_filename);
+            }
+            return [...changed];
+        } catch (error) {
+            console.warn('Changed-file comparison unavailable; falling back to manifest SHAs.', error);
+            return null;
+        }
     }
 
     function emitWorkerProgress(progress) {
@@ -374,7 +400,7 @@
         });
     }
 
-    async function runWorkerCache(worker, commit, files) {
+    async function runWorkerCache(worker, commit, files, changedPaths = null) {
         return workerRequest(worker, {
             type: 'HEX_CACHE_GAME',
             commit,
@@ -382,6 +408,7 @@
             owner: OWNER,
             repo: REPO,
             files,
+            changedPaths: Array.isArray(changedPaths) ? changedPaths : null,
         }, {
             timeout: WORKER_STALL_TIMEOUT_MS,
             onProgress: emitWorkerProgress,
@@ -516,6 +543,18 @@
             emit({ phase: 'checking', message: 'Build is current, but the saved copy needs repair…' });
         }
 
+        let changedPaths = null;
+        if (before.valid && before.activeCommit && before.activeCommit !== commit) {
+            emit({ phase: 'checking', message: 'Finding which game files actually changed…' });
+            changedPaths = await getChangedRuntimePaths(before.activeCommit, commit);
+            if (changedPaths) {
+                emit({
+                    phase: 'checking',
+                    message: `${changedPaths.length} runtime file${changedPaths.length === 1 ? '' : 's'} changed since the saved build. Unchanged files will stay on the phone.`,
+                });
+            }
+        }
+
         // A valid existing copy does not need another storage-capacity probe.
         // The incremental repair only stages genuinely missing/changed files.
         if (!before.valid) {
@@ -559,7 +598,7 @@
 
         let result;
         try {
-            result = await runWorkerCache(worker, commit, files);
+            result = await runWorkerCache(worker, commit, files, changedPaths);
         } catch (error) {
             return { complete: false, failures: [errorInfo(error, 'worker')], hasActiveCache: Boolean(before.valid), activeCommit: before.activeCommit || null };
         }
@@ -571,7 +610,7 @@
             });
             await sleep(AUTO_RETRY_DELAY_MS);
             try {
-                result = await runWorkerCache(worker, commit, files);
+                result = await runWorkerCache(worker, commit, files, changedPaths);
             } catch (error) {
                 return { complete: false, failures: [errorInfo(error, 'worker')], hasActiveCache: Boolean(before.valid), activeCommit: before.activeCommit || null };
             }

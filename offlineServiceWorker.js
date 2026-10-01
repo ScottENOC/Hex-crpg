@@ -2,11 +2,13 @@
 // Atomic, integrity-checked local game cache for the development branch.
 'use strict';
 
-const SW_VERSION = '11';
-const META_CACHE = `hex-game-meta-v${SW_VERSION}`;
-const GAME_CACHE_PREFIX = `hex-game-v${SW_VERSION}-`;
-const LEGACY_GAME_CACHE_PREFIXES = ['hex-game-v10-', 'hex-game-v9-', 'hex-game-v8-', 'hex-game-v7-', 'hex-game-v6-', 'hex-game-v5-', 'hex-game-v4-', 'hex-game-v3-', 'hex-game-v2-', 'hex-game-v1-'];
-const LEGACY_META_CACHES = ['hex-game-meta-v10', 'hex-game-meta-v9', 'hex-game-meta-v8', 'hex-game-meta-v7', 'hex-game-meta-v6', 'hex-game-meta-v5', 'hex-game-meta-v4', 'hex-game-meta-v3', 'hex-game-meta-v2', 'hex-game-meta-v1'];
+const SW_VERSION = '12';
+// These names are intentionally NOT versioned. Worker implementation versions
+// may change without making the stored game copy foreign to the next worker.
+const META_CACHE = 'hex-game-meta';
+const GAME_CACHE_PREFIX = 'hex-game-cache-';
+const LEGACY_GAME_CACHE_PREFIXES = ['hex-game-v11-', 'hex-game-v10-', 'hex-game-v9-', 'hex-game-v8-', 'hex-game-v7-', 'hex-game-v6-', 'hex-game-v5-', 'hex-game-v4-', 'hex-game-v3-', 'hex-game-v2-', 'hex-game-v1-'];
+const LEGACY_META_CACHES = ['hex-game-meta-v11', 'hex-game-meta-v10', 'hex-game-meta-v9', 'hex-game-meta-v8', 'hex-game-meta-v7', 'hex-game-meta-v6', 'hex-game-meta-v5', 'hex-game-meta-v4', 'hex-game-meta-v3', 'hex-game-meta-v2', 'hex-game-meta-v1'];
 const SCOPE_URL = self.registration.scope;
 const META_KEY = new URL('__hex_offline_meta__/active.json', SCOPE_URL).href;
 const MANIFEST_KEY = new URL('__hex_offline_meta__/manifest.json', SCOPE_URL).href;
@@ -367,6 +369,7 @@ async function cacheGame(message, port) {
     const owner = String(message.owner || '');
     const repo = String(message.repo || '');
     const files = Array.isArray(message.files) ? message.files.filter(file => file?.path && file?.sha) : [];
+    const changedPathSet = Array.isArray(message.changedPaths) ? new Set(message.changedPaths.filter(Boolean)) : null;
     if (!/^[0-9a-f]{40}$/i.test(commit) || !owner || !repo || !files.length) {
         port.postMessage({ type: 'error', kind: 'bad-request', message: 'Offline cache received an invalid commit or file list.' });
         return;
@@ -450,7 +453,10 @@ async function cacheGame(message, port) {
         // If the manifest SHA matches and that exact URL was physically present,
         // the file is reusable. Do NOT call cache.match() again for every one of
         // ~421 unchanged files: concurrent CacheStorage reads can stall WebKit.
-        if (activeCache && activeShaByPath.get(file.path) === file.sha && !missingActivePaths.has(file.path)) {
+        const physicallyPresent = activeCache && !missingActivePaths.has(file.path);
+        const compareSaysUnchanged = changedPathSet && !changedPathSet.has(file.path);
+        const manifestShaMatches = activeShaByPath.get(file.path) === file.sha;
+        if (physicallyPresent && (compareSaysUnchanged || manifestShaMatches)) {
             reused++;
             stored++;
             return;
@@ -500,7 +506,9 @@ async function cacheGame(message, port) {
     }
 
     sendProgress('', 'storing', before.valid
-        ? `Checking ${files.length} files; unchanged files stay in place…`
+        ? changedPathSet
+            ? `Checking ${files.length} files; GitHub reports ${changedPathSet.size} changed runtime file${changedPathSet.size === 1 ? '' : 's'}…`
+            : `Checking ${files.length} files; unchanged files stay in place…`
         : `Saving ${files.length} files locally…`);
     await Promise.all(Array.from({ length: MAX_CONCURRENT_DOWNLOADS }, () => workerLoop()));
 
@@ -571,6 +579,8 @@ async function cacheGame(message, port) {
             complete: true, failures: [], stored: files.length, total: files.length,
             downloaded, reused, retried, removed, activeCommit: commit, fileCount: files.length,
             totalBytes, changed: before.activeCommit !== commit,
+            recoveredCache: before.cacheName || null, recoveredFromMeta: before.recoveredFromMeta || null,
+            changedHintCount: changedPathSet ? changedPathSet.size : null,
         },
     });
 }
