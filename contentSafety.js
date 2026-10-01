@@ -1,22 +1,25 @@
 // contentSafety.js
-// Device-local content presentation policy and atomic humanoid-frame gate.
+// Device-local content presentation policy and one-time atomic humanoid-frame gate.
 // Safe-mode coverage is visual only: it never equips, unequips, adds, removes,
 // or saves fallback garments on the real entity.
 (() => {
   'use strict';
 
-  const BUILD = '20261001-content-safety-v2-performance';
+  const BUILD = '20261001-content-safety-v3-latched';
   const STORAGE_KEY = 'rpg_adult_content_enabled';
   const COVERAGE_EPSILON = 0.02;
   const BASE_COVERAGE_SLOTS = ['underwear', 'bra', 'pants', 'shirt'];
   const watchedAssetSources = new Set();
-  const readinessCache = new WeakMap();
-  const hotReadinessCache = new WeakMap();
+  const watchedImages = new WeakSet();
   const planCache = new WeakMap();
+  const latchedGeneration = new WeakMap();
+  const pendingCharacters = new Map();
+  let safetyGeneration = 1;
   let portraitObserver = null;
   let installedStyle = false;
   let preloadSource = null;
   let preloadCache = BASE_COVERAGE_SLOTS;
+  let retryQueued = false;
 
   function storedAdultPreference() {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -34,7 +37,8 @@
   }
 
   function invalidateCaches() {
-    window.__contentSafetyRevision = (window.__contentSafetyRevision || 0) + 1;
+    safetyGeneration++;
+    pendingCharacters.clear();
   }
 
   function requestRedraw() {
@@ -69,6 +73,7 @@
   function injectSettingsUI() {
     const settings = document.getElementById('settings-content');
     if (!settings || document.getElementById('adult-content-toggle')) return !!settings;
+
     const section = document.createElement('div');
     section.id = 'content-safety-settings';
     section.innerHTML = `
@@ -77,10 +82,12 @@
         <label><input type="checkbox" id="adult-content-toggle"> 18+ content</label>
         <small style="color:#aaa;display:block;margin-top:3px;">On by default. Turn off to enforce visible underwear and outer clothing without changing equipped items.</small>
       </div>`;
+
     const headings = Array.from(settings.querySelectorAll('h3'));
     const saveHeading = headings.find(h => h.textContent.trim() === 'Save Code');
     if (saveHeading) settings.insertBefore(section, saveHeading);
     else settings.appendChild(section);
+
     const toggle = document.getElementById('adult-content-toggle');
     toggle?.addEventListener('change', () => setAdultContentEnabled(toggle.checked));
     syncSettingsUI();
@@ -91,6 +98,7 @@
     const toggle = document.getElementById('adult-content-toggle');
     if (toggle) toggle.checked = isAdultContentEnabled();
   }
+
   window.syncContentSafetySettingsUI = syncSettingsUI;
 
   function installPortraitStyle() {
@@ -119,15 +127,36 @@
       || (image.width > 0 && image.height > 0));
   }
 
+  function queuePendingRetry() {
+    if (retryQueued || !pendingCharacters.size) return;
+    retryQueued = true;
+    queueMicrotask(() => {
+      retryQueued = false;
+      retryPendingCharacters();
+    });
+  }
+
+  function watchImage(image) {
+    if (!image || imageReady(image) || watchedImages.has(image)) return image;
+    watchedImages.add(image);
+    const done = () => queuePendingRetry();
+    image.addEventListener?.('load', done, { once:true });
+    image.addEventListener?.('error', done, { once:true });
+    return image;
+  }
+
   function watchAsset(src) {
     if (!src || !window.assetManager) return null;
     const image = window.assetManager.request(src);
+    watchImage(image);
     if (!watchedAssetSources.has(src)) {
       watchedAssetSources.add(src);
       window.assetManager.whenReady(src).then(() => {
-        invalidateCaches();
-        if (!isAdultContentEnabled()) requestRedraw();
-      }).catch(() => {});
+        queuePendingRetry();
+      }).catch(() => {
+        // Asset manager owns retries and in-game failure diagnostics. Keep the
+        // character gated rather than expose an incomplete PG frame.
+      });
     }
     return image;
   }
@@ -188,14 +217,11 @@
     return parts.join('|');
   }
 
-  const EMPTY_SET = Object.freeze(new Set());
-
   function resolveCoveragePlan(entity) {
-    // Adult mode needs no fallback planning at all. This is the main hot-path
-    // optimisation: the default mode now exits before string/array allocation.
     if (isAdultContentEnabled()) {
-      return { items: entity?.equipped || {}, forceOpaque: EMPTY_SET, forceVisible: EMPTY_SET, signature: 'adult' };
+      return { items:entity?.equipped || {}, forceOpaque:new Set(), forceVisible:new Set(), signature:'adult' };
     }
+
     const signature = planSignature(entity);
     const cached = planCache.get(entity);
     if (cached?.signature === signature) return cached.plan;
@@ -220,6 +246,7 @@
     const shirtVisible = visibleCoverageGarment(entity, 'shirt', items.shirt);
     const dressCoversAll = shirtVisible && fullBodyOuterGarment(items.shirt);
     const pantsVisible = visibleCoverageGarment(entity, 'pants', items.pants);
+
     if (female) {
       if (!dressCoversAll) {
         if (!shirtVisible) {
@@ -253,6 +280,7 @@
     proxy.equipped = { ...(entity?.equipped || {}), [slot]: itemId };
     proxy.equipmentVisibility = { ...(entity?.equipmentVisibility || {}), [slot]: true };
     proxy.clothingColors = { ...(entity?.clothingColors || {}) };
+
     if (forceOpaque && itemId) {
       const spec = specFor(itemId);
       const original = entity?.clothingColors?.[itemId] || {};
@@ -270,6 +298,7 @@
     const current = system?.drawSlot;
     if (!system || typeof current !== 'function') return false;
     if (current.__contentSafetyDraw) return true;
+
     const wrapped = function contentSafetyDrawSlot(ctx, entity, slot, view, bounds) {
       if (isAdultContentEnabled() || entity?.__contentSafetyRenderProxy || !BASE_COVERAGE_SLOTS.includes(slot)) {
         return current.apply(this, arguments);
@@ -301,6 +330,7 @@
     if (!system) return false;
     system.migrateLegacyEquipment?.(entity);
     system.ensureDefaultOutfit?.(entity, { player: entity?.side === 'player' });
+
     const plan = resolveCoveragePlan(entity);
     let ready = true;
     for (const slot of preloadSlots()) {
@@ -313,7 +343,8 @@
       if (!spec) continue;
       for (const layer of spec.layers || []) {
         const src = layerSource(layer, view);
-        if (src && !imageReady(watchAsset(src))) ready = false;
+        if (!src) continue;
+        if (!imageReady(watchAsset(src))) ready = false;
       }
     }
     return ready;
@@ -330,14 +361,26 @@
         : window.ARMOUR_VISUAL_ASSETS?.[tier]?.front;
       const legacy = tier === 'heavy' ? window.gameVisuals?.humanHeavy
         : tier === 'medium' ? window.gameVisuals?.humanMedium : window.gameVisuals?.humanLight;
-      if (!imageReady(authored) && !imageReady(legacy)) return false;
+      if (!imageReady(authored) && !imageReady(legacy)) {
+        watchImage(authored);
+        watchImage(legacy);
+        return false;
+      }
     }
+
     if (entity?.equipped?.helmet && visible('helmet')) {
       const front = window.gameVisuals?.nasal_helm;
       const rear = window.REAR_HUMAN_EQUIPMENT_ASSETS?.helmet;
       if (view === 'back') {
-        if (!imageReady(rear) && !imageReady(front)) return false;
-      } else if (!imageReady(front)) return false;
+        if (!imageReady(rear) && !imageReady(front)) {
+          watchImage(rear);
+          watchImage(front);
+          return false;
+        }
+      } else if (!imageReady(front)) {
+        watchImage(front);
+        return false;
+      }
     }
     return true;
   }
@@ -349,62 +392,74 @@
     const view = viewForFacing(facing);
     const bodyType = entity.bodyType || 'average';
     const body = (assets.body?.[bodyType] || assets.body?.average)?.[view];
-    if (!imageReady(body)) return false;
+    if (!imageReady(body)) {
+      watchImage(body);
+      return false;
+    }
+
     const hasVisibleHelmet = !!entity?.equipped?.helmet
       && window.equipmentAppearanceSystem?.isSlotVisible?.(entity, 'helmet') !== false;
     if (!hasVisibleHelmet) {
       const hairStyle = entity.hairStyle || 'brown_1';
       const hairSet = assets.hair?.[hairStyle] || assets.hair?.brown_1;
       const hair = hairSet?.[view] || assets.hair?.brown_1?.[view];
-      if (hair && !imageReady(hair)) return false;
+      if (hair && !imageReady(hair)) {
+        watchImage(hair);
+        return false;
+      }
     }
     return true;
   }
 
-  function readinessSignature(entity, facing) {
-    const view = viewForFacing(facing);
-    const visibility = entity?.equipmentVisibility || {};
-    const equipped = entity?.equipped || {};
-    const plan = resolveCoveragePlan(entity);
-    const parts = [
-      window.__contentSafetyRevision || 0, view, plan.signature,
-      entity?.bodyType || 'average', entity?.hairStyle || 'brown_1',
-      entity?.displayClothes === false ? 0 : 1, entity?.displayArmour === false ? 0 : 1
-    ];
-    for (const slot of preloadSlots()) {
-      parts.push(`${slot}:${plan.items?.[slot] ?? equipped[slot] ?? '-'}:${visibility[slot] === false ? 0 : 1}`);
+  function scanCharacterOnce(entity) {
+    // Load and validate all directional views in this single character-level
+    // pass. Once this succeeds the character is permanently latched ready for
+    // the current content-mode generation; facing changes do not re-scan it.
+    for (const facing of ['down', 'left', 'up']) {
+      const view = viewForFacing(facing);
+      const ready = bodyAndHairReady(entity, facing)
+        && clothingFrameReady(entity, view)
+        && equipmentFrameReady(entity, view);
+      if (!ready) return false;
     }
-    parts.push(`armor:${equipped.armor || '-'}:${visibility.armor === false ? 0 : 1}`);
-    parts.push(`helmet:${equipped.helmet || '-'}:${visibility.helmet === false ? 0 : 1}`);
-    return parts.join('|');
+    return true;
+  }
+
+  function markCharacterReady(entity) {
+    latchedGeneration.set(entity, safetyGeneration);
+    pendingCharacters.delete(entity);
+  }
+
+  function retryPendingCharacters() {
+    if (isAdultContentEnabled() || !pendingCharacters.size) return;
+    let becameReady = false;
+    for (const [entity, generation] of [...pendingCharacters]) {
+      if (generation !== safetyGeneration) {
+        pendingCharacters.delete(entity);
+        continue;
+      }
+      if (!scanCharacterOnce(entity)) continue;
+      markCharacterReady(entity);
+      becameReady = true;
+    }
+    if (becameReady) requestRedraw();
   }
 
   function isHumanoidFrameReady(entity, facing = 'down') {
     if (!entity) return false;
-    // Atomic coverage is a PG-mode safety requirement. In the default 18+
-    // mode there is no reason to scan clothing/body readiness every frame.
     if (isAdultContentEnabled()) return true;
     const key = entity.race && entity.gender ? `${entity.race}_${entity.gender}` : '';
     if (!window.DIRECT_HUMANOID_RIGS?.[key]) return true;
 
-    const now = performance.now();
-    const revision = window.__contentSafetyRevision || 0;
-    const hot = hotReadinessCache.get(entity);
-    if (hot && hot.facing === facing && hot.revision === revision && now - hot.at < 4) return hot.ready;
+    if (latchedGeneration.get(entity) === safetyGeneration) return true;
+    if (pendingCharacters.get(entity) === safetyGeneration) return false;
 
-    const signature = readinessSignature(entity, facing);
-    const cached = readinessCache.get(entity);
-    if (cached?.signature === signature && cached.ready) {
-      hotReadinessCache.set(entity, { facing, revision, at: now, ready: true });
-      return true;
-    }
-    const view = viewForFacing(facing);
-    const ready = bodyAndHairReady(entity, facing)
-      && clothingFrameReady(entity, view)
-      && equipmentFrameReady(entity, view);
-    if (ready) readinessCache.set(entity, { signature, ready: true });
-    hotReadinessCache.set(entity, { facing, revision, at: now, ready });
-    return ready;
+    // This is the only synchronous readiness scan for this character. If an
+    // asset is still loading, image load events drive the next attempt.
+    pendingCharacters.set(entity, safetyGeneration);
+    if (!scanCharacterOnce(entity)) return false;
+    markCharacterReady(entity);
+    return true;
   }
 
   function installAtomicMapWrapper() {
@@ -412,6 +467,7 @@
     const current = window.drawPlayerCharacter;
     if (typeof current !== 'function') return false;
     if (current.__contentSafetyAtomicFrame) return true;
+
     const wrapped = function atomicHumanoidFrame(ctx, entity, x, y, z, flyOff) {
       if (!isAdultContentEnabled()) {
         const key = entity?.race && entity?.gender ? `${entity.race}_${entity.gender}` : '';
@@ -447,13 +503,13 @@
     const gender = document.getElementById('gender-select')?.value;
     if (!race || !gender) return null;
     const probe = {
-      race, gender, side: 'player', facing: 'down',
-      bodyType: document.getElementById('body-type-select')?.value || 'average',
-      hairStyle: document.getElementById('hair-style-select')?.value || 'brown_1',
-      equipped: {}, clothingColors: {}, equipmentVisibility: {},
-      displayArmour: true, displayClothes: true
+      race, gender, side:'player', facing:'down',
+      bodyType:document.getElementById('body-type-select')?.value || 'average',
+      hairStyle:document.getElementById('hair-style-select')?.value || 'brown_1',
+      equipped:{}, clothingColors:{}, equipmentVisibility:{},
+      displayArmour:true, displayClothes:true
     };
-    window.clothingSystem?.ensureDefaultOutfit?.(probe, { player: true });
+    window.clothingSystem?.ensureDefaultOutfit?.(probe, { player:true });
     return probe;
   }
 
@@ -461,6 +517,7 @@
     const current = window.updateAppearancePreview;
     if (typeof current !== 'function' || !current.__directHumanoidPreview) return false;
     if (current.__contentSafetyAtomicFrame) return true;
+
     const wrapped = function atomicAppearancePreview() {
       const canvas = document.getElementById('appearance-preview-canvas');
       if (!isAdultContentEnabled()) {
@@ -498,6 +555,7 @@
       }
       return;
     }
+
     const entities = visibleTurnEntities();
     cards.forEach((card, index) => {
       const canvas = card.querySelector('canvas[data-direct-humanoid-canvas="true"]');
@@ -518,7 +576,7 @@
     }
     if (!portraitObserver) {
       portraitObserver = new MutationObserver(() => queueMicrotask(syncPortraitSafety));
-      portraitObserver.observe(bar, { childList: true, subtree: true });
+      portraitObserver.observe(bar, { childList:true, subtree:true });
     }
     syncPortraitSafety();
     return true;
@@ -544,14 +602,13 @@
     isHumanoidFrameReady,
     syncSettingsUI,
     syncPortraitSafety,
+    retryPendingCharacters,
   };
 
   installAll();
-  // Compatibility modules install in a known startup window. A handful of
-  // delayed retries catches those races without a permanent 20 Hz/1 Hz poll.
   [50, 150, 500, 1500, 5000].forEach(delay => setTimeout(installAll, delay));
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', installAll, { once: true });
+    document.addEventListener('DOMContentLoaded', installAll, { once:true });
   }
-  window.addEventListener?.('load', () => setTimeout(installAll, 0), { once: true });
+  window.addEventListener?.('load', () => setTimeout(installAll, 0), { once:true });
 })();
