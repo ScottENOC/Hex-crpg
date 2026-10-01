@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Validate PNG assets
+        run: npm run validate:png
+
       - name: Run fast Node tests
         run: npm run test:unit
 

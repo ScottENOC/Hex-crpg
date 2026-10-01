@@ -19,14 +19,11 @@ test.describe('The Barrow of Corvin Ashgrave: lichdom escalation', () => {
         const result = await page.evaluate(() => {
             window.necromancerDefeated = true;
             window.necromancerDefeatedAt = window.worldSeconds;
-            window.updateTime(1); // barely any time passed
-            const tooSoon = !!window.lichRisenNewsReady;
-
-            window.worldSeconds += 4 * 24 * 3600; // fast-forward 4 days
             window.updateTime(1);
-            const afterDelay = !!window.lichRisenNewsReady;
-
-            return { tooSoon, afterDelay };
+            const tooSoon = !!window.lichRisenNewsReady;
+            window.worldSeconds += 4 * 24 * 3600;
+            window.updateTime(1);
+            return { tooSoon, afterDelay: !!window.lichRisenNewsReady };
         });
         expect(result.tooSoon).toBe(false);
         expect(result.afterDelay).toBe(true);
@@ -38,20 +35,13 @@ test.describe('The Barrow of Corvin Ashgrave: lichdom escalation', () => {
             const barrowMinions = window.entities.filter(e => e.barrowMinion);
             const boss = window.entities.find(e => e.isLichBoss);
             const coreKey = Object.keys(window.tileObjects).find(k => window.tileObjects[k].readId === 'lich_phylactery_core');
-            return {
-                anteCenter: window.campaign2LichBarrowCenter,
-                sanctumCenter: window.campaign2LichSanctumCenter,
-                barrowMinionCount: barrowMinions.length,
-                bossExists: !!boss,
-                bossName: boss?.name,
-                bossHp: boss?.maxHp,
-                bossAlive: boss?.alive,
-                hasCore: !!coreKey,
-            };
+            return { anteCenter: window.campaign2LichBarrowCenter, sanctumCenter: window.campaign2LichSanctumCenter,
+                barrowMinionCount: barrowMinions.length, bossExists: !!boss, bossName: boss?.name,
+                bossHp: boss?.maxHp, bossAlive: boss?.alive, hasCore: !!coreKey };
         });
         expect(result.anteCenter).toBeTruthy();
         expect(result.sanctumCenter).toBeTruthy();
-        expect(result.barrowMinionCount).toBeGreaterThanOrEqual(5); // 3 antechamber + boss + 1 escort
+        expect(result.barrowMinionCount).toBeGreaterThanOrEqual(5);
         expect(result.bossExists).toBe(true);
         expect(result.bossName).toBe('Corvin Ashgrave, the Lich');
         expect(result.bossHp).toBe(130);
@@ -65,24 +55,19 @@ test.describe('The Barrow of Corvin Ashgrave: lichdom escalation', () => {
             const npc = window.entities.find(e => e.name === 'Captain Ilsa Rennick') || { name: 'Captain Ilsa Rennick', reputation: { standing: 0, knowledge: 0 } };
             const dialogueCalls = [];
             window.showDialogue = (n, text, options) => { dialogueCalls.push({ text, options }); };
-
             window.questLog = window.questLog || [];
             window.questLog.push({ id: 'disciple_exposed', status: 'completed' });
             window.questLog.push({ id: 'necromancer_hunt', status: 'completed' });
-
-            // Crypt is done, but the news hasn't broken yet.
             dialogueCalls.length = 0;
             window.npcDialogueTrees.reddale_captain(npc);
             const mentionsMarrowTooSoon = dialogueCalls.some(c => c.text.includes('Corvin Ashgrave'));
-
             window.lichRisenNewsReady = true;
             dialogueCalls.length = 0;
             window.npcDialogueTrees.reddale_captain(npc);
             const offer = dialogueCalls.find(c => c.options.some(o => o.label.includes("finish what I started")));
             offer.options.find(o => o.label.includes("finish what I started")).action();
-            const questActive = window.questLog.find(q => q.id === 'necromancer_lichdom')?.status === 'active';
-
-            return { mentionsMarrowTooSoon, offered: !!offer, questActive };
+            return { mentionsMarrowTooSoon, offered: !!offer,
+                questActive: window.questLog.find(q => q.id === 'necromancer_lichdom')?.status === 'active' };
         });
         expect(result.mentionsMarrowTooSoon).toBe(false);
         expect(result.offered).toBe(true);
@@ -95,12 +80,13 @@ test.describe('The Barrow of Corvin Ashgrave: lichdom escalation', () => {
             window.questLog = window.questLog || [];
             window.questLog.push({ id: 'necromancer_lichdom', status: 'active', resolution: null });
             window.entities.forEach(e => { if (e.side === 'enemy' && !e.isLichBoss) e.alive = false; });
-
             const boss = window.entities.find(e => e.isLichBoss);
-            window.handleLethalDamage(boss, { side: 'player', name: 'Test' });
-
-            return { questStillActive: window.questLog.find(q => q.id === 'necromancer_lichdom')?.status === 'active' };
+            const attacker = { side: 'player', name: 'Test' };
+            window.handleLethalDamage(boss, attacker);
+            if (boss.alive) { boss.hp = 0; window.handleLethalDamage(boss, attacker); }
+            return { bossAlive: boss.alive, questStillActive: window.questLog.find(q => q.id === 'necromancer_lichdom')?.status === 'active' };
         });
+        expect(result.bossAlive).toBe(false);
         expect(result.questStillActive).toBe(true);
     });
 
@@ -111,24 +97,21 @@ test.describe('The Barrow of Corvin Ashgrave: lichdom escalation', () => {
             window.questLog.push({ id: 'necromancer_lichdom', status: 'active', resolution: null });
             const standingBefore = window.factions.necromancer_cult.standing;
             const goldBefore = window.party[0].gold || 0;
-
             let calls;
             window.showDialogue = (n, text, options) => { calls = options; };
             window.readLichPhylacteryCoreNote();
             calls.find(o => o.label === 'Destroy it.').action();
-
             window.entities.forEach(e => { if (e.side === 'enemy' && !e.isLichBoss) e.alive = false; });
             const boss = window.entities.find(e => e.isLichBoss);
-            window.handleLethalDamage(boss, { side: 'player', name: 'Test' });
-
+            const attacker = { side: 'player', name: 'Test' };
+            window.handleLethalDamage(boss, attacker);
+            if (boss.alive) { boss.hp = 0; window.handleLethalDamage(boss, attacker); }
             const quest = window.questLog.find(q => q.id === 'necromancer_lichdom');
-            return {
-                questCompleted: quest?.status === 'completed',
-                resolution: quest?.resolution,
+            return { bossAlive: boss.alive, questCompleted: quest?.status === 'completed', resolution: quest?.resolution,
                 standingDropped: window.factions.necromancer_cult.standing < standingBefore,
-                goldGained: (window.party[0].gold || 0) > goldBefore,
-            };
+                goldGained: (window.party[0].gold || 0) > goldBefore };
         });
+        expect(result.bossAlive).toBe(false);
         expect(result.questCompleted).toBe(true);
         expect(result.resolution).toBe('destroyed');
         expect(result.standingDropped).toBe(true);
@@ -140,23 +123,21 @@ test.describe('The Barrow of Corvin Ashgrave: lichdom escalation', () => {
         const result = await page.evaluate(() => {
             window.questLog = window.questLog || [];
             window.questLog.push({ id: 'necromancer_lichdom', status: 'active', resolution: null });
-
             let calls;
             window.showDialogue = (n, text, options) => { calls = options; };
             window.readLichPhylacteryCoreNote();
             calls.find(o => o.label === 'Bind it to yourself instead.').action();
-
             window.entities.forEach(e => { if (e.side === 'enemy' && !e.isLichBoss) e.alive = false; });
             const boss = window.entities.find(e => e.isLichBoss);
-            window.handleLethalDamage(boss, { side: 'player', name: 'Test' });
-
+            const attacker = { side: 'player', name: 'Test' };
+            window.handleLethalDamage(boss, attacker);
+            if (boss.alive) { boss.hp = 0; window.handleLethalDamage(boss, attacker); }
             const quest = window.questLog.find(q => q.id === 'necromancer_lichdom');
-            return {
-                resolution: quest?.resolution,
+            return { bossAlive: boss.alive, resolution: quest?.resolution,
                 hasGraveChill: (window.player.skills.lich_grave_chill || 0) > 0,
-                hasWitheringTouch: (window.player.skills.lich_withering_touch || 0) > 0,
-            };
+                hasWitheringTouch: (window.player.skills.lich_withering_touch || 0) > 0 };
         });
+        expect(result.bossAlive).toBe(false);
         expect(result.resolution).toBe('claimed');
         expect(result.hasGraveChill).toBe(true);
         expect(result.hasWitheringTouch).toBe(true);
@@ -169,22 +150,16 @@ test.describe('The Barrow of Corvin Ashgrave: lichdom escalation', () => {
             window.questLog.push({ id: 'necromancer_lichdom', status: 'active', resolution: null });
             const cultStandingBefore = window.factions.necromancer_cult.standing;
             const kingdomStandingBefore = window.factions.silverhart_kingdom.standing;
-
             const boss = window.entities.find(e => e.isLichBoss);
             let calls;
             window.showDialogue = (n, text, options) => { calls = options; };
             window.parleyWithEnemy(boss);
             calls.find(o => o.label.includes('Join you')).action();
-
             const quest = window.questLog.find(q => q.id === 'necromancer_lichdom');
-            return {
-                resolution: quest?.resolution,
-                bossAlive: boss.alive,
-                alliedFlag: window.necromancerAllied === true,
+            return { resolution: quest?.resolution, bossAlive: boss.alive, alliedFlag: window.necromancerAllied === true,
                 hasDeathlessFlesh: (window.player.skills.lich_deathless_flesh || 0) > 0,
                 cultStandingRose: window.factions.necromancer_cult.standing > cultStandingBefore,
-                kingdomStandingFell: window.factions.silverhart_kingdom.standing < kingdomStandingBefore,
-            };
+                kingdomStandingFell: window.factions.silverhart_kingdom.standing < kingdomStandingBefore };
         });
         expect(result.resolution).toBe('allied');
         expect(result.bossAlive).toBe(false);

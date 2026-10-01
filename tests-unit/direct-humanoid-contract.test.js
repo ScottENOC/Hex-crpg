@@ -42,7 +42,8 @@ test('direct humanoid compositor owns the runtime renderer stack', () => {
   contains(rendererSource, "compositionSource:profile?'direct-horizontal-strip-width-profile':'direct-axis-aligned-scale-translate'");
   contains(rendererSource, "human_female:{x:-.1873125,y:-.015,w:.374625,h:.2183}");
   contains(rendererSource, 'const SHIELD_OPAQUE_HEIGHT_DROP = .10;');
-  contains(rendererSource, "shield:'images/shield_back.svg'");
+  contains(rendererSource, "round:{front:'images/equipment/shields/round.png',back:'images/equipment/shields/round_back.svg'}");
+  contains(rendererSource, "kite:{front:'images/equipment/shields/kite.png',back:'images/equipment/shields/kite_back.png'}");
   contains(rendererSource, "helmet:'images/nasalHelm_back.svg'");
   contains(rendererSource, "heldItems:{sword:{inward:0,y:.171336564429012}}");
   contains(rendererSource, "front:'images/characters/human_male/body_broad_front.png'");

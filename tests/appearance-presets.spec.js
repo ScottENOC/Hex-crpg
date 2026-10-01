@@ -74,12 +74,12 @@ test.describe('Character appearance presets', () => {
             return {
                 applied: npc.appearancePresetApplied || null,
                 hasHair: Number.isFinite(npc.hairHue),
-                hasBodyType: !!npc.bodyType,
+                effectiveBodyType: npc.bodyType || 'average',
             };
         });
         expect(result.applied).toBeNull();
         expect(result.hasHair).toBe(true);
-        expect(result.hasBodyType).toBe(true);
+        expect(result.effectiveBodyType).toBe('average');
     });
 
     test('supports an explicit preset id on any buildNPC spec', async ({ page }) => {

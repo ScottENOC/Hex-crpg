@@ -4,6 +4,11 @@
 // tracking yet beyond a status string — a foundation to build on, not a
 // full quest system.
 
+// The quest log is shared application state. Initialise it when this module
+// loads so callers can safely append quests before the quest-log UI has ever
+// been opened. Preserve an existing array during reloads/tests.
+window.questLog = Array.isArray(window.questLog) ? window.questLog : [];
+
 function renderQuestLog() {
     const listDiv = document.getElementById('quest-log-list');
     if (!listDiv) return;
@@ -33,7 +38,7 @@ function renderQuestLog() {
         listDiv.appendChild(attitudeDiv);
     }
 
-    const quests = window.questLog || [];
+    const quests = window.questLog;
     if (quests.length === 0) {
         const emptyMsg = document.createElement('p');
         emptyMsg.style.cssText = 'color: #888; text-align: center; padding: 20px;';

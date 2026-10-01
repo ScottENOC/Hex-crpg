@@ -1,7 +1,7 @@
 // Explicit garment layers: one authored image per colourable part.
 (() => {
   'use strict';
-  const BUILD='20260929-clothing-layers-v20';
+  const BUILD=window.PRESENTATION_BUILD||'20260930-fitted-shirt-fit-v4';
   const slots=['underwear','bra','pants','shirt'];
   const preloadSlots=['shirt','pants','bra','underwear'];
   const labels={underwear:'Underwear',bra:'Bra',pants:'Pants',shirt:'Shirt / Dress'};
@@ -40,6 +40,21 @@
     },
   };
 
+  // Female body sprites are narrower through the shoulders than the old authored
+  // top art, but substantially fuller through the chest/waist than the visible
+  // centre of several garment PNGs. Keep sleeve extremities anchored to the
+  // normal outerwear box and expand only the central cloth progressively down
+  // the torso. This deliberately does not touch bra/underwear sizing, which is
+  // already correct and follows a separate aspect-preserving path.
+  const FEMININE_TOP_FIT={
+    top_blouse:{chest:1.08,waist:1.14},
+    // The dress as a whole is 1.75x wider below; 1.7143 here makes the visible
+    // front/back waist body section about 2.5x its previous width.
+    top_dress:{chest:1.11,waist:1.7143},
+    top_shirt_f:{chest:1.73,waist:1.84},
+    default:{chest:1.06,waist:1.10},
+  };
+
   const singleLayerViews=(slot,views,label)=>({slot,layers:[{id:'base',label,defaultColor:{hue:110,saturation:55,value:62,opacity:1},views}]});
   const singleLayer=(slot,path,label)=>singleLayerViews(slot,{front:path,side:path,back:path},label);
   const twoToneGarment=(slot,views,labelDark,labelLight)=>({slot,layers:[
@@ -60,7 +75,10 @@
     pants_breeches:singleLayer('pants','images/equipment/clothing/pants_breeches.png','Breeches'),
     pants_hose:singleLayer('pants','images/equipment/clothing/pants_hose.png','Hose'),
     pants_trousers:singleLayerViews('pants',{
-      front:'images/equipment/clothing/pants_trousers.png',
+      front:'images/equipment/clothing/pants_trousers_front.png',
+      // No separately authored side file exists; make the intentional front-art
+      // fallback explicit so every directional consumer resolves the same source.
+      side:'images/equipment/clothing/pants_trousers_front.png',
       back:'images/equipment/clothing/pants_trousers_back.png',
     },'Trousers'),
     underwear_briefs:twoToneGarment('underwear',{
@@ -211,7 +229,16 @@
     };
   }
 
-  function load(src){if(!src)return null;if(images.has(src))return images.get(src);const img=new Image();img.src=`${src}${src.includes('?')?'&':'?'}build=${BUILD}`;img.onload=()=>{window.renderEntities?.();window.refreshDirectionalTurnPortraits?.();};images.set(src,img);return img;}
+  function load(src){
+    if(!src)return null;
+    if(images.has(src))return images.get(src);
+    const img=window.assetManager.request(src);
+    images.set(src,img);
+    window.assetManager.whenReady(src).then(()=>{
+      window.drawMap?.();window.renderEntities?.();window.refreshDirectionalTurnPortraits?.();window.updateAppearancePreview?.();
+    }).catch(()=>{});
+    return img;
+  }
   function view(v){return(v==='up'||v==='back')?'back':(v==='left'||v==='right'||v==='side')?'side':'front';}
   function sourceForLayer(l,v){const resolved=view(v);if(l.views?.[resolved])return l.views[resolved];if(resolved==='side')return l.views?.front||l.views?.back||null;return l.views?.front||null;}
 
@@ -279,10 +306,22 @@
     const resolved=view(v),set=CLOTHING_TARGETS[resolved]||CLOTHING_TARGETS.front;
     if(slot==='shirt'){
       if(itemId==='top_dress') return set.dress;
-      if(itemId==='top_shirt_f') return {...set.shirt,y:set.shirt.y-.03,h:set.shirt.h+.06};
+      if(itemId==='top_shirt_f'){
+        // The fitted-shirt source has a much wider authored silhouette than the
+        // generic clothing box. Make its whole target 20% wider than the prior
+        // 1.10 fit while preserving its centre point; torso shaping below then
+        // restores the still-wider body section without equally inflating sleeves.
+        const w=set.shirt.w*1.32;
+        return {...set.shirt,x:set.shirt.x-(w-set.shirt.w)/2,w};
+      }
       return set.shirt;
     }
-    if(slot==='pants') return set.pants;
+    if(slot==='pants'){
+      // Move every pants-slot garment upward without changing its dimensions.
+      // Two per cent of the common pants target height gives a small waistband rise.
+      const rise=set.pants.h*.02;
+      return {...set.pants,y:set.pants.y-rise};
+    }
     if(slot==='bra') return set.bra;
     if(slot==='underwear') return set.underwear;
     return null;
@@ -290,12 +329,15 @@
 
   // A dress cannot be fitted from one maximum-width rectangle: a flared hem
   // would shrink the bodice and sleeves. Cache two source bands instead, each
-  // with its own horizontal opaque bounds, while keeping a shared waist seam.
+  // with its own horizontal rendered-cloth bounds, while keeping a shared seam.
+  // Using the green cloth mask here is important: alpha can include non-cloth
+  // authored pixels that tint() subsequently removes, which made the visible
+  // dress substantially narrower than the rectangle it was fitted against.
   function dressBands(img,waistFraction=.39){
     let per=dressBandBoundsCache.get(img);if(!per){per=new Map();dressBandBoundsCache.set(img,per);}
     const fraction=Math.max(.20,Math.min(.70,Number(waistFraction)||.39)),key=fraction.toFixed(4);
     if(per.has(key))return per.get(key);
-    const full=opaqueBounds(img),bottom=full.y+full.h;
+    const full=toneBounds(img),bottom=full.y+full.h;
     const split=Math.max(full.y+1,Math.min(bottom-1,Math.round(full.y+full.h*fraction)));
     let result={
       top:{x:full.x,y:full.y,w:full.w,h:split-full.y},
@@ -304,12 +346,60 @@
     try{
       const w=img.naturalWidth||img.width,h=img.naturalHeight||img.height,c=document.createElement('canvas');c.width=w;c.height=h;
       const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(img,0,0);const p=x.getImageData(0,0,w,h).data;
-      const xBounds=(y0,y1)=>{let left=w,right=-1;for(let yy=y0;yy<y1;yy++)for(let xx=0;xx<w;xx++)if(p[(yy*w+xx)*4+3]>=8){if(xx<left)left=xx;if(xx>right)right=xx;}return right>=left?{x:left,w:right-left+1}:null;};
+      const xBounds=(y0,y1)=>{
+        let left=w,right=-1;
+        for(let yy=y0;yy<y1;yy++)for(let xx=0;xx<w;xx++){
+          const i=(yy*w+xx)*4,r=p[i],g=p[i+1],b=p[i+2],a=p[i+3];
+          if(pixelMatchesTone(r,g,b,a,'darkGreen')||pixelMatchesTone(r,g,b,a,'lightGreen')){if(xx<left)left=xx;if(xx>right)right=xx;}
+        }
+        return right>=left?{x:left,w:right-left+1}:null;
+      };
       const topX=xBounds(full.y,split),skirtX=xBounds(split,bottom);
       if(topX)result.top={x:topX.x,y:full.y,w:topX.w,h:split-full.y};
       if(skirtX)result.skirt={x:skirtX.x,y:split,w:skirtX.w,h:bottom-split};
-    }catch(_){/* Keep the common opaque width if pixel inspection is unavailable. */}
+    }catch(_){/* Keep the common tone width if pixel inspection is unavailable. */}
     per.set(key,result);return result;
+  }
+
+  function feminineTopExpansion(itemId,t){
+    const p=FEMININE_TOP_FIT[itemId]||FEMININE_TOP_FIT.default;
+    const y=Math.max(0,Math.min(1,t));
+    if(y<=.45) return 1+(p.chest-1)*(y/.45);
+    return p.chest+(p.waist-p.chest)*((y-.45)/.55);
+  }
+
+  // Expand the central torso without moving the garment's outside sleeve edge.
+  // Front/back are split into left/centre/right source zones: the centre grows
+  // as we approach the waist while the two outside zones give up the same space.
+  // That closes excessive arm/body gaps and makes the bodice fit the body rather
+  // than just making the whole sprite (including sleeves) wider. Side view has
+  // no useful left/right sleeve separation, so it receives a smaller centred
+  // whole-strip expansion instead.
+  function drawFeminineTop(ctx,source,trim,dx,dy,dw,dh,itemId,v){
+    if(!trim?.w||!trim?.h)return false;
+    const resolved=view(v),strips=Math.min(32,Math.max(12,Math.round(trim.h/10)));
+    const centreSource=.52;
+    for(let row=0;row<strips;row++){
+      const sy0=trim.y+Math.floor(trim.h*row/strips),sy1=trim.y+Math.floor(trim.h*(row+1)/strips);
+      if(sy1<=sy0)continue;
+      const t=((sy0+sy1)/2-trim.y)/trim.h,expansion=feminineTopExpansion(itemId,t);
+      const dy0=dy+dh*((sy0-trim.y)/trim.h),dy1=dy+dh*((sy1-trim.y)/trim.h);
+      if(resolved==='side'){
+        const sideScale=1+(expansion-1)*.45,stripW=dw*sideScale,stripX=dx+(dw-stripW)/2;
+        ctx.drawImage(source,trim.x,sy0,trim.w,sy1-sy0,stripX,dy0,stripW,dy1-dy0+.15);
+        continue;
+      }
+      const srcCentreW=trim.w*centreSource,srcOuterW=(trim.w-srcCentreW)/2;
+      // Let the central body section use the requested expansion all the way up
+      // to the full garment width. The old 72% clamp flattened larger fit values;
+      // this 100% safety clamp only prevents the outer sleeve zones going negative.
+      const centreDestW=Math.min(dw,dw*centreSource*expansion),outerDestW=(dw-centreDestW)/2;
+      const sxCentre=trim.x+srcOuterW,sxRight=sxCentre+srcCentreW;
+      ctx.drawImage(source,trim.x,sy0,srcOuterW,sy1-sy0,dx,dy0,outerDestW,dy1-dy0+.15);
+      ctx.drawImage(source,sxCentre,sy0,srcCentreW,sy1-sy0,dx+outerDestW,dy0,centreDestW,dy1-dy0+.15);
+      ctx.drawImage(source,sxRight,sy0,srcOuterW,sy1-sy0,dx+outerDestW+centreDestW,dy0,outerDestW,dy1-dy0+.15);
+    }
+    return true;
   }
 
   function drawFittedGarment(ctx,source,trim,target,bounds,slot,entity,itemId,v,garmentSpec,geometrySource){
@@ -320,22 +410,36 @@
     if(slot==='shirt'&&garmentSpec?.fitMode==='dressSplit'&&geometrySource){
       const resolved=view(v),set=CLOTHING_TARGETS[resolved]||CLOTHING_TARGETS.front;
       const bands=dressBands(geometrySource,garmentSpec.waistFraction),topTarget=set.shirt;
-      const topX=bounds.left+topTarget.x*bounds.width,topY=bounds.top+topTarget.y*bounds.height;
-      const topW=topTarget.w*bounds.width,topH=topTarget.h*bounds.height;
+      const baseTopW=topTarget.w*bounds.width,topH=topTarget.h*bounds.height;
+      const dressWidthScale=itemId==='top_dress'?1.75:1;
+      const topW=baseTopW*dressWidthScale;
+      const baseTopX=bounds.left+topTarget.x*bounds.width;
+      const topX=baseTopX-(topW-baseTopW)/2,topY=bounds.top+topTarget.y*bounds.height;
       const authoredFlare=bands.top.w?bands.skirt.w/bands.top.w:1;
-      const maxSkirtW=Math.max(topW,Math.min(bounds.width,Number(garmentSpec.maxSkirtWidth||.98)*bounds.width));
-      const skirtW=Math.min(maxSkirtW,topW*Math.max(1,authoredFlare));
+      // First reproduce the old skirt width, including its authored-flare/cap rules,
+      // then enlarge that result by 75% so the requested bottom increase is exact.
+      const baseMaxSkirtW=Math.max(baseTopW,Math.min(bounds.width,Number(garmentSpec.maxSkirtWidth||.98)*bounds.width));
+      const baseSkirtW=Math.min(baseMaxSkirtW,baseTopW*Math.max(1,authoredFlare));
+      const skirtW=baseSkirtW*dressWidthScale;
       const skirtX=bounds.left+(bounds.width-skirtW)/2;
       const skirtY=bounds.top+OUTERWEAR.waist*bounds.height;
       const skirtH=(OUTERWEAR.bottom-OUTERWEAR.waist)*bounds.height;
-      ctx.drawImage(source,bands.top.x,bands.top.y,bands.top.w,bands.top.h,topX,topY,topW,topH);
+      if(hasFeminineBody(entity)) drawFeminineTop(ctx,source,bands.top,topX,topY,topW,topH,itemId,v);
+      else ctx.drawImage(source,bands.top.x,bands.top.y,bands.top.w,bands.top.h,topX,topY,topW,topH);
       ctx.drawImage(source,bands.skirt.x,bands.skirt.y,bands.skirt.w,bands.skirt.h,skirtX,skirtY,skirtW,skirtH);
       return true;
     }
 
-    // Ordinary shirts and pants remain geometry-locked to one body-relative
-    // rectangle. Only garments explicitly opting into dressSplit use two bands.
-    if(slot==='shirt'||slot==='pants'){
+    // Female tops need body-shaped horizontal fitting rather than a single
+    // rectangle: preserve the established height and outside sleeve placement,
+    // but widen the central chest/waist. Legacy traveller garb is a composite
+    // SVG (shirt + lower tunic + boots), so leave it on its historical path.
+    if(slot==='shirt'){
+      if(hasFeminineBody(entity)&&itemId!=='traveler_garb') return drawFeminineTop(ctx,source,trim,targetX,targetY,targetW,targetH,itemId,v);
+      ctx.drawImage(source,trim.x,trim.y,trim.w,trim.h,targetX,targetY,targetW,targetH);
+      return true;
+    }
+    if(slot==='pants'){
       ctx.drawImage(source,trim.x,trim.y,trim.w,trim.h,targetX,targetY,targetW,targetH);
       return true;
     }

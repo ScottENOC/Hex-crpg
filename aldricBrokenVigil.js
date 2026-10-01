@@ -119,7 +119,7 @@
     }
 
     function hasEnoughEvidence(q = quest()) {
-        return !!q && (q.clues?.sealed_dispatch || (q.clues?.company_roster && q.clues?.baron_customs) || clueCount(q) >= REQUIRED_CLUES);
+        return !!q && !!(q.clues?.sealed_dispatch || (q.clues?.company_roster && q.clues?.baron_customs) || clueCount(q) >= REQUIRED_CLUES);
     }
 
     function addClue(id, source = null) {

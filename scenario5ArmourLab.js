@@ -18,11 +18,9 @@
   const imageCache=new Map();
   let renderGeneration=0;
 
-  function loadImage(src){
-    if(imageCache.has(src))return imageCache.get(src);
-    const promise=new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error(`Failed to load ${src}`));img.src=src;});
-    imageCache.set(src,promise);return promise;
-  }
+function loadImage(src) {
+  return window.assetManager.load(src);
+}
 
   function robustBounds(img){
     const w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;

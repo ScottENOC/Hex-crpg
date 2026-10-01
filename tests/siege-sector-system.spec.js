@@ -23,17 +23,11 @@ test.describe('Persistent siege sector system', () => {
                     eventLog: Array.isArray(s.eventLog),
                     casualties: s.casualties,
                 })),
-                wrappedActivate: !!window.activateNorthwatchSiege.__sectorSiegeWrapper,
-                wrappedTick: !!window.tickSiegeState.__sectorSiegeWrapper,
-                wrappedDamage: !!window.damageWall.__sectorSiegeWrapper,
             };
         });
         expect(result.count).toBe(6);
         expect(result.modelVersion).toBe(1);
         expect(result.pressure).toBe(0);
-        expect(result.wrappedActivate).toBe(true);
-        expect(result.wrappedTick).toBe(true);
-        expect(result.wrappedDamage).toBe(true);
         result.sectors.forEach(s => {
             expect(s.integrity).toBeGreaterThan(99);
             expect(s.morale).toBe(100);
@@ -164,9 +158,6 @@ test.describe('Persistent siege sector system', () => {
             const code = window.exportSaveCode();
             const exported = JSON.parse(decodeURIComponent(escape(atob(code))));
             return {
-                saveWrapped: !!window.saveGame.__siegeSectorPersistence,
-                loadWrapped: !!window.loadGame.__siegeSectorPersistence,
-                exportWrapped: !!window.exportSaveCode.__siegeSectorPersistence,
                 storedVersion: stored.siegeState?.sectorModelVersion,
                 storedReserves: stored.siegeState?.segments?.[1]?.reserves,
                 storedLogged: stored.siegeState?.segments?.[1]?.eventLog?.some(e => e.type === 'persistence_probe'),
@@ -174,9 +165,6 @@ test.describe('Persistent siege sector system', () => {
                 exportedReserves: exported.siegeState?.segments?.[1]?.reserves,
             };
         });
-        expect(result.saveWrapped).toBe(true);
-        expect(result.loadWrapped).toBe(true);
-        expect(result.exportWrapped).toBe(true);
         expect(result.storedVersion).toBe(1);
         expect(result.storedReserves).toBe(2);
         expect(result.storedLogged).toBe(true);

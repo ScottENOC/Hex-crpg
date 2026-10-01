@@ -75,10 +75,8 @@
     const visuals=window.gameVisuals,rear=window.REAR_HUMAN_EQUIPMENT_ASSETS?.armour;
     if(!visuals?.humanLight||!visuals?.humanMedium||!visuals?.humanHeavy||!rear)return false;
     for(const [tier,path] of Object.entries(rearArmourPaths)){
-      const img=new Image();
-      img.addEventListener('load',()=>{window.drawMap?.();window.renderEntities?.();window.refreshDirectionalTurnPortraits?.();});
-      const build=encodeURIComponent(window.PRESENTATION_BUILD||BUILD);
-      img.src=`${path}?build=${build}`;
+      const img=window.assetManager.request(path);
+      window.assetManager.whenReady(path).then(()=>{window.drawMap?.();window.renderEntities?.();window.refreshDirectionalTurnPortraits?.();}).catch(()=>{});
       rear[tier]=img;
     }
     const frontProps={light:'humanLight',medium:'humanMedium',heavy:'humanHeavy'};
