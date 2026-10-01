@@ -1,9 +1,9 @@
 // Per-equipped-item rendering visibility plus weapon and armour material colours.
 (() => {
   'use strict';
-  const BUILD='20260929-equipment-appearance-v3';
-  const renderSlots=['weapon','offhand','armor','helmet','shirt','pants','bra','underwear'];
-  const slotLabels={weapon:'Main hand',offhand:'Off hand',armor:'Armour',helmet:'Helmet',shirt:'Shirt / Dress',pants:'Pants',bra:'Bra',underwear:'Underwear'};
+  const BUILD='20261001-equipment-appearance-v4';
+  const renderSlots=['weapon','offhand','armor','helmet','shirt','pants','shoes','bra','underwear'];
+  const slotLabels={weapon:'Main hand',offhand:'Off hand',armor:'Armour',helmet:'Helmet',shirt:'Shirt / Dress',pants:'Pants',shoes:'Shoes',bra:'Bra',underwear:'Underwear'};
   const tintCache=new WeakMap();
   let armourRenderSourcesInstalled=false;
   let activeArmourEntity=null;
