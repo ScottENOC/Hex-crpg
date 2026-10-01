@@ -1,0 +1,41 @@
+name: Apply Auto Heal approach
+
+on:
+  push:
+    branches: [feature/idle-auto-heal-approach]
+    paths:
+      - '.github/workflows/apply-idle-auto-heal-approach.yml'
+      - 'scripts/apply-idle-auto-heal-approach.py'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/idle-auto-heal-approach
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Apply patch
+        run: python3 scripts/apply-idle-auto-heal-approach.py
+
+      - name: Focused checks
+        run: |
+          node --check spellPlanner.js
+          node --test tests-unit/idle-auto-heal.test.js
+
+      - name: Commit implementation and remove one-off patcher
+        run: |
+          rm -f scripts/apply-idle-auto-heal-approach.py .github/workflows/apply-idle-auto-heal-approach.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add spellPlanner.js tests-unit/idle-auto-heal.test.js index.html scripts/apply-idle-auto-heal-approach.py .github/workflows/apply-idle-auto-heal-approach.yml
+          git commit -m "Let idle healers approach nearby allies"
+          git push origin feature/idle-auto-heal-approach
