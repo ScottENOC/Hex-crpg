@@ -233,3 +233,169 @@ function autoBuildSpellsForEntity(entity) {
 }
 
 window.autoBuildSpellsForEntity = autoBuildSpellsForEntity;
+
+// REAL-TIME IDLE BEHAVIOURS
+// Player preference, not save-state: like graphics/UI settings, this lives in
+// localStorage. Absent key means ON so new/existing installs get Auto Heal by
+// default. The controller only makes decisions in exploration; actual casts go
+// through tryCastSpell so cast time, mana payment, visuals and messages remain
+// owned by the normal spell pipeline.
+const AUTO_HEAL_STORAGE_KEY = 'rpg_idle_auto_heal';
+
+function isAutoHealEnabled() {
+    try {
+        return !window.localStorage || window.localStorage.getItem(AUTO_HEAL_STORAGE_KEY) !== 'false';
+    } catch (_) {
+        return true;
+    }
+}
+
+function setAutoHealEnabled(enabled) {
+    const value = !!enabled;
+    try {
+        if (window.localStorage) window.localStorage.setItem(AUTO_HEAL_STORAGE_KEY, value ? 'true' : 'false');
+    } catch (_) {}
+    const checkbox = window.document && window.document.getElementById('idle-auto-heal');
+    if (checkbox) checkbox.checked = value;
+}
+
+function hasIdleInstruction(entity) {
+    if (!entity) return true;
+    return !!entity.destination || !!entity.pendingCast || (entity.castCooldown || 0) > 0;
+}
+
+function isHealingSpell(spell) {
+    return !!spell && spell.baseId === 'heal' && (spell.type === 'heal' || spell.type === 'aoe_heal');
+}
+
+function getAutoHealManaCost(caster, spell) {
+    const base = Math.max(0, Number(spell && spell.manaCost) || 0);
+    const penalty = typeof window.getArmorSpellPenalty === 'function'
+        ? Math.max(0, Number(window.getArmorSpellPenalty(caster, spell)) || 0)
+        : 0;
+    return base + penalty;
+}
+
+function healEfficiency(caster, spell) {
+    const mana = Math.max(1, getAutoHealManaCost(caster, spell));
+    const healing = Math.max(0, Number(spell && spell.magnitude) || 0);
+    return healing / mana;
+}
+
+function alreadyReceivingAutoHeal(target, party) {
+    return party.some(member => member !== target && member.pendingCast &&
+        member.pendingCast.target === target && isHealingSpell(member.pendingCast.spell));
+}
+
+function selectAutoHealAction(caster, party = window.entities || []) {
+    if (!caster || !caster.alive || caster.side !== 'player' || caster.aiControlled || caster.rider || hasIdleInstruction(caster)) return null;
+    if (!(caster.maxMana > 0) || !(caster.currentMana > 0)) return null;
+
+    const prepared = (caster.createdSpells || []).filter(spell =>
+        isHealingSpell(spell) && Number.isFinite(spell.manaCost) && spell.manaCost > 0 &&
+        caster.currentMana >= getAutoHealManaCost(caster, spell) &&
+        Number.isFinite(spell.magnitude) && spell.magnitude > 0);
+    if (!prepared.length) return null;
+
+    const manaPct = caster.currentMana / caster.maxMana;
+    const candidates = [];
+    for (const target of party) {
+        if (!target || !target.alive || target.side !== 'player' || target.aiControlled || target.rider || !(target.maxHp > 0)) continue;
+        if (target.hp >= target.maxHp || hasIdleInstruction(target)) continue;
+        if ((target.hp / target.maxHp) >= manaPct) continue;
+        if (alreadyReceivingAutoHeal(target, party)) continue;
+
+        const distance = window.distance ? window.distance(caster.hex, target.hex) : Infinity;
+        const reachable = prepared.filter(spell => distance <= (Number(spell.range) || 1));
+        if (!reachable.length) continue;
+
+        reachable.sort((a, b) => {
+            const eff = healEfficiency(caster, b) - healEfficiency(caster, a);
+            if (Math.abs(eff) > 1e-9) return eff;
+            const aCost = getAutoHealManaCost(caster, a);
+            const bCost = getAutoHealManaCost(caster, b);
+            if (aCost !== bCost) return aCost - bCost;
+            return (b.magnitude || 0) - (a.magnitude || 0);
+        });
+        candidates.push({ target, spell: reachable[0] });
+    }
+
+    // "Fewest hitpoints" deliberately means absolute current HP, not health
+    // percentage. Percentage is only the mana-conservation gate above.
+    candidates.sort((a, b) => {
+        if (a.target.hp !== b.target.hp) return a.target.hp - b.target.hp;
+        const ap = a.target.hp / a.target.maxHp;
+        const bp = b.target.hp / b.target.maxHp;
+        return ap - bp;
+    });
+    if (!candidates.length) return null;
+    return { caster, target: candidates[0].target, spell: candidates[0].spell };
+}
+
+function processAutoHeal() {
+    if (!isAutoHealEnabled()) return false;
+    if (window.isInCombat || window.currentTurnEntity || window.isPausedForReaction || window.isResting || window.isSleeping) return false;
+    if (window.multiplayer && window.multiplayer.roomCode && !window.multiplayer.isHost) return false;
+    if (!Array.isArray(window.entities) || typeof window.tryCastSpell !== 'function') return false;
+
+    const party = window.entities.filter(entity => entity && entity.alive && entity.side === 'player' && !entity.rider && !entity.aiControlled);
+    let startedAny = false;
+    for (const caster of party) {
+        const action = selectAutoHealAction(caster, party);
+        if (!action) continue;
+        const started = window.tryCastSpell(action.caster, action.spell, action.target, action.target.hex);
+        if (started !== false) startedAny = true;
+    }
+    return startedAny;
+}
+
+function installIdleBehaviourSettingsUI() {
+    if (!window.document) return;
+    const settingsContent = window.document.getElementById('settings-content');
+    if (!settingsContent || window.document.getElementById('idle-auto-heal')) return;
+
+    const heading = window.document.createElement('h3');
+    heading.textContent = 'Idle Behaviours';
+    const group = window.document.createElement('div');
+    group.className = 'form-group';
+    const label = window.document.createElement('label');
+    const checkbox = window.document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.id = 'idle-auto-heal';
+    checkbox.checked = isAutoHealEnabled();
+    checkbox.addEventListener('change', () => setAutoHealEnabled(checkbox.checked));
+    label.appendChild(checkbox);
+    label.appendChild(window.document.createTextNode(' Auto Heal while idle'));
+    group.appendChild(label);
+
+    const help = window.document.createElement('small');
+    help.style.color = '#aaa';
+    help.textContent = 'Outside combat, idle healers may use prepared healing spells on nearby idle party members when the target\'s health % is below the caster\'s mana %.';
+    group.appendChild(help);
+
+    const graphicsHeading = Array.from(settingsContent.querySelectorAll('h3'))
+        .find(node => node.textContent.trim() === 'Graphics');
+    settingsContent.insertBefore(heading, graphicsHeading || null);
+    settingsContent.insertBefore(group, graphicsHeading || null);
+}
+
+window.idleBehaviours = {
+    isAutoHealEnabled,
+    setAutoHealEnabled,
+    hasIdleInstruction,
+    getAutoHealManaCost,
+    healEfficiency,
+    selectAutoHealAction,
+    processAutoHeal,
+    installSettingsUI: installIdleBehaviourSettingsUI,
+};
+window.setAutoHealEnabled = setAutoHealEnabled;
+
+if (window.document && typeof window.document.addEventListener === 'function') {
+    window.document.addEventListener('DOMContentLoaded', () => {
+        installIdleBehaviourSettingsUI();
+        if (!window._idleBehaviourInterval && typeof window.setInterval === 'function') {
+            window._idleBehaviourInterval = window.setInterval(processAutoHeal, 250);
+        }
+    });
+}
