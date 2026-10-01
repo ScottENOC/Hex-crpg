@@ -281,7 +281,11 @@ function getVisibleHexesForRect(extraMargin) {
 let _terrainBuffer = null, _terrainBufferCtx = null;
 let _terrainBufferOriginX = 0, _terrainBufferOriginY = 0; // cameraX/Y the buffer was last rendered at
 let _terrainBufferZoom = null;
-let _terrainBufferExploredCount = -1;
+// Hexes actually baked into the current terrain buffer. Newly explored
+// on-screen hexes that are not in this set are drawn live until the camera's
+// next natural buffer rebuild, instead of rebuilding the whole oversized
+// buffer every time exploredHexes grows by one.
+let _terrainBufferHexKeys = new Set();
 let _terrainBufferFloor = 0;
 const TERRAIN_BUFFER_MARGIN = 500;
 
@@ -444,14 +448,14 @@ function drawMap() {
   // 2. PASS 1: Base Terrain & Foliage — via the camera-anchored buffer (see
   // comment above renderTerrainPass/TERRAIN_BUFFER_MARGIN). Rebuilt only
   // when the camera has drifted near the edge of its slack, zoom changed, or
-  // new terrain became explored; otherwise just blitted at an offset.
-  const exploredCount = window.exploredHexes ? window.exploredHexes.size : 0;
+  // the viewed floor changes; otherwise just blitted at an offset. Newly
+  // explored on-screen hexes are filled live below without invalidating the
+  // whole buffer.
   const dx = window.cameraX - _terrainBufferOriginX;
   const dy = window.cameraY - _terrainBufferOriginY;
   const rebuildMargin = TERRAIN_BUFFER_MARGIN * 0.6;
   const needsRebuild = !_terrainBuffer ||
       _terrainBufferZoom !== window.cameraZoom ||
-      _terrainBufferExploredCount !== exploredCount ||
       _terrainBufferFloor !== viewerFloor ||
       Math.abs(dx) > rebuildMargin || Math.abs(dy) > rebuildMargin;
 
@@ -470,7 +474,6 @@ function drawMap() {
       _terrainBufferOriginX = savedCameraX;
       _terrainBufferOriginY = savedCameraY;
       _terrainBufferZoom = window.cameraZoom;
-      _terrainBufferExploredCount = exploredCount;
       _terrainBufferFloor = viewerFloor;
 
       window.cameraX = savedCameraX + TERRAIN_BUFFER_MARGIN;
@@ -488,6 +491,7 @@ function drawMap() {
       const savedMapCtx = mapCtx;
       mapCtx = _terrainBufferCtx;
       renderTerrainPass(bufVisibleAndExplored, imgOk, viewerFloor);
+      _terrainBufferHexKeys = new Set(bufVisibleAndExplored.map(({q,r}) => `${q},${r}`));
       mapCtx = savedMapCtx;
       window.cameraX = savedCameraX;
       window.cameraY = savedCameraY;
@@ -496,6 +500,14 @@ function drawMap() {
   mapCtx.drawImage(_terrainBuffer,
       window.cameraX - _terrainBufferOriginX - TERRAIN_BUFFER_MARGIN,
       window.cameraY - _terrainBufferOriginY - TERRAIN_BUFFER_MARGIN);
+
+  // Exploration used to invalidate the entire oversized terrain buffer for
+  // every newly discovered hex. Draw only the newly revealed on-screen tiles
+  // live; once the camera naturally crosses the buffer slack boundary they are
+  // folded into the next full buffer build. This preserves immediate reveal
+  // without a several-hundred-millisecond rebuild while walking.
+  const unbufferedTerrain = visibleAndExplored.filter(({q,r}) => !_terrainBufferHexKeys.has(`${q},${r}`));
+  if (unbufferedTerrain.length) renderTerrainPass(unbufferedTerrain, imgOk, viewerFloor);
 
   // 2b. Fog-of-war dim for currently-unseen-but-explored hexes — kept live
   // (not baked into the buffer) since which hexes count as "visible" shifts
