@@ -159,4 +159,28 @@ test('private dialogue can be reopened if the panel is closed without an answer'
   assert(rendered.options.some(o=>o.label==='Speak freely.'));
 });
 
-console.log('14 tests passed');
+test('game skill aliases and class skill ranks work with the existing progression schema',()=>{
+  const {api}=fresh();
+  global.party[3].skills={wizard:4,arcane:9};
+  delete global.party[3].classLevels;
+  assert.equal(api.classLevel(global.party[3],'Wizard'),4);
+  assert.equal(api.skillValue(global.party[3],'Arcana'),9);
+});
+
+test('privacy and whispers use dialogueHearing volume ranges when available',()=>{
+  const {api}=fresh();
+  global.party[0].hex={q:0,r:0};
+  global.party[5].hex={q:0,r:0};
+  global.entities=[...global.party,{name:'Courtier',alive:true,hex:{q:3,r:0}}];
+  global.distance=(a,b)=>Math.abs(a.q-b.q);
+  global.dialogueHearingSystem={volumes:{whisper:{clear:2,max:4},quiet:{clear:3,max:6}}};
+  assert.equal(api.privacyLevel(),1);
+  const result=api.raiseReaction({companion:'Reyna Fletcher',preferredChannel:'whisper',whisperText:'Quiet warning.'});
+  assert.deepEqual(result.overheardBy,['Courtier']);
+  global.entities[global.entities.length-1].hex={q:5,r:0};
+  assert.equal(api.privacyLevel(),2);
+  global.entities[global.entities.length-1].hex={q:7,r:0};
+  assert.equal(api.privacyLevel(),3);
+});
+
+console.log('16 tests passed');
