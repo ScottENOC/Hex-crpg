@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/apply-idle-auto-heal-approach.yml'
       - 'scripts/apply-idle-auto-heal-approach.py'
+      - 'scripts/fix-idle-auto-heal-action-return.py'
 
 permissions:
   contents: write
@@ -24,7 +25,9 @@ jobs:
           node-version: 22
 
       - name: Apply patch
-        run: python3 scripts/apply-idle-auto-heal-approach.py
+        run: |
+          python3 scripts/apply-idle-auto-heal-approach.py
+          python3 scripts/fix-idle-auto-heal-action-return.py
 
       - name: Normalise VM object assertions
         run: |
@@ -69,9 +72,9 @@ jobs:
       - name: Commit implementation and remove one-off patcher
         if: steps.focused.outcome == 'success'
         run: |
-          rm -f scripts/apply-idle-auto-heal-approach.py .github/workflows/apply-idle-auto-heal-approach.yml auto-heal-test-output.txt
+          rm -f scripts/apply-idle-auto-heal-approach.py scripts/fix-idle-auto-heal-action-return.py .github/workflows/apply-idle-auto-heal-approach.yml auto-heal-test-output.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add spellPlanner.js tests-unit/idle-auto-heal.test.js index.html scripts/apply-idle-auto-heal-approach.py .github/workflows/apply-idle-auto-heal-approach.yml auto-heal-test-output.txt
+          git add spellPlanner.js tests-unit/idle-auto-heal.test.js index.html scripts/apply-idle-auto-heal-approach.py scripts/fix-idle-auto-heal-action-return.py .github/workflows/apply-idle-auto-heal-approach.yml auto-heal-test-output.txt
           git commit -m "Let idle healers approach nearby allies"
           git push origin feature/idle-auto-heal-approach
