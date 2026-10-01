@@ -84,7 +84,7 @@ test.describe('character banter', () => {
         expect(result.firedOnceEnough).toBe(true);
     });
 
-    test('legacy and canonical Aldric approval keys stay synchronised', async ({ page }) => {
+    test('legacy and canonical Aldric approval keys stay synchronised, including immediately after load', async ({ page }) => {
         const result = await page.evaluate(() => {
             window.rescuePaladin();
             window.recruitAldric();
@@ -92,10 +92,17 @@ test.describe('character banter', () => {
             const legacyReadsCanonical = window.companionAttitude['Ser Aldric'];
             window.companionAttitude['Ser Aldric'] = 61;
             const canonicalReadsLegacyWrite = window.companionAttitude['Ser Aldric Thorne'];
-            return { legacyReadsCanonical, canonicalReadsLegacyWrite };
+
+            window.saveGame('aldric_attitude_alias_test');
+            window.loadGame('aldric_attitude_alias_test');
+            window.companionAttitude['Ser Aldric Thorne'] = 47;
+            const legacyAfterLoad = window.companionAttitude['Ser Aldric'];
+
+            return { legacyReadsCanonical, canonicalReadsLegacyWrite, legacyAfterLoad };
         });
         expect(result.legacyReadsCanonical).toBe(73);
         expect(result.canonicalReadsLegacyWrite).toBe(61);
+        expect(result.legacyAfterLoad).toBe(47);
     });
 
     test('firedBanterIds persists through save/load', async ({ page }) => {
