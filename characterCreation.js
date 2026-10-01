@@ -104,6 +104,7 @@ function createCharacterData(race, cls, name, gender = "female", voice = "pc_1")
         helmet: null,
         shirt: null,
         pants: null,
+        shoes: null,
         bra: null,
         underwear: null
     }
