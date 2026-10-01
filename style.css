@@ -522,3 +522,65 @@ button:hover { background-color: #3f51b5; }
     line-height: 1.1;
     white-space: nowrap;
 }
+
+
+/* HOME_SCREEN_SAFE_AREA_V1
+   Home Screen PWAs with viewport-fit=cover deliberately use the full display,
+   but interactive chrome must stay outside the Dynamic Island/status bar and
+   home-indicator areas. env() resolves to zero on devices without cut-outs. */
+.modal {
+    box-sizing: border-box;
+    padding-top: max(8px, env(safe-area-inset-top, 0px));
+    padding-right: max(8px, env(safe-area-inset-right, 0px));
+    padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+    padding-left: max(8px, env(safe-area-inset-left, 0px));
+}
+
+.modal-content {
+    margin: 0 auto;
+    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 16px);
+    box-sizing: border-box;
+}
+
+.close-btn {
+    top: 0;
+    right: 0;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+#characterCreator {
+    box-sizing: border-box;
+    padding-top: max(8px, env(safe-area-inset-top, 0px));
+    padding-right: max(8px, env(safe-area-inset-right, 0px));
+    padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+    padding-left: max(8px, env(safe-area-inset-left, 0px));
+}
+
+@media (max-width: 850px) {
+    /* The earlier phone rule used top:60px and accidentally discarded the
+       safe-area component already present in the desktop rule. */
+    #top-menu {
+        top: calc(60px + env(safe-area-inset-top, 0px)) !important;
+        padding-left: max(1px, env(safe-area-inset-left, 0px)) !important;
+        padding-right: max(1px, env(safe-area-inset-right, 0px)) !important;
+    }
+
+    #gameContainer {
+        bottom: env(safe-area-inset-bottom, 0px) !important;
+        padding-left: env(safe-area-inset-left, 0px);
+        padding-right: env(safe-area-inset-right, 0px);
+    }
+
+    #ui-container {
+        padding-left: max(5px, env(safe-area-inset-left, 0px));
+        padding-right: max(5px, env(safe-area-inset-right, 0px));
+        padding-bottom: max(5px, env(safe-area-inset-bottom, 0px));
+    }
+}

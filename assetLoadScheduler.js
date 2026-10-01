@@ -4,7 +4,7 @@
 (() => {
     'use strict';
 
-    const SCHEDULER_VERSION = '8';
+    const SCHEDULER_VERSION = '9';
     if (window.__assetLoadSchedulerInstalled && window.__assetLoadSchedulerVersion === SCHEDULER_VERSION) return;
     // index.html loads this before the other game scripts in a normal page load.
     if (window.__assetLoadSchedulerInstalled) return;
@@ -174,6 +174,56 @@
     const phaseCritical = new Set();
     const managerRecords = new Map();
     const domBindingTokens = new WeakMap();
+    /* HOME_SCREEN_ART_DIAGNOSTICS_V1 */
+    const reportedAssetFailures = new Set();
+    const assetFailureLog = [];
+
+    function reportAssetFailure(value, error, source = 'asset-manager') {
+        const path = canonicalPath(value || '(unknown image)');
+        const key = `${source}:${path}`;
+        if (reportedAssetFailures.has(key)) return;
+        reportedAssetFailures.add(key);
+        const detail = {
+            path,
+            source,
+            message: error?.message || String(error || 'Image load failed'),
+            at: Date.now(),
+        };
+        assetFailureLog.push(detail);
+        if (assetFailureLog.length > 50) assetFailureLog.shift();
+        console.warn('Art asset failed:', detail);
+        try { window.dispatchEvent(new CustomEvent('hex-art-asset-error', { detail })); } catch (_) {}
+
+        // iPhone/Home Screen testing normally has no developer console. Put the
+        // exact failing path into the in-game message log once that UI exists.
+        let attempts = 0;
+        const announce = () => {
+            if (typeof window.showMessage === 'function') {
+                window.showMessage(`Art failed to load: ${path}`);
+                return;
+            }
+            if (attempts++ < 12) setTimeout(announce, 750);
+        };
+        announce();
+    }
+
+    // Catch image elements that bypass AssetManager as well. Managed images
+    // report only after their own retries are exhausted, so transient retry
+    // failures are not announced twice.
+    window.addEventListener('error', event => {
+        const image = event.target;
+        if (!(image instanceof HTMLImageElement)) return;
+        const raw = image.currentSrc || nativeSrc.get.call(image) || image.getAttribute('src') || '';
+        const path = normalise(raw);
+        if (!path) return;
+        const managed = managerRecords.get(recordKey(path));
+        if (managed && managed.status !== 'error' && managed.status !== 'suppressed') return;
+        setTimeout(() => {
+            const latest = managerRecords.get(recordKey(path));
+            if (latest && latest.status !== 'error' && latest.status !== 'suppressed') return;
+            reportAssetFailure(path, latest?.error || new Error('Browser image element failed to load'), latest ? 'asset-manager' : 'unmanaged-image');
+        }, 0);
+    }, true);
     let offlineStartupPending = Boolean(window.__hexOfflineReady && typeof window.__hexOfflineReady.then === 'function');
     if (offlineStartupPending) {
         window.__hexOfflineReady.finally(() => {
@@ -369,6 +419,7 @@
             record.error=null;
             record.failureCount=0;
             record.nextRetryAt=0;
+            reportedAssetFailures.delete(`asset-manager:${record.path}`);
             record.resolve(record.image);
         };
         if (typeof record.image.decode === 'function') record.image.decode().then(finish, finish);
@@ -405,6 +456,7 @@
                 );
                 record.nextRetryAt=performance.now()+retryDelay;
                 record.reject(record.error);
+                reportAssetFailure(record.path, record.error, 'asset-manager');
                 done();
             };
             record.image.addEventListener('load',onLoad,{once:true,capture:true});
@@ -505,6 +557,7 @@
         get(path){return managerRecords.get(recordKey(path))?.image || null;},
         status(path){return managerRecords.get(recordKey(path))?.status || 'unrequested';},
         get cacheSize(){return managerRecords.size;},
+        getFailures(){return assetFailureLog.map(item=>({...item}));},
     };
 
     function hash(text) {

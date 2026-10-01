@@ -196,7 +196,7 @@
     };
 
     const REAR_EQUIPMENT_PATHS = {
-        helmet:'images/nasalHelm_back.svg',
+        helmet:'images/equipment/helmets/nasal_helm_back.svg',
     };
 
     const ITEM_GRIPS = {
