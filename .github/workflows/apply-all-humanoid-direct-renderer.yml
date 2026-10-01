@@ -26,10 +26,12 @@ jobs:
           node-version: '20'
       - name: Apply renderer migration
         run: python3 .github/scripts/apply-all-humanoid-direct-renderer.py
-      - name: Validate JavaScript and all ten presentation rigs
+      - name: Check renderer JavaScript
+        run: node --check humanoidRenderer.js
+      - name: Check main JavaScript
+        run: node --check main.js
+      - name: Check all ten direct rigs
         run: |
-          node --check humanoidRenderer.js
-          node --check main.js
           python3 - <<'PY'
           from pathlib import Path
           text = Path('humanoidRenderer.js').read_text()
@@ -41,40 +43,41 @@ jobs:
           missing = [key for key in expected if f'{key}:' not in rig_block]
           if missing:
               raise SystemExit(f'Missing direct humanoid rigs: {missing}')
-          if rig_block.count('bodyAssetMode:') != 10:
-              raise SystemExit('Expected bodyAssetMode metadata for all ten rigs')
+          count = rig_block.count('bodyAssetMode:')
+          if count != 10:
+              raise SystemExit(f'Expected bodyAssetMode metadata for 10 rigs, found {count}')
           for marker in [
-              "window.DIRECT_HUMANOID_RIG_KEYS",
+              'window.DIRECT_HUMANOID_RIG_KEYS',
               "CHARACTER_RIGS[key]?.bodyRender === 'visible-fit'",
-              "images/characters/goblin_female/body_side.png",
-              "images/characters/orc_male/body_back.png",
-              "images/characters/elf_male/body.png",
+              'images/characters/goblin_female/body_side.png',
+              'images/characters/orc_male/body_back.png',
+              'images/characters/elf_male/body.png',
           ]:
               if marker not in text:
                   raise SystemExit(f'Missing renderer marker: {marker}')
-          main = Path('main.js').read_text()
-          for stale in ['images/elfmale.png','images/elfmalehair.png','images/dwarffemale.png','images/dwarfmale.png']:
-              if stale in main:
-                  raise SystemExit(f'Stale creator preload remains: {stale}')
-          html = Path('index.html').read_text()
-          if 'humanoidRenderer.js?v=3' not in html or 'main.js?v=7' not in html:
-              raise SystemExit('iOS cache-bust tokens were not bumped')
-          assets = [
-              'images/characters/elf_male/body.png',
-              'images/characters/dwarf_female/body.png',
-              'images/characters/dwarf_male/body.png',
-              'images/characters/goblin_female/body_front.png',
-              'images/characters/goblin_female/body_side.png',
-              'images/characters/goblin_female/body_back.png',
-              'images/characters/orc_male/body_front.png',
-              'images/characters/orc_male/body_side.png',
-              'images/characters/orc_male/body_back.png',
-          ]
-          absent = [path for path in assets if not Path(path).is_file()]
-          if absent:
-              raise SystemExit(f'Missing seeded presentation art: {absent}')
-          print('Direct humanoid renderer covers all 10 playable race/body presentations.')
+          print('All ten direct rigs present')
           PY
+      - name: Check obsolete creator preloads are gone
+        run: |
+          ! grep -q 'images/elfmale.png' main.js
+          ! grep -q 'images/elfmalehair.png' main.js
+          ! grep -q 'images/dwarffemale.png' main.js
+          ! grep -q 'images/dwarfmale.png' main.js
+      - name: Check cache tokens
+        run: |
+          grep -q 'humanoidRenderer.js?v=3' index.html
+          grep -q 'main.js?v=7' index.html
+      - name: Check seeded presentation art
+        run: |
+          test -f images/characters/elf_male/body.png
+          test -f images/characters/dwarf_female/body.png
+          test -f images/characters/dwarf_male/body.png
+          test -f images/characters/goblin_female/body_front.png
+          test -f images/characters/goblin_female/body_side.png
+          test -f images/characters/goblin_female/body_back.png
+          test -f images/characters/orc_male/body_front.png
+          test -f images/characters/orc_male/body_side.png
+          test -f images/characters/orc_male/body_back.png
       - name: Remove temporary patch machinery
         run: rm .github/scripts/apply-all-humanoid-direct-renderer.py .github/workflows/apply-all-humanoid-direct-renderer.yml
       - name: Commit and push
