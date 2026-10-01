@@ -80,11 +80,10 @@ if('serviceWorker'in navigator){navigator.serviceWorker.register(`sw.js?build=${
         // stale/missed clothing child load cannot silently remove all shoes.
         ['footwearSystem.js','footwearSystem'],
         ['renderHotPathCache.js','renderHotPathCache'],
-        // Persistent-world render performance: cull static dictionaries to a
-        // nearby spatial subset, cache party membership for visibility calls,
-        // and stop rebuilding the exploration turn strip dozens of times/sec.
-        ['renderSpatialCulling.js','renderSpatialCulling'],
-        ['visibilityHotPathCache.js','visibilityHotPathCache'],
+        // The experiment with extra visibility/static-dictionary wrappers made
+        // the measured render path worse on iPhone. Keep only the cheap UI
+        // throttle here; the base renderer already has viewport culling and its
+        // own visibility cache.
         ['realtimeUiThrottle.js','realtimeUiThrottle'],
     ];
     for (const [src,key] of scripts) {
