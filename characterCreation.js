@@ -179,7 +179,7 @@ if (!document.querySelector('script[data-identity-presentation]')) {
 // colourable like hair, and independently selectable in the creator.
 if (!document.querySelector('script[data-facial-hair-system]')) {
   const facialHairScript = document.createElement('script');
-  facialHairScript.src = `facialHairSystem.js?build=${encodeURIComponent(window.PRESENTATION_BUILD || '20261001-facial-hair-v1')}`;
+  facialHairScript.src = `facialHairSystem.js?build=${encodeURIComponent(window.PRESENTATION_BUILD || '20261001-facial-hair-v2')}&facial=20261001-beard-v1`;
   facialHairScript.dataset.facialHairSystem = 'true';
   facialHairScript.async = false;
   document.head.appendChild(facialHairScript);

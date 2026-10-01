@@ -4,13 +4,25 @@
 (() => {
     'use strict';
 
-    const BUILD = '20261001-facial-hair-v1';
+    const BUILD = '20261001-facial-hair-v2';
     const NPC_FACIAL_HAIR_CHANCE = 0.30;
     const FACIAL_HAIR_STYLES = Object.freeze({
         moustache: Object.freeze({
             label: 'Moustache',
             front: 'images/characters/facial_hair/moustache_front.svg',
             side: 'images/characters/facial_hair/moustache_side.svg',
+        }),
+        beard_full: Object.freeze({
+            label: 'Full beard',
+            front: 'images/characters/facial_hair/beard_full_front.png',
+            side: 'images/characters/facial_hair/beard_full_side.png',
+            // Beards cover substantially more of the face than a moustache, so
+            // they need their own placement box instead of being squeezed into
+            // the moustache target. Values are normalised to humanoid body bounds.
+            targets: Object.freeze({
+                front: Object.freeze({ x: 0.310, y: 0.108, w: 0.380, h: 0.255 }),
+                side: Object.freeze({ x: 0.350, y: 0.103, w: 0.330, h: 0.270 }),
+            }),
         }),
     });
     const AVAILABLE_STYLE_IDS = Object.freeze(Object.keys(FACIAL_HAIR_STYLES));
@@ -127,12 +139,16 @@
         return true;
     }
 
-    function facialHairTarget(view, bounds) {
+    function facialHairTarget(view, bounds, style) {
         // Normalised to the direct humanoid body bounds. The side art is authored
         // facing right; humanoidRenderer mirrors the whole stack for left-facing.
-        const t = view === 'side'
+        // Individual styles can provide a larger/smaller target while moustaches
+        // and future simple styles retain the original compact default.
+        const key = view === 'side' ? 'side' : 'front';
+        const fallback = key === 'side'
             ? { x: 0.445, y: 0.125, w: 0.150, h: 0.090 }
             : { x: 0.385, y: 0.130, w: 0.230, h: 0.085 };
+        const t = style?.targets?.[key] || fallback;
         return {
             left: bounds.left + bounds.width * t.x,
             top: bounds.top + bounds.height * t.y,
@@ -155,7 +171,7 @@
         const image = window.getRecoloredCharacterHairSprite
             ? window.getRecoloredCharacterHairSprite(source, hue, entity.facialHairLightMult || entity.hairLightMult || 1, entity.facialHairSatMult || entity.hairSatMult || 1)
             : source;
-        return drawImageContained(ctx, image, facialHairTarget(view, bounds));
+        return drawImageContained(ctx, image, facialHairTarget(view, bounds, style));
     }
 
     function ensureCreatorControls() {
