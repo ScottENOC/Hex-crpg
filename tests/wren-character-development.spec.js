@@ -97,11 +97,15 @@ test.describe('Wren character development', () => {
 
     test('different value combinations produce distinct Wren stances', async ({ page }) => {
         const result = await page.evaluate(() => {
-            const wren = window.party.find(p => p.name === 'Wren Talbot');
-            const arc = window.wrenCharacterArc.ensureWrenArc();
+            let arc = window.wrenCharacterArc.ensureWrenArc();
             arc.personalLoyalty = 60;
             arc.mercy = -50;
             const darkLoyal = window.wrenCharacterArc.getWrenStance();
+
+            // getWrenStance() normalises the stored arc via ensureWrenArc(),
+            // which replaces characterArc with a fresh object. Reacquire the
+            // live arc before setting up the second independent scenario.
+            arc = window.wrenCharacterArc.ensureWrenArc();
             arc.personalLoyalty = -50;
             arc.mercy = 60;
             const conscience = window.wrenCharacterArc.getWrenStance();

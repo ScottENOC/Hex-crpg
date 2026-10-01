@@ -226,9 +226,8 @@
             back:'images/equipment/clothing/traveler_garb_back.svg',
         };
         for (const [view,path] of Object.entries(paths)) {
-            const img = new Image();
-            img.addEventListener('load', () => { window.drawMap?.(); window.renderEntities?.(); });
-            img.src = `${path}?build=${BUILD}`;
+            const img = window.assetManager.request(path);
+            window.assetManager.whenReady(path).then(() => { window.drawMap?.(); window.renderEntities?.(); }).catch(() => {});
             target[view] = img;
         }
         clothingAssetsRefreshed = true;

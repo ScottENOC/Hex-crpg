@@ -1,4 +1,178 @@
 // dialogue.js
+
+// iOS/mobile-friendly image diagnostics. Console logs are easy to miss on-device,
+// so persistent image failures are also surfaced in the in-game message log.
+// The global capture listener sees failures from detached image-loader objects
+// as well as ordinary <img> elements. Existing retry code gets time to recover
+// first, so a transient GitHub Pages/cache hiccup does not immediately spam chat.
+(() => {
+    if (window.__imageLoadDiagnosticsInstalled) return;
+    window.__imageLoadDiagnosticsInstalled = true;
+
+    const reportedAssets = new Set();
+    const pendingChecks = new WeakMap();
+    const pendingMessages = [];
+    const RETRY_SETTLE_MS = 450;
+    const MAX_SETTLE_MS = 5000;
+
+    function cleanAssetUrl(src) {
+        try {
+            const url = new URL(String(src || ''), document.baseURI);
+            // assetLoadScheduler adds this when bypassing a stale browser cache.
+            // Strip it so retry URLs dedupe back to the real asset.
+            url.searchParams.delete('assetRetry');
+            return url;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function assetKey(src) {
+        const url = cleanAssetUrl(src);
+        if (!url) return String(src || 'unknown image');
+        return `${url.origin}${url.pathname}${url.search}`;
+    }
+
+    function assetLabel(src) {
+        const url = cleanAssetUrl(src);
+        if (!url) return String(src || 'unknown image');
+        if (url.protocol === 'data:') return '[inline data image]';
+        if (url.protocol === 'blob:') return '[blob image]';
+        try {
+            const base = new URL('.', document.baseURI);
+            if (url.origin === base.origin && url.pathname.startsWith(base.pathname)) {
+                return decodeURIComponent(url.pathname.slice(base.pathname.length)) + url.search;
+            }
+        } catch (_) {}
+        return decodeURIComponent(url.pathname) + url.search;
+    }
+
+    function appendToMessageLog(message) {
+        if (typeof window.showMessage === 'function') {
+            window.showMessage(message);
+            return true;
+        }
+
+        // dialogue.js loads before ui.js, but the message-log DOM already exists.
+        // Use the same simple format as ui.js until showMessage is installed.
+        const log = document.getElementById('message-log');
+        if (!log) return false;
+        const line = document.createElement('div');
+        line.style.marginBottom = '2px';
+        line.innerText = `> ${message}`;
+        log.appendChild(line);
+        while (log.childNodes.length > 200) log.removeChild(log.firstChild);
+        log.scrollTop = log.scrollHeight;
+        return true;
+    }
+
+    function announce(message) {
+        console.warn(`[Image diagnostics] ${message}`);
+        if (appendToMessageLog(message)) return;
+        pendingMessages.push(message);
+    }
+
+    function flushPendingMessages() {
+        if (!pendingMessages.length) return;
+        const messages = pendingMessages.splice(0);
+        for (const message of messages) {
+            if (!appendToMessageLog(message)) pendingMessages.push(message);
+        }
+    }
+
+    async function classifyAndAnnounce(src) {
+        const key = assetKey(src);
+        if (reportedAssets.has(key)) return;
+        reportedAssets.add(key);
+
+        const label = assetLabel(src);
+        const url = cleanAssetUrl(src);
+        if (!url || url.protocol === 'data:' || url.protocol === 'blob:') {
+            announce(`⚠ IMAGE DECODE/READ FAILED — ${label}`);
+            return;
+        }
+
+        try {
+            const response = await fetch(url.href, {
+                method: 'HEAD',
+                cache: 'no-store',
+                credentials: 'same-origin'
+            });
+
+            if (response.status === 404) {
+                announce(`⚠ IMAGE 404 — not found: ${label}`);
+                return;
+            }
+            if (!response.ok) {
+                announce(`⚠ IMAGE HTTP ${response.status} — load failed: ${label}`);
+                return;
+            }
+
+            const contentType = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+            if (contentType && !contentType.startsWith('image/') && contentType !== 'application/octet-stream') {
+                announce(`⚠ IMAGE INVALID RESPONSE — got ${contentType} instead of an image: ${label}`);
+                return;
+            }
+
+            announce(`⚠ IMAGE DECODE/READ FAILED — file exists (HTTP ${response.status}) but the browser could not read it: ${label}`);
+        } catch (_) {
+            announce(`⚠ IMAGE LOAD FAILED — network/cache error or status check unavailable: ${label}`);
+        }
+    }
+
+    function schedulePersistentFailureCheck(img, src) {
+        const prior = pendingChecks.get(img);
+        if (prior?.timer) clearTimeout(prior.timer);
+
+        const state = {
+            startedAt: prior?.startedAt || performance.now(),
+            src,
+            timer: null
+        };
+
+        const check = () => {
+            // A successful retry makes naturalWidth non-zero. Say nothing in that
+            // case: the existing retry machinery recovered and chat stays clean.
+            if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                pendingChecks.delete(img);
+                return;
+            }
+
+            const elapsed = performance.now() - state.startedAt;
+            // While a retry is actively downloading, `complete` is false. Give a
+            // slow GitHub Pages response up to five seconds before calling it bad.
+            if (!img.complete && elapsed < MAX_SETTLE_MS) {
+                state.timer = setTimeout(check, RETRY_SETTLE_MS);
+                pendingChecks.set(img, state);
+                return;
+            }
+
+            pendingChecks.delete(img);
+            void classifyAndAnnounce(state.src);
+        };
+
+        state.timer = setTimeout(check, RETRY_SETTLE_MS);
+        pendingChecks.set(img, state);
+    }
+
+    window.addEventListener('error', (event) => {
+        const img = event.target;
+        if (!(img instanceof HTMLImageElement)) return;
+        const src = img.currentSrc || img.src;
+        if (!src) return;
+        schedulePersistentFailureCheck(img, src);
+    }, true);
+
+    // Expose this for any future loader that catches an error before the browser
+    // emits an image error event.
+    window.reportImageLoadFailure = function reportImageLoadFailure(src) {
+        void classifyAndAnnounce(src);
+    };
+
+    document.addEventListener('DOMContentLoaded', flushPendingMessages, { once: true });
+    window.setTimeout(flushPendingMessages, 1000);
+})();
+
 const dialogueData = {
     'arena_lobby_1': {
         speaker: 'Arena Announcer',

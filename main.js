@@ -71,14 +71,11 @@ document.addEventListener("DOMContentLoaded", () => {
             {key: 'arenaannouncer', src: 'images/arenaannouncer.png'},
             {key: 'arenamercenary', src: 'images/arenamercenary.png'},
             {key: 'arenashopkeeper', src: 'images/arenashopkeeper.png'},
-            {key: 'playerBase', src: 'images/elf.png'},
-            {key: 'leatherArmor', src: 'images/elfleatherarmour.png'},
-            {key: 'chainArmor', src: 'images/elfchainarmour.png'},
             {key: 'monsterDefault', src: 'images/goblin.png'},
             {key: 'orcBase', src: 'images/orc.png'},
-            {key: 'humanLight', src: 'images/humanlightarmour.png'},
-            {key: 'humanMedium', src: 'images/humanmediumarmour.png'},
-            {key: 'humanHeavy', src: 'images/humanheavyarmour.png'},
+            {key: 'humanLight', src: 'images/equipment/armour/human/light.png'},
+            {key: 'humanMedium', src: 'images/equipment/armour/human/medium.png'},
+            {key: 'humanHeavy', src: 'images/equipment/armour/human/heavy.png'},
             {key: 'horse', src: 'images/horse.png'},
             {key: 'skeleton', src: 'images/skeleton.svg'},
             {key: 'zombie', src: 'images/zombie.svg'},
@@ -131,16 +128,15 @@ document.addEventListener("DOMContentLoaded", () => {
         window.gameVisuals = {};
         const _loadedKeys = new Set();
 
-        function load(asset) {
-            if (_loadedKeys.has(asset.key)) return Promise.resolve(); // already loaded (or in flight) via an earlier tier / a race-select change
-            _loadedKeys.add(asset.key);
-            return new Promise((resolve) => {
-                const img = new Image();
-                img.onload = () => { window.gameVisuals[asset.key] = img; resolve(); };
-                img.onerror = () => { console.warn("Failed:", asset.src); resolve(); };
-                img.src = asset.src;
-            });
-        }
+function load(asset) {
+    if (_loadedKeys.has(asset.key)) return Promise.resolve();
+    _loadedKeys.add(asset.key);
+    const img = window.assetManager.request(asset.src);
+    window.gameVisuals[asset.key] = img;
+    return window.assetManager.wait(asset.src).catch((error) => {
+        console.warn('Failed:', asset.src, error);
+    });
+}
 
         // Re-prioritizable on demand for combinations still using legacy flat
         // creator/game art. Direct-rendered humanoids load through their own
@@ -649,16 +645,15 @@ window.updateRoguelikePreview = function() {
         dwarf_female: 'images/dwarffemalehair.png', dwarf_male: 'images/dwarfmalehair.png'
     };
     const _appearancePreviewImages = {};
-    function loadAppearancePreviewImage(src) {
-        let img = _appearancePreviewImages[src];
-        if (!img) {
-            img = new Image();
-            img.onload = () => window.updateAppearancePreview();
-            img.src = src;
-            _appearancePreviewImages[src] = img;
-        }
-        return img;
+function loadAppearancePreviewImage(src) {
+    let img = _appearancePreviewImages[src];
+    if (!img) {
+        img = window.assetManager.request(src);
+        window.assetManager.whenReady(src).then(() => window.updateAppearancePreview()).catch(() => {});
+        _appearancePreviewImages[src] = img;
     }
+    return img;
+}
     window.updateSkinToneControlMode = function() {
         const fantasy = !!document.getElementById('fantasy-skin-check')?.checked;
         const controls = document.getElementById('fantasy-skin-controls');

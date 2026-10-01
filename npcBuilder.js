@@ -31,10 +31,8 @@ function ensureDirectionalNpcImages() {
     if (!window.gameVisuals || typeof Image === 'undefined') return false;
     Object.values(DIRECTIONAL_NPC_ART).forEach(views => {
         Object.values(views).forEach(({ key, src }) => {
-            if (window.gameVisuals[key]) return;
-            const img = new Image();
-            img.src = src;
-            img.addEventListener('load', () => window.drawMap?.());
+            if (window.gameVisuals[key]) return;            const img = window.assetManager.request(src);
+            window.assetManager.whenReady(src).then(() => window.drawMap?.()).catch(() => {});
             window.gameVisuals[key] = img;
         });
     });

@@ -1,13 +1,7 @@
 // data.js
 
-// data.js is the first game script in index.html. Install the asset scheduler
-// synchronously here so every later Image.src assignment is redirected,
-// prioritised and concurrency-limited before any renderer/game code can run.
-// document.write is safe in this narrow parser-time use: this file is loaded by
-// a normal blocking <script> while the document is still being parsed.
-if (!window.__assetLoadSchedulerInstalled) {
-    document.write('<script src="assetLoadScheduler.js?v=2"><\/script>');
-}
+// assetLoadScheduler.js is loaded explicitly by index.html before data.js.
+// Standalone harnesses that need managed art must load the scheduler explicitly too.
 
 const raceData = {
     human: {
@@ -100,6 +94,102 @@ if (!window.__companionRelationshipsModuleLoaded) {
     document.write('<script src="companionRelationships.js?build=20260929-companion-relationships-v2"><\/script>');
 }
 
+// Important non-companions can now use the same conceptual relationship depth
+// without inheriting party membership. Their existing personal NPC standing is
+// retained as Approval; Trust/Familiarity/Friendship persist on the protagonist,
+// while Romance/Attraction only become live for characters whose authored
+// profile has actually been developed that far. The dialogue bridge lets
+// existing quest choices feed these memories without rewriting every tree.
+if (!window.__persistentCharacterRelationshipsModuleLoaded) {
+    window.__persistentCharacterRelationshipsModuleLoaded = true;
+    document.write('<script src="persistentCharacterRelationships.js?build=20260930-persistent-character-relationships-v1"><\/script>');
+    document.write('<script src="persistentCharacterDialogueHooks.js?build=20260930-persistent-character-dialogue-hooks-v2"><\/script>');
+}
+
+// Queen Aelwen is the first foreign sovereign to get a character-specific pass
+// on top of the persistent-character layer. The Living Accord follows the
+// existing Silver Accord into a practical forest-boundary dispute with
+// Seraphine, while Fenn/Nessa can contribute their already-developed views.
+if (!window.__aelwenLivingAccordModuleLoaded) {
+    window.__aelwenLivingAccordModuleLoaded = true;
+    document.write('<script src="aelwenLivingAccord.js?build=20260930-aelwen-living-accord-v1"><\/script>');
+}
+
+// King Balrik's first persistent-character pass grows from the existing
+// Deepholds infestation and the sealed Sunken Deep. The old warning forces a
+// real policy choice between preservation, controlled study and tightly bounded
+// reclamation, with Thrain and Mirabel able to contribute independent views.
+if (!window.__balrikLastHoldModuleLoaded) {
+    window.__balrikLastHoldModuleLoaded = true;
+    document.write('<script src="balrikLastHold.js?build=20260930-balrik-last-hold-v1"><\/script>');
+}
+
+// Thessaly already intersects A Noble's Grudge and Mirabel's Concordance, so
+// her first persistent-character pass deepens those consequences instead of
+// inventing another quest. Her personal theme is responsible institutional
+// memory: secrecy can be necessary, but deliberately forgetting dangerous work
+// merely forces the next generation to rediscover old mistakes without context.
+if (!window.__thessalyCourtWizardModuleLoaded) {
+    window.__thessalyCourtWizardModuleLoaded = true;
+    document.write('<script src="thessalyCourtWizard.js?build=20260930-thessaly-court-wizard-v1"><\/script>');
+}
+
+// Nessa's first persistent-character pass grows from stories she already owns:
+// the Silver Trail, Fenn's Living Boundary and Aelwen's Living Accord. Her
+// stewardship is neither blanket preservation nor blanket intervention: choices
+// create responsibility, and another creature's trust is never hers to grant.
+if (!window.__nessaGroveWardenModuleLoaded) {
+    window.__nessaGroveWardenModuleLoaded = true;
+    document.write('<script src="nessaGroveWarden.js?build=20260930-nessa-grove-warden-v1"><\/script>');
+}
+
+// Petra's first pass likewise deepens existing Ironbond material rather than
+// adding another side quest. She remembers Wren's murder-payment trail and
+// Aldric's broken contract, balancing institutional accountability against the
+// livelihoods of current workers — while admitting how convenient that defence
+// can be for the factor currently sitting behind the desk.
+if (!window.__petraIronbondFactorModuleLoaded) {
+    window.__petraIronbondFactorModuleLoaded = true;
+    document.write('<script src="petraIronbondFactor.js?build=20260930-petra-ironbond-factor-v1"><\/script>');
+}
+
+// Adelram's first pass connects the Crimson Court, Alden's burial-register
+// investigation and the necromancer/lich arc. His faith is deliberately not
+// certainty: doctrine can guide inquiry, but rites and mystery must never become
+// respectable language for losing track of what happened to actual people.
+if (!window.__adelramCathedralShepherdModuleLoaded) {
+    window.__adelramCathedralShepherdModuleLoaded = true;
+    document.write('<script src="adelramCathedralShepherd.js?build=20260930-adelram-cathedral-shepherd-v1"><\/script>');
+}
+
+// Ilsa's first pass deepens the investigations she already commands in Reddale:
+// missing patrols, border scouting, Reyna's compromised trackers and Ashgrave.
+// Her law-and-order view is about preserving truthful information as much as
+// punishment; an institution people are terrified to approach makes itself blind.
+if (!window.__ilsaWatchCaptainModuleLoaded) {
+    window.__ilsaWatchCaptainModuleLoaded = true;
+    document.write('<script src="ilsaWatchCaptain.js?build=20260930-ilsa-watch-captain-v1"><\/script>');
+}
+
+// Thrain already has enough authored story that another quest would be noise.
+// His persistent pass joins the two runesmithing trust/teaching quests to his
+// Last Hold counsel: dwarven tradition is a chain of custody, not a museum piece
+// or a blood-based exemption from standards, and outsiders can earn stewardship.
+if (!window.__thrainRuneKeeperModuleLoaded) {
+    window.__thrainRuneKeeperModuleLoaded = true;
+    document.write('<script src="thrainRuneKeeper.js?build=20260930-thrain-rune-keeper-v1"><\/script>');
+}
+
+// The persistent cast should form a social/political network, not nine isolated
+// sophisticated dialogue trees. Existing direct links above remain authoritative;
+// this pass fills only the strongest missing circles: Seraphine/Thessaly/Adelram
+// around dangerous supernatural knowledge, and Seraphine/Petra/Ilsa around
+// Ironbond evidence, witnesses, institutional continuity and accountability.
+if (!window.__persistentCharacterCrossReactivityModuleLoaded) {
+    window.__persistentCharacterCrossReactivityModuleLoaded = true;
+    document.write('<script src="persistentCharacterCrossReactivity.js?build=20260930-persistent-cross-reactivity-v1"><\/script>');
+}
+
 // Relationship progression is intentionally separate from the storage/
 // permission layer above: familiarity grows from unique personal conversations
 // and slow shared time, while trust moves only through explicit authored events.
@@ -108,6 +198,26 @@ if (!window.__companionRelationshipsModuleLoaded) {
 if (!window.__companionRelationshipProgressionModuleLoaded) {
     window.__companionRelationshipProgressionModuleLoaded = true;
     document.write('<script src="companionRelationshipProgression.js?build=20260929-companion-relationship-progression-v2"><\/script>');
+}
+
+// Unrecruited companions should not freeze forever at their first recruitment
+// hex. This intentionally small agency layer relocates only companions whose
+// existing dialogue has a clean deferred-recruitment moment. It stores authored
+// recruitment-location stages on the protagonist save, moves them between a few
+// existing landmarks, and never resolves their personal or main quests off-screen.
+if (!window.__companionWorldAgencyModuleLoaded) {
+    window.__companionWorldAgencyModuleLoaded = true;
+    document.write('<script src="companionWorldAgency.js?build=20260930-companion-world-agency-v1"><\/script>');
+}
+
+// Aldric is the one recruitment hook that originally treated physical rescue
+// and party recruitment as the same action. Keep his special case separate from
+// the generic relocation layer: cutting him loose no longer conscripts him, and
+// a deferred Aldric can move to Reddale / the Vessel-Seeker investigation while
+// all decisive Broken Vigil and necromancer choices still wait for the player.
+if (!window.__aldricIndependentRecruitmentModuleLoaded) {
+    window.__aldricIndependentRecruitmentModuleLoaded = true;
+    document.write('<script src="aldricIndependentRecruitment.js?build=20260930-aldric-independent-recruitment-v1"><\/script>');
 }
 
 // Wren's Millbrook personal quest sits on top of the relationship system. It is
@@ -150,6 +260,61 @@ if (!window.__aldricBrokenVigilModuleLoaded) {
     document.write('<script src="aldricBrokenVigil.js?build=20260930-aldric-broken-vigil-v2"><\/script>');
 }
 
+// Aldric Chapter 2 asks what his own vows require once there is no corrupt
+// counterparty to blame. The Silver Vigil genuinely needs a warden at Saint
+// Orra's Hospice; Aldric can obey literally, negotiate bounded service, seek an
+// honest release, or make the choice himself while developing discernment and
+// his willingness to share burdens rather than martyr himself to them.
+if (!window.__aldricMeasureOfOathModuleLoaded) {
+    window.__aldricMeasureOfOathModuleLoaded = true;
+    document.write('<script src="aldricMeasureOfOath.js?build=20260930-aldric-measure-of-oath-v1"><\/script>');
+}
+
+// Mirabel's first post-recruitment chapter follows the damaged magical folio
+// she joined the party to recover from the spider ruin. It develops her own
+// curiosity-vs-restraint and flight-vs-rootedness arcs while tying the book's
+// echo-anchoring theory into Silverhart scholarship and the necromancer thread.
+if (!window.__mirabelUnquietConcordanceModuleLoaded) {
+    window.__mirabelUnquietConcordanceModuleLoaded = true;
+    document.write('<script src="mirabelUnquietConcordance.js?build=20260930-mirabel-unquiet-concordance-v1"><\/script>');
+}
+
+// Fenn's first post-recruitment chapter reuses Emberwood Grove and Old Mac's
+// pasture. A changed watercourse creates a real farm-vs-wetland conflict with no
+// mandatory skill gate, while Nature/Perception can reveal the old channel and
+// Fenn develops his own preservation-vs-stewardship and independence axes.
+if (!window.__fennLivingBoundaryModuleLoaded) {
+    window.__fennLivingBoundaryModuleLoaded = true;
+    document.write('<script src="fennLivingBoundary.js?build=20260930-fenn-living-boundary-v1"><\/script>');
+}
+
+// Reyna's first post-recruitment chapter grows directly out of Eyes on the
+// Border / Northwatch. Missing civilian trackers have been leaking route data to
+// the raiders under coercion, forcing Reyna to confront her own reflexive
+// self-reliance and decide how much trust she puts in people and institutions.
+if (!window.__reynaEmptyBlindModuleLoaded) {
+    window.__reynaEmptyBlindModuleLoaded = true;
+    document.write('<script src="reynaEmptyBlind.js?build=20260930-reyna-empty-blind-v1"><\/script>');
+}
+
+// Alden's first post-recruitment chapter follows the people erased from
+// Northwatch's official memorial into the Grand Cathedral burial register. It
+// develops his detachment-vs-engagement philosophy, restores individual names
+// where possible, and leaves a missing-body breadcrumb for the necromancer arc.
+if (!window.__aldenUncountedModuleLoaded) {
+    window.__aldenUncountedModuleLoaded = true;
+    document.write('<script src="aldenUncounted.js?build=20260930-alden-uncounted-v1"><\/script>');
+}
+
+// Companion stories also feed back into major quests. The Vessel-Seeker / lich
+// arc can now surface party-specific counsel whose wording depends on personal
+// quest outcomes and evolving companion values, and companions who actually
+// clear the crypt with the player remember having done so.
+if (!window.__companionMajorQuestReactivityModuleLoaded) {
+    window.__companionMajorQuestReactivityModuleLoaded = true;
+    document.write('<script src="companionMajorQuestReactivity.js?build=20260930-companion-major-quest-reactivity-v2"><\/script>');
+}
+
 // Romance agreements interpret affinity rather than replacing it. Commitment,
 // sex and exclusivity are separate authored concepts: some companions are
 // monogamous, some support consensual non-monogamy, and Brother Alden can be
@@ -166,6 +331,28 @@ if (!window.__companionRomanceModuleLoaded) {
 if (!window.__wrenPriceOfSilenceModuleLoaded) {
     window.__wrenPriceOfSilenceModuleLoaded = true;
     document.write('<script src="wrenPriceOfSilence.js?build=20260929-wren-price-of-silence-v1"><\/script>');
+}
+
+// Wren Chapter 3 follows the exact Silverhart lead left by The Price of Silence.
+// The Crown did not order Mara and Galen's murder; an old Transport Office
+// knowingly reimbursed and buried the payment afterwards to protect a fragile
+// relief contract. The investigation resolves Wren's parents' official record
+// while pushing her security arc from fear-bound staying toward chosen loyalty.
+if (!window.__wrenCrownQuietHandModuleLoaded) {
+    window.__wrenCrownQuietHandModuleLoaded = true;
+    document.write('<script src="wrenCrownQuietHand.js?build=20260930-wren-crown-quiet-hand-v1"><\/script>');
+}
+
+// Late-game companion conversation stays authored without becoming exhaustible.
+// A generic memory/salience layer remembers discussed subjects and applies
+// in-world cooldowns; Wren and Aldric are the pilot pools with milestone,
+// reactive, evergreen and finite personal-history conversations. It loads after
+// their story wrappers so the single "Talk for a while" entry decorates the final
+// companion dialogue tree rather than competing with quest-specific menus.
+if (!window.__companionConversationMemoryModuleLoaded) {
+    window.__companionConversationMemoryModuleLoaded = true;
+    document.write('<script src="companionConversationMemory.js?build=20260930-companion-conversation-memory-v1"><\/script>');
+    document.write('<script src="wrenAldricEvergreenDialogue.js?build=20260930-wren-aldric-evergreen-v1"><\/script>');
 }
 
 // Declarative hints for NPC/AI skill spending. Existing gameplay prereq fields

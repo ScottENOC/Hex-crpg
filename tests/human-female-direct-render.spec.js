@@ -13,7 +13,12 @@ async function waitForDirectRenderer(page, key = 'human_female') {
 async function waitForRearEquipmentAssets(page) {
   await page.waitForFunction(() => {
     const rear = window.REAR_HUMAN_EQUIPMENT_ASSETS;
+    const shields = window.SHIELD_VISUAL_ASSETS;
     return rear?.shield?.naturalWidth > 0
+      && shields?.round?.front?.naturalWidth > 0
+      && shields?.round?.back?.naturalWidth > 0
+      && shields?.kite?.front?.naturalWidth > 0
+      && shields?.kite?.back?.naturalWidth > 0
       && rear?.helmet?.naturalWidth > 0
       && rear?.armour?.light?.naturalWidth > 0
       && rear?.armour?.medium?.naturalWidth > 0
@@ -90,7 +95,7 @@ async function renderEquippedHuman(page, gender, facing, { helmet = true } = {})
   }, { gender, facing, helmet });
 }
 
-function expectFrontOrSideOrder(order, headLayer) {
+function expectForegroundShieldOrder(order, headLayer) {
   const body = order.indexOf('body');
   const armour = order.indexOf('armour');
   const head = order.indexOf(headLayer);
@@ -102,6 +107,28 @@ function expectFrontOrSideOrder(order, headLayer) {
   expect(head).toBeGreaterThan(armour);
   expect(shield).toBeGreaterThan(head);
   expect(weapons).toBeGreaterThan(shield);
+
+  for (const clothing of ['underwear','bra','pants','shirt']) {
+    const index = order.indexOf(clothing);
+    if (index >= 0) {
+      expect(index).toBeGreaterThan(body);
+      expect(index).toBeLessThan(armour);
+    }
+  }
+}
+
+function expectRightSideOrder(order, headLayer) {
+  const shield = order.indexOf('shield');
+  const body = order.indexOf('body');
+  const armour = order.indexOf('armour');
+  const head = order.indexOf(headLayer);
+  const weapons = order.indexOf('weapons');
+
+  expect(shield).toBeGreaterThanOrEqual(0);
+  expect(body).toBeGreaterThan(shield);
+  expect(armour).toBeGreaterThan(body);
+  expect(head).toBeGreaterThan(armour);
+  expect(weapons).toBeGreaterThan(head);
 
   for (const clothing of ['underwear','bra','pants','shirt']) {
     const index = order.indexOf(clothing);
@@ -150,7 +177,82 @@ test.describe('direct humanoid compositor', () => {
     }
   });
 
-  test('human female uses the current clothing, armour, head and held-item painter order', async ({ page }) => {
+  test('shield items select their own front/rear art and preserve shield aspect ratio', async ({ page }) => {
+    await createCharacter(page, { race:'human', gender:'female' });
+    await waitForDirectRenderer(page, 'human_female');
+    await waitForRearEquipmentAssets(page);
+
+    const result = await page.evaluate(() => {
+      const entity = (window.entities || []).find(e => e.alive && e.race === 'human' && e.gender === 'female' && e.side === 'player');
+      if (!entity) throw new Error('No player-side human female entity found');
+      const shields = window.SHIELD_VISUAL_ASSETS;
+
+      function renderShield(itemId, facing) {
+        entity.equipped = { ...(entity.equipped || {}), armor:null, helmet:null, weapon:null, offhand:itemId };
+        entity.displayArmour = false;
+        entity.displayClothes = false;
+        entity.facing = facing;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 240;
+        canvas.height = 300;
+        const ctx = canvas.getContext('2d');
+        const height = 240;
+        const width = height * (window.HUMAN_FEMALE_RENDER_ASPECT || 0.48);
+        const originalDraw = CanvasRenderingContext2D.prototype.drawImage;
+        let capture = null;
+
+        CanvasRenderingContext2D.prototype.drawImage = function(image, ...args) {
+          let label = null;
+          for (const [visual, pair] of Object.entries(shields || {})) {
+            if (pair.front === image) label = `${visual}.front`;
+            if (pair.back === image) label = `${visual}.back`;
+          }
+          if (this === ctx && label && args.length === 4) {
+            capture = {
+              label,
+              width:Math.abs(args[2]),
+              height:Math.abs(args[3]),
+              sourceRatio:(image.naturalWidth || image.width) / (image.naturalHeight || image.height),
+            };
+          }
+          return originalDraw.call(this, image, ...args);
+        };
+        try {
+          window.drawDirectionalHumanoidInBounds(
+            ctx,
+            entity,
+            { left:(canvas.width-width)/2, top:20, width, height },
+            facing,
+          );
+        } finally {
+          CanvasRenderingContext2D.prototype.drawImage = originalDraw;
+        }
+        return capture;
+      }
+
+      return {
+        itemVisuals:{
+          wooden:window.items.wooden_shield.shieldVisual,
+          bulwark:window.items.bulwark_shield.shieldVisual,
+        },
+        woodenFront:renderShield('wooden_shield','down'),
+        woodenBack:renderShield('wooden_shield','up'),
+        bulwarkFront:renderShield('bulwark_shield','down'),
+        bulwarkBack:renderShield('bulwark_shield','up'),
+      };
+    });
+
+    expect(result.itemVisuals).toEqual({wooden:'round',bulwark:'kite'});
+    expect(result.woodenFront.label).toBe('round.front');
+    expect(result.woodenBack.label).toBe('round.back');
+    expect(result.bulwarkFront.label).toBe('kite.front');
+    expect(result.bulwarkBack.label).toBe('kite.back');
+    expect(result.bulwarkFront.width / result.bulwarkFront.height).toBeCloseTo(result.bulwarkFront.sourceRatio, 5);
+    expect(result.bulwarkBack.width / result.bulwarkBack.height).toBeCloseTo(result.bulwarkBack.sourceRatio, 5);
+  });
+
+  test('human female uses facing-aware shield painter order', async ({ page }) => {
     await createCharacter(page, { race:'human', gender:'female' });
     await waitForDirectRenderer(page, 'human_female');
     await waitForRearEquipmentAssets(page);
@@ -158,7 +260,7 @@ test.describe('direct humanoid compositor', () => {
     const down = await renderEquippedHuman(page, 'female', 'down');
     expect(down.rendered).toBe(true);
     expect(down.count).toBeGreaterThan(0);
-    expectFrontOrSideOrder(down.layerOrder, 'helmet');
+    expectForegroundShieldOrder(down.layerOrder, 'helmet');
     expect(down.draw).toEqual({key:'human_female',view:'front',facing:'down'});
     expect(down.armour).toMatchObject({
       view:'front',
@@ -170,7 +272,7 @@ test.describe('direct humanoid compositor', () => {
     expect(down.armour.height).toBeGreaterThan(0);
 
     const right = await renderEquippedHuman(page, 'female', 'right');
-    expectFrontOrSideOrder(right.layerOrder, 'helmet');
+    expectRightSideOrder(right.layerOrder, 'helmet');
     expect(right.draw).toEqual({key:'human_female',view:'side',facing:'right'});
     expect(right.armour).toMatchObject({
       view:'side',
@@ -178,6 +280,10 @@ test.describe('direct humanoid compositor', () => {
       rotation:0,
       shear:false,
     });
+
+    const left = await renderEquippedHuman(page, 'female', 'left');
+    expectForegroundShieldOrder(left.layerOrder, 'helmet');
+    expect(left.draw).toEqual({key:'human_female',view:'side',facing:'left'});
 
     const up = await renderEquippedHuman(page, 'female', 'up');
     expectBackOrder(up.layerOrder, 'helmet');
@@ -190,7 +296,7 @@ test.describe('direct humanoid compositor', () => {
     });
 
     const hair = await renderEquippedHuman(page, 'female', 'down', { helmet:false });
-    expectFrontOrSideOrder(hair.layerOrder, 'hair');
+    expectForegroundShieldOrder(hair.layerOrder, 'hair');
   });
 
   test('human male follows the same current direct-compositor order', async ({ page }) => {
@@ -200,7 +306,7 @@ test.describe('direct humanoid compositor', () => {
     const result = await renderEquippedHuman(page, 'male', 'down');
     expect(result.rendered).toBe(true);
     expect(result.count).toBeGreaterThan(0);
-    expectFrontOrSideOrder(result.layerOrder, 'helmet');
+    expectForegroundShieldOrder(result.layerOrder, 'helmet');
     expect(result.draw).toEqual({key:'human_male',view:'front',facing:'down'});
     expect(result.armour).toMatchObject({
       view:'front',

@@ -12,17 +12,12 @@
     };
     const imageCache = new Map();
 
-    function loadImage(src) {
-        if (imageCache.has(src)) return imageCache.get(src);
-        const p = new Promise((resolve, reject) => {
-            const img = new Image();
-            img.onload = () => resolve(img);
-            img.onerror = () => reject(new Error(`Failed to load ${src}`));
-            img.src = src;
-        });
-        imageCache.set(src, p);
-        return p;
-    }
+function loadImage(src) {
+  if (imageCache.has(src)) return imageCache.get(src);
+  const promise = window.assetManager.load(src);
+  imageCache.set(src, promise);
+  return promise;
+}
 
     function drawAnchor(ctx, p, name) {
         ctx.save();

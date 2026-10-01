@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="app-build" content="20260928-character-body-assets-v3">
+    <meta name="app-build" content="20261001-unified-asset-loading-v2">
     <title>Hex RPG</title>
     <link rel="stylesheet" href="style.css">
     <style>
@@ -626,21 +626,21 @@
     </div>
 
     <script src="vendor/socket.io.min.js"></script>
-    <!-- Cache-busting: every local script below shares one ?v=N query param.
+    <!-- Cache-busting: local entry scripts carry explicit version query params.
          Mobile Safari (regular tabs, not private/incognito) caches these
          far more aggressively than desktop browsers and won't pick up a
-         changed file just because the server sent a new Last-Modified/ETag
-         — bump this number on every deploy that changes any .js file, or
-         returning players get served stale code until they clear site data. -->
-    <script src="data.js?v=5"></script>
-    <script src="name.js?v=14"></script>
-    <script src="dialogue.js?v=5"></script>
+         changed file just because the server sent a new Last-Modified/ETag.
+         Bump the version of each changed static entry script when deploying. -->
+    <script data-asset-load-scheduler src="assetLoadScheduler.js?v=6"></script>
+    <script src="data.js?v=7"></script>
+    <script src="name.js?v=16"></script>
+    <script src="dialogue.js?v=6"></script>
     <script src="questLog.js?v=5"></script>
     <script src="roster.js?v=5"></script>
     <script src="worldTime.js?v=5"></script>
     <script src="world_map_data.js?v=5"></script>
     <script src="worldMap.js?v=5"></script>
-    <script src="characterCreation.js?v=8"></script>
+    <script src="characterCreation.js?v=10"></script>
     <script src="spriteRecolor.js?v=6"></script>
     <script src="hexMap.js?v=5"></script>
     <script src="graphicsSettings.js?v=6"></script>
@@ -674,7 +674,7 @@
     <script src="audio.js?v=5"></script>
     <script src="musicDirector.js?v=5"></script>
     <script src="network.js?v=5"></script>
-    <script src="ui.js?v=5"></script>
+    <script src="ui.js?v=6"></script>
     <script src="gameEngine.js?v=5"></script>
     <script src="controller.js?v=5"></script>
     <script src="main.js?v=6"></script>
