@@ -1,4 +1,4 @@
-name: Apply terrain buffer exploration fix
+name: Apply performance follow-up
 
 on:
   push:
@@ -25,7 +25,9 @@ jobs:
       - name: Apply patch
         run: python3 .github/scripts/apply-terrain-buffer-exploration-fix.py
       - name: Check JavaScript
-        run: node --check hexMap.js
+        run: |
+          node --check hexMap.js
+          node --check performanceMonitor.js
       - name: Check diff
         run: git diff --check
       - name: Commit patch
@@ -36,6 +38,6 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add hexMap.js
-          git commit -m 'Avoid terrain buffer rebuild on every explored hex'
+          git add hexMap.js performanceMonitor.js
+          git commit -m 'Trim pathfinding hot loop and report render pacing'
           git push origin HEAD:development
