@@ -12,6 +12,30 @@
   const BRAID_TOP = -.035;
   const LEGACY_BRAID_TOP = { side:-.010, back:-.005 };
   const activeContexts = new WeakSet();
+  const WRAPPER_LINK_KEYS = ['__alignmentWrappedFunction','__preciseBase','__previous','__legacyDrawPlayerCharacter'];
+  const WRAPPER_MARKERS = ['__spriteAlignmentFixes','__preciseColourContext','__childSystem','__directionalBraidSupport','__directHumanoidCompositor'];
+
+  function wrapperChainHas(fn, marker) {
+    if (typeof fn !== 'function') return false;
+    const seen = new Set();
+    const pending = [fn];
+    while (pending.length) {
+      const current = pending.pop();
+      if (typeof current !== 'function' || seen.has(current)) continue;
+      seen.add(current);
+      if (current[marker]) return true;
+      for (const key of WRAPPER_LINK_KEYS) {
+        if (typeof current[key] === 'function' && !seen.has(current[key])) pending.push(current[key]);
+      }
+    }
+    return false;
+  }
+
+  function preserveWrapperMarkers(source, target) {
+    for (const marker of WRAPPER_MARKERS) {
+      if (wrapperChainHas(source, marker)) target[marker] = true;
+    }
+  }
 
   const PLAYER_START_COLOURS = {
     shirt: {
@@ -274,16 +298,13 @@
   function wrapDirectional(name) {
     const current = window[name];
     if (typeof current !== 'function') return false;
-    if (current.__spriteAlignmentFixes) return true;
+    if (wrapperChainHas(current,'__spriteAlignmentFixes')) return true;
     const wrapped = function(ctx,entity,bounds,facing='down') {
       return withBraidAlignment(ctx,entity,facing,bounds,() => current.apply(this,arguments));
     };
     wrapped.__spriteAlignmentFixes = true;
     wrapped.__alignmentWrappedFunction = current;
-    // Preserve renderer/readiness markers used elsewhere in the presentation stack.
-    for (const key of ['__directionalBraidSupport','__directHumanoidCompositor']) {
-      if (current[key]) wrapped[key] = current[key];
-    }
+    preserveWrapperMarkers(current, wrapped);
     window[name] = wrapped;
     return true;
   }
@@ -291,16 +312,14 @@
   function wrapWorld(name) {
     const current = window[name];
     if (typeof current !== 'function') return false;
-    if (current.__spriteAlignmentFixes) return true;
+    if (wrapperChainHas(current,'__spriteAlignmentFixes')) return true;
     const wrapped = function(ctx,entity,x,y,z=1,flyOff=0) {
       const bounds = directWorldBounds(entity,x,y,z,flyOff);
       return withBraidAlignment(ctx,entity,entity?.facing || 'down',bounds,() => current.apply(this,arguments));
     };
     wrapped.__spriteAlignmentFixes = true;
     wrapped.__alignmentWrappedFunction = current;
-    for (const key of ['__directionalBraidSupport','__directHumanoidCompositor']) {
-      if (current[key]) wrapped[key] = current[key];
-    }
+    preserveWrapperMarkers(current, wrapped);
     if (current.__legacyDrawPlayerCharacter) wrapped.__legacyDrawPlayerCharacter = current.__legacyDrawPlayerCharacter;
     window[name] = wrapped;
     return true;
