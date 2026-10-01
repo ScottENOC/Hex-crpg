@@ -2,7 +2,7 @@
 // Atomic, integrity-checked local game cache for the development branch.
 'use strict';
 
-const SW_VERSION = '14';
+const SW_VERSION = '15';
 // These names are intentionally NOT versioned. Worker implementation versions
 // may change without making the stored game copy foreign to the next worker.
 const META_CACHE = 'hex-game-meta';
@@ -91,36 +91,21 @@ async function writeCacheManifest(cache, commit, files) {
 async function inspectGameCache(cacheName, expectedCommit = null) {
     if (!cacheName) return null;
     try {
+        // The manifest is our completion record. It is written only after every
+        // required file has been verified and the update has been promoted.
+        // Do not enumerate hundreds of Cache Storage entries here: WebKit can
+        // stall indefinitely on cache.keys() for a large cache on iOS.
         const manifest = await readCacheManifest(cacheName);
         if (!manifest?.commit || !Array.isArray(manifest.files) || !manifest.files.length) return null;
         if (expectedCommit && manifest.commit !== expectedCommit) return null;
-        const cache = await caches.open(cacheName);
-        const keys = await cache.keys();
         const expectedCount = manifest.files.length;
-
-        // A raw entry count is not enough. An old cache can contain stale files
-        // and still have 421 entries while a required sprite is absent. Compare
-        // the actual cached request URLs with every path in the manifest.
-        const cachedUrls = new Set(keys.map(request => {
-            try {
-                const url = new URL(request.url);
-                url.search = '';
-                url.hash = '';
-                return url.href;
-            } catch (_) {
-                return request.url;
-            }
-        }));
-        const missingPaths = manifest.files
-            .filter(file => !cachedUrls.has(localUrl(file.path)))
-            .map(file => file.path);
-        const availableCount = Math.max(0, expectedCount - missingPaths.length);
         return {
-            valid: availableCount > 0,
-            healthy: missingPaths.length === 0,
-            missingCount: missingPaths.length,
-            missingPaths,
-            availableCount,
+            valid: true,
+            healthy: true,
+            manifestTrusted: true,
+            missingCount: 0,
+            missingPaths: [],
+            availableCount: expectedCount,
             activeCommit: manifest.commit,
             fileCount: expectedCount,
             totalBytes: manifest.files.reduce((sum, file) => sum + (Number(file.size) || 0), 0),
@@ -135,7 +120,7 @@ async function statusResult() {
     const meta = await readActiveMeta(true);
     if (meta?.cacheName) {
         const direct = await inspectGameCache(meta.cacheName, meta.commit || null);
-        if (direct?.valid) return { ...direct, recovered: false, recoveredFromMeta: META_CACHE };
+        if (direct?.valid) return { ...direct, reportedMissingPaths: Array.isArray(meta.missingPaths) ? meta.missingPaths : [], recovered: false, recoveredFromMeta: META_CACHE };
     }
 
     // Every worker version uses a new metadata cache. Read the previous
@@ -191,17 +176,16 @@ async function statusResult() {
     return { valid: false, activeCommit: null, fileCount: 0, cacheName: null, recovered: false };
 }
 
-async function diagnoseGameCache(files) {
+async function diagnoseGameCache(files, port = null) {
     const expectedFiles = Array.isArray(files) ? files.filter(file => file?.path && file?.sha) : [];
-    const cacheNames = await caches.keys();
     let meta = await readActiveMeta(true);
     let metaSource = meta ? META_CACHE : null;
 
-    // If the stable metadata record is missing, inspect old records without
-    // mutating anything. This lets the phone tell us whether migration failed.
+    // Inspection must be read-only and must not enumerate a large game cache.
+    // If stable metadata is absent, old metadata records are cheap to probe by
+    // exact key; opening one may create an empty cache but never touches game data.
     if (!meta?.cacheName) {
         for (const legacyMetaName of LEGACY_META_CACHES) {
-            if (!cacheNames.includes(legacyMetaName)) continue;
             try {
                 const legacyMetaCache = await caches.open(legacyMetaName);
                 const candidate = await readJsonResponse(await legacyMetaCache.match(META_KEY));
@@ -214,73 +198,105 @@ async function diagnoseGameCache(files) {
         }
     }
 
-    let cacheName = meta?.cacheName || null;
-    if (!cacheName || !cacheNames.includes(cacheName)) {
-        const candidates = cacheNames.filter(name =>
-            name.startsWith(GAME_CACHE_PREFIX) || LEGACY_GAME_CACHE_PREFIXES.some(prefix => name.startsWith(prefix))
-        );
-        if (candidates.length) cacheName = candidates[candidates.length - 1];
-    }
-
-    if (!cacheName || !cacheNames.includes(cacheName)) {
+    const cacheName = meta?.cacheName || null;
+    if (!cacheName) {
         return {
             workerVersion: SW_VERSION,
             metaSource,
-            cacheName: cacheName || null,
+            cacheName: null,
             cacheExists: false,
             savedCommit: meta?.commit || null,
             manifestFiles: 0,
-            cacheEntries: 0,
             expectedFiles: expectedFiles.length,
-            physicalPresent: 0,
-            physicalMissing: expectedFiles.length,
             shaSame: 0,
             shaDifferent: 0,
             noSavedSha: expectedFiles.length,
+            probeCount: 0,
+            probePresent: 0,
+            probeMissing: 0,
+            probeTimeouts: 0,
         };
     }
 
-    const cache = await caches.open(cacheName);
     const manifest = await readCacheManifest(cacheName);
-    const keys = await cache.keys();
-    const cachedUrls = new Set(keys.map(request => {
-        try {
-            const url = new URL(request.url);
-            url.search = '';
-            url.hash = '';
-            return url.href;
-        } catch (_) {
-            return request.url;
-        }
-    }));
     const savedShaByPath = new Map((manifest?.files || []).map(file => [file.path, file.sha]));
-
-    let physicalPresent = 0;
     let shaSame = 0;
     let shaDifferent = 0;
     let noSavedSha = 0;
     for (const file of expectedFiles) {
-        if (cachedUrls.has(localUrl(file.path))) physicalPresent++;
         const savedSha = savedShaByPath.get(file.path);
         if (!savedSha) noSavedSha++;
         else if (savedSha === file.sha) shaSame++;
         else shaDifferent++;
     }
 
+    // We only need a bounded physical sample to distinguish “the cache is
+    // empty/wrong” from “the manifest comparison is wrong”. A full cache.keys()
+    // scan is exactly the WebKit operation that is hanging on the user's iPhone.
+    const probeLimit = Math.min(24, expectedFiles.length);
+    const probeFiles = [];
+    if (probeLimit) {
+        const seen = new Set();
+        for (let i = 0; i < probeLimit; i++) {
+            const index = probeLimit === 1 ? 0 : Math.round(i * (expectedFiles.length - 1) / (probeLimit - 1));
+            const file = expectedFiles[index];
+            if (file && !seen.has(file.path)) {
+                seen.add(file.path);
+                probeFiles.push(file);
+            }
+        }
+    }
+
+    let probePresent = 0;
+    let probeMissing = 0;
+    let probeTimeouts = 0;
+    const cache = await caches.open(cacheName);
+    const directMatch = (request, timeoutMs = 2500) => Promise.race([
+        cache.match(request, { ignoreSearch: true }),
+        new Promise(resolve => setTimeout(() => resolve('__HEX_CACHE_MATCH_TIMEOUT__'), timeoutMs)),
+    ]);
+
+    for (let i = 0; i < probeFiles.length; i++) {
+        const file = probeFiles[i];
+        if (port) {
+            port.postMessage({
+                type: 'progress', phase: 'diagnostic', processed: i, total: probeFiles.length,
+                current: file.path, message: `Probing saved file ${i + 1} / ${probeFiles.length}…`,
+            });
+        }
+        const response = await directMatch(new Request(localUrl(file.path)));
+        if (response === '__HEX_CACHE_MATCH_TIMEOUT__') {
+            probeTimeouts++;
+            if (probeTimeouts >= 3) break;
+        } else if (response) {
+            probePresent++;
+        } else {
+            probeMissing++;
+        }
+    }
+
+    if (port) {
+        port.postMessage({
+            type: 'progress', phase: 'diagnostic', processed: probePresent + probeMissing + probeTimeouts,
+            total: probeFiles.length, message: 'Local-cache inspection complete.',
+        });
+    }
+
     return {
         workerVersion: SW_VERSION,
         metaSource,
         cacheName,
-        cacheExists: true,
+        cacheExists: Boolean(manifest),
         savedCommit: manifest?.commit || meta?.commit || null,
         manifestFiles: Array.isArray(manifest?.files) ? manifest.files.length : 0,
-        cacheEntries: keys.length,
         expectedFiles: expectedFiles.length,
-        physicalPresent,
-        physicalMissing: Math.max(0, expectedFiles.length - physicalPresent),
         shaSame,
         shaDifferent,
         noSavedSha,
+        probeCount: probeFiles.length,
+        probePresent,
+        probeMissing,
+        probeTimeouts,
     };
 }
 
@@ -516,7 +532,7 @@ async function cacheGame(message, port) {
     const activeCache = activeCacheName ? await caches.open(activeCacheName) : null;
     const activeManifest = activeCacheName ? await readCacheManifest(activeCacheName) : null;
     const activeShaByPath = new Map((activeManifest?.files || []).map(file => [file.path, file.sha]));
-    const missingActivePaths = new Set(before.missingPaths || []);
+    const reportedMissingPaths = new Set(before.reportedMissingPaths || []);
     const newPaths = new Set(files.map(file => file.path));
 
     const patchCacheName = `${GAME_CACHE_PREFIX}patch-${commit}`;
@@ -542,14 +558,12 @@ async function cacheGame(message, port) {
     async function cacheOne(file) {
         const request = new Request(localUrl(file.path));
 
-        // inspectGameCache() already performed the expensive exact-path scan.
-        // If the manifest SHA matches and that exact URL was physically present,
-        // the file is reusable. Do NOT call cache.match() again for every one of
-        // ~421 unchanged files: concurrent CacheStorage reads can stall WebKit.
-        const physicallyPresent = activeCache && !missingActivePaths.has(file.path);
-        const compareSaysUnchanged = changedPathSet && !changedPathSet.has(file.path);
-        const manifestShaMatches = activeShaByPath.get(file.path) === file.sha;
-        if (physicallyPresent && (compareSaysUnchanged || manifestShaMatches)) {
+        // The promoted manifest is authoritative for unchanged files: it is
+        // written only after a complete verified update. Reuse by Git blob SHA
+        // without reopening/enumerating every cached response. A runtime miss
+        // recorded by the fetch handler overrides this and forces repair.
+        const manifestShaMatches = activeCache && activeShaByPath.get(file.path) === file.sha;
+        if (manifestShaMatches && !reportedMissingPaths.has(file.path)) {
             reused++;
             stored++;
             return;
@@ -657,11 +671,14 @@ async function cacheGame(message, port) {
         commit,
         fileCount: files.length,
         totalBytes,
+        missingPaths: [],
         updatedAt: Date.now(),
     };
     await writeActiveMeta(nextMeta);
-    await cleanupStaleGameCaches([finalCacheName]);
-    await cleanupLegacyCaches([finalCacheName]);
+    // Do not enumerate all Cache Storage names on the update critical path.
+    // WebKit has already shown that cache enumeration can stall on this device.
+    // Known staging data was deleted above; legacy housekeeping can be done by
+    // a future explicit maintenance operation without blocking play/update.
 
     sendProgress('', 'ready', before.valid
         ? `Update complete: ${downloaded} changed file${downloaded === 1 ? '' : 's'} downloaded, ${reused} reused in place.`
@@ -694,7 +711,7 @@ self.addEventListener('message', event => {
     if (event.data?.type === 'HEX_CACHE_DIAGNOSTICS') {
         event.waitUntil((async () => {
             try {
-                port.postMessage({ type: 'result', result: await diagnoseGameCache(event.data?.files || []) });
+                port.postMessage({ type: 'result', result: await diagnoseGameCache(event.data?.files || [], port) });
             } catch (error) {
                 port.postMessage({ type: 'error', kind: 'diagnostics', message: error?.message || String(error) });
             }
@@ -751,6 +768,18 @@ async function serveFromActiveCache(request) {
     return response ? rangedResponse(request, response) : null;
 }
 
+async function recordRuntimeMiss(path) {
+    if (!path || path.startsWith('__hex_offline_meta__/')) return;
+    try {
+        const meta = await readActiveMeta();
+        if (!meta?.cacheName) return;
+        const missing = new Set(Array.isArray(meta.missingPaths) ? meta.missingPaths : []);
+        if (missing.has(path)) return;
+        missing.add(path);
+        await writeActiveMeta({ ...meta, missingPaths: [...missing].slice(-100) });
+    } catch (_) {}
+}
+
 self.addEventListener('fetch', event => {
     const request = event.request;
     if (request.method !== 'GET') return;
@@ -781,6 +810,10 @@ self.addEventListener('fetch', event => {
 
         const cached = await serveFromActiveCache(request);
         if (cached) return cached;
+        // Remember cache holes even when the network can temporarily hide them.
+        // The next explicit update will repair these paths instead of trusting
+        // the completion manifest for them.
+        event.waitUntil(recordRuntimeMiss(relativePath));
         try {
             return await fetch(request);
         } catch (error) {

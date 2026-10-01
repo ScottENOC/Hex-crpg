@@ -5,12 +5,12 @@
 (() => {
     'use strict';
 
-    const VERSION = '14';
+    const VERSION = '15';
     const OWNER = 'ScottENOC';
     const REPO = 'Hex-crpg';
     const BRANCH = 'development';
     const API_BASE = `https://api.github.com/repos/${OWNER}/${REPO}`;
-    const SW_URL = 'offlineServiceWorker.js?v=14';
+    const SW_URL = 'offlineServiceWorker.js?v=15';
     const BRANCH_CACHE_MS = 15000;
     const REQUEST_TIMEOUT_MS = 25000;
     const WORKER_STALL_TIMEOUT_MS = 45000;
@@ -307,7 +307,7 @@
                     if (settled) return;
                     settled = true;
                     close();
-                    reject(Object.assign(new Error('The local-cache worker made no progress for 45 seconds.'), { kind: 'worker-stalled' }));
+                    reject(Object.assign(new Error(`The local-cache worker made no progress for ${Math.round(timeout / 1000)} seconds.`), { kind: 'worker-stalled' }));
                 }, timeout);
             };
 
@@ -401,7 +401,16 @@
         const registration = await ensureRegistration();
         const worker = registration.active || navigator.serviceWorker.controller || registration.waiting || registration.installing;
         const latest = await getLatestRuntimeFiles();
-        return workerRequest(worker, { type: 'HEX_CACHE_DIAGNOSTICS', files: latest.files }, { timeout: 20000 });
+        return workerRequest(worker, { type: 'HEX_CACHE_DIAGNOSTICS', files: latest.files }, {
+            timeout: 30000,
+            onProgress: progress => emit({
+                phase: 'diagnostic',
+                processed: progress.processed || 0,
+                total: progress.total || 0,
+                current: progress.current || '',
+                message: progress.message || 'Inspecting local cache…',
+            }),
+        });
     }
 
     function shortCommit(value) {
@@ -411,10 +420,13 @@
     function formatCacheDiagnostic(d) {
         if (!d) return 'Cache diagnostic returned no data.';
         const cacheText = d.cacheName || 'none';
+        const probeCompleted = (d.probePresent || 0) + (d.probeMissing || 0);
+        const probeText = d.probeCount
+            ? `physical probes ${d.probePresent || 0}/${probeCompleted || d.probeCount} present${d.probeTimeouts ? ` · ${d.probeTimeouts} timed out` : ''}`
+            : 'physical probes unavailable';
         return `Diagnostic: engine v${d.workerVersion || '?'} · cache ${cacheText} · saved commit ${shortCommit(d.savedCommit)} · ` +
-            `${d.physicalPresent || 0}/${d.expectedFiles || 0} expected files physically present (${d.physicalMissing || 0} missing) · ` +
-            `SHA: ${d.shaSame || 0} same, ${d.shaDifferent || 0} different, ${d.noSavedSha || 0} without saved SHA · ` +
-            `manifest ${d.manifestFiles || 0} files · raw cache ${d.cacheEntries || 0} entries · metadata ${d.metaSource || 'none'}.`;
+            `${probeText} · SHA: ${d.shaSame || 0} same, ${d.shaDifferent || 0} different, ${d.noSavedSha || 0} without saved SHA · ` +
+            `manifest ${d.manifestFiles || 0}/${d.expectedFiles || 0} files · metadata ${d.metaSource || 'none'}.`;
     }
 
     function emitWorkerProgress(progress) {
@@ -890,7 +902,7 @@
 
     async function restartForUpdatedBuild(gate, result) {
         if (!result.changed || !result.commit) return false;
-        const reloadKey = 'hex-offline-reloaded-commit-v14';
+        const reloadKey = 'hex-offline-reloaded-commit-v15';
         let alreadyReloaded = null;
         try { alreadyReloaded = sessionStorage.getItem(reloadKey); } catch (_) {}
         if (alreadyReloaded === result.commit) return false;
