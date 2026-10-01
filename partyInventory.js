@@ -244,7 +244,7 @@ if (typeof document !== 'undefined' && !window.expeditionSystem && !document.que
 if (typeof document !== 'undefined' && !window.campSystem && !document.querySelector('script[data-camp-system]')) {
     const campScript = document.createElement('script');
     campScript.dataset.campSystem = 'true';
-    campScript.src = 'campSystem.js?v=20261001-camp1';
+    campScript.src = 'campSystem.js?v=20261001-camp2';
     campScript.async = false;
     document.head.appendChild(campScript);
 }
