@@ -2,10 +2,14 @@
 (() => {
     'use strict';
 
-    const BUILD = window.PRESENTATION_BUILD || '20260930-visibility-assets-v1';
+    const BUILD = window.PRESENTATION_BUILD || '20261001-braid-direction-v2';
     const STYLE = 'braid';
     const SIDE_LEFT_PATH = 'images/characters/human_female/hair_braid_side_left.png';
+    // Use a new URL for the corrected rear pose so iOS/GitHub Pages cannot keep
+    // serving the older straight-down braid from the image HTTP cache.
+    const BACK_RIGHT_PATH = 'images/characters/human_female/hair_braid_back_right.png';
     let sideLeftImage = null;
+    let backRightImage = null;
     const sideLeftRenderSources = new Map();
 
     function imageReady(image) {
@@ -22,8 +26,35 @@
             window.drawMap?.();
             window.renderEntities?.();
             window.refreshDirectionalTurnPortraits?.();
-        }).catch(() => {});
+        }).catch(error => console.warn('Left braid asset failed:', SIDE_LEFT_PATH, error));
         return image;
+    }
+
+    function ensureBackRightImage() {
+        if (backRightImage) return backRightImage;
+        const image = window.assetManager.request(BACK_RIGHT_PATH);
+        backRightImage = image;
+        window.assetManager.whenReady(BACK_RIGHT_PATH).then(() => {
+            installBackRightSources();
+            window.drawMap?.();
+            window.renderEntities?.();
+            window.refreshDirectionalTurnPortraits?.();
+            window.updateAppearancePreview?.();
+        }).catch(error => console.warn('Rear braid asset failed:', BACK_RIGHT_PATH, error));
+        return image;
+    }
+
+    function installBackRightSources() {
+        const image = ensureBackRightImage();
+        const sets = window.DIRECTIONAL_CHARACTER_ASSETS || {};
+        let installed = false;
+        for (const set of Object.values(sets)) {
+            const braid = set?.hair?.[STYLE];
+            if (!braid) continue;
+            braid.back = image;
+            installed = true;
+        }
+        return installed;
     }
 
     function leftRenderSource(entity) {
@@ -105,9 +136,13 @@
     }
 
     function withDirectionalBraid(entity, facing, draw) {
-        if (entity?.hairStyle !== STYLE || facing !== 'left') return draw();
+        if (entity?.hairStyle !== STYLE) return draw();
         const braid = braidSetFor(entity);
         if (!braid) return draw();
+        // Keep the corrected rear source installed even if another presentation
+        // module refreshes the shared directional asset tables.
+        braid.back = ensureBackRightImage();
+        if (facing !== 'left') return draw();
         const originalSide = braid.side;
         const left = leftRenderSource(entity);
         braid.sideLeft = ensureSideLeftImage();
@@ -142,6 +177,7 @@
 
     function install() {
         ensureSideLeftImage();
+        installBackRightSources();
         const directional = installDirectionalDrawWrapper();
         const world = installWorldDrawWrapper();
         if (directional && world) { window.__directionalBraidHairReady = true; return true; }
@@ -149,6 +185,10 @@
     }
 
     const timer = setInterval(() => { if (install()) clearInterval(timer); }, 50);
+    // Presentation modules can replace shared asset tables during startup; a
+    // cheap safety pass ensures the corrected rear braid remains authoritative.
+    const sourceTimer = setInterval(installBackRightSources, 1000);
+    setTimeout(() => clearInterval(sourceTimer), 15000);
     if (document.readyState === 'complete') install();
     else window.addEventListener('load', install, {once:true});
 })();
