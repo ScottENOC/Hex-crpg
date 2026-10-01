@@ -58,6 +58,10 @@
   load('bodyMarkingSystem.js','body-marking-system');
   load('clothingSlotExpansion.js','small-clothing-slot-expansion');
   load('newClothingGarments.js','new-clothing-garments');
+  // Content policy comes last so it can wrap the final clothing-slot model.
+  // It still polls briefly during startup because renderHotPathCache may install
+  // its shirt fast path after this nested loader finishes.
+  load('contentSafety.js','content-safety');
 
   purgeRetiredReferences();
   setInterval(purgeRetiredReferences,1000);
