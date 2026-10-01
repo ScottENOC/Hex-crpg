@@ -1,0 +1,45 @@
+name: Apply facial hair cache bump
+
+on:
+  push:
+    branches: [development]
+    paths:
+      - '.github/workflows/apply-facial-hair-cache-bump.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+      - name: Move to latest development
+        run: |
+          git fetch origin development
+          git reset --hard origin/development
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Apply cache-bust patch
+        run: python3 .github/scripts/apply-facial-hair-cache-bump.py
+      - name: Validate facial hair scripts and cache token
+        run: |
+          node --check facialHairSystem.js
+          node --check characterCreation.js
+          grep -q "characterCreation.js?v=11" index.html
+          grep -q "moustache_front.svg" facialHairSystem.js
+          grep -q "NPC_FACIAL_HAIR_CHANCE = 0.30" facialHairSystem.js
+      - name: Remove temporary patch machinery
+        run: rm .github/scripts/apply-facial-hair-cache-bump.py .github/workflows/apply-facial-hair-cache-bump.yml
+      - name: Commit and push
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html .github/scripts/apply-facial-hair-cache-bump.py .github/workflows/apply-facial-hair-cache-bump.yml
+          git commit -m 'Bump character creation cache for facial hair'
+          git pull --rebase origin development
+          git push origin HEAD:development
