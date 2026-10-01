@@ -2,10 +2,10 @@
 // Atomic, integrity-checked local game cache for the development branch.
 'use strict';
 
-const SW_VERSION = '3';
+const SW_VERSION = '4';
 const META_CACHE = `hex-game-meta-v${SW_VERSION}`;
 const GAME_CACHE_PREFIX = `hex-game-v${SW_VERSION}-`;
-const LEGACY_GAME_CACHE_PREFIXES = ['hex-game-v2-', 'hex-game-v1-'];
+const LEGACY_GAME_CACHE_PREFIXES = ['hex-game-v3-', 'hex-game-v2-', 'hex-game-v1-'];
 const SCOPE_URL = self.registration.scope;
 const META_KEY = new URL('__hex_offline_meta__/active.json', SCOPE_URL).href;
 const MANIFEST_KEY = new URL('__hex_offline_meta__/manifest.json', SCOPE_URL).href;
@@ -280,11 +280,15 @@ async function cleanupStaleGameCaches(keepNames) {
 async function assertCacheStorageWorks() {
     const probeName = `hex-game-storage-probe-v${SW_VERSION}`;
     const probeUrl = new URL('__hex_offline_meta__/storage-probe', SCOPE_URL).href;
+    const storageStep = (promise, label, timeoutMs = 5000) => Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(makeFailure('storage-timeout', `${label} timed out.`)), timeoutMs)),
+    ]);
     try {
-        const cache = await caches.open(probeName);
-        await cache.put(probeUrl, new Response('ok', { headers: { 'Content-Type': 'text/plain' } }));
-        const response = await cache.match(probeUrl);
-        if (!response || await response.text() !== 'ok') {
+        const cache = await storageStep(caches.open(probeName), 'Opening local Cache Storage');
+        await storageStep(cache.put(probeUrl, new Response('ok', { headers: { 'Content-Type': 'text/plain' } })), 'Writing the local storage test');
+        const response = await storageStep(cache.match(probeUrl), 'Reading the local storage test');
+        if (!response || await storageStep(response.text(), 'Checking the local storage test') !== 'ok') {
             throw makeFailure('storage', 'A test file was written but could not be read back from iOS Cache Storage.');
         }
     } catch (error) {
@@ -299,7 +303,7 @@ async function assertCacheStorageWorks() {
 async function cleanupLegacyCaches() {
     const names = await caches.keys();
     await Promise.all(names
-        .filter(name => name === 'hex-game-meta-v1' || name === 'hex-game-meta-v2' || name.startsWith('hex-game-v1-') || name.startsWith('hex-game-v2-'))
+        .filter(name => name === 'hex-game-meta-v1' || name === 'hex-game-meta-v2' || name === 'hex-game-meta-v3' || name.startsWith('hex-game-v1-') || name.startsWith('hex-game-v2-') || name.startsWith('hex-game-v3-'))
         .map(name => caches.delete(name)));
 }
 
@@ -314,26 +318,27 @@ async function cacheGame(message, port) {
     }
 
     const diagnosticTotalBytes = files.reduce((sum, file) => sum + (Number(file.size) || 0), 0);
-    port.postMessage({
-        type: 'progress', phase: 'storage-check', current: 'Testing a local Cache Storage write…',
-        processed: 0, stored: 0, total: files.length, downloaded: 0, reused: 0, retried: 0, failed: 0,
-        totalBytes: diagnosticTotalBytes, message: 'Checking that iOS can save game files locally…',
-    });
-    try {
-        await assertCacheStorageWorks();
-    } catch (error) {
-        port.postMessage({
-            type: 'result',
-            result: {
-                complete: false, storageFailure: true, quotaFailure: error?.kind === 'quota',
-                failures: [serialiseFailure(error, '(local storage test)')], stored: 0, total: files.length,
-                downloaded: 0, reused: 0, retried: 0, activeCommit: null,
-            },
-        });
-        return;
-    }
-
     const before = await statusResult();
+    if (!before.valid) {
+        port.postMessage({
+            type: 'progress', phase: 'storage-check', current: 'Testing a local Cache Storage write…',
+            processed: 0, stored: 0, total: files.length, downloaded: 0, reused: 0, retried: 0, failed: 0,
+            totalBytes: diagnosticTotalBytes, message: 'Checking that iOS can save game files locally…',
+        });
+        try {
+            await assertCacheStorageWorks();
+        } catch (error) {
+            port.postMessage({
+                type: 'result',
+                result: {
+                    complete: false, storageFailure: true, quotaFailure: error?.kind === 'quota',
+                    failures: [serialiseFailure(error, '(local storage test)')], stored: 0, total: files.length,
+                    downloaded: 0, reused: 0, retried: 0, activeCommit: null,
+                },
+            });
+            return;
+        }
+    }
     const activeMeta = await readActiveMeta(true);
     const targetCacheName = cacheNameForCommit(commit);
     await cleanupStaleGameCaches([before.valid ? before.cacheName : null, targetCacheName]);

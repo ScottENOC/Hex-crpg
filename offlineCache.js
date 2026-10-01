@@ -5,12 +5,12 @@
 (() => {
     'use strict';
 
-    const VERSION = '3';
+    const VERSION = '4';
     const OWNER = 'ScottENOC';
     const REPO = 'Hex-crpg';
     const BRANCH = 'development';
     const API_BASE = `https://api.github.com/repos/${OWNER}/${REPO}`;
-    const SW_URL = 'offlineServiceWorker.js?v=3';
+    const SW_URL = 'offlineServiceWorker.js?v=4';
     const BRANCH_CACHE_MS = 15000;
     const REQUEST_TIMEOUT_MS = 25000;
     const WORKER_STALL_TIMEOUT_MS = 45000;
@@ -188,8 +188,8 @@
                 if (!registration.active) await navigator.serviceWorker.ready;
 
                 const activeUrl = registration.active?.scriptURL || '';
-                if (!registration.active || !activeUrl.includes('offlineServiceWorker.js') || !activeUrl.includes('v=3')) {
-                    const error = new Error('The v3 offline worker is not active yet.');
+                if (!registration.active || !activeUrl.includes('offlineServiceWorker.js') || !activeUrl.includes('v=4')) {
+                    const error = new Error('The v4 offline worker is not active yet.');
                     error.kind = 'worker-version';
                     throw error;
                 }
@@ -518,7 +518,7 @@
         if (!gate) {
             gate = document.createElement('div');
             gate.id = 'hex-offline-gate';
-            gate.innerHTML = '<div class="hex-offline-card"><h2 class="hex-offline-title">Preparing local game copy…</h2><p class="hex-offline-count">Starting…</p><div class="hex-offline-track"><div class="hex-offline-bar"></div></div><p class="hex-offline-detail"></p><div class="hex-offline-error" hidden></div><div class="hex-offline-actions"><button class="hex-offline-retry" hidden>Retry</button><button class="hex-offline-continue" hidden>Continue</button></div></div>';
+            gate.innerHTML = '<div class="hex-offline-card"><h2 class="hex-offline-title">Preparing local game copy…</h2><p class="hex-offline-count">Starting…</p><div class="hex-offline-track"><div class="hex-offline-bar"></div></div><p class="hex-offline-detail"></p><div class="hex-offline-error" hidden></div><div class="hex-offline-actions"><button class="hex-offline-launch" hidden>Launch now</button><button class="hex-offline-update" hidden>Check for updates</button><button class="hex-offline-retry" hidden>Retry</button><button class="hex-offline-continue" hidden>Continue</button></div></div>';
             document.body.appendChild(gate);
         }
         return gate;
@@ -600,6 +600,88 @@
         });
     }
 
+    async function readLocalCopyStatus() {
+        emit({ phase: 'checking', stored: 0, processed: 0, total: 0, message: 'Checking local game copy…' });
+        try {
+            const registration = await ensureRegistration();
+            const worker = registration.active || registration.waiting || registration.installing;
+            return await getWorkerStatus(worker);
+        } catch (error) {
+            console.warn('Could not read local game copy', error);
+            return { valid: false, error: errorInfo(error, 'local-status') };
+        }
+    }
+
+    function launchLocalCopy(gate, result) {
+        releaseReadyBarrier({
+            complete: true,
+            usingExisting: true,
+            hasActiveCache: true,
+            commit: result.activeCommit || result.commit || null,
+            fileCount: result.fileCount || 0,
+        });
+        gate.hidden = true;
+        document.body.classList.remove('hex-offline-preparing');
+    }
+
+    async function waitForLocalChoice(gate, local, message = 'Ready to play from the copy stored on this phone.') {
+        const title = gate.querySelector('.hex-offline-title');
+        const count = gate.querySelector('.hex-offline-count');
+        const detail = gate.querySelector('.hex-offline-detail');
+        const bar = gate.querySelector('.hex-offline-bar');
+        const launchButton = gate.querySelector('.hex-offline-launch');
+        const updateButton = gate.querySelector('.hex-offline-update');
+        const errorBox = gate.querySelector('.hex-offline-error');
+
+        title.textContent = 'Silverhart Saga';
+        count.textContent = `${local.fileCount || 0} game files available locally`;
+        detail.textContent = message;
+        bar.style.width = '100%';
+        errorBox.hidden = true;
+        launchButton.hidden = false;
+        updateButton.hidden = false;
+        updateButton.disabled = navigator.onLine === false;
+        updateButton.textContent = navigator.onLine === false ? 'Check for updates (offline)' : 'Check for updates';
+
+        return new Promise(resolve => {
+            launchButton.onclick = () => resolve('launch');
+            updateButton.onclick = () => resolve('update');
+        }).finally(() => {
+            launchButton.onclick = null;
+            updateButton.onclick = null;
+            launchButton.hidden = true;
+            updateButton.hidden = true;
+            updateButton.disabled = false;
+        });
+    }
+
+    async function handleIncompleteResult(gate, result) {
+        while (!result.complete) {
+            renderProgress(gate, status);
+            const action = await waitForFailureAction(gate, result);
+            if (action === 'continue') return { continued: true, result };
+            gate.querySelector('.hex-offline-error').hidden = true;
+            emit({ phase: 'recovering', message: 'Retrying the local game copy…' });
+            result = await sync({ force: true });
+        }
+        return { continued: false, result };
+    }
+
+    async function restartForUpdatedBuild(gate, result) {
+        if (!result.changed || !result.commit) return false;
+        const reloadKey = 'hex-offline-reloaded-commit-v4';
+        let alreadyReloaded = null;
+        try { alreadyReloaded = sessionStorage.getItem(reloadKey); } catch (_) {}
+        if (alreadyReloaded === result.commit) return false;
+        try { sessionStorage.setItem(reloadKey, result.commit); } catch (_) {}
+        gate.querySelector('.hex-offline-title').textContent = 'Update complete';
+        gate.querySelector('.hex-offline-count').textContent = 'Restarting once so the updated game runs from the phone…';
+        gate.querySelector('.hex-offline-bar').style.width = '100%';
+        await sleep(300);
+        location.reload();
+        return true;
+    }
+
     async function startup() {
         const gate = ensureGate();
         if (!gate) return;
@@ -607,46 +689,53 @@
         gate.hidden = false;
         const unsubscribe = onProgress(progress => renderProgress(gate, progress));
         try {
-            let result = await sync();
-            while (!result.complete) {
-                renderProgress(gate, status);
-                const action = await waitForFailureAction(gate, result);
-                if (action === 'continue') {
-                    releaseReadyBarrier({ ...result, continuedOnline: true });
+            let local = await readLocalCopyStatus();
+
+            // First install/repair: there is nothing safe to launch yet, so build
+            // the local copy automatically once. Subsequent launches never do this.
+            if (!local.valid) {
+                let installResult = await sync({ force: true });
+                const handled = await handleIncompleteResult(gate, installResult);
+                installResult = handled.result;
+                if (handled.continued) {
+                    releaseReadyBarrier({ ...installResult, continuedOnline: true });
                     gate.hidden = true;
                     document.body.classList.remove('hex-offline-preparing');
                     return;
                 }
-                gate.querySelector('.hex-offline-error').hidden = true;
-                emit({ phase: 'recovering', message: 'Retrying the local game copy…' });
-                result = await sync({ force: true });
+                if (await restartForUpdatedBuild(gate, installResult)) return;
+                local = await readLocalCopyStatus();
+                if (!local.valid) throw Object.assign(new Error('The local copy completed but could not be reopened.'), { kind: 'local-status' });
             }
 
-            if (result.warning) {
-                gate.querySelector('.hex-offline-title').textContent = 'Using local game copy';
-                gate.querySelector('.hex-offline-count').textContent = 'The saved copy is ready.';
-                gate.querySelector('.hex-offline-detail').textContent = result.warning.message;
-                await sleep(1800);
-            }
+            let choiceMessage = local.recovered
+                ? 'Recovered the existing local game copy. Ready to launch.'
+                : 'Ready to play from the copy stored on this phone.';
 
-            if (result.changed && result.commit) {
-                const reloadKey = 'hex-offline-reloaded-commit-v3';
-                let alreadyReloaded = null;
-                try { alreadyReloaded = sessionStorage.getItem(reloadKey); } catch (_) {}
-                if (alreadyReloaded !== result.commit) {
-                    try { sessionStorage.setItem(reloadKey, result.commit); } catch (_) {}
-                    gate.querySelector('.hex-offline-title').textContent = 'Local copy ready';
-                    gate.querySelector('.hex-offline-count').textContent = 'Restarting once so every game file comes from the phone…';
-                    gate.querySelector('.hex-offline-bar').style.width = '100%';
-                    await sleep(300);
-                    location.reload();
+            while (local.valid) {
+                const choice = await waitForLocalChoice(gate, local, choiceMessage);
+                if (choice === 'launch') {
+                    launchLocalCopy(gate, local);
                     return;
                 }
-            }
 
-            releaseReadyBarrier(result);
-            gate.hidden = true;
-            document.body.classList.remove('hex-offline-preparing');
+                // Explicit user action only: GitHub and storage checks happen here.
+                emit({ phase: 'checking', message: 'Checking GitHub for a newer development build…' });
+                let updateResult = await sync({ force: true });
+                const handled = await handleIncompleteResult(gate, updateResult);
+                updateResult = handled.result;
+                if (handled.continued) {
+                    launchLocalCopy(gate, local);
+                    return;
+                }
+                if (await restartForUpdatedBuild(gate, updateResult)) return;
+
+                local = await readLocalCopyStatus();
+                if (!local.valid) throw Object.assign(new Error('The saved local copy could not be reopened after the update check.'), { kind: 'local-status' });
+                choiceMessage = updateResult.upToDate || updateResult.changed === false
+                    ? 'No newer build found. Your local copy is ready.'
+                    : 'Update check complete. Your local copy is ready.';
+            }
         } catch (error) {
             console.error('Offline cache startup failed', error);
             const result = { complete: false, hasActiveCache: false, failures: [errorInfo(error, 'startup')] };
