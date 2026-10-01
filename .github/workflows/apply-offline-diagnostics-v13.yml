@@ -23,7 +23,9 @@ jobs:
         with:
           node-version: '20'
       - name: Apply diagnostics patch
-        run: python3 scripts/apply_offline_diagnostics_v13.py
+        run: |
+          sed -i "s/hex-offline-reloaded-commit-v12/hex-offline-reloaded-commit-v11/" scripts/apply_offline_diagnostics_v13.py
+          python3 scripts/apply_offline_diagnostics_v13.py
       - name: Validate JavaScript and diagnostic wiring
         run: |
           node --check offlineCache.js
