@@ -2,10 +2,10 @@
 // Atomic, integrity-checked local game cache for the development branch.
 'use strict';
 
-const SW_VERSION = '6';
+const SW_VERSION = '7';
 const META_CACHE = `hex-game-meta-v${SW_VERSION}`;
 const GAME_CACHE_PREFIX = `hex-game-v${SW_VERSION}-`;
-const LEGACY_GAME_CACHE_PREFIXES = ['hex-game-v5-', 'hex-game-v4-', 'hex-game-v3-', 'hex-game-v2-', 'hex-game-v1-'];
+const LEGACY_GAME_CACHE_PREFIXES = ['hex-game-v6-', 'hex-game-v5-', 'hex-game-v4-', 'hex-game-v3-', 'hex-game-v2-', 'hex-game-v1-'];
 const SCOPE_URL = self.registration.scope;
 const META_KEY = new URL('__hex_offline_meta__/active.json', SCOPE_URL).href;
 const MANIFEST_KEY = new URL('__hex_offline_meta__/manifest.json', SCOPE_URL).href;
@@ -300,10 +300,16 @@ async function assertCacheStorageWorks() {
     }
 }
 
-async function cleanupLegacyCaches() {
+async function cleanupLegacyCaches(keepNames = []) {
+    const keep = new Set((keepNames || []).filter(Boolean));
     const names = await caches.keys();
     await Promise.all(names
-        .filter(name => name === 'hex-game-meta-v1' || name === 'hex-game-meta-v2' || name === 'hex-game-meta-v3' || name === 'hex-game-meta-v4' || name === 'hex-game-meta-v5' || name.startsWith('hex-game-v1-') || name.startsWith('hex-game-v2-') || name.startsWith('hex-game-v3-') || name.startsWith('hex-game-v4-') || name.startsWith('hex-game-v5-'))
+        .filter(name => !keep.has(name) && (
+            name === 'hex-game-meta-v1' || name === 'hex-game-meta-v2' || name === 'hex-game-meta-v3' ||
+            name === 'hex-game-meta-v4' || name === 'hex-game-meta-v5' || name === 'hex-game-meta-v6' ||
+            name.startsWith('hex-game-v1-') || name.startsWith('hex-game-v2-') || name.startsWith('hex-game-v3-') ||
+            name.startsWith('hex-game-v4-') || name.startsWith('hex-game-v5-') || name.startsWith('hex-game-v6-')
+        ))
         .map(name => caches.delete(name)));
 }
 
@@ -317,13 +323,13 @@ async function cacheGame(message, port) {
         return;
     }
 
-    const diagnosticTotalBytes = files.reduce((sum, file) => sum + (Number(file.size) || 0), 0);
+    const totalBytes = files.reduce((sum, file) => sum + (Number(file.size) || 0), 0);
     const before = await statusResult();
     if (!before.valid) {
         port.postMessage({
             type: 'progress', phase: 'storage-check', current: 'Testing a local Cache Storage write…',
             processed: 0, stored: 0, total: files.length, downloaded: 0, reused: 0, retried: 0, failed: 0,
-            totalBytes: diagnosticTotalBytes, message: 'Checking that iOS can save game files locally…',
+            totalBytes, message: 'Checking that iOS can save game files locally…',
         });
         try {
             await assertCacheStorageWorks();
@@ -339,17 +345,21 @@ async function cacheGame(message, port) {
             return;
         }
     }
-    const activeMeta = await readActiveMeta(true);
-    const targetCacheName = cacheNameForCommit(commit);
-    await cleanupStaleGameCaches([before.valid ? before.cacheName : null, targetCacheName]);
-    const targetCache = await caches.open(targetCacheName);
-    const oldCache = before.valid && before.cacheName && before.cacheName !== targetCacheName
-        ? await caches.open(before.cacheName)
-        : null;
-    const oldManifest = oldCache ? await readCacheManifest(before.cacheName) : null;
-    const oldShaByPath = new Map((oldManifest?.files || []).map(file => [file.path, file.sha]));
 
-    const totalBytes = files.reduce((sum, file) => sum + (Number(file.size) || 0), 0);
+    // v7 deliberately does NOT create and populate another full 420-file cache
+    // for every update. On iOS that duplication can stall Cache Storage before
+    // even the first unchanged file is reported as reused. Instead, download
+    // only changed/new files into a tiny staging cache. Once every changed file
+    // is verified, apply those few responses to the existing complete cache.
+    const activeCacheName = before.valid ? before.cacheName : null;
+    const activeCache = activeCacheName ? await caches.open(activeCacheName) : null;
+    const activeManifest = activeCacheName ? await readCacheManifest(activeCacheName) : null;
+    const activeShaByPath = new Map((activeManifest?.files || []).map(file => [file.path, file.sha]));
+    const newPaths = new Set(files.map(file => file.path));
+
+    const patchCacheName = `${GAME_CACHE_PREFIX}patch-${commit}`;
+    const patchCache = await caches.open(patchCacheName);
+
     let processed = 0;
     let stored = 0;
     let downloaded = 0;
@@ -361,50 +371,42 @@ async function cacheGame(message, port) {
 
     const sendProgress = (current = '', phase = 'storing', messageText = '') => {
         port.postMessage({
-            type: 'progress',
-            phase,
-            current,
-            processed,
-            stored,
-            total: files.length,
-            downloaded,
-            reused,
-            retried,
-            failed: failures.length,
-            totalBytes,
-            message: messageText,
+            type: 'progress', phase, current, processed, stored, total: files.length,
+            downloaded, reused, retried, failed: failures.length, totalBytes, message: messageText,
         });
     };
 
     async function cacheOne(file) {
         const request = new Request(localUrl(file.path));
-        const already = await targetCache.match(request, { ignoreSearch: true });
-        if (already && already.headers.get('X-Hex-Blob-Sha') === file.sha) {
-            reused++;
-            stored++;
-            return;
-        }
 
-        if (oldCache && oldShaByPath.get(file.path) === file.sha) {
-            const oldResponse = await oldCache.match(request, { ignoreSearch: true });
-            if (oldResponse) {
-                await targetCache.put(request, oldResponse.clone());
+        // Unchanged files stay exactly where they already are. No second copy.
+        if (activeCache && activeShaByPath.get(file.path) === file.sha) {
+            const existing = await activeCache.match(request, { ignoreSearch: true });
+            if (existing) {
                 reused++;
                 stored++;
                 return;
             }
         }
 
-        sendProgress(file.path, 'storing', `Downloading ${file.path}…`);
+        // Resume a partially downloaded patch without re-fetching good files.
+        const staged = await patchCache.match(request, { ignoreSearch: true });
+        if (staged && staged.headers.get('X-Hex-Blob-Sha') === file.sha) {
+            reused++;
+            stored++;
+            return;
+        }
+
+        sendProgress(file.path, 'storing', `Downloading changed file ${file.path}…`);
         const result = await downloadVerifiedFile(file, { owner, repo, commit });
         retried += Math.max(0, (result.attempts || 1) - 1);
         try {
-            await targetCache.put(request, result.response.clone());
+            await patchCache.put(request, result.response.clone());
         } catch (error) {
             if (error?.name === 'QuotaExceededError') {
-                throw makeFailure('quota', 'The browser ran out of local web-app storage while saving this file.');
+                throw makeFailure('quota', 'The browser ran out of local web-app storage while saving this update.');
             }
-            throw makeFailure('storage', `The browser could not save the file locally: ${error?.message || error}`);
+            throw makeFailure('storage', `The browser could not save the changed file locally: ${error?.message || error}`);
         }
         downloaded++;
         stored++;
@@ -428,73 +430,76 @@ async function cacheGame(message, port) {
         }
     }
 
-    sendProgress('', 'storing', `Saving ${files.length} files locally…`);
+    sendProgress('', 'storing', before.valid
+        ? `Checking ${files.length} files; unchanged files stay in place…`
+        : `Saving ${files.length} files locally…`);
     await Promise.all(Array.from({ length: MAX_CONCURRENT_DOWNLOADS }, () => workerLoop()));
 
-    if (quotaFailure) {
-        if (!before.valid || before.cacheName !== targetCacheName) await caches.delete(targetCacheName);
+    if (quotaFailure || failures.length) {
         port.postMessage({
             type: 'result',
             result: {
-                complete: false,
-                quotaFailure: true,
-                failures,
-                stored,
-                total: files.length,
-                downloaded,
-                reused,
-                retried,
-                activeCommit: before.activeCommit || null,
+                complete: false, quotaFailure, failures, stored, total: files.length,
+                downloaded, reused, retried, activeCommit: before.activeCommit || null,
+                hasActiveCache: Boolean(before.valid),
             },
         });
         return;
     }
 
-    if (failures.length) {
-        port.postMessage({
-            type: 'result',
-            result: {
-                complete: false,
-                failures,
-                stored,
-                total: files.length,
-                downloaded,
-                reused,
-                retried,
-                activeCommit: before.activeCommit || null,
-            },
-        });
-        return;
+    let finalCacheName;
+    let finalCache;
+
+    if (before.valid && activeCache) {
+        // All changed files are already verified. Applying the patch now only
+        // touches changed/new files plus removals, rather than duplicating the
+        // entire game. If a prior patch had no changes this loop is effectively free.
+        const patchRequests = await patchCache.keys();
+        for (const request of patchRequests) {
+            const response = await patchCache.match(request);
+            if (response) await activeCache.put(request, response.clone());
+        }
+
+        // Remove runtime files that no longer exist in the new build.
+        for (const oldFile of (activeManifest?.files || [])) {
+            if (!newPaths.has(oldFile.path)) {
+                await activeCache.delete(new Request(localUrl(oldFile.path)), { ignoreSearch: true });
+            }
+        }
+
+        await writeCacheManifest(activeCache, commit, files);
+        finalCacheName = activeCacheName;
+        finalCache = activeCache;
+        await caches.delete(patchCacheName);
+    } else {
+        // First install: the staging cache already contains the whole verified
+        // build, so simply promote it instead of copying it again.
+        await writeCacheManifest(patchCache, commit, files);
+        finalCacheName = patchCacheName;
+        finalCache = patchCache;
     }
 
-    await writeCacheManifest(targetCache, commit, files);
     const nextMeta = {
         version: SW_VERSION,
-        cacheName: targetCacheName,
+        cacheName: finalCacheName,
         commit,
         fileCount: files.length,
         totalBytes,
         updatedAt: Date.now(),
     };
-    // This pointer is the atomic switch: it is written only after every file
-    // exists in the staged cache and passed its Git SHA integrity check.
     await writeActiveMeta(nextMeta);
-    await cleanupStaleGameCaches([targetCacheName]);
-    await cleanupLegacyCaches();
-    sendProgress('', 'ready', 'Local copy complete.');
+    await cleanupStaleGameCaches([finalCacheName]);
+    await cleanupLegacyCaches([finalCacheName]);
+
+    sendProgress('', 'ready', before.valid
+        ? `Update complete: ${downloaded} changed file${downloaded === 1 ? '' : 's'} downloaded, ${reused} reused in place.`
+        : 'Local copy complete.');
     port.postMessage({
         type: 'result',
         result: {
-            complete: true,
-            failures: [],
-            stored: files.length,
-            total: files.length,
-            downloaded,
-            reused,
-            retried,
-            activeCommit: commit,
-            fileCount: files.length,
-            totalBytes,
+            complete: true, failures: [], stored: files.length, total: files.length,
+            downloaded, reused, retried, activeCommit: commit, fileCount: files.length,
+            totalBytes, changed: before.activeCommit !== commit,
         },
     });
 }
@@ -592,6 +597,23 @@ self.addEventListener('fetch', event => {
 
         const cached = await serveFromActiveCache(request);
         if (cached) return cached;
-        return fetch(request);
+        try {
+            return await fetch(request);
+        } catch (error) {
+            // Never reject event.respondWith() merely because the phone is
+            // offline. WebKit surfaces that as “FetchEvent.respondWith …
+            // TypeError: Load failed”. A controlled 503 lets optional misses
+            // (notably favicon/browser probes) fail harmlessly while making a
+            // genuinely missing runtime file diagnosable as HTTP 503.
+            try {
+                const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+                for (const client of clients) client.postMessage({ type: 'HEX_OFFLINE_MISS', path: relativePath || '(root)' });
+            } catch (_) {}
+            return new Response('Offline and this resource is not in the local game copy.', {
+                status: 503,
+                statusText: 'Offline',
+                headers: { 'Content-Type': 'text/plain; charset=utf-8', 'X-Hex-Offline-Miss': relativePath || '(root)' },
+            });
+        }
     })());
 });
