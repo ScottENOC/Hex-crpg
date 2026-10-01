@@ -521,9 +521,12 @@
                     const index = prefixes.findIndex(prefix => name.startsWith(prefix));
                     return index < 0 ? Number.MAX_SAFE_INTEGER : index;
                 };
+                // Older v15 first installs could promote a fully complete cache
+                // whose name still contains "patch". Do not hide those here:
+                // incomplete staging caches have no completion manifest and are
+                // rejected below, while completed ones are safe to recover.
                 const candidates = cacheNames
                     .filter(name => prefixes.some(prefix => name.startsWith(prefix)))
-                    .filter(name => !/(?:^|-)patch(?:-|$)/i.test(name))
                     .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
                 discoveredCacheNames = candidates.slice(0, 8);
                 emit({

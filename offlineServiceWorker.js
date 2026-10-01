@@ -535,7 +535,13 @@ async function cacheGame(message, port) {
     const reportedMissingPaths = new Set(before.reportedMissingPaths || []);
     const newPaths = new Set(files.map(file => file.path));
 
-    const patchCacheName = `${GAME_CACHE_PREFIX}patch-${commit}`;
+    // Incremental updates use a temporary patch cache. A first install is
+    // already downloading the complete build, so give that cache its permanent
+    // canonical name immediately. Recovery still accepts older completed
+    // patch-named caches when they contain a valid completion manifest.
+    const patchCacheName = before.valid
+        ? `${GAME_CACHE_PREFIX}patch-${commit}`
+        : cacheNameForCommit(commit);
     const patchCache = await caches.open(patchCacheName);
 
     let processed = 0;
