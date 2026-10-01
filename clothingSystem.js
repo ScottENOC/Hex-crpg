@@ -56,6 +56,7 @@
   load('spriteAlignmentFixes.js','sprite-alignment-fixes');
   load('fashionMarket.js','silverhart-fashion-market');
   load('bodyMarkingSystem.js','body-marking-system');
+  load('clothingSlotExpansion.js','small-clothing-slot-expansion');
 
   purgeRetiredReferences();
   setInterval(purgeRetiredReferences,1000);
