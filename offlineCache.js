@@ -5,12 +5,12 @@
 (() => {
     'use strict';
 
-    const VERSION = '12';
+    const VERSION = '13';
     const OWNER = 'ScottENOC';
     const REPO = 'Hex-crpg';
     const BRANCH = 'development';
     const API_BASE = `https://api.github.com/repos/${OWNER}/${REPO}`;
-    const SW_URL = 'offlineServiceWorker.js?v=12';
+    const SW_URL = 'offlineServiceWorker.js?v=13';
     const BRANCH_CACHE_MS = 15000;
     const REQUEST_TIMEOUT_MS = 25000;
     const WORKER_STALL_TIMEOUT_MS = 45000;
@@ -384,6 +384,39 @@
         }
     }
 
+    async function getLatestRuntimeFiles() {
+        const branchInfo = await getBranchInfo();
+        const commit = branchInfo?.commit?.sha;
+        const treeSha = branchInfo?.commit?.commit?.tree?.sha;
+        if (!commit || !treeSha) throw Object.assign(new Error('GitHub returned branch information without a commit/tree SHA.'), { kind: 'github-data' });
+        const treeResult = await fetchJsonWithRetries(`${API_BASE}/git/trees/${treeSha}?recursive=1`, 'GitHub game-file list');
+        if (treeResult?.truncated) throw Object.assign(new Error('GitHub returned an incomplete file list.'), { kind: 'file-list-truncated' });
+        const files = runtimeFilesFromTree(treeResult?.tree);
+        if (!files.length) throw Object.assign(new Error('No runtime game files were found.'), { kind: 'file-list-empty' });
+        return { commit, files };
+    }
+
+    async function inspectLocalCopy() {
+        emit({ phase: 'checking', message: 'Inspecting local cache without downloading anything…' });
+        const registration = await ensureRegistration({ allowUpdate: true });
+        const worker = registration.active || registration.waiting || registration.installing;
+        const latest = await getLatestRuntimeFiles();
+        return workerRequest(worker, { type: 'HEX_CACHE_DIAGNOSTICS', files: latest.files }, { timeout: 20000 });
+    }
+
+    function shortCommit(value) {
+        return value ? String(value).slice(0, 8) : 'none';
+    }
+
+    function formatCacheDiagnostic(d) {
+        if (!d) return 'Cache diagnostic returned no data.';
+        const cacheText = d.cacheName || 'none';
+        return `Diagnostic: engine v${d.workerVersion || '?'} · cache ${cacheText} · saved commit ${shortCommit(d.savedCommit)} · ` +
+            `${d.physicalPresent || 0}/${d.expectedFiles || 0} expected files physically present (${d.physicalMissing || 0} missing) · ` +
+            `SHA: ${d.shaSame || 0} same, ${d.shaDifferent || 0} different, ${d.noSavedSha || 0} without saved SHA · ` +
+            `manifest ${d.manifestFiles || 0} files · raw cache ${d.cacheEntries || 0} entries · metadata ${d.metaSource || 'none'}.`;
+    }
+
     function emitWorkerProgress(progress) {
         emit({
             phase: progress.phase || 'storing',
@@ -676,7 +709,7 @@
         if (!gate) {
             gate = document.createElement('div');
             gate.id = 'hex-offline-gate';
-            gate.innerHTML = '<div class="hex-offline-card"><h2 class="hex-offline-title">Preparing local game copy…</h2><p class="hex-offline-count">Starting…</p><div class="hex-offline-track"><div class="hex-offline-bar"></div></div><p class="hex-offline-detail"></p><div class="hex-offline-error" hidden></div><div class="hex-offline-actions"><button class="hex-offline-launch" hidden>Launch now</button><button class="hex-offline-update" hidden>Check for updates</button><button class="hex-offline-retry" hidden>Retry</button><button class="hex-offline-continue" hidden>Continue</button></div></div>';
+            gate.innerHTML = '<div class="hex-offline-card"><h2 class="hex-offline-title">Preparing local game copy…</h2><p class="hex-offline-count">Starting…</p><div class="hex-offline-track"><div class="hex-offline-bar"></div></div><p class="hex-offline-detail"></p><div class="hex-offline-error" hidden></div><div class="hex-offline-actions"><button class="hex-offline-launch" hidden>Launch now</button><button class="hex-offline-update" hidden>Check for updates</button><button class="hex-offline-inspect" hidden>Inspect local copy</button><button class="hex-offline-retry" hidden>Retry</button><button class="hex-offline-continue" hidden>Continue</button></div></div>';
             document.body.appendChild(gate);
         }
         return gate;
@@ -803,6 +836,7 @@
         const bar = gate.querySelector('.hex-offline-bar');
         const launchButton = gate.querySelector('.hex-offline-launch');
         const updateButton = gate.querySelector('.hex-offline-update');
+        const inspectButton = gate.querySelector('.hex-offline-inspect');
         const errorBox = gate.querySelector('.hex-offline-error');
 
         title.textContent = 'Silverhart Saga';
@@ -820,18 +854,24 @@
         errorBox.hidden = true;
         launchButton.hidden = false;
         updateButton.hidden = false;
+        inspectButton.hidden = false;
         updateButton.disabled = navigator.onLine === false;
+        inspectButton.disabled = navigator.onLine === false;
         updateButton.textContent = navigator.onLine === false ? 'Check for updates (offline)' : 'Check for updates';
 
         return new Promise(resolve => {
             launchButton.onclick = () => resolve('launch');
             updateButton.onclick = () => resolve('update');
+            inspectButton.onclick = () => resolve('inspect');
         }).finally(() => {
             launchButton.onclick = null;
             updateButton.onclick = null;
+            inspectButton.onclick = null;
             launchButton.hidden = true;
             updateButton.hidden = true;
+            inspectButton.hidden = true;
             updateButton.disabled = false;
+            inspectButton.disabled = false;
         });
     }
 
@@ -849,7 +889,7 @@
 
     async function restartForUpdatedBuild(gate, result) {
         if (!result.changed || !result.commit) return false;
-        const reloadKey = 'hex-offline-reloaded-commit-v11';
+        const reloadKey = 'hex-offline-reloaded-commit-v13';
         let alreadyReloaded = null;
         try { alreadyReloaded = sessionStorage.getItem(reloadKey); } catch (_) {}
         if (alreadyReloaded === result.commit) return false;
@@ -912,6 +952,19 @@
                 if (choice === 'launch') {
                     launchLocalCopy(gate, local);
                     return;
+                }
+                if (choice === 'inspect') {
+                    try {
+                        const diagnostic = await inspectLocalCopy();
+                        choiceMessage = formatCacheDiagnostic(diagnostic);
+                    } catch (error) {
+                        choiceMessage = `Cache diagnostic failed: ${error?.message || error}`;
+                    }
+                    local = await readLocalCopyStatus();
+                    if (!local.valid && local.statusUnavailable && local.hasWorker) {
+                        local = { ...local, valid: true, unverified: true, fileCount: null };
+                    }
+                    continue;
                 }
 
                 // Explicit user action only: GitHub and storage checks happen here.

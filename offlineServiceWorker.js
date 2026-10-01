@@ -2,7 +2,7 @@
 // Atomic, integrity-checked local game cache for the development branch.
 'use strict';
 
-const SW_VERSION = '12';
+const SW_VERSION = '13';
 // These names are intentionally NOT versioned. Worker implementation versions
 // may change without making the stored game copy foreign to the next worker.
 const META_CACHE = 'hex-game-meta';
@@ -189,6 +189,99 @@ async function statusResult() {
     }
 
     return { valid: false, activeCommit: null, fileCount: 0, cacheName: null, recovered: false };
+}
+
+async function diagnoseGameCache(files) {
+    const expectedFiles = Array.isArray(files) ? files.filter(file => file?.path && file?.sha) : [];
+    const cacheNames = await caches.keys();
+    let meta = await readActiveMeta(true);
+    let metaSource = meta ? META_CACHE : null;
+
+    // If the stable metadata record is missing, inspect old records without
+    // mutating anything. This lets the phone tell us whether migration failed.
+    if (!meta?.cacheName) {
+        for (const legacyMetaName of LEGACY_META_CACHES) {
+            if (!cacheNames.includes(legacyMetaName)) continue;
+            try {
+                const legacyMetaCache = await caches.open(legacyMetaName);
+                const candidate = await readJsonResponse(await legacyMetaCache.match(META_KEY));
+                if (candidate?.cacheName) {
+                    meta = candidate;
+                    metaSource = legacyMetaName;
+                    break;
+                }
+            } catch (_) {}
+        }
+    }
+
+    let cacheName = meta?.cacheName || null;
+    if (!cacheName || !cacheNames.includes(cacheName)) {
+        const candidates = cacheNames.filter(name =>
+            name.startsWith(GAME_CACHE_PREFIX) || LEGACY_GAME_CACHE_PREFIXES.some(prefix => name.startsWith(prefix))
+        );
+        if (candidates.length) cacheName = candidates[candidates.length - 1];
+    }
+
+    if (!cacheName || !cacheNames.includes(cacheName)) {
+        return {
+            workerVersion: SW_VERSION,
+            metaSource,
+            cacheName: cacheName || null,
+            cacheExists: false,
+            savedCommit: meta?.commit || null,
+            manifestFiles: 0,
+            cacheEntries: 0,
+            expectedFiles: expectedFiles.length,
+            physicalPresent: 0,
+            physicalMissing: expectedFiles.length,
+            shaSame: 0,
+            shaDifferent: 0,
+            noSavedSha: expectedFiles.length,
+        };
+    }
+
+    const cache = await caches.open(cacheName);
+    const manifest = await readCacheManifest(cacheName);
+    const keys = await cache.keys();
+    const cachedUrls = new Set(keys.map(request => {
+        try {
+            const url = new URL(request.url);
+            url.search = '';
+            url.hash = '';
+            return url.href;
+        } catch (_) {
+            return request.url;
+        }
+    }));
+    const savedShaByPath = new Map((manifest?.files || []).map(file => [file.path, file.sha]));
+
+    let physicalPresent = 0;
+    let shaSame = 0;
+    let shaDifferent = 0;
+    let noSavedSha = 0;
+    for (const file of expectedFiles) {
+        if (cachedUrls.has(localUrl(file.path))) physicalPresent++;
+        const savedSha = savedShaByPath.get(file.path);
+        if (!savedSha) noSavedSha++;
+        else if (savedSha === file.sha) shaSame++;
+        else shaDifferent++;
+    }
+
+    return {
+        workerVersion: SW_VERSION,
+        metaSource,
+        cacheName,
+        cacheExists: true,
+        savedCommit: manifest?.commit || meta?.commit || null,
+        manifestFiles: Array.isArray(manifest?.files) ? manifest.files.length : 0,
+        cacheEntries: keys.length,
+        expectedFiles: expectedFiles.length,
+        physicalPresent,
+        physicalMissing: Math.max(0, expectedFiles.length - physicalPresent),
+        shaSame,
+        shaDifferent,
+        noSavedSha,
+    };
 }
 
 function mimeTypeFor(path) {
@@ -594,6 +687,16 @@ self.addEventListener('message', event => {
                 port.postMessage({ type: 'result', result: await statusResult() });
             } catch (error) {
                 port.postMessage({ type: 'error', kind: 'status', message: error?.message || String(error) });
+            }
+        })());
+        return;
+    }
+    if (event.data?.type === 'HEX_CACHE_DIAGNOSTICS') {
+        event.waitUntil((async () => {
+            try {
+                port.postMessage({ type: 'result', result: await diagnoseGameCache(event.data?.files || []) });
+            } catch (error) {
+                port.postMessage({ type: 'error', kind: 'diagnostics', message: error?.message || String(error) });
             }
         })());
         return;
