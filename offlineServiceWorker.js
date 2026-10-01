@@ -2,10 +2,10 @@
 // Atomic, integrity-checked local game cache for the development branch.
 'use strict';
 
-const SW_VERSION = '7';
+const SW_VERSION = '8';
 const META_CACHE = `hex-game-meta-v${SW_VERSION}`;
 const GAME_CACHE_PREFIX = `hex-game-v${SW_VERSION}-`;
-const LEGACY_GAME_CACHE_PREFIXES = ['hex-game-v6-', 'hex-game-v5-', 'hex-game-v4-', 'hex-game-v3-', 'hex-game-v2-', 'hex-game-v1-'];
+const LEGACY_GAME_CACHE_PREFIXES = ['hex-game-v7-', 'hex-game-v6-', 'hex-game-v5-', 'hex-game-v4-', 'hex-game-v3-', 'hex-game-v2-', 'hex-game-v1-'];
 const SCOPE_URL = self.registration.scope;
 const META_KEY = new URL('__hex_offline_meta__/active.json', SCOPE_URL).href;
 const MANIFEST_KEY = new URL('__hex_offline_meta__/manifest.json', SCOPE_URL).href;
@@ -94,9 +94,30 @@ async function inspectGameCache(cacheName, expectedCommit = null) {
         const cache = await caches.open(cacheName);
         const keys = await cache.keys();
         const expectedCount = manifest.files.length;
-        if (keys.length < expectedCount + 1) return null;
+
+        // A raw entry count is not enough. An old cache can contain stale files
+        // and still have 421 entries while a required sprite is absent. Compare
+        // the actual cached request URLs with every path in the manifest.
+        const cachedUrls = new Set(keys.map(request => {
+            try {
+                const url = new URL(request.url);
+                url.search = '';
+                url.hash = '';
+                return url.href;
+            } catch (_) {
+                return request.url;
+            }
+        }));
+        const missingPaths = manifest.files
+            .filter(file => !cachedUrls.has(localUrl(file.path)))
+            .map(file => file.path);
+        const availableCount = Math.max(0, expectedCount - missingPaths.length);
         return {
-            valid: true,
+            valid: availableCount > 0,
+            healthy: missingPaths.length === 0,
+            missingCount: missingPaths.length,
+            missingPaths,
+            availableCount,
             activeCommit: manifest.commit,
             fileCount: expectedCount,
             totalBytes: manifest.files.reduce((sum, file) => sum + (Number(file.size) || 0), 0),
@@ -111,7 +132,7 @@ async function statusResult() {
     const meta = await readActiveMeta(true);
     if (meta?.cacheName) {
         const direct = await inspectGameCache(meta.cacheName, meta.commit || null);
-        if (direct) return { ...direct, recovered: false };
+        if (direct?.valid) return { ...direct, recovered: false };
     }
 
     // The large game cache may survive even if iOS loses/restores the tiny
@@ -123,7 +144,7 @@ async function statusResult() {
     );
     for (const name of candidates) {
         const recovered = await inspectGameCache(name);
-        if (!recovered) continue;
+        if (!recovered?.valid) continue;
         await writeActiveMeta({
             version: SW_VERSION,
             cacheName: recovered.cacheName,
@@ -306,9 +327,9 @@ async function cleanupLegacyCaches(keepNames = []) {
     await Promise.all(names
         .filter(name => !keep.has(name) && (
             name === 'hex-game-meta-v1' || name === 'hex-game-meta-v2' || name === 'hex-game-meta-v3' ||
-            name === 'hex-game-meta-v4' || name === 'hex-game-meta-v5' || name === 'hex-game-meta-v6' ||
+            name === 'hex-game-meta-v4' || name === 'hex-game-meta-v5' || name === 'hex-game-meta-v6' || name === 'hex-game-meta-v7' ||
             name.startsWith('hex-game-v1-') || name.startsWith('hex-game-v2-') || name.startsWith('hex-game-v3-') ||
-            name.startsWith('hex-game-v4-') || name.startsWith('hex-game-v5-') || name.startsWith('hex-game-v6-')
+            name.startsWith('hex-game-v4-') || name.startsWith('hex-game-v5-') || name.startsWith('hex-game-v6-') || name.startsWith('hex-game-v7-')
         ))
         .map(name => caches.delete(name)));
 }
@@ -382,7 +403,10 @@ async function cacheGame(message, port) {
         // Unchanged files stay exactly where they already are. No second copy.
         if (activeCache && activeShaByPath.get(file.path) === file.sha) {
             const existing = await activeCache.match(request, { ignoreSearch: true });
-            if (existing) {
+            // The manifest SHA and the response's own SHA marker must agree.
+            // This turns Check for updates into a repair pass for missing/stale
+            // cache entries instead of blindly trusting metadata.
+            if (existing && existing.headers.get('X-Hex-Blob-Sha') === file.sha) {
                 reused++;
                 stored++;
                 return;

@@ -5,12 +5,12 @@
 (() => {
     'use strict';
 
-    const VERSION = '7';
+    const VERSION = '8';
     const OWNER = 'ScottENOC';
     const REPO = 'Hex-crpg';
     const BRANCH = 'development';
     const API_BASE = `https://api.github.com/repos/${OWNER}/${REPO}`;
-    const SW_URL = 'offlineServiceWorker.js?v=7';
+    const SW_URL = 'offlineServiceWorker.js?v=8';
     const BRANCH_CACHE_MS = 15000;
     const REQUEST_TIMEOUT_MS = 25000;
     const WORKER_STALL_TIMEOUT_MS = 45000;
@@ -18,6 +18,22 @@
     const AUTO_RETRY_DELAY_MS = 1200;
 
     const supported = location.protocol === 'https:' && 'serviceWorker' in navigator && 'caches' in window;
+    const reportedOfflineMisses = new Set();
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.addEventListener('message', event => {
+            if (event.data?.type !== 'HEX_OFFLINE_MISS') return;
+            const path = String(event.data.path || '(unknown resource)');
+            if (reportedOfflineMisses.has(path)) return;
+            reportedOfflineMisses.add(path);
+            console.warn('Offline local-copy miss:', path);
+            try { window.dispatchEvent(new CustomEvent('hex-offline-resource-miss', { detail: { path } })); } catch (_) {}
+            if (/^(?:images|audio)\//.test(path)) {
+                const report = () => window.showMessage?.(`Offline local copy is missing: ${path}. Use Check for updates to repair it.`);
+                if (typeof window.showMessage === 'function') report();
+                else setTimeout(report, 1200);
+            }
+        });
+    }
     const listeners = new Set();
     let registrationPromise = null;
     let syncPromise = null;
@@ -454,27 +470,20 @@
             return { complete: false, failures: [errorInfo(error)], hasActiveCache: Boolean(before.valid) };
         }
 
+        // Do not short-circuit merely because the commit SHA matches. Explicit
+        // Check for updates also verifies every cached response against the
+        // manifest and repairs holes/stale entries. Existing healthy files are
+        // reused in place, so this is cheap and does not duplicate the game.
         if (before.valid && before.activeCommit === commit) {
-            emit({
-                phase: 'ready',
-                stored: before.fileCount || 0,
-                processed: before.fileCount || 0,
-                total: before.fileCount || 0,
-                message: 'Local copy is already up to date.',
-            });
-            return {
-                complete: true,
-                upToDate: true,
-                changed: false,
-                commit,
-                fileCount: before.fileCount || 0,
-                hasActiveCache: true,
-            };
+            emit({ phase: 'checking', message: 'Build is current. Verifying the local game files…' });
         }
 
-        // Only an actual update/new install needs a quota estimate.
-        const storage = await storageDiagnostic();
-        emit({ phase: 'storage-check', message: storage.message });
+        // A valid existing copy does not need another storage-capacity probe.
+        // The incremental repair only stages genuinely missing/changed files.
+        if (!before.valid) {
+            const storage = await storageDiagnostic();
+            emit({ phase: 'storage-check', message: storage.message });
+        }
         emit({ phase: 'listing', message: 'Getting the list of game files…' });
         let treeResult;
         try {
@@ -528,10 +537,11 @@
             }
         }
 
-        const repairedOrChanged = !before.valid || before.activeCommit !== commit;
+        const repairedOrChanged = !before.valid || before.activeCommit !== commit || (result.downloaded || 0) > 0 || before.healthy === false;
         return {
             ...result,
             changed: Boolean(result.complete && repairedOrChanged),
+            upToDate: Boolean(result.complete && before.activeCommit === commit && (result.downloaded || 0) === 0),
             commit,
             hasActiveCache: Boolean(result.complete || before.valid),
             previousCommit: before.activeCommit || null,
@@ -717,8 +727,12 @@
         title.textContent = 'Silverhart Saga';
         count.textContent = local.statusUnavailable || local.unverified
             ? 'Local game copy detected'
-            : `${local.fileCount || 0} game files available locally`;
-        detail.textContent = message;
+            : local.healthy === false
+                ? `${local.availableCount || 0} / ${local.fileCount || 0} game files available locally`
+                : `${local.fileCount || 0} game files available locally`;
+        detail.textContent = local.healthy === false
+            ? `${local.missingCount || 0} local file${local.missingCount === 1 ? ' is' : 's are'} missing. Launch is available, but Check for updates will repair the saved copy.`
+            : message;
         bar.style.width = '100%';
         errorBox.hidden = true;
         launchButton.hidden = false;
@@ -804,9 +818,11 @@
 
             let choiceMessage = local.unverified
                 ? 'iOS did not answer the file-count check. You can still launch the installed copy, or use Check for updates to verify/repair it.'
-                : local.recovered
-                    ? 'Recovered the existing local game copy. Ready to launch.'
-                    : 'Ready to play from the copy stored on this phone.';
+                : local.healthy === false
+                    ? `${local.missingCount || 0} cached game file${local.missingCount === 1 ? ' is' : 's are'} missing. Check for updates will repair only the missing/changed files.`
+                    : local.recovered
+                        ? 'Recovered the existing local game copy. Ready to launch.'
+                        : 'Ready to play from the copy stored on this phone.';
 
             while (local.valid) {
                 const choice = await waitForLocalChoice(gate, local, choiceMessage);
