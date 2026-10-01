@@ -25,7 +25,9 @@ jobs:
         with:
           node-version: '20'
       - name: Apply renderer migration
-        run: python3 .github/scripts/apply-all-humanoid-direct-renderer.py
+        run: |
+          python3 .github/scripts/apply-all-humanoid-direct-renderer.py
+          python3 .github/scripts/remove-legacy-appearance-preview-map.py
       - name: Check renderer JavaScript
         run: node --check humanoidRenderer.js
       - name: Check main JavaScript
@@ -57,12 +59,14 @@ jobs:
                   raise SystemExit(f'Missing renderer marker: {marker}')
           print('All ten direct rigs present')
           PY
-      - name: Check obsolete creator preloads are gone
+      - name: Check obsolete creator fallbacks are gone
         run: |
           ! grep -q 'images/elfmale.png' main.js
           ! grep -q 'images/elfmalehair.png' main.js
           ! grep -q 'images/dwarffemale.png' main.js
           ! grep -q 'images/dwarfmale.png' main.js
+          grep -q 'const APPEARANCE_BASE_SRC = {}' main.js
+          grep -q 'const APPEARANCE_HAIR_SRC = {}' main.js
       - name: Check cache tokens
         run: |
           grep -q 'humanoidRenderer.js?v=3' index.html
@@ -79,7 +83,7 @@ jobs:
           test -f images/characters/orc_male/body_side.png
           test -f images/characters/orc_male/body_back.png
       - name: Remove temporary patch machinery
-        run: rm .github/scripts/apply-all-humanoid-direct-renderer.py .github/workflows/apply-all-humanoid-direct-renderer.yml
+        run: rm .github/scripts/apply-all-humanoid-direct-renderer.py .github/scripts/remove-legacy-appearance-preview-map.py .github/workflows/apply-all-humanoid-direct-renderer.yml
       - name: Commit and push
         run: |
           git config user.name 'github-actions[bot]'
