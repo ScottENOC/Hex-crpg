@@ -1,68 +1,85 @@
-name: Analyse clothing upload
+name: Finish clothing upload
 on:
   push:
     branches: [development]
-  workflow_dispatch:
+    paths: ['.github/workflows/analyse-clothing-upload.yml']
 permissions:
-  contents: read
+  contents: write
+concurrency:
+  group: finish-clothing-upload
+  cancel-in-progress: false
 jobs:
-  analyse:
+  finish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - run: pip install pillow numpy
-      - name: Build contact sheet and image statistics
+      - name: Clean and rename the 30 uploaded clothing images
         run: |
-          cat > /tmp/analyse_clothing.py <<'PY'
-          from PIL import Image, ImageDraw, ImageFont
+          python - <<'PYCODE'
+          from PIL import Image
           from pathlib import Path
-          import json, numpy as np
+          import numpy as np
 
+          root = Path('images/equipment/clothing')
+          mapping = {'Grok Image 2026-10-01 at 4.52.50 PM.png': 'shirt_plunge_back.png', 'Grok Image 2026-10-01 at 4.53.19 PM.png': 'shirt_plunge_front.png', 'Grok Image 2026-10-01 at 4.53.33 PM.png': 'shirt_plunge_side.png', 'Grok Image 2026-10-01 at 4.54.01 PM.png': 'shirt_tie_tank_back.png', 'Grok Image 2026-10-01 at 4.54.17 PM.png': 'shirt_tie_tank_front.png', 'Grok Image 2026-10-01 at 4.54.32 PM.png': 'shirt_tie_tank_side.png', 'Grok Image 2026-10-01 at 4.54.51 PM.png': 'corset_lace_front.png', 'Grok Image 2026-10-01 at 4.55.02 PM.png': 'corset_lace_back.png', 'Grok Image 2026-10-01 at 4.55.12 PM.png': 'corset_lace_side.png', 'Grok Image 2026-10-01 at 4.55.29 PM.png': 'pants_lattice_side.png', 'Grok Image 2026-10-01 at 4.55.40 PM.png': 'pants_lattice_front.png', 'Grok Image 2026-10-01 at 4.55.51 PM.png': 'pants_lattice_back.png', 'Grok Image 2026-10-01 at 4.56.02 PM.png': 'cloak_full_front.png', 'Grok Image 2026-10-01 at 4.56.09 PM.png': 'cloak_full_back.png', 'Grok Image 2026-10-01 at 4.56.15 PM.png': 'cloak_full_side.png', 'Grok Image 2026-10-01 at 4.56.24 PM.png': 'shirt_collared_front.png', 'Grok Image 2026-10-01 at 4.56.30 PM.png': 'shirt_collared_back.png', 'Grok Image 2026-10-01 at 4.56.39 PM.png': 'shirt_collared_side.png', 'Grok Image 2026-10-01 at 5.33.45 PM.png': 'tights_fishnet_front.png', 'Grok Image 2026-10-01 at 5.34.05 PM.png': 'tights_fishnet_back.png', 'Grok Image 2026-10-01 at 5.34.17 PM.png': 'tights_fishnet_side.png', 'Grok Image 2026-10-01 at 5.34.50 PM.png': 'shirt_mesh_turtleneck_back.png', 'Grok Image 2026-10-01 at 5.35.15 PM.png': 'shirt_mesh_turtleneck_front.png', 'Grok Image 2026-10-01 at 5.35.34 PM.png': 'shirt_mesh_turtleneck_side.png', 'Grok Image 2026-10-01 at 5.36.05 PM.png': 'shirt_dress_lace_front.png', 'Grok Image 2026-10-01 at 5.36.18 PM.png': 'shirt_dress_lace_back.png', 'Grok Image 2026-10-01 at 5.36.33 PM.png': 'shirt_dress_lace_side.png', 'Grok Image 2026-10-01 at 5.36.46 PM.png': 'pants_fitted_shorts_side.png', 'Grok Image 2026-10-01 at 5.42.52 PM.png': 'pants_fitted_shorts_front.png', 'Grok Image 2026-10-01 at 5.42.59 PM.png': 'pants_fitted_shorts_back.png'}
+          missing = [name for name in mapping if not (root / name).exists()]
+          if missing:
+              raise SystemExit('Missing expected source images: ' + ', '.join(missing))
+
+          for old_name, new_name in mapping.items():
+              old = root / old_name
+              new = root / new_name
+              rgb = np.asarray(Image.open(old).convert('RGB'), dtype=np.float32)
+              maximum = rgb.max(axis=2)
+              minimum = rgb.min(axis=2)
+              chroma = maximum - minimum
+              mean = rgb.mean(axis=2)
+
+              # The Grok exports are opaque white-background images. Garment
+              # pixels are green/coloured while the background and its soft
+              # shadow are almost neutral. Blend the two useful signals rather
+              # than flood-filling so enclosed fishnet/lace holes become truly
+              # transparent too.
+              colour_alpha = np.clip((chroma - 3.0) / 7.0 * 255.0, 0, 255)
+              dark_alpha = np.clip((180.0 - mean) / 25.0 * 255.0, 0, 255)
+              alpha = np.maximum(colour_alpha, dark_alpha).astype(np.uint8)
+              rgba = np.dstack((rgb.astype(np.uint8), alpha))
+              Image.fromarray(rgba, 'RGBA').save(new, compress_level=6)
+              old.unlink()
+
+          assert len(mapping) == 30
+          assert all((root / name).exists() for name in mapping.values())
+          assert all(not (root / name).exists() for name in mapping)
+          PYCODE
+      - name: Validate generated asset set
+        run: |
+          python - <<'PYCODE'
+          from pathlib import Path
+          from PIL import Image
           root=Path('images/equipment/clothing')
-          files=sorted(root.glob('Grok Image 2026-10-01 at *.png'), key=lambda p:p.name)
-          rows=[]
-          thumbs=[]
-          font=ImageFont.load_default()
-          for i,p in enumerate(files,1):
+          targets=['shirt_plunge_back.png', 'shirt_plunge_front.png', 'shirt_plunge_side.png', 'shirt_tie_tank_back.png', 'shirt_tie_tank_front.png', 'shirt_tie_tank_side.png', 'corset_lace_front.png', 'corset_lace_back.png', 'corset_lace_side.png', 'pants_lattice_side.png', 'pants_lattice_front.png', 'pants_lattice_back.png', 'cloak_full_front.png', 'cloak_full_back.png', 'cloak_full_side.png', 'shirt_collared_front.png', 'shirt_collared_back.png', 'shirt_collared_side.png', 'tights_fishnet_front.png', 'tights_fishnet_back.png', 'tights_fishnet_side.png', 'shirt_mesh_turtleneck_back.png', 'shirt_mesh_turtleneck_front.png', 'shirt_mesh_turtleneck_side.png', 'shirt_dress_lace_front.png', 'shirt_dress_lace_back.png', 'shirt_dress_lace_side.png', 'pants_fitted_shorts_side.png', 'pants_fitted_shorts_front.png', 'pants_fitted_shorts_back.png']
+          assert len(targets)==30 and len(set(targets))==30
+          for name in targets:
+              p=root/name
+              assert p.exists() and p.stat().st_size > 1000, name
               im=Image.open(p).convert('RGBA')
-              arr=np.asarray(im)
-              rgb=arr[:,:,:3].astype(np.int16)
-              a=arr[:,:,3]
-              corners=np.array([rgb[0,0],rgb[0,-1],rgb[-1,0],rgb[-1,-1]])
-              bg=np.median(corners,axis=0)
-              dist=np.sqrt(np.sum((rgb-bg)**2,axis=2))
-              edge=np.concatenate([dist[0],dist[-1],dist[:,0],dist[:,-1]])
-              rows.append({'index':i,'file':p.name,'width':im.width,'height':im.height,
-                           'corner_bg_rgb':[int(x) for x in bg], 'edge_bg_distance_median':float(np.median(edge)),
-                           'existing_alpha_fraction':float(np.mean(a<250)),
-                           'background_like_fraction':float(np.mean(dist<22))})
-              thumb=im.copy(); thumb.thumbnail((260,390))
-              tile=Image.new('RGBA',(300,450),(245,245,245,255)); d=ImageDraw.Draw(tile); s=16
-              for yy in range(0,400,s):
-                  for xx in range(0,300,s):
-                      if (xx//s+yy//s)%2:d.rectangle([xx,yy,xx+s-1,yy+s-1],fill=(215,215,215,255))
-              x=(300-thumb.width)//2; y=(400-thumb.height)//2; tile.alpha_composite(thumb,(x,y))
-              d=ImageDraw.Draw(tile); label=f'{i:02d}  {p.name.split(" at ")[-1].replace(".png","")}'
-              d.rectangle([0,400,299,449],fill=(255,255,255,255)); d.text((8,407),label,fill='black',font=font)
-              d.text((8,425),f'{im.width}x{im.height} bg~{tuple(int(x) for x in bg)}',fill='black',font=font)
-              thumbs.append(tile.convert('RGB'))
-          cols=5; tw,th=300,450; n=len(thumbs); r=(n+cols-1)//cols
-          sheet=Image.new('RGB',(cols*tw,r*th),'white')
-          for j,t in enumerate(thumbs): sheet.paste(t,((j%cols)*tw,(j//cols)*th))
-          Path('clothing-analysis').mkdir(exist_ok=True)
-          sheet.save('clothing-analysis/contact_sheet.jpg',quality=90)
-          Path('clothing-analysis/analysis.json').write_text(json.dumps(rows,indent=2))
-          print(json.dumps(rows,indent=2))
-          PY
-          python /tmp/analyse_clothing.py
-      - uses: actions/upload-artifact@v4
-        with:
-          name: clothing-analysis
-          path: clothing-analysis/
-      - uses: actions/upload-artifact@v4
-        with:
-          name: clothing-sources
-          path: images/equipment/clothing/Grok Image 2026-10-01 at *.png
+              lo,hi=im.getchannel('A').getextrema()
+              assert lo == 0 and hi > 0, (name, lo, hi)
+          print('Validated 30 cleaned directional clothing PNGs.')
+          PYCODE
+      - name: Commit finished clothing integration
+        run: |
+          git config user.name 'OpenAI Codex'
+          git config user.email 'codex@openai.com'
+          git add -A images/equipment/clothing
+          git diff --cached --check
+          git diff --cached --quiet && { echo 'No changes to commit'; exit 1; }
+          git commit -m 'Clean and rename uploaded clothing art'
+          git push origin HEAD:development
