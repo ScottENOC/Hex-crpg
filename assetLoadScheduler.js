@@ -4,7 +4,7 @@
 (() => {
     'use strict';
 
-    const SCHEDULER_VERSION = '6';
+    const SCHEDULER_VERSION = '7';
     if (window.__assetLoadSchedulerInstalled && window.__assetLoadSchedulerVersion === SCHEDULER_VERSION) return;
     // index.html loads this before the other game scripts in a normal page load.
     if (window.__assetLoadSchedulerInstalled) return;
@@ -174,6 +174,13 @@
     const phaseCritical = new Set();
     const managerRecords = new Map();
     const domBindingTokens = new WeakMap();
+    let offlineStartupPending = Boolean(window.__hexOfflineReady && typeof window.__hexOfflineReady.then === 'function');
+    if (offlineStartupPending) {
+        window.__hexOfflineReady.finally(() => {
+            offlineStartupPending = false;
+            schedulePump();
+        });
+    }
 
     function normalise(src) {
         try {
@@ -195,7 +202,7 @@
     }
 
     function currentBuild() {
-        return document.querySelector('meta[name="app-build"]')?.content || window.PRESENTATION_BUILD || 'asset-manager-v6';
+        return document.querySelector('meta[name="app-build"]')?.content || window.PRESENTATION_BUILD || 'asset-manager-v7';
     }
 
     function managedUrl(value, {retry=0, freshReason='retry'}={}) {
@@ -239,6 +246,7 @@
     }
 
     function mayStartNow(path) {
+        if (offlineStartupPending) return false;
         if (phase === 'game') return true;
         if (phaseCritical.has(path)) return true;
         return creatorRelevant(path);
@@ -414,7 +422,7 @@
             record.queued=true;
             enqueue(record.path, done=>startManagerRecord(record,done), priority);
         };
-        if (immediate || mayStartNow(record.path)) start();
+        if ((immediate && !offlineStartupPending) || mayStartNow(record.path)) start();
         else record.status='deferred';
         return record.image;
     }
@@ -554,7 +562,8 @@
 
     function gameManifest() {
         const scenario = selectedCampaign()==='1' ? [...ARENA_CRITICAL,...ARENA_SOON] : [...CAMPAIGN2_NEARBY];
-        const deferredArt = [...managerRecords.values()].filter(record=>record.status==='deferred').map(record=>record.path).filter(path=>path?.startsWith('images/'));
+        const localCopyReady=Boolean(window.__hexOfflineReadyResult?.complete && window.__hexOfflineReadyResult?.hasActiveCache);
+        const deferredArt = localCopyReady ? [] : [...managerRecords.values()].filter(record=>record.status==='deferred').map(record=>record.path).filter(path=>path?.startsWith('images/'));
         return [...new Set([...currentCreatorCharacterAssets(true),...currentClothingAssets(true),...currentStartingEquipmentAssets(),...scenario,...deferredArt])];
     }
 
@@ -596,7 +605,8 @@
 
     function updateOverlay(loaded,total) {
         const overlay=ensureOverlay();
-        overlay.querySelector('.hex-loading-count').textContent=`Loaded ${loaded} / ${total} art assets`;
+        const verb=window.__hexOfflineReadyResult?.hasActiveCache?'Prepared':'Loaded';
+        overlay.querySelector('.hex-loading-count').textContent=`${verb} ${loaded} / ${total} art assets`;
         overlay.querySelector('.hex-loading-bar').style.width=`${total ? Math.round(loaded*100/total) : 100}%`;
     }
 
@@ -667,6 +677,7 @@
 
     async function loadCreator() {
         try {
+            if (window.__hexOfflineReady) await window.__hexOfflineReady;
             await runGate('Loading character creator…',creatorManifest());
             phase='creator-ready';
             hideOverlay();
@@ -677,6 +688,7 @@
     }
 
     async function loadGameAndStart() {
+        if (window.__hexOfflineReady) await window.__hexOfflineReady;
         if (startGateRunning || phase==='game') return;
         startGateRunning=true;
         phase='game-loading';

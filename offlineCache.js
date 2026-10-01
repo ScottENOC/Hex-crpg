@@ -5,21 +5,32 @@
 (() => {
     'use strict';
 
-    const VERSION = '1';
+    const VERSION = '2';
     const OWNER = 'ScottENOC';
     const REPO = 'Hex-crpg';
     const BRANCH = 'development';
     const API_BASE = `https://api.github.com/repos/${OWNER}/${REPO}`;
-    const SW_URL = 'offlineServiceWorker.js?v=1';
+    const SW_URL = 'offlineServiceWorker.js?v=2';
     const BRANCH_CACHE_MS = 15000;
     const REQUEST_TIMEOUT_MS = 25000;
-    const WORKER_TIMEOUT_MS = 15 * 60 * 1000;
+    const WORKER_STALL_TIMEOUT_MS = 45000;
     const AUTO_RETRY_DELAY_MS = 1200;
 
     const supported = location.protocol === 'https:' && 'serviceWorker' in navigator && 'caches' in window;
     const listeners = new Set();
     let registrationPromise = null;
     let syncPromise = null;
+    let resolveReadyBarrier;
+    let readyBarrierResolved = false;
+    const readyBarrier = new Promise(resolve => { resolveReadyBarrier = resolve; });
+    window.__hexOfflineReady = readyBarrier;
+
+    function releaseReadyBarrier(result) {
+        if (readyBarrierResolved) return;
+        readyBarrierResolved = true;
+        window.__hexOfflineReadyResult = result || { complete: false, hasActiveCache: false };
+        resolveReadyBarrier(window.__hexOfflineReadyResult);
+    }
     let status = {
         phase: 'idle',
         stored: 0,
@@ -136,6 +147,26 @@
         return value;
     }
 
+    async function waitForWorkerActivation(worker, timeout = 20000) {
+        if (!worker || worker.state === 'activated') return;
+        await new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                cleanup();
+                reject(Object.assign(new Error('The updated offline worker did not activate in time.'), { kind: 'worker-activation-timeout' }));
+            }, timeout);
+            const onState = () => {
+                if (worker.state === 'activated') { cleanup(); resolve(); }
+                else if (worker.state === 'redundant') {
+                    cleanup();
+                    reject(Object.assign(new Error('The updated offline worker became redundant before activation.'), { kind: 'worker-redundant' }));
+                }
+            };
+            const cleanup = () => { clearTimeout(timer); worker.removeEventListener('statechange', onState); };
+            worker.addEventListener('statechange', onState);
+            onState();
+        });
+    }
+
     async function ensureRegistration() {
         if (!supported) {
             const error = new Error('Offline app storage is not available in this browser/context.');
@@ -151,13 +182,27 @@
                 try { await registration.update(); } catch (error) {
                     console.warn('Service worker update check failed; existing worker can still be used.', error);
                 }
-                return navigator.serviceWorker.ready;
-            })();
+
+                const candidate = registration.installing || registration.waiting;
+                if (candidate) await waitForWorkerActivation(candidate);
+                if (!registration.active) await navigator.serviceWorker.ready;
+
+                const activeUrl = registration.active?.scriptURL || '';
+                if (!registration.active || !activeUrl.includes('offlineServiceWorker.js') || !activeUrl.includes('v=2')) {
+                    const error = new Error('The v2 offline worker is not active yet.');
+                    error.kind = 'worker-version';
+                    throw error;
+                }
+                return registration;
+            })().catch(error => {
+                registrationPromise = null;
+                throw error;
+            });
         }
         return registrationPromise;
     }
 
-    function workerRequest(worker, message, { timeout = 30000, onProgress = null } = {}) {
+    function workerRequest(worker, message, { timeout = WORKER_STALL_TIMEOUT_MS, onProgress = null } = {}) {
         return new Promise((resolve, reject) => {
             if (!worker) {
                 reject(Object.assign(new Error('No active offline worker is available.'), { kind: 'worker-missing' }));
@@ -165,24 +210,33 @@
             }
             const channel = new MessageChannel();
             let settled = false;
-            const timer = setTimeout(() => {
-                if (settled) return;
-                settled = true;
+            let timer = null;
+
+            const close = () => {
+                if (timer) clearTimeout(timer);
                 channel.port1.close();
-                reject(Object.assign(new Error('The local-cache worker stopped responding.'), { kind: 'worker-timeout' }));
-            }, timeout);
+            };
+            const armStallTimer = () => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(() => {
+                    if (settled) return;
+                    settled = true;
+                    close();
+                    reject(Object.assign(new Error('The local-cache worker made no progress for 45 seconds.'), { kind: 'worker-stalled' }));
+                }, timeout);
+            };
 
             channel.port1.onmessage = event => {
                 const data = event.data || {};
                 if (data.type === 'progress') {
+                    armStallTimer();
                     if (typeof onProgress === 'function') onProgress(data);
                     return;
                 }
                 if (data.type !== 'result' && data.type !== 'error') return;
                 if (settled) return;
                 settled = true;
-                clearTimeout(timer);
-                channel.port1.close();
+                close();
                 if (data.type === 'error') {
                     const error = new Error(data.message || 'Offline worker failed.');
                     error.kind = data.kind || 'worker';
@@ -192,6 +246,7 @@
                 }
             };
 
+            armStallTimer();
             worker.postMessage(message, [channel.port2]);
         });
     }
@@ -243,13 +298,41 @@
             repo: REPO,
             files,
         }, {
-            timeout: WORKER_TIMEOUT_MS,
+            timeout: WORKER_STALL_TIMEOUT_MS,
             onProgress: emitWorkerProgress,
         });
     }
 
+    function isStandaloneWebApp() {
+        return window.matchMedia?.('(display-mode: standalone)')?.matches || navigator.standalone === true;
+    }
+
+    async function storageDiagnostic() {
+        const mode = isStandaloneWebApp() ? 'Home Screen app' : 'Safari tab';
+        if (!navigator.storage?.estimate) return { message: `${mode} · iOS storage estimate unavailable` };
+        try {
+            const estimate = await navigator.storage.estimate();
+            let persisted = false;
+            try { persisted = Boolean(await navigator.storage.persisted?.()); } catch (_) {}
+            if (isStandaloneWebApp() && !persisted && navigator.storage.persist) {
+                try { persisted = Boolean(await navigator.storage.persist()); } catch (_) {}
+            }
+            const quota = Number(estimate?.quota) || 0;
+            const usage = Number(estimate?.usage) || 0;
+            const available = Math.max(0, quota - usage);
+            return {
+                quota, usage, available, persisted,
+                message: `${mode} · ${formatBytes(available)} available locally${persisted ? ' · persistent storage' : ''}`,
+            };
+        } catch (error) {
+            return { message: `${mode} · storage check failed: ${error?.message || error}` };
+        }
+    }
+
     async function syncInternal() {
-        emit({ phase: 'registering', message: 'Starting local storage…' });
+        emit({ phase: 'registering', stored: 0, processed: 0, total: 0, message: 'Starting local storage…' });
+        const storage = await storageDiagnostic();
+        emit({ phase: 'storage-check', stored: 0, processed: 0, total: 0, message: storage.message });
         let registration;
         try {
             registration = await ensureRegistration();
@@ -395,6 +478,7 @@
     window.hexOfflineCache = {
         version: VERSION,
         supported,
+        ready: readyBarrier,
         sync,
         retry: () => sync({ force: true }),
         onProgress,
@@ -432,7 +516,8 @@
         const count = gate.querySelector('.hex-offline-count');
         const bar = gate.querySelector('.hex-offline-bar');
         const detail = gate.querySelector('.hex-offline-detail');
-        if (progress.phase === 'checking') title.textContent = 'Checking local game copy…';
+        if (progress.phase === 'storage-check') title.textContent = 'Checking iPhone storage…';
+        else if (progress.phase === 'checking') title.textContent = 'Checking local game copy…';
         else if (progress.phase === 'recovering') title.textContent = 'Recovering failed downloads…';
         else if (progress.phase === 'ready') title.textContent = 'Local game copy ready';
         else title.textContent = 'Preparing local game copy…';
@@ -441,6 +526,7 @@
             count.textContent = `Stored ${progress.stored || 0} / ${progress.total} files locally`;
             bar.style.width = `${Math.max(0, Math.min(100, Math.round((progress.stored || 0) * 100 / progress.total)))}%`;
             const parts = [];
+            if (progress.message) parts.push(progress.message);
             if (progress.downloaded) parts.push(`${progress.downloaded} downloaded`);
             if (progress.reused) parts.push(`${progress.reused} reused`);
             if (progress.retried) parts.push(`${progress.retried} retries`);
@@ -479,7 +565,9 @@
             : 'Some files are not safely stored on this phone yet.';
         detail.textContent = result.quotaFailure
             ? 'The browser reported that local storage is full or its web-app storage quota was reached.'
-            : 'Automatic retries have already been attempted.';
+            : result.storageFailure
+                ? 'iOS allowed the web app to open, but a test write to local Cache Storage failed.'
+                : 'Automatic retries have already been attempted.';
         errorBox.textContent = failureText(result.failures) || 'The local-copy update failed for an unknown reason.';
         errorBox.hidden = false;
         retry.hidden = false;
@@ -510,6 +598,7 @@
                 renderProgress(gate, status);
                 const action = await waitForFailureAction(gate, result);
                 if (action === 'continue') {
+                    releaseReadyBarrier({ ...result, continuedOnline: true });
                     gate.hidden = true;
                     document.body.classList.remove('hex-offline-preparing');
                     return;
@@ -527,7 +616,7 @@
             }
 
             if (result.changed && result.commit) {
-                const reloadKey = 'hex-offline-reloaded-commit-v1';
+                const reloadKey = 'hex-offline-reloaded-commit-v2';
                 let alreadyReloaded = null;
                 try { alreadyReloaded = sessionStorage.getItem(reloadKey); } catch (_) {}
                 if (alreadyReloaded !== result.commit) {
@@ -541,6 +630,7 @@
                 }
             }
 
+            releaseReadyBarrier(result);
             gate.hidden = true;
             document.body.classList.remove('hex-offline-preparing');
         } catch (error) {
@@ -549,6 +639,7 @@
             await waitForFailureAction(gate, result).then(action => {
                 if (action === 'retry') location.reload();
                 else {
+                    releaseReadyBarrier({ ...result, continuedOnline: true });
                     gate.hidden = true;
                     document.body.classList.remove('hex-offline-preparing');
                 }

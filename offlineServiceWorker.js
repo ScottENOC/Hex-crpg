@@ -2,7 +2,7 @@
 // Atomic, integrity-checked local game cache for the development branch.
 'use strict';
 
-const SW_VERSION = '1';
+const SW_VERSION = '2';
 const META_CACHE = `hex-game-meta-v${SW_VERSION}`;
 const GAME_CACHE_PREFIX = `hex-game-v${SW_VERSION}-`;
 const SCOPE_URL = self.registration.scope;
@@ -12,6 +12,7 @@ const MAX_CONCURRENT_DOWNLOADS = 4;
 const RAW_ATTEMPTS = 3;
 const PAGE_ATTEMPTS = 2;
 const RETRY_DELAYS_MS = [250, 900, 2200];
+const FILE_FETCH_TIMEOUT_MS = 15000;
 
 let activeMetaMemo = null;
 
@@ -176,10 +177,22 @@ function responseFromBytes(arrayBuffer, file) {
 
 async function fetchAndVerify(url, file, source) {
     let response;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FILE_FETCH_TIMEOUT_MS);
     try {
-        response = await fetch(url, { cache: 'no-store', credentials: 'omit' });
+        const sameOrigin = new URL(url).origin === new URL(SCOPE_URL).origin;
+        response = await fetch(url, {
+            cache: 'no-store',
+            credentials: sameOrigin ? 'same-origin' : 'omit',
+            signal: controller.signal,
+        });
     } catch (error) {
+        if (error?.name === 'AbortError') {
+            throw makeFailure('network-timeout', `${source} timed out after ${Math.round(FILE_FETCH_TIMEOUT_MS / 1000)} seconds.`, { source });
+        }
         throw makeFailure(self.navigator?.onLine === false ? 'offline' : 'network', `${source} could not be reached.`, { source });
+    } finally {
+        clearTimeout(timer);
     }
     if (!response.ok) {
         throw makeFailure(response.status === 404 ? 'missing' : 'http', `${source} returned HTTP ${response.status}.`, {
@@ -199,8 +212,10 @@ async function fetchAndVerify(url, file, source) {
 
 async function downloadVerifiedFile(file, context) {
     const sources = [
-        { name: 'GitHub raw', url: rawUrl(context.owner, context.repo, context.commit, file.path), attempts: RAW_ATTEMPTS },
+        // Prefer same-origin Pages on iOS; SHA verification catches stale deployments
+        // and then falls back to the exact commit on raw.githubusercontent.com.
         { name: 'GitHub Pages', url: localUrl(file.path), attempts: PAGE_ATTEMPTS },
+        { name: 'GitHub raw', url: rawUrl(context.owner, context.repo, context.commit, file.path), attempts: RAW_ATTEMPTS },
     ];
     let attempts = 0;
     let lastError = null;
@@ -236,6 +251,32 @@ async function cleanupStaleGameCaches(keepNames) {
         .map(name => caches.delete(name)));
 }
 
+async function assertCacheStorageWorks() {
+    const probeName = `hex-game-storage-probe-v${SW_VERSION}`;
+    const probeUrl = new URL('__hex_offline_meta__/storage-probe', SCOPE_URL).href;
+    try {
+        const cache = await caches.open(probeName);
+        await cache.put(probeUrl, new Response('ok', { headers: { 'Content-Type': 'text/plain' } }));
+        const response = await cache.match(probeUrl);
+        if (!response || await response.text() !== 'ok') {
+            throw makeFailure('storage', 'A test file was written but could not be read back from iOS Cache Storage.');
+        }
+    } catch (error) {
+        if (error?.kind) throw error;
+        if (error?.name === 'QuotaExceededError') throw makeFailure('quota', 'iOS reported that local web-app storage is full.');
+        throw makeFailure('storage', `iOS could not write to local Cache Storage: ${error?.message || error}`);
+    } finally {
+        try { await caches.delete(probeName); } catch (_) {}
+    }
+}
+
+async function cleanupLegacyCaches() {
+    const names = await caches.keys();
+    await Promise.all(names
+        .filter(name => name === 'hex-game-meta-v1' || name.startsWith('hex-game-v1-'))
+        .map(name => caches.delete(name)));
+}
+
 async function cacheGame(message, port) {
     const commit = String(message.commit || '');
     const owner = String(message.owner || '');
@@ -243,6 +284,26 @@ async function cacheGame(message, port) {
     const files = Array.isArray(message.files) ? message.files.filter(file => file?.path && file?.sha) : [];
     if (!/^[0-9a-f]{40}$/i.test(commit) || !owner || !repo || !files.length) {
         port.postMessage({ type: 'error', kind: 'bad-request', message: 'Offline cache received an invalid commit or file list.' });
+        return;
+    }
+
+    const diagnosticTotalBytes = files.reduce((sum, file) => sum + (Number(file.size) || 0), 0);
+    port.postMessage({
+        type: 'progress', phase: 'storage-check', current: 'Testing a local Cache Storage write…',
+        processed: 0, stored: 0, total: files.length, downloaded: 0, reused: 0, retried: 0, failed: 0,
+        totalBytes: diagnosticTotalBytes, message: 'Checking that iOS can save game files locally…',
+    });
+    try {
+        await assertCacheStorageWorks();
+    } catch (error) {
+        port.postMessage({
+            type: 'result',
+            result: {
+                complete: false, storageFailure: true, quotaFailure: error?.kind === 'quota',
+                failures: [serialiseFailure(error, '(local storage test)')], stored: 0, total: files.length,
+                downloaded: 0, reused: 0, retried: 0, activeCommit: null,
+            },
+        });
         return;
     }
 
@@ -303,6 +364,7 @@ async function cacheGame(message, port) {
             }
         }
 
+        sendProgress(file.path, 'storing', `Downloading ${file.path}…`);
         const result = await downloadVerifiedFile(file, { owner, repo, commit });
         retried += Math.max(0, (result.attempts || 1) - 1);
         try {
@@ -387,6 +449,7 @@ async function cacheGame(message, port) {
     // exists in the staged cache and passed its Git SHA integrity check.
     await writeActiveMeta(nextMeta);
     await cleanupStaleGameCaches([targetCacheName]);
+    await cleanupLegacyCaches();
     sendProgress('', 'ready', 'Local copy complete.');
     port.postMessage({
         type: 'result',
