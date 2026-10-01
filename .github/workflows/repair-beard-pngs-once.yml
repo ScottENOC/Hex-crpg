@@ -22,7 +22,7 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Repair PNG chunk lengths and validate image streams
+      - name: Salvage complete scanlines and validate PNGs
         run: |
           node <<'NODE'
           const fs = require('node:fs');
@@ -32,95 +32,121 @@ jobs:
             'images/characters/facial_hair/beard_full_front.png',
             'images/characters/facial_hair/beard_full_side.png',
           ];
-          const pngSignature = Buffer.from([137,80,78,71,13,10,26,10]);
-          const iendChunk = Buffer.from([0,0,0,0,73,69,78,68,174,66,96,130]);
+          const signature = Buffer.from([137,80,78,71,13,10,26,10]);
+          const iend = Buffer.from([0,0,0,0,73,69,78,68,174,66,96,130]);
 
           function crc32(buffer) {
             let crc = 0xffffffff;
             for (const byte of buffer) {
               crc ^= byte;
-              for (let bit = 0; bit < 8; bit++) {
-                crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
-              }
+              for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
             }
             return (crc ^ 0xffffffff) >>> 0;
           }
 
-          function adler32(buffer) {
-            let a = 1;
-            let b = 0;
-            const MOD = 65521;
-            for (const byte of buffer) {
-              a = (a + byte) % MOD;
-              b = (b + a) % MOD;
+          function paeth(a, b, c) {
+            const p = a + b - c;
+            const pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+            return pa <= pb && pa <= pc ? a : (pb <= pc ? b : c);
+          }
+
+          function unfilterRow(filter, filtered, previous, bpp = 4) {
+            const out = Buffer.alloc(filtered.length);
+            for (let x = 0; x < filtered.length; x++) {
+              const left = x >= bpp ? out[x - bpp] : 0;
+              const up = previous ? previous[x] : 0;
+              const upLeft = previous && x >= bpp ? previous[x - bpp] : 0;
+              let predictor = 0;
+              if (filter === 1) predictor = left;
+              else if (filter === 2) predictor = up;
+              else if (filter === 3) predictor = Math.floor((left + up) / 2);
+              else if (filter === 4) predictor = paeth(left, up, upLeft);
+              else if (filter !== 0) throw new Error(`unsupported PNG filter ${filter}`);
+              out[x] = (filtered[x] + predictor) & 255;
             }
-            return (((b << 16) | a) >>> 0);
+            return out;
+          }
+
+          function makeChunk(type, data) {
+            const typeBytes = Buffer.from(type, 'ascii');
+            const out = Buffer.alloc(12 + data.length);
+            out.writeUInt32BE(data.length >>> 0, 0);
+            typeBytes.copy(out, 4);
+            data.copy(out, 8);
+            out.writeUInt32BE(crc32(Buffer.concat([typeBytes, data])), 8 + data.length);
+            return out;
           }
 
           for (const file of files) {
-            const png = fs.readFileSync(file);
-            if (!png.subarray(0, 8).equals(pngSignature)) throw new Error(`${file}: bad PNG signature`);
-            if (png.toString('ascii', 12, 16) !== 'IHDR') throw new Error(`${file}: IHDR not first chunk`);
-            if (png.toString('ascii', 37, 41) !== 'IDAT') throw new Error(`${file}: expected single IDAT at byte 33`);
-            if (!png.subarray(-12).equals(iendChunk)) throw new Error(`${file}: intact IEND footer not found`);
+            const original = fs.readFileSync(file);
+            if (!original.subarray(0, 8).equals(signature)) throw new Error(`${file}: bad PNG signature`);
+            if (original.toString('ascii', 12, 16) !== 'IHDR') throw new Error(`${file}: IHDR not first chunk`);
+            if (original.toString('ascii', 37, 41) !== 'IDAT') throw new Error(`${file}: expected IDAT at byte 33`);
+            if (!original.subarray(-12).equals(iend)) throw new Error(`${file}: intact IEND footer not found`);
 
-            // Both files are IHDR + one IDAT + IEND. Correct the bad IDAT
-            // length first, without touching the compressed payload.
-            const dataLength = png.length - 57;
-            const dataStart = 41;
-            const crcOffset = dataStart + dataLength;
-            if (crcOffset + 4 !== png.length - 12) throw new Error(`${file}: unexpected chunk layout`);
-            png.writeUInt32BE(dataLength >>> 0, 33);
-
-            const width = png.readUInt32BE(16);
-            const height = png.readUInt32BE(20);
-            const bitDepth = png[24];
-            const colourType = png[25];
-            const interlace = png[28];
+            const width = original.readUInt32BE(16);
+            const height = original.readUInt32BE(20);
+            const bitDepth = original[24];
+            const colourType = original[25];
+            const interlace = original[28];
             if (bitDepth !== 8 || colourType !== 6 || interlace !== 0) {
-              throw new Error(`${file}: unexpected IHDR format ${width}x${height}, depth=${bitDepth}, colour=${colourType}, interlace=${interlace}`);
-            }
-            const expectedRawBytes = height * (1 + width * 4);
-            const compressed = png.subarray(dataStart, crcOffset);
-
-            let raw;
-            try {
-              raw = zlib.inflateSync(compressed);
-            } catch (error) {
-              if (error?.code !== 'Z_DATA_ERROR') throw error;
-              if (compressed.length < 7) throw error;
-
-              const cmf = compressed[0];
-              const flg = compressed[1];
-              if ((cmf & 0x0f) !== 8 || (((cmf << 8) | flg) % 31) !== 0 || (flg & 0x20)) {
-                throw new Error(`${file}: invalid or unsupported zlib wrapper`);
-              }
-
-              // The original failure is "incorrect data check". Decode the
-              // deflate payload while ignoring only the four-byte Adler footer.
-              // Do not alter anything unless the full raw image decodes to the
-              // exact byte count dictated by IHDR.
-              raw = zlib.inflateRawSync(compressed.subarray(2, -4));
-              if (raw.length !== expectedRawBytes) {
-                throw new Error(`${file}: raw deflate decoded ${raw.length} bytes; expected ${expectedRawBytes}`);
-              }
-              compressed.writeUInt32BE(adler32(raw), compressed.length - 4);
-              raw = zlib.inflateSync(compressed);
-              console.log(`${file}: recovered intact deflate payload and rebuilt Adler-32`);
+              throw new Error(`${file}: unsupported ${width}x${height} depth=${bitDepth} colour=${colourType} interlace=${interlace}`);
             }
 
-            if (raw.length !== expectedRawBytes) {
-              throw new Error(`${file}: decompressed ${raw.length} bytes; expected ${expectedRawBytes}`);
+            const dataStart = 41;
+            const dataLength = original.length - 57;
+            const crcOffset = dataStart + dataLength;
+            const compressed = original.subarray(dataStart, crcOffset);
+            if (compressed.length < 7) throw new Error(`${file}: compressed stream too short`);
+            const cmf = compressed[0], flg = compressed[1];
+            if ((cmf & 0x0f) !== 8 || (((cmf << 8) | flg) % 31) !== 0 || (flg & 0x20)) {
+              throw new Error(`${file}: invalid or unsupported zlib wrapper`);
             }
 
-            // Compressed bytes may have changed only in the zlib checksum, so
-            // finish by rebuilding the PNG IDAT CRC and require normal decoding.
-            png.writeUInt32BE(crc32(png.subarray(37, crcOffset)), crcOffset);
-            const verification = zlib.inflateSync(png.subarray(dataStart, crcOffset));
-            if (verification.length !== expectedRawBytes) throw new Error(`${file}: verification decode length changed`);
+            // The source files are truncated near the end. Decode the surviving
+            // raw-deflate payload, then preserve every COMPLETE PNG scanline.
+            // Any incomplete final row plus later missing rows are replaced by
+            // fully transparent pixels; no surviving pixel is altered.
+            const partialRaw = zlib.inflateRawSync(compressed.subarray(2, -4));
+            const stride = width * 4;
+            const rowBytes = stride + 1;
+            const completeRows = Math.min(height, Math.floor(partialRaw.length / rowBytes));
+            if (completeRows < Math.floor(height * 0.9)) {
+              throw new Error(`${file}: only ${completeRows}/${height} complete rows survive; refusing salvage`);
+            }
 
-            fs.writeFileSync(file, png);
-            console.log(`${file}: repaired losslessly; decoded ${width}x${height} RGBA`);
+            const pixels = [];
+            let previous = null;
+            for (let y = 0; y < completeRows; y++) {
+              const offset = y * rowBytes;
+              const filter = partialRaw[offset];
+              const filtered = partialRaw.subarray(offset + 1, offset + rowBytes);
+              const row = unfilterRow(filter, filtered, previous, 4);
+              pixels.push(row);
+              previous = row;
+            }
+            while (pixels.length < height) pixels.push(Buffer.alloc(stride));
+
+            // Re-encode deterministically with filter type 0. This converts only
+            // the damaged tail rows to transparent; all complete source rows are
+            // reconstructed byte-for-byte at pixel level.
+            const raw = Buffer.alloc(height * rowBytes);
+            for (let y = 0; y < height; y++) {
+              const offset = y * rowBytes;
+              raw[offset] = 0;
+              pixels[y].copy(raw, offset + 1);
+            }
+            const rebuiltIdat = zlib.deflateSync(raw, { level: 9 });
+            const ihdrChunk = original.subarray(8, 33);
+            const rebuilt = Buffer.concat([signature, ihdrChunk, makeChunk('IDAT', rebuiltIdat), iend]);
+
+            // Decode the rebuilt stream normally before writing it.
+            const verifyLength = zlib.inflateSync(rebuiltIdat).length;
+            const expectedLength = height * rowBytes;
+            if (verifyLength !== expectedLength) throw new Error(`${file}: rebuilt decode ${verifyLength} != ${expectedLength}`);
+
+            fs.writeFileSync(file, rebuilt);
+            console.log(`${file}: salvaged ${completeRows}/${height} complete rows; filled ${height - completeRows} bottom row(s) transparent`);
           }
           NODE
 
@@ -148,6 +174,6 @@ jobs:
             echo "No beard PNG changes to commit."
             exit 0
           fi
-          git commit -m "Repair full beard PNG chunk metadata"
+          git commit -m "Salvage truncated full beard PNGs"
           git pull --rebase origin development
           git push origin HEAD:development
