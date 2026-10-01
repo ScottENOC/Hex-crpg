@@ -1,0 +1,441 @@
+name: Apply orphaned cache inspector recovery
+
+on:
+  push:
+    branches: [development]
+    paths:
+      - '.github/workflows/apply-offline-inspector-recovery.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+      - name: Move to latest development
+        run: |
+          git fetch origin development
+          git reset --hard origin/development
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Extend local cache inspector recovery
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('offlineCache.js')
+          text = p.read_text()
+          start = text.index('    async function inspectLocalCopy() {')
+          end = text.index('    function shortCommit(value) {', start)
+          replacement = r'''    async function inspectLocalCopy() {
+        const scopeUrl = new URL('./', location.href).href;
+        const metaKey = new URL('__hex_offline_meta__/active.json', scopeUrl).href;
+        const manifestKey = new URL('__hex_offline_meta__/manifest.json', scopeUrl).href;
+        const metaCacheName = 'hex-game-meta';
+        const legacyMetaCacheNames = [
+            'hex-game-meta-v11', 'hex-game-meta-v10', 'hex-game-meta-v9', 'hex-game-meta-v8',
+            'hex-game-meta-v7', 'hex-game-meta-v6', 'hex-game-meta-v5', 'hex-game-meta-v4',
+            'hex-game-meta-v3', 'hex-game-meta-v2', 'hex-game-meta-v1',
+        ];
+        const gameCachePrefixes = [
+            'hex-game-cache-', 'hex-game-v11-', 'hex-game-v10-', 'hex-game-v9-', 'hex-game-v8-',
+            'hex-game-v7-', 'hex-game-v6-', 'hex-game-v5-', 'hex-game-v4-', 'hex-game-v3-',
+            'hex-game-v2-', 'hex-game-v1-',
+        ];
+
+        let lastStep = 'Starting local-cache inspection';
+        const diagnosticAwait = async (label, operation, {
+            timeoutMs = 5000,
+            processed = 0,
+            total = 0,
+            current = '',
+        } = {}) => {
+            lastStep = label;
+            const startedAt = Date.now();
+            const push = () => {
+                const seconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+                emit({
+                    phase: 'diagnostic',
+                    processed,
+                    total,
+                    current,
+                    message: seconds > 0 ? `${label} · waiting ${seconds}s…` : label,
+                });
+            };
+            push();
+            const heartbeat = setInterval(push, 1000);
+            let timeoutId = null;
+            try {
+                return await Promise.race([
+                    Promise.resolve().then(operation),
+                    new Promise((_, reject) => {
+                        timeoutId = setTimeout(() => {
+                            const error = new Error(`${label} did not answer within ${Math.round(timeoutMs / 1000)} seconds.`);
+                            error.kind = 'diagnostic-timeout';
+                            error.stage = label;
+                            reject(error);
+                        }, timeoutMs);
+                    }),
+                ]);
+            } finally {
+                clearInterval(heartbeat);
+                if (timeoutId) clearTimeout(timeoutId);
+            }
+        };
+
+        let workerVersion = null;
+        try {
+            const registration = await diagnosticAwait(
+                '0/8 · Checking offline worker registration',
+                () => navigator.serviceWorker.getRegistration('./'),
+                { timeoutMs: 3000 }
+            );
+            const worker = navigator.serviceWorker.controller || registration?.active || registration?.waiting || registration?.installing;
+            if (worker?.scriptURL) workerVersion = new URL(worker.scriptURL).searchParams.get('v');
+        } catch (_) {}
+
+        let metaSource = metaCacheName;
+        let meta = null;
+        let cacheNames = null;
+        let cacheName = null;
+        let cache = null;
+        let manifest = null;
+        let orphanedCache = false;
+        let candidateCacheCount = 0;
+
+        const metaCache = await diagnosticAwait(
+            '1/8 · Opening current metadata cache',
+            () => caches.open(metaCacheName),
+            { timeoutMs: 5000 }
+        );
+        const metaResponse = await diagnosticAwait(
+            '2/8 · Reading active local-cache pointer',
+            () => metaCache.match(metaKey),
+            { timeoutMs: 5000 }
+        );
+        if (metaResponse) {
+            meta = await diagnosticAwait(
+                '2/8 · Decoding active local-cache pointer',
+                () => metaResponse.clone().json(),
+                { timeoutMs: 2000 }
+            );
+        }
+
+        if (!meta?.cacheName) {
+            cacheNames = await diagnosticAwait(
+                '3/8 · Active pointer missing; listing local cache names',
+                () => caches.keys(),
+                { timeoutMs: 8000 }
+            );
+
+            const availableLegacyMeta = legacyMetaCacheNames.filter(name => cacheNames.includes(name));
+            for (let i = 0; i < availableLegacyMeta.length; i++) {
+                const name = availableLegacyMeta[i];
+                const oldMetaCache = await diagnosticAwait(
+                    `3/8 · Checking older metadata ${i + 1}/${availableLegacyMeta.length}: ${name}`,
+                    () => caches.open(name),
+                    { timeoutMs: 4000, current: name }
+                );
+                const response = await diagnosticAwait(
+                    `3/8 · Reading older active pointer ${i + 1}/${availableLegacyMeta.length}`,
+                    () => oldMetaCache.match(metaKey),
+                    { timeoutMs: 4000, current: name }
+                );
+                if (!response) continue;
+                const candidateMeta = await diagnosticAwait(
+                    `3/8 · Decoding older active pointer ${i + 1}/${availableLegacyMeta.length}`,
+                    () => response.clone().json(),
+                    { timeoutMs: 2000, current: name }
+                );
+                if (candidateMeta?.cacheName) {
+                    meta = candidateMeta;
+                    metaSource = name;
+                    break;
+                }
+            }
+        }
+
+        cacheName = meta?.cacheName || null;
+        if (cacheName) {
+            const exists = await diagnosticAwait(
+                `4/8 · Checking pointed-to cache ${cacheName}`,
+                () => caches.has(cacheName),
+                { timeoutMs: 5000, current: cacheName }
+            );
+            if (exists) {
+                cache = await diagnosticAwait(
+                    `4/8 · Opening pointed-to cache ${cacheName}`,
+                    () => caches.open(cacheName),
+                    { timeoutMs: 5000, current: cacheName }
+                );
+                const response = await diagnosticAwait(
+                    '5/8 · Reading pointed-to cache manifest',
+                    () => cache.match(manifestKey),
+                    { timeoutMs: 5000, current: cacheName }
+                );
+                if (response) {
+                    manifest = await diagnosticAwait(
+                        '5/8 · Decoding pointed-to cache manifest',
+                        () => response.clone().json(),
+                        { timeoutMs: 2500, current: cacheName }
+                    );
+                }
+            }
+        }
+
+        // If metadata was lost, stale, or pointed at a cache with no readable
+        // completion manifest, inspect cache NAMES only and probe candidate
+        // manifests by exact key. We still never enumerate the hundreds of
+        // entries inside a game cache.
+        if (!cache || !Array.isArray(manifest?.files) || !manifest.files.length) {
+            if (!cacheNames) {
+                cacheNames = await diagnosticAwait(
+                    '3/8 · Listing local cache names for recovery',
+                    () => caches.keys(),
+                    { timeoutMs: 8000 }
+                );
+            }
+            const prefixRank = name => {
+                const index = gameCachePrefixes.findIndex(prefix => name.startsWith(prefix));
+                return index < 0 ? Number.MAX_SAFE_INTEGER : index;
+            };
+            const candidates = cacheNames
+                .filter(name => gameCachePrefixes.some(prefix => name.startsWith(prefix)))
+                .filter(name => !/(?:^|-)patch(?:-|$)/i.test(name))
+                .sort((a, b) => prefixRank(a) - prefixRank(b) || a.localeCompare(b));
+            candidateCacheCount = candidates.length;
+
+            if (candidates.length) {
+                emit({
+                    phase: 'diagnostic', processed: 0, total: candidates.length, current: '',
+                    message: `4/8 · Metadata did not identify a usable copy; found ${candidates.length} game-cache candidate${candidates.length === 1 ? '' : 's'}…`,
+                });
+            }
+
+            const limit = Math.min(16, candidates.length);
+            for (let i = 0; i < limit; i++) {
+                const name = candidates[i];
+                const candidateCache = await diagnosticAwait(
+                    `4/8 · Candidate ${i + 1}/${limit}: opening ${name}`,
+                    () => caches.open(name),
+                    { timeoutMs: 5000, processed: i, total: limit, current: name }
+                );
+                const response = await diagnosticAwait(
+                    `5/8 · Candidate ${i + 1}/${limit}: reading completion manifest`,
+                    () => candidateCache.match(manifestKey),
+                    { timeoutMs: 5000, processed: i, total: limit, current: name }
+                );
+                if (!response) continue;
+                let candidateManifest = null;
+                try {
+                    candidateManifest = await diagnosticAwait(
+                        `5/8 · Candidate ${i + 1}/${limit}: decoding completion manifest`,
+                        () => response.clone().json(),
+                        { timeoutMs: 2500, processed: i, total: limit, current: name }
+                    );
+                } catch (_) {
+                    continue;
+                }
+                if (!candidateManifest?.commit || !Array.isArray(candidateManifest.files) || !candidateManifest.files.length) continue;
+                cacheName = name;
+                cache = candidateCache;
+                manifest = candidateManifest;
+                orphanedCache = !meta?.cacheName || meta.cacheName !== name;
+                metaSource = orphanedCache ? 'discovered from cache manifest' : metaSource;
+                break;
+            }
+        }
+
+        if (!cache || !Array.isArray(manifest?.files) || !manifest.files.length) {
+            const hexNames = (cacheNames || []).filter(name => name.startsWith('hex-game-'));
+            return {
+                workerVersion,
+                metaSource,
+                cacheName: cacheName || meta?.cacheName || null,
+                cacheExists: Boolean(cache),
+                savedCommit: meta?.commit || null,
+                manifestFiles: 0,
+                expectedFiles: 0,
+                shaCompared: false,
+                shaSame: 0,
+                shaDifferent: 0,
+                noSavedSha: 0,
+                probeCount: 0,
+                probePresent: 0,
+                probeMissing: 0,
+                probeTimeouts: 0,
+                orphanedCache: false,
+                candidateCacheCount,
+                discoveredCacheNames: hexNames.slice(0, 8),
+                lastStep: candidateCacheCount
+                    ? `Found ${candidateCacheCount} game-cache candidate${candidateCacheCount === 1 ? '' : 's'}, but none had a readable completion manifest`
+                    : `No active pointer and no game-cache candidates were found (${(cacheNames || []).length} total Cache Storage names)`,
+            };
+        }
+
+        const manifestFiles = manifest.files.filter(file => file?.path && file?.sha);
+        emit({
+            phase: 'diagnostic', processed: 0, total: manifestFiles.length, current: cacheName,
+            message: orphanedCache
+                ? `5/8 · Recovered orphaned cache ${cacheName} from its ${manifestFiles.length}-file manifest.`
+                : `5/8 · Saved manifest contains ${manifestFiles.length} files.`,
+        });
+
+        let latest = null;
+        let comparisonError = null;
+        if (navigator.onLine !== false) {
+            try {
+                latest = await diagnosticAwait(
+                    '6/8 · Getting current GitHub file list for SHA comparison',
+                    () => getLatestRuntimeFiles(),
+                    { timeoutMs: 20000 }
+                );
+            } catch (error) {
+                comparisonError = error?.message || String(error);
+                emit({ phase: 'diagnostic', processed: 0, total: 0, current: '', message: `6/8 · SHA comparison skipped: ${comparisonError}` });
+            }
+        } else {
+            comparisonError = 'Phone is offline';
+            emit({ phase: 'diagnostic', processed: 0, total: 0, current: '', message: '6/8 · Offline: skipping GitHub SHA comparison' });
+        }
+
+        const expectedFiles = Array.isArray(latest?.files) ? latest.files : manifestFiles;
+        const savedShaByPath = new Map(manifestFiles.map(file => [file.path, file.sha]));
+        let shaSame = 0;
+        let shaDifferent = 0;
+        let noSavedSha = 0;
+        if (latest?.files) {
+            emit({ phase: 'diagnostic', processed: 0, total: latest.files.length, current: '', message: `7/8 · Comparing ${latest.files.length} Git blob SHAs…` });
+            for (const file of latest.files) {
+                const savedSha = savedShaByPath.get(file.path);
+                if (!savedSha) noSavedSha++;
+                else if (savedSha === file.sha) shaSame++;
+                else shaDifferent++;
+            }
+        }
+
+        const probeSource = manifestFiles.length ? manifestFiles : expectedFiles;
+        const probeLimit = Math.min(24, probeSource.length);
+        const probeFiles = [];
+        if (probeLimit) {
+            const seen = new Set();
+            for (let i = 0; i < probeLimit; i++) {
+                const index = probeLimit === 1 ? 0 : Math.round(i * (probeSource.length - 1) / (probeLimit - 1));
+                const file = probeSource[index];
+                if (file && !seen.has(file.path)) {
+                    seen.add(file.path);
+                    probeFiles.push(file);
+                }
+            }
+        }
+
+        let probePresent = 0;
+        let probeMissing = 0;
+        let probeTimeouts = 0;
+        let consecutiveTimeouts = 0;
+        for (let i = 0; i < probeFiles.length; i++) {
+            const file = probeFiles[i];
+            const label = `8/8 · Probe ${i + 1}/${probeFiles.length}: ${file.path}`;
+            try {
+                const response = await diagnosticAwait(
+                    label,
+                    () => cache.match(new Request(new URL(file.path.split('/').map(part => encodeURIComponent(part)).join('/'), scopeUrl).href), { ignoreSearch: true }),
+                    { timeoutMs: 3500, processed: i, total: probeFiles.length, current: file.path }
+                );
+                consecutiveTimeouts = 0;
+                if (response) probePresent++;
+                else probeMissing++;
+                emit({
+                    phase: 'diagnostic',
+                    processed: i + 1,
+                    total: probeFiles.length,
+                    current: file.path,
+                    message: response ? `${label} · present` : `${label} · MISSING`,
+                });
+            } catch (error) {
+                if (error?.kind !== 'diagnostic-timeout') throw error;
+                probeTimeouts++;
+                consecutiveTimeouts++;
+                emit({
+                    phase: 'diagnostic',
+                    processed: i + 1,
+                    total: probeFiles.length,
+                    current: file.path,
+                    message: `${label} · TIMED OUT`,
+                });
+                if (consecutiveTimeouts >= 2) {
+                    lastStep = `${label} · stopped after two consecutive Cache Storage timeouts`;
+                    break;
+                }
+            }
+        }
+
+        return {
+            workerVersion,
+            metaSource,
+            cacheName,
+            cacheExists: true,
+            savedCommit: manifest?.commit || meta?.commit || null,
+            latestCommit: latest?.commit || null,
+            manifestFiles: manifestFiles.length,
+            expectedFiles: expectedFiles.length,
+            shaCompared: Boolean(latest?.files),
+            shaSame,
+            shaDifferent,
+            noSavedSha,
+            comparisonError,
+            probeCount: probeFiles.length,
+            probePresent,
+            probeMissing,
+            probeTimeouts,
+            orphanedCache,
+            candidateCacheCount,
+            lastStep,
+        };
+    }
+
+'''
+          new_text = text[:start] + replacement + text[end:]
+
+          # Add orphan/candidate information to the compact final report.
+          old = "        const lastText = d.lastStep ? ` · last step: ${d.lastStep}` : '';\n        return `Diagnostic: engine v${d.workerVersion || '?'} · cache ${cacheText} · saved commit ${shortCommit(d.savedCommit)} · ` +\n            `${probeText} · ${shaText} · manifest ${d.manifestFiles || 0}/${d.expectedFiles || 0} files · metadata ${d.metaSource || 'none'}${lastText}.`;"
+          new = "        const recoveryText = d.orphanedCache ? ' · ORPHANED CACHE FOUND (metadata pointer missing/stale)' : '';\n        const candidateText = Number.isFinite(d.candidateCacheCount) && d.candidateCacheCount > 0 ? ` · ${d.candidateCacheCount} candidate cache${d.candidateCacheCount === 1 ? '' : 's'}` : '';\n        const discoveredText = Array.isArray(d.discoveredCacheNames) && d.discoveredCacheNames.length ? ` · cache names: ${d.discoveredCacheNames.join(', ')}` : '';\n        const lastText = d.lastStep ? ` · last step: ${d.lastStep}` : '';\n        return `Diagnostic: engine v${d.workerVersion || '?'} · cache ${cacheText} · saved commit ${shortCommit(d.savedCommit)} · ` +\n            `${probeText} · ${shaText} · manifest ${d.manifestFiles || 0}/${d.expectedFiles || 0} files · metadata ${d.metaSource || 'none'}${recoveryText}${candidateText}${discoveredText}${lastText}.`;"
+          if old not in new_text:
+              raise SystemExit('formatCacheDiagnostic target not found')
+          new_text = new_text.replace(old, new, 1)
+          p.write_text(new_text)
+
+          idx = Path('index.html')
+          html = idx.read_text()
+          if '20261001-pwa-offline-cache-v15-inspector2' not in html:
+              raise SystemExit('expected inspector2 app-build marker not found')
+          html = html.replace('20261001-pwa-offline-cache-v15-inspector2', '20261001-pwa-offline-cache-v15-inspector3', 1)
+          if 'offlineCache.js?v=15-inspector2' not in html:
+              raise SystemExit('expected offlineCache inspector2 script URL not found')
+          html = html.replace('offlineCache.js?v=15-inspector2', 'offlineCache.js?v=15-inspector3', 1)
+          idx.write_text(html)
+          PY
+      - name: Validate JavaScript and recovery wiring
+        run: |
+          node --check offlineCache.js
+          grep -q "Active pointer missing; listing local cache names" offlineCache.js
+          grep -q "ORPHANED CACHE FOUND" offlineCache.js
+          grep -q "offlineCache.js?v=15-inspector3" index.html
+      - name: Remove temporary workflow
+        run: rm .github/workflows/apply-offline-inspector-recovery.yml
+      - name: Commit and push
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add offlineCache.js index.html .github/workflows/apply-offline-inspector-recovery.yml
+          git commit -m 'Recover orphaned local cache during inspection'
+          git pull --rebase origin development
+          git push origin HEAD:development
