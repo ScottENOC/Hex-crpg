@@ -248,3 +248,10 @@ if (typeof document !== 'undefined' && !window.campSystem && !document.querySele
     campScript.async = false;
     document.head.appendChild(campScript);
 }
+if (typeof document !== 'undefined' && !window.campDeploymentSystem && !document.querySelector('script[data-camp-deployment-system]')) {
+    const deploymentScript = document.createElement('script');
+    deploymentScript.dataset.campDeploymentSystem = 'true';
+    deploymentScript.src = 'campDeploymentSystem.js?v=20261001-camp3';
+    deploymentScript.async = false;
+    document.head.appendChild(deploymentScript);
+}
