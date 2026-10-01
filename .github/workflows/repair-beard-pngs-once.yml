@@ -1,0 +1,115 @@
+name: Repair beard PNGs once
+
+on:
+  push:
+    branches:
+      - repair-beard-pngs
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Repair PNG chunk lengths and validate image streams
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const zlib = require('node:zlib');
+
+          const files = [
+            'images/characters/facial_hair/beard_full_front.png',
+            'images/characters/facial_hair/beard_full_side.png',
+          ];
+          const pngSignature = Buffer.from([137,80,78,71,13,10,26,10]);
+          const iendChunk = Buffer.from([0,0,0,0,73,69,78,68,174,66,96,130]);
+
+          function crc32(buffer) {
+            let crc = 0xffffffff;
+            for (const byte of buffer) {
+              crc ^= byte;
+              for (let bit = 0; bit < 8; bit++) {
+                crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+              }
+            }
+            return (crc ^ 0xffffffff) >>> 0;
+          }
+
+          for (const file of files) {
+            const png = fs.readFileSync(file);
+            if (!png.subarray(0, 8).equals(pngSignature)) throw new Error(`${file}: bad PNG signature`);
+            if (png.toString('ascii', 12, 16) !== 'IHDR') throw new Error(`${file}: IHDR not first chunk`);
+            if (png.toString('ascii', 37, 41) !== 'IDAT') throw new Error(`${file}: expected single IDAT at byte 33`);
+            if (!png.subarray(-12).equals(iendChunk)) throw new Error(`${file}: intact IEND footer not found`);
+
+            // These two files contain exactly IHDR + one IDAT + IEND. Their
+            // pixel stream and footer are present, but the IDAT length field is
+            // wrong, causing the validator/browser to read through the CRC and
+            // IEND as if they were compressed image data.
+            const dataLength = png.length - 57; // signature 8 + IHDR 25 + IDAT overhead 12 + IEND 12
+            const dataStart = 41;
+            const crcOffset = dataStart + dataLength;
+            if (crcOffset + 4 !== png.length - 12) throw new Error(`${file}: unexpected chunk layout`);
+
+            png.writeUInt32BE(dataLength >>> 0, 33);
+            const typeAndData = png.subarray(37, crcOffset);
+            png.writeUInt32BE(crc32(typeAndData), crcOffset);
+
+            // Refuse to publish unless the repaired IDAT really is a complete
+            // zlib stream with the exact scanline byte count described by IHDR.
+            const width = png.readUInt32BE(16);
+            const height = png.readUInt32BE(20);
+            const bitDepth = png[24];
+            const colourType = png[25];
+            const interlace = png[28];
+            if (bitDepth !== 8 || colourType !== 6 || interlace !== 0) {
+              throw new Error(`${file}: unexpected IHDR format ${width}x${height}, depth=${bitDepth}, colour=${colourType}, interlace=${interlace}`);
+            }
+            const raw = zlib.inflateSync(png.subarray(dataStart, crcOffset));
+            const expectedRawBytes = height * (1 + width * 4);
+            if (raw.length !== expectedRawBytes) {
+              throw new Error(`${file}: decompressed ${raw.length} bytes; expected ${expectedRawBytes}`);
+            }
+            fs.writeFileSync(file, png);
+            console.log(`${file}: repaired IDAT length=${dataLength}; decoded ${width}x${height} RGBA successfully`);
+          }
+          NODE
+
+          npm ci
+          npm run validate:png
+
+      - name: Commit repaired binary blobs to development
+        run: |
+          mkdir -p /tmp/beard-png-repair
+          cp images/characters/facial_hair/beard_full_front.png /tmp/beard-png-repair/
+          cp images/characters/facial_hair/beard_full_side.png /tmp/beard-png-repair/
+
+          git fetch origin development
+          git checkout -B development origin/development
+          cp /tmp/beard-png-repair/beard_full_front.png images/characters/facial_hair/beard_full_front.png
+          cp /tmp/beard-png-repair/beard_full_side.png images/characters/facial_hair/beard_full_side.png
+
+          npm ci
+          npm run validate:png
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add images/characters/facial_hair/beard_full_front.png images/characters/facial_hair/beard_full_side.png
+          if git diff --cached --quiet; then
+            echo "No beard PNG changes to commit."
+            exit 0
+          fi
+          git commit -m "Repair full beard PNG chunk metadata"
+          git pull --rebase origin development
+          git push origin HEAD:development
