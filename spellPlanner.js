@@ -288,7 +288,7 @@ function alreadyReceivingAutoHeal(target, party) {
 }
 
 function selectAutoHealAction(caster, party = window.entities || []) {
-    if (!caster || !caster.alive || caster.side !== 'player' || hasIdleInstruction(caster)) return null;
+    if (!caster || !caster.alive || caster.side !== 'player' || caster.aiControlled || caster.rider || hasIdleInstruction(caster)) return null;
     if (!(caster.maxMana > 0) || !(caster.currentMana > 0)) return null;
 
     const prepared = (caster.createdSpells || []).filter(spell =>
@@ -300,7 +300,7 @@ function selectAutoHealAction(caster, party = window.entities || []) {
     const manaPct = caster.currentMana / caster.maxMana;
     const candidates = [];
     for (const target of party) {
-        if (!target || !target.alive || target.side !== 'player' || !(target.maxHp > 0)) continue;
+        if (!target || !target.alive || target.side !== 'player' || target.aiControlled || target.rider || !(target.maxHp > 0)) continue;
         if (target.hp >= target.maxHp || hasIdleInstruction(target)) continue;
         if ((target.hp / target.maxHp) >= manaPct) continue;
         if (alreadyReceivingAutoHeal(target, party)) continue;
@@ -334,11 +334,11 @@ function selectAutoHealAction(caster, party = window.entities || []) {
 
 function processAutoHeal() {
     if (!isAutoHealEnabled()) return false;
-    if (window.isInCombat || window.currentTurnEntity || window.isPausedForReaction || window.isSleeping) return false;
+    if (window.isInCombat || window.currentTurnEntity || window.isPausedForReaction || window.isResting || window.isSleeping) return false;
     if (window.multiplayer && window.multiplayer.roomCode && !window.multiplayer.isHost) return false;
     if (!Array.isArray(window.entities) || typeof window.tryCastSpell !== 'function') return false;
 
-    const party = window.entities.filter(entity => entity && entity.alive && entity.side === 'player');
+    const party = window.entities.filter(entity => entity && entity.alive && entity.side === 'player' && !entity.rider && !entity.aiControlled);
     let startedAny = false;
     for (const caster of party) {
         const action = selectAutoHealAction(caster, party);
