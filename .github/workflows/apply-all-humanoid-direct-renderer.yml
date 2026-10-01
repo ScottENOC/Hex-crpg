@@ -1,0 +1,87 @@
+name: Apply all-race humanoid renderer migration
+
+on:
+  push:
+    branches: [development]
+    paths:
+      - '.github/workflows/apply-all-humanoid-direct-renderer.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+      - name: Move to latest development
+        run: |
+          git fetch origin development
+          git reset --hard origin/development
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Apply renderer migration
+        run: python3 .github/scripts/apply-all-humanoid-direct-renderer.py
+      - name: Validate JavaScript and all ten presentation rigs
+        run: |
+          node --check humanoidRenderer.js
+          node --check main.js
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('humanoidRenderer.js').read_text()
+          expected = [
+              'human_female','human_male','elf_female','elf_male','dwarf_female',
+              'dwarf_male','goblin_female','goblin_male','orc_female','orc_male'
+          ]
+          rig_block = text.split('const CHARACTER_RIGS = {',1)[1].split('};',1)[0]
+          missing = [key for key in expected if f'{key}:' not in rig_block]
+          if missing:
+              raise SystemExit(f'Missing direct humanoid rigs: {missing}')
+          if rig_block.count('bodyAssetMode:') != 10:
+              raise SystemExit('Expected bodyAssetMode metadata for all ten rigs')
+          for marker in [
+              "window.DIRECT_HUMANOID_RIG_KEYS",
+              "CHARACTER_RIGS[key]?.bodyRender === 'visible-fit'",
+              "images/characters/goblin_female/body_side.png",
+              "images/characters/orc_male/body_back.png",
+              "images/characters/elf_male/body.png",
+          ]:
+              if marker not in text:
+                  raise SystemExit(f'Missing renderer marker: {marker}')
+          main = Path('main.js').read_text()
+          for stale in ['images/elfmale.png','images/elfmalehair.png','images/dwarffemale.png','images/dwarfmale.png']:
+              if stale in main:
+                  raise SystemExit(f'Stale creator preload remains: {stale}')
+          html = Path('index.html').read_text()
+          if 'humanoidRenderer.js?v=3' not in html or 'main.js?v=7' not in html:
+              raise SystemExit('iOS cache-bust tokens were not bumped')
+          assets = [
+              'images/characters/elf_male/body.png',
+              'images/characters/dwarf_female/body.png',
+              'images/characters/dwarf_male/body.png',
+              'images/characters/goblin_female/body_front.png',
+              'images/characters/goblin_female/body_side.png',
+              'images/characters/goblin_female/body_back.png',
+              'images/characters/orc_male/body_front.png',
+              'images/characters/orc_male/body_side.png',
+              'images/characters/orc_male/body_back.png',
+          ]
+          absent = [path for path in assets if not Path(path).is_file()]
+          if absent:
+              raise SystemExit(f'Missing seeded presentation art: {absent}')
+          print('Direct humanoid renderer covers all 10 playable race/body presentations.')
+          PY
+      - name: Remove temporary patch machinery
+        run: rm .github/scripts/apply-all-humanoid-direct-renderer.py .github/workflows/apply-all-humanoid-direct-renderer.yml
+      - name: Commit and push
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Render all playable humanoids through direct compositor'
+          git pull --rebase origin development
+          git push origin HEAD:development
