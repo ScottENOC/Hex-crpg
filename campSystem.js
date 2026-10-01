@@ -148,7 +148,11 @@
                 let bestScore = -Infinity;
                 for (let i = 0; i < remaining.length; i++) {
                     const candidate = remaining[i];
-                    const social = occupants.reduce((sum, other) => sum + relationshipScore(candidate, other), 0) / occupants.length;
+                    // A single bad pairing should be enough to make a shared
+                    // tent unattractive; neutral friends elsewhere in the tent
+                    // must not average that conflict away. Cold then relaxes
+                    // this worst-pair threshold explicitly.
+                    const social = Math.min(...occupants.map(other => relationshipScore(candidate, other)));
                     const adjusted = social + coldBonus;
                     if (adjusted > bestScore) {
                         bestScore = adjusted;
