@@ -59,3 +59,15 @@
         const timer = setInterval(() => { if (install()) clearInterval(timer); }, INSTALL_RETRY_MS);
     }
 })();
+
+// This script is the last normal presentation entry in name.js. Bootstrap the
+// NPC composite cache from here so it wraps the completed humanoid/weapon/hair
+// renderer chain rather than being overwritten by a later presentation module.
+(() => {
+    if (document.querySelector('script[data-humanoid-sprite-cache]')) return;
+    const script = document.createElement('script');
+    script.src = `humanoidSpriteCache.js?build=${encodeURIComponent(window.PRESENTATION_BUILD || 'npc-sprite-cache-v1')}`;
+    script.dataset.humanoidSpriteCache = 'true';
+    script.async = false;
+    document.head.appendChild(script);
+})();
