@@ -132,6 +132,8 @@
     const GAME_MAX_CONCURRENT = 4;
     const MANAGER_MAX_RETRIES = 2;
     const MANAGER_RETRY_DELAYS_MS = [180, 600];
+    const MANAGER_ERROR_RETRY_BASE_MS = 1800;
+    const MANAGER_ERROR_RETRY_MAX_MS = 15000;
     const GAMEPLAY_WARMUP_GRACE_MS = 750;
 
     const ARENA_CRITICAL = [
@@ -306,6 +308,15 @@
         return SUPPRESSED.has(requested) ? requested : canonicalPath(value);
     }
 
+    function createRecordPromise(record) {
+        let resolvePromise, rejectPromise;
+        const promise = new Promise((resolve,reject) => { resolvePromise=resolve; rejectPromise=reject; });
+        promise.catch(() => {});
+        record.promise=promise;
+        record.resolve=resolvePromise;
+        record.reject=rejectPromise;
+    }
+
     function recordFor(value) {
         const requested = normalise(value);
         const suppressed = SUPPRESSED.has(requested);
@@ -313,13 +324,12 @@
         let record = managerRecords.get(path);
         if (record) return record;
         const image = new Image();
-        let resolvePromise, rejectPromise;
-        const promise = new Promise((resolve,reject) => { resolvePromise=resolve; rejectPromise=reject; });
-        promise.catch(() => {});
         record = {
-            path,image,promise,resolve:resolvePromise,reject:rejectPromise,
+            path,image,promise:null,resolve:null,reject:null,
             status:suppressed?'suppressed':'idle',queued:false,attempt:0,error:null,
+            failureCount:0,nextRetryAt:0,
         };
+        createRecordPromise(record);
         managerRecords.set(path,record);
         if (suppressed) {
             record.error = new Error(`Suppressed obsolete asset: ${requested}`);
@@ -328,11 +338,24 @@
         return record;
     }
 
+    function rearmFailedRecord(record) {
+        if (!record || record.status!=='error') return record;
+        createRecordPromise(record);
+        record.status='idle';
+        record.queued=false;
+        record.attempt=0;
+        record.error=null;
+        record.nextRetryAt=0;
+        return record;
+    }
+
     function settleLoaded(record) {
         const finish = () => {
             if (record.status === 'ready') return;
             record.status='ready';
             record.error=null;
+            record.failureCount=0;
+            record.nextRetryAt=0;
             record.resolve(record.image);
         };
         if (typeof record.image.decode === 'function') record.image.decode().then(finish, finish);
@@ -362,6 +385,12 @@
                 }
                 record.status='error';
                 record.error=new Error(`Failed to load image: ${record.path}`);
+                record.failureCount += 1;
+                const retryDelay=Math.min(
+                    MANAGER_ERROR_RETRY_MAX_MS,
+                    MANAGER_ERROR_RETRY_BASE_MS * (2 ** Math.max(0,record.failureCount-1)),
+                );
+                record.nextRetryAt=performance.now()+retryDelay;
                 record.reject(record.error);
                 done();
             };
@@ -374,7 +403,12 @@
 
     function requestManaged(value,{priority=null,immediate=false}={}) {
         const record=recordFor(value);
-        if (record.status==='ready' || record.status==='loading' || record.queued || record.status==='error' || record.status==='suppressed') return record.image;
+        if (record.status==='suppressed') return record.image;
+        if (record.status==='error') {
+            if (record.nextRetryAt && performance.now() < record.nextRetryAt) return record.image;
+            rearmFailedRecord(record);
+        }
+        if (record.status==='ready' || record.status==='loading' || record.queued) return record.image;
         const start=() => {
             if (record.status!=='idle') return;
             record.queued=true;
