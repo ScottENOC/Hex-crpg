@@ -242,7 +242,19 @@
             window.drawMap?.();
             window.renderEntities?.();
             queuePortraitRefresh();
-        }).catch(() => {});
+            // The creator preview may have tried to draw while this image was
+            // still deferred. Redraw it now rather than leaving a blank canvas
+            // until the player happens to touch another appearance control.
+            if (document.getElementById('appearance-preview-canvas')) {
+                requestAnimationFrame(() => window.updateAppearancePreview?.());
+            }
+        }).catch((error) => {
+            console.warn('Humanoid renderer art failed to load:', src, error);
+            if (!rendererImageCache.get(`reported:${src}`)) {
+                rendererImageCache.set(`reported:${src}`, true);
+                window.showMessage?.(`Art asset failed to load: ${src.split('/').pop()} — ${error?.message || 'load failed'}`);
+            }
+        });
         return image;
     }
 
@@ -794,7 +806,12 @@
             ctx.clearRect(0,0,canvas.width,canvas.height);
             const height = canvas.height*.90;
             const width = height*HUMAN_RENDER_ASPECT;
-            drawDirectionalHumanoidInBounds(ctx, preview, {left:(canvas.width-width)/2,top:(canvas.height-height)/2,width,height}, 'down');
+            const rendered = drawDirectionalHumanoidInBounds(ctx, preview, {left:(canvas.width-width)/2,top:(canvas.height-height)/2,width,height}, 'down');
+            // Never turn a temporarily-unready direct sprite into an empty
+            // preview. The legacy preview is a safe visual fallback while the
+            // directional body finishes decoding; the ready callback above will
+            // replace it as soon as the direct asset is available.
+            if (!rendered) return creatorLegacy.apply(this, arguments);
         };
         wrapped.__directHumanoidPreview = true;
         wrapped.__legacyPreview = creatorLegacy;

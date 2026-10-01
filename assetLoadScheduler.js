@@ -4,7 +4,7 @@
 (() => {
     'use strict';
 
-    const SCHEDULER_VERSION = '7';
+    const SCHEDULER_VERSION = '8';
     if (window.__assetLoadSchedulerInstalled && window.__assetLoadSchedulerVersion === SCHEDULER_VERSION) return;
     // index.html loads this before the other game scripts in a normal page load.
     if (window.__assetLoadSchedulerInstalled) return;
@@ -178,6 +178,11 @@
     if (offlineStartupPending) {
         window.__hexOfflineReady.finally(() => {
             offlineStartupPending = false;
+            // Requests made while the full local copy was being prepared were
+            // deliberately parked as `deferred`. Wake every one now: otherwise
+            // renderer-owned Image objects can remain blank forever even though
+            // their bytes are already safely present in Cache Storage.
+            releaseManagedDeferred();
             schedulePump();
         });
     }
@@ -411,6 +416,10 @@
 
     function requestManaged(value,{priority=null,immediate=false}={}) {
         const record=recordFor(value);
+        // A record may have been created while the offline startup barrier was
+        // active. Once that barrier is gone, any fresh request must be allowed
+        // to wake it instead of inheriting the stale `deferred` state forever.
+        if (record.status==='deferred' && !offlineStartupPending) record.status='idle';
         if (record.status==='suppressed') return record.image;
         if (record.status==='error') {
             if (record.nextRetryAt && performance.now() < record.nextRetryAt) return record.image;
