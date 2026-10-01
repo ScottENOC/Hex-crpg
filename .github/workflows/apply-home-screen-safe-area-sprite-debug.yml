@@ -1,0 +1,92 @@
+name: Apply Home Screen safe-area and sprite diagnostics
+
+on:
+  push:
+    branches: [development]
+    paths:
+      - 'scripts/apply-home-screen-safe-area-sprite-debug.py'
+      - '.github/workflows/apply-home-screen-safe-area-sprite-debug.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Move to latest development
+        run: |
+          git fetch origin development
+          git checkout development
+          git pull --ff-only origin development
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply safe-area and sprite fix
+        run: python3 scripts/apply-home-screen-safe-area-sprite-debug.py
+
+      - name: Validate JavaScript and browser wiring
+        run: |
+          node --check assetLoadScheduler.js
+          node --check humanoidRenderer.js
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          html = Path('index.html').read_text()
+          css = Path('style.css').read_text()
+          scheduler = Path('assetLoadScheduler.js').read_text()
+          renderer = Path('humanoidRenderer.js').read_text()
+
+          assert 'assetLoadScheduler.js?v=9' in html
+          assert 'humanoidRenderer.js?v=1' in html
+          assert html.index('assetLoadScheduler.js?v=9') < html.index('humanoidRenderer.js?v=1') < html.index('main.js')
+          assert 'HOME_SCREEN_SAFE_AREA_V1' in css
+          assert 'env(safe-area-inset-top' in css
+          assert 'min-width: 44px' in css and 'min-height: 44px' in css
+          assert 'HOME_SCREEN_ART_DIAGNOSTICS_V1' in scheduler
+          assert "const SCHEDULER_VERSION = '9';" in scheduler
+          assert 'getFailures(){return assetFailureLog' in scheduler
+
+          # The direct renderer's literal image paths must all exist exactly,
+          # including case, on Linux/GitHub Pages.
+          paths = sorted(set(re.findall(r"['\"](images/[^'\"]+\.(?:png|webp|svg))['\"]", renderer)))
+          missing = [p for p in paths if not Path(p).is_file()]
+          if missing:
+              raise SystemExit('humanoidRenderer.js references missing art:\n' + '\n'.join(missing))
+
+          required = [
+              'images/characters/human_female/body_front.png',
+              'images/characters/human_female/body_side.png',
+              'images/characters/human_female/body_back.png',
+          ]
+          for path in required:
+              assert Path(path).is_file(), path
+          print(f'Validated {len(paths)} direct-renderer art paths')
+          PY
+          git diff --check
+
+      - name: Remove temporary patch machinery
+        run: |
+          rm -f scripts/apply-home-screen-safe-area-sprite-debug.py
+          rm -f .github/workflows/apply-home-screen-safe-area-sprite-debug.yml
+
+      - name: Commit and push
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html style.css assetLoadScheduler.js scripts/apply-home-screen-safe-area-sprite-debug.py .github/workflows/apply-home-screen-safe-area-sprite-debug.yml
+          if git diff --cached --quiet; then
+            echo 'Nothing to commit'
+            exit 0
+          fi
+          git commit -m 'Respect iPhone safe areas and restore humanoid renderer'
+          git pull --rebase origin development
+          git push origin development
