@@ -15,7 +15,7 @@
     'use strict';
 
     const root = typeof window !== 'undefined' ? window : globalThis;
-    const BUILD = '20261001-aldric-independent-recruitment-v2';
+    const BUILD = '20261001-aldric-independent-recruitment-v3';
     const NAME = 'Ser Aldric Thorne';
     const LEGACY_ATTITUDE_NAME = 'Ser Aldric';
     const DIALOGUE_ID = 'ser_aldric_captive';
@@ -271,6 +271,22 @@
         return true;
     }
 
+    function installLoadHook() {
+        const base = root.loadGame;
+        if (typeof base !== 'function' || base.__aldricAttitudeAliasAware) return false;
+        const wrapped = function() {
+            const result = base.apply(this, arguments);
+            // loadGame restores companionAttitude after world setup, replacing
+            // the object that carried our accessor. Re-attach it immediately.
+            syncAttitudeAlias();
+            return result;
+        };
+        wrapped.__aldricAttitudeAliasAware = true;
+        wrapped.__baseAldricIndependentRecruitmentLoad = base;
+        root.loadGame = wrapped;
+        return true;
+    }
+
     function install() {
         if (!root.npcDialogueTrees || typeof root.showDialogue !== 'function') return false;
         syncAttitudeAlias();
@@ -291,6 +307,7 @@
         root.recruitAldric = recruitAldric;
 
         installWorldHook();
+        installLoadHook();
         sync();
         if (typeof document !== 'undefined' && !root.__aldricIndependentRecruitmentTimer) {
             root.__aldricIndependentRecruitmentTimer = setInterval(sync, 15000);
@@ -300,7 +317,8 @@
 
     const api = {
         build: BUILD, state, setStage, freeAldric, deferAldric, advanceFromStory,
-        place, recruitAldric, alternativeText, showCaptiveDialogue, syncAttitudeAlias, sync, install,
+        place, recruitAldric, alternativeText, showCaptiveDialogue, syncAttitudeAlias,
+        sync, installWorldHook, installLoadHook, install,
     };
     root.aldricIndependentRecruitment = api;
     root.ALDRIC_INDEPENDENT_RECRUITMENT_BUILD = BUILD;
