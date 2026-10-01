@@ -8,6 +8,7 @@
     'use strict';
 
     const MEMBERSHIP_REFRESH_MS = 250;
+    const RESULT_SLICE_MS = 20;
     const INSTALL_RETRY_MS = 500;
     const stats = window.visibilityHotPathStats = {
         installed:false,
@@ -18,6 +19,9 @@
         boundsHits:0,
         boundsRebuilds:0,
         boundsRejects:0,
+        resultHits:0,
+        resultMisses:0,
+        resultCacheResets:0,
     };
 
     const now = () => (typeof performance !== 'undefined' && typeof performance.now === 'function')
@@ -30,6 +34,8 @@
     let membershipValidUntil = -Infinity;
     let lastBoundsKey = null;
     let lastBounds = null;
+    let resultContextKey = null;
+    const resultCache = new Map();
 
     function defaultFriendlies() {
         const entities = window.entities || [];
@@ -69,6 +75,20 @@
         return lastBounds;
     }
 
+    function prepareResultCache() {
+        // Visibility can change when the party moves, light/floor changes, or
+        // simply on the next render slice after a door/terrain mutation. The
+        // 20 ms slice lets drawMap + renderEntities share LOS answers without
+        // ever turning this into long-lived world-state caching.
+        const slice = Math.floor(now() / RESULT_SLICE_MS);
+        const key = `${lastBoundsKey || '-'}|${Number(window.lightLevel ?? -1)}|${Number(window._viewerFloor || 0)}|${slice}`;
+        if (key !== resultContextKey) {
+            resultContextKey = key;
+            resultCache.clear();
+            stats.resultCacheResets++;
+        }
+    }
+
     function install() {
         const current = window.isVisibleToPlayer;
         if (typeof current !== 'function') return false;
@@ -80,13 +100,24 @@
             if (friendliesOverride) stats.suppliedOverrideCalls++;
             else stats.cachedMembershipCalls++;
 
-            if (targetHex) {
-                const bounds = boundsFor(friendlies);
-                if (!bounds) return false;
-                if (targetHex.q < bounds.minQ || targetHex.q > bounds.maxQ || targetHex.r < bounds.minR || targetHex.r > bounds.maxR) {
-                    stats.boundsRejects++;
-                    return false;
-                }
+            if (!targetHex) {
+                const downstreamFriendlies = friendliesOverride ? friendlies : friendlies.slice();
+                return current.call(this, targetHex, downstreamFriendlies);
+            }
+
+            const bounds = boundsFor(friendlies);
+            if (!bounds) return false;
+            prepareResultCache();
+            const resultKey = `${targetHex.q},${targetHex.r}`;
+            if (resultCache.has(resultKey)) {
+                stats.resultHits++;
+                return resultCache.get(resultKey);
+            }
+
+            if (targetHex.q < bounds.minQ || targetHex.q > bounds.maxQ || targetHex.r < bounds.minR || targetHex.r > bounds.maxR) {
+                stats.boundsRejects++;
+                resultCache.set(resultKey, false);
+                return false;
             }
 
             // The older wide-bounds wrapper caches by array identity. When
@@ -94,7 +125,10 @@
             // copy so its old WeakMap cannot retain stale bounds after the
             // party walks. This still avoids the expensive full-entity filter.
             const downstreamFriendlies = friendliesOverride ? friendlies : friendlies.slice();
-            return current.call(this, targetHex, downstreamFriendlies);
+            const visible = current.call(this, targetHex, downstreamFriendlies);
+            resultCache.set(resultKey, visible);
+            stats.resultMisses++;
+            return visible;
         };
         wrapped.__visibilityHotPathCache = true;
         wrapped.__original = current;
@@ -103,7 +137,7 @@
         return true;
     }
 
-    window.VisibilityHotPathCache = { install, stats, MEMBERSHIP_REFRESH_MS };
+    window.VisibilityHotPathCache = { install, stats, MEMBERSHIP_REFRESH_MS, RESULT_SLICE_MS };
     if (!install()) {
         const timer = setInterval(() => { if (install()) clearInterval(timer); }, INSTALL_RETRY_MS);
     }
