@@ -5,15 +5,16 @@
 (() => {
     'use strict';
 
-    const VERSION = '5';
+    const VERSION = '6';
     const OWNER = 'ScottENOC';
     const REPO = 'Hex-crpg';
     const BRANCH = 'development';
     const API_BASE = `https://api.github.com/repos/${OWNER}/${REPO}`;
-    const SW_URL = 'offlineServiceWorker.js?v=5';
+    const SW_URL = 'offlineServiceWorker.js?v=6';
     const BRANCH_CACHE_MS = 15000;
     const REQUEST_TIMEOUT_MS = 25000;
     const WORKER_STALL_TIMEOUT_MS = 45000;
+    const STARTUP_WORKER_TIMEOUT_MS = 6000;
     const AUTO_RETRY_DELAY_MS = 1200;
 
     const supported = location.protocol === 'https:' && 'serviceWorker' in navigator && 'caches' in window;
@@ -55,6 +56,17 @@
 
     function sleep(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    function withTimeout(promise, label, timeoutMs = STARTUP_WORKER_TIMEOUT_MS) {
+        return Promise.race([
+            promise,
+            new Promise((_, reject) => setTimeout(() => {
+                const error = new Error(`${label} timed out.`);
+                error.kind = 'worker-timeout';
+                reject(error);
+            }, timeoutMs)),
+        ]);
     }
 
     function formatBytes(bytes) {
@@ -167,34 +179,71 @@
         });
     }
 
-    async function ensureRegistration() {
+    async function ensureRegistration({ allowUpdate = false } = {}) {
         if (!supported) {
             const error = new Error('Offline app storage is not available in this browser/context.');
             error.kind = 'unsupported';
             throw error;
         }
-        if (!registrationPromise) {
-            registrationPromise = (async () => {
-                const registration = await navigator.serviceWorker.register(SW_URL, {
-                    scope: './',
-                    updateViaCache: 'none',
-                });
-                try { await registration.update(); } catch (error) {
-                    console.warn('Service worker update check failed; existing worker can still be used.', error);
-                }
 
+        const buildRegistration = async () => {
+            let registration = null;
+            try {
+                registration = await withTimeout(
+                    navigator.serviceWorker.getRegistration('./'),
+                    'Looking up the local game worker',
+                    4000
+                );
+            } catch (error) {
+                console.warn('Local worker lookup did not answer promptly.', error);
+            }
+
+            if (!registration) {
+                registration = await withTimeout(
+                    navigator.serviceWorker.register(SW_URL, { scope: './', updateViaCache: 'none' }),
+                    'Starting the local game worker',
+                    8000
+                );
+            }
+
+            // Startup must never force an update. Updating the worker is part of
+            // the explicit Check for updates action only.
+            if (allowUpdate) {
+                try {
+                    await withTimeout(registration.update(), 'Checking for a local worker update', 8000);
+                } catch (error) {
+                    console.warn('Service worker update check timed out/failed; the existing worker can still be used.', error);
+                }
                 const candidate = registration.installing || registration.waiting;
-                if (candidate) await waitForWorkerActivation(candidate);
-                if (!registration.active) await navigator.serviceWorker.ready;
-
-                const activeUrl = registration.active?.scriptURL || '';
-                if (!registration.active || !activeUrl.includes('offlineServiceWorker.js') || !activeUrl.includes('v=5')) {
-                    const error = new Error('The v5 offline worker is not active yet.');
-                    error.kind = 'worker-version';
-                    throw error;
+                if (candidate) {
+                    try { await waitForWorkerActivation(candidate, 8000); }
+                    catch (error) { console.warn('Updated worker did not activate promptly; keeping the current worker.', error); }
                 }
-                return registration;
-            })().catch(error => {
+            }
+
+            if (!registration.active && !navigator.serviceWorker.controller) {
+                try {
+                    registration = await withTimeout(
+                        navigator.serviceWorker.ready,
+                        'Waiting for the local game worker',
+                        8000
+                    );
+                } catch (error) {
+                    throw Object.assign(error, { kind: error.kind || 'worker-ready-timeout' });
+                }
+            }
+
+            if (!registration?.active && !navigator.serviceWorker.controller) {
+                const error = new Error('No active local game worker is available.');
+                error.kind = 'worker-missing';
+                throw error;
+            }
+            return registration;
+        };
+
+        if (allowUpdate) return buildRegistration();
+        if (!registrationPromise) {
+            registrationPromise = buildRegistration().catch(error => {
                 registrationPromise = null;
                 throw error;
             });
@@ -252,7 +301,7 @@
     }
 
     async function getWorkerStatus(worker) {
-        return workerRequest(worker, { type: 'HEX_CACHE_STATUS' }, { timeout: 30000 });
+        return workerRequest(worker, { type: 'HEX_CACHE_STATUS' }, { timeout: STARTUP_WORKER_TIMEOUT_MS });
     }
 
     function isRuntimeFile(entry) {
@@ -366,7 +415,7 @@
         emit({ phase: 'checking', stored: 0, processed: 0, total: 0, message: 'Checking local game copy…' });
         let registration;
         try {
-            registration = await ensureRegistration();
+            registration = await ensureRegistration({ allowUpdate: true });
         } catch (error) {
             return { complete: false, failures: [errorInfo(error, 'worker')], hasActiveCache: false, unsupported: error?.kind === 'unsupported' };
         }
@@ -628,7 +677,19 @@
             return await getWorkerStatus(worker);
         } catch (error) {
             console.warn('Could not read local game copy', error);
-            return { valid: false, error: errorInfo(error, 'local-status') };
+            let hasWorker = Boolean(navigator.serviceWorker.controller);
+            if (!hasWorker) {
+                try {
+                    const registration = await withTimeout(navigator.serviceWorker.getRegistration('./'), 'Double-checking the local worker', 1500);
+                    hasWorker = Boolean(registration?.active);
+                } catch (_) {}
+            }
+            return {
+                valid: false,
+                statusUnavailable: true,
+                hasWorker,
+                error: errorInfo(error, 'local-status'),
+            };
         }
     }
 
@@ -654,7 +715,9 @@
         const errorBox = gate.querySelector('.hex-offline-error');
 
         title.textContent = 'Silverhart Saga';
-        count.textContent = `${local.fileCount || 0} game files available locally`;
+        count.textContent = local.statusUnavailable || local.unverified
+            ? 'Local game copy detected'
+            : `${local.fileCount || 0} game files available locally`;
         detail.textContent = message;
         bar.style.width = '100%';
         errorBox.hidden = true;
@@ -718,6 +781,9 @@
         const unsubscribe = onProgress(progress => renderProgress(gate, progress));
         try {
             let local = await readLocalCopyStatus();
+            if (!local.valid && local.statusUnavailable && local.hasWorker) {
+                local = { ...local, valid: true, unverified: true, fileCount: null };
+            }
 
             // First install/repair: there is nothing safe to launch yet, so build
             // the local copy automatically once. Subsequent launches never do this.
@@ -736,9 +802,11 @@
                 if (!local.valid) throw Object.assign(new Error('The local copy completed but could not be reopened.'), { kind: 'local-status' });
             }
 
-            let choiceMessage = local.recovered
-                ? 'Recovered the existing local game copy. Ready to launch.'
-                : 'Ready to play from the copy stored on this phone.';
+            let choiceMessage = local.unverified
+                ? 'iOS did not answer the file-count check. You can still launch the installed copy, or use Check for updates to verify/repair it.'
+                : local.recovered
+                    ? 'Recovered the existing local game copy. Ready to launch.'
+                    : 'Ready to play from the copy stored on this phone.';
 
             while (local.valid) {
                 const choice = await waitForLocalChoice(gate, local, choiceMessage);
@@ -759,6 +827,11 @@
                 if (await restartForUpdatedBuild(gate, updateResult)) return;
 
                 local = await readLocalCopyStatus();
+                if (!local.valid && local.statusUnavailable && local.hasWorker) {
+                    local = { ...local, valid: true, unverified: true, fileCount: null };
+                    choiceMessage = 'The update finished, but iOS did not answer the file-count check. Launch is still available.';
+                    continue;
+                }
                 if (!local.valid) throw Object.assign(new Error('The saved local copy could not be reopened after the update check.'), { kind: 'local-status' });
                 choiceMessage = updateResult.upToDate || updateResult.changed === false
                     ? 'No newer build found. Your local copy is ready.'

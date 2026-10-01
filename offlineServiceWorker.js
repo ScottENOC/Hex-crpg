@@ -2,10 +2,10 @@
 // Atomic, integrity-checked local game cache for the development branch.
 'use strict';
 
-const SW_VERSION = '5';
+const SW_VERSION = '6';
 const META_CACHE = `hex-game-meta-v${SW_VERSION}`;
 const GAME_CACHE_PREFIX = `hex-game-v${SW_VERSION}-`;
-const LEGACY_GAME_CACHE_PREFIXES = ['hex-game-v4-', 'hex-game-v3-', 'hex-game-v2-', 'hex-game-v1-'];
+const LEGACY_GAME_CACHE_PREFIXES = ['hex-game-v5-', 'hex-game-v4-', 'hex-game-v3-', 'hex-game-v2-', 'hex-game-v1-'];
 const SCOPE_URL = self.registration.scope;
 const META_KEY = new URL('__hex_offline_meta__/active.json', SCOPE_URL).href;
 const MANIFEST_KEY = new URL('__hex_offline_meta__/manifest.json', SCOPE_URL).href;
@@ -303,7 +303,7 @@ async function assertCacheStorageWorks() {
 async function cleanupLegacyCaches() {
     const names = await caches.keys();
     await Promise.all(names
-        .filter(name => name === 'hex-game-meta-v1' || name === 'hex-game-meta-v2' || name === 'hex-game-meta-v3' || name === 'hex-game-meta-v4' || name.startsWith('hex-game-v1-') || name.startsWith('hex-game-v2-') || name.startsWith('hex-game-v3-') || name.startsWith('hex-game-v4-'))
+        .filter(name => name === 'hex-game-meta-v1' || name === 'hex-game-meta-v2' || name === 'hex-game-meta-v3' || name === 'hex-game-meta-v4' || name === 'hex-game-meta-v5' || name.startsWith('hex-game-v1-') || name.startsWith('hex-game-v2-') || name.startsWith('hex-game-v3-') || name.startsWith('hex-game-v4-') || name.startsWith('hex-game-v5-'))
         .map(name => caches.delete(name)));
 }
 
