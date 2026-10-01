@@ -140,6 +140,18 @@ test('stronger companion Insight adds an authored party-expertise route',()=>{
   assert(follow.prompt.includes('Reyna Fletcher reads Bram'));
 });
 
+test('expertise-only scenes are wrapped even without behaviour rules',()=>{
+  const {api,dialogues}=reset();
+  global.npcDialogueTrees.reddale_steward=(npc)=>global.showDialogue(npc,'State your business.',[
+    {label:'Try to read him.',action:()=>{}},
+    {label:'Never mind.',action:()=>{}},
+  ]);
+  api.install(); api.installSceneHooks();
+  global.npcDialogueTrees.reddale_steward({name:"Baron's Steward"});
+  const dlg=dialogues.at(-1);
+  assert(dlg.options.some(o=>o.__partyExpertise && o.label.includes('Reyna')));
+});
+
 test('religious party knowledge is attributed to the companion who has it',()=>{
   const {api}=reset();
   global.hasKnowledgeReligion=c=>c?.name==='Brother Alden';
@@ -177,4 +189,4 @@ test('generic gold leverage records only after a successful payment',()=>{
   assert(messages.some(m=>m.includes('hand over')));
 });
 
-console.log('10 tests passed');
+console.log('11 tests passed');

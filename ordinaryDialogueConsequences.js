@@ -5,9 +5,10 @@
 'use strict';
 
 const root = typeof window !== 'undefined' ? window : globalThis;
-const BUILD = '20261001-ordinary-dialogue-consequences-v1';
+const BUILD = '20261001-ordinary-dialogue-consequences-v2';
 const sceneRules = new Map();
 const wrappedTrees = new Set();
+const expertiseScenes = new Set(['reddale_steward']);
 let currentScene = null;
 let installed = false;
 
@@ -275,10 +276,17 @@ function wrapTree(sceneId) {
   return true;
 }
 
+function registerExpertiseScene(sceneId) {
+  if (!sceneId) return false;
+  expertiseScenes.add(String(sceneId));
+  return wrapTree(String(sceneId)) || true;
+}
+
 function installSceneHooks() {
   if (!root.npcDialogueTrees) return 0;
   let count = 0;
-  for (const id of sceneRules.keys()) if (wrapTree(id)) count++;
+  const ids = new Set([...sceneRules.keys(), ...expertiseScenes]);
+  for (const id of ids) if (wrapTree(id)) count++;
   return count;
 }
 
@@ -317,6 +325,7 @@ const api = {
   BUILD,
   DEFAULT_RULES,
   registerRule,
+  registerExpertiseScene,
   ruleFor,
   semanticMeta,
   recordAndReact,
@@ -328,6 +337,7 @@ const api = {
   installSceneHooks,
   install,
   wrappedTrees,
+  expertiseScenes,
 };
 root.ordinaryDialogueConsequences = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

@@ -97,5 +97,5 @@ window.recordGoldLeverageChoice = recordGoldLeverageChoice;
 // leverage.js itself is intentionally loaded much earlier than campaign2Dialogue.js.
 if (typeof document !== 'undefined' && !window.__ordinaryDialogueConsequencesModuleLoaded) {
     window.__ordinaryDialogueConsequencesModuleLoaded = true;
-    document.write('<script src="ordinaryDialogueConsequences.js?build=20261001-ordinary-dialogue-consequences-v1"><\\/script>');
+    document.write('<script src="ordinaryDialogueConsequences.js?build=20261001-ordinary-dialogue-consequences-v2"><\\/script>');
 }
