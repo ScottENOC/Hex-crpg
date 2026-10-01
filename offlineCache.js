@@ -1262,8 +1262,12 @@
         // Never let the offline/PWA layer block the ordinary Safari website.
         // Only the installed Home Screen app owns and uses the local game copy.
         if (!isStandaloneWebApp()) {
+            // Ordinary Safari should not run the Home Screen app's offline launcher,
+            // but it must also never unregister workers or delete hex-game-* caches.
+            // On current iOS versions Safari and the installed Home Screen app can
+            // expose shared service-worker/Cache Storage state, so destructive
+            // cleanup here can erase the installed app's complete local copy.
             releaseReadyBarrier({ complete: true, browserMode: true, hasActiveCache: false });
-            Promise.resolve().then(cleanupSafariOfflineControl).catch(() => {});
             return;
         }
 
