@@ -1,49 +1,53 @@
-name: Humanoid Renderer Focused Tests
+name: One-off Offline Cache v16 Refresh
 
-# Deliberately scoped to the direct humanoid + clothing regressions; do not expand this to the full suite.
 on:
   push:
     branches:
       - development
     paths:
-      - 'humanoidRenderer.js'
-      - 'rendererAssetRecovery.js'
-      - 'equipmentInterface.js'
-      - 'clothingLayers.js'
-      - 'clothingSystem.js'
-      - 'characterCreation.js'
-      - 'braidDirectionalHair.js'
-      - 'index.html'
-      - 'entities.js'
-      - 'graphicsSettings.js'
-      - 'name.js'
-      - 'tests/human-female-direct-render.spec.js'
-      - 'tests/humanoid-body-fallback-regression.spec.js'
-      - 'tests/armour-asset-consistency.spec.js'
-      - 'tests/visibility-assets.spec.js'
-      - 'images/characters/elf_female/**'
-      - 'images/characters/human_female/**'
-      - 'images/equipment/clothing/**'
-      - 'images/equipment/armour/**'
       - '.github/workflows/human-female-render-diagnostic.yml'
 
-concurrency:
-  group: humanoid-renderer-${{ github.ref }}
-  cancel-in-progress: true
+permissions:
+  contents: write
 
 jobs:
-  focused-render:
+  patch:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Run focused humanoid, clothing and armour rendering regressions
-        run: npx playwright test tests/human-female-direct-render.spec.js tests/humanoid-body-fallback-regression.spec.js tests/armour-asset-consistency.spec.js tests/visibility-assets.spec.js --reporter=line
+          ref: development
+          fetch-depth: 0
+      - name: Bump launcher and worker bootstrap versions
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git pull --ff-only origin development
+
+          python3 -c 'from pathlib import Path; p=Path("offlineCache.js"); s=p.read_text(); assert "const VERSION = '\''15'\'';" in s; assert "const SW_URL = '\''offlineServiceWorker.js?v=15'\'';" in s; s=s.replace("const VERSION = '\''15'\'';", "const VERSION = '\''16'\'';", 1).replace("const SW_URL = '\''offlineServiceWorker.js?v=15'\'';", "const SW_URL = '\''offlineServiceWorker.js?v=16'\'';", 1); p.write_text(s)'
+
+          python3 -c 'from pathlib import Path; p=Path("offlineServiceWorker.js"); s=p.read_text(); assert "const SW_VERSION = '\''15'\'';" in s; p.write_text(s.replace("const SW_VERSION = '\''15'\'';", "const SW_VERSION = '\''16'\'';", 1))'
+
+          python3 -c 'from pathlib import Path; p=Path("index.html"); s=p.read_text(); old1="20261001-pwa-offline-cache-v15-safari-storage-fix"; old2="offlineCache.js?v=15-safari-storage-fix"; assert old1 in s and old2 in s; s=s.replace(old1,"20261001-pwa-offline-cache-v16-cache-recovery",1).replace(old2,"offlineCache.js?v=16-cache-recovery",1); p.write_text(s)'
+
+          node --check offlineCache.js
+          node --check offlineServiceWorker.js
+          node --test tests-unit/offline-cache-regression.test.js
+          grep -Fq "offlineCache.js?v=16-cache-recovery" index.html
+          grep -Fq "offlineServiceWorker.js?v=16" offlineCache.js
+          grep -Fq "const SW_VERSION = '16';" offlineServiceWorker.js
+          grep -Fq ': cacheNameForCommit(commit);' offlineServiceWorker.js
+          ! grep -Fq '.filter(name => !/(?:^|-)patch(?:-|$)/i.test(name))' offlineCache.js
+
+          git checkout '${{ github.event.before }}' -- .github/workflows/human-female-render-diagnostic.yml
+          git add offlineCache.js offlineServiceWorker.js index.html .github/workflows/human-female-render-diagnostic.yml
+          git diff --cached --check
+          git commit -m 'Refresh offline cache bootstrap as v16'
+          git pull --rebase origin development
+          node --check offlineCache.js
+          node --check offlineServiceWorker.js
+          node --test tests-unit/offline-cache-regression.test.js
+          git push origin HEAD:development
