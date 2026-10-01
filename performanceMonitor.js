@@ -352,18 +352,24 @@
         const v = window.performanceVisibilityCacheStats || {};
         const rv = window.performanceRenderVisibilityStats || {};
         const p = window.performancePathfindingStats || {};
+        const npcCache = window.humanoidSpriteCacheStats || {};
         const totalVis = (v.hits || 0) + (v.misses || 0);
         const hitRate = totalVis ? (100 * (v.hits || 0) / totalVis).toFixed(1) : '0.0';
         const pathAvg = p.calls ? (p.totalMs || 0) / p.calls : 0;
+        const npcCacheLookups = (npcCache.hits || 0) + (npcCache.misses || 0);
+        const npcCacheHitRate = npcCacheLookups ? (100 * (npcCache.hits || 0) / npcCacheLookups).toFixed(1) : '0.0';
+        const activeRenderInterval = window._getRenderIntervalMs ? Number(window._getRenderIntervalMs()) : 0;
+        const activeRenderTarget = activeRenderInterval > 0 ? `${Math.round(1000 / activeRenderInterval)}fps/${activeRenderInterval}ms` : 'unknown';
         return [
             `Captured: ${new Date().toISOString()}`,
             `Session: ${sessionStartedAt == null ? '0.0' : ((now() - sessionStartedAt) / 1000).toFixed(1)} s`,
             `Campaign: ${window.currentCampaign ?? 'unknown'} | combat: ${!!window.isInCombat}`,
             `Entities: ${(window.entities || []).length} | zoom: ${(window.cameraZoom || 1).toFixed(2)}`,
-            `Frame-rate mode: ${window.frameRateMode || 'unknown'} | render scale: ${window.renderScale || 1} | foliage: ${window.foliageDetail || 'unknown'}`,
+            `Frame-rate mode: ${window.frameRateMode || 'unknown'} | active target: ${activeRenderTarget} | render scale: ${window.renderScale || 1} | foliage: ${window.foliageDetail || 'unknown'}`,
             `Render coalescer: frames=${r.frames || 0}, avg=${fmt(r.avgFrameMs || 0)} ms, last=${fmt(r.lastFrameMs || 0)} ms, coalesced=${r.coalesced || 0}`,
             `Render breakdown: mapFrames=${r.mapFrames || 0}, map avg=${fmt(r.avgMapMs || 0)} ms, map-other avg=${fmt(r.avgMapOtherMs || 0)} ms, entities avg=${fmt(r.avgEntitiesMs || 0)} ms`,
             `Render last: map=${fmt(r.lastMapMs || 0)} ms, map-other=${fmt(r.lastMapOtherMs || 0)} ms, entities=${fmt(r.lastEntitiesMs || 0)} ms, entityOnlyFrames=${r.entityOnlyFrames || 0}`,
+            `NPC composite cache: installed=${!!npcCache.installed}, hits=${npcCache.hits || 0}, misses=${npcCache.misses || 0}, hitRate=${npcCacheHitRate}%, builds=${npcCache.builds || 0}, failed=${npcCache.failedBuilds || 0}, rewraps=${npcCache.rewraps || 0}`,
             `Visibility cache: hits=${v.hits || 0}, misses=${v.misses || 0}, hitRate=${hitRate}%, rangeRejects=${v.rangeRejects || 0}, entries=${v.entries || 0}, clears=${v.clears || 0}, refreshes=${v.refreshes || 0}`,
             `Render visibility: rebuilds=${rv.rebuilds || 0}, candidates=${rv.candidates || 0}, visible=${rv.visible || 0}, renderQueries=${rv.renderQueries || 0}, renderHits=${rv.renderHits || 0}, gameplayFallbacks=${rv.gameplayFallbacks || 0}`,
             `Pathfinding fast path: calls=${p.calls || 0}, npc=${p.npcCalls || 0}, player=${p.playerCalls || 0}, realtimePlayerOptimized=${p.realtimePlayerOptimized || 0}, combatPlayer=${p.combatPlayerCalls || 0}, npcOptimized=${p.optimizedNpcCalls || 0}, preferredSets=${p.preferredSetCalls || 0}, avg=${fmt(pathAvg)} ms, max=${fmt(p.maxMs || 0)} ms`,
