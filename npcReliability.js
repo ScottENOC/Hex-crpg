@@ -2,12 +2,15 @@
 // Generated-NPC hardening plus lightweight creator/player presentation guards.
 (() => {
   'use strict';
-  const DOOR_CLEARANCE_RADIUS=1, MALE_BALD_CHANCE=.06;
+  const DOOR_CLEARANCE_RADIUS=1, MALE_BALD_CHANCE=.06, RENDER_GUARD_MS=500;
   const BLOCKED=new Set(['Wall','Water','Palisade Wall','Keep Wall','Stone Wall']);
   const DOORS=new Set(['door_open','door_closed']);
   const styled=new WeakSet();
   let talkWrapped=false,dialogueWrapped=false,renderWrapped=false,creatorInstalled=false;
   let maintenancePasses=0,doorwayMoves=0,doorCache=[],doorCacheAt=0;
+  let lastRenderGuardAt=-Infinity,renderGuardRuns=0,renderGuardSkips=0;
+  let lastRenderGuardMs=0,maxRenderGuardMs=0,lastMaintenanceMs=0,maxMaintenanceMs=0;
+  const clock=()=>typeof performance!=='undefined'&&typeof performance.now==='function'?performance.now():Date.now();
 
   const CREATOR_DEFAULTS={
     'race-select':'human','gender-select':'female','class-select':'fighter','voice-select':'pc_1',
@@ -91,7 +94,7 @@
     return true;
   }
 
-  function refreshDoors(force=false){const now=performance.now?.()||Date.now();if(!force&&doorCache.length&&now-doorCacheAt<5000)return doorCache;doorCache=[];for(const[k,o]of Object.entries(window.tileObjects||{})){if(!DOORS.has(o?.type))continue;const[q,r]=k.split(',').map(Number);if(Number.isFinite(q)&&Number.isFinite(r))doorCache.push({q,r});}doorCacheAt=now;return doorCache;}
+  function refreshDoors(force=false){const now=clock();if(!force&&doorCache.length&&now-doorCacheAt<5000)return doorCache;doorCache=[];for(const[k,o]of Object.entries(window.tileObjects||{})){if(!DOORS.has(o?.type))continue;const[q,r]=k.split(',').map(Number);if(Number.isFinite(q)&&Number.isFinite(r))doorCache.push({q,r});}doorCacheAt=now;return doorCache;}
   function dist(a,b){return window.distance?window.distance(a,b):Math.max(Math.abs(a.q-b.q),Math.abs(a.r-b.r),Math.abs((a.q+a.r)-(b.q+b.r)));}
   function inDoorClearance(h,ds=refreshDoors()){return!!h&&ds.some(d=>dist(h,d)<=DOOR_CLEARANCE_RADIUS);}
   function occupied(h,ignore){return(window.entities||[]).some(e=>e!==ignore&&e?.alive&&e.hex?.q===h.q&&e.hex?.r===h.r);}
@@ -101,7 +104,25 @@
   function smallTalkLine(npc){const pool=SMALL_TALK[npc?.occupation]||SMALL_TALK.generic;npc.__smallTalkCount=(npc.__smallTalkCount||0)+1;const salt=`${npc?.id||npc?.name}|${npc.__smallTalkCount}|${Math.floor((window.worldSeconds||0)/3600)}`;if(pool!==SMALL_TALK.generic&&npc.__smallTalkCount%3===0){const g=SMALL_TALK.generic;return g[Math.floor(unit(`${salt}:general`)*g.length)%g.length];}return pool[Math.floor(unit(salt)*pool.length)%pool.length];}
   function installTalkFallback(){const original=window.talkToNPC;if(typeof original!=='function')return false;if(original.__npcReliabilitySmallTalk){talkWrapped=true;return true;}const wrapped=function(npc,...args){const authored=!!(npc?.dialogueId&&window.npcDialogueTrees?.[npc.dialogueId]);if(authored||npc?.arenaFlavorLine||!npc?.isNPC)return original.call(this,npc,...args);styleEntityNow(npc);window.showDialogue?.(npc,smallTalkLine(npc),[{label:'Take care.',action:()=>{}}]);};wrapped.__npcReliabilitySmallTalk=true;wrapped.__original=original;window.talkToNPC=wrapped;talkWrapped=true;return true;}
   function installDialogueStyling(){const original=window.showDialogue;if(typeof original!=='function')return false;if(original.__npcReliabilityAppearance){dialogueWrapped=true;return true;}const wrapped=function(npc,...args){if(npc?.isGeneratedCivilian)styleEntityNow(npc);else baldHints(npc);return original.call(this,npc,...args);};wrapped.__npcReliabilityAppearance=true;wrapped.__original=original;window.showDialogue=wrapped;dialogueWrapped=true;return true;}
-  function installRenderStyling(){const original=window.renderEntities;if(typeof original!=='function')return false;if(original.__npcReliabilityAppearance){renderWrapped=true;return true;}const wrapped=function(...args){ensureDirectionalPlayerPresentation();styleGeneratedResidents();return original.apply(this,args);};wrapped.__npcReliabilityAppearance=true;wrapped.__original=original;window.renderEntities=wrapped;renderWrapped=true;return true;}
+  function installRenderStyling(){
+    const original=window.renderEntities;
+    if(typeof original!=='function')return false;
+    if(original.__npcReliabilityAppearance){renderWrapped=true;return true;}
+    const wrapped=function(...args){
+      const now=clock();
+      if(now-lastRenderGuardAt>=RENDER_GUARD_MS){
+        const started=now;
+        lastRenderGuardAt=now;
+        ensureDirectionalPlayerPresentation();
+        styleGeneratedResidents();
+        lastRenderGuardMs=clock()-started;
+        maxRenderGuardMs=Math.max(maxRenderGuardMs,lastRenderGuardMs);
+        renderGuardRuns++;
+      }else renderGuardSkips++;
+      return original.apply(this,args);
+    };
+    wrapped.__npcReliabilityAppearance=true;wrapped.__original=original;window.renderEntities=wrapped;renderWrapped=true;return true;
+  }
 
   function creatorVisible(){const el=document.getElementById('characterCreator');return!!el&&getComputedStyle(el).display!=='none';}
   function installCreatorBaldOption(){const s=document.getElementById('hair-style-select');if(!s)return false;if(!s.querySelector('option[value="bald"]'))s.appendChild(new Option('Bald','bald'));creatorInstalled=true;return true;}
@@ -109,10 +130,10 @@
   function installCreatorSync(){if(!installCreatorBaldOption())return false;const s=document.getElementById('hair-style-select');if(!s.dataset.npcReliabilityBaldListener){s.dataset.npcReliabilityBaldListener='true';s.addEventListener('change',()=>{syncCreator();window.updateAppearancePreview?.();});}return true;}
 
   function install(){ensureCreatorDefaults();installTransparentBaldHair();installTalkFallback();installDialogueStyling();installRenderStyling();installCreatorSync();syncCreator();ensureDirectionalPlayerPresentation();}
-  function maintenance(){maintenancePasses++;install();normalisePopulationHair();styleGeneratedResidents();ensureDirectionalPlayerPresentation();clearGeneratedDoorways();}
+  function maintenance(){const started=clock();maintenancePasses++;install();normalisePopulationHair();styleGeneratedResidents();ensureDirectionalPlayerPresentation();clearGeneratedDoorways();lastMaintenanceMs=clock()-started;maxMaintenanceMs=Math.max(maxMaintenanceMs,lastMaintenanceMs);}
 
   window.NPCReliability={maintenance,ensureCreatorDefaults,ensureDirectionalPlayerPresentation,normaliseHairRecord,normalisePopulationHair,styleEntityNow,styleGeneratedResidents,inDoorClearance,clearGeneratedDoorways,safeCivilianHex,smallTalkLine,installTransparentBaldHair,refreshDoors,
-    get stats(){return{maintenancePasses,doorwayMoves,talkWrapperInstalled:talkWrapped,dialogueWrapperInstalled:dialogueWrapped,renderWrapperInstalled:renderWrapped,creatorInstalled,previewWrapperInstalled:false};},DOOR_CLEARANCE_RADIUS,MALE_BALD_CHANCE,SMALL_TALK};
+    get stats(){return{maintenancePasses,doorwayMoves,talkWrapperInstalled:talkWrapped,dialogueWrapperInstalled:dialogueWrapped,renderWrapperInstalled:renderWrapped,creatorInstalled,previewWrapperInstalled:false,renderGuardRuns,renderGuardSkips,lastRenderGuardMs,maxRenderGuardMs,lastMaintenanceMs,maxMaintenanceMs};},DOOR_CLEARANCE_RADIUS,MALE_BALD_CHANCE,RENDER_GUARD_MS,SMALL_TALK};
 
   const boot=setInterval(install,100);setTimeout(()=>clearInterval(boot),15000);install();
   window.__npcReliabilityMaintenanceTimer=setInterval(maintenance,1200);maintenance();
