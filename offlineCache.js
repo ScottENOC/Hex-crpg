@@ -5,12 +5,12 @@
 (() => {
     'use strict';
 
-    const VERSION = '4';
+    const VERSION = '5';
     const OWNER = 'ScottENOC';
     const REPO = 'Hex-crpg';
     const BRANCH = 'development';
     const API_BASE = `https://api.github.com/repos/${OWNER}/${REPO}`;
-    const SW_URL = 'offlineServiceWorker.js?v=4';
+    const SW_URL = 'offlineServiceWorker.js?v=5';
     const BRANCH_CACHE_MS = 15000;
     const REQUEST_TIMEOUT_MS = 25000;
     const WORKER_STALL_TIMEOUT_MS = 45000;
@@ -188,8 +188,8 @@
                 if (!registration.active) await navigator.serviceWorker.ready;
 
                 const activeUrl = registration.active?.scriptURL || '';
-                if (!registration.active || !activeUrl.includes('offlineServiceWorker.js') || !activeUrl.includes('v=4')) {
-                    const error = new Error('The v4 offline worker is not active yet.');
+                if (!registration.active || !activeUrl.includes('offlineServiceWorker.js') || !activeUrl.includes('v=5')) {
+                    const error = new Error('The v5 offline worker is not active yet.');
                     error.kind = 'worker-version';
                     throw error;
                 }
@@ -305,6 +305,26 @@
 
     function isStandaloneWebApp() {
         return window.matchMedia?.('(display-mode: standalone)')?.matches || navigator.standalone === true;
+    }
+
+    async function cleanupSafariOfflineControl() {
+        // Normal Safari should remain a plain website. Its storage context is
+        // separate from an installed Home Screen web app, so clearing Hex
+        // service-worker state here does not delete the installed app copy.
+        try {
+            const registrations = await navigator.serviceWorker?.getRegistrations?.() || [];
+            await Promise.all(registrations.map(registration => registration.unregister()));
+        } catch (error) {
+            console.warn('Could not unregister old Safari service worker', error);
+        }
+        try {
+            const names = await caches.keys();
+            await Promise.all(names
+                .filter(name => name.startsWith('hex-game-'))
+                .map(name => caches.delete(name)));
+        } catch (error) {
+            console.warn('Could not clear old Safari Hex caches', error);
+        }
     }
 
     async function storageDiagnostic() {
@@ -669,7 +689,7 @@
 
     async function restartForUpdatedBuild(gate, result) {
         if (!result.changed || !result.commit) return false;
-        const reloadKey = 'hex-offline-reloaded-commit-v4';
+        const reloadKey = 'hex-offline-reloaded-commit-v5';
         let alreadyReloaded = null;
         try { alreadyReloaded = sessionStorage.getItem(reloadKey); } catch (_) {}
         if (alreadyReloaded === result.commit) return false;
@@ -683,6 +703,14 @@
     }
 
     async function startup() {
+        // Never let the offline/PWA layer block the ordinary Safari website.
+        // Only the installed Home Screen app owns and uses the local game copy.
+        if (!isStandaloneWebApp()) {
+            releaseReadyBarrier({ complete: true, browserMode: true, hasActiveCache: false });
+            Promise.resolve().then(cleanupSafariOfflineControl).catch(() => {});
+            return;
+        }
+
         const gate = ensureGate();
         if (!gate) return;
         document.body.classList.add('hex-offline-preparing');

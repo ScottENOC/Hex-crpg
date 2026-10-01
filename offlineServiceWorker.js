@@ -2,10 +2,10 @@
 // Atomic, integrity-checked local game cache for the development branch.
 'use strict';
 
-const SW_VERSION = '4';
+const SW_VERSION = '5';
 const META_CACHE = `hex-game-meta-v${SW_VERSION}`;
 const GAME_CACHE_PREFIX = `hex-game-v${SW_VERSION}-`;
-const LEGACY_GAME_CACHE_PREFIXES = ['hex-game-v3-', 'hex-game-v2-', 'hex-game-v1-'];
+const LEGACY_GAME_CACHE_PREFIXES = ['hex-game-v4-', 'hex-game-v3-', 'hex-game-v2-', 'hex-game-v1-'];
 const SCOPE_URL = self.registration.scope;
 const META_KEY = new URL('__hex_offline_meta__/active.json', SCOPE_URL).href;
 const MANIFEST_KEY = new URL('__hex_offline_meta__/manifest.json', SCOPE_URL).href;
@@ -303,7 +303,7 @@ async function assertCacheStorageWorks() {
 async function cleanupLegacyCaches() {
     const names = await caches.keys();
     await Promise.all(names
-        .filter(name => name === 'hex-game-meta-v1' || name === 'hex-game-meta-v2' || name === 'hex-game-meta-v3' || name.startsWith('hex-game-v1-') || name.startsWith('hex-game-v2-') || name.startsWith('hex-game-v3-'))
+        .filter(name => name === 'hex-game-meta-v1' || name === 'hex-game-meta-v2' || name === 'hex-game-meta-v3' || name === 'hex-game-meta-v4' || name.startsWith('hex-game-v1-') || name.startsWith('hex-game-v2-') || name.startsWith('hex-game-v3-') || name.startsWith('hex-game-v4-'))
         .map(name => caches.delete(name)));
 }
 
@@ -569,17 +569,29 @@ self.addEventListener('fetch', event => {
     const scope = new URL(SCOPE_URL);
     if (url.origin !== scope.origin || !url.pathname.startsWith(scope.pathname)) return;
 
+    const relativePath = decodeURIComponent(url.pathname.slice(scope.pathname.length));
+    const bootstrapRequest = request.mode === 'navigate' ||
+        relativePath === '' ||
+        relativePath === 'index.html' ||
+        relativePath === 'offlineCache.js' ||
+        relativePath === 'manifest.webmanifest';
+
     event.respondWith((async () => {
+        // Critical bootstrap files are network-first whenever a network exists.
+        // Older workers used cache-first + ignoreSearch, which could return v3
+        // JavaScript for a v4/v5 request and permanently trap Safari on old code.
+        if (bootstrapRequest) {
+            try {
+                const network = await fetch(request, { cache: 'no-store' });
+                if (network && network.ok) return network;
+            } catch (_) {}
+            const fallback = await serveFromActiveCache(request);
+            if (fallback) return fallback;
+            throw new Error(`Bootstrap request failed: ${request.url}`);
+        }
+
         const cached = await serveFromActiveCache(request);
         if (cached) return cached;
-        try {
-            return await fetch(request);
-        } catch (error) {
-            if (request.mode === 'navigate') {
-                const fallback = await serveFromActiveCache(new Request(localUrl('index.html')));
-                if (fallback) return fallback;
-            }
-            throw error;
-        }
+        return fetch(request);
     })());
 });
