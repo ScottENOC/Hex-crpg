@@ -41,14 +41,10 @@ document.addEventListener("DOMContentLoaded", () => {
             {key: 'floor4', src: 'images/arenaHexFloor4.png'}
         ];
 
-        // Only legacy-rendered race/gender combinations belong here. Human
-        // female, human male and elf female are owned by humanoidRenderer.js,
-        // which loads their directional body/hair art directly.
-        const raceGenderImages = {
-            elf_male: [{key: 'elfMaleBase', src: 'images/elfmale.png'}, {key: 'elfMaleHair', src: 'images/elfmalehair.png'}],
-            dwarf_female: [{key: 'dwarfFemaleBase', src: 'images/dwarffemale.png'}, {key: 'dwarfFemaleHair', src: 'images/dwarffemalehair.png'}],
-            dwarf_male: [{key: 'dwarfMaleBase', src: 'images/dwarfmale.png'}, {key: 'dwarfMaleHair', src: 'images/dwarfmalehair.png'}],
-        };
+        // All five playable races × both body presentations are now owned by
+        // humanoidRenderer.js. Keeping this map empty also prevents speculative
+        // creator loading from requesting the deleted root-level elf/dwarf files.
+        const raceGenderImages = {};
 
         // Lightweight assets useful immediately after character creation.
         const earlyRoomImages = [
@@ -633,17 +629,11 @@ window.updateRoguelikePreview = function() {
     
     window.updateRoguelikePreview();
 
-    // Legacy flat-sprite preview is retained only for combinations not yet
-    // owned by humanoidRenderer.js. Direct humanoids install their own
-    // directional creator preview and therefore must not request old flat art.
-    const APPEARANCE_BASE_SRC = {
-        elf_male: 'images/elfmale.png',
-        dwarf_female: 'images/dwarffemale.png', dwarf_male: 'images/dwarfmale.png'
-    };
-    const APPEARANCE_HAIR_SRC = {
-        elf_male: 'images/elfmalehair.png',
-        dwarf_female: 'images/dwarffemalehair.png', dwarf_male: 'images/dwarfmalehair.png'
-    };
+    // All playable race/body presentations are direct-renderer owned. These
+    // maps remain as empty compatibility inputs for the legacy preview helper,
+    // which now only serves non-playable/custom art paths.
+    const APPEARANCE_BASE_SRC = {};
+    const APPEARANCE_HAIR_SRC = {};
     const _appearancePreviewImages = {};
 function loadAppearancePreviewImage(src) {
     let img = _appearancePreviewImages[src];
