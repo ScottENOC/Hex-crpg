@@ -45,9 +45,13 @@ jobs:
           scheduler = Path('assetLoadScheduler.js').read_text()
           renderer = Path('humanoidRenderer.js').read_text()
 
-          assert 'assetLoadScheduler.js?v=9' in html
-          assert 'humanoidRenderer.js?v=1' in html
-          assert html.index('assetLoadScheduler.js?v=9') < html.index('humanoidRenderer.js?v=1') < html.index('main.js')
+          scheduler_tag = '<script data-asset-load-scheduler src="assetLoadScheduler.js?v=9"></script>'
+          renderer_tag = '<script src="humanoidRenderer.js?v=1"></script>'
+          main_match = re.search(r'<script src="main\.js\?v=\d+"></script>', html)
+          assert scheduler_tag in html
+          assert renderer_tag in html
+          assert main_match, 'main.js script tag not found'
+          assert html.index(scheduler_tag) < html.index(renderer_tag) < main_match.start()
           assert 'HOME_SCREEN_SAFE_AREA_V1' in css
           assert 'env(safe-area-inset-top' in css
           assert 'min-width: 44px' in css and 'min-height: 44px' in css
