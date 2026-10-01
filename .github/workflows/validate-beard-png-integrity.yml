@@ -1,0 +1,112 @@
+name: Validate beard PNG integrity
+
+on:
+  push:
+    branches: [development]
+    paths:
+      - '.github/workflows/validate-beard-png-integrity.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+      - name: Validate exact committed PNG bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          file images/characters/facial_hair/beard_full_front.png
+          file images/characters/facial_hair/beard_full_side.png
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, struct, zlib
+
+          files = [
+              Path('images/characters/facial_hair/beard_full_front.png'),
+              Path('images/characters/facial_hair/beard_full_side.png'),
+          ]
+
+          def paeth(a,b,c):
+              p=a+b-c; pa=abs(p-a); pb=abs(p-b); pc=abs(p-c)
+              return a if pa <= pb and pa <= pc else (b if pb <= pc else c)
+
+          for path in files:
+              data = path.read_bytes()
+              assert data[:8] == b'\x89PNG\r\n\x1a\n', f'{path}: bad PNG signature'
+              pos=8; chunks=[]; idat=[]; ihdr=None; seen_iend=False
+              while pos < len(data):
+                  assert pos+8 <= len(data), f'{path}: truncated chunk header at {pos}'
+                  n=struct.unpack('>I', data[pos:pos+4])[0]
+                  typ=data[pos+4:pos+8]
+                  start=pos+8; end=start+n
+                  assert end+4 <= len(data), f'{path}: truncated {typ!r} chunk'
+                  payload=data[start:end]
+                  stored=struct.unpack('>I',data[end:end+4])[0]
+                  calc=zlib.crc32(payload,zlib.crc32(typ)) & 0xffffffff
+                  assert stored == calc, f'{path}: CRC mismatch in {typ.decode()}'
+                  chunks.append((typ.decode(),n))
+                  if typ == b'IHDR': ihdr=payload
+                  if typ == b'IDAT': idat.append(payload)
+                  pos=end+4
+                  if typ == b'IEND':
+                      seen_iend=True
+                      break
+              assert seen_iend, f'{path}: missing IEND'
+              assert pos == len(data), f'{path}: {len(data)-pos} trailing bytes after IEND'
+              assert ihdr and len(ihdr)==13, f'{path}: missing/invalid IHDR'
+              width,height,bit_depth,color_type,compression,filter_method,interlace = struct.unpack('>IIBBBBB', ihdr)
+              assert bit_depth == 8, f'{path}: unexpected bit depth {bit_depth}'
+              assert color_type == 6, f'{path}: expected RGBA PNG (type 6), got {color_type}'
+              assert compression == 0 and filter_method == 0 and interlace == 0, f'{path}: unsupported PNG settings'
+              raw=zlib.decompress(b''.join(idat))
+              bpp=4; stride=width*bpp
+              assert len(raw)==height*(stride+1), f'{path}: decompressed size mismatch {len(raw)} != {height*(stride+1)}'
+              rows=[]; offset=0
+              prev=bytearray(stride)
+              for y in range(height):
+                  f=raw[offset]; offset+=1
+                  assert 0 <= f <= 4, f'{path}: invalid filter {f} on row {y}'
+                  scan=bytearray(raw[offset:offset+stride]); offset+=stride
+                  recon=bytearray(stride)
+                  for x,v in enumerate(scan):
+                      a=recon[x-bpp] if x>=bpp else 0
+                      b=prev[x]
+                      c=prev[x-bpp] if x>=bpp else 0
+                      if f==0: val=v
+                      elif f==1: val=(v+a)&255
+                      elif f==2: val=(v+b)&255
+                      elif f==3: val=(v+((a+b)//2))&255
+                      else: val=(v+paeth(a,b,c))&255
+                      recon[x]=val
+                  rows.append(recon); prev=recon
+              opaque=[]; alpha_values=[]
+              for y,row in enumerate(rows):
+                  for x in range(width):
+                      a=row[x*4+3]; alpha_values.append(a)
+                      if a: opaque.append((x,y,a))
+              assert opaque, f'{path}: entirely transparent'
+              minx=min(x for x,y,a in opaque); maxx=max(x for x,y,a in opaque)
+              miny=min(y for x,y,a in opaque); maxy=max(y for x,y,a in opaque)
+              assert min(alpha_values)==0 and max(alpha_values)==255, f'{path}: expected transparent background + opaque art'
+              git_sha=hashlib.sha1(f'blob {len(data)}\0'.encode()+data).hexdigest()
+              print(f'{path}: VALID PNG')
+              print(f'  bytes={len(data)} git_blob_sha={git_sha}')
+              print(f'  {width}x{height}, RGBA8, non-interlaced, chunks={chunks}')
+              print(f'  alpha=0..255, nontransparent_bbox=({minx},{miny})-({maxx},{maxy})')
+          PY
+      - name: Remove temporary validator
+        if: always()
+        shell: bash
+        run: |
+          git rm -f .github/workflows/validate-beard-png-integrity.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Remove temporary beard PNG validator'
+          git pull --rebase origin development
+          git push origin HEAD:development
