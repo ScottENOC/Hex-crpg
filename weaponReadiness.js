@@ -1,39 +1,424 @@
 // weaponReadiness.js - equipped (hands), readied (body), stored (shared inventory)
-(()=>{'use strict';
-const BODY=['leftHip','rightHip','back'];
-const RIG={human_female:[1.60,1.92,-.16],human_male:[1.70,2.06,-.17],elf_female:[1.60,1.92,-.16],elf_male:[2,2.4,-.20],dwarf_female:[1.6,1.92,-.07],dwarf_male:[1.6,1.92,-.07],goblin_female:[1.45,1.7,-.12],goblin_male:[1.5,1.75,-.12],orc_female:[1.85,2.05,-.15],orc_male:[1.9,2.1,-.15]};
-const base=x=>window.getEquipmentBaseId?.(x)||(typeof x==='string'?x:x?.baseId||x?.itemId||x?.id)||null;
-function kind(x){const id=base(x),d=id&&window.items?.[id];if(!id||d?.type!=='weapon')return null;const s=(id+' '+(d.name||'')).toLowerCase();if(s.includes('dagger'))return'dagger';if(s.includes('sword')||id==='starforged_blade')return'sword';if(s.includes('axe')&&!s.includes('pickaxe'))return'axe';if(s.includes('bow'))return'bow';return null;}
-function ensure(c){if(!c)return{leftHip:null,rightHip:null,back:null,extraDaggers:[]};let r=c.weaponReadiness;if(!r||typeof r!=='object'||Array.isArray(r))r=c.weaponReadiness={leftHip:null,rightHip:null,back:null,extraDaggers:[]};for(const s of BODY)if(!(s in r)||r[s]&&!kind(r[s]))r[s]=null;if(!Array.isArray(r.extraDaggers))r.extraDaggers=[];r.extraDaggers=r.extraDaggers.filter(x=>kind(x)==='dagger');return r;}
-function assigns(c){const r=ensure(c),a=[];for(const s of BODY)if(r[s])a.push({location:s,itemId:base(r[s]),kind:kind(r[s])});r.extraDaggers.forEach((x,i)=>a.push({location:`dagger:${i}`,itemId:base(x),kind:'dagger'}));return a;}
-function active(c){const e=c?.equipped||{};return[base(e.weapon),base(e.offhand)].filter(id=>id&&window.items?.[id]?.type==='weapon');}
-const count=(arr,id)=>arr.filter(x=>(typeof x==='string'?x:x.itemId)===id).length;
-const party=()=>Array.isArray(window.party)?window.party.filter(Boolean):[];
-function owned(id){id=base(id);return(window.partyInventory||window.player?.inventory||[]).reduce((n,x)=>n+(base(x)===id),0);}
-function assigned(c,id){return count(assigns(c),base(id));}
-function activeCount(c,id){return count(active(c),base(id));}
-function committed(id){id=base(id);return party().reduce((n,c)=>n+Math.max(assigned(c,id),activeCount(c,id)),0);}
-const stored=id=>Math.max(0,owned(id)-committed(id));
-const label=id=>window.items?.[base(id)]?.name||base(id)||'Weapon';
-function sync(c){if(!c)return;const e=(window.entities||[]).find(x=>x?.name===c.name&&x.side==='player');if(e&&e!==c)e.weaponReadiness=ensure(c);}
-function msg(s){window.showMessage?window.showMessage(s):console.info(s);}
-function place(c,id,{evict=false,free=true}={}){id=base(id);const k=kind(id),r=ensure(c);if(!k)return{ok:false,reason:'That weapon has no body carry point yet.'};if(free&&stored(id)<=0)return{ok:false,reason:'No uncommitted copy is available in shared storage.'};if(k==='axe'||k==='bow'){if(!r.back||evict){const old=r.back;r.back=id;sync(c);return{ok:true,location:'back',old};}return{ok:false,reason:`${label(r.back)} already occupies the back position.`};}const order=k==='dagger'?['rightHip','leftHip']:['leftHip','rightHip'];for(const s of order)if(!r[s]){r[s]=id;sync(c);return{ok:true,location:s};}if(k==='dagger'){r.extraDaggers.push(id);sync(c);return{ok:true,location:`dagger:${r.extraDaggers.length-1}`};}if(evict){const s=order[0],old=r[s];r[s]=id;sync(c);return{ok:true,location:s,old};}return{ok:false,reason:'Both hip positions are occupied.'};}
-function ensureEquipped(c){if(!c)return;const need={};active(c).filter(kind).forEach(id=>need[id]=(need[id]||0)+1);for(const[id,n]of Object.entries(need))while(assigned(c,id)<n){if(!place(c,id,{evict:true,free:false}).ok)break;}sync(c);}
-function ready(c,id){const r=place(c,id);if(!r.ok){msg(`Cannot ready ${label(id)}: ${r.reason}`);return false;}msg(`${label(id)} readied.`);refresh();return true;}
-function unready(c,loc){const r=ensure(c);let id=BODY.includes(loc)?r[loc]:r.extraDaggers[+loc.split(':')[1]];if(!id)return false;if(assigned(c,id)<=activeCount(c,id)){msg(`${label(id)} is currently in hand, so its carry point stays reserved.`);return false;}if(BODY.includes(loc))r[loc]=null;else r.extraDaggers.splice(+loc.split(':')[1],1);sync(c);msg(`${label(id)} moved to stored party inventory.`);refresh();return true;}
-function projected(c,id,off){id=base(id);const cur=base(off?c?.equipped?.offhand:c?.equipped?.weapon);return activeCount(c,id)+(cur===id?0:1);}
-function combatReady(c,id,off=false){id=base(id);const cur=base(off?c?.equipped?.offhand:c?.equipped?.weapon);return cur===id||assigned(c,id)>=projected(c,id,off);}
-function canTake(c,id,off=false){id=base(id);const cur=base(off?c?.equipped?.offhand:c?.equipped?.weapon);return cur===id||assigned(c,id)>=projected(c,id,off)||stored(id)>0;}
-function refresh(){try{window.syncPlayerEntity?.();window.renderEntities?.();}catch(_){}if(document.getElementById('inventory-modal')?.style.display==='block')setTimeout(()=>window.showInventoryScreen?.(),0);}
-function installEquip(){const f=window.equipItem;if(typeof f!=='function')return false;if(f.__weaponReadiness)return true;const w=function(id,off=false){const c=window.player,b=base(id),d=b&&window.items?.[b];if(!c||d?.type!=='weapon')return f.apply(this,arguments);if(window.isInCombat&&!combatReady(c,b,off)){msg(`${label(b)} is stored, not readied. You cannot swap to it during combat.`);return false;}if(!window.isInCombat&&!canTake(c,b,off)){msg(`${label(b)} is committed to another party member. Unready it there first.`);return false;}const before=[base(c.equipped?.weapon),base(c.equipped?.offhand)];const out=f.apply(this,arguments),after=[base(c.equipped?.weapon),base(c.equipped?.offhand)];if(!window.isInCombat&&(before[0]!==after[0]||before[1]!==after[1]||after.includes(b)))ensureEquipped(c);return out;};w.__weaponReadiness=true;w.__unwrappedEquipItem=f;window.equipItem=w;return true;}
-function activeLocs(c){const n={};active(c).forEach(id=>n[id]=(n[id]||0)+1);const set=new Set;for(const a of assigns(c))if(n[a.itemId]>0){set.add(a.location);n[a.itemId]--;}return set;}
-const locName=l=>l==='leftHip'?'Left hip':l==='rightHip'?'Right hip':l==='back'?'Back':'Small sheath';
-function panel(){const c=window.player;if(!c)return null;ensureEquipped(c);const live=activeLocs(c),p=document.createElement('section');p.dataset.weaponReadinessPanel='true';p.style.cssText='border:1px solid #59636b;border-radius:6px;padding:9px;margin:0 0 12px;background:#24292d';p.innerHTML='<strong>Readied weapons</strong><div style="font-size:.8em;color:#aaa">In hand or attached to your body = reachable in combat. Everything else is stored with party gear.</div>';for(const a of assigns(c)){const row=document.createElement('div'),on=live.has(a.location);row.style.cssText='display:flex;justify-content:space-between;gap:8px;margin-top:5px;padding:4px;background:#30363b';row.innerHTML=`<span>${locName(a.location)}: ${label(a.itemId)}${on?' — in hand':''}</span>`;const b=document.createElement('button');b.textContent=on?'In hand':'Store';b.disabled=on;b.style.width='auto';if(!on)b.onclick=()=>unready(c,a.location);row.appendChild(b);p.appendChild(row);}const ids=[...new Set((window.partyInventory||c.inventory||[]).map(base).filter(Boolean))].filter(id=>kind(id)&&stored(id)>0);if(ids.length){const h=document.createElement('div');h.textContent='Stored but ready-compatible:';h.style.cssText='margin-top:8px;font-size:.82em;color:#bbb';p.appendChild(h);const box=document.createElement('div');box.style.cssText='display:flex;flex-wrap:wrap;gap:5px;margin-top:5px';ids.forEach(id=>{const b=document.createElement('button');b.textContent=`Ready ${label(id)}`;b.style.width='auto';b.onclick=()=>ready(c,id);box.appendChild(b);});p.appendChild(box);}const note=document.createElement('div');note.style.cssText='font-size:.76em;color:#888;margin-top:7px';note.textContent='Swords use a hip; bows and axes use the back. Daggers use a hip first, but spare daggers can always fit in another small sheath. Spears, clubs and tools have no alternate carry point yet.';p.appendChild(note);return p;}
-function installUI(){const f=window.showInventoryScreen;if(typeof f!=='function'||!f.__slotEquipmentUI)return false;if(f.__weaponReadiness)return true;const w=function(...a){const x=f.apply(this,a),host=document.getElementById('inventory-content');if(host&&!host.querySelector('[data-weapon-readiness-panel]')){const p=panel();if(p)host.prepend(p);}return x;};w.__slotEquipmentUI=true;w.__weaponReadiness=true;w.__unwrappedInventoryUI=f;window.showInventoryScreen=w;return true;}
-function bounds(e,x,y,z=1,fly=0){const q=RIG[e?.race&&e?.gender?`${e.race}_${e.gender}`:''];if(!q)return null;const h=window.hexSize||1,w=q[0]*h*z,hh=q[1]*h*z,top=y-w/2+q[2]*h*z+fly,vw=hh*.48;return{left:x-vw/2,top,width:vw,height:hh};}
-function alternatePlan(e){const n={};active(e).forEach(id=>n[id]=(n[id]||0)+1);const out=[];let bi=0;for(const a of assigns(e)){if(n[a.itemId]>0){n[a.itemId]--;continue;}if(a.location.startsWith('dagger:'))continue;if(a.location==='back')out.push({itemId:a.itemId,kind:a.kind,placement:'back',hip:null,backIndex:bi++});else out.push({itemId:a.itemId,kind:a.kind,placement:'hip',hip:a.location==='leftHip'?'left':'right'});}return out;}
-function installRender(){const f=window.drawHumanoidCharacter,c=window.realtimeWeaponSheathing;if(typeof f!=='function'||!f.__realtimeSheathedWeaponPresentation||!c?.drawLayer||!c?.drawBackLayer)return false;if(f.__weaponReadiness)return true;const w=function(ctx,e,x,y,z,fly){const p=alternatePlan(e),face=['up','down','left','right'].includes(e?.facing)?e.facing:'down',b=bounds(e,x,y,z,fly);if(p.length&&face!=='up'&&b)c.drawBackLayer(ctx,e,b,p);const ok=f.apply(this,arguments);if(ok&&p.length){const rb=window.__humanoidRendererLastDraw?.entity===e?window.__humanoidRendererLastDraw.bounds:b;if(face==='up'&&rb)c.drawBackLayer(ctx,e,rb,p);c.drawLayer(ctx,e,p);}return ok;};w.__realtimeSheathedWeaponPresentation=true;w.__weaponReadiness=true;w.__underlyingReadinessDraw=f;window.drawHumanoidCharacter=w;return true;}
-function settle(){party().forEach(c=>{ensure(c);ensureEquipped(c);sync(c);});installEquip();installUI();installRender();}
-const timer=setInterval(settle,100);setTimeout(()=>clearInterval(timer),15000);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',settle,{once:true});else settle();window.addEventListener('load',()=>{settle();setTimeout(settle,250);setTimeout(settle,1000);},{once:true});
-window.weaponReadinessSystem={kind,ensure,assignments:assigns,assignedCount:assigned,activeCount,ownedCount:owned,committedCount:committed,storedCount:stored,ready,unreadyAt:unready,canEquipInCombat:combatReady,ensureEquipped,alternateVisualPlan:alternatePlan,settle};
+(() => {
+  'use strict';
+
+  const BODY = ['leftHip', 'rightHip', 'back'];
+  const EMPTY_PLAN = Object.freeze([]);
+  const RIG = {
+    human_female:[1.60,1.92,-.16], human_male:[1.70,2.06,-.17],
+    elf_female:[1.60,1.92,-.16], elf_male:[2,2.4,-.20],
+    dwarf_female:[1.6,1.92,-.07], dwarf_male:[1.6,1.92,-.07],
+    goblin_female:[1.45,1.7,-.12], goblin_male:[1.5,1.75,-.12],
+    orc_female:[1.85,2.05,-.15], orc_male:[1.9,2.1,-.15]
+  };
+
+  const base = x => window.getEquipmentBaseId?.(x)
+    || (typeof x === 'string' ? x : x?.baseId || x?.itemId || x?.id) || null;
+  const party = () => Array.isArray(window.party) ? window.party.filter(Boolean) : [];
+  const label = id => window.items?.[base(id)]?.name || base(id) || 'Weapon';
+
+  function isPartyMember(entity) {
+    if (!entity || entity.side !== 'player') return false;
+    const members = window.party;
+    if (!Array.isArray(members)) return false;
+    return members.some(member => member === entity || member?.name === entity.name);
+  }
+
+  function kind(raw) {
+    const id = base(raw);
+    const item = id && window.items?.[id];
+    if (!id || item?.type !== 'weapon') return null;
+    const text = `${id} ${item.name || ''}`.toLowerCase();
+    if (text.includes('dagger')) return 'dagger';
+    if (text.includes('sword') || id === 'starforged_blade') return 'sword';
+    if (text.includes('axe') && !text.includes('pickaxe')) return 'axe';
+    if (text.includes('bow')) return 'bow';
+    return null;
+  }
+
+  function ensure(character) {
+    if (!character) return { leftHip:null, rightHip:null, back:null, extraDaggers:[] };
+    let readiness = character.weaponReadiness;
+    if (!readiness || typeof readiness !== 'object' || Array.isArray(readiness)) {
+      readiness = character.weaponReadiness = { leftHip:null, rightHip:null, back:null, extraDaggers:[] };
+    }
+    for (const slot of BODY) {
+      if (!(slot in readiness) || (readiness[slot] && !kind(readiness[slot]))) readiness[slot] = null;
+    }
+    if (!Array.isArray(readiness.extraDaggers)) readiness.extraDaggers = [];
+    readiness.extraDaggers = readiness.extraDaggers.filter(item => kind(item) === 'dagger');
+    return readiness;
+  }
+
+  function assignments(character) {
+    const readiness = ensure(character);
+    const result = [];
+    for (const location of BODY) {
+      if (!readiness[location]) continue;
+      result.push({ location, itemId:base(readiness[location]), kind:kind(readiness[location]) });
+    }
+    readiness.extraDaggers.forEach((item, index) => {
+      result.push({ location:`dagger:${index}`, itemId:base(item), kind:'dagger' });
+    });
+    return result;
+  }
+
+  function activeWeapons(character) {
+    const equipped = character?.equipped || {};
+    const result = [];
+    for (const raw of [equipped.weapon, equipped.offhand]) {
+      const id = base(raw);
+      if (id && window.items?.[id]?.type === 'weapon') result.push(id);
+    }
+    return result;
+  }
+
+  const count = (list, id) => list.reduce((n, value) => n + ((typeof value === 'string' ? value : value.itemId) === id), 0);
+
+  function ownedCount(id) {
+    id = base(id);
+    return (window.partyInventory || window.player?.inventory || [])
+      .reduce((n, raw) => n + (base(raw) === id), 0);
+  }
+
+  function assignedCount(character, id) {
+    return count(assignments(character), base(id));
+  }
+
+  function activeCount(character, id) {
+    return count(activeWeapons(character), base(id));
+  }
+
+  function committedCount(id) {
+    id = base(id);
+    return party().reduce((total, character) => {
+      return total + Math.max(assignedCount(character, id), activeCount(character, id));
+    }, 0);
+  }
+
+  const storedCount = id => Math.max(0, ownedCount(id) - committedCount(id));
+
+  function sync(character) {
+    if (!character) return;
+    const entity = (window.entities || []).find(e => e?.name === character.name && e.side === 'player');
+    if (entity && entity !== character) entity.weaponReadiness = ensure(character);
+  }
+
+  function message(text) {
+    if (window.showMessage) window.showMessage(text);
+    else console.info(text);
+  }
+
+  function place(character, id, { evict=false, free=true } = {}) {
+    id = base(id);
+    const weaponKind = kind(id);
+    const readiness = ensure(character);
+    if (!weaponKind) return { ok:false, reason:'That weapon has no body carry point yet.' };
+    if (free && storedCount(id) <= 0) return { ok:false, reason:'No uncommitted copy is available in shared storage.' };
+
+    if (weaponKind === 'axe' || weaponKind === 'bow') {
+      if (!readiness.back || evict) {
+        const old = readiness.back;
+        readiness.back = id;
+        sync(character);
+        return { ok:true, location:'back', old };
+      }
+      return { ok:false, reason:`${label(readiness.back)} already occupies the back position.` };
+    }
+
+    const preferred = weaponKind === 'dagger' ? ['rightHip','leftHip'] : ['leftHip','rightHip'];
+    for (const location of preferred) {
+      if (readiness[location]) continue;
+      readiness[location] = id;
+      sync(character);
+      return { ok:true, location };
+    }
+    if (weaponKind === 'dagger') {
+      readiness.extraDaggers.push(id);
+      sync(character);
+      return { ok:true, location:`dagger:${readiness.extraDaggers.length - 1}` };
+    }
+    if (evict) {
+      const location = preferred[0];
+      const old = readiness[location];
+      readiness[location] = id;
+      sync(character);
+      return { ok:true, location, old };
+    }
+    return { ok:false, reason:'Both hip positions are occupied.' };
+  }
+
+  function ensureEquipped(character) {
+    if (!character) return;
+    const needed = {};
+    for (const id of activeWeapons(character)) {
+      if (kind(id)) needed[id] = (needed[id] || 0) + 1;
+    }
+    for (const [id, amount] of Object.entries(needed)) {
+      while (assignedCount(character, id) < amount) {
+        if (!place(character, id, { evict:true, free:false }).ok) break;
+      }
+    }
+    sync(character);
+  }
+
+  function refresh() {
+    try { window.syncPlayerEntity?.(); window.renderEntities?.(); } catch (_) {}
+    if (document.getElementById('inventory-modal')?.style.display === 'block') {
+      setTimeout(() => window.showInventoryScreen?.(), 0);
+    }
+  }
+
+  function ready(character, id) {
+    const result = place(character, id);
+    if (!result.ok) {
+      message(`Cannot ready ${label(id)}: ${result.reason}`);
+      return false;
+    }
+    message(`${label(id)} readied.`);
+    refresh();
+    return true;
+  }
+
+  function unreadyAt(character, location) {
+    const readiness = ensure(character);
+    const extraIndex = location.startsWith('dagger:') ? Number(location.split(':')[1]) : -1;
+    const id = BODY.includes(location) ? readiness[location] : readiness.extraDaggers[extraIndex];
+    if (!id) return false;
+    if (assignedCount(character, id) <= activeCount(character, id)) {
+      message(`${label(id)} is currently in hand, so its carry point stays reserved.`);
+      return false;
+    }
+    if (BODY.includes(location)) readiness[location] = null;
+    else readiness.extraDaggers.splice(extraIndex, 1);
+    sync(character);
+    message(`${label(id)} moved to stored party inventory.`);
+    refresh();
+    return true;
+  }
+
+  function projectedCount(character, id, offhand) {
+    id = base(id);
+    const current = base(offhand ? character?.equipped?.offhand : character?.equipped?.weapon);
+    return activeCount(character, id) + (current === id ? 0 : 1);
+  }
+
+  function canEquipInCombat(character, id, offhand=false) {
+    id = base(id);
+    const current = base(offhand ? character?.equipped?.offhand : character?.equipped?.weapon);
+    return current === id || assignedCount(character, id) >= projectedCount(character, id, offhand);
+  }
+
+  function canTake(character, id, offhand=false) {
+    id = base(id);
+    const current = base(offhand ? character?.equipped?.offhand : character?.equipped?.weapon);
+    return current === id
+      || assignedCount(character, id) >= projectedCount(character, id, offhand)
+      || storedCount(id) > 0;
+  }
+
+  function installEquip() {
+    const original = window.equipItem;
+    if (typeof original !== 'function') return false;
+    if (original.__weaponReadiness) return true;
+    const wrapped = function(id, offhand=false) {
+      const character = window.player;
+      const itemId = base(id);
+      const item = itemId && window.items?.[itemId];
+      if (!character || item?.type !== 'weapon') return original.apply(this, arguments);
+      if (window.isInCombat && !canEquipInCombat(character, itemId, offhand)) {
+        message(`${label(itemId)} is stored, not readied. You cannot swap to it during combat.`);
+        return false;
+      }
+      if (!window.isInCombat && !canTake(character, itemId, offhand)) {
+        message(`${label(itemId)} is committed to another party member. Unready it there first.`);
+        return false;
+      }
+      const beforeMain = base(character.equipped?.weapon);
+      const beforeOff = base(character.equipped?.offhand);
+      const result = original.apply(this, arguments);
+      const afterMain = base(character.equipped?.weapon);
+      const afterOff = base(character.equipped?.offhand);
+      if (!window.isInCombat && (beforeMain !== afterMain || beforeOff !== afterOff || afterMain === itemId || afterOff === itemId)) {
+        ensureEquipped(character);
+      }
+      return result;
+    };
+    wrapped.__weaponReadiness = true;
+    wrapped.__unwrappedEquipItem = original;
+    window.equipItem = wrapped;
+    return true;
+  }
+
+  function activeLocations(character) {
+    const remaining = {};
+    for (const id of activeWeapons(character)) remaining[id] = (remaining[id] || 0) + 1;
+    const result = new Set();
+    for (const assignment of assignments(character)) {
+      if ((remaining[assignment.itemId] || 0) <= 0) continue;
+      result.add(assignment.location);
+      remaining[assignment.itemId]--;
+    }
+    return result;
+  }
+
+  const locationName = location => location === 'leftHip' ? 'Left hip'
+    : location === 'rightHip' ? 'Right hip'
+    : location === 'back' ? 'Back' : 'Small sheath';
+
+  function panel() {
+    const character = window.player;
+    if (!character) return null;
+    ensureEquipped(character);
+    const active = activeLocations(character);
+    const panel = document.createElement('section');
+    panel.dataset.weaponReadinessPanel = 'true';
+    panel.style.cssText = 'border:1px solid #59636b;border-radius:6px;padding:9px;margin:0 0 12px;background:#24292d';
+    panel.innerHTML = '<strong>Readied weapons</strong><div style="font-size:.8em;color:#aaa">In hand or attached to your body = reachable in combat. Everything else is stored with party gear.</div>';
+
+    for (const assignment of assignments(character)) {
+      const row = document.createElement('div');
+      const inHand = active.has(assignment.location);
+      row.style.cssText = 'display:flex;justify-content:space-between;gap:8px;margin-top:5px;padding:4px;background:#30363b';
+      row.innerHTML = `<span>${locationName(assignment.location)}: ${label(assignment.itemId)}${inHand ? ' — in hand' : ''}</span>`;
+      const button = document.createElement('button');
+      button.textContent = inHand ? 'In hand' : 'Store';
+      button.disabled = inHand;
+      button.style.width = 'auto';
+      if (!inHand) button.onclick = () => unreadyAt(character, assignment.location);
+      row.appendChild(button);
+      panel.appendChild(row);
+    }
+
+    const storedIds = [...new Set((window.partyInventory || character.inventory || []).map(base).filter(Boolean))]
+      .filter(id => kind(id) && storedCount(id) > 0);
+    if (storedIds.length) {
+      const heading = document.createElement('div');
+      heading.textContent = 'Stored but ready-compatible:';
+      heading.style.cssText = 'margin-top:8px;font-size:.82em;color:#bbb';
+      panel.appendChild(heading);
+      const buttons = document.createElement('div');
+      buttons.style.cssText = 'display:flex;flex-wrap:wrap;gap:5px;margin-top:5px';
+      for (const id of storedIds) {
+        const button = document.createElement('button');
+        button.textContent = `Ready ${label(id)}`;
+        button.style.width = 'auto';
+        button.onclick = () => ready(character, id);
+        buttons.appendChild(button);
+      }
+      panel.appendChild(buttons);
+    }
+
+    const note = document.createElement('div');
+    note.style.cssText = 'font-size:.76em;color:#888;margin-top:7px';
+    note.textContent = 'Swords use a hip; bows and axes use the back. Daggers use a hip first, but spare daggers can always fit in another small sheath. Spears, clubs and tools have no alternate carry point yet.';
+    panel.appendChild(note);
+    return panel;
+  }
+
+  function installUI() {
+    const original = window.showInventoryScreen;
+    if (typeof original !== 'function' || !original.__slotEquipmentUI) return false;
+    if (original.__weaponReadiness) return true;
+    const wrapped = function(...args) {
+      const result = original.apply(this, args);
+      const host = document.getElementById('inventory-content');
+      if (host && !host.querySelector('[data-weapon-readiness-panel]')) {
+        const readinessPanel = panel();
+        if (readinessPanel) host.prepend(readinessPanel);
+      }
+      return result;
+    };
+    wrapped.__slotEquipmentUI = true;
+    wrapped.__weaponReadiness = true;
+    wrapped.__unwrappedInventoryUI = original;
+    window.showInventoryScreen = wrapped;
+    return true;
+  }
+
+  function bounds(entity, x, y, z=1, fly=0) {
+    const rig = RIG[entity?.race && entity?.gender ? `${entity.race}_${entity.gender}` : ''];
+    if (!rig) return null;
+    const hex = window.hexSize || 1;
+    const legacyWidth = rig[0] * hex * z;
+    const height = rig[1] * hex * z;
+    const top = y - legacyWidth / 2 + rig[2] * hex * z + fly;
+    const width = height * .48;
+    return { left:x - width / 2, top, width, height };
+  }
+
+  function alternateVisualPlan(entity) {
+    if (!isPartyMember(entity)) return EMPTY_PLAN;
+    const remaining = {};
+    for (const id of activeWeapons(entity)) remaining[id] = (remaining[id] || 0) + 1;
+    const result = [];
+    let backIndex = 0;
+    for (const assignment of assignments(entity)) {
+      if ((remaining[assignment.itemId] || 0) > 0) {
+        remaining[assignment.itemId]--;
+        continue;
+      }
+      if (assignment.location.startsWith('dagger:')) continue;
+      if (assignment.location === 'back') {
+        result.push({ itemId:assignment.itemId, kind:assignment.kind, placement:'back', hip:null, backIndex:backIndex++ });
+      } else {
+        result.push({ itemId:assignment.itemId, kind:assignment.kind, placement:'hip', hip:assignment.location === 'leftHip' ? 'left' : 'right' });
+      }
+    }
+    return result;
+  }
+
+  function installRender() {
+    const original = window.drawHumanoidCharacter;
+    const carry = window.realtimeWeaponSheathing;
+    if (typeof original !== 'function' || !original.__realtimeSheathedWeaponPresentation || !carry?.drawLayer || !carry?.drawBackLayer) return false;
+    if (original.__weaponReadiness) return true;
+    const wrapped = function(ctx, entity, x, y, z, fly) {
+      // NPCs, enemies, summons and other non-party entities use the original
+      // weapon presentation directly. They do not need alternate readiness.
+      if (!isPartyMember(entity)) return original.apply(this, arguments);
+
+      const plan = alternateVisualPlan(entity);
+      if (!plan.length) return original.apply(this, arguments);
+      const facing = ['up','down','left','right'].includes(entity?.facing) ? entity.facing : 'down';
+      const tacticalBounds = bounds(entity, x, y, z, fly);
+      if (facing !== 'up' && tacticalBounds) carry.drawBackLayer(ctx, entity, tacticalBounds, plan);
+      const rendered = original.apply(this, arguments);
+      if (rendered) {
+        const finalBounds = window.__humanoidRendererLastDraw?.entity === entity
+          ? window.__humanoidRendererLastDraw.bounds : tacticalBounds;
+        if (facing === 'up' && finalBounds) carry.drawBackLayer(ctx, entity, finalBounds, plan);
+        carry.drawLayer(ctx, entity, plan);
+      }
+      return rendered;
+    };
+    wrapped.__realtimeSheathedWeaponPresentation = true;
+    wrapped.__weaponReadiness = true;
+    wrapped.__underlyingReadinessDraw = original;
+    window.drawHumanoidCharacter = wrapped;
+    return true;
+  }
+
+  function settle() {
+    for (const character of party()) {
+      ensure(character);
+      ensureEquipped(character);
+      sync(character);
+    }
+    installEquip();
+    installUI();
+    installRender();
+  }
+
+  settle();
+  [50, 150, 500, 1500, 5000].forEach(delay => setTimeout(settle, delay));
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', settle, { once:true });
+  window.addEventListener('load', () => setTimeout(settle, 0), { once:true });
+
+  window.weaponReadinessSystem = {
+    kind, ensure, assignments,
+    assignedCount, activeCount, ownedCount, committedCount, storedCount,
+    ready, unreadyAt, canEquipInCombat, ensureEquipped,
+    alternateVisualPlan, isPartyMember, settle
+  };
 })();
