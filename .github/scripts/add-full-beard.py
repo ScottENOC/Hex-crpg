@@ -91,7 +91,7 @@ creator.write_text(creator_text.replace(old_loader, new_loader, 1))
 
 index = Path('index.html')
 html = index.read_text()
-updated, count = re.subn(r'characterCreation\\.js\\?v=[^"\\s<]+', 'characterCreation.js?v=20261001-beard1', html, count=1)
+updated, count = re.subn(r'characterCreation\.js\?v=[^"\s<]+', 'characterCreation.js?v=20261001-beard1', html, count=1)
 if count != 1:
     raise SystemExit('could not find unique characterCreation.js cache token')
 index.write_text(updated)
