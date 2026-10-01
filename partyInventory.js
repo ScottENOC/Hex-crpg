@@ -231,12 +231,20 @@ function openStorageChest(q, r) {
 window.openStorageChest = openStorageChest;
 
 // Expedition systems are kept separate from this compatibility layer. Load
-// them with a dated URL so the new module itself is not trapped behind an old
-// mobile-Safari cache entry; it installs after the rest of the page scripts
-// have parsed (or immediately if DOMContentLoaded has already fired).
+// them with dated URLs so the modules themselves are not trapped behind old
+// mobile-Safari cache entries; campSystem waits for expeditionSystem's sleep
+// wrapper and then layers explicit camp setup on top of it.
 if (typeof document !== 'undefined' && !window.expeditionSystem && !document.querySelector('script[data-expedition-system]')) {
     const expeditionScript = document.createElement('script');
     expeditionScript.dataset.expeditionSystem = 'true';
-    expeditionScript.src = 'expeditionSystem.js?v=20260929';
+    expeditionScript.src = 'expeditionSystem.js?v=20261001-camp1';
+    expeditionScript.async = false;
     document.head.appendChild(expeditionScript);
+}
+if (typeof document !== 'undefined' && !window.campSystem && !document.querySelector('script[data-camp-system]')) {
+    const campScript = document.createElement('script');
+    campScript.dataset.campSystem = 'true';
+    campScript.src = 'campSystem.js?v=20261001-camp1';
+    campScript.async = false;
+    document.head.appendChild(campScript);
 }
