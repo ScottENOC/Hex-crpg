@@ -40,6 +40,17 @@ test('humanoid rendering is gated until body, clothing, and equipped armour are 
   contains(source, '#appearance-preview-canvas.content-safety-frame-pending');
 });
 
+test('atomic readiness is latched per character instead of rescanned every frame', () => {
+  const source = read('contentSafety.js');
+  contains(source, 'const latchedGeneration = new WeakMap();');
+  contains(source, 'const pendingCharacters = new Map();');
+  contains(source, "for (const facing of ['down', 'left', 'up'])");
+  contains(source, 'if (latchedGeneration.get(entity) === safetyGeneration) return true;');
+  contains(source, 'if (pendingCharacters.get(entity) === safetyGeneration) return false;');
+  contains(source, "image.addEventListener?.('load', done, { once:true });");
+  assert.ok(!source.includes('setInterval(installAll'), 'content safety must not poll its installer forever');
+});
+
 test('content safety loads after clothing slot expansion and garment registration', () => {
   const loader = read('clothingSystem.js');
   const expansion = loader.indexOf("load('clothingSlotExpansion.js','small-clothing-slot-expansion');");
