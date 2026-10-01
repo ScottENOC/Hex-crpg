@@ -56,3 +56,5 @@ jobs:
           git commit -m 'Add full beard facial-hair style'
           git pull --rebase origin development
           git push origin HEAD:development
+
+# Retry after fixing the cache-token matcher.
