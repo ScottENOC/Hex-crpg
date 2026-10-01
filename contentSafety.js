@@ -300,6 +300,7 @@
 
     const plan = isAdultContentEnabled() ? null : resolveCoveragePlan(entity);
     const slots = Array.from(new Set(system.preloadSlots || BASE_COVERAGE_SLOTS));
+    let ready = true;
     for (const slot of slots) {
       const planned = plan?.items?.[slot];
       const itemId = planned !== undefined ? planned : entity?.equipped?.[slot];
@@ -311,10 +312,13 @@
       for (const layer of spec.layers || []) {
         const src = layerSource(layer, view);
         if (!src) continue;
-        if (!imageReady(watchAsset(src))) return false;
+        // Request every layer before deciding the frame is blocked. This keeps
+        // a shirt + trousers + underwear outfit loading in parallel rather than
+        // serialising requests behind the first missing image.
+        if (!imageReady(watchAsset(src))) ready = false;
       }
     }
-    return true;
+    return ready;
   }
 
   function equipmentFrameReady(entity, view) {
