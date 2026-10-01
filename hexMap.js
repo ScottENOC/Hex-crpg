@@ -835,6 +835,32 @@ function connectAllRoadNetworks() {
 window.connectAllRoadNetworks = connectAllRoadNetworks;
 
 function findPath(start, target, availableTP, entity, ignoreTP = false, preferredPath = null) {
+    const pathFloor = entity.floor || 0;
+    const isPlayer = entity.side === 'player';
+
+    // Trivial/known-impossible targets should never fan out into a 5000-node
+    // A* search. Preserve fog-of-war semantics: an unexplored wall is still
+    // treated as unknown to the player, exactly as it is in the neighbour
+    // expansion below.
+    if (start.q === target.q && start.r === target.r) return [start];
+    const targetIsKnown = !isPlayer || window.isHexExplored(target.q, target.r);
+    if (targetIsKnown && window.getTerrainAtFloor(target.q, target.r, pathFloor).impassable) return null;
+
+    // These values depend only on the moving entity, not on each of the six
+    // neighbours of every expanded node. Hoisting them removes thousands of
+    // repeated equipment/skill lookups from longer searches.
+    const isLightOrNoArmorEntity = !entity.equipped || !entity.equipped.armor || window.items[entity.equipped.armor]?.id === 'light_armor';
+    let movementBaseCost = 5;
+    if (entity.skills) {
+        if (entity.skills.fastMovement && isLightOrNoArmorEntity) movementBaseCost -= entity.skills.fastMovement;
+        if (entity.skills.swift_step) {
+            const offhand = entity.equipped?.offhand;
+            const isUnarmored = !entity.equipped?.armor && (!offhand || window.items[offhand]?.type !== 'shield');
+            if (isUnarmored) movementBaseCost -= 1;
+        }
+    }
+    movementBaseCost = Math.max(1, movementBaseCost);
+
     // Built once per call instead of re-scanning window.entities (a linear
     // scan) for every single neighbor of every expanded node — with
     // iterations capped at 5000 and up to 6 neighbors each, that was up to
@@ -848,7 +874,6 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
     // one hex — keyed on floor instead of the .rider flag. entity.floor is
     // 0 for everything outside a registered multi-story building, so this
     // is a no-op filter almost everywhere.
-    const pathFloor = entity.floor || 0;
     const occupantsByHex = new Map();
     for (const e of window.entities) {
         if (!e.alive) continue;
@@ -904,10 +929,11 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
         for (let next of neighbors) {
             const key = `${next.q},${next.r}`;
 
-            // TASK 2: Knowledge-based pathing for player
-            const isPlayer = (entity.side === 'player');
-            const isVisible = window.isVisibleToPlayer(next);
-            const isExplored = window.isHexExplored(next.q, next.r);
+            // TASK 2: Knowledge-based pathing for player. NPCs have full
+            // terrain knowledge, so do not pay for an exploration lookup for
+            // every expanded neighbour when the caller is not a player.
+            const isExplored = !isPlayer || window.isHexExplored(next.q, next.r);
+            const terrain = window.getTerrainAtFloor(next.q, next.r, pathFloor);
 
             // Check for ENEMY obstacles (Living enemies only)
             // Friendlies DO NOT block movement
@@ -923,10 +949,13 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
             const occupant = (occupantsByHex.get(key) || []).find(e =>
                 isPlayer ? (e.side === 'enemy' || e.blocksPlayerPath) : e.side !== entity.side);
 
-            const isLightOrNoArmorEntity = !entity.equipped || !entity.equipped.armor || window.items[entity.equipped.armor]?.id === 'light_armor';
             let acrobaticsCost = 0;
             if (occupant) {
-                const isKnownObstacle = !isPlayer || isVisible;
+                // Visibility only matters when there is actually an occupant.
+                // The real-time player fast path deliberately has no blocking
+                // occupants, so this removes what used to be one visibility
+                // function call per neighbour from its hottest A* loop.
+                const isKnownObstacle = !isPlayer || window.isVisibleToPlayer(next);
                 if (isKnownObstacle) {
                     // Acrobatics lets a lightly-armored (or unarmored) entity
                     // cross an occupied hex instead of being blocked by it,
@@ -953,25 +982,14 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
                 }
             }
 
-            // Calculate cost
-            let baseCost = 5;
-            if (entity.skills) {
-                if (entity.skills['fastMovement'] && isLightOrNoArmorEntity) {
-                    baseCost -= entity.skills['fastMovement'];
-                }
-                if (entity.skills['swift_step']) {
-                    const isUnarmored = (!entity.equipped || !entity.equipped.armor) && (!entity.equipped || !entity.equipped.offhand || window.items[entity.equipped.offhand].type !== 'shield');
-                    if (isUnarmored) baseCost -= 1;
-                }
-            }
-            baseCost = Math.max(1, baseCost) + acrobaticsCost;
+            // Calculate cost from the entity-wide base computed once above.
+            let baseCost = movementBaseCost + acrobaticsCost;
 
             // PREFERRED PATH DISCOUNT (Stay Together)
             if (preferredPath && preferredPath.includes(key)) {
                 baseCost = Math.max(1, baseCost - 2);
             }
 
-            const terrain = window.getTerrainAtFloor(next.q, next.r, pathFloor);
             // Impassable-terrain check (Wall, and now the keep's Keep Wall)
             if (terrain.impassable) {
                 const isKnownWall = !isPlayer || isExplored;
