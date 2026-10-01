@@ -61,6 +61,9 @@ if('serviceWorker'in navigator){navigator.serviceWorker.register(`sw.js?build=${
         ['spriteRigging.js','spriteRigging'],
         ['scenario5ArmourLab.js','scenario5ArmourLab'],
         ['renderPerfTuning.js','renderPerfTuning'],
+        // Preserve 10 ms combat ticks, but coalesce expensive real-time
+        // exploration simulation to a phone-friendly cadence.
+        ['realtimeTickCadence.js','realtimeTickCadence'],
         ['raceSkinPalettes.js','raceSkinPalettes'],
         ['humanoidRenderer.js','humanoidRenderer'],
         // The bridge owns real-time held/sheathed weapon presentation and the
