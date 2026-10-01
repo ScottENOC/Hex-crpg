@@ -19,7 +19,7 @@ jobs:
           cat > /tmp/analyse_clothing.py <<'PY'
           from PIL import Image, ImageDraw, ImageFont
           from pathlib import Path
-          import json, re, numpy as np
+          import json, numpy as np
 
           root=Path('images/equipment/clothing')
           files=sorted(root.glob('Grok Image 2026-10-01 at *.png'), key=lambda p:p.name)
@@ -35,26 +35,18 @@ jobs:
               bg=np.median(corners,axis=0)
               dist=np.sqrt(np.sum((rgb-bg)**2,axis=2))
               edge=np.concatenate([dist[0],dist[-1],dist[:,0],dist[:,-1]])
-              alpha_frac=float(np.mean(a<250))
-              bg_like=float(np.mean(dist<22))
               rows.append({'index':i,'file':p.name,'width':im.width,'height':im.height,
                            'corner_bg_rgb':[int(x) for x in bg], 'edge_bg_distance_median':float(np.median(edge)),
-                           'existing_alpha_fraction':alpha_frac,'background_like_fraction':bg_like})
-              thumb=im.copy()
-              thumb.thumbnail((260,390))
-              tile=Image.new('RGBA',(300,450),(245,245,245,255))
-              # checkerboard behind transparent regions
-              d=ImageDraw.Draw(tile)
-              s=16
+                           'existing_alpha_fraction':float(np.mean(a<250)),
+                           'background_like_fraction':float(np.mean(dist<22))})
+              thumb=im.copy(); thumb.thumbnail((260,390))
+              tile=Image.new('RGBA',(300,450),(245,245,245,255)); d=ImageDraw.Draw(tile); s=16
               for yy in range(0,400,s):
                   for xx in range(0,300,s):
                       if (xx//s+yy//s)%2:d.rectangle([xx,yy,xx+s-1,yy+s-1],fill=(215,215,215,255))
-              x=(300-thumb.width)//2; y=(400-thumb.height)//2
-              tile.alpha_composite(thumb,(x,y))
-              d=ImageDraw.Draw(tile)
-              label=f'{i:02d}  {p.name.split(" at ")[-1].replace(".png","")}'
-              d.rectangle([0,400,299,449],fill=(255,255,255,255))
-              d.text((8,407),label,fill='black',font=font)
+              x=(300-thumb.width)//2; y=(400-thumb.height)//2; tile.alpha_composite(thumb,(x,y))
+              d=ImageDraw.Draw(tile); label=f'{i:02d}  {p.name.split(" at ")[-1].replace(".png","")}'
+              d.rectangle([0,400,299,449],fill=(255,255,255,255)); d.text((8,407),label,fill='black',font=font)
               d.text((8,425),f'{im.width}x{im.height} bg~{tuple(int(x) for x in bg)}',fill='black',font=font)
               thumbs.append(tile.convert('RGB'))
           cols=5; tw,th=300,450; n=len(thumbs); r=(n+cols-1)//cols
@@ -70,3 +62,7 @@ jobs:
         with:
           name: clothing-analysis
           path: clothing-analysis/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: clothing-sources
+          path: images/equipment/clothing/Grok Image 2026-10-01 at *.png
