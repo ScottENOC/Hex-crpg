@@ -1,0 +1,57 @@
+name: Apply offline cache v15
+
+on:
+  push:
+    branches: [development]
+    paths:
+      - 'scripts/patch-offline-v15.py'
+      - '.github/workflows/apply-offline-v15.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+      - name: Move to latest development
+        run: |
+          git fetch origin development
+          git reset --hard origin/development
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Apply v15 patch
+        run: python3 scripts/patch-offline-v15.py
+      - name: Validate JavaScript and v15 wiring
+        run: |
+          node --check offlineCache.js
+          node --check offlineServiceWorker.js
+          grep -q "const VERSION = '15'" offlineCache.js
+          grep -q "const SW_VERSION = '15'" offlineServiceWorker.js
+          grep -q "offlineServiceWorker.js?v=15" offlineCache.js
+          grep -q "offlineCache.js?v=15" index.html
+          grep -q "manifestTrusted: true" offlineServiceWorker.js
+          grep -q "recordRuntimeMiss" offlineServiceWorker.js
+          if grep -A35 "async function inspectGameCache" offlineServiceWorker.js | grep -q "cache.keys()"; then
+            echo 'inspectGameCache still enumerates game cache entries'
+            exit 1
+          fi
+          if grep -A120 "async function diagnoseGameCache" offlineServiceWorker.js | grep -q "const keys = await cache.keys"; then
+            echo 'diagnostic still enumerates game cache entries'
+            exit 1
+          fi
+      - name: Remove temporary patch machinery
+        run: rm -f scripts/patch-offline-v15.py .github/workflows/apply-offline-v15.yml
+      - name: Commit and push
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add offlineCache.js offlineServiceWorker.js index.html scripts/patch-offline-v15.py .github/workflows/apply-offline-v15.yml
+          git commit -m 'Reuse offline files from the saved manifest'
+          git pull --rebase origin development
+          git push origin HEAD:development
