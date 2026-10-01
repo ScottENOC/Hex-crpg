@@ -15,8 +15,9 @@
     'use strict';
 
     const root = typeof window !== 'undefined' ? window : globalThis;
-    const BUILD = '20260930-aldric-independent-recruitment-v1';
+    const BUILD = '20261001-aldric-independent-recruitment-v2';
     const NAME = 'Ser Aldric Thorne';
+    const LEGACY_ATTITUDE_NAME = 'Ser Aldric';
     const DIALOGUE_ID = 'ser_aldric_captive';
     let suppressWrapper = 0;
 
@@ -25,6 +26,27 @@
     function isRecruited() { return party().some(member => member?.name === NAME); }
     function quest(id) { return (root.questLog || []).find(q => q?.id === id) || null; }
     function entity() { return (root.entities || []).find(e => e?.name === NAME && e.side !== 'player') || null; }
+
+    // Older companion dialogue still asks companionAttitude for "Ser Aldric",
+    // while recruitment, patience and the canonical character all use the full
+    // name. Keep one source of truth and make the legacy key a live alias so
+    // approval gates, old saves and newer systems cannot drift apart.
+    function syncAttitudeAlias() {
+        const attitudes = root.companionAttitude;
+        if (!attitudes || typeof attitudes !== 'object') return false;
+        const descriptor = Object.getOwnPropertyDescriptor(attitudes, LEGACY_ATTITUDE_NAME);
+        const legacyValue = attitudes[LEGACY_ATTITUDE_NAME];
+        if (attitudes[NAME] === undefined && legacyValue !== undefined) attitudes[NAME] = legacyValue;
+        if (!descriptor || descriptor.configurable) {
+            Object.defineProperty(attitudes, LEGACY_ATTITUDE_NAME, {
+                configurable: true,
+                enumerable: true,
+                get() { return attitudes[NAME]; },
+                set(value) { attitudes[NAME] = value; },
+            });
+        }
+        return true;
+    }
 
     function state() {
         const pc = protagonist();
@@ -159,6 +181,7 @@
             if (!companion.inventory.includes(itemId)) companion.inventory.push(itemId);
         }
         root.finishRecruiting(companion, npc);
+        syncAttitudeAlias();
         const s = state();
         s.freed = true;
         s.recruited = true;
@@ -222,6 +245,7 @@
     }
 
     function sync() {
+        syncAttitudeAlias();
         if (isRecruited()) {
             const s = state();
             s.recruited = true;
@@ -249,6 +273,7 @@
 
     function install() {
         if (!root.npcDialogueTrees || typeof root.showDialogue !== 'function') return false;
+        syncAttitudeAlias();
         root.npcDialogueTrees[DIALOGUE_ID] = function(npc) {
             if (suppressWrapper) return false;
             return showCaptiveDialogue(npc);
@@ -275,7 +300,7 @@
 
     const api = {
         build: BUILD, state, setStage, freeAldric, deferAldric, advanceFromStory,
-        place, recruitAldric, alternativeText, showCaptiveDialogue, sync, install,
+        place, recruitAldric, alternativeText, showCaptiveDialogue, syncAttitudeAlias, sync, install,
     };
     root.aldricIndependentRecruitment = api;
     root.ALDRIC_INDEPENDENT_RECRUITMENT_BUILD = BUILD;
