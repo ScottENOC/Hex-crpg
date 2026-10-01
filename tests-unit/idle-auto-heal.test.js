@@ -18,6 +18,7 @@ function makeWorld() {
         isInCombat: false,
         currentTurnEntity: null,
         isPausedForReaction: false,
+        isResting: false,
         isSleeping: false,
         casts: [],
         distance(a, b) {
@@ -119,7 +120,7 @@ test('Auto Heal respects instructions, range, and effective armour-adjusted mana
     assert.equal(action.spell.manaCost, 4, '5-mana version costs 8 in armour and is unavailable');
 });
 
-test('Auto Heal never runs in combat or while disabled, and otherwise uses tryCastSpell', () => {
+test('Auto Heal never runs in combat, rest, or while disabled, and otherwise uses tryCastSpell', () => {
     const world = makeWorld();
     const caster = entity('Cleric', { mana: 8, maxMana: 10, spells: [heal(5, 10)] });
     const target = entity('Hero', { hp: 2, maxHp: 10, q: 1 });
@@ -130,6 +131,10 @@ test('Auto Heal never runs in combat or while disabled, and otherwise uses tryCa
     assert.equal(world.casts.length, 0);
 
     world.isInCombat = false;
+    world.isResting = true;
+    assert.equal(world.idleBehaviours.processAutoHeal(), false);
+    world.isResting = false;
+
     world.idleBehaviours.setAutoHealEnabled(false);
     assert.equal(world.idleBehaviours.processAutoHeal(), false);
 
@@ -137,6 +142,18 @@ test('Auto Heal never runs in combat or while disabled, and otherwise uses tryCa
     assert.equal(world.idleBehaviours.processAutoHeal(), true);
     assert.equal(world.casts.length, 1);
     assert.equal(world.casts[0].target, target);
+});
+
+test('AI-controlled allies are not treated as idle party characters', () => {
+    const world = makeWorld();
+    const caster = entity('Cleric', { mana: 8, maxMana: 10, spells: [heal(5, 10)] });
+    const summon = entity('Summon', { hp: 1, maxHp: 10, q: 1 });
+    summon.aiControlled = true;
+    const partyMember = entity('Hero', { hp: 2, maxHp: 10, q: 1 });
+    world.entities = [caster, summon, partyMember];
+
+    const action = world.idleBehaviours.selectAutoHealAction(caster, world.entities);
+    assert.equal(action.target, partyMember);
 });
 
 test('a target with a pending incoming heal is not double-booked', () => {
