@@ -26,6 +26,10 @@
         const current = window.updateTurnIndicator;
         if (typeof current !== 'function') return false;
         if (current.__realtimeUiThrottle) { stats.installed=true; return true; }
+        // renderHotPathCache replaces updateTurnIndicator with its stable-card
+        // implementation asynchronously. Wait for that final layer so this
+        // throttle cannot be immediately overwritten during startup.
+        if (!current.__stableTurnCards) return false;
 
         const wrapped = function(...args) {
             stats.calls++;
