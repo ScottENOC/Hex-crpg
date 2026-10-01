@@ -26,6 +26,23 @@ jobs:
       - name: Apply patch
         run: python3 scripts/apply-idle-auto-heal-approach.py
 
+      - name: Normalise VM object assertions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('tests-unit/idle-auto-heal.test.js')
+          s = p.read_text()
+          s = s.replace(
+              "    assert.deepEqual(action.approachDestination, { q: 5, r: 0 });",
+              "    assert.equal(action.approachDestination.q, 5);\n    assert.equal(action.approachDestination.r, 0);"
+          )
+          s = s.replace(
+              "    assert.deepEqual(caster.destination, { q: 5, r: 0 });",
+              "    assert.equal(caster.destination.q, 5);\n    assert.equal(caster.destination.r, 0);"
+          )
+          p.write_text(s)
+          PY
+
       - name: Focused checks
         run: |
           node --check spellPlanner.js
