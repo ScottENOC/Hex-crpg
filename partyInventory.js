@@ -210,7 +210,7 @@ function openStorageChest(q, r) {
                 chest.items.push(...window.partyInventory);
                 window.partyInventory.length = 0;
                 window.showMessage('Everything you carried is now in the chest.');
-                if (window.showInventoryScreen && document.getElementById("inventory-modal")?.style.display === "block" && window.showInventoryScreen) window.showInventoryScreen();
+                if (document.getElementById("inventory-modal")?.style.display === "block" && window.showInventoryScreen) window.showInventoryScreen();
             }
         });
     }
