@@ -2,7 +2,7 @@
 // Authored companion conversation memory, salience, cooldowns and personality clues.
 (() => {
 'use strict';
-const BUILD='20261001-companion-conversation-memory-v16', DAY=86400, DEFAULT_LIMIT=4, registry=new Map();
+const BUILD='20261001-companion-conversation-memory-v17', DAY=86400, DEFAULT_LIMIT=4, registry=new Map();
 const now=()=>Number(window.worldSeconds||0), party=()=>Array.isArray(window.party)?window.party:[], quest=id=>(window.questLog||[]).find(q=>q?.id===id)||null;
 function canonical(x){const n=typeof x==='string'?x:x?.name;return n?party().find((m,i)=>i>0&&m?.name===n)||null:null;}
 function ensureMemory(x){const c=canonical(x);if(!c)return null;window.getCompanionRelationship?.(c);c.playerRelationship ||= {familiarity:10,trust:10,history:[],knownConversationKeys:[]};const e=c.playerRelationship.conversationMemory||{};return c.playerRelationship.conversationMemory={version:3,topics:e.topics&&typeof e.topics==='object'?e.topics:{},history:Array.isArray(e.history)?e.history:[],lastMeaningful:e.lastMeaningful||null};}
@@ -38,6 +38,7 @@ if(typeof document!=='undefined'&&!window.__companionPersonalityKnowledgeModuleL
  load('partyConversationRollout.js?build=20261001-party-conversation-rollout-v1');
  load('companionFashionPreferences.js?build=20261001-companion-fashion-preferences-v1');
  load('companionContextualBanter.js?build=20261001-companion-contextual-banter-v1');
+ load('companionTriadConversations.js?build=20261001-companion-triad-conversations-v1');
  load('companionRelationshipMoments.js?build=20261001-companion-relationship-moments-v1');
  load('companionPhysicalAffection.js?build=20261001-companion-physical-affection-v1');
  load('companionQuestChains.js?build=20261001-companion-quest-chains-v1');
