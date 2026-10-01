@@ -11,6 +11,30 @@
     let sideLeftImage = null;
     let backRightImage = null;
     const sideLeftRenderSources = new Map();
+    const WRAPPER_LINK_KEYS = ['__braidWrappedFunction','__alignmentWrappedFunction','__preciseBase','__previous','__legacyDrawPlayerCharacter'];
+    const WRAPPER_MARKERS = ['__directionalBraidSupport','__spriteAlignmentFixes','__preciseColourContext','__childSystem','__directHumanoidCompositor'];
+
+    function wrapperChainHas(fn, marker) {
+        if (typeof fn !== 'function') return false;
+        const seen = new Set();
+        const pending = [fn];
+        while (pending.length) {
+            const current = pending.pop();
+            if (typeof current !== 'function' || seen.has(current)) continue;
+            seen.add(current);
+            if (current[marker]) return true;
+            for (const key of WRAPPER_LINK_KEYS) {
+                if (typeof current[key] === 'function' && !seen.has(current[key])) pending.push(current[key]);
+            }
+        }
+        return false;
+    }
+
+    function preserveWrapperMarkers(source, target) {
+        for (const marker of WRAPPER_MARKERS) {
+            if (wrapperChainHas(source, marker)) target[marker] = true;
+        }
+    }
 
     function imageReady(image) {
         return !!image && ((image.complete && image.naturalWidth > 0 && image.naturalHeight > 0)
@@ -154,9 +178,12 @@
 
     function installDirectionalDrawWrapper() {
         const current = window.drawDirectionalHumanoidInBounds;
-        if (typeof current !== 'function' || current.__directionalBraidSupport) return !!current?.__directionalBraidSupport;
+        if (typeof current !== 'function') return false;
+        if (wrapperChainHas(current, '__directionalBraidSupport')) return true;
         const wrapped = function(ctx, entity, bounds, facing='down') { return withDirectionalBraid(entity, facing, () => current.apply(this, arguments)); };
         wrapped.__directionalBraidSupport = true;
+        wrapped.__braidWrappedFunction = current;
+        preserveWrapperMarkers(current, wrapped);
         window.drawDirectionalHumanoidInBounds = wrapped;
         window.drawDirectionalCharacterBase = wrapped;
         window.drawHumanFemaleDirectionalBase = wrapped;
@@ -165,10 +192,12 @@
 
     function installWorldDrawWrapper() {
         const current = window.drawPlayerCharacter;
-        if (typeof current !== 'function' || !current.__directHumanoidCompositor) return false;
-        if (current.__directionalBraidSupport) return true;
+        if (typeof current !== 'function' || !wrapperChainHas(current, '__directHumanoidCompositor')) return false;
+        if (wrapperChainHas(current, '__directionalBraidSupport')) return true;
         const wrapped = function(ctx, entity) { const facing=entity?.facing||'down'; return withDirectionalBraid(entity,facing,()=>current.apply(this,arguments)); };
         wrapped.__directionalBraidSupport = true;
+        wrapped.__braidWrappedFunction = current;
+        preserveWrapperMarkers(current, wrapped);
         wrapped.__directHumanoidCompositor = true;
         wrapped.__legacyDrawPlayerCharacter = current.__legacyDrawPlayerCharacter || current;
         window.drawPlayerCharacter = wrapped;
