@@ -33,6 +33,17 @@ test('boots target shoes and keep the requested directional render tuning', () =
     contains(footwear, 'const PLAYER_DEFAULT_COLOR = {hue:28,saturation:68,value:32,opacity:1};');
 });
 
+test('footwear render bridge survives the asynchronous shirt hot-path replacement', () => {
+    const footwear = read('footwearSystem.js');
+    const hotPath = read('renderHotPathCache.js');
+
+    contains(hotPath, 'system.drawSlot = cachedDrawSlot;');
+    contains(footwear, 'if (cs.drawSlot.__footwearDrawBridge) return true;');
+    contains(footwear, 'wrapped.__footwearDrawBridge = true;');
+    contains(footwear, 'const bootstrapTimer = setInterval(install,100);');
+    contains(footwear, 'wrapClothingDraw();');
+});
+
 test('temporary post-render footwear UI extension is gone', () => {
     const bootstrap = read('name.js');
     assert.ok(!bootstrap.includes('footwearEquipmentUI.js'));
