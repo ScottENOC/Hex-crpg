@@ -12,16 +12,30 @@
     const HUMAN_RENDER_ASPECT = 0.48;
     const previousHex = new WeakMap();
     const trimCache = new WeakMap();
+    // Several humanoid rigs intentionally share the same authored hair paths.
+    // Keep one HTMLImageElement per source so a failed request/retry cannot leave
+    // one race's private copy broken while another copy of the same file succeeds.
+    const rendererImageCache = new Map();
     let legacyDrawPlayerCharacter = null;
     let installed = false;
     let creatorLegacy = null;
     let portraitObserver = null;
     let portraitQueued = false;
 
+    // All five playable races and both body presentations are compositor-owned.
+    // bodyAssetMode is diagnostic metadata: it makes temporary art fallbacks explicit
+    // without sending those characters back through the legacy all-in-one renderer.
     const CHARACTER_RIGS = {
-        human_female: { bodyW:1.60, bodyH:1.92, yOff:-0.16, heightScale:1.92/2.16 },
-        elf_female:   { bodyW:1.60, bodyH:1.92, yOff:-0.16, heightScale:1.92/2.16 },
-        human_male:   { bodyW:1.70, bodyH:2.06, yOff:-0.17, heightScale:2.06/2.16 },
+        human_female: { bodyW:1.60, bodyH:1.92, yOff:-0.16, heightScale:1.92/2.16, bodyAssetMode:'directional' },
+        human_male:   { bodyW:1.70, bodyH:2.06, yOff:-0.17, heightScale:2.06/2.16, bodyAssetMode:'directional' },
+        elf_female:   { bodyW:1.60, bodyH:1.92, yOff:-0.16, heightScale:1.92/2.16, bodyAssetMode:'directional' },
+        elf_male:     { bodyW:2.00, bodyH:2.40, yOff:-0.20, heightScale:2.40/2.16, bodyAssetMode:'flat-fallback', bodyRender:'visible-fit' },
+        dwarf_female: { bodyW:1.60, bodyH:1.92, yOff:-0.07, heightScale:1.92/2.16, bodyAssetMode:'flat-fallback', bodyRender:'visible-fit' },
+        dwarf_male:   { bodyW:1.60, bodyH:1.92, yOff:-0.07, heightScale:1.92/2.16, bodyAssetMode:'flat-fallback', bodyRender:'visible-fit' },
+        goblin_female:{ bodyW:1.45, bodyH:1.70, yOff:-0.12, heightScale:1.70/2.16, bodyAssetMode:'shared-directional-fallback', bodyRender:'visible-fit' },
+        goblin_male:  { bodyW:1.50, bodyH:1.75, yOff:-0.12, heightScale:1.75/2.16, bodyAssetMode:'directional', bodyRender:'visible-fit' },
+        orc_female:   { bodyW:1.85, bodyH:2.05, yOff:-0.15, heightScale:2.05/2.16, bodyAssetMode:'directional', bodyRender:'visible-fit' },
+        orc_male:     { bodyW:1.90, bodyH:2.10, yOff:-0.15, heightScale:2.10/2.16, bodyAssetMode:'shared-directional-fallback', bodyRender:'visible-fit' },
     };
 
     const CHARACTER_PATHS = {
@@ -83,9 +97,72 @@
             // Hair choices are shared between genders; the body rig supplies placement.
             hair:null,
         },
+        elf_male: {
+            body: { average: {
+                // No directional elf-male body has been authored yet. All three
+                // facings deliberately use the surviving flat body until that art lands.
+                front:'images/characters/elf_male/body.png',
+                side:'images/characters/elf_male/body.png',
+                back:'images/characters/elf_male/body.png',
+            } },
+            hair:null,
+        },
+        dwarf_female: {
+            body: { average: {
+                front:'images/characters/dwarf_female/body.png',
+                side:'images/characters/dwarf_female/body.png',
+                back:'images/characters/dwarf_female/body.png',
+            } },
+            hair:null,
+        },
+        dwarf_male: {
+            body: { average: {
+                front:'images/characters/dwarf_male/body.png',
+                side:'images/characters/dwarf_male/body.png',
+                back:'images/characters/dwarf_male/body.png',
+            } },
+            hair:null,
+        },
+        goblin_female: {
+            body: { average: {
+                front:'images/characters/goblin_female/body_front.png',
+                side:'images/characters/goblin_female/body_side.png',
+                back:'images/characters/goblin_female/body_back.png',
+            } },
+            hair:null,
+        },
+        goblin_male: {
+            body: { average: {
+                front:'images/characters/goblin_male/body_front.png',
+                side:'images/characters/goblin_male/body_side.png',
+                back:'images/characters/goblin_male/body_back.png',
+            } },
+            hair:null,
+        },
+        orc_female: {
+            body: { average: {
+                front:'images/characters/orc_female/body_front.png',
+                side:'images/characters/orc_female/body_side.png',
+                back:'images/characters/orc_female/body_back.png',
+            } },
+            hair:null,
+        },
+        orc_male: {
+            body: { average: {
+                front:'images/characters/orc_male/body_front.png',
+                side:'images/characters/orc_male/body_side.png',
+                back:'images/characters/orc_male/body_back.png',
+            } },
+            hair:null,
+        },
     };
-    CHARACTER_PATHS.human_male.hair = CHARACTER_PATHS.human_female.hair;
-    CHARACTER_PATHS.elf_female.hair = CHARACTER_PATHS.human_female.hair;
+
+    // Hair is an appearance layer, never a race/gender permission. Every direct
+    // playable humanoid can select every registered hairstyle; NPC generation
+    // remains free to weight those styles differently.
+    for (const paths of Object.values(CHARACTER_PATHS)) {
+        if (!paths.hair) paths.hair = CHARACTER_PATHS.human_female.hair;
+    }
 
     // Elf-female source art has different transparent framing from the human body sheets.
     const BODY_VISIBLE_TARGETS = {
@@ -177,14 +254,22 @@
     };
     const SHIELD_OPAQUE_HEIGHT_DROP = .10;
 
+    const SHIELD_PATHS = {
+        round:{front:'images/equipment/shields/round.png',back:'images/equipment/shields/round_back.svg'},
+        kite:{front:'images/equipment/shields/kite.png',back:'images/equipment/shields/kite_back.png'},
+    };
+
+    // Armour is renderer-owned directional art, just like shields. Front and
+    // side share the canonical high-quality front PNG; back uses the matching
+    // rear WebP from the same organised equipment folder.
+    const ARMOUR_PATHS = {
+        light:{front:'images/equipment/armour/human/light.png',back:'images/equipment/armour/human/light_back.webp'},
+        medium:{front:'images/equipment/armour/human/medium.png',back:'images/equipment/armour/human/medium_back.webp'},
+        heavy:{front:'images/equipment/armour/human/heavy.png',back:'images/equipment/armour/human/heavy_back.webp'},
+    };
+
     const REAR_EQUIPMENT_PATHS = {
-        shield:'images/shield_back.svg',
-        helmet:'images/nasalHelm_back.svg',
-        armour:{
-            light:'images/humanlightarmour_back.svg',
-            medium:'images/humanmediumarmour_back.svg',
-            heavy:'images/humanheavyarmour_back.svg',
-        },
+        helmet:'images/equipment/helmets/nasal_helm_back.svg',
     };
 
     const ITEM_GRIPS = {
@@ -222,18 +307,27 @@
     }
 
     function loadImage(src) {
-        if (typeof Image === 'undefined') return null;
-        const image = new Image();
-        image.addEventListener('load', () => {
+        if (!src) return null;
+        if (rendererImageCache.has(src)) return rendererImageCache.get(src);
+        const image = window.assetManager.request(src);
+        rendererImageCache.set(src, image);
+        window.assetManager.whenReady(src).then(() => {
             window.drawMap?.();
             window.renderEntities?.();
             queuePortraitRefresh();
+            // The creator preview may have tried to draw while this image was
+            // still deferred. Redraw it now rather than leaving a blank canvas
+            // until the player happens to touch another appearance control.
+            if (document.getElementById('appearance-preview-canvas')) {
+                requestAnimationFrame(() => window.updateAppearancePreview?.());
+            }
+        }).catch((error) => {
+            console.warn('Humanoid renderer art failed to load:', src, error);
+            if (!rendererImageCache.get(`reported:${src}`)) {
+                rendererImageCache.set(`reported:${src}`, true);
+                window.showMessage?.(`Art asset failed to load: ${src.split('/').pop()} — ${error?.message || 'load failed'}`);
+            }
         });
-        // Renderer-owned art uses the compositor build token so fresh clothing JS
-        // can never be paired with a stale/broken cached body image on iOS Safari.
-        const assetBuild = encodeURIComponent(window.PRESENTATION_BUILD || 'direct-humanoid-assets-v1');
-        const separator = src.includes('?') ? '&' : '?';
-        image.src = `${src}${separator}build=${assetBuild}`;
         return image;
     }
 
@@ -252,11 +346,16 @@
 
     const CHARACTER_ASSETS = Object.fromEntries(Object.entries(CHARACTER_PATHS)
         .map(([key, paths]) => [key, loadSet(paths)]));
+    const SHIELD_ASSETS = Object.fromEntries(Object.entries(SHIELD_PATHS)
+        .map(([visual, paths]) => [visual, {front:loadImage(paths.front), back:loadImage(paths.back)}]));
+    const ARMOUR_ASSETS = Object.fromEntries(Object.entries(ARMOUR_PATHS)
+        .map(([tier, paths]) => [tier, {front:loadImage(paths.front), back:loadImage(paths.back)}]));
     const REAR_EQUIPMENT_ASSETS = {
-        shield:loadImage(REAR_EQUIPMENT_PATHS.shield),
+        // Compatibility aliases for existing readiness checks and legacy consumers.
+        shield:SHIELD_ASSETS.round.back,
         helmet:loadImage(REAR_EQUIPMENT_PATHS.helmet),
-        armour:Object.fromEntries(Object.entries(REAR_EQUIPMENT_PATHS.armour)
-            .map(([tier, src]) => [tier, loadImage(src)])),
+        armour:Object.fromEntries(Object.entries(ARMOUR_ASSETS)
+            .map(([tier, views]) => [tier, views.back])),
     };
 
     function facingFromHexDelta(dq, dr) {
@@ -347,6 +446,33 @@
         return trim;
     }
 
+    function frontHairOpaqueWidthFraction(frontImage) {
+        const layout = DIRECTIONAL_LAYOUT.front;
+        if (!layout || !imageReady(frontImage)) return layout?.hairDest?.w || .56;
+        const trim = alphaTrim(frontImage);
+        const iw = frontImage.naturalWidth || frontImage.width || 1;
+        const cropLeft = layout.hairCrop.x * iw;
+        const cropRight = (layout.hairCrop.x + layout.hairCrop.w) * iw;
+        const trimLeft = trim.trimLeft;
+        const trimRight = trim.trimLeft + trim.trimWidth;
+        const visibleOpaque = Math.max(0, Math.min(trimRight, cropRight) - Math.max(trimLeft, cropLeft));
+        const cropWidth = Math.max(1, layout.hairCrop.w * iw);
+        return visibleOpaque ? layout.hairDest.w * (visibleOpaque / cropWidth) : layout.hairDest.w;
+    }
+
+    function tightDirectionalHairDestination(image, view, frontImage) {
+        if (!imageReady(image)) return null;
+        const trim = alphaTrim(image);
+        const iw = image.naturalWidth || image.width || 1;
+        const ih = image.naturalHeight || image.height || 1;
+        const opaqueFraction = Math.max(.01, trim.trimWidth / iw);
+        const wantedOpaqueWidth = frontHairOpaqueWidthFraction(frontImage);
+        const w = wantedOpaqueWidth / opaqueFraction;
+        const sourceAspect = iw / ih;
+        const h = w * HUMAN_RENDER_ASPECT / Math.max(.01, sourceAspect);
+        return {x:.5-w/2,y:view === 'back' ? -.005 : -.010,w,h};
+    }
+
     function drawVisibleFit(ctx, image, bounds, target) {
         if (!imageReady(image)) return false;
         const trim = alphaTrim(image);
@@ -376,8 +502,11 @@
         const reduction = Number(item?.reduction || 0);
         const visuals = window.gameVisuals || {};
         const tier = reduction >= 3 ? 'heavy' : reduction >= 2 ? 'medium' : 'light';
-        const generic = tier === 'heavy' ? visuals.humanHeavy : tier === 'medium' ? visuals.humanMedium : visuals.humanLight;
-        let image = rearPreferred(view, REAR_EQUIPMENT_ASSETS.armour[tier], generic);
+        const authored = view === 'back' ? ARMOUR_ASSETS[tier]?.back : ARMOUR_ASSETS[tier]?.front;
+        // The canonical organised pair is the normal rendering source. Keep the
+        // compatibility preload as a temporary load-failure fallback only.
+        const legacy = tier === 'heavy' ? visuals.humanHeavy : tier === 'medium' ? visuals.humanMedium : visuals.humanLight;
+        let image = imageReady(authored) ? authored : legacy;
         if (!image) return null;
         if (entity.goldGear && window.getGoldTintedSprite) image = window.getGoldTintedSprite(image) || image;
         return image;
@@ -408,7 +537,9 @@
         if (!id) return null;
         const item = window.items?.[id];
         if (item?.type === 'shield') {
-            return {image:rearPreferred(view, REAR_EQUIPMENT_ASSETS.shield, window.gameVisuals?.shield),kind:'shield',scale:.73,itemId:id};
+            const shieldSet = SHIELD_ASSETS[item.shieldVisual] || SHIELD_ASSETS.round;
+            const front = imageReady(shieldSet?.front) ? shieldSet.front : window.gameVisuals?.shield;
+            return {image:rearPreferred(view, shieldSet?.back, front),kind:'shield',scale:.73,itemId:id};
         }
         const spec = weaponSpec(id);
         return spec ? {...spec,itemId:id} : null;
@@ -464,9 +595,16 @@
         if (!anchorPoint) return false;
         const anchor = point(bounds, anchorPoint);
         const grip = ITEM_GRIPS[spec.kind] || ITEM_GRIPS.sword;
-        let size;
-        if (spec.kind === 'shield') size = bounds.width * spec.scale;
-        else {
+        let drawWidth, drawHeight;
+        if (spec.kind === 'shield') {
+            // Shield art is not required to live on a square canvas. Treat the
+            // configured scale as its displayed height and preserve the authored
+            // aspect ratio so tightly cropped kite/tower shields stay narrow.
+            drawHeight = bounds.width * spec.scale;
+            const imageWidth = image.naturalWidth || image.width || 1;
+            const imageHeight = image.naturalHeight || image.height || 1;
+            drawWidth = drawHeight * imageWidth / imageHeight;
+        } else {
             // Derive held-item size from the compositor bounds rather than the
             // world camera. World rendering is unchanged because those bounds
             // are themselves built from hexSize*z, while 100px initiative
@@ -474,15 +612,16 @@
             const rig = CHARACTER_RIGS[keyFor(entity)];
             const bodyHeightUnits = rig?.bodyH || 1;
             const basePixel = bounds.height / bodyHeightUnits;
-            size = basePixel * (rig?.heightScale || 1) * spec.scale;
+            drawHeight = basePixel * (rig?.heightScale || 1) * spec.scale;
+            drawWidth = drawHeight;
         }
 
-        let itemY = anchor.y - grip.y*size;
+        let itemY = anchor.y - grip.y*drawHeight;
         if (spec.kind === 'shield') {
             const trim = alphaTrim(image);
             const opaqueHeight = trim?.trimHeight && trim?.originalHeight
-                ? size * trim.trimHeight / trim.originalHeight
-                : size;
+                ? drawHeight * trim.trimHeight / trim.originalHeight
+                : drawHeight;
             itemY += opaqueHeight * SHIELD_OPAQUE_HEIGHT_DROP;
         }
 
@@ -493,10 +632,10 @@
             ctx.save();
             ctx.translate(anchor.x, anchor.y);
             ctx.scale(-1, 1);
-            ctx.drawImage(image, -grip.x*size, -grip.y*size, size, size);
+            ctx.drawImage(image, -grip.x*drawWidth, -grip.y*drawHeight, drawWidth, drawHeight);
             ctx.restore();
         } else {
-            ctx.drawImage(image, anchor.x - grip.x*size, itemY, size, size);
+            ctx.drawImage(image, anchor.x - grip.x*drawWidth, itemY, drawWidth, drawHeight);
         }
         return true;
     }
@@ -595,7 +734,9 @@
         if (!imageReady(sourceBody)) return false;
 
         const layout = DIRECTIONAL_LAYOUT[view];
-        const sourceHair = set?.hair?.[entity.hairStyle || 'brown_1']?.[view] || set?.hair?.brown_1?.[view];
+        const hairStyle = entity.hairStyle || 'brown_1';
+        const hairSet = set?.hair?.[hairStyle] || set?.hair?.brown_1;
+        const sourceHair = hairSet?.[view] || set?.hair?.brown_1?.[view];
         const bodyImage = resolvedBodyImage(entity, sourceBody);
         const hairImage = resolvedHairImage(entity, sourceHair);
         const hasHelmet = !!entity.equipped?.helmet && equipmentSlotVisible(entity,'helmet');
@@ -604,12 +745,14 @@
         const cx = bounds.left + bounds.width/2;
         const layerOrder = [];
 
-        const drawHeldLayers = () => {
+        const drawShieldLayer = () => {
             let shieldDrawn = false;
             shieldDrawn = drawHeldItem(ctx, entity, view, bounds, 'off', 'shield') || shieldDrawn;
             shieldDrawn = drawHeldItem(ctx, entity, view, bounds, 'main', 'shield') || shieldDrawn;
             if (shieldDrawn) layerOrder.push('shield');
+        };
 
+        const drawWeaponLayer = () => {
             let weaponDrawn = false;
             weaponDrawn = drawHeldItem(ctx, entity, view, bounds, 'main', 'weapon') || weaponDrawn;
             weaponDrawn = drawHeldItem(ctx, entity, view, bounds, 'off', 'weapon') || weaponDrawn;
@@ -623,14 +766,23 @@
             ctx.translate(-cx, 0);
         }
         try {
-            // Back-view equipment belongs behind the character. Front and side
-            // retain the established body/head/armour then shield/weapons order.
-            if (view === 'back') drawHeldLayers();
+            // Shield depth depends on the actual facing, not just the authored
+            // front/side/back sprite view. Front + left expose the shield arm;
+            // back + right put the shield behind the body/armour. Weapons retain
+            // the existing rear-behind / front-and-side-foreground behaviour.
+            const shieldBehindBody = view === 'back' || facing === 'right';
+            if (shieldBehindBody) drawShieldLayer();
+            if (view === 'back') drawWeaponLayer();
 
             const bodySource = imageReady(bodyImage) ? bodyImage : sourceBody;
             const bodyTarget = BODY_VISIBLE_TARGETS[key]?.[view];
-            const bodyDrawn = bodyTarget
-                ? !!drawVisibleFit(ctx, bodySource, bounds, bodyTarget)
+            // Human directional sheets retain their measured crop. Rigs whose
+            // source framing differs (and temporary one-view fallbacks) alpha-trim
+            // then fit the visible body to the compositor bounds instead of forcing
+            // them through human-specific crop coordinates.
+            const useVisibleBodyFit = !!bodyTarget || CHARACTER_RIGS[key]?.bodyRender === 'visible-fit';
+            const bodyDrawn = useVisibleBodyFit
+                ? !!drawVisibleFit(ctx, bodySource, bounds, bodyTarget || {x:0,y:0,w:1,h:1})
                 : drawCropped(ctx, bodySource, layout.bodyCrop, layout.bodyDest, bounds);
             if (bodyDrawn) layerOrder.push('body');
             for (const slot of ['underwear','bra','pants','shirt']) {
@@ -639,10 +791,28 @@
             if (entity.displayArmour !== false && equipmentSlotVisible(entity,'armor') && entity.equipped?.armor && drawArmour(ctx, entity, view, bounds)) layerOrder.push('armour');
             if (typeof window.drawFacialHairLayer === 'function' && window.drawFacialHairLayer(ctx,entity,view,bounds)) layerOrder.push('facialHair');
             if (!hasHelmet && imageReady(hairImage)) {
-                if (drawCropped(ctx, hairImage, layout.hairCrop, layout.hairDest, bounds)) layerOrder.push('hair');
+                const tightDirectional = hairStyle === 'braid' && view !== 'front';
+                const tightDest = tightDirectional
+                    ? tightDirectionalHairDestination(sourceHair, view, hairSet?.front)
+                    : null;
+                const hairCrop = tightDest ? {x:0,y:0,w:1,h:1} : layout.hairCrop;
+                const hairDest = tightDest || layout.hairDest;
+                const hairDrawn = drawCropped(ctx, hairImage, hairCrop, hairDest, bounds);
+                if (hairDrawn) layerOrder.push('hair');
+                window.__humanoidRendererLastHair = {
+                    style:hairStyle,
+                    view,
+                    tightDirectional:!!tightDest,
+                    crop:{...hairCrop},
+                    dest:{...hairDest},
+                    sourceWidth:sourceHair?.naturalWidth || sourceHair?.width || 0,
+                    sourceHeight:sourceHair?.naturalHeight || sourceHair?.height || 0,
+                    drew:!!hairDrawn,
+                };
             } else if (hasHelmet && drawHelmet(ctx, entity, view, bounds)) layerOrder.push('helmet');
 
-            if (view !== 'back') drawHeldLayers();
+            if (!shieldBehindBody) drawShieldLayer();
+            if (view !== 'back') drawWeaponLayer();
         } finally {
             ctx.restore();
         }
@@ -714,7 +884,12 @@
             ctx.clearRect(0,0,canvas.width,canvas.height);
             const height = canvas.height*.90;
             const width = height*HUMAN_RENDER_ASPECT;
-            drawDirectionalHumanoidInBounds(ctx, preview, {left:(canvas.width-width)/2,top:(canvas.height-height)/2,width,height}, 'down');
+            const rendered = drawDirectionalHumanoidInBounds(ctx, preview, {left:(canvas.width-width)/2,top:(canvas.height-height)/2,width,height}, 'down');
+            // Never turn a temporarily-unready direct sprite into an empty
+            // preview. The legacy preview is a safe visual fallback while the
+            // directional body finishes decoding; the ready callback above will
+            // replace it as soon as the direct asset is available.
+            if (!rendered) return creatorLegacy.apply(this, arguments);
         };
         wrapped.__directHumanoidPreview = true;
         wrapped.__legacyPreview = creatorLegacy;
@@ -743,11 +918,11 @@
                 const src = img.getAttribute('src') || '';
                 if (/images\/human(?:female|male)(?:hair)?\.png/.test(src)) img.remove();
             });
-            let canvas = portrait.querySelector('canvas[data-direct-humanoid="true"]');
+            let canvas = portrait.querySelector('canvas[data-direct-humanoid-canvas="true"]');
             if (!canvas) {
                 canvas = document.createElement('canvas');
                 canvas.width=100; canvas.height=100;
-                canvas.dataset.directHumanoid='true';
+                canvas.dataset.directHumanoidCanvas='true';
                 canvas.classList.add('portrait-layer');
                 canvas.style.cssText='width:100%;height:100%;left:0;top:0;';
                 portrait.insertBefore(canvas, portrait.firstChild);
@@ -755,7 +930,15 @@
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0,0,100,100);
             const height=92,width=height*HUMAN_RENDER_ASPECT;
-            drawDirectionalHumanoidInBounds(ctx,entity,{left:(100-width)/2,top:4,width,height},'down');
+            const rendered = drawDirectionalHumanoidInBounds(ctx,entity,{left:(100-width)/2,top:4,width,height},'down');
+            // Do not suppress the established IMG portrait until this frame has
+            // actually drawn. Image decoding is asynchronous on iOS; tagging an
+            // empty canvas as authoritative made the tracker blank even though
+            // the same entity rendered correctly on the map a moment later.
+            portrait.classList.toggle('direct-humanoid-ready', !!rendered);
+            canvas.style.display = rendered ? 'block' : 'none';
+            if (rendered) canvas.dataset.directHumanoid='true';
+            else delete canvas.dataset.directHumanoid;
         });
     }
 
@@ -784,6 +967,11 @@
     window.HUMAN_FEMALE_RENDER_ASPECT = HUMAN_RENDER_ASPECT;
     window.DIRECTIONAL_CHARACTER_PATHS = CHARACTER_PATHS;
     window.DIRECTIONAL_CHARACTER_ASSETS = CHARACTER_ASSETS;
+    window.DIRECT_HUMANOID_RIGS = CHARACTER_RIGS;
+    window.DIRECT_HUMANOID_RIG_KEYS = Object.freeze(Object.keys(CHARACTER_RIGS));
+    window.DIRECT_HUMANOID_BODY_STATUS = Object.freeze(Object.fromEntries(
+        Object.entries(CHARACTER_RIGS).map(([key, rig]) => [key, rig.bodyAssetMode || 'directional'])
+    ));
     window.DIRECTIONAL_CHARACTER_LAYOUT = DIRECTIONAL_LAYOUT;
     window.HUMAN_FEMALE_DIRECTIONAL_ASSETS = {
         body:CHARACTER_ASSETS.human_female.body.average,
@@ -797,6 +985,8 @@
         hair:CHARACTER_ASSETS.elf_female.hair,
     };
     window.REAR_HUMAN_EQUIPMENT_ASSETS = REAR_EQUIPMENT_ASSETS;
+    window.SHIELD_VISUAL_ASSETS = SHIELD_ASSETS;
+    window.ARMOUR_VISUAL_ASSETS = ARMOUR_ASSETS;
     window.ITEM_GRIPS = ITEM_GRIPS;
     window.facingToSpriteView = facingToView;
     window.facingFromHexDelta = facingFromHexDelta;

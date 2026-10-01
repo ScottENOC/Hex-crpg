@@ -110,19 +110,13 @@
     };
 
     function loadImage(src) {
-        if (typeof Image === 'undefined') return null;
-        const img = new Image();
-        img.addEventListener('load', () => {
-            // A directional character may have been deliberately left blank
-            // while this image was loading. Paint it as soon as the authored
-            // asset is ready instead of waiting for the next game tick.
-            if (typeof window.drawMap === 'function') window.drawMap();
-            if (typeof window.renderEntities === 'function') window.renderEntities();
-            if (typeof window.refreshDirectionalTurnPortraits === 'function') {
-                window.refreshDirectionalTurnPortraits();
-            }
-        });
-        img.src = src;
+        if (!src) return null;
+        const img = window.assetManager.request(src);
+        window.assetManager.whenReady(src).then(() => {
+            window.drawMap?.();
+            window.renderEntities?.();
+            window.refreshDirectionalTurnPortraits?.();
+        }).catch(() => {});
         return img;
     }
 

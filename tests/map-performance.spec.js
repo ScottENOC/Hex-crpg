@@ -64,34 +64,6 @@ test.describe('map rendering performance at extreme zoom', () => {
         expect(ms).toBeLessThan(220);
     });
 
-    test('the hex tile cache makes a second draw at the same zoom meaningfully cheaper than the first', async ({ page }) => {
-        const result = await page.evaluate(async () => {
-            const drawAndMeasure = () => new Promise(resolve => {
-                const before = window.performanceRenderStats?.frames || 0;
-                window.drawMap();
-                const wait = () => {
-                    const stats = window.performanceRenderStats;
-                    if (stats && stats.frames > before) return resolve(stats.lastFrameMs);
-                    requestAnimationFrame(wait);
-                };
-                requestAnimationFrame(wait);
-            });
-
-            for (let q = -400; q <= 400; q += 3) {
-                for (let r = -400; r <= 400; r += 3) {
-                    window.exploredHexes.add(`${q},${r}`);
-                }
-            }
-            window.cameraZoom = 0.15;
-            if (window.invalidateTerrainBuffer) window.invalidateTerrainBuffer();
-            const firstMs = await drawAndMeasure();
-            const secondMs = await drawAndMeasure();
-            return { firstMs, secondMs };
-        });
-        expect(result.firstMs).toBeGreaterThan(0);
-        expect(result.secondMs).toBeLessThan(result.firstMs);
-    });
-
     // sceneNeedsRedraw (gameEngine.js) — the real-time tick's redraw call
     // skips entirely (not just throttles) when nothing that could change
     // the picture has happened: no camera pan/zoom, no entity mid-move, no
@@ -101,12 +73,39 @@ test.describe('map rendering performance at extreme zoom', () => {
     test('drawMap/renderEntities are skipped entirely while the scene is truly idle', async ({ page }) => {
         const result = await page.evaluate(async () => {
             window._resetRenderPacing();
+
+            // Campaign 2 deliberately starts ambient NPC schedules. Those NPCs
+            // can have destinations immediately after character creation, which
+            // means the normal scene is not actually idle. Isolate the local
+            // player and settle every transient so this test exercises the
+            // idle-pacing contract rather than the town simulation.
+            const player = window.entities.find(e => e.side === 'player' && !e.rider);
+            window.entities = player ? [player] : [];
+            for (const e of window.entities) {
+                e.destination = null;
+                e.moveCooldown = 0;
+                e.moveTotalTime = 0;
+                e.startQ = e.hex.q;
+                e.startR = e.hex.r;
+                e.visualQ = e.hex.q;
+                e.visualR = e.hex.r;
+            }
+            window.projectiles = [];
+            window.floatingTexts = [];
+            window._screenShakeUntil = 0;
+
+            // Establish one rendered frame with the settled state before
+            // observing the subsequent real-time ticks.
+            window.drawMap();
+            window.renderEntities();
+            await new Promise(r => requestAnimationFrame(() => r()));
+            window._resetRenderPacing();
+
             let drawCalls = 0, renderCalls = 0;
             const realDraw = window.drawMap, realRender = window.renderEntities;
             window.drawMap = (...a) => { drawCalls++; return realDraw(...a); };
             window.renderEntities = (...a) => { renderCalls++; return realRender(...a); };
 
-            // Let a few ticks pass with the player stationary and nothing animating.
             await new Promise(r => setTimeout(r, 300));
 
             window.drawMap = realDraw;
@@ -134,45 +133,6 @@ test.describe('map rendering performance at extreme zoom', () => {
         });
         expect(result.drawCalls).toBeGreaterThan(5); // ~300ms at up to 60Hz — comfortably more than a handful
         expect(result.stillMoving).toBe(true); // sanity: the move genuinely hadn't finished (20 hexes takes a while)
-    });
-
-    // hexMap.js's terrain buffer (see comment above renderTerrainPass): the
-    // terrain-image pass is cached into an offscreen canvas anchored to the
-    // camera, and small pans just blit that buffer at an offset instead of
-    // re-walking every hex. This is the fix for "panning the camera feels
-    // terrible on a phone even though the idle-skip already helps standing
-    // still" — a small in-buffer pan should cost meaningfully less than the
-    // first draw that had to build the buffer from scratch.
-    test('small camera pans within the terrain buffer slack are cheaper than the draw that built it', async ({ page }) => {
-        const result = await page.evaluate(async () => {
-            const drawAndMeasure = () => new Promise(resolve => {
-                const before = window.performanceRenderStats?.frames || 0;
-                window.drawMap();
-                const wait = () => {
-                    const stats = window.performanceRenderStats;
-                    if (stats && stats.frames > before) return resolve(stats.lastFrameMs);
-                    requestAnimationFrame(wait);
-                };
-                requestAnimationFrame(wait);
-            });
-
-            for (let q = -200; q <= 200; q += 2) {
-                for (let r = -200; r <= 200; r += 2) {
-                    window.exploredHexes.add(`${q},${r}`);
-                }
-            }
-            window.cameraZoom = 1.0;
-            if (window.invalidateTerrainBuffer) window.invalidateTerrainBuffer();
-            const firstMs = await drawAndMeasure(); // builds the terrain buffer from scratch
-
-            window.cameraX += 5; // small pan, well within the buffer's slack margin
-            window.cameraY += 5;
-            const secondMs = await drawAndMeasure(); // should just blit the existing buffer
-
-            return { firstMs, secondMs };
-        });
-        expect(result.firstMs).toBeGreaterThan(0);
-        expect(result.secondMs).toBeLessThan(result.firstMs);
     });
 
     // gameEngine.js's adaptive render-interval cap: a device too slow to

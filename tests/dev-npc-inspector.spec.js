@@ -41,6 +41,26 @@ test.describe('Developer NPC inspector', () => {
         expect(report.skills.some(s => s.id === 'sword_hit')).toBe(true);
     });
 
+    test('preserves ordered multiclass history including a repeated class', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const npc = window.buildNPC({
+                name: 'Inspector Multiclass Veteran', race: 'human', gender: 'male',
+                hex: { q: 422, r: 420 }, progressionMode: 'authored',
+                classLevels: ['fighter', 'rogue', 'fighter'],
+                skillPicks: [], equipment: [], side: 'enemy',
+            });
+            const report = window.devNpcInspector.describeEntity(npc);
+            return {
+                report,
+                formatted: window.devNpcInspector.formatReport(report),
+            };
+        });
+
+        expect(result.report.classSequence).toEqual(['fighter', 'rogue', 'fighter']);
+        expect(result.report.classCounts).toEqual({ fighter: 2, rogue: 1 });
+        expect(result.formatted).toContain('Classes: Fighter → Rogue → Fighter');
+    });
+
     test('shows civilians as genuinely classless with zero budget', async ({ page }) => {
         const report = await page.evaluate(() => {
             const npc = window.buildNPC({

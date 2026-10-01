@@ -100,16 +100,26 @@ socket.on('disconnect', () => {
     document.getElementById('multiplayer-status').innerText = 'Status: Offline';
     document.getElementById('multiplayer-status').style.color = '#e74c3c';
 
-    // Only show the overlay if we were actively in a game
-    if (document.getElementById('gameContainer').style.display === 'flex') {
+    // A solo game has no server dependency. Losing internet must not freeze it
+    // behind the multiplayer reconnect overlay. Only an actual joined/hosted
+    // room needs to wait for the multiplayer server.
+    const inMultiplayerSession = Boolean(window.multiplayer?.roomCode);
+    if (inMultiplayerSession && document.getElementById('gameContainer')?.style.display === 'flex') {
         showDisconnectOverlay('Connection lost — attempting to reconnect…', false);
+    } else {
+        hideDisconnectOverlay();
     }
 });
 
 socket.on('connect_error', () => {
-    // After multiple failed reconnect attempts, offer manual rejoin button
-    if (document.getElementById('disconnect-overlay').style.display === 'flex') {
-        showDisconnectOverlay('Unable to reach server. Check your connection.', !!window.multiplayer.roomCode);
+    // Socket.IO may be trying to reconnect in the background even in solo play.
+    // That is harmless and must never surface as a blocking game overlay.
+    if (!window.multiplayer?.roomCode) {
+        hideDisconnectOverlay();
+        return;
+    }
+    if (document.getElementById('disconnect-overlay')?.style.display === 'flex') {
+        showDisconnectOverlay('Unable to reach server. Check your connection.', true);
     }
 });
 

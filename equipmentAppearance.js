@@ -1,9 +1,9 @@
 // Per-equipped-item rendering visibility plus weapon and armour material colours.
 (() => {
   'use strict';
-  const BUILD='20260929-equipment-appearance-v3';
-  const renderSlots=['weapon','offhand','armor','helmet','shirt','pants','bra','underwear'];
-  const slotLabels={weapon:'Main hand',offhand:'Off hand',armor:'Armour',helmet:'Helmet',shirt:'Shirt / Dress',pants:'Pants',bra:'Bra',underwear:'Underwear'};
+  const BUILD='20261001-equipment-appearance-v4';
+  const renderSlots=['weapon','offhand','armor','helmet','shirt','pants','shoes','bra','underwear'];
+  const slotLabels={weapon:'Main hand',offhand:'Off hand',armor:'Armour',helmet:'Helmet',shirt:'Shirt / Dress',pants:'Pants',shoes:'Shoes',bra:'Bra',underwear:'Underwear'};
   const tintCache=new WeakMap();
   let armourRenderSourcesInstalled=false;
   let activeArmourEntity=null;
@@ -75,10 +75,8 @@
     const visuals=window.gameVisuals,rear=window.REAR_HUMAN_EQUIPMENT_ASSETS?.armour;
     if(!visuals?.humanLight||!visuals?.humanMedium||!visuals?.humanHeavy||!rear)return false;
     for(const [tier,path] of Object.entries(rearArmourPaths)){
-      const img=new Image();
-      img.addEventListener('load',()=>{window.drawMap?.();window.renderEntities?.();window.refreshDirectionalTurnPortraits?.();});
-      const build=encodeURIComponent(window.PRESENTATION_BUILD||BUILD);
-      img.src=`${path}?build=${build}`;
+      const img=window.assetManager.request(path);
+      window.assetManager.whenReady(path).then(()=>{window.drawMap?.();window.renderEntities?.();window.refreshDirectionalTurnPortraits?.();}).catch(()=>{});
       rear[tier]=img;
     }
     const frontProps={light:'humanLight',medium:'humanMedium',heavy:'humanHeavy'};

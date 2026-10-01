@@ -106,7 +106,7 @@ function selectCharacterByName(name) {
         window.player = char;
         const idx = window.party.findIndex(p => p.name === name);
         if (idx !== -1) window.selectedCharacterIndex = idx;
-        
+
         updatePartyTabs();
         showCharacter();
         if (document.getElementById("character-screen-modal").style.display === "block") showCharacterScreen();
@@ -128,18 +128,18 @@ function addJerry() {
     const randRace = races[Math.floor(Math.random() * races.length)];
     const randCls = classes[Math.floor(Math.random() * classes.length)];
     const randGender = genders[Math.floor(Math.random() * genders.length)];
-    
+
     const jerry = window.createCharacterData(randRace, randCls, `Jerry ${window.party.length}`, randGender);
     window.party.push(jerry);
     if (window.wireSharedInventory) window.wireSharedInventory(jerry);
-    
+
     const playerEntity = window.entities.find(e => e.side === 'player');
     if (!playerEntity) {
         showMessage("No player entity found to spawn next to!");
         return;
     }
     let spawnHex = { q: playerEntity.hex.q + 1, r: playerEntity.hex.r };
-    
+
     const directions = [
         {q:1, r:0}, {q:1, r:-1}, {q:0, r:-1},
         {q:-1, r:0}, {q:-1, r:1}, {q:0, r:1},
@@ -159,10 +159,10 @@ function addJerry() {
     jerryEntity.side = 'player';
     Object.assign(jerryEntity, jerry);
     jerryEntity.skills = jerry.skills;
-    
+
     window.entities.push(jerryEntity);
     showMessage(`${jerry.name} (the ${randRace} ${randCls}) joined the party!`);
-    
+
     updatePartyTabs();
     window.drawMap();
     window.renderEntities();
@@ -210,10 +210,10 @@ function toggleRest() {
 function updateRestButton() {
     const btn = document.getElementById("rest-btn");
     if (!btn) return;
-    
+
     // Check for mobile layout
     const isMobile = window.innerWidth <= 850;
-    
+
     if (window.isResting) {
         btn.innerText = "Stop";
         btn.style.backgroundColor = "#f44336";
@@ -299,7 +299,7 @@ function toggleSleep() {
 function updateSleepButton() {
     const btn = document.getElementById("sleep-btn");
     if (!btn) return;
-    
+
     if (window.isSleeping) {
         btn.innerText = "Stop";
         btn.style.backgroundColor = "#f44336";
@@ -320,7 +320,7 @@ function showCharacter(){
   const info = document.getElementById("character-info");
   if (!info) return;
   if (!window.player){info.innerText="No character yet.";return;}
-  
+
   let txt=`<strong>${window.player.name}</strong> (${window.player.race} ${window.player.class} Lv${window.player.level})<br>
 HP: ${Math.ceil(window.player.hp)}/${window.player.maxHp} | MP: ${Math.floor(window.player.currentMana)}/${window.player.maxMana} ${window.isInCombat ? `| TP: ${Math.floor(window.player.timePoints)}` : ''} | Dmg: ${window.player.baseDamage}
 `;
@@ -371,7 +371,7 @@ function showCharacterScreen() {
         expDiv.style.padding = '10px';
         expDiv.style.marginBottom = '20px';
         expDiv.innerHTML = `
-            <strong>Level:</strong> ${char.level} | 
+            <strong>Level:</strong> ${char.level} |
             <strong>EXP:</strong> ${char.exp} / ${expNext}
             <button onclick="window.gainExp(1000)" style="margin-left: 20px; font-size: 0.7em;">Cheat: +1000 EXP</button>
         `;
@@ -401,7 +401,7 @@ function showCharacterScreen() {
 
     const playerSkills = char.skills || {};
     const availablePoints = { ...char.attributes } || { wildcard: 0 };
-    
+
     const skillTrees = {};
     for (const key in window.skills) {
         const skill = window.skills[key];
@@ -455,7 +455,7 @@ function showCharacterScreen() {
             skillsInTree.forEach(skillKey => {
                 const skill = window.skills[skillKey];
                 let currentRanks = playerSkills[skillKey] || 0;
-                
+
                 if (skillKey === 'riding' || skillKey === 'riding_druid' || skillKey === 'riding_paladin') {
                     if (playerSkills['riding'] || playerSkills['riding_druid'] || playerSkills['riding_paladin']) {
                         currentRanks = 1;
@@ -464,7 +464,7 @@ function showCharacterScreen() {
 
                 const maxRanks = skill.maxRanks;
                 const isMaxed = maxRanks > 0 && currentRanks >= maxRanks;
-                
+
                 let prereqMet = true;
                 let missingPrereq = "";
                 if (skill.prereq) {
@@ -496,14 +496,14 @@ function showCharacterScreen() {
                 const canUseAnyPool = tree === 'misc' && Object.values(availablePoints).some(v => (v || 0) > 0);
                 const canLearn = (hasPoints || canUseWildcard || canUseAnyPool) && !isMaxed && prereqMet;
                 const buttonLabel = maxRanks === 1 ? 'Learn' : `+1 Rank (${currentRanks})`;
-                
+
                 if (window.showAllSkillsMode || prereqMet || currentRanks > 0) {
                     treeHtml += `
                         <div class="skill-item" style="padding-left: 20px; margin-bottom: 10px;" title="${missingPrereq}">
                             <strong>${skill.name}</strong>: ${skill.description}
                             ${missingPrereq ? `<br><small style="color: #f44336;">${missingPrereq}</small>` : ''}
-                            ${isMaxed && maxRanks === 1 ? 
-                                '<span style="color: #4caf50; margin-left: 10px;">(Learned)</span>' : 
+                            ${isMaxed && maxRanks === 1 ?
+                                '<span style="color: #4caf50; margin-left: 10px;">(Learned)</span>' :
                                 (isMaxed ? `<span style="color: #4caf50; margin-left: 10px;">(Max Rank: ${currentRanks})</span>` :
                                 `<button onclick="window.learnSkill('${skillKey}')" ${canLearn ? '' : 'disabled'} style="margin-left: 10px;">${buttonLabel}</button>`)
                             }
@@ -586,7 +586,7 @@ function learnSkill(skillKey, forcedPool) {
     }
 
     player.skills[skillKey] = (player.skills[skillKey] || 0) + 1;
-    
+
     const partyChar = window.party.find(p => p.name === player.name);
     if (partyChar) {
         partyChar.skills = player.skills;
@@ -636,7 +636,7 @@ function learnSkill(skillKey, forcedPool) {
     showCharacter();
     showCharacterScreen();
     updateActionButtons();
-    updateTurnIndicator(); 
+    updateTurnIndicator();
 }
 
 function addAllEquipment() {
@@ -698,26 +698,26 @@ function showMessage(msg) {
 function updateActionButtons() {
     const buttonsDiv = document.getElementById('actions');
     if (!buttonsDiv) return;
-    
+
     buttonsDiv.innerHTML = '';
 
     const inCombat = window.isInCombat;
     let player = inCombat ? window.currentTurnEntity : window.player;
-    
+
     // Always try to find the actual world entity for the player side
     if (!player && window.entities) {
         player = window.entities.find(ent => ent.side === 'player' && !ent.rider);
     }
-    
+
     // Fallback to window.player if no entity found
     if (!player) player = window.player;
-    
+
     if (player && player.side === "player" && !player.aiControlled) {
         const charData = window.player;
         const isCasting = player.castCooldown > 0;
 
         const isSentientAlly = player.side === 'player' && !player.aiControlled && !['Wolf', 'Horse', 'Boar', 'Tiger', 'Eagle'].includes(player.name);
-        
+
         // Ensure sentient logic uses the current resolved player entity
         if (isSentientAlly) {
             if (!window.playerAction) {
@@ -956,7 +956,7 @@ function updateActionButtons() {
                 const skill = window.skills[skillKey];
                 if (skill && skill.active && charData.skills[skillKey] > 0) {
                     if (skill.tree === 'monster_skills') continue; // Handled specially (Fly/Land) or internal
-                    
+
                     let weaponReqMet = true;
                     if (skillKey.endsWith('_feint')) {
                         const weaponType = skillKey.split('_')[0];
@@ -964,7 +964,7 @@ function updateActionButtons() {
                         if (!eq || !window.items[eq] || !window.items[eq]?.id.includes(weaponType)) weaponReqMet = false;
                     } else if (skillKey === 'disarm') {
                         const eq = charData.equipped.weapon;
-                        if (!eq) weaponReqMet = false; 
+                        if (!eq) weaponReqMet = false;
                     } else if (skillKey === 'assassinate') {
                         const eq = charData.equipped.weapon;
                         if (!eq) weaponReqMet = false;
@@ -974,7 +974,7 @@ function updateActionButtons() {
                     } else if (skillKey === 'pickpocket') {
                         if (!charData.isStealthed) weaponReqMet = false;
                     }
-                    
+
                     if (weaponReqMet) {
                         const button = document.createElement('button');
                         button.id = `skill-btn-${skillKey}`;
@@ -1185,16 +1185,16 @@ function renderSpellStats() {
     if (!baseSelect) return;
     const baseId = baseSelect.value;
     const base = window.baseSpells[baseId];
-    
+
     const speedSelect = document.getElementById("spell-speed-select");
     const speed = speedSelect ? speedSelect.value : 'default';
-    
+
     const rangeInput = document.getElementById("spell-range-bonus");
     const rangeBonus = rangeInput ? (parseInt(rangeInput.value) || 0) : 0;
-    
+
     const magInput = document.getElementById("spell-magnitude-bonus");
     const magBonus = magInput ? (parseInt(magInput.value) || 0) : 0;
-    
+
     const radBonusInput = document.getElementById("spell-radius-bonus");
     const radBonus = radBonusInput ? (parseInt(radBonusInput.value) || 0) : 0;
     const targetBonusInput = document.getElementById("spell-targets-bonus");
@@ -1237,7 +1237,7 @@ function renderSpellStats() {
     }
     if (speed === 'quickened') { tpCost = 5; manaCost += Math.max(0, 5 - effSpeed); }
     if (speed === 'slowed') { tpCost = 20; manaCost -= 4; }
-    
+
     if (touch) manaCost -= 3; else manaCost += Math.max(0, rangeBonus - effRange);
     manaCost += (magBonus * Math.max(0, 5 - effMag));
     manaCost += (radBonus * 10);
@@ -1264,7 +1264,7 @@ function renderSpellStats() {
     `;
     const display = document.getElementById("spell-stats-display");
     if (display) display.innerHTML = statsHtml;
-    
+
     if (animalId === 'boar') {
         manaCost += 8;
     } else if (animalId === 'tiger') {
@@ -1422,7 +1422,7 @@ function drinkPotion(itemId) {
     const player = window.player;
     const item = window.items[itemId];
     const ent = window.entities.find(e => e.name === player.name);
-    
+
     if (ent && ent.timePoints < 1) {
         showMessage("Not enough TP to drink.");
         return;
@@ -1668,7 +1668,7 @@ function doLevelUp() {
     const expReq = window.player.level * 1000;
     if (window.player.exp < expReq) return;
     window.player.exp -= expReq;
-    
+
     applyLevelUp(window.player, cls);
 
     window.showMessage(`Level UP! You are now level ${window.player.level} ${cls}.`);
@@ -1691,7 +1691,7 @@ function updateActiveSpellsUI() {
     const listDiv = document.getElementById("active-spells-list");
     if (!listDiv) return;
     listDiv.innerHTML = '';
-    
+
     if (!window.activeSpells || window.activeSpells.length === 0) {
         listDiv.innerHTML = '<p style="color: #666; margin: 0;">No active spells.</p>';
         return;
@@ -1705,7 +1705,7 @@ function updateActiveSpellsUI() {
         item.style.marginBottom = "3px";
         item.style.borderBottom = "1px solid #333";
         item.style.paddingBottom = "2px";
-        
+
         let targetText = "";
         if (s.targetEntityId) {
             const targetEnt = window.entities.find(e => e.id === s.targetEntityId);
@@ -1762,24 +1762,24 @@ function updateTurnIndicator() {
                             if (entity.race === 'human') {
                                 const sizePct = entity.gender === 'male' ? 90 : 80;
                                 const offsetPct = (100 - sizePct) / 2;
-                                const applyHumanScaling = (img) => { 
-                                    img.style.width = `${sizePct}%`; 
-                                    img.style.height = `${sizePct}%`; 
-                                    img.style.left = `${offsetPct}%`; 
-                                    img.style.top = `${offsetPct}%`; 
+                                const applyHumanScaling = (img) => {
+                                    img.style.width = `${sizePct}%`;
+                                    img.style.height = `${sizePct}%`;
+                                    img.style.left = `${offsetPct}%`;
+                                    img.style.top = `${offsetPct}%`;
                                 };
-                                const baseImg = document.createElement('img');
-                                baseImg.src = entity.gender === 'male' ? 'images/humanmale.png' : 'images/humanfemale.png'; 
+                                const baseImg = window.assetManager.createDOMImage();
+                                window.assetManager.bind(baseImg, entity.gender === 'male' ? 'images/characters/human_male/body_front.png' : 'images/characters/human_female/body_front.png', {priority:-20});
                                 baseImg.classList.add('portrait-layer');
                                 applyHumanScaling(baseImg); portraitDiv.appendChild(baseImg);
-                                
+
                                 if (entity.gender !== 'male') {
-                                    const hairImg = document.createElement('img');
-                                    hairImg.src = 'images/humanfemalehair.png'; hairImg.classList.add('portrait-layer');
+                                    const hairImg = window.assetManager.createDOMImage();
+                                    window.assetManager.bind(hairImg, 'images/characters/human_female/hair_brown_1_front.png', {priority:-20}); hairImg.classList.add('portrait-layer');
                                     applyHumanScaling(hairImg); hairImg.style.marginTop = "-3px"; portraitDiv.appendChild(hairImg);
                                 } else {
-                                    const hairImg = document.createElement('img');
-                                    hairImg.src = 'images/humanmalehair.png'; hairImg.classList.add('portrait-layer');
+                                    const hairImg = window.assetManager.createDOMImage();
+                                    window.assetManager.bind(hairImg, 'images/characters/human_female/hair_brown_1_front.png', {priority:-20}); hairImg.classList.add('portrait-layer');
                                     // 40% smaller than 45% = 27%. Higher by 25% height = 2.5% top
                                     hairImg.style.width = '27%';
                                     hairImg.style.height = '27%';
@@ -1787,29 +1787,29 @@ function updateTurnIndicator() {
                                     hairImg.style.top = '2.5%';
                                     portraitDiv.appendChild(hairImg);
                                 }
-                                
+
                                 if (entity.equipped && entity.equipped.helmet === 'nasal_helm') {
-                                    const helmImg = document.createElement('img');
-                                    helmImg.src = 'images/nasalHelm.png'; helmImg.classList.add('portrait-layer');
+                                    const helmImg = window.assetManager.createDOMImage();
+                                    window.assetManager.bind(helmImg, 'images/equipment/helmets/nasal_helm.png', {priority:-20}); helmImg.classList.add('portrait-layer');
                                     applyHumanScaling(helmImg); portraitDiv.appendChild(helmImg);
                                 }
-            
+
                                 if (entity.equipped && entity.equipped.armor) {
-                                    const armorImg = document.createElement('img');
+                                    const armorImg = window.assetManager.createDOMImage();
                                     const aid = entity.equipped.armor;
-                                    if (aid === 'light_armor') armorImg.src = 'images/humanlightarmour.png';
-                                    else if (aid === 'medium_armor') armorImg.src = 'images/humanmediumarmour.png';
-                                    else if (aid === 'heavy_armor') armorImg.src = 'images/humanheavyarmour.png';
+                                    if (aid === 'light_armor') window.assetManager.bind(armorImg, 'images/equipment/armour/human/light.png', {priority:-20});
+                                    else if (aid === 'medium_armor') window.assetManager.bind(armorImg, 'images/equipment/armour/human/medium.png', {priority:-20});
+                                    else if (aid === 'heavy_armor') window.assetManager.bind(armorImg, 'images/equipment/armour/human/heavy.png', {priority:-20});
                                     armorImg.classList.add('portrait-layer'); applyHumanScaling(armorImg);
                                     portraitDiv.appendChild(armorImg);
                                 }
                             } else {
-                                const baseImg = document.createElement('img');
+                                const baseImg = window.assetManager.createDOMImage();
                                 let scalingFactor = 1.0;
                                 if (entity.race === 'elf') {
-                                    baseImg.src = entity.gender === 'male' ? 'images/elfmale.png' : 'images/elffemale.png';
+                                    window.assetManager.bind(baseImg, entity.gender === 'male' ? 'images/characters/legacy/elf_male/body.png' : 'images/characters/elf_female/body_front.png', {priority:-20});
                                 } else if (entity.race === 'dwarf') {
-                                    baseImg.src = entity.gender === 'male' ? 'images/dwarfmale.png' : 'images/dwarffemale.png';
+                                    window.assetManager.bind(baseImg, entity.gender === 'male' ? 'images/characters/legacy/dwarf_male/body.png' : 'images/characters/legacy/dwarf_female/body.png', {priority:-20});
                                     scalingFactor = 0.8;
                                 } else if (entity.race === 'orc') {
                                     // No dedicated layered orc body art — reuse the
@@ -1817,9 +1817,9 @@ function updateTurnIndicator() {
                                     // (gameEngine.js's drawPlayerCharacter does the
                                     // same for the main map) rather than falling
                                     // through to the elf portrait below.
-                                    baseImg.src = 'images/orc.png';
+                                    window.assetManager.bind(baseImg, 'images/characters/creatures/orc.png', {priority:-20});
                                 } else {
-                                    baseImg.src = 'images/elf.png';
+                                    window.assetManager.bind(baseImg, 'images/characters/legacy/elf_male/body.png', {priority:-20});
                                 }
                                 baseImg.classList.add('portrait-layer');
                                 if (scalingFactor !== 1.0) {
@@ -1829,14 +1829,14 @@ function updateTurnIndicator() {
                                     baseImg.style.top = `${(100 - 100 * scalingFactor) / 2}%`;
                                 }
                                 portraitDiv.appendChild(baseImg);
-            
+
                                 // HAIR OVERLAYS
                                 if (entity.race === 'elf') {
-                                    const hairImg = document.createElement('img');
-                                    if (entity.gender === 'female') hairImg.src = 'images/elffemalehair.png';
-                                    else if (entity.gender === 'male') hairImg.src = 'images/elfmalehair.png';
-                                    
-                                    if (hairImg.src) {
+                                    const hairImg = window.assetManager.createDOMImage();
+                                    if (entity.gender === 'female') window.assetManager.bind(hairImg, 'images/characters/human_female/hair_brown_1_front.png', {priority:-20});
+                                    else if (entity.gender === 'male') window.assetManager.bind(hairImg, 'images/characters/legacy/elf_male/hair.png', {priority:-20});
+
+                                    if (hairImg.dataset.assetManagerPath) {
                                         hairImg.classList.add('portrait-layer');
                                         if (scalingFactor !== 1.0) {
                                             hairImg.style.width = `${100 * scalingFactor}%`;
@@ -1847,16 +1847,16 @@ function updateTurnIndicator() {
                                         portraitDiv.appendChild(hairImg);
                                     }
                                 } else if (entity.race === 'dwarf') {
-                                    const hairImg = document.createElement('img');
+                                    const hairImg = window.assetManager.createDOMImage();
                                     if (entity.gender === 'male') {
-                                        hairImg.src = 'images/dwarfmalehair.png';
+                                        window.assetManager.bind(hairImg, 'images/characters/legacy/dwarf_male/hair.png', {priority:-20});
                                         hairImg.classList.add('portrait-layer');
                                         hairImg.style.width = `${100 * scalingFactor}%`;
                                         hairImg.style.height = `${100 * scalingFactor}%`;
                                         hairImg.style.left = `${(100 - 100 * scalingFactor) / 2}%`;
                                         hairImg.style.top = `${(100 - 100 * scalingFactor) / 2}%`;
                                     } else if (entity.gender === 'female') {
-                                        hairImg.src = 'images/dwarffemalehair.png';
+                                        window.assetManager.bind(hairImg, 'images/characters/legacy/dwarf_female/hair.png', {priority:-20});
                                         hairImg.classList.add('portrait-layer');
                                         // 31.25% scale (25% bigger than previous 25% scale)
                                         // Dwarf scalingFactor is 0.8. 0.8 * 0.3125 = 0.25 (25%).
@@ -1865,18 +1865,18 @@ function updateTurnIndicator() {
                                         hairImg.style.left = '37.5%'; // Centered
                                         hairImg.style.top = '40%';  // Dropped down by 25% height
                                     }
-                                    
-                                    if (hairImg.src) {
+
+                                    if (hairImg.dataset.assetManagerPath) {
                                         portraitDiv.appendChild(hairImg);
                                     }
                                 }
-            
-                                if (entity.equipped && entity.equipped.armor) {                    const armorImg = document.createElement('img');
+
+                                if (entity.equipped && entity.equipped.armor) {                    const armorImg = window.assetManager.createDOMImage();
                     const aid = entity.equipped.armor;
-                    if (aid === 'light_armor') armorImg.src = 'images/humanlightarmour.png';
-                    else if (aid === 'medium_armor') armorImg.src = 'images/humanmediumarmour.png';
-                    else if (aid === 'heavy_armor') armorImg.src = 'images/humanheavyarmour.png';
-                    armorImg.classList.add('portrait-layer'); 
+                    if (aid === 'light_armor') window.assetManager.bind(armorImg, 'images/equipment/armour/human/light.png', {priority:-20});
+                    else if (aid === 'medium_armor') window.assetManager.bind(armorImg, 'images/equipment/armour/human/medium.png', {priority:-20});
+                    else if (aid === 'heavy_armor') window.assetManager.bind(armorImg, 'images/equipment/armour/human/heavy.png', {priority:-20});
+                    armorImg.classList.add('portrait-layer');
                     if (scalingFactor !== 1.0) {
                         armorImg.style.width = `${100 * scalingFactor}%`;
                         armorImg.style.height = `${100 * scalingFactor}%`;
@@ -1888,8 +1888,8 @@ function updateTurnIndicator() {
             }
             // SHIELD LAYER (Universal)
             if (entity.equipped && entity.equipped.offhand && window.items[entity.equipped.offhand].type === 'shield') {
-                const shieldImg = document.createElement('img');
-                shieldImg.src = 'images/shield.png';
+                const shieldImg = window.assetManager.createDOMImage();
+                window.assetManager.bind(shieldImg, 'images/equipment/shields/round.png', {priority:-20});
                 shieldImg.classList.add('portrait-layer');
                 // The shield is a hand-held item, not another full-body
                 // layer — sizing it like the body/armor layers made it
@@ -1909,7 +1909,7 @@ function updateTurnIndicator() {
                 portraitDiv.appendChild(shieldImg);
             }
         } else {
-            const img = document.createElement('img');
+            const img = window.assetManager.createDOMImage();
             // Renamed bosses (Grishnak, Krog, etc.) carry spriteBase (their
             // underlying monster type) since e.name no longer matches a
             // generic monster name once the boss-spawn code renames them.
@@ -1918,24 +1918,24 @@ function updateTurnIndicator() {
                 entity.name === 'Boar' || entity.name === 'Tiger' || entity.name === 'Eagle' || entity.name === 'Troll'
                 ? entity.name
                 : ({ orc: 'Orc', wolf: 'Wolf', troll: 'Troll', skeleton: 'Skeleton', zombie: 'Zombie', imp: 'Imp', boar: 'Boar', tiger: 'Tiger' }[entity.spriteBase] || entity.name);
-            if (key === 'Orc') img.src = 'images/orc.png';
-            else if (key === 'Wolf') img.src = 'images/wolf.png';
-            else if (key === 'Horse') { img.src = 'images/horse.png'; applyHorseScaling(img); }
-            else if (key === 'Skeleton') img.src = 'images/skeleton.svg';
-            else if (key === 'Zombie') img.src = 'images/zombie.svg';
-            else if (key === 'Imp') img.src = 'images/imp.svg';
-            else if (key === 'Boar') img.src = 'images/boar.png';
-            else if (key === 'Tiger') img.src = 'images/tiger.png';
-            else if (key === 'Troll') img.src = 'images/troll.png';
+            if (key === 'Orc') window.assetManager.bind(img, 'images/characters/creatures/orc.png', {priority:-20});
+            else if (key === 'Wolf') window.assetManager.bind(img, 'images/characters/creatures/wolf.png', {priority:-20});
+            else if (key === 'Horse') { window.assetManager.bind(img, 'images/characters/creatures/horse.png', {priority:-20}); applyHorseScaling(img); }
+            else if (key === 'Skeleton') window.assetManager.bind(img, 'images/characters/creatures/skeleton.svg', {priority:-20});
+            else if (key === 'Zombie') window.assetManager.bind(img, 'images/characters/creatures/zombie.svg', {priority:-20});
+            else if (key === 'Imp') window.assetManager.bind(img, 'images/characters/creatures/imp.svg', {priority:-20});
+            else if (key === 'Boar') window.assetManager.bind(img, 'images/characters/creatures/boar.png', {priority:-20});
+            else if (key === 'Tiger') window.assetManager.bind(img, 'images/characters/creatures/tiger.png', {priority:-20});
+            else if (key === 'Troll') window.assetManager.bind(img, 'images/characters/creatures/troll.png', {priority:-20});
             else if (key === 'Eagle') {
-                img.src = entity.isFlying ? 'images/eagleflying.png' : 'images/eagle.png';
+                window.assetManager.bind(img, entity.isFlying ? 'images/characters/creatures/eagle_flying.png' : 'images/characters/creatures/eagle.png', {priority:-20});
             }
-            else img.src = 'images/goblin.png';
+            else window.assetManager.bind(img, 'images/characters/creatures/goblin.png', {priority:-20});
             img.classList.add('portrait-layer'); portraitDiv.appendChild(img);
         }
         if (entity.riding && entity.riding.name === 'Horse') {
-            const horseImg = document.createElement('img');
-            horseImg.src = 'images/horse.png'; horseImg.classList.add('portrait-layer');
+            const horseImg = window.assetManager.createDOMImage();
+            window.assetManager.bind(horseImg, 'images/characters/creatures/horse.png', {priority:-20}); horseImg.classList.add('portrait-layer');
             applyHorseScaling(horseImg); portraitDiv.appendChild(horseImg);
         }
         const infoDiv = document.createElement('div');
@@ -1966,7 +1966,7 @@ function showEntityDetails(entity) {
     if (!modal || !contentDiv) return;
 
     nameSpan.innerText = entity.name;
-    
+
     let html = `
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
             <div>
@@ -2174,17 +2174,17 @@ function showDialogue(npc, message, options = []) {
         const z = (100 * 0.65) / (cfg.bodyH * hs);
         window.drawPlayerCharacter(ctx, npc, 50, 65, z, 0);
     } else {
-        const baseImg = document.createElement('img');
+        const baseImg = window.assetManager.createDOMImage();
         if (npc.customImage && window.gameVisuals[npc.customImage]?.complete) {
-            baseImg.src = window.gameVisuals[npc.customImage].src;
+            window.assetManager.bind(baseImg, window.gameVisuals[npc.customImage].src, {priority:-20});
         } else if (npc.race === 'human') {
-            baseImg.src = npc.gender === 'male' ? 'images/humanmale.png' : 'images/humanfemale.png';
+            window.assetManager.bind(baseImg, npc.gender === 'male' ? 'images/characters/human_male/body_front.png' : 'images/characters/human_female/body_front.png', {priority:-20});
         } else if (npc.race === 'elf') {
-            baseImg.src = npc.gender === 'male' ? 'images/elfmale.png' : 'images/elffemale.png';
+            window.assetManager.bind(baseImg, npc.gender === 'male' ? 'images/characters/legacy/elf_male/body.png' : 'images/characters/elf_female/body_front.png', {priority:-20});
         } else if (npc.race === 'dwarf') {
-            baseImg.src = npc.gender === 'male' ? 'images/dwarfmale.png' : 'images/dwarffemale.png';
+            window.assetManager.bind(baseImg, npc.gender === 'male' ? 'images/characters/legacy/dwarf_male/body.png' : 'images/characters/legacy/dwarf_female/body.png', {priority:-20});
         } else {
-            baseImg.src = 'images/elf.png';
+            window.assetManager.bind(baseImg, 'images/characters/legacy/elf_male/body.png', {priority:-20});
         }
         baseImg.classList.add('portrait-layer');
         portrait.appendChild(baseImg);
@@ -2426,7 +2426,7 @@ function getRunMaxFriendlySkills() {
                 treeTotals[tree] = (treeTotals[tree] || 0) + (f.attributes[tree] || 0);
             }
         }
-        
+
         // 3. Update global max
         for (const tree in treeTotals) {
             maxSkills[tree] = Math.max(maxSkills[tree] || 0, treeTotals[tree]);
@@ -2459,9 +2459,9 @@ function endArenaRun() {
     const maxFriendly = getRunMaxFriendlySkills();
     const maxEnemy = window.runMaxEnemySkills || {};
     const currentBonuses = window.roguelikeData.permanentSkillBonuses || {};
-    
-    // Rule: can only earn more if (current bonus) < (base points). 
-    // Base points = total - current bonus. 
+
+    // Rule: can only earn more if (current bonus) < (base points).
+    // Base points = total - current bonus.
     // So: bonus < (total - bonus)  =>  2 * bonus < total
     const validFriendlyTrees = Object.keys(maxFriendly).filter(t => {
         const total = maxFriendly[t] || 0;
@@ -2483,7 +2483,7 @@ function endArenaRun() {
         const tree = validEnemyTrees[Math.floor(Math.random() * validEnemyTrees.length)];
         choices.push({ type: 'skill', tree: tree, label: `Permanent ${tree} point (From Enemies)` });
     }
-    
+
     // Relic (Simplified: random magic item if beat > 2 fights)
     if (window.roguelikeData.fightsCompleted > 2) {
         const magicItems = Object.keys(window.items).filter(id => id.includes('sword_arrow') || id.includes('glowing'));
@@ -2495,10 +2495,10 @@ function endArenaRun() {
     const modal = document.getElementById("end-run-modal");
     const msg = document.getElementById("end-run-message");
     const choiceDiv = document.getElementById("reward-choices");
-    
+
     msg.innerText = `Your journey ends here. You completed ${window.roguelikeData.fightsCompleted} matches. Choose a legacy for your next character:`;
     choiceDiv.innerHTML = '';
-    
+
     if (choices.length === 0) {
         const btn = document.createElement("button");
         btn.innerText = "Accept Fate (No Rewards Available)";
@@ -2522,7 +2522,7 @@ function selectRoguelikeReward(choice) {
     } else if (choice.type === 'relic') {
         window.roguelikeData.relics.push(choice.id);
     }
-    
+
     localStorage.setItem('rpg_roguelike_data', JSON.stringify(window.roguelikeData));
     alert("Legacy recorded. Good luck in your next life.");
     location.reload();
@@ -2537,7 +2537,7 @@ window.syncMute = function(isMuted) {
     const menuCheck = document.getElementById('mute-check-menu');
     if (titleCheck) titleCheck.checked = isMuted;
     if (menuCheck) menuCheck.checked = isMuted;
-    
+
     // Refresh music state when toggling mute
     if (!isMuted) updateMusicState();
 };
@@ -2598,7 +2598,7 @@ function updateMusicState() {
     const spellModal = document.getElementById("spell-menu-modal");
     const inventoryModal = document.getElementById("inventory-modal");
     const settingsModal = document.getElementById("settings-modal");
-    
+
     const inMenu = (characterModal && characterModal.style.display === "block") ||
                    (spellModal && spellModal.style.display === "block") ||
                    (inventoryModal && inventoryModal.style.display === "block") ||
@@ -2638,7 +2638,7 @@ function updateMusicState() {
 document.addEventListener('DOMContentLoaded', () => {
     window.syncMute(true);
     // Initial music check
-    setTimeout(updateMusicState, 500); 
+    setTimeout(updateMusicState, 500);
 });
 
 window.addAllEquipment = addAllEquipment;
@@ -2696,7 +2696,7 @@ function highlightValidTargets(caster, spell) {
                     else if (type === 'heal' || type === 'buff') valid = (e.side === caster.side);
                     else if (type === 'dispel') valid = true;
                     else if (type === 'debuff' && spell.baseId === 'calm_animal') valid = !!window.resolveCalmAnimalTarget(e);
-                    
+
                     if (valid) {
                         window.highlightedHexes.push({ q: e.hex.q, r: e.hex.r, type: 'attack' });
                     }

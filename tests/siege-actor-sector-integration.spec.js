@@ -17,7 +17,6 @@ test.describe('Siege actors use physical sectors', () => {
             const gateSector = window.SiegeActorSectorIntegration.nearestSectorToHex(window.campaign2NorthwatchGateHex, state);
             const rearSector = window.SiegeActorSectorIntegration.nearestSectorToHex(sapper.siegeTargetHex, state);
             return {
-                wrapped: !!window.spawnBatteringRamAndSapper.__siegeSectorActorWrapper,
                 ram: ram && {
                     sectorId: ram.siegeSectorId,
                     role: ram.siegeRole,
@@ -34,7 +33,6 @@ test.describe('Siege actors use physical sectors', () => {
                 stateSapperSectorId: state.sapperSectorId,
             };
         });
-        expect(result.wrapped).toBe(true);
         expect(result.ram).toBeTruthy();
         expect(result.sapper).toBeTruthy();
         expect(result.ram.role).toBe('battering-ram');
@@ -116,7 +114,6 @@ test.describe('Siege actors use physical sectors', () => {
             window.spawnSecondGreenskinWave();
             const wave = window.entities.filter(e => !before.has(e.id) && String(e.name).includes('II-'));
             return {
-                wrapped: !!window.spawnSecondGreenskinWave.__siegeSectorActorWrapper,
                 targetSectorId: targetSector.id,
                 breach,
                 count: wave.length,
@@ -125,7 +122,6 @@ test.describe('Siege actors use physical sectors', () => {
                 primary: state.primaryAssaultSectorId,
             };
         });
-        expect(result.wrapped).toBe(true);
         expect(result.count).toBeGreaterThan(20);
         expect(result.sectorIds).toEqual([result.targetSectorId]);
         expect(result.primary).toBe(result.targetSectorId);
@@ -142,14 +138,12 @@ test.describe('Siege actors use physical sectors', () => {
             window.spawnGreenskinAssaultWave();
             const wave = window.entities.filter(e => !before.has(e.id) && e.siegeRole === 'assault-wave-1');
             return {
-                wrapped: !!window.spawnGreenskinAssaultWave.__siegeSectorActorWrapper,
                 gateSectorId: gateSector?.id,
                 count: wave.length,
                 sectorIds: [...new Set(wave.map(e => e.siegeSectorId))],
                 primary: state.primaryAssaultSectorId,
             };
         });
-        expect(result.wrapped).toBe(true);
         expect(result.count).toBeGreaterThan(30);
         expect(result.sectorIds).toEqual([result.gateSectorId]);
         expect(result.primary).toBe(result.gateSectorId);

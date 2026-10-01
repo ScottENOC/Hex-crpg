@@ -59,10 +59,9 @@
 
   function load(src){
     if(images.has(src)) return images.get(src);
-    const img=new Image();
-    img.src=`${src}${src.includes('?')?'&':'?'}build=${BUILD}`;
-    img.onload=()=>redraw(window.player);
+    const img=window.assetManager.request(src);
     images.set(src,img);
+    window.assetManager.whenReady(src).then(()=>redraw(window.player)).catch(()=>{});
     return img;
   }
   function ready(img){return !!img&&img.complete&&img.naturalWidth>0&&img.naturalHeight>0;}
@@ -166,15 +165,13 @@
     const daily=(((hash(`${seed(e)}|skirt-weather|${day()}`)%10001)/10000)-.5)*.12;
     return seasonalWarmth()+daily>=skirtThreshold(e)?SKIRT_ID:preferredNonSkirt(e);
   }
-  function copyColour(e,oldId,newId){
-    const old=e?.clothingColors?.[oldId]?.base;if(!old)return;
-    e.clothingColors=e.clothingColors||{};const next=e.clothingColors[newId]||(e.clothingColors[newId]={});if(!next.base)next.base={...old};
-  }
   function reconsider(e){
     if(!eligibleFemaleNpc(e)) return false;
     const current=e.equipped.pants;if(current&&!AUTO_LOWER.has(current)) return false;
     const next=chooseLower(e);if(next===current)return false;
-    if(current)copyColour(e,current,next);e.equipped.pants=next;
+    // Skirts, shorts and trousers are separate physical garments. Switching
+    // outfit must not copy colour/material controls between their instances.
+    e.equipped.pants=next;
     if(next===SKIRT_ID)ensureShape(e);
     if(Array.isArray(e.inventory)&&!e.inventory.includes(next))e.inventory.push(next);
     return true;

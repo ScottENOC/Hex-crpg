@@ -41,14 +41,10 @@ document.addEventListener("DOMContentLoaded", () => {
             {key: 'floor4', src: 'images/arenaHexFloor4.png'}
         ];
 
-        // Only legacy-rendered race/gender combinations belong here. Human
-        // female, human male and elf female are owned by humanoidRenderer.js,
-        // which loads their directional body/hair art directly.
-        const raceGenderImages = {
-            elf_male: [{key: 'elfMaleBase', src: 'images/elfmale.png'}, {key: 'elfMaleHair', src: 'images/elfmalehair.png'}],
-            dwarf_female: [{key: 'dwarfFemaleBase', src: 'images/dwarffemale.png'}, {key: 'dwarfFemaleHair', src: 'images/dwarffemalehair.png'}],
-            dwarf_male: [{key: 'dwarfMaleBase', src: 'images/dwarfmale.png'}, {key: 'dwarfMaleHair', src: 'images/dwarfmalehair.png'}],
-        };
+        // All five playable races × both body presentations are now owned by
+        // humanoidRenderer.js. Keeping this map empty also prevents speculative
+        // creator loading from requesting the deleted root-level elf/dwarf files.
+        const raceGenderImages = {};
 
         // Lightweight assets useful immediately after character creation.
         const earlyRoomImages = [
@@ -71,14 +67,11 @@ document.addEventListener("DOMContentLoaded", () => {
             {key: 'arenaannouncer', src: 'images/arenaannouncer.png'},
             {key: 'arenamercenary', src: 'images/arenamercenary.png'},
             {key: 'arenashopkeeper', src: 'images/arenashopkeeper.png'},
-            {key: 'playerBase', src: 'images/elf.png'},
-            {key: 'leatherArmor', src: 'images/elfleatherarmour.png'},
-            {key: 'chainArmor', src: 'images/elfchainarmour.png'},
             {key: 'monsterDefault', src: 'images/goblin.png'},
             {key: 'orcBase', src: 'images/orc.png'},
-            {key: 'humanLight', src: 'images/humanlightarmour.png'},
-            {key: 'humanMedium', src: 'images/humanmediumarmour.png'},
-            {key: 'humanHeavy', src: 'images/humanheavyarmour.png'},
+            {key: 'humanLight', src: 'images/equipment/armour/human/light.png'},
+            {key: 'humanMedium', src: 'images/equipment/armour/human/medium.png'},
+            {key: 'humanHeavy', src: 'images/equipment/armour/human/heavy.png'},
             {key: 'horse', src: 'images/horse.png'},
             {key: 'skeleton', src: 'images/skeleton.svg'},
             {key: 'zombie', src: 'images/zombie.svg'},
@@ -131,16 +124,15 @@ document.addEventListener("DOMContentLoaded", () => {
         window.gameVisuals = {};
         const _loadedKeys = new Set();
 
-        function load(asset) {
-            if (_loadedKeys.has(asset.key)) return Promise.resolve(); // already loaded (or in flight) via an earlier tier / a race-select change
-            _loadedKeys.add(asset.key);
-            return new Promise((resolve) => {
-                const img = new Image();
-                img.onload = () => { window.gameVisuals[asset.key] = img; resolve(); };
-                img.onerror = () => { console.warn("Failed:", asset.src); resolve(); };
-                img.src = asset.src;
-            });
-        }
+function load(asset) {
+    if (_loadedKeys.has(asset.key)) return Promise.resolve();
+    _loadedKeys.add(asset.key);
+    const img = window.assetManager.request(asset.src);
+    window.gameVisuals[asset.key] = img;
+    return window.assetManager.wait(asset.src).catch((error) => {
+        console.warn('Failed:', asset.src, error);
+    });
+}
 
         // Re-prioritizable on demand for combinations still using legacy flat
         // creator/game art. Direct-rendered humanoids load through their own
@@ -637,28 +629,21 @@ window.updateRoguelikePreview = function() {
     
     window.updateRoguelikePreview();
 
-    // Legacy flat-sprite preview is retained only for combinations not yet
-    // owned by humanoidRenderer.js. Direct humanoids install their own
-    // directional creator preview and therefore must not request old flat art.
-    const APPEARANCE_BASE_SRC = {
-        elf_male: 'images/elfmale.png',
-        dwarf_female: 'images/dwarffemale.png', dwarf_male: 'images/dwarfmale.png'
-    };
-    const APPEARANCE_HAIR_SRC = {
-        elf_male: 'images/elfmalehair.png',
-        dwarf_female: 'images/dwarffemalehair.png', dwarf_male: 'images/dwarfmalehair.png'
-    };
+    // All playable race/body presentations are direct-renderer owned. These
+    // maps remain as empty compatibility inputs for the legacy preview helper,
+    // which now only serves non-playable/custom art paths.
+    const APPEARANCE_BASE_SRC = {};
+    const APPEARANCE_HAIR_SRC = {};
     const _appearancePreviewImages = {};
-    function loadAppearancePreviewImage(src) {
-        let img = _appearancePreviewImages[src];
-        if (!img) {
-            img = new Image();
-            img.onload = () => window.updateAppearancePreview();
-            img.src = src;
-            _appearancePreviewImages[src] = img;
-        }
-        return img;
+function loadAppearancePreviewImage(src) {
+    let img = _appearancePreviewImages[src];
+    if (!img) {
+        img = window.assetManager.request(src);
+        window.assetManager.whenReady(src).then(() => window.updateAppearancePreview()).catch(() => {});
+        _appearancePreviewImages[src] = img;
     }
+    return img;
+}
     window.updateSkinToneControlMode = function() {
         const fantasy = !!document.getElementById('fantasy-skin-check')?.checked;
         const controls = document.getElementById('fantasy-skin-controls');

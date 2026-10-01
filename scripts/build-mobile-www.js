@@ -40,7 +40,7 @@ function main() {
     const skipRootFiles = new Set(['gameEngine.js_new', 'learnSkill_fixed.js', 'server.js']);
     for (const entry of fs.readdirSync(ROOT, { withFileTypes: true })) {
         if (!entry.isFile()) continue;
-        if (!entry.name.endsWith('.js') && !entry.name.endsWith('.css') && entry.name !== 'index.html') continue;
+        if (!entry.name.endsWith('.js') && !entry.name.endsWith('.css') && !entry.name.endsWith('.webmanifest') && entry.name !== 'index.html') continue;
         if (skipRootFiles.has(entry.name)) continue;
         fs.copyFileSync(path.join(ROOT, entry.name), path.join(OUT, entry.name));
     }
@@ -48,6 +48,14 @@ function main() {
     for (const dir of ['images', 'audio', 'vendor']) {
         const src = path.join(ROOT, dir);
         if (fs.existsSync(src)) copyDir(src, path.join(OUT, dir));
+    }
+
+    // Keep the PWA/app icon reference valid in the Capacitor bundle too.
+    const appIcon = path.join(ROOT, 'appstore', 'icon-1024.png');
+    if (fs.existsSync(appIcon)) {
+        const iconOut = path.join(OUT, 'appstore', 'icon-1024.png');
+        fs.mkdirSync(path.dirname(iconOut), { recursive: true });
+        fs.copyFileSync(appIcon, iconOut);
     }
 
     console.log(`Built mobile/www (${fs.readdirSync(OUT).length} top-level entries).`);

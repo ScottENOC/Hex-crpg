@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Validate PNG assets
+        run: npm run validate:png
+
       - name: Run fast Node tests
         run: npm run test:unit
 
@@ -48,8 +51,8 @@ jobs:
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
-      - name: Run development smoke test
-        run: npx playwright test tests/smoke.spec.js
+      - name: Run development smoke and startup integrity tests
+        run: npx playwright test tests/smoke.spec.js tests/startup-integrity.spec.js
 
       - name: Upload Playwright smoke failures
         if: failure()
@@ -61,7 +64,10 @@ jobs:
           if-no-files-found: ignore
 
   playwright:
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    # Diagnostic snapshot only: run the browser suite even when a known PNG/unit
+    # gate is red, so that one blocking asset cannot hide unrelated regressions.
+    # The real development workflow remains strict.
+    if: always() && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
     needs: unit
     strategy:
       fail-fast: false

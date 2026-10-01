@@ -109,7 +109,7 @@ test.describe("The Vessel-Seeker's Crypt", () => {
             window.handleLethalDamage(boss, { side: 'player', name: 'Test' });
             const afterFirst = {
                 alive: boss.alive,
-                revivedOnce: boss._revivedOnce === true,
+                revenantRevived: boss.revenantRevived === true,
                 hp: boss.hp,
                 questCompleted: window.questLog.find(q => q.id === 'necromancer_hunt')?.status === 'completed',
             };
@@ -127,7 +127,7 @@ test.describe("The Vessel-Seeker's Crypt", () => {
             };
         });
         expect(result.afterFirst.alive).toBe(true);
-        expect(result.afterFirst.revivedOnce).toBe(true);
+        expect(result.afterFirst.revenantRevived).toBe(true);
         expect(result.afterFirst.hp).toBeGreaterThan(0);
         expect(result.afterFirst.questCompleted).toBe(false);
         expect(result.bossAliveAfterSecond).toBe(false);
