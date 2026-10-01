@@ -4,7 +4,7 @@
 (() => {
     'use strict';
 
-    const SCHEDULER_VERSION = '9';
+    const SCHEDULER_VERSION = '6';
     if (window.__assetLoadSchedulerInstalled && window.__assetLoadSchedulerVersion === SCHEDULER_VERSION) return;
     // index.html loads this before the other game scripts in a normal page load.
     if (window.__assetLoadSchedulerInstalled) return;
@@ -174,68 +174,6 @@
     const phaseCritical = new Set();
     const managerRecords = new Map();
     const domBindingTokens = new WeakMap();
-    /* HOME_SCREEN_ART_DIAGNOSTICS_V1 */
-    const reportedAssetFailures = new Set();
-    const assetFailureLog = [];
-
-    function reportAssetFailure(value, error, source = 'asset-manager') {
-        const path = canonicalPath(value || '(unknown image)');
-        const key = `${source}:${path}`;
-        if (reportedAssetFailures.has(key)) return;
-        reportedAssetFailures.add(key);
-        const detail = {
-            path,
-            source,
-            message: error?.message || String(error || 'Image load failed'),
-            at: Date.now(),
-        };
-        assetFailureLog.push(detail);
-        if (assetFailureLog.length > 50) assetFailureLog.shift();
-        console.warn('Art asset failed:', detail);
-        try { window.dispatchEvent(new CustomEvent('hex-art-asset-error', { detail })); } catch (_) {}
-
-        // iPhone/Home Screen testing normally has no developer console. Put the
-        // exact failing path into the in-game message log once that UI exists.
-        let attempts = 0;
-        const announce = () => {
-            if (typeof window.showMessage === 'function') {
-                window.showMessage(`Art failed to load: ${path}`);
-                return;
-            }
-            if (attempts++ < 12) setTimeout(announce, 750);
-        };
-        announce();
-    }
-
-    // Catch image elements that bypass AssetManager as well. Managed images
-    // report only after their own retries are exhausted, so transient retry
-    // failures are not announced twice.
-    window.addEventListener('error', event => {
-        const image = event.target;
-        if (!(image instanceof HTMLImageElement)) return;
-        const raw = image.currentSrc || nativeSrc.get.call(image) || image.getAttribute('src') || '';
-        const path = normalise(raw);
-        if (!path) return;
-        const managed = managerRecords.get(recordKey(path));
-        if (managed && managed.status !== 'error' && managed.status !== 'suppressed') return;
-        setTimeout(() => {
-            const latest = managerRecords.get(recordKey(path));
-            if (latest && latest.status !== 'error' && latest.status !== 'suppressed') return;
-            reportAssetFailure(path, latest?.error || new Error('Browser image element failed to load'), latest ? 'asset-manager' : 'unmanaged-image');
-        }, 0);
-    }, true);
-    let offlineStartupPending = Boolean(window.__hexOfflineReady && typeof window.__hexOfflineReady.then === 'function');
-    if (offlineStartupPending) {
-        window.__hexOfflineReady.finally(() => {
-            offlineStartupPending = false;
-            // Requests made while the full local copy was being prepared were
-            // deliberately parked as `deferred`. Wake every one now: otherwise
-            // renderer-owned Image objects can remain blank forever even though
-            // their bytes are already safely present in Cache Storage.
-            releaseManagedDeferred();
-            schedulePump();
-        });
-    }
 
     function normalise(src) {
         try {
@@ -257,7 +195,7 @@
     }
 
     function currentBuild() {
-        return document.querySelector('meta[name="app-build"]')?.content || window.PRESENTATION_BUILD || 'asset-manager-v7';
+        return document.querySelector('meta[name="app-build"]')?.content || window.PRESENTATION_BUILD || 'asset-manager-v6';
     }
 
     function managedUrl(value, {retry=0, freshReason='retry'}={}) {
@@ -301,7 +239,6 @@
     }
 
     function mayStartNow(path) {
-        if (offlineStartupPending) return false;
         if (phase === 'game') return true;
         if (phaseCritical.has(path)) return true;
         return creatorRelevant(path);
@@ -419,7 +356,6 @@
             record.error=null;
             record.failureCount=0;
             record.nextRetryAt=0;
-            reportedAssetFailures.delete(`asset-manager:${record.path}`);
             record.resolve(record.image);
         };
         if (typeof record.image.decode === 'function') record.image.decode().then(finish, finish);
@@ -456,7 +392,6 @@
                 );
                 record.nextRetryAt=performance.now()+retryDelay;
                 record.reject(record.error);
-                reportAssetFailure(record.path, record.error, 'asset-manager');
                 done();
             };
             record.image.addEventListener('load',onLoad,{once:true,capture:true});
@@ -468,10 +403,6 @@
 
     function requestManaged(value,{priority=null,immediate=false}={}) {
         const record=recordFor(value);
-        // A record may have been created while the offline startup barrier was
-        // active. Once that barrier is gone, any fresh request must be allowed
-        // to wake it instead of inheriting the stale `deferred` state forever.
-        if (record.status==='deferred' && !offlineStartupPending) record.status='idle';
         if (record.status==='suppressed') return record.image;
         if (record.status==='error') {
             if (record.nextRetryAt && performance.now() < record.nextRetryAt) return record.image;
@@ -483,7 +414,7 @@
             record.queued=true;
             enqueue(record.path, done=>startManagerRecord(record,done), priority);
         };
-        if ((immediate && !offlineStartupPending) || mayStartNow(record.path)) start();
+        if (immediate || mayStartNow(record.path)) start();
         else record.status='deferred';
         return record.image;
     }
@@ -557,7 +488,6 @@
         get(path){return managerRecords.get(recordKey(path))?.image || null;},
         status(path){return managerRecords.get(recordKey(path))?.status || 'unrequested';},
         get cacheSize(){return managerRecords.size;},
-        getFailures(){return assetFailureLog.map(item=>({...item}));},
     };
 
     function hash(text) {
@@ -624,8 +554,7 @@
 
     function gameManifest() {
         const scenario = selectedCampaign()==='1' ? [...ARENA_CRITICAL,...ARENA_SOON] : [...CAMPAIGN2_NEARBY];
-        const localCopyReady=Boolean(window.__hexOfflineReadyResult?.complete && window.__hexOfflineReadyResult?.hasActiveCache);
-        const deferredArt = localCopyReady ? [] : [...managerRecords.values()].filter(record=>record.status==='deferred').map(record=>record.path).filter(path=>path?.startsWith('images/'));
+        const deferredArt = [...managerRecords.values()].filter(record=>record.status==='deferred').map(record=>record.path).filter(path=>path?.startsWith('images/'));
         return [...new Set([...currentCreatorCharacterAssets(true),...currentClothingAssets(true),...currentStartingEquipmentAssets(),...scenario,...deferredArt])];
     }
 
@@ -667,8 +596,7 @@
 
     function updateOverlay(loaded,total) {
         const overlay=ensureOverlay();
-        const verb=window.__hexOfflineReadyResult?.hasActiveCache?'Prepared':'Loaded';
-        overlay.querySelector('.hex-loading-count').textContent=`${verb} ${loaded} / ${total} art assets`;
+        overlay.querySelector('.hex-loading-count').textContent=`Loaded ${loaded} / ${total} art assets`;
         overlay.querySelector('.hex-loading-bar').style.width=`${total ? Math.round(loaded*100/total) : 100}%`;
     }
 
@@ -739,7 +667,6 @@
 
     async function loadCreator() {
         try {
-            if (window.__hexOfflineReady) await window.__hexOfflineReady;
             await runGate('Loading character creator…',creatorManifest());
             phase='creator-ready';
             hideOverlay();
@@ -750,7 +677,6 @@
     }
 
     async function loadGameAndStart() {
-        if (window.__hexOfflineReady) await window.__hexOfflineReady;
         if (startGateRunning || phase==='game') return;
         startGateRunning=true;
         phase='game-loading';
