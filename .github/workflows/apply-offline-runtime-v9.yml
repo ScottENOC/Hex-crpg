@@ -1,0 +1,108 @@
+name: Apply offline runtime v9
+
+on:
+  push:
+    branches: [development]
+    paths:
+      - '.github/workflows/apply-offline-runtime-v9.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+      - name: Move to latest development
+        run: |
+          git fetch origin development
+          git reset --hard origin/development
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply v9 cache repair
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          sw = Path('offlineServiceWorker.js')
+          s = sw.read_text()
+          s = s.replace("const SW_VERSION = '8';", "const SW_VERSION = '9';", 1)
+          s = s.replace("const LEGACY_GAME_CACHE_PREFIXES = ['hex-game-v7-', 'hex-game-v6-', 'hex-game-v5-', 'hex-game-v4-', 'hex-game-v3-', 'hex-game-v2-', 'hex-game-v1-'];",
+                        "const LEGACY_GAME_CACHE_PREFIXES = ['hex-game-v8-', 'hex-game-v7-', 'hex-game-v6-', 'hex-game-v5-', 'hex-game-v4-', 'hex-game-v3-', 'hex-game-v2-', 'hex-game-v1-'];", 1)
+
+          old = """    const totalBytes = files.reduce((sum, file) => sum + (Number(file.size) || 0), 0);\n    const before = await statusResult();\n"""
+          new = """    const totalBytes = files.reduce((sum, file) => sum + (Number(file.size) || 0), 0);\n\n    // CacheStorage.keys() can be unusually slow on iOS. Keep the page-side\n    // watchdog informed while that single scan is in progress so a slow local\n    // database is not mistaken for a dead service worker.\n    let before;\n    const statusHeartbeat = () => port.postMessage({\n        type: 'progress', phase: 'checking', current: 'Inspecting saved local files…',\n        processed: 0, stored: 0, total: files.length, downloaded: 0, reused: 0, retried: 0, failed: 0,\n        totalBytes, message: 'Inspecting the saved local game file list…',\n    });\n    statusHeartbeat();\n    const statusHeartbeatTimer = setInterval(statusHeartbeat, 5000);\n    try {\n        before = await statusResult();\n    } finally {\n        clearInterval(statusHeartbeatTimer);\n    }\n"""
+          if old not in s:
+              raise SystemExit('statusResult anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = """    const activeManifest = activeCacheName ? await readCacheManifest(activeCacheName) : null;\n    const activeShaByPath = new Map((activeManifest?.files || []).map(file => [file.path, file.sha]));\n    const newPaths = new Set(files.map(file => file.path));\n"""
+          new = """    const activeManifest = activeCacheName ? await readCacheManifest(activeCacheName) : null;\n    const activeShaByPath = new Map((activeManifest?.files || []).map(file => [file.path, file.sha]));\n    const missingActivePaths = new Set(before.missingPaths || []);\n    const newPaths = new Set(files.map(file => file.path));\n"""
+          if old not in s:
+              raise SystemExit('manifest anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = """        // Unchanged files stay exactly where they already are. No second copy.\n        if (activeCache && activeShaByPath.get(file.path) === file.sha) {\n            const existing = await activeCache.match(request, { ignoreSearch: true });\n            // The manifest SHA and the response's own SHA marker must agree.\n            // This turns Check for updates into a repair pass for missing/stale\n            // cache entries instead of blindly trusting metadata.\n            if (existing && existing.headers.get('X-Hex-Blob-Sha') === file.sha) {\n                reused++;\n                stored++;\n                return;\n            }\n        }\n"""
+          new = """        // inspectGameCache() already performed the expensive exact-path scan.\n        // If the manifest SHA matches and that exact URL was physically present,\n        // the file is reusable. Do NOT call cache.match() again for every one of\n        // ~421 unchanged files: concurrent CacheStorage reads can stall WebKit.\n        if (activeCache && activeShaByPath.get(file.path) === file.sha && !missingActivePaths.has(file.path)) {\n            reused++;\n            stored++;\n            return;\n        }\n"""
+          if old not in s:
+              raise SystemExit('unchanged reuse anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = """        // Resume a partially downloaded patch without re-fetching good files.\n        const staged = await patchCache.match(request, { ignoreSearch: true });\n"""
+          new = """        // Only changed/missing files reach the staging cache. Report this read\n        // before asking iOS for it so the watchdog and the user can see progress.\n        sendProgress(file.path, 'storing', `Checking repair staging for ${file.path}…`);\n        const staged = await patchCache.match(request, { ignoreSearch: true });\n"""
+          if old not in s:
+              raise SystemExit('staging anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = """        const patchRequests = await patchCache.keys();\n        for (const request of patchRequests) {\n            const response = await patchCache.match(request);\n            if (response) await activeCache.put(request, response.clone());\n        }\n"""
+          new = """        sendProgress('', 'storing', 'Applying verified repaired files to the local copy…');\n        const patchRequests = await patchCache.keys();\n        for (const request of patchRequests) {\n            sendProgress(decodeURIComponent(new URL(request.url).pathname.split('/').pop() || ''), 'storing', 'Applying verified repaired files…');\n            const response = await patchCache.match(request);\n            if (response) await activeCache.put(request, response.clone());\n        }\n"""
+          if old not in s:
+              raise SystemExit('patch apply anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = """            name === 'hex-game-meta-v4' || name === 'hex-game-meta-v5' || name === 'hex-game-meta-v6' || name === 'hex-game-meta-v7' ||\n            name.startsWith('hex-game-v1-') || name.startsWith('hex-game-v2-') || name.startsWith('hex-game-v3-') ||\n            name.startsWith('hex-game-v4-') || name.startsWith('hex-game-v5-') || name.startsWith('hex-game-v6-') || name.startsWith('hex-game-v7-')\n"""
+          new = """            name === 'hex-game-meta-v4' || name === 'hex-game-meta-v5' || name === 'hex-game-meta-v6' || name === 'hex-game-meta-v7' || name === 'hex-game-meta-v8' ||\n            name.startsWith('hex-game-v1-') || name.startsWith('hex-game-v2-') || name.startsWith('hex-game-v3-') ||\n            name.startsWith('hex-game-v4-') || name.startsWith('hex-game-v5-') || name.startsWith('hex-game-v6-') || name.startsWith('hex-game-v7-') || name.startsWith('hex-game-v8-')\n"""
+          if old not in s:
+              raise SystemExit('legacy cleanup anchor not found')
+          s = s.replace(old, new, 1)
+          sw.write_text(s)
+
+          oc = Path('offlineCache.js')
+          s = oc.read_text()
+          s = s.replace("const VERSION = '8';", "const VERSION = '9';", 1)
+          s = s.replace("const SW_URL = 'offlineServiceWorker.js?v=8';", "const SW_URL = 'offlineServiceWorker.js?v=9';", 1)
+          s = s.replace("const reloadKey = 'hex-offline-reloaded-commit-v5';", "const reloadKey = 'hex-offline-reloaded-commit-v9';", 1)
+          oc.write_text(s)
+
+          idx = Path('index.html')
+          s = idx.read_text()
+          s = s.replace('20261001-pwa-offline-cache-v8', '20261001-pwa-offline-cache-v9', 1)
+          s = s.replace('offlineCache.js?v=8', 'offlineCache.js?v=9', 1)
+          idx.write_text(s)
+          PY
+      - name: Validate changed JavaScript
+        run: |
+          node --check offlineServiceWorker.js
+          node --check offlineCache.js
+          grep -q "const SW_VERSION = '9'" offlineServiceWorker.js
+          grep -q "const VERSION = '9'" offlineCache.js
+          grep -q 'offlineCache.js?v=9' index.html
+          grep -q 'missingActivePaths' offlineServiceWorker.js
+          if grep -A10 'Unchanged files stay exactly' offlineServiceWorker.js | grep -q 'activeCache.match'; then
+            echo 'Per-file unchanged cache.match still present' >&2
+            exit 1
+          fi
+      - name: Remove temporary workflow
+        run: rm .github/workflows/apply-offline-runtime-v9.yml
+      - name: Commit and push
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add offlineServiceWorker.js offlineCache.js index.html .github/workflows/apply-offline-runtime-v9.yml
+          git commit -m 'Avoid iOS cache verification stalls'
+          git push origin HEAD:development
