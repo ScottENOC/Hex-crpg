@@ -64,7 +64,10 @@ jobs:
           if-no-files-found: ignore
 
   playwright:
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    # Diagnostic snapshot only: run the browser suite even when a known PNG/unit
+    # gate is red, so that one blocking asset cannot hide unrelated regressions.
+    # The real development workflow remains strict.
+    if: always() && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
     needs: unit
     strategy:
       fail-fast: false
