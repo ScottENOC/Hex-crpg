@@ -5,7 +5,7 @@ def replace_once(path, old, new):
     p = Path(path)
     text = p.read_text()
     if old not in text:
-        raise SystemExit(f'Missing expected text in {path}: {old[:120]!r}')
+        raise SystemExit(f'Missing expected text in {path}: {old[:160]!r}')
     p.write_text(text.replace(old, new, 1))
 
 # offlineCache.js: bump version and, crucially, register the new script URL
@@ -33,8 +33,9 @@ new_update = '''            // Startup must never force a game-file update. Howe
             // to THIS build's service-worker URL. registration.update() is not
             // enough: it only re-fetches whatever script URL originally created
             // the registration (for example ?v=8), so old iOS installs could be
-            // trapped on that worker forever even while offlineCache.js was v9+.
+            // trapped on that worker forever even while offlineCache.js was newer.
             if (allowUpdate) {
+                emit({ phase: 'checking', message: `Installing offline engine v${VERSION}…` });
                 try {
                     registration = await withTimeout(
                         navigator.serviceWorker.register(SW_URL, { scope: './', updateViaCache: 'none' }),
@@ -77,19 +78,22 @@ new_status = '''            const registration = await ensureRegistration();
 '''
 replace_once('offlineCache.js', old_status, new_status)
 
-old_detail = '''        detail.textContent = message;
+old_choice_detail = '''        detail.textContent = local.healthy === false
+            ? `${local.missingCount || 0} local file${local.missingCount === 1 ? ' is' : 's are'} missing. Launch is available, but Check for updates will repair the saved copy.`
+            : message;
         bar.style.width = '100%';
 '''
-new_detail = '''        const engineText = local.workerVersion ? `Offline engine v${local.workerVersion}` : 'Offline engine version unknown';
-        detail.textContent = `${message} · ${engineText}`;
+new_choice_detail = '''        const choiceMessage = local.healthy === false
+            ? `${local.missingCount || 0} local file${local.missingCount === 1 ? ' is' : 's are'} missing. Launch is available, but Check for updates will repair the saved copy.`
+            : message;
+        const engineText = local.workerVersion ? `Offline engine v${local.workerVersion}` : 'Offline engine version unknown';
+        detail.textContent = `${choiceMessage} · ${engineText}`;
         bar.style.width = '100%';
 '''
-replace_once('offlineCache.js', old_detail, new_detail)
+replace_once('offlineCache.js', old_choice_detail, new_choice_detail)
 
-# Make update failures say which engine actually handled the request when known.
-old_failure = "errorBox.textContent = failureText(result.failures) || 'The local-copy update failed for an unknown reason.';"
-new_failure = "errorBox.textContent = `${failureText(result.failures) || 'The local-copy update failed for an unknown reason.'}${result.workerVersion ? `\\nOffline engine v${result.workerVersion}` : ''}`;"
-replace_once('offlineCache.js', old_failure, new_failure)
+# A new reload key ensures one clean reload after v10 first repairs the build.
+replace_once('offlineCache.js', "const reloadKey = 'hex-offline-reloaded-commit-v9';", "const reloadKey = 'hex-offline-reloaded-commit-v10';")
 
 # Service worker v10 recognises v9 caches as legacy/reusable.
 replace_once('offlineServiceWorker.js', "const SW_VERSION = '9';", "const SW_VERSION = '10';")
