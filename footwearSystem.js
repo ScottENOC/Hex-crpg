@@ -4,7 +4,7 @@
 (() => {
   'use strict';
 
-  const BUILD = window.PRESENTATION_BUILD || '20261001-footwear-v3';
+  const BUILD = window.PRESENTATION_BUILD || '20261001-footwear-v4';
   const SLOT = 'shoes';
   const ITEM_ID = 'boots';
   const VIEWS = {
@@ -18,14 +18,9 @@
   const imageCache = new Map();
   const boundsCache = new WeakMap();
   const splitBoundsCache = new WeakMap();
-  let drawWrapped = false;
   let unequipWrapped = false;
 
-  // Deliberately public tuning: footwear can be nudged without redrawing art.
-  // spread is the pre-existing centre-to-centre distance between the two boots
-  // as a fraction of humanoid render bounds. scale enlarges each rendered boot
-  // relative to the approved v1 fit, and outwardShift then moves each boot away
-  // from the character centre by that fraction of its NEW rendered width.
+  // Public tuning so footwear can be adjusted without redrawing the source art.
   const tuning = window.FOOTWEAR_RENDER_TUNING = window.FOOTWEAR_RENDER_TUNING || {
     bottom: 1.006,
     height: 0.22,
@@ -50,7 +45,6 @@
     if (!cs.slots.includes(SLOT)) cs.slots.push(SLOT);
     if (!cs.preloadSlots.includes(SLOT)) cs.preloadSlots.push(SLOT);
     cs.slotLabels[SLOT] = 'Shoes';
-
     cs.builtinGarments[ITEM_ID] = {
       slot: SLOT,
       layers: [{
@@ -60,8 +54,8 @@
         views: {...VIEWS},
       }],
     };
-
     cs.registerBuiltinItems();
+
     window.items[ITEM_ID] = {
       ...(window.items[ITEM_ID] || {}),
       id: ITEM_ID,
@@ -100,9 +94,8 @@
       e.footwearDefaultsApplied = true;
     }
 
-    // The authored asset stays green so the normal clothing tint system can
-    // recolour it. Only the player's initial pair gets a dark-brown leather
-    // default, and never overwrite a colour already chosen/saved by the player.
+    // Keep the authored source green for the normal tint system. Only the main
+    // character's initial pair starts as dark-brown leather; saved/custom colours win.
     if (isMainCharacter(e) && e.equipped[SLOT] === ITEM_ID) {
       if (!e.clothingColors || typeof e.clothingColors !== 'object') e.clothingColors = {};
       const colours = e.clothingColors[ITEM_ID] || (e.clothingColors[ITEM_ID] = {});
@@ -127,7 +120,7 @@
       window.renderEntities?.();
       window.refreshDirectionalTurnPortraits?.();
       window.updateAppearancePreview?.();
-    }).catch(() => {});
+    }).catch(error => console.warn('Footwear asset failed:', src, error));
     return img;
   }
 
@@ -194,7 +187,7 @@
     return {w:src.w*scale,h:src.h*scale};
   }
 
-  function drawContained(ctx, source, src, cx, bottom, maxW, maxH, scaleMultiplier=1) {
+  function drawContained(ctx,source,src,cx,bottom,maxW,maxH,scaleMultiplier=1) {
     const size = containedSize(src,maxW,maxH,scaleMultiplier);
     ctx.drawImage(source,src.x,src.y,src.w,src.h,cx-size.w/2,bottom-size.h,size.w,size.h);
     return size;
@@ -225,14 +218,8 @@
 
     if (resolved === 'side') {
       const trim = opaqueBounds(img);
-      drawContained(
-        ctx, rendered, trim,
-        bounds.left + bounds.width/2,
-        bottom,
-        Number(tuning.sideMaxWidth ?? .34) * bounds.width,
-        maxH,
-        renderScale
-      );
+      drawContained(ctx,rendered,trim,bounds.left+bounds.width/2,bottom,
+        Number(tuning.sideMaxWidth ?? .34)*bounds.width,maxH,renderScale);
       return true;
     }
 
@@ -251,34 +238,31 @@
     const leftSize = containedSize(halves.left,maxW,maxH,renderScale);
     const rightSize = containedSize(halves.right,maxW,maxH,renderScale);
 
-    // Keep the established foot anchors, then move each enlarged boot outward by
-    // exactly 40% of that individual boot's new rendered width.
-    drawContained(
-      ctx,rendered,halves.left,
-      centre-halfSpread-outwardShift*leftSize.w,
-      bottom,maxW,maxH,renderScale
-    );
-    drawContained(
-      ctx,rendered,halves.right,
-      centre+halfSpread+outwardShift*rightSize.w,
-      bottom,maxW,maxH,renderScale
-    );
+    drawContained(ctx,rendered,halves.left,
+      centre-halfSpread-outwardShift*leftSize.w,bottom,maxW,maxH,renderScale);
+    drawContained(ctx,rendered,halves.right,
+      centre+halfSpread+outwardShift*rightSize.w,bottom,maxW,maxH,renderScale);
     return true;
   }
 
+  // The shirt hot-path optimiser replaces clothingSystem.drawSlot after this
+  // module may already have installed. Keep footwear as the OUTERMOST drawSlot
+  // wrapper, and re-wrap if another renderer legitimately replaces drawSlot.
+  // HumanoidRenderer always invokes the shirt slot before armour, so this keeps
+  // boots over trouser hems and below armour without coupling the hot path to shoes.
   function wrapClothingDraw() {
     const cs = window.clothingSystem;
-    if (!cs || drawWrapped || typeof cs.drawSlot !== 'function') return false;
-    const base = cs.drawSlot.bind(cs);
-    cs.drawSlot = function(ctx,e,slot,v,bounds) {
-      const drew = base(ctx,e,slot,v,bounds);
-      // Current humanoid renderer draws clothing in underwear→bra→pants→shirt
-      // order. Drawing footwear immediately after the shirt call puts boots over
-      // trouser hems but below armour, which is the intended layer order.
+    if (!cs || typeof cs.drawSlot !== 'function') return false;
+    if (cs.drawSlot.__footwearDrawBridge) return true;
+    const base = cs.drawSlot;
+    const wrapped = function(ctx,e,slot,v,bounds) {
+      const drew = base.apply(this,arguments);
       if (slot === 'shirt') drawFootwear(ctx,e,v,bounds);
       return drew;
     };
-    drawWrapped = true;
+    wrapped.__footwearDrawBridge = true;
+    wrapped.__footwearDrawBase = base;
+    cs.drawSlot = wrapped;
     return true;
   }
 
@@ -316,18 +300,21 @@
     for (const e of window.entities || []) ensureDefaultFootwear(e);
     for (const e of window.party || []) ensureDefaultFootwear(e);
     if (window.player) ensureDefaultFootwear(window.player);
-    wrapClothingDraw();
-    wrapUnequip();
-    return true;
+    const draw = wrapClothingDraw();
+    const unequip = wrapUnequip();
+    return draw && unequip;
   }
 
-  const timer = setInterval(() => {
-    install();
-    if (registerSlot() && drawWrapped && unequipWrapped) clearInterval(timer);
-  },50);
+  // renderHotPathCache installs asynchronously. Keep checking during bootstrap
+  // so footwear remains outside that wrapper whichever module wins the first race.
+  const bootstrapTimer = setInterval(install,100);
+  setTimeout(() => clearInterval(bootstrapTimer),15000);
 
+  // Cheap long-lived safety check also covers dev hot reloads and delayed modules.
   setInterval(() => {
     registerSlot();
+    wrapClothingDraw();
+    wrapUnequip();
     for (const e of window.entities || []) ensureDefaultFootwear(e);
     if (window.player) ensureDefaultFootwear(window.player);
   },1000);
@@ -343,5 +330,6 @@
     tuning,
     drawFootwear,
     ensureDefaultFootwear,
+    ensureDrawBridge: wrapClothingDraw,
   };
 })();
