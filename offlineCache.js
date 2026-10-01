@@ -5,12 +5,12 @@
 (() => {
     'use strict';
 
-    const VERSION = '9';
+    const VERSION = '10';
     const OWNER = 'ScottENOC';
     const REPO = 'Hex-crpg';
     const BRANCH = 'development';
     const API_BASE = `https://api.github.com/repos/${OWNER}/${REPO}`;
-    const SW_URL = 'offlineServiceWorker.js?v=9';
+    const SW_URL = 'offlineServiceWorker.js?v=10';
     const BRANCH_CACHE_MS = 15000;
     const REQUEST_TIMEOUT_MS = 25000;
     const WORKER_STALL_TIMEOUT_MS = 45000;
@@ -222,19 +222,39 @@
                 );
             }
 
-            // Startup must never force an update. Updating the worker is part of
-            // the explicit Check for updates action only.
+            // Startup must never force a game-file update. However, when the user
+            // explicitly presses Check for updates we must move the registration
+            // to THIS build's service-worker URL. registration.update() is not
+            // enough: it only re-fetches whatever script URL originally created
+            // the registration (for example ?v=8), so old iOS installs could be
+            // trapped on that worker forever even while offlineCache.js was newer.
             if (allowUpdate) {
+                emit({ phase: 'checking', message: `Installing offline engine v${VERSION}…` });
                 try {
-                    await withTimeout(registration.update(), 'Checking for a local worker update', 8000);
+                    registration = await withTimeout(
+                        navigator.serviceWorker.register(SW_URL, { scope: './', updateViaCache: 'none' }),
+                        `Installing offline engine v${VERSION}`,
+                        10000
+                    );
                 } catch (error) {
-                    console.warn('Service worker update check timed out/failed; the existing worker can still be used.', error);
+                    console.warn(`Offline engine v${VERSION} registration timed out/failed; the existing worker can still be used.`, error);
                 }
-                const candidate = registration.installing || registration.waiting;
-                if (candidate) {
-                    try { await waitForWorkerActivation(candidate, 8000); }
-                    catch (error) { console.warn('Updated worker did not activate promptly; keeping the current worker.', error); }
+                const desired = [registration.installing, registration.waiting, registration.active]
+                    .find(worker => worker?.scriptURL?.includes(`v=${VERSION}`));
+                if (desired && desired.state !== 'activated') {
+                    try { await waitForWorkerActivation(desired, 10000); }
+                    catch (error) { console.warn(`Offline engine v${VERSION} did not activate promptly; keeping the current worker.`, error); }
                 }
+                // Refresh the registration object after activation so callers do
+                // not accidentally message the old active worker from a stale
+                // ServiceWorkerRegistration snapshot.
+                try {
+                    registration = await withTimeout(
+                        navigator.serviceWorker.getRegistration('./'),
+                        'Confirming the updated local game worker',
+                        3000
+                    ) || registration;
+                } catch (_) {}
             }
 
             if (!registration.active && !navigator.serviceWorker.controller) {
@@ -684,7 +704,10 @@
         try {
             const registration = await ensureRegistration();
             const worker = registration.active || registration.waiting || registration.installing;
-            return await getWorkerStatus(worker);
+            const result = await getWorkerStatus(worker);
+            let workerVersion = null;
+            try { workerVersion = new URL(worker?.scriptURL || location.href).searchParams.get('v'); } catch (_) {}
+            return { ...result, workerVersion, workerScriptURL: worker?.scriptURL || '' };
         } catch (error) {
             console.warn('Could not read local game copy', error);
             let hasWorker = Boolean(navigator.serviceWorker.controller);
@@ -730,9 +753,11 @@
             : local.healthy === false
                 ? `${local.availableCount || 0} / ${local.fileCount || 0} game files available locally`
                 : `${local.fileCount || 0} game files available locally`;
-        detail.textContent = local.healthy === false
+        const choiceMessage = local.healthy === false
             ? `${local.missingCount || 0} local file${local.missingCount === 1 ? ' is' : 's are'} missing. Launch is available, but Check for updates will repair the saved copy.`
             : message;
+        const engineText = local.workerVersion ? `Offline engine v${local.workerVersion}` : 'Offline engine version unknown';
+        detail.textContent = `${choiceMessage} · ${engineText}`;
         bar.style.width = '100%';
         errorBox.hidden = true;
         launchButton.hidden = false;
@@ -766,7 +791,7 @@
 
     async function restartForUpdatedBuild(gate, result) {
         if (!result.changed || !result.commit) return false;
-        const reloadKey = 'hex-offline-reloaded-commit-v9';
+        const reloadKey = 'hex-offline-reloaded-commit-v10';
         let alreadyReloaded = null;
         try { alreadyReloaded = sessionStorage.getItem(reloadKey); } catch (_) {}
         if (alreadyReloaded === result.commit) return false;
