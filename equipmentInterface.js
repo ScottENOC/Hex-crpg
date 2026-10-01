@@ -1,7 +1,7 @@
 // Slot-first equipment UI: equipped boxes + one appearance-aware inventory list.
 (()=>{'use strict';
 
-const BUILD=window.PRESENTATION_BUILD||'20260930-equipment-ui-v4';
+const BUILD=window.PRESENTATION_BUILD||'20261001-equipment-ui-v5';
 const SLOT_DEFS=[
   {key:'helmet',label:'Helmet',area:'helmet'},
   {key:'shirt',label:'Shirt / Dress',area:'shirt'},
@@ -9,10 +9,12 @@ const SLOT_DEFS=[
   {key:'weapon',label:'Main hand',area:'weapon'},
   {key:'offhand',label:'Off hand',area:'offhand'},
   {key:'pants',label:'Pants',area:'pants'},
+  {key:'shoes',label:'Shoes',area:'shoes'},
   {key:'bra',label:'Bra',area:'bra'},
   {key:'underwear',label:'Underwear',area:'underwear'},
   {key:'accessory',label:'Accessory',area:'accessory'}
 ];
+window.EQUIPMENT_SLOT_DEFS=SLOT_DEFS;
 let state={filter:'all',sort:'name',picker:null};
 
 const base=v=>window.getEquipmentBaseId?.(v)||v;
@@ -440,7 +442,7 @@ function backpack(p,host){
   const f=document.createElement('select');
   for(const[v,t]of[
     ['all','All'],['weapon','Weapons'],['offhand','Off hand / shields'],['armor','Armour'],
-    ['helmet','Helmets'],['shirt','Tops'],['pants','Pants'],['accessory','Accessories']
+    ['helmet','Helmets'],['shirt','Tops'],['pants','Pants'],['shoes','Shoes'],['accessory','Accessories']
   ]){
     const o=document.createElement('option');o.value=v;o.textContent=t;f.appendChild(o);
   }
@@ -502,7 +504,7 @@ function render(){
   host.appendChild(gold);
 
   const layout=document.createElement('div');
-  layout.style.cssText='display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-areas:". helmet ." "weapon armor offhand" "shirt shirt accessory" "pants pants pants" "bra bra bra" "underwear underwear underwear";gap:7px';
+  layout.style.cssText='display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-areas:". helmet ." "weapon armor offhand" "shirt shirt accessory" "pants pants pants" "shoes shoes shoes" "bra bra bra" "underwear underwear underwear";gap:7px';
   for(const s of SLOT_DEFS)layout.appendChild(slotBox(p,s));
   host.appendChild(layout);
   backpack(p,host);
