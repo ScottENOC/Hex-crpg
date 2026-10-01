@@ -241,6 +241,7 @@ window.autoBuildSpellsForEntity = autoBuildSpellsForEntity;
 // through tryCastSpell so cast time, mana payment, visuals and messages remain
 // owned by the normal spell pipeline.
 const AUTO_HEAL_STORAGE_KEY = 'rpg_idle_auto_heal';
+const AUTO_HEAL_APPROACH_HEXES = 5;
 
 function isAutoHealEnabled() {
     try {
@@ -282,9 +283,31 @@ function healEfficiency(caster, spell) {
     return healing / mana;
 }
 
-function alreadyReceivingAutoHeal(target, party) {
-    return party.some(member => member !== target && member.pendingCast &&
-        member.pendingCast.target === target && isHealingSpell(member.pendingCast.spell));
+function alreadyReceivingAutoHeal(target, party, caster) {
+    return party.some(member => member !== target && member !== caster && (
+        (member.pendingCast && member.pendingCast.target === target && isHealingSpell(member.pendingCast.spell)) ||
+        member._autoHealTarget === target
+    ));
+}
+
+function getAutoHealApproachDestination(caster, target, spell) {
+    if (!window.distance) return undefined;
+    const range = Math.max(1, Number(spell && spell.range) || 1);
+    const directDistance = window.distance(caster.hex, target.hex);
+    if (directDistance <= range) return null;
+    if (directDistance > range + AUTO_HEAL_APPROACH_HEXES || typeof window.findPath !== 'function') return undefined;
+
+    // Use the real movement path, not just straight-line hex distance. If a
+    // wall/detour means reaching casting range would take >5 actual steps,
+    // Auto Heal leaves the character alone. Path[0] is the caster's hex.
+    const path = window.findPath(caster.hex, target.hex, undefined, caster, true);
+    if (!path || path.length < 2) return undefined;
+    const furthestStep = Math.min(AUTO_HEAL_APPROACH_HEXES, path.length - 1);
+    for (let step = 1; step <= furthestStep; step++) {
+        const hex = path[step];
+        if (window.distance(hex, target.hex) <= range) return { q: hex.q, r: hex.r };
+    }
+    return undefined;
 }
 
 function selectAutoHealAction(caster, party = window.entities || []) {
@@ -303,21 +326,27 @@ function selectAutoHealAction(caster, party = window.entities || []) {
         if (!target || !target.alive || target.side !== 'player' || target.aiControlled || target.rider || !(target.maxHp > 0)) continue;
         if (target.hp >= target.maxHp || hasIdleInstruction(target)) continue;
         if ((target.hp / target.maxHp) >= manaPct) continue;
-        if (alreadyReceivingAutoHeal(target, party)) continue;
+        if (alreadyReceivingAutoHeal(target, party, caster)) continue;
 
         const distance = window.distance ? window.distance(caster.hex, target.hex) : Infinity;
-        const reachable = prepared.filter(spell => distance <= (Number(spell.range) || 1));
-        if (!reachable.length) continue;
+        const usable = prepared.map(spell => {
+            const range = Math.max(1, Number(spell.range) || 1);
+            if (distance > range + AUTO_HEAL_APPROACH_HEXES) return null;
+            const approachDestination = getAutoHealApproachDestination(caster, target, spell);
+            if (distance > range && !approachDestination) return null;
+            return { spell, approachDestination };
+        }).filter(Boolean);
+        if (!usable.length) continue;
 
-        reachable.sort((a, b) => {
-            const eff = healEfficiency(caster, b) - healEfficiency(caster, a);
+        usable.sort((a, b) => {
+            const eff = healEfficiency(caster, b.spell) - healEfficiency(caster, a.spell);
             if (Math.abs(eff) > 1e-9) return eff;
-            const aCost = getAutoHealManaCost(caster, a);
-            const bCost = getAutoHealManaCost(caster, b);
+            const aCost = getAutoHealManaCost(caster, a.spell);
+            const bCost = getAutoHealManaCost(caster, b.spell);
             if (aCost !== bCost) return aCost - bCost;
-            return (b.magnitude || 0) - (a.magnitude || 0);
+            return (b.spell.magnitude || 0) - (a.spell.magnitude || 0);
         });
-        candidates.push({ target, spell: reachable[0] });
+        candidates.push({ target, spell: usable[0].spell, approachDestination: usable[0].approachDestination });
     }
 
     // "Fewest hitpoints" deliberately means absolute current HP, not health
@@ -329,7 +358,7 @@ function selectAutoHealAction(caster, party = window.entities || []) {
         return ap - bp;
     });
     if (!candidates.length) return null;
-    return { caster, target: candidates[0].target, spell: candidates[0].spell };
+    return { caster, target: candidates[0].target, spell: candidates[0].spell, approachDestination: candidates[0].approachDestination };
 }
 
 function processAutoHeal() {
@@ -342,7 +371,17 @@ function processAutoHeal() {
     let startedAny = false;
     for (const caster of party) {
         const action = selectAutoHealAction(caster, party);
-        if (!action) continue;
+        if (!action) {
+            if (!caster.destination && !caster.pendingCast) caster._autoHealTarget = null;
+            continue;
+        }
+        if (action.approachDestination) {
+            caster._autoHealTarget = action.target;
+            caster.destination = { ...action.approachDestination };
+            startedAny = true;
+            continue;
+        }
+        caster._autoHealTarget = null;
         const started = window.tryCastSpell(action.caster, action.spell, action.target, action.target.hex);
         if (started !== false) startedAny = true;
     }
@@ -370,7 +409,7 @@ function installIdleBehaviourSettingsUI() {
 
     const help = window.document.createElement('small');
     help.style.color = '#aaa';
-    help.textContent = 'Outside combat, idle healers may use prepared healing spells on nearby idle party members when the target\'s health % is below the caster\'s mana %.';
+    help.textContent = 'Outside combat, idle healers may walk up to 5 hexes to get within normal spell range, then heal nearby idle party members when the target\'s health % is below the caster\'s mana %.';
     group.appendChild(help);
 
     const graphicsHeading = Array.from(settingsContent.querySelectorAll('h3'))
@@ -385,6 +424,7 @@ window.idleBehaviours = {
     hasIdleInstruction,
     getAutoHealManaCost,
     healEfficiency,
+    getAutoHealApproachDestination,
     selectAutoHealAction,
     processAutoHeal,
     installSettingsUI: installIdleBehaviourSettingsUI,

@@ -24,6 +24,13 @@ function makeWorld() {
         distance(a, b) {
             return Math.max(Math.abs(a.q - b.q), Math.abs(a.r - b.r));
         },
+        findPath(start, target) {
+            if (start.r !== target.r) return null;
+            const path = [{ q: start.q, r: start.r }];
+            const step = target.q >= start.q ? 1 : -1;
+            for (let q = start.q + step; q !== target.q + step; q += step) path.push({ q, r: start.r });
+            return path;
+        },
         getArmorSpellPenalty() { return 0; },
         tryCastSpell(caster, spell, target, hex) {
             caster.pendingCast = { spell, target, hex };
@@ -111,7 +118,7 @@ test('Auto Heal respects instructions, range, and effective armour-adjusted mana
     });
     const moving = entity('Moving', { hp: 1, maxHp: 100, q: 1 });
     moving.destination = { q: 2, r: 0 };
-    const tooFar = entity('Far', { hp: 2, maxHp: 100, q: 6 });
+    const tooFar = entity('Far', { hp: 2, maxHp: 100, q: 11 });
     const eligible = entity('OK', { hp: 3, maxHp: 100, q: 4 });
     world.entities = [caster, moving, tooFar, eligible];
 
@@ -165,4 +172,51 @@ test('a target with a pending incoming heal is not double-booked', () => {
     world.entities = [firstHealer, secondHealer, target];
 
     assert.equal(world.idleBehaviours.selectAutoHealAction(secondHealer, world.entities), null);
+});
+
+
+test('Auto Heal walks at most five path steps to enter normal spell range before casting', () => {
+    const world = makeWorld();
+    const caster = entity('Cleric', { mana: 8, maxMana: 10, spells: [heal(5, 10, 2)] });
+    const target = entity('Hero', { hp: 2, maxHp: 10, q: 7 });
+    world.entities = [caster, target];
+
+    const action = world.idleBehaviours.selectAutoHealAction(caster, world.entities);
+    assert.equal(action.approachDestination.q, 5);
+    assert.equal(action.approachDestination.r, 0);
+
+    assert.equal(world.idleBehaviours.processAutoHeal(), true);
+    assert.equal(caster.destination.q, 5);
+    assert.equal(caster.destination.r, 0);
+    assert.equal(world.casts.length, 0, 'walking happens before casting');
+
+    caster.hex = { ...caster.destination };
+    caster.destination = null;
+    assert.equal(world.idleBehaviours.processAutoHeal(), true);
+    assert.equal(world.casts.length, 1);
+    assert.equal(world.casts[0].target, target);
+});
+
+test('Auto Heal will not start an approach that needs more than five movement steps', () => {
+    const world = makeWorld();
+    const caster = entity('Cleric', { mana: 8, maxMana: 10, spells: [heal(5, 10, 2)] });
+    const target = entity('Hero', { hp: 2, maxHp: 10, q: 8 });
+    world.entities = [caster, target];
+
+    assert.equal(world.idleBehaviours.selectAutoHealAction(caster, world.entities), null);
+    assert.equal(world.idleBehaviours.processAutoHeal(), false);
+    assert.equal(caster.destination, undefined);
+});
+
+test('path detours count against the five-step Auto Heal approach allowance', () => {
+    const world = makeWorld();
+    world.findPath = (start, target) => [
+        { q: 0, r: 0 }, { q: 0, r: 1 }, { q: 1, r: 1 }, { q: 2, r: 1 },
+        { q: 3, r: 1 }, { q: 4, r: 1 }, { q: 5, r: 1 }, { q: 6, r: 0 },
+    ];
+    const caster = entity('Cleric', { mana: 8, maxMana: 10, spells: [heal(5, 10, 1)] });
+    const target = entity('Hero', { hp: 2, maxHp: 10, q: 6 });
+    world.entities = [caster, target];
+
+    assert.equal(world.idleBehaviours.selectAutoHealAction(caster, world.entities), null);
 });
