@@ -44,15 +44,34 @@ jobs:
           PY
 
       - name: Focused checks
+        id: focused
+        continue-on-error: true
         run: |
-          node --check spellPlanner.js
-          node --test tests-unit/idle-auto-heal.test.js
+          set +e
+          node --check spellPlanner.js > auto-heal-test-output.txt 2>&1
+          CHECK_STATUS=$?
+          node --test tests-unit/idle-auto-heal.test.js >> auto-heal-test-output.txt 2>&1
+          TEST_STATUS=$?
+          cat auto-heal-test-output.txt
+          if [ "$CHECK_STATUS" -ne 0 ] || [ "$TEST_STATUS" -ne 0 ]; then
+            exit 1
+          fi
 
-      - name: Commit implementation and remove one-off patcher
+      - name: Preserve failure output
+        if: steps.focused.outcome == 'failure'
         run: |
-          rm -f scripts/apply-idle-auto-heal-approach.py .github/workflows/apply-idle-auto-heal-approach.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add spellPlanner.js tests-unit/idle-auto-heal.test.js index.html scripts/apply-idle-auto-heal-approach.py .github/workflows/apply-idle-auto-heal-approach.yml
+          git add auto-heal-test-output.txt
+          git commit -m "Capture Auto Heal approach test failure"
+          git push origin feature/idle-auto-heal-approach
+
+      - name: Commit implementation and remove one-off patcher
+        if: steps.focused.outcome == 'success'
+        run: |
+          rm -f scripts/apply-idle-auto-heal-approach.py .github/workflows/apply-idle-auto-heal-approach.yml auto-heal-test-output.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add spellPlanner.js tests-unit/idle-auto-heal.test.js index.html scripts/apply-idle-auto-heal-approach.py .github/workflows/apply-idle-auto-heal-approach.yml auto-heal-test-output.txt
           git commit -m "Let idle healers approach nearby allies"
           git push origin feature/idle-auto-heal-approach
