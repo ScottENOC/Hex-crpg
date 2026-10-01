@@ -112,6 +112,20 @@ if marker not in js:
 
 scheduler.write_text(js)
 
+# The direct renderer should use canonical organised art paths instead of
+# depending on an AssetManager legacy redirect. This back-view helmet moved
+# into images/equipment/helmets/ with the rest of the equipment art.
+renderer = Path('humanoidRenderer.js')
+renderer_js = renderer.read_text()
+renderer_js = renderer_js.replace(
+    "helmet:'images/nasalHelm_back.svg'",
+    "helmet:'images/equipment/helmets/nasal_helm_back.svg'",
+    1,
+)
+if "helmet:'images/equipment/helmets/nasal_helm_back.svg'" not in renderer_js:
+    raise SystemExit('Could not canonicalise humanoid rear helmet path')
+renderer.write_text(renderer_js)
+
 # 3) Respect the iPhone camera/status bar/home indicator across modal screens.
 style = Path('style.css')
 css = style.read_text()
@@ -182,4 +196,4 @@ if safe_marker not in css:
 '''
 style.write_text(css)
 
-print('Applied Home Screen safe-area, humanoid renderer, and art diagnostics changes')
+print('Applied Home Screen safe-area, humanoid renderer, canonical helmet path, and art diagnostics changes')
