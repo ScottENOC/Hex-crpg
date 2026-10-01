@@ -210,7 +210,7 @@ function openStorageChest(q, r) {
                 chest.items.push(...window.partyInventory);
                 window.partyInventory.length = 0;
                 window.showMessage('Everything you carried is now in the chest.');
-                if (window.showInventoryScreen && document.getElementById("inventory-modal")?.style.display === "block") window.showInventoryScreen();
+                if (window.showInventoryScreen && document.getElementById("inventory-modal")?.style.display === "block" && window.showInventoryScreen) window.showInventoryScreen();
             }
         });
     }
@@ -251,7 +251,7 @@ if (typeof document !== 'undefined' && !window.campSystem && !document.querySele
 if (typeof document !== 'undefined' && !window.campDeploymentSystem && !document.querySelector('script[data-camp-deployment-system]')) {
     const deploymentScript = document.createElement('script');
     deploymentScript.dataset.campDeploymentSystem = 'true';
-    deploymentScript.src = 'campDeploymentSystem.js?v=20261001-camp3';
+    deploymentScript.src = 'campDeploymentSystem.js?v=20261001-camp4';
     deploymentScript.async = false;
     document.head.appendChild(deploymentScript);
 }
