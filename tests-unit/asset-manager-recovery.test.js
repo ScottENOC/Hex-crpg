@@ -90,7 +90,10 @@ function installAssetManager() {
       return {};
     },
   };
-  const window = {};
+  const window = {
+    addEventListener() {},
+    dispatchEvent() {},
+  };
   const context = {
     window,
     document,
