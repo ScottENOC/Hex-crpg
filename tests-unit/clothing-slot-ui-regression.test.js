@@ -40,3 +40,17 @@ test('expanded clothing slots unequip as cosmetic clothing rather than combat eq
     contains(ui, 'if(p?.equipped&&expanded.includes(slot))');
     contains(ui, 'none.onclick=()=>unequipSlot(slot);');
 });
+
+test('equipment picker touch bridge converts only stationary taps into one existing click action', () => {
+    const expansion = read('clothingSlotExpansion.js');
+
+    contains(expansion, "event.target?.closest?.('[data-equipment-slot-picker] button')");
+    contains(expansion, 'const MAX_TAP_MOVE_PX = 10;');
+    contains(expansion, "document.addEventListener('touchend'");
+    contains(expansion, 'event.preventDefault();');
+    contains(expansion, 'pending.button.click();');
+    assert.ok(
+        expansion.indexOf('event.preventDefault();') < expansion.indexOf('pending.button.click();'),
+        'touchend must suppress the native synthetic click before forwarding to the existing click handler'
+    );
+});
