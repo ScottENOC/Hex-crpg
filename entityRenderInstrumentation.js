@@ -27,7 +27,10 @@ function publish(value) {
 publish(false);
 
 function campaignEntities() {
-  const entities = [...(window.entities || [])];
+  const entitySource = window.entities;
+  const entities = Array.isArray(entitySource)
+    ? entitySource
+    : (entitySource && typeof entitySource === 'object' ? Object.values(entitySource) : []);
   if (window.player && !entities.includes(window.player)) entities.push(window.player);
   return entities;
 }
