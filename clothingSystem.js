@@ -2,7 +2,7 @@
 // Compatibility loader for the explicit garment-layer model.
 (() => {
   'use strict';
-  const BUILD=window.PRESENTATION_BUILD||'20261002-ios-equipment-touch-v1';
+  const BUILD=window.PRESENTATION_BUILD||'20261002-four-direction-cache-v1';
   const RETIRED_GARMENTS=new Set(['fine_tunic','noble_doublet','scholars_robe','traveler_garb','top_masc_toggle','top_masc_buttoned','top_masc_lacework']);
 
   function load(src,key){
@@ -63,6 +63,10 @@
   // It still polls briefly during startup because renderHotPathCache may install
   // its shirt fast path after this nested loader finishes.
   load('contentSafety.js','content-safety');
+  // The four-direction humanoid composite cache is a runtime-derived layer.
+  // Load it explicitly from the same cache-busted compatibility chain so the
+  // installed iOS app cannot silently keep using an older cache bootstrap.
+  load('humanoidSpriteCache.js','humanoid-sprite-cache');
 
   purgeRetiredReferences();
   setInterval(purgeRetiredReferences,1000);
