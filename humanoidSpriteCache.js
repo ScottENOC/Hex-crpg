@@ -404,6 +404,7 @@
                     }
                     if (!entry) {
                         failures.push({entity, facing, path:'(composite)', error:new Error(`Composite draw failed for ${FACING_LABELS[facing]}`)});
+                        onView?.(entity, facing, completed);
                         break;
                     }
                     pending.set(facing, entry);
@@ -545,11 +546,10 @@
             for (const entity of list) {
                 const result = await warmEntity(entity, {
                     force:true,
-                    onView(info) {
+                    onView(viewEntity, facing, completedForEntity) {
                         viewDone += 1;
-                        const name = entity?.name || entity?.id || 'Unnamed character';
-                        const facing = info?.facingLabel || info?.facing || 'view';
-                        showProgress(charDone, characters.length, viewDone, totalViews, `Building: ${name}\nView: ${facing}\nCompleted views: ${viewDone} / ${totalViews}`);
+                        const name = viewEntity?.name || viewEntity?.id || 'Unnamed character';
+                        showProgress(charDone, characters.length, viewDone, totalViews, `Building: ${name}\nView complete: ${FACING_LABELS[facing] || facing} (${completedForEntity} / 4)\nCompleted views: ${viewDone} / ${totalViews}`);
                     },
                 });
                 if (result.failures?.length) {
