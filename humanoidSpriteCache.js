@@ -435,40 +435,10 @@
     }
 
     function collectCacheableCharacters() {
-        // Temporary focused warm-up: only the player and Wren.
-        // Do not enumerate the campaign's full entity collection here.
-        const targets = [];
+        // Isolation test: warm only the main player character.
+        // Do not touch Wren, the party collection, or the campaign entity collection.
         const player = window.player;
-        if (isCacheCandidate(player)) targets.push(player);
-
-        const wrenCandidates = [
-            window.wren,
-            window.Wren,
-            window.party?.Wren,
-            window.party?.wren,
-        ];
-        for (const candidate of wrenCandidates) {
-            if (candidate?.name && String(candidate.name).toLowerCase() === 'wren') {
-                if (isCacheCandidate(candidate)) targets.push(candidate);
-                break;
-            }
-            if (isCacheCandidate(candidate)) {
-                targets.push(candidate);
-                break;
-            }
-        }
-
-        // Wren normally lives in the party collection. This is deliberately
-        // limited to the party rather than the full campaign entity list.
-        if (targets.length < 2) {
-            for (const candidate of uniqueObjects(window.party)) {
-                if (String(candidate?.name || '').toLowerCase() !== 'wren') continue;
-                if (isCacheCandidate(candidate) && !targets.includes(candidate)) targets.push(candidate);
-                break;
-            }
-        }
-
-        return uniqueObjects(targets);
+        return isCacheCandidate(player) ? [player] : [];
     }
 
     function overlayParts() {
