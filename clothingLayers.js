@@ -67,13 +67,11 @@
     top_blouse:twoToneTop('images/equipment/clothing/top_blouse.png'),
     top_dress:{...twoToneTop('images/equipment/clothing/top_dress.png'),fitMode:'dressSplit',waistFraction:.39,maxSkirtWidth:.98},
     top_shirt_f:twoToneTop('images/equipment/clothing/top_shirt_f.png'),
-    top_masc_toggle:twoToneTop('images/equipment/clothing/top_masc_toggle.png'),
     top_masc_lacework:twoToneTop('images/equipment/clothing/top_masc_lacework.png'),
     top_masc_laced:twoToneTop('images/equipment/clothing/top_masc_laced.png'),
-    top_masc_buttoned:twoToneTop('images/equipment/clothing/top_masc_buttoned.png'),
-    pants_baggy_wraps:singleLayer('pants','images/equipment/clothing/pants_baggy_wraps.png','Baggy wraps'),
-    pants_breeches:singleLayer('pants','images/equipment/clothing/pants_breeches.png','Breeches'),
-    pants_hose:singleLayer('pants','images/equipment/clothing/pants_hose.png','Hose'),
+    pants_baggy_wraps:singleLayerViews('pants',{front:'images/equipment/clothing/pants_baggy_wraps_front.png',side:'images/equipment/clothing/pants_baggy_wraps_side.png',back:'images/equipment/clothing/pants_baggy_wraps_back.png'},'Baggy wraps'),
+    pants_breeches:singleLayerViews('pants',{front:'images/equipment/clothing/pants_breeches_front.png',side:'images/equipment/clothing/pants_breeches_side.png',back:'images/equipment/clothing/pants_breeches_back.png'},'Breeches'),
+    pants_hose:singleLayerViews('pants',{front:'images/equipment/clothing/pants_hose_front.png',side:'images/equipment/clothing/pants_hose_side.png',back:'images/equipment/clothing/pants_hose_back.png'},'Hose'),
     pants_trousers:singleLayerViews('pants',{
       front:'images/equipment/clothing/pants_trousers_front.png',
       // No separately authored side file exists; make the intentional front-art
@@ -83,6 +81,7 @@
     },'Trousers'),
     underwear_briefs:twoToneGarment('underwear',{
       front:'images/equipment/clothing/briefs_female_front.png',
+      side:'images/equipment/clothing/briefs_female_side.png',
       back:'images/equipment/clothing/briefs_female_back.png',
     },'Main','Trim'),
     underwear_briefs_gstring:twoToneGarment('underwear',{
@@ -92,6 +91,7 @@
     },'Main','Trim'),
     underwear_bra:twoToneGarment('bra',{
       front:'images/equipment/clothing/bra_front.png',
+      side:'images/equipment/clothing/bra_side.png',
       back:'images/equipment/clothing/bra_back.png',
     },'Main','Trim'),
     underwear_bra_strapless:twoToneGarment('bra',{
@@ -101,20 +101,11 @@
     },'Main','Trim'),
   };
   const FEMININE_START_TOPS=['top_blouse','top_dress','top_shirt_f'];
-  const MASCULINE_START_TOPS=['top_masc_toggle','top_masc_lacework','top_masc_laced','top_masc_buttoned'];
-  const RETIRED_TOPS=new Set(['top_shirt','top_tunic']);
+  const MASCULINE_START_TOPS=['top_masc_lacework','top_masc_laced'];
+  const RETIRED_TOPS=new Set(['top_shirt','top_tunic','top_masc_toggle','top_masc_buttoned','traveler_garb']);
   const STARTER_PANTS='pants_trousers';
-  const PLAYER_DEFAULT={shirt:'top_masc_toggle',pants:STARTER_PANTS,underwear:'underwear_briefs',bra:'underwear_bra'};
+  const PLAYER_DEFAULT={shirt:'top_masc_laced',pants:STARTER_PANTS,underwear:'underwear_briefs',bra:'underwear_bra'};
   const HUMANOID_RACES=new Set(['human','elf','dwarf','goblin','orc']);
-
-  function legacy(itemId){
-    if(itemId!=='traveler_garb') return null;
-    return {slot:'shirt',layers:[{id:'base',label:'Base',defaultColor:{hue:28,saturation:76,value:70,opacity:1},views:{
-      front:'images/equipment/clothing/traveler_garb_front.svg',
-      side:'images/equipment/clothing/traveler_garb_side.svg',
-      back:'images/equipment/clothing/traveler_garb_back.svg',
-    }}]};
-  }
 
   function layer(raw,i){
     const c=raw.defaultColor||raw.color||{};
@@ -124,9 +115,9 @@
   }
 
   function spec(itemId){
-    const item=window.items?.[itemId], builtin=GARMENTS[itemId], old=legacy(itemId);
-    if(!item&&!builtin&&!old) return null;
-    const source=builtin||old;
+    const item=window.items?.[itemId], builtin=GARMENTS[itemId];
+    if(!item&&!builtin) return null;
+    const source=builtin;
     const slot=item?.clothingSlot||source?.slot||(item?.type==='clothes'?'shirt':null);
     if(!slots.includes(slot)) return null;
     const raw=(Array.isArray(item?.clothingLayers)&&item.clothingLayers.length)?item.clothingLayers:
@@ -144,7 +135,7 @@
     if(!window.items) return false;
     const names={
       top_blouse:'Blouse',top_dress:'Dress',top_shirt_f:'Fitted Shirt',
-      top_masc_toggle:'Toggle Tunic',top_masc_lacework:'Lacework Shirt',top_masc_laced:'Laced Tunic',top_masc_buttoned:'Buttoned Work Shirt',
+      top_masc_lacework:'Lacework Shirt',top_masc_laced:'Laced Tunic',
       pants_baggy_wraps:'Baggy Wraps',pants_breeches:'Breeches',pants_hose:'Hose',pants_trousers:'Unisex Trousers',underwear_briefs:'Briefs',
       underwear_briefs_gstring:'G-string',underwear_bra:'Bra',underwear_bra_strapless:'Strapless Bra'
     };
@@ -432,10 +423,9 @@
 
     // Female tops need body-shaped horizontal fitting rather than a single
     // rectangle: preserve the established height and outside sleeve placement,
-    // but widen the central chest/waist. Legacy traveller garb is a composite
-    // SVG (shirt + lower tunic + boots), so leave it on its historical path.
+    // but widen the central chest/waist.
     if(slot==='shirt'){
-      if(hasFeminineBody(entity)&&itemId!=='traveler_garb') return drawFeminineTop(ctx,source,trim,targetX,targetY,targetW,targetH,itemId,v);
+      if(hasFeminineBody(entity)) return drawFeminineTop(ctx,source,trim,targetX,targetY,targetW,targetH,itemId,v);
       ctx.drawImage(source,trim.x,trim.y,trim.w,trim.h,targetX,targetY,targetW,targetH);
       return true;
     }

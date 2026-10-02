@@ -55,7 +55,6 @@ const items = {
     // stats. See CLOTHING_PRESETS (gameEngine.js) for the shirt/pants hues
     // each one actually renders as, and window.clothingDisplayMode for the
     // "always show armor / always show clothes" inventory toggle.
-    'traveler_garb':  { id: 'traveler_garb',  name: "Traveler's Garb",  type: 'clothes', buyPrice: 15, description: 'Plain, practical, well-worn.' },
     'ore_silver': { id: 'ore_silver', name: 'Silver Ore', type: 'resource', sellPrice: 12, description: 'Uncommon ore, prized for fine jewelry and coin.' },
     'ore_gold': { id: 'ore_gold', name: 'Gold Ore', type: 'resource', sellPrice: 20, description: 'Rare ore, valuable and soft.' },
     'gem_red': { id: 'gem_red', name: 'Red Gem', type: 'resource', sellPrice: 30, description: 'A rare, uncut gemstone — flavor and favor, nothing more.' },

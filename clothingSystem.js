@@ -3,7 +3,7 @@
 (() => {
   'use strict';
   const BUILD=window.PRESENTATION_BUILD||'20261001-footwear-v1';
-  const RETIRED_GARMENTS=new Set(['fine_tunic','noble_doublet','scholars_robe']);
+  const RETIRED_GARMENTS=new Set(['fine_tunic','noble_doublet','scholars_robe','traveler_garb','top_masc_toggle','top_masc_buttoned']);
 
   function load(src,key){
     const attr=`data-${key}`;

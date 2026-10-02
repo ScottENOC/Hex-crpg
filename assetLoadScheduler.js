@@ -528,15 +528,15 @@
         const feminine=gender==='female';
         const tops=feminine
             ? ['top_blouse','top_dress','top_shirt_f']
-            : ['top_masc_toggle','top_masc_lacework','top_masc_laced','top_masc_buttoned'];
+            : ['top_masc_lacework','top_masc_laced'];
         const selectedTops=allViews ? tops : [tops[hash(`${race}_${gender}|top`)%tops.length]];
         const paths=[...selectedTops.map(top=>`images/equipment/clothing/${top}.png`),'images/equipment/clothing/pants_trousers_front.png'];
         if (allViews) paths.push('images/equipment/clothing/pants_trousers_back.png');
         paths.push('images/equipment/clothing/briefs_female_front.png');
-        if (allViews) paths.push('images/equipment/clothing/briefs_female_back.png');
+        if (allViews) paths.push('images/equipment/clothing/briefs_female_side.png','images/equipment/clothing/briefs_female_back.png');
         if (feminine) {
             paths.push('images/equipment/clothing/bra_front.png');
-            if (allViews) paths.push('images/equipment/clothing/bra_back.png');
+            if (allViews) paths.push('images/equipment/clothing/bra_side.png','images/equipment/clothing/bra_back.png');
         }
         return paths;
     }

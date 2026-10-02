@@ -55,21 +55,19 @@ test('outerwear keeps a canonical armour-relative envelope while runtime tops us
     contains(layersSource, "if(itemId==='underwear_bra'){");
 });
 
-test('masculine starter tops are the four new two-tone PNG overlays', () => {
+test('masculine starter tops use the two retained two-tone PNG overlays', () => {
     const layersSource = read('clothingLayers.js');
     const masculineAssets = [
-        'top_masc_toggle.png',
         'top_masc_lacework.png',
         'top_masc_laced.png',
-        'top_masc_buttoned.png',
     ];
 
     for (const asset of masculineAssets) {
         contains(layersSource, `images/equipment/clothing/${asset}`);
     }
-    contains(layersSource, "const MASCULINE_START_TOPS=['top_masc_toggle','top_masc_lacework','top_masc_laced','top_masc_buttoned'];");
+    contains(layersSource, "const MASCULINE_START_TOPS=['top_masc_lacework','top_masc_laced'];");
     contains(layersSource, "const FEMININE_START_TOPS=['top_blouse','top_dress','top_shirt_f'];");
-    contains(layersSource, "const RETIRED_TOPS=new Set(['top_shirt','top_tunic']);");
+    contains(layersSource, "const RETIRED_TOPS=new Set(['top_shirt','top_tunic','top_masc_toggle','top_masc_buttoned','traveler_garb']);");
     contains(layersSource, "for(const id of MASCULINE_START_TOPS) if(window.items[id]) window.items[id].clothingGender='male';");
     contains(layersSource, "for(const id of FEMININE_START_TOPS) if(window.items[id]) window.items[id].clothingGender='female';");
     excludes(layersSource, "top_shirt:singleLayer('shirt'");
@@ -80,11 +78,13 @@ test('transparent underwear assets and alternate styles are wired as PNGs', () =
     const layersSource = read('clothingLayers.js');
     const pngAssets = [
         'briefs_female_front.png',
+        'briefs_female_side.png',
         'briefs_female_back.png',
         'briefs_gstring_front.png',
         'briefs_gstring_side.png',
         'briefs_gstring_back.png',
         'bra_front.png',
+        'bra_side.png',
         'bra_back.png',
         'bra_strapless_front.png',
         'bra_strapless_side.png',
@@ -100,11 +100,15 @@ test('transparent underwear assets and alternate styles are wired as PNGs', () =
     excludes(layersSource, 'images/equipment/clothing/bra_front.jpg');
 });
 
-test('trousers use the current directional PNG assets', () => {
+test('pants use the current directional PNG assets', () => {
     const layersSource = read('clothingLayers.js');
     contains(layersSource, "front:'images/equipment/clothing/pants_trousers_front.png'");
-    contains(layersSource, "side:'images/equipment/clothing/pants_trousers_front.png'");
     contains(layersSource, "back:'images/equipment/clothing/pants_trousers_back.png'");
+    for (const id of ['pants_baggy_wraps','pants_breeches','pants_hose']) {
+        contains(layersSource, `front:'images/equipment/clothing/${id}_front.png'`);
+        contains(layersSource, `side:'images/equipment/clothing/${id}_side.png'`);
+        contains(layersSource, `back:'images/equipment/clothing/${id}_back.png'`);
+    }
 });
 
 test('bootstrap clothing layers all consume the shared presentation build token', () => {

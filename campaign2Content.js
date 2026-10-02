@@ -553,7 +553,7 @@ window.campaign2Clothier = {
     side: 'neutral', factionId: null, color: '#7a3a5a',
     dialogueId: 'silverhart_clothier'
 };
-window.campaign2ClothierItems = ['traveler_garb', 'fine_tunic', 'noble_doublet', 'scholars_robe'];
+window.campaign2ClothierItems = ['fine_tunic', 'noble_doublet', 'scholars_robe'];
 
 window.campaign2MagicDealer = {
     name: 'Corvin Ashe', title: 'Rare Goods Dealer',

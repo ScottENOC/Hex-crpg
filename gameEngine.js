@@ -1627,7 +1627,6 @@ const CHAR_CONFIG = {
 // screen's toggle, ui.js) — 'clothes' always shows them; the default
 // 'armor' mode only shows them when no armor is equipped to compete with.
 window.CLOTHING_PRESETS = {
-    traveler_garb:  { shirtHue: 30,  pantsHue: 25,  satMult: 0.7 },
     fine_tunic:     { shirtHue: 220, pantsHue: 0,   satMult: 0.9 },
     noble_doublet:  { shirtHue: 280, pantsHue: 0,   satMult: 1.1 },
     scholars_robe:  { shirtHue: 0,   pantsHue: 0,   satMult: 0.15 },

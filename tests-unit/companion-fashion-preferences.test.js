@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const modulePath = require.resolve('../companionFashionPreferences.js');
 
-function load({shirt='top_masc_buttoned', hue=210, opacity=1, attraction=18, companion='Wren Talbot', familiarity=60}={}) {
+function load({shirt='top_masc_laced', hue=210, opacity=1, attraction=18, companion='Wren Talbot', familiarity=60}={}) {
   delete require.cache[modulePath];
   for (const k of ['party','player','items','clothingSystem','equipmentAppearanceSystem','companionAffinity','companionRomance','companionConversationMemory','getCompanionAffinity','getCompanionRomanceReadiness','getCompanionRelationship','companionFashion','getCompanionEffectiveAttraction','document','entities','isInCombat','showMessage']) delete global[k];
   const p={name:'PC',gender:'female',equipped:{shirt,pants:'pants_trousers'},clothingColors:{
@@ -10,7 +10,7 @@ function load({shirt='top_masc_buttoned', hue=210, opacity=1, attraction=18, com
   }};
   const c={name:companion,playerAffinity:{friendship:60,romanticBond:20,attraction},playerRelationship:{familiarity,trust:50}};
   global.party=[p,c]; global.player=p; global.items={
-    top_masc_buttoned:{name:'Buttoned Work Shirt',clothingGender:'male',type:'clothes'},
+    top_masc_laced:{name:'Laced Tunic',clothingGender:'male',type:'clothes'},
     shirt_mesh_turtleneck:{name:'Mesh Turtleneck',description:'open-mesh turtleneck',fashionTier:'statement',type:'clothes'},
     shirt_collared:{name:'Collared Shirt',fashionTier:'everyday',type:'clothes'},
     pants_trousers:{name:'Trousers',type:'clothes'},
@@ -75,8 +75,8 @@ test('Mirabel novelty bonus decays after an outfit has been seen',()=>{
 test('Wren can revise her own explanation of what style she likes',()=>{
   const {api,c}=load({companion:'Wren Talbot'});
   api.observe(c);
-  global.party[0].clothingColors.top_masc_buttoned.base.hue=150; api.observe(c);
-  global.party[0].clothingColors.top_masc_buttoned.base.hue=30; api.observe(c);
+  global.party[0].clothingColors.top_masc_laced.base.hue=150; api.observe(c);
+  global.party[0].clothingColors.top_masc_laced.base.hue=30; api.observe(c);
   assert.match(api.selfDiscovery(c),/thought it was the men’s clothes|sharper cuts/i);
 });
 
