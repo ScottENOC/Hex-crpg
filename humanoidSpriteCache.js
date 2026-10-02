@@ -385,10 +385,12 @@
                         prepared = await prepareFacingSources(entity, facing);
                     } catch (error) {
                         failures.push({entity, facing, path:'prepareFacingSources', error:normaliseError(error)});
+                        onView?.({facing, facingLabel:FACING_LABELS[facing], stage:'error'});
                         break;
                     }
                     if (!prepared.ready) {
                         failures.push(...prepared.failed.map(f => ({...f, entity, facing, error:normaliseError(f.error)})));
+                        onView?.({facing, facingLabel:FACING_LABELS[facing], stage:'source-failed'});
                         break;
                     }
                     if (state.version !== version) break;
@@ -397,6 +399,7 @@
                         entry = buildComposite(window.drawPlayerCharacter?.__humanoidFourDirectionBase || window.drawPlayerCharacter, entity, facing, version);
                     } catch (error) {
                         failures.push({entity, facing, path:'buildComposite', error:normaliseError(error)});
+                        onView?.({facing, facingLabel:FACING_LABELS[facing], stage:'composite-failed'});
                         break;
                     }
                     if (!entry) {
@@ -448,7 +451,21 @@
         return {overlay,title,count,bar,error,retry,proceed};
     }
 
-    function showProgress(charDone, charTotal, viewDone, viewTotal) {
+    function showCacheDetail(text) {
+        const overlay = document.getElementById('hex-loading-gate');
+        if (!overlay) return;
+        let detail = overlay.querySelector('.hex-loading-cache-detail');
+        if (!detail) {
+            detail = document.createElement('div');
+            detail.className = 'hex-loading-cache-detail';
+            detail.style.cssText = 'margin-top:10px;max-height:150px;overflow:auto;text-align:left;font:12px/1.45 monospace;color:#cfc4aa;white-space:pre-wrap;';
+            const count = overlay.querySelector('.hex-loading-count');
+            if (count?.parentNode) count.parentNode.insertBefore(detail, count.nextSibling);
+        }
+        detail.textContent = text;
+    }
+
+    function showProgress(charDone, charTotal, viewDone, viewTotal, detailText='') {
         const ui = overlayParts();
         if (!ui) return;
         ui.overlay.hidden = false;
@@ -458,6 +475,7 @@
         if (ui.error) ui.error.hidden = true;
         if (ui.retry) ui.retry.hidden = true;
         if (ui.proceed) ui.proceed.hidden = true;
+        if (detailText) showCacheDetail(detailText);
     }
 
     async function chooseFailureAction(failures) {
@@ -527,9 +545,11 @@
             for (const entity of list) {
                 const result = await warmEntity(entity, {
                     force:true,
-                    onView() {
+                    onView(info) {
                         viewDone += 1;
-                        showProgress(charDone, characters.length, viewDone, totalViews);
+                        const name = entity?.name || entity?.id || 'Unnamed character';
+                        const facing = info?.facingLabel || info?.facing || 'view';
+                        showProgress(charDone, characters.length, viewDone, totalViews, `Building: ${name}\nView: ${facing}\nCompleted views: ${viewDone} / ${totalViews}`);
                     },
                 });
                 if (result.failures?.length) {
