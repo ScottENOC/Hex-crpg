@@ -874,12 +874,13 @@
     }
 
     function init() {
-        installMutationHooks();
-        installDrawCache();
-        installLifecycleHooks();
-        overlayParts();
-        discoveryTimer = setInterval(discoverNewCharacters, 1000);
+        // TEMPORARY DIAGNOSTIC: completely disable the humanoid composite
+        // cache and all of its lifecycle hooks. This lets us confirm whether
+        // campaign loading works through the normal renderer path.
         window.__characterCompositeGameplayReady = true;
+        window.__humanoidSpriteCacheDisabled = true;
+        window.HumanoidSpriteCacheDisabled = true;
+        console.warn('[humanoid-cache] DISABLED FOR DIAGNOSTIC TEST');
     }
 
     window.HumanoidSpriteCache = {
