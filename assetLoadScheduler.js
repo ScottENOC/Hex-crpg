@@ -528,7 +528,7 @@
         const feminine=gender==='female';
         const tops=feminine
             ? ['top_blouse','top_dress','top_shirt_f']
-            : ['top_masc_lacework','top_masc_laced'];
+            : ['top_masc_laced'];
         const selectedTops=allViews ? tops : [tops[hash(`${race}_${gender}|top`)%tops.length]];
         const directionalTops=new Set(['top_blouse','top_dress','top_shirt_f','top_masc_laced']);
         const topPath=(top,view='front')=>directionalTops.has(top)

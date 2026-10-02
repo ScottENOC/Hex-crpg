@@ -48,7 +48,6 @@ const PROFILES = Object.freeze({
 });
 
 const CATALOG = Object.freeze({
-  top_masc_lacework:{ masculine:.9, structured:.45, fitted:.45, ornate:.55 },
   top_masc_laced:{ masculine:.9, structured:.5, fitted:.5, practical:.45 },
   top_blouse:{ feminine:.75, flowing:.55, formal:.2 },
   top_dress:{ feminine:1, flowing:.7, formal:.45, revealing:.15 },

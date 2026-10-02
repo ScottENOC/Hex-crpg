@@ -62,13 +62,11 @@
     {id:'light',label:labelLight,defaultColor:{hue:110,saturation:45,value:72,opacity:1},views,sourceTone:'lightGreen'},
   ]});
   const twoToneTopViews=(views)=>twoToneGarment('shirt',views,'Main','Trim');
-  const twoToneTop=(path)=>twoToneTopViews({front:path,side:path,back:path});
 
   const GARMENTS={
     top_blouse:twoToneTopViews({front:'images/equipment/clothing/top_blouse_front.png',side:'images/equipment/clothing/top_blouse_side.png',back:'images/equipment/clothing/top_blouse_back.png'}),
     top_dress:{...twoToneTopViews({front:'images/equipment/clothing/top_dress_front.png',side:'images/equipment/clothing/top_dress_side.png',back:'images/equipment/clothing/top_dress_back.png'}),fitMode:'dressSplit',waistFraction:.39,maxSkirtWidth:.98},
     top_shirt_f:twoToneTopViews({front:'images/equipment/clothing/top_shirt_f_front.png',side:'images/equipment/clothing/top_shirt_f_side.png',back:'images/equipment/clothing/top_shirt_f_back.png'}),
-    top_masc_lacework:twoToneTop('images/equipment/clothing/top_masc_lacework.png'),
     top_masc_laced:twoToneTopViews({front:'images/equipment/clothing/top_masc_laced_front.png',side:'images/equipment/clothing/top_masc_laced_side.png',back:'images/equipment/clothing/top_masc_laced_back.png'}),
     pants_baggy_wraps:singleLayerViews('pants',{front:'images/equipment/clothing/pants_baggy_wraps_front.png',side:'images/equipment/clothing/pants_baggy_wraps_side.png',back:'images/equipment/clothing/pants_baggy_wraps_back.png'},'Baggy wraps'),
     pants_breeches:singleLayerViews('pants',{front:'images/equipment/clothing/pants_breeches_front.png',side:'images/equipment/clothing/pants_breeches_side.png',back:'images/equipment/clothing/pants_breeches_back.png'},'Breeches'),
@@ -102,8 +100,8 @@
     },'Main','Trim'),
   };
   const FEMININE_START_TOPS=['top_blouse','top_dress','top_shirt_f'];
-  const MASCULINE_START_TOPS=['top_masc_lacework','top_masc_laced'];
-  const RETIRED_TOPS=new Set(['top_shirt','top_tunic','top_masc_toggle','top_masc_buttoned','traveler_garb']);
+  const MASCULINE_START_TOPS=['top_masc_laced'];
+  const RETIRED_TOPS=new Set(['top_shirt','top_tunic','top_masc_toggle','top_masc_buttoned','top_masc_lacework','traveler_garb']);
   const STARTER_PANTS='pants_trousers';
   const PLAYER_DEFAULT={shirt:'top_masc_laced',pants:STARTER_PANTS,underwear:'underwear_briefs',bra:'underwear_bra'};
   const HUMANOID_RACES=new Set(['human','elf','dwarf','goblin','orc']);
@@ -136,7 +134,7 @@
     if(!window.items) return false;
     const names={
       top_blouse:'Blouse',top_dress:'Dress',top_shirt_f:'Fitted Shirt',
-      top_masc_lacework:'Lacework Shirt',top_masc_laced:'Laced Tunic',
+      top_masc_laced:'Laced Tunic',
       pants_baggy_wraps:'Baggy Wraps',pants_breeches:'Breeches',pants_hose:'Hose',pants_trousers:'Unisex Trousers',underwear_briefs:'Briefs',
       underwear_briefs_gstring:'G-string',underwear_bra:'Bra',underwear_bra_strapless:'Strapless Bra'
     };

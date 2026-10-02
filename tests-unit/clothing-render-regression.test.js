@@ -57,20 +57,20 @@ test('outerwear keeps a canonical armour-relative envelope while runtime tops us
 
 test('starter tops use retained assets and explicit directional views where authored', () => {
     const layersSource = read('clothingLayers.js');
-    contains(layersSource, 'images/equipment/clothing/top_masc_lacework.png');
     for (const id of ['top_blouse','top_dress','top_shirt_f','top_masc_laced']) {
         contains(layersSource, `front:'images/equipment/clothing/${id}_front.png'`);
         contains(layersSource, `side:'images/equipment/clothing/${id}_side.png'`);
         contains(layersSource, `back:'images/equipment/clothing/${id}_back.png'`);
         excludes(layersSource, `images/equipment/clothing/${id}.png`);
     }
-    contains(layersSource, "const MASCULINE_START_TOPS=['top_masc_lacework','top_masc_laced'];");
+    contains(layersSource, "const MASCULINE_START_TOPS=['top_masc_laced'];");
     contains(layersSource, "const FEMININE_START_TOPS=['top_blouse','top_dress','top_shirt_f'];");
-    contains(layersSource, "const RETIRED_TOPS=new Set(['top_shirt','top_tunic','top_masc_toggle','top_masc_buttoned','traveler_garb']);");
+    contains(layersSource, "const RETIRED_TOPS=new Set(['top_shirt','top_tunic','top_masc_toggle','top_masc_buttoned','top_masc_lacework','traveler_garb']);");
     contains(layersSource, "for(const id of MASCULINE_START_TOPS) if(window.items[id]) window.items[id].clothingGender='male';");
     contains(layersSource, "for(const id of FEMININE_START_TOPS) if(window.items[id]) window.items[id].clothingGender='female';");
     excludes(layersSource, "top_shirt:singleLayer('shirt'");
     excludes(layersSource, "top_tunic:singleLayer('shirt'");
+    excludes(layersSource, 'images/equipment/clothing/top_masc_lacework.png');
 });
 
 test('transparent underwear assets and alternate styles are wired as PNGs', () => {
