@@ -173,6 +173,76 @@
     window.setTimeout(flushPendingMessages, 1000);
 })();
 
+// Dialogue owns the foreground interaction layer. If a normal menu is still
+// open behind it, that menu can remain the iOS hit-test target even when the
+// dialogue is visually on top. Close ordinary menus first instead of trying to
+// pass taps through overlapping modal layers.
+(() => {
+    if (window.__dialogueMenuPrecedenceInstalled) return;
+    window.__dialogueMenuPrecedenceInstalled = true;
+
+    const MENU_MODAL_IDS = [
+        'character-screen-modal',
+        'spell-menu-modal',
+        'world-map-modal',
+        'quest-log-modal',
+        'roster-modal',
+        'shop-modal',
+        'save-game-modal',
+        'load-game-modal',
+        'mercenary-creation-modal',
+        'entity-details-modal',
+        'settings-modal',
+    ];
+
+    function closeMenusForDialogue() {
+        // Inventory is special: equipmentInterface.js keeps the selected slot in
+        // private state. Use its real X handler whenever Inventory/the slot picker
+        // is open so that state is cleared as well as the visible DOM.
+        const inventoryModal = document.getElementById('inventory-modal');
+        const equipmentPicker = document.querySelector('[data-equipment-slot-picker]');
+        if (inventoryModal?.style.display === 'block' || equipmentPicker) {
+            const inventoryClose = document.getElementById('close-inventory-modal');
+            if (inventoryClose) inventoryClose.click();
+            else if (inventoryModal) inventoryModal.style.display = 'none';
+        }
+        // Belt-and-braces for an older inventory shell that may not have wired
+        // the X button yet. The current shell removes this itself.
+        document.querySelector('[data-equipment-slot-picker]')?.remove();
+
+        for (const id of MENU_MODAL_IDS) {
+            const modal = document.getElementById(id);
+            if (modal?.style.display === 'block') modal.style.display = 'none';
+        }
+
+        // A top-menu dropdown is not a modal, but it is still an interaction
+        // layer and should not stay open under dialogue.
+        document.querySelectorAll('.dropdown-content.show').forEach(menu => menu.classList.remove('show'));
+    }
+
+    function installDialogueMenuPrecedence() {
+        const baseShowDialogue = window.showDialogue;
+        if (typeof baseShowDialogue !== 'function') return false;
+        if (baseShowDialogue.__closesMenusBeforeDialogue) return true;
+
+        const wrappedShowDialogue = function() {
+            closeMenusForDialogue();
+            return baseShowDialogue.apply(this, arguments);
+        };
+        wrappedShowDialogue.__closesMenusBeforeDialogue = true;
+        wrappedShowDialogue.__baseShowDialogue = baseShowDialogue;
+        window.showDialogue = wrappedShowDialogue;
+        return true;
+    }
+
+    window.closeMenusForDialogue = closeMenusForDialogue;
+
+    // ui.js defines showDialogue later in the page, so install once all static
+    // scripts have loaded. This is startup-only; there is no polling or frame work.
+    if (document.readyState === 'complete') installDialogueMenuPrecedence();
+    else window.addEventListener('load', installDialogueMenuPrecedence, { once: true });
+})();
+
 const dialogueData = {
     'arena_lobby_1': {
         speaker: 'Arena Announcer',
