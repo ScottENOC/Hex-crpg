@@ -1,10 +1,6 @@
 // humanoidSpriteCache.js
-// Out-of-combat humanoids usually keep the same body, hair, clothing and
-// equipment for many frames. The direct compositor can issue dozens of canvas
-// draws per character, so cache the finished sprite and move that one bitmap
-// around instead of recomposing every render. This deliberately includes the
-// player party: world position is not baked into the composite, and facing /
-// appearance changes are already part of the cache key.
+// Cache finished out-of-combat humanoid composites so world rendering usually
+// moves one bitmap instead of rebuilding every body/clothing/equipment layer.
 (() => {
     'use strict';
 
@@ -13,17 +9,8 @@
     const HEALTHCHECK_MS = 1000;
     const cache = new WeakMap();
     const stats = window.humanoidSpriteCacheStats = {
-        installed:false,
-        hits:0,
-        misses:0,
-        builds:0,
-        bypasses:0,
-        failedBuilds:0,
-        rewraps:0,
-        playerHits:0,
-        npcHits:0,
-        buildMs:0,
-        maxBuildMs:0,
+        installed:false, hits:0, misses:0, builds:0, bypasses:0, failedBuilds:0,
+        rewraps:0, playerHits:0, npcHits:0, buildMs:0, maxBuildMs:0,
     };
 
     function safeJson(value) {
@@ -31,14 +18,11 @@
         catch (_) { return String(value ?? ''); }
     }
 
-    function directHumanoid(entity) {
-        if (!entity?.race || !entity?.gender) return false;
-        return !!window.DIRECT_HUMANOID_RIGS?.[`${entity.race}_${entity.gender}`];
-    }
-
-    function isCacheableHumanoid(entity) {
-        if (!entity || window.isInCombat) return false;
-        return directHumanoid(entity);
+    // Do not duplicate humanoidRenderer.js's private CHARACTER_RIGS table here.
+    // The direct compositor is authoritative: a candidate is cacheable when a
+    // trial composite actually advances __humanoidRendererDrawCount for it.
+    function isCacheCandidate(entity) {
+        return !!entity && !window.isInCombat && !!entity.race && !!entity.gender && !entity.customImage;
     }
 
     function appearanceKey(entity, z, flyOff=0) {
@@ -86,9 +70,8 @@
         stats.buildMs += elapsed;
         stats.maxBuildMs = Math.max(stats.maxBuildMs, elapsed);
         const after = Number(window.__humanoidRendererDrawCount || 0);
-        // Do not cache an empty/legacy fallback frame while the body is still
-        // unavailable. Once the body can be composed, subsequent world frames
-        // should only blit this bitmap rather than repeating per-pixel work.
+        // This is also the eligibility test. Legacy/non-humanoid renderers do not
+        // advance the direct compositor counter, so they safely fall through.
         if (after <= before || window.__humanoidRendererLastDraw?.entity !== entity) return null;
         stats.builds++;
         return { canvas, key:appearanceKey(entity,z,flyOff), cx, cy };
@@ -103,7 +86,7 @@
         }
 
         const wrapped = function(ctx, entity, x, y, z=1, flyOff=0) {
-            if (!ctx || !isCacheableHumanoid(entity)) {
+            if (!ctx || !isCacheCandidate(entity)) {
                 stats.bypasses++;
                 return current.apply(this, arguments);
             }
@@ -115,6 +98,8 @@
                 entry = buildComposite(current, entity, z, flyOff);
                 if (!entry) {
                     stats.failedBuilds++;
+                    // buildComposite already rendered legacy/non-direct candidates
+                    // to its offscreen canvas. Render them normally once onscreen.
                     return current.apply(this, arguments);
                 }
                 cache.set(entity, entry);
@@ -132,9 +117,7 @@
         wrapped.__original = current;
         if (wrapperChainHas(current, '__directHumanoidCompositor')) wrapped.__directHumanoidCompositor = true;
         window.drawPlayerCharacter = wrapped;
-        window.clearHumanoidSpriteCache = entity => {
-            if (entity) cache.delete(entity);
-        };
+        window.clearHumanoidSpriteCache = entity => { if (entity) cache.delete(entity); };
         stats.installed = true;
         return true;
     }
