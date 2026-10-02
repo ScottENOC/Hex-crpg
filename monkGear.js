@@ -5,7 +5,7 @@
   const TOP = 'monk_wrap';
   const PANTS = 'monk_trousers';
   const ASSET = 'images/equipment/clothing/';
-  const BUILD = '20261002-monk-gear-v3';
+  const BUILD = '20261002-monk-gear-v4';
 
   const topLayers = {
     slot: 'shirt',
@@ -26,7 +26,9 @@
       defaultColor: { hue: 35, saturation: 25, value: 80, opacity: 1 },
       views: {
         front: `${ASSET}monk_trousers_front.png`,
-        side: `${ASSET}monk_trousers_side.png`,
+        // The first bespoke side PNG was structurally corrupt. Keep a real
+        // side-view silhouette instead of repeatedly retrying a broken image.
+        side: `${ASSET}pants_baggy_wraps_side.png`,
         back: `${ASSET}monk_trousers_back.png`,
       },
     }],
