@@ -3,7 +3,7 @@
 (() => {
     'use strict';
 
-    const BUILD = '20261002-four-direction-cache-v1';
+    const BUILD = '20261002-four-direction-cache-v2';
     const CACHE_PAD_HEXES = 4;
     const FACING_ORDER = Object.freeze(['down', 'up', 'right', 'left']);
     const FACING_LABELS = Object.freeze({down:'front', up:'back', right:'side-right', left:'side-left'});
