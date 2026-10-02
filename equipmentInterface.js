@@ -1,16 +1,20 @@
 // Slot-first equipment UI: equipped boxes + one appearance-aware inventory list.
 (()=>{'use strict';
 
-const BUILD=window.PRESENTATION_BUILD||'20261001-equipment-ui-v5';
+const BUILD=window.PRESENTATION_BUILD||'20261002-equipment-ui-v6';
 const SLOT_DEFS=[
   {key:'helmet',label:'Helmet',area:'helmet'},
+  {key:'cloak',label:'Cloak',area:'cloak'},
+  {key:'coat',label:'Coat',area:'coat'},
   {key:'shirt',label:'Shirt / Dress',area:'shirt'},
+  {key:'topOuter',label:'Top outer / Corset',area:'topOuter'},
   {key:'armor',label:'Armour',area:'armor'},
   {key:'weapon',label:'Main hand',area:'weapon'},
   {key:'offhand',label:'Off hand',area:'offhand'},
   {key:'pants',label:'Pants',area:'pants'},
+  {key:'tights',label:'Tights / Stockings',area:'tights'},
   {key:'shoes',label:'Shoes',area:'shoes'},
-  {key:'bra',label:'Bra',area:'bra'},
+  {key:'bra',label:'Bra / Under-layer',area:'bra'},
   {key:'underwear',label:'Underwear',area:'underwear'},
   {key:'accessory',label:'Accessory',area:'accessory'}
 ];
@@ -20,6 +24,16 @@ let state={filter:'all',sort:'name',picker:null};
 const base=v=>window.getEquipmentBaseId?.(v)||v;
 const def=v=>window.items?.[base(v)]||null;
 const isInst=v=>!!window.equipmentIdentity?.isInstance?.(v);
+
+function clothingSlotsFor(raw){
+  const id=base(raw),d=def(raw);
+  if(d?.type!=='clothes')return[];
+  const spec=window.clothingSystem?.getItemSpec?.(id);
+  const declared=Array.isArray(spec?.slots)&&spec.slots.length
+    ?spec.slots
+    :(Array.isArray(d.clothingSlots)&&d.clothingSlots.length?d.clothingSlots:[spec?.slot||d.clothingSlot||'shirt']);
+  return[...new Set(declared.filter(Boolean))];
+}
 
 function slotFor(raw){
   const id=base(raw),d=def(raw);
@@ -43,6 +57,7 @@ function compatible(raw,slot,p){
     return !main||main.hands===1;
   }
   if(slot==='weapon')return d.type==='weapon';
+  if(d.type==='clothes')return clothingSlotsFor(raw).includes(slot);
   return slotFor(raw)===slot;
 }
 
@@ -351,14 +366,33 @@ function grouped(p){
 }
 
 function equip(raw,slot){
-  const p=window.player,id=base(raw);
+  const p=window.player,id=base(raw),d=def(raw);
   if(!p||!id)return;
+
+  // The slot picker is an explicit choice. For flexible garments such as a
+  // corset, honour the clicked slot instead of prompting again or silently
+  // falling back to the garment's default slot.
+  if(d?.type==='clothes'&&window.equipClothingToSlot){
+    window.equipClothingToSlot(id,slot);
+    if(isInst(raw)){
+      p.equippedInstances=p.equippedInstances||{};
+      for(const[otherSlot,other]of Object.entries(p.equippedInstances)){
+        if(otherSlot!==slot&&other===raw)delete p.equippedInstances[otherSlot];
+      }
+      p.equippedInstances[slot]=raw;
+      window.syncPlayerEntity?.();
+    }
+    state.picker=null;
+    render();
+    return;
+  }
+
   if(isInst(raw)&&window.physicalEquipment&&slot===slotFor(raw)){
     window.physicalEquipment.equip(raw.instanceId);
     state.picker=null;
     return;
   }
-  window.equipItem?.(id,slot==='offhand'&&def(raw)?.type==='weapon');
+  window.equipItem?.(id,slot==='offhand'&&d?.type==='weapon');
   if(isInst(raw)){
     p.equippedInstances=p.equippedInstances||{};
     p.equippedInstances[slot]=raw;
@@ -366,6 +400,23 @@ function equip(raw,slot){
   }
   state.picker=null;
   render();
+}
+
+function unequipSlot(slot){
+  const p=window.player;
+  const expanded=window.clothingSlotExpansion?.slots||[];
+  if(p?.equipped&&expanded.includes(slot)){
+    p.equipped[slot]=null;
+    if(p.equippedInstances)delete p.equippedInstances[slot];
+    window.syncPlayerEntity?.();
+    window.showCharacter?.();
+    window.renderEntities?.();
+    state.picker=null;
+    render();
+    return;
+  }
+  window.unequipItem?.(slot);
+  state.picker=null;
 }
 
 function slotBox(p,s){
@@ -403,7 +454,7 @@ function picker(p,slot){
   const none=document.createElement('button');
   none.textContent='Unequip / empty slot';
   none.style.cssText='width:100%;margin-bottom:8px;padding:9px';
-  none.onclick=()=>{window.unequipItem?.(slot);state.picker=null;};
+  none.onclick=()=>unequipSlot(slot);
   panel.appendChild(none);
 
   const choices=grouped(p).filter(g=>compatible(g.raw,slot,p));
@@ -442,7 +493,9 @@ function backpack(p,host){
   const f=document.createElement('select');
   for(const[v,t]of[
     ['all','All'],['weapon','Weapons'],['offhand','Off hand / shields'],['armor','Armour'],
-    ['helmet','Helmets'],['shirt','Tops'],['pants','Pants'],['shoes','Shoes'],['accessory','Accessories']
+    ['helmet','Helmets'],['cloak','Cloaks'],['coat','Coats'],['topOuter','Top outer / Corsets'],
+    ['shirt','Tops / Dresses'],['pants','Pants'],['tights','Tights / Stockings'],['shoes','Shoes'],
+    ['bra','Bra / Under-layers'],['underwear','Underwear'],['accessory','Accessories']
   ]){
     const o=document.createElement('option');o.value=v;o.textContent=t;f.appendChild(o);
   }
@@ -460,7 +513,7 @@ function backpack(p,host){
 
   let xs=grouped(p);
   if(state.filter!=='all'){
-    xs=xs.filter(g=>state.filter==='offhand'?compatible(g.raw,'offhand',p):slotFor(g.raw)===state.filter);
+    xs=xs.filter(g=>compatible(g.raw,state.filter,p));
   }
   const cmp={
     name:(a,b)=>label(a.raw).localeCompare(label(b.raw)),
@@ -504,7 +557,7 @@ function render(){
   host.appendChild(gold);
 
   const layout=document.createElement('div');
-  layout.style.cssText='display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-areas:". helmet ." "weapon armor offhand" "shirt shirt accessory" "pants pants pants" "shoes shoes shoes" "bra bra bra" "underwear underwear underwear";gap:7px';
+  layout.style.cssText='display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-areas:". helmet ." "cloak cloak cloak" "coat coat coat" "weapon armor offhand" "topOuter topOuter accessory" "shirt shirt accessory" "pants pants pants" "tights tights tights" "shoes shoes shoes" "bra bra bra" "underwear underwear underwear";gap:7px';
   for(const s of SLOT_DEFS)layout.appendChild(slotBox(p,s));
   host.appendChild(layout);
   backpack(p,host);
