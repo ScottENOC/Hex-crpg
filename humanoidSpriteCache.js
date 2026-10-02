@@ -532,7 +532,30 @@
     }
 
     async function warmAll(source=window.entities, {reason='initial-load', allowProceed=true}={}) {
-        const characters = collectCacheableCharacters(source);
+        let diagnosticStage = 'starting warm-up';
+        let diagnosticEntity = null;
+        let diagnosticFacing = null;
+        let characters = [];
+        const diagnostic = (stage, extra='') => {
+            diagnosticStage = stage;
+            const sourceType = source == null ? String(source) : Array.isArray(source) ? 'Array' : typeof source;
+            showCacheDetail(
+                'Stage: ' + stage +
+                '\nSource type: ' + sourceType +
+                '\nCharacters discovered: ' + characters.length +
+                '\nCurrent character: ' + (diagnosticEntity?.name || diagnosticEntity?.id || 'none') +
+                '\nDirection: ' + (diagnosticFacing ? (FACING_LABELS[diagnosticFacing] || diagnosticFacing) : 'none') +
+                (extra ? '\n' + extra : '')
+            );
+        };
+        diagnostic('discovering cacheable characters');
+        try {
+            characters = collectCacheableCharacters(source);
+        } catch (error) {
+            const detail = normaliseError(error);
+            diagnostic('character discovery FAILED', 'Error: ' + detail.message + '\n' + (detail.stack || ''));
+            throw detail;
+        }
         const totalViews = characters.length * FACING_ORDER.length;
         stats.lastWarmExpectedCharacters = characters.length;
         stats.lastWarmExpectedViews = totalViews;
@@ -544,14 +567,27 @@
         const runPass = async list => {
             const failedEntities = [];
             for (const entity of list) {
-                const result = await warmEntity(entity, {
+                diagnosticEntity = entity;
+                diagnosticFacing = null;
+                diagnostic('starting character', 'Reason: ' + reason);
+                let result;
+                try {
+                    result = await warmEntity(entity, {
                     force:true,
                     onView(viewEntity, facing, completedForEntity) {
+                        diagnosticEntity = viewEntity;
+                        diagnosticFacing = facing;
+                        diagnostic('building direction', 'View ' + completedForEntity + ' / 4');
                         viewDone += 1;
                         const name = viewEntity?.name || viewEntity?.id || 'Unnamed character';
                         showProgress(charDone, characters.length, viewDone, totalViews, `Building: ${name}\nView complete: ${FACING_LABELS[facing] || facing} (${completedForEntity} / 4)\nCompleted views: ${viewDone} / ${totalViews}`);
                     },
-                });
+                    });
+                } catch (error) {
+                    const detail = normaliseError(error);
+                    diagnostic('warmEntity THREW', 'Error: ' + detail.message + '\n' + (detail.stack || ''));
+                    throw detail;
+                }
                 if (result.failures?.length) {
                     failures.push(...result.failures);
                     failedEntities.push(entity);
@@ -567,8 +603,10 @@
 
         let pending = characters;
         while (pending.length) {
+            diagnostic('starting warm pass', 'Pending characters: ' + pending.length);
             failures = [];
             const failedEntities = await runPass(pending);
+            diagnostic('warm pass completed', 'Failed characters: ' + failedEntities.length);
             if (!failedEntities.length) break;
             stats.lastWarmFailures = failures.length;
             if (!allowProceed) return {complete:false, characters:characters.length, views:viewDone, failures};
