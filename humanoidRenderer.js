@@ -899,7 +899,8 @@
     }
 
     function sortedTurnEntities() {
-        const list = [...(window.entities || [])].filter(e => e.alive && (e.side === 'player' || e.hasBeenSeenByPlayer) && !e.rider && !e.isNPC);
+        const entityList = Array.isArray(window.entities) ? window.entities : (window.entities && typeof window.entities === 'object' ? Object.values(window.entities) : []);
+        const list = entityList.filter(e => e.alive && (e.side === 'player' || e.hasBeenSeenByPlayer) && !e.rider && !e.isNPC);
         if (window.isInCombat) list.sort((a,b) => b.timePoints-a.timePoints);
         return list;
     }
