@@ -92,7 +92,7 @@
     return true;
   }
 
-  function syncCharacter(source){if(!source)return;ensure(source);for(const target of [...(window.party||[]),...(window.entities||[])]){if(!target||target===source||target.name!==source.name)continue;target.equipmentVisibility=JSON.parse(JSON.stringify(source.equipmentVisibility||{}));target.equipmentColors=JSON.parse(JSON.stringify(source.equipmentColors||{}));target.displayArmour=true;target.displayClothes=true;}}
+  function syncCharacter(source){if(!source)return;ensure(source);for(const target of (Array.isArray(window.party) ? window.party : (window.party && typeof window.party === 'object' ? Object.values(window.party) : [])).concat(Array.isArray(window.entities) ? window.entities : (window.entities && typeof window.entities === 'object' ? Object.values(window.entities) : []))){if(!target||target===source||target.name!==source.name)continue;target.equipmentVisibility=JSON.parse(JSON.stringify(source.equipmentVisibility||{}));target.equipmentColors=JSON.parse(JSON.stringify(source.equipmentColors||{}));target.displayArmour=true;target.displayClothes=true;}}
   function redraw(e){syncCharacter(e);window.drawMap?.();window.renderEntities?.();window.refreshDirectionalTurnPortraits?.();}
   window.equipmentAppearanceSystem={build:BUILD,renderSlots,slotLabels,ensure,isSlotVisible,setSlotVisible,weaponParts,getWeaponMaterial,setWeaponMaterial,resolveWeaponImage,armourTier,armourParts,getArmourMaterial,setArmourMaterial,resolveArmourImage,installArmourRenderSources,syncCharacter,redraw};
   const armourTimer=setInterval(()=>{if(installArmourRenderSources())clearInterval(armourTimer);},50);
