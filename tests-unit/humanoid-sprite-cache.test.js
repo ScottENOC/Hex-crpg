@@ -15,7 +15,7 @@ function makeCanvas() {
   };
 }
 
-test('non-party direct humanoids reuse a composite while player/combat draws bypass it', () => {
+test('cacheable humanoids including player reuse composites while combat draws bypass them', () => {
   let baseCalls = 0;
   const intervals = [];
   const window = {
@@ -52,7 +52,10 @@ test('non-party direct humanoids reuse a composite while player/combat draws byp
 
   const player = { name:'Player', side:'player', race:'human', gender:'female', equipped:{}, facing:'down' };
   window.drawPlayerCharacter(ctx, player, 100, 100, 1, 0);
-  assert.equal(baseCalls, 2, 'player rendering must bypass NPC cache');
+  assert.equal(baseCalls, 2, 'player should build its first composite, then reuse it');
+  window.drawPlayerCharacter(ctx, player, 100, 100, 1, 0);
+  assert.equal(baseCalls, 2, 'player second stable draw should use cached composite');
+  assert.equal(window.humanoidSpriteCacheStats.playerHits, 1);
 
   window.isInCombat = true;
   window.drawPlayerCharacter(ctx, npc, 102, 100, 1, 0);
