@@ -35,6 +35,7 @@
         lastWarmFailures:0,
         buildMs:0,
         maxBuildMs:0,
+        rewraps:0,
     };
 
     function toArray(value) {
@@ -531,7 +532,7 @@
             if (action === 'proceed') {
                 return {complete:false, characters:characters.length, views:viewDone, failures};
             }
-            await new Promise(resolve => setTimeout(resolve, 1900));
+            await new Promise(resolve => (typeof window.setTimeout === 'function' ? window.setTimeout(resolve, 1900) : resolve()));
             viewDone = Math.max(0, (charDone * FACING_ORDER.length));
             pending = failedEntities;
             showProgress(charDone, characters.length, viewDone, totalViews);
@@ -559,8 +560,12 @@
                 console.warn('[humanoid-cache] Background rebuild failed:', reason, entity?.name || entity?.id, error);
             }
         };
-        if (typeof requestIdleCallback === 'function') requestIdleCallback(() => run(), {timeout:500});
-        else setTimeout(run, 0);
+        if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(() => run(), {timeout:500});
+        else if (typeof window.setTimeout === 'function') window.setTimeout(run, 0);
+        // Browser environments always provide one of the above. Test/embedded
+        // sandboxes may intentionally omit timers; a cache miss can safely
+        // fall back to the uncached renderer until the next normal discovery pass.
+
     }
 
     function installMutationHooks() {
@@ -711,7 +716,7 @@
                     console.error('Campaign art preparation failed', error);
                     const action = await chooseFailureAction([{entity:null, facing:null, path:error?.message || String(error), error}]);
                     if (action !== 'retry') return {complete:false, characters:0, views:0, failures:[{error}]};
-                    await new Promise(resolve => setTimeout(resolve, 100));
+                    await new Promise(resolve => (typeof window.setTimeout === 'function' ? window.setTimeout(resolve, 100) : resolve()));
                 }
             }
         } finally {
@@ -765,7 +770,10 @@
 
     function discoverNewCharacters() {
         installMutationHooks();
-        installDrawCache();
+        const previousDraw = window.drawPlayerCharacter;
+        const wasCachedWrapper = !!previousDraw?.__fourDirectionHumanoidCache;
+        const installedNow = installDrawCache();
+        if (installedNow && !wasCachedWrapper && window.drawPlayerCharacter?.__fourDirectionHumanoidCache) stats.rewraps += 1;
         installLifecycleHooks();
         for (const entity of collectCacheableCharacters()) {
             if (!cache.has(entity)) {
