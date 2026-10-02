@@ -1,0 +1,35 @@
+name: Final clothing cleanup
+
+on:
+  push:
+    branches:
+      - development
+    paths:
+      - .github/workflows/final-clothing-cleanup.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Pillow
+        run: python -m pip install --disable-pip-version-check pillow
+      - name: Apply cleanup
+        run: python scripts/tmp_directional_top_cleanup.py
+      - name: Run focused tests
+        run: node --test tests-unit/clothing-render-regression.test.js tests-unit/companion-fashion-preferences.test.js
+      - name: Commit
+        run: |
+          git config user.name ScottENOC
+          git config user.email bales.scott@gmail.com
+          git add -A
+          git commit -m "fix: finish directional clothing cleanup"
+          git push origin development
