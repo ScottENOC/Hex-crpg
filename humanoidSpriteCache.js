@@ -18,8 +18,24 @@
         catch (_) { return String(value ?? ''); }
     }
 
+    function combatIsActive() {
+        // Some builds expose isInCombat as a function, others as a boolean.
+        // Treating the function object itself as the state made every humanoid
+        // permanently ineligible for caching, which is why the cache reported
+        // installed=true while hits/misses/builds all stayed at zero.
+        try {
+            return typeof window.isInCombat === 'function'
+                ? !!window.isInCombat()
+                : !!window.isInCombat;
+        } catch (_) {
+            // If combat state cannot be read safely, preserve correctness by
+            // bypassing the cache for that draw.
+            return true;
+        }
+    }
+
     function isCacheCandidate(entity) {
-        return !!entity && !window.isInCombat && !!entity.race && !!entity.gender && !entity.customImage;
+        return !!entity && !combatIsActive() && !!entity.race && !!entity.gender && !entity.customImage;
     }
 
     function appearanceKey(entity, z, flyOff=0) {
@@ -72,10 +88,6 @@
         return { canvas, key:appearanceKey(entity,z,flyOff), cx, cy };
     }
 
-    // gameEngine.js calls drawPlayerCharacter by its global identifier. Safari can
-    // keep that global binding separate from later window-property wrappers, which
-    // left the cache reporting installed while receiving zero calls. Rebind the
-    // actual global identifier to the wrapper as well as the window property.
     function bindGlobalDraw(wrapped) {
         window.__hexHumanoidCachedDraw = wrapped;
         try {
