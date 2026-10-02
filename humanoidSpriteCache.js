@@ -10,7 +10,7 @@
     const cache = new WeakMap();
     const stats = window.humanoidSpriteCacheStats = {
         installed:false, hits:0, misses:0, builds:0, bypasses:0, failedBuilds:0,
-        rewraps:0, playerHits:0, npcHits:0, buildMs:0, maxBuildMs:0,
+        rewraps:0, playerHits:0, npcHits:0, buildMs:0, maxBuildMs:0, globalBinds:0, globalBindFailures:0,
     };
 
     function safeJson(value) {
@@ -18,9 +18,6 @@
         catch (_) { return String(value ?? ''); }
     }
 
-    // Do not duplicate humanoidRenderer.js's private CHARACTER_RIGS table here.
-    // The direct compositor is authoritative: a candidate is cacheable when a
-    // trial composite actually advances __humanoidRendererDrawCount for it.
     function isCacheCandidate(entity) {
         return !!entity && !window.isInCombat && !!entity.race && !!entity.gender && !entity.customImage;
     }
@@ -70,17 +67,33 @@
         stats.buildMs += elapsed;
         stats.maxBuildMs = Math.max(stats.maxBuildMs, elapsed);
         const after = Number(window.__humanoidRendererDrawCount || 0);
-        // This is also the eligibility test. Legacy/non-humanoid renderers do not
-        // advance the direct compositor counter, so they safely fall through.
         if (after <= before || window.__humanoidRendererLastDraw?.entity !== entity) return null;
         stats.builds++;
         return { canvas, key:appearanceKey(entity,z,flyOff), cx, cy };
+    }
+
+    // gameEngine.js calls drawPlayerCharacter by its global identifier. Safari can
+    // keep that global binding separate from later window-property wrappers, which
+    // left the cache reporting installed while receiving zero calls. Rebind the
+    // actual global identifier to the wrapper as well as the window property.
+    function bindGlobalDraw(wrapped) {
+        window.__hexHumanoidCachedDraw = wrapped;
+        try {
+            (0, eval)('drawPlayerCharacter = window.__hexHumanoidCachedDraw');
+            stats.globalBinds++;
+            return true;
+        } catch (err) {
+            stats.globalBindFailures++;
+            console.warn('[humanoid-cache] Could not bind global drawPlayerCharacter', err);
+            return false;
+        }
     }
 
     function install() {
         const current = window.drawPlayerCharacter;
         if (typeof current !== 'function') return false;
         if (wrapperChainHas(current, '__stableNpcCompositeCache')) {
+            bindGlobalDraw(current);
             stats.installed = true;
             return true;
         }
@@ -98,8 +111,6 @@
                 entry = buildComposite(current, entity, z, flyOff);
                 if (!entry) {
                     stats.failedBuilds++;
-                    // buildComposite already rendered legacy/non-direct candidates
-                    // to its offscreen canvas. Render them normally once onscreen.
                     return current.apply(this, arguments);
                 }
                 cache.set(entity, entry);
@@ -117,6 +128,7 @@
         wrapped.__original = current;
         if (wrapperChainHas(current, '__directHumanoidCompositor')) wrapped.__directHumanoidCompositor = true;
         window.drawPlayerCharacter = wrapped;
+        bindGlobalDraw(wrapped);
         window.clearHumanoidSpriteCache = entity => { if (entity) cache.delete(entity); };
         stats.installed = true;
         return true;
@@ -132,7 +144,7 @@
             const lookups = Number(s.hits || 0) + Number(s.misses || 0);
             const hitRate = lookups ? (100 * Number(s.hits || 0) / lookups).toFixed(1) : '0.0';
             const avgBuild = s.builds ? (Number(s.buildMs || 0) / s.builds).toFixed(2) : '0.00';
-            return `${report}\n\nHUMANOID COMPOSITE CACHE\n========================\nInstalled: ${!!s.installed} | hits=${s.hits || 0} misses=${s.misses || 0} hitRate=${hitRate}%\nPlayer hits=${s.playerHits || 0} NPC hits=${s.npcHits || 0}\nBuilds=${s.builds || 0} failedBuilds=${s.failedBuilds || 0} bypasses=${s.bypasses || 0} rewraps=${s.rewraps || 0}\nBuild avg=${avgBuild}ms max=${Number(s.maxBuildMs || 0).toFixed(2)}ms`;
+            return `${report}\n\nHUMANOID COMPOSITE CACHE\n========================\nInstalled: ${!!s.installed} | hits=${s.hits || 0} misses=${s.misses || 0} hitRate=${hitRate}%\nPlayer hits=${s.playerHits || 0} NPC hits=${s.npcHits || 0}\nBuilds=${s.builds || 0} failedBuilds=${s.failedBuilds || 0} bypasses=${s.bypasses || 0} rewraps=${s.rewraps || 0}\nGlobal binds=${s.globalBinds || 0} failures=${s.globalBindFailures || 0}\nBuild avg=${avgBuild}ms max=${Number(s.maxBuildMs || 0).toFixed(2)}ms`;
         };
         wrapped.__npcSpriteCacheStats = true;
         wrapped.__original = current;
@@ -155,7 +167,7 @@
         const rate = lookups ? (100 * stats.hits / lookups).toFixed(0) : '0';
         const live = wrapperChainHas(window.drawPlayerCharacter, '__stableNpcCompositeCache');
         const avgBuild = stats.builds ? (stats.buildMs / stats.builds).toFixed(1) : '0.0';
-        el.textContent = `hum-cache ${live ? 'LIVE' : 'LOST'} hit ${stats.hits}/${lookups} (${rate}%) P${stats.playerHits} N${stats.npcHits} build ${stats.builds} fail ${stats.failedBuilds} ${avgBuild}ms avg`;
+        el.textContent = `hum-cache ${live ? 'LIVE' : 'LOST'} hit ${stats.hits}/${lookups} (${rate}%) P${stats.playerHits} N${stats.npcHits} build ${stats.builds} fail ${stats.failedBuilds} bind ${stats.globalBinds}/${stats.globalBindFailures} ${avgBuild}ms avg`;
     }
 
     window.HumanoidSpriteCache = { install, installReportStats, updateOverlayStats, stats, CACHE_PAD_HEXES };
@@ -172,6 +184,8 @@
         if (typeof current === 'function' && !wrapperChainHas(current, '__stableNpcCompositeCache')) {
             stats.installed = false;
             if (install()) stats.rewraps++;
+        } else if (typeof current === 'function') {
+            bindGlobalDraw(current);
         }
         updateOverlayStats();
     }, HEALTHCHECK_MS);
