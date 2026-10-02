@@ -15,6 +15,7 @@
     let installed = false;
     let lifecycleInstalled = false;
     let discoveryTimer = null;
+    let lastDiagnostic = {stage:'idle', entity:null, facing:null};
 
     const stats = window.humanoidSpriteCacheStats = {
         build: BUILD,
@@ -538,6 +539,8 @@
         let characters = [];
         const diagnostic = (stage, extra='') => {
             diagnosticStage = stage;
+            lastDiagnostic = {stage, entity:diagnosticEntity, facing:diagnosticFacing, reason};
+            window.__humanoidCacheDiagnostic = lastDiagnostic;
             const sourceType = source == null ? String(source) : Array.isArray(source) ? 'Array' : typeof source;
             showCacheDetail(
                 'Stage: ' + stage +
@@ -797,7 +800,7 @@
                 } catch (error) {
                     const detail = normaliseError(error);
                     console.error('Campaign art preparation failed', detail.message, detail.stack || detail);
-                    const action = await chooseFailureAction([{entity:null, facing:null, path:error?.message || String(error), error}]);
+                    showCacheDetail('Stage: UNHANDLED EXCEPTION\nLast stage: ' + lastDiagnostic.stage + '\nCharacter: ' + (lastDiagnostic.entity?.name || lastDiagnostic.entity?.id || 'none') + '\nDirection: ' + (lastDiagnostic.facing ? (FACING_LABELS[lastDiagnostic.facing] || lastDiagnostic.facing) : 'none') + '\nError: ' + detail.message + '\n' + (detail.stack || 'No stack available'));\n                    const action = await chooseFailureAction([{entity:lastDiagnostic.entity, facing:lastDiagnostic.facing, path:detail.message, error:detail}]);
                     if (action !== 'retry') return {complete:false, characters:0, views:0, failures:[{error}]};
                     await new Promise(resolve => (typeof window.setTimeout === 'function' ? window.setTimeout(resolve, 100) : resolve()));
                 }
