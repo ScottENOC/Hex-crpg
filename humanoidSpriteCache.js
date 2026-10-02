@@ -5,6 +5,7 @@
 
     const BUILD = '20261002-player-wren-cache-v3';
     const DIAGNOSTIC_MARKER = 'DIRECTIONAL-ENTITY-ITERATION-FIX-20261003';
+    window.__HEX_DIAGNOSTIC_MARKER = DIAGNOSTIC_MARKER;
     const CACHE_PAD_HEXES = 4;
     const FACING_ORDER = Object.freeze(['down', 'up', 'right', 'left']);
     const FACING_LABELS = Object.freeze({down:'front', up:'back', right:'side-right', left:'side-left'});
@@ -831,8 +832,9 @@
                     return result;
                 } catch (error) {
                     const detail = normaliseError(error);
-                    console.error('Campaign art preparation failed', detail.message, detail.stack || detail);
-                    showCacheDetail('Stage: UNHANDLED EXCEPTION\nLast stage: ' + lastDiagnostic.stage + '\nCharacter: ' + (lastDiagnostic.entity?.name || lastDiagnostic.entity?.id || 'none') + '\nDirection: ' + (lastDiagnostic.facing ? (FACING_LABELS[lastDiagnostic.facing] || lastDiagnostic.facing) : 'none') + '\nError: ' + detail.message + '\n' + (detail.stack || 'No stack available'));\n                    const action = await chooseFailureAction([{entity:lastDiagnostic.entity, facing:lastDiagnostic.facing, path:detail.message, error:detail}]);
+                    const diagnosticMessage = `[${DIAGNOSTIC_MARKER}] ${detail.message}`;
+                    console.error('Campaign art preparation failed', diagnosticMessage, detail.stack || detail);
+                    showCacheDetail('Stage: UNHANDLED EXCEPTION\nLast stage: ' + lastDiagnostic.stage + '\nCharacter: ' + (lastDiagnostic.entity?.name || lastDiagnostic.entity?.id || 'none') + '\nDirection: ' + (lastDiagnostic.facing ? (FACING_LABELS[lastDiagnostic.facing] || lastDiagnostic.facing) : 'none') + '\nDiagnostic marker: ' + DIAGNOSTIC_MARKER + '\nError: ' + detail.message + '\n' + (detail.stack || 'No stack available'));\n                    const action = await chooseFailureAction([{entity:lastDiagnostic.entity, facing:lastDiagnostic.facing, path:detail.message, error:detail}]);
                     if (action !== 'retry') return {complete:false, characters:0, views:0, failures:[{error}]};
                     await new Promise(resolve => (typeof window.setTimeout === 'function' ? window.setTimeout(resolve, 100) : resolve()));
                 }
