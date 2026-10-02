@@ -237,10 +237,13 @@
 
     window.closeMenusForDialogue = closeMenusForDialogue;
 
-    // ui.js defines showDialogue later in the page, so install once all static
-    // scripts have loaded. This is startup-only; there is no polling or frame work.
-    if (document.readyState === 'complete') installDialogueMenuPrecedence();
-    else window.addEventListener('load', installDialogueMenuPrecedence, { once: true });
+    // ui.js defines showDialogue later in the parser, so install immediately
+    // after parser-blocking scripts have run. No polling or frame work is added.
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', installDialogueMenuPrecedence, { once: true });
+    } else {
+        installDialogueMenuPrecedence();
+    }
 })();
 
 const dialogueData = {
