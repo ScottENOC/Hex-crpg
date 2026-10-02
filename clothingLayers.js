@@ -73,9 +73,7 @@
     pants_hose:singleLayerViews('pants',{front:'images/equipment/clothing/pants_hose_front.png',side:'images/equipment/clothing/pants_hose_side.png',back:'images/equipment/clothing/pants_hose_back.png'},'Hose'),
     pants_trousers:singleLayerViews('pants',{
       front:'images/equipment/clothing/pants_trousers_front.png',
-      // No separately authored side file exists; make the intentional front-art
-      // fallback explicit so every directional consumer resolves the same source.
-      side:'images/equipment/clothing/pants_trousers_front.png',
+      side:'images/equipment/clothing/pants_trousers_side.png',
       back:'images/equipment/clothing/pants_trousers_back.png',
     },'Trousers'),
     underwear_briefs:twoToneGarment('underwear',{
