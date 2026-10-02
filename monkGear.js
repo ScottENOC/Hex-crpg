@@ -5,7 +5,7 @@
   const TOP = 'monk_wrap';
   const PANTS = 'monk_trousers';
   const ASSET = 'images/equipment/clothing/';
-  const BUILD = '20261002-monk-gear-v1';
+  const BUILD = '20261002-monk-gear-v2';
 
   const topLayers = {
     slot: 'shirt',
@@ -47,10 +47,7 @@
     return character;
   }
 
-  // createCharacterData is the common path for the player and recruitable
-  // companions. Brother Alden is created as a monk through this function, so
-  // this also gives the existing monk companion the outfit without a one-off
-  // name check.
+  // Companions, including Brother Alden, use the exported character factory.
   function wrapCharacterCreation() {
     const original = window.createCharacterData;
     if (typeof original !== 'function' || original.__monkGearWrapped) return false;
@@ -63,6 +60,23 @@
     wrappedCreateCharacterData.__monkGearWrapped = true;
     wrappedCreateCharacterData.__monkGearOriginal = original;
     window.createCharacterData = wrappedCreateCharacterData;
+    return true;
+  }
+
+  // initializePlayer's original body calls its local factory directly, so wrap
+  // the outer player path as well rather than relying on createCharacterData's
+  // exported wrapper to catch it.
+  function wrapPlayerCreation() {
+    const original = window.initializePlayer;
+    if (typeof original !== 'function' || original.__monkGearWrapped) return false;
+    function wrappedInitializePlayer(race, cls, ...rest) {
+      const result = original.call(this, race, cls, ...rest);
+      if (String(cls || '').toLowerCase() === 'monk') equipMonkOutfit(window.player || window.party?.[0]);
+      return result;
+    }
+    wrappedInitializePlayer.__monkGearWrapped = true;
+    wrappedInitializePlayer.__monkGearOriginal = original;
+    window.initializePlayer = wrappedInitializePlayer;
     return true;
   }
 
@@ -117,7 +131,7 @@
     entity.__monkGearNpcRolled = true;
     const humanoid = entity.tags?.includes?.('humanoid') || ['human', 'elf', 'dwarf', 'orc', 'goblin'].includes(entity.race);
     if (!humanoid) return;
-    // Stable 1-in-25 roll: rare, deterministic, and therefore save/reload-safe.
+    // Stable 1-in-25 roll: rare, deterministic, and save/reload-safe.
     const identity = `${entity.name || ''}|${entity.race || ''}|${entity.gender || ''}|${entity.hex?.q ?? ''}|${entity.hex?.r ?? ''}`;
     if (hash(identity) % 25 !== 0) return;
     entity.equipped ||= {};
@@ -133,17 +147,36 @@
     for (const entity of window.entities || []) maybeEquipRareNpc(entity);
   }
 
+  // Catch NPCs created after initial world setup without maintaining a permanent
+  // full-entity polling loop.
+  function wrapNpcBuilder() {
+    const original = window.buildNPC;
+    if (typeof original !== 'function' || original.__monkGearWrapped) return false;
+    function wrappedBuildNPC(...args) {
+      const npc = original.apply(this, args);
+      maybeEquipRareNpc(npc);
+      return npc;
+    }
+    wrappedBuildNPC.__monkGearWrapped = true;
+    wrappedBuildNPC.__monkGearOriginal = original;
+    window.buildNPC = wrappedBuildNPC;
+    return true;
+  }
+
   function install() {
-    wrapCharacterCreation();
-    registerItems();
-    stockShops();
+    const characterReady = wrapCharacterCreation();
+    const playerReady = wrapPlayerCreation();
+    const itemsReady = registerItems();
+    const shopsReady = stockShops();
+    const npcBuilderReady = wrapNpcBuilder();
     scanNpcs();
+    return characterReady && playerReady && itemsReady && shopsReady && npcBuilderReady;
   }
 
   install();
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once: true });
   window.addEventListener('load', install, { once: true });
-  const timer = setInterval(install, 1000);
+  const timer = setInterval(() => { if (install()) clearInterval(timer); }, 250);
   setTimeout(() => clearInterval(timer), 30000);
 
   window.monkGearSystem = { build: BUILD, topId: TOP, pantsId: PANTS, equipMonkOutfit, maybeEquipRareNpc, install };
