@@ -6,20 +6,21 @@ const path = require('node:path');
 const ROOT = path.resolve(__dirname, '..');
 const read = file => fs.readFileSync(path.join(ROOT, file), 'utf8');
 
-test('asset scheduler keeps renderer image traffic behind the offline startup barrier', () => {
-  const source = read('assetLoadScheduler.js');
+test('humanoid-critical image requests are not blocked on offline cache readiness', () => {
+  const scheduler = read('assetLoadScheduler.js');
+  const renderer = read('humanoidRenderer.js');
 
-  assert.match(source, /window\.__hexOfflineReady/,
-    'scheduler must observe the offline/local-copy readiness promise');
-  assert.match(source, /if \(offlineStartupPending\) return false;/,
-    'normal renderer requests must remain parked while the local copy is being prepared');
-  assert.match(source, /\(immediate && !offlineStartupPending\) \|\| mayStartNow\(record\.path\)/,
-    'even immediate renderer requests must respect the startup barrier');
-  assert.match(source, /releaseManagedDeferred\(\);[\s\S]*schedulePump\(\);/,
-    'parked renderer requests must resume after the startup barrier settles');
+  assert.doesNotMatch(scheduler, /offlineStartupPending/,
+    'renderer image traffic must not be parked behind the offline bootstrap; this previously made all people disappear');
+  assert.match(scheduler, /if \(immediate \|\| mayStartNow\(record\.path\)\) start\(\);/,
+    'immediate managed image requests must be allowed to start');
+  assert.match(renderer, /window\.assetManager\.request\(src\)/,
+    'humanoid renderer must continue using the shared managed image cache');
+  assert.match(renderer, /window\.assetManager\.whenReady\(src\)\.then/,
+    'humanoid renderer must redraw when its body image becomes ready');
 });
 
-test('performance backpressure does not remove restored directional clothing', () => {
+test('performance scheduling does not remove restored directional clothing', () => {
   const source = read('assetLoadScheduler.js');
 
   for (const marker of [
