@@ -268,7 +268,7 @@
 
   function syncShoes(p) {
     if (!p) return;
-    for (const target of [...(window.party||[]),...(window.entities||[])]) {
+    for (const target of (Array.isArray(window.party) ? window.party : (window.party && typeof window.party === 'object' ? Object.values(window.party) : [])).concat(Array.isArray(window.entities) ? window.entities : (window.entities && typeof window.entities === 'object' ? Object.values(window.entities) : []))) {
       if (!target || target === p || target.name !== p.name) continue;
       if (!target.equipped) target.equipped={};
       target.equipped[SLOT] = p.equipped?.[SLOT] || null;
@@ -297,8 +297,8 @@
 
   function install() {
     if (!registerSlot()) return false;
-    for (const e of window.entities || []) ensureDefaultFootwear(e);
-    for (const e of window.party || []) ensureDefaultFootwear(e);
+    for (const e of (Array.isArray(window.entities) ? window.entities : (window.entities && typeof window.entities === 'object' ? Object.values(window.entities) : []))) ensureDefaultFootwear(e);
+    for (const e of (Array.isArray(window.party) ? window.party : (window.party && typeof window.party === 'object' ? Object.values(window.party) : []))) ensureDefaultFootwear(e);
     if (window.player) ensureDefaultFootwear(window.player);
     const draw = wrapClothingDraw();
     const unequip = wrapUnequip();
@@ -315,7 +315,7 @@
     registerSlot();
     wrapClothingDraw();
     wrapUnequip();
-    for (const e of window.entities || []) ensureDefaultFootwear(e);
+    for (const e of (Array.isArray(window.entities) ? window.entities : (window.entities && typeof window.entities === 'object' ? Object.values(window.entities) : []))) ensureDefaultFootwear(e);
     if (window.player) ensureDefaultFootwear(window.player);
   },1000);
 
