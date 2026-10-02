@@ -78,3 +78,21 @@ test('opt-in mobile input probe reports hit-testing without intercepting taps', 
     contains(ui, 'pointer-events:none');
     contains(ui, "['touchstart','pointerdown','touchend','pointerup','click']");
 });
+
+test('dialogue closes ordinary menus and equipment picker before taking focus', () => {
+    const dialogue = read('dialogue.js');
+
+    contains(dialogue, 'function closeMenusForDialogue()');
+    contains(dialogue, "document.getElementById('close-inventory-modal')");
+    contains(dialogue, "document.querySelector('[data-equipment-slot-picker]')?.remove();");
+    contains(dialogue, "'character-screen-modal'");
+    contains(dialogue, "'shop-modal'");
+    contains(dialogue, "'settings-modal'");
+    contains(dialogue, "document.querySelectorAll('.dropdown-content.show')");
+    contains(dialogue, 'closeMenusForDialogue();');
+    contains(dialogue, 'return baseShowDialogue.apply(this, arguments);');
+
+    const closeIndex = dialogue.indexOf('closeMenusForDialogue();');
+    const showIndex = dialogue.indexOf('return baseShowDialogue.apply(this, arguments);');
+    assert.ok(closeIndex >= 0 && showIndex > closeIndex, 'menus must close before dialogue is shown');
+});
