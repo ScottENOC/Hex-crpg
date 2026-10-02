@@ -367,3 +367,46 @@
     install: installAll,
   };
 })();
+
+// Mobile Safari can deliver touchstart/touchend to dynamically-created buttons
+// inside the fixed, scrollable equipment picker but omit the synthetic click.
+// Keep the button's existing click handler as the single source of truth: this
+// bridge only calls button.click() after a stationary touch and prevents the
+// browser from generating a second click for that same tap. A moved touch is
+// left alone so scrolling the picker can never equip an item accidentally.
+(() => {
+  'use strict';
+  if (window.__equipmentPickerTouchBridgeInstalled) return;
+  window.__equipmentPickerTouchBridgeInstalled = true;
+
+  const MAX_TAP_MOVE_PX = 10;
+  let start = null;
+
+  document.addEventListener('touchstart', event => {
+    const button = event.target?.closest?.('[data-equipment-slot-picker] button');
+    if (!button || event.touches.length !== 1) {
+      start = null;
+      return;
+    }
+    const touch = event.touches[0];
+    start = { button, x: touch.clientX, y: touch.clientY };
+  }, { passive: true, capture: true });
+
+  document.addEventListener('touchend', event => {
+    const pending = start;
+    start = null;
+    if (!pending || !pending.button.isConnected || event.changedTouches.length !== 1) return;
+
+    const touch = event.changedTouches[0];
+    const dx = touch.clientX - pending.x;
+    const dy = touch.clientY - pending.y;
+    if ((dx * dx) + (dy * dy) > MAX_TAP_MOVE_PX * MAX_TAP_MOVE_PX) return;
+
+    // Cancelling the native touchend suppresses Safari's delayed synthetic click;
+    // the programmatic click below therefore runs the existing action exactly once.
+    event.preventDefault();
+    pending.button.click();
+  }, { passive: false, capture: true });
+
+  document.addEventListener('touchcancel', () => { start = null; }, { passive: true, capture: true });
+})();
