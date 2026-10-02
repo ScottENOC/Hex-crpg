@@ -312,6 +312,7 @@
     }
 
     function buildComposite(original, entity, facing, version) {
+        if (typeof original !== 'function') throw new Error('Humanoid base renderer is not installed yet');
         const hs = Math.max(1, Number(window.hexSize || 30));
         const size = Math.max(64, Math.ceil(hs * CACHE_PAD_HEXES * 2));
         const canvas = document.createElement('canvas');
@@ -379,13 +380,25 @@
                 failures.length = 0;
                 completed = 0;
                 for (const facing of FACING_ORDER) {
-                    const prepared = await prepareFacingSources(entity, facing);
+                    let prepared;
+                    try {
+                        prepared = await prepareFacingSources(entity, facing);
+                    } catch (error) {
+                        failures.push({entity, facing, path:'prepareFacingSources', error:normaliseError(error)});
+                        break;
+                    }
                     if (!prepared.ready) {
-                        failures.push(...prepared.failed.map(f => ({...f, entity, facing})));
+                        failures.push(...prepared.failed.map(f => ({...f, entity, facing, error:normaliseError(f.error)})));
                         break;
                     }
                     if (state.version !== version) break;
-                    const entry = buildComposite(window.drawPlayerCharacter?.__humanoidFourDirectionBase || window.drawPlayerCharacter, entity, facing, version);
+                    let entry;
+                    try {
+                        entry = buildComposite(window.drawPlayerCharacter?.__humanoidFourDirectionBase || window.drawPlayerCharacter, entity, facing, version);
+                    } catch (error) {
+                        failures.push({entity, facing, path:'buildComposite', error:normaliseError(error)});
+                        break;
+                    }
                     if (!entry) {
                         failures.push({entity, facing, path:'(composite)', error:new Error(`Composite draw failed for ${FACING_LABELS[facing]}`)});
                         break;
@@ -457,7 +470,8 @@
         for (const failure of failures) {
             const name = failure.entity?.name || failure.entity?.id || 'Unnamed character';
             const view = FACING_LABELS[failure.facing] || failure.facing || 'unknown view';
-            const path = failure.path || failure.error?.message || '(unknown asset)';
+            const error = failure.error ? normaliseError(failure.error) : null;
+            const path = failure.path || error?.message || '(unknown asset)';
             const key = `${name}|${view}|${path}`;
             if (seen.has(key)) continue;
             seen.add(key);
@@ -482,6 +496,16 @@
                 if (ui.error) ui.error.hidden = true;
             }
         });
+    }
+
+    function normaliseError(error) {
+        if (error instanceof Error) return error;
+        if (error && typeof error === 'object') {
+            let detail = error.message || error.reason || error.name;
+            if (!detail) { try { detail = JSON.stringify(error); } catch (_) {} }
+            return new Error(String(detail || 'Unknown error object'));
+        }
+        return new Error(String(error ?? 'Unknown error'));
     }
 
     function escapeHtml(value) {
@@ -713,7 +737,8 @@
                     if (!result.complete) console.warn('[humanoid-cache] Proceeding with uncached fallback for failed character views:', result.failures);
                     return result;
                 } catch (error) {
-                    console.error('Campaign art preparation failed', error);
+                    const detail = normaliseError(error);
+                    console.error('Campaign art preparation failed', detail.message, detail.stack || detail);
                     const action = await chooseFailureAction([{entity:null, facing:null, path:error?.message || String(error), error}]);
                     if (action !== 'retry') return {complete:false, characters:0, views:0, failures:[{error}]};
                     await new Promise(resolve => (typeof window.setTimeout === 'function' ? window.setTimeout(resolve, 100) : resolve()));
