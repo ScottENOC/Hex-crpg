@@ -19,11 +19,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install Pillow
+        run: python -m pip install --disable-pip-version-check pillow
       - name: Inspect newly uploaded PNG backgrounds
         run: |
           python - <<'PY'
           from PIL import Image
-          from pathlib import Path
           paths = [
             'images/equipment/clothing/bra_side.png',
             'images/equipment/clothing/bra_back.png',
