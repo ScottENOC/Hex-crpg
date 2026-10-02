@@ -207,3 +207,14 @@ if (!document.querySelector('script[data-layered-clothing]')) {
   clothingScript.async = false;
   document.head.appendChild(clothingScript);
 }
+
+// Monk-specific clothing is data-driven in its own small compatibility module.
+// It registers the wrap/trousers, equips monks at character creation, adds the
+// set to the clothier, and gives ordinary humanoid NPCs a rare deterministic roll.
+if (!document.querySelector('script[data-monk-gear]')) {
+  const monkGearScript = document.createElement('script');
+  monkGearScript.src = `monkGear.js?build=${encodeURIComponent(window.PRESENTATION_BUILD || '20261002-monk-gear-v1')}`;
+  monkGearScript.dataset.monkGear = 'true';
+  monkGearScript.async = false;
+  document.head.appendChild(monkGearScript);
+}
