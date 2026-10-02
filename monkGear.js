@@ -50,7 +50,8 @@
   // Companions, including Brother Alden, use the exported character factory.
   function wrapCharacterCreation() {
     const original = window.createCharacterData;
-    if (typeof original !== 'function' || original.__monkGearWrapped) return false;
+    if (typeof original !== 'function') return false;
+    if (original.__monkGearWrapped) return true;
     function wrappedCreateCharacterData(...args) {
       const character = original.apply(this, args);
       const cls = character?.class || args[1];
@@ -68,7 +69,8 @@
   // exported wrapper to catch it.
   function wrapPlayerCreation() {
     const original = window.initializePlayer;
-    if (typeof original !== 'function' || original.__monkGearWrapped) return false;
+    if (typeof original !== 'function') return false;
+    if (original.__monkGearWrapped) return true;
     function wrappedInitializePlayer(race, cls, ...rest) {
       const result = original.call(this, race, cls, ...rest);
       if (String(cls || '').toLowerCase() === 'monk') equipMonkOutfit(window.player || window.party?.[0]);
@@ -151,7 +153,8 @@
   // full-entity polling loop.
   function wrapNpcBuilder() {
     const original = window.buildNPC;
-    if (typeof original !== 'function' || original.__monkGearWrapped) return false;
+    if (typeof original !== 'function') return false;
+    if (original.__monkGearWrapped) return true;
     function wrappedBuildNPC(...args) {
       const npc = original.apply(this, args);
       maybeEquipRareNpc(npc);
