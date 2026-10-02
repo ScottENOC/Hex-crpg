@@ -26,7 +26,7 @@ test('cacheable humanoids including player reuse composites while combat draws b
     drawPlayerCharacter(ctx, entity) {
       baseCalls++;
       window.__humanoidRendererDrawCount++;
-      window.__humanoidRendererLastDraw = { entity };
+      window.__humanoidRendererLastDraw = { entity, facing: entity.facing };
     },
   };
   window.drawPlayerCharacter.__directHumanoidCompositor = true;
