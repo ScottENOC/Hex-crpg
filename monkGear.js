@@ -5,7 +5,7 @@
   const TOP = 'monk_wrap';
   const PANTS = 'monk_trousers';
   const ASSET = 'images/equipment/clothing/';
-  const BUILD = '20261002-monk-gear-v2';
+  const BUILD = '20261002-monk-gear-v3';
 
   const topLayers = {
     slot: 'shirt',
@@ -145,8 +145,13 @@
     equipMonkOutfit(entity);
   }
 
-  function scanNpcs() {
-    for (const entity of window.entities || []) maybeEquipRareNpc(entity);
+  let initialNpcScanDone = false;
+  function scanNpcsOnce() {
+    if (initialNpcScanDone) return true;
+    if (!Array.isArray(window.entities)) return false;
+    initialNpcScanDone = true;
+    for (const entity of window.entities) maybeEquipRareNpc(entity);
+    return true;
   }
 
   // Catch NPCs created after initial world setup without maintaining a permanent
@@ -172,14 +177,14 @@
     const itemsReady = registerItems();
     const shopsReady = stockShops();
     const npcBuilderReady = wrapNpcBuilder();
-    scanNpcs();
-    return characterReady && playerReady && itemsReady && shopsReady && npcBuilderReady;
+    const initialNpcsReady = scanNpcsOnce();
+    return characterReady && playerReady && itemsReady && shopsReady && npcBuilderReady && initialNpcsReady;
   }
 
   install();
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once: true });
   window.addEventListener('load', install, { once: true });
-  const timer = setInterval(() => { if (install()) clearInterval(timer); }, 250);
+  const timer = setInterval(() => { if (install()) clearInterval(timer); }, 1000);
   setTimeout(() => clearInterval(timer), 30000);
 
   window.monkGearSystem = { build: BUILD, topId: TOP, pantsId: PANTS, equipMonkOutfit, maybeEquipRareNpc, install };
