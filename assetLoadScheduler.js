@@ -586,7 +586,7 @@
         if (!overlay) {
             overlay=document.createElement('div');
             overlay.id='hex-loading-gate';
-            overlay.innerHTML='<div class="hex-loading-card"><h2 class="hex-loading-title"></h2><p class="hex-loading-count"></p><div class="hex-loading-track"><div class="hex-loading-bar"></div></div><div class="hex-loading-error" hidden></div><div class="hex-loading-actions"><button class="hex-loading-retry" hidden>Retry failed assets</button><button class="hex-loading-continue" hidden>Start game anyway</button></div></div>';
+            overlay.innerHTML='<div class="hex-loading-card"><h2 class="hex-loading-title"></h2><p class="hex-loading-count"></p><p class="hex-loading-build" style="font-size:.72rem;opacity:.55;margin:0 0 10px">Build 91b7706 · cache v2</p><div class="hex-loading-track"><div class="hex-loading-bar"></div></div><div class="hex-loading-error" hidden></div><div class="hex-loading-actions"><button class="hex-loading-retry" hidden>Retry failed assets</button><button class="hex-loading-continue" hidden>Start game anyway</button></div></div>';
             document.body.appendChild(overlay);
         }
         return overlay;
