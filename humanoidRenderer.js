@@ -376,7 +376,7 @@
     }
 
     function updateFacingFromMovement() {
-        for (const entity of window.entities || []) {
+        for (const entity of (Array.isArray(window.entities) ? window.entities : (window.entities && typeof window.entities === 'object' ? Object.values(window.entities) : []))) {
             if (!entity?.hex) continue;
             const old = previousHex.get(entity);
             if (!old) {
