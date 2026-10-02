@@ -1,4 +1,26 @@
 // main.js - VERSION 2.0 - DEFINITIVE
+
+// TEMPORARY CAMPAIGN-2 DIAGNOSTIC
+// Surface the exact runtime exception on-device; iOS Safari's console is not
+// convenient during GitHub Pages testing. Remove after the culprit is fixed.
+if (!window.__campaign2ErrorProbeInstalled) {
+    window.__campaign2ErrorProbeInstalled = true;
+    window.addEventListener('error', (event) => {
+        const message = event?.error?.stack || event?.message || 'Unknown runtime error';
+        if (window.currentCampaign === '2' || /not iterable/i.test(String(message))) {
+            console.error('[CAMPAIGN2 ERROR PROBE]', message);
+            try { window.showMessage?.('[C2 DEBUG] ' + String(message).slice(0, 700)); } catch (_) {}
+        }
+    });
+    window.addEventListener('unhandledrejection', (event) => {
+        const reason = event?.reason?.stack || event?.reason?.message || event?.reason || 'Unknown promise rejection';
+        if (window.currentCampaign === '2' || /not iterable/i.test(String(reason))) {
+            console.error('[CAMPAIGN2 REJECTION PROBE]', reason);
+            try { window.showMessage?.('[C2 DEBUG] ' + String(reason).slice(0, 700)); } catch (_) {}
+        }
+    });
+}
+
 console.log("--- MAIN.JS VERSION 2.0 LOADED ---");
 
 document.addEventListener("DOMContentLoaded", () => {
