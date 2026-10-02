@@ -3,7 +3,7 @@
 (() => {
     'use strict';
 
-    const BUILD = '20261002-four-direction-cache-v2';
+    const BUILD = '20261002-player-wren-cache-v3';
     const CACHE_PAD_HEXES = 4;
     const FACING_ORDER = Object.freeze(['down', 'up', 'right', 'left']);
     const FACING_LABELS = Object.freeze({down:'front', up:'back', right:'side-right', left:'side-left'});
@@ -432,11 +432,41 @@
         finally { if (state.warming === task) state.warming = null; }
     }
 
-    function collectCacheableCharacters(source=window.entities) {
-        const candidates = uniqueObjects(source).filter(isCacheCandidate);
+    function collectCacheableCharacters() {
+        // Temporary focused warm-up: only the player and Wren.
+        // Do not enumerate the campaign's full entity collection here.
+        const targets = [];
         const player = window.player;
-        if (isCacheCandidate(player) && !candidates.includes(player)) candidates.unshift(player);
-        return candidates;
+        if (isCacheCandidate(player)) targets.push(player);
+
+        const wrenCandidates = [
+            window.wren,
+            window.Wren,
+            window.party?.Wren,
+            window.party?.wren,
+        ];
+        for (const candidate of wrenCandidates) {
+            if (candidate?.name && String(candidate.name).toLowerCase() === 'wren') {
+                if (isCacheCandidate(candidate)) targets.push(candidate);
+                break;
+            }
+            if (isCacheCandidate(candidate)) {
+                targets.push(candidate);
+                break;
+            }
+        }
+
+        // Wren normally lives in the party collection. This is deliberately
+        // limited to the party rather than the full campaign entity list.
+        if (targets.length < 2) {
+            for (const candidate of uniqueObjects(window.party)) {
+                if (String(candidate?.name || '').toLowerCase() !== 'wren') continue;
+                if (isCacheCandidate(candidate) && !targets.includes(candidate)) targets.push(candidate);
+                break;
+            }
+        }
+
+        return uniqueObjects(targets);
     }
 
     function overlayParts() {
@@ -541,7 +571,7 @@
             diagnosticStage = stage;
             lastDiagnostic = {stage, entity:diagnosticEntity, facing:diagnosticFacing, reason};
             window.__humanoidCacheDiagnostic = lastDiagnostic;
-            const sourceType = source == null ? String(source) : Array.isArray(source) ? 'Array' : typeof source;
+            const sourceType = 'focused player + Wren';
             showCacheDetail(
                 'Stage: ' + stage +
                 '\nSource type: ' + sourceType +
