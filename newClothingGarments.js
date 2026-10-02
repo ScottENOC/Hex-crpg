@@ -255,7 +255,7 @@
     wrapped.__newClothingFashionHook = true;
     wrapped.__previous = previous;
     window.buildNPC = wrapped;
-    for (const entity of window.entities || []) maybeStyleNpc(entity);
+    for (const entity of (Array.isArray(window.entities) ? window.entities : (window.entities && typeof window.entities === 'object' ? Object.values(window.entities) : []))) maybeStyleNpc(entity);
     npcHookInstalled = true;
     return true;
   }
