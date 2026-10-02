@@ -1,37 +1,8 @@
 from pathlib import Path
-from PIL import Image, ImageDraw
+from PIL import Image
 
 ROOT = Path('.')
 CLOTHING = ROOT / 'images/equipment/clothing'
-
-NEW_ROOT_ASSETS = [
-    'top_blouse_back.png', 'top_blouse_side.png',
-    'top_dress_back.png', 'top_dress_side.png',
-    'top_masc_laced_back.png', 'top_masc_laced_front.png', 'top_masc_laced_side.png',
-    'top_shirt_f_back.png', 'top_shirt_f_side.png',
-]
-
-
-def clear_edge_background(path: Path):
-    im = Image.open(path).convert('RGBA')
-    w, h = im.size
-    amin, amax = im.getchannel('A').getextrema()
-    corners = [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)]
-    if amin < 255 and all(im.getpixel(xy)[3] == 0 for xy in corners):
-        print(f'already transparent: {path}')
-        return
-    edge = corners + [(w // 2, 0), (w // 2, h - 1), (0, h // 2), (w - 1, h // 2)]
-    edge_rgb = [im.getpixel(xy)[:3] for xy in edge]
-    dark = max(max(c) for c in edge_rgb) < 35
-    threshold = 30 if dark else 60
-    print(f'cleaning {path}: size={w}x{h} alpha={amin}..{amax} edge={edge_rgb} threshold={threshold}')
-    for seed in edge:
-        if im.getpixel(seed)[3]:
-            ImageDraw.floodfill(im, seed, (0, 0, 0, 0), thresh=threshold)
-    amin2, amax2 = im.getchannel('A').getextrema()
-    if amin2 != 0 or amax2 == 0:
-        raise RuntimeError(f'background cleanup failed for {path}: alpha {amin2}..{amax2}')
-    im.save(path, optimize=True)
 
 
 def replace(path, old, new, count=1):
@@ -43,117 +14,137 @@ def replace(path, old, new, count=1):
     p.write_text(text.replace(old, new, count))
 
 
-# Clean every just-uploaded image before moving it into the clothing asset tree.
-for name in NEW_ROOT_ASSETS:
-    p = ROOT / name
-    if not p.exists():
-        raise RuntimeError(f'expected uploaded root asset missing: {name}')
-    clear_edge_background(p)
+def remove_line(path, line):
+    replace(path, line + '\n', '')
 
-# Existing unsuffixed authored images are the front views for these three families.
-for stem in ['top_blouse', 'top_dress', 'top_shirt_f']:
-    src = CLOTHING / f'{stem}.png'
-    dst = CLOTHING / f'{stem}_front.png'
-    if not src.exists():
-        raise RuntimeError(f'missing existing front source: {src}')
-    if dst.exists():
-        dst.unlink()
-    src.rename(dst)
 
-# top_masc_laced has a newly uploaded full directional set; retire its old shared view.
-(CLOTHING / 'top_masc_laced.png').unlink(missing_ok=True)
+# The three uploaded female side views face left while the game's canonical side
+# direction faces right. Flip the already-cleaned transparent PNGs in place.
+for name in ['top_blouse_side.png', 'top_dress_side.png', 'top_shirt_f_side.png']:
+    path = CLOTHING / name
+    im = Image.open(path).convert('RGBA')
+    amin, amax = im.getchannel('A').getextrema()
+    if amin != 0 or amax == 0:
+        raise RuntimeError(f'expected transparent side asset before flip: {path}, alpha={amin}..{amax}')
+    im.transpose(Image.Transpose.FLIP_LEFT_RIGHT).save(path, optimize=True)
+    print(f'flipped side view to face right: {path}')
 
-# Move the uploaded files out of the repo root into the canonical clothing folder.
-for name in NEW_ROOT_ASSETS:
-    src = ROOT / name
-    dst = CLOTHING / name
-    if dst.exists():
-        dst.unlink()
-    src.rename(dst)
+# Retire the final single-view male shirt. top_masc_laced now provides the sole
+# masculine starter top and has explicit front/side/back artwork.
+(CLOTHING / 'top_masc_lacework.png').unlink(missing_ok=True)
 
-# Wire explicit directional views into the renderer. Keep the single-path helper
-# for top_masc_lacework, which still only has one authored image.
 replace(
     'clothingLayers.js',
-    "  const twoToneTop=(path)=>twoToneGarment('shirt',{front:path,side:path,back:path},'Main','Trim');",
     "  const twoToneTopViews=(views)=>twoToneGarment('shirt',views,'Main','Trim');\n"
     "  const twoToneTop=(path)=>twoToneTopViews({front:path,side:path,back:path});",
+    "  const twoToneTopViews=(views)=>twoToneGarment('shirt',views,'Main','Trim');",
+)
+remove_line('clothingLayers.js', "    top_masc_lacework:twoToneTop('images/equipment/clothing/top_masc_lacework.png'),")
+replace(
+    'clothingLayers.js',
+    "  const MASCULINE_START_TOPS=['top_masc_lacework','top_masc_laced'];",
+    "  const MASCULINE_START_TOPS=['top_masc_laced'];",
 )
 replace(
     'clothingLayers.js',
-    "    top_blouse:twoToneTop('images/equipment/clothing/top_blouse.png'),\n"
-    "    top_dress:{...twoToneTop('images/equipment/clothing/top_dress.png'),fitMode:'dressSplit',waistFraction:.39,maxSkirtWidth:.98},\n"
-    "    top_shirt_f:twoToneTop('images/equipment/clothing/top_shirt_f.png'),\n"
-    "    top_masc_lacework:twoToneTop('images/equipment/clothing/top_masc_lacework.png'),\n"
-    "    top_masc_laced:twoToneTop('images/equipment/clothing/top_masc_laced.png'),",
-    "    top_blouse:twoToneTopViews({front:'images/equipment/clothing/top_blouse_front.png',side:'images/equipment/clothing/top_blouse_side.png',back:'images/equipment/clothing/top_blouse_back.png'}),\n"
-    "    top_dress:{...twoToneTopViews({front:'images/equipment/clothing/top_dress_front.png',side:'images/equipment/clothing/top_dress_side.png',back:'images/equipment/clothing/top_dress_back.png'}),fitMode:'dressSplit',waistFraction:.39,maxSkirtWidth:.98},\n"
-    "    top_shirt_f:twoToneTopViews({front:'images/equipment/clothing/top_shirt_f_front.png',side:'images/equipment/clothing/top_shirt_f_side.png',back:'images/equipment/clothing/top_shirt_f_back.png'}),\n"
-    "    top_masc_lacework:twoToneTop('images/equipment/clothing/top_masc_lacework.png'),\n"
-    "    top_masc_laced:twoToneTopViews({front:'images/equipment/clothing/top_masc_laced_front.png',side:'images/equipment/clothing/top_masc_laced_side.png',back:'images/equipment/clothing/top_masc_laced_back.png'}),",
+    "  const RETIRED_TOPS=new Set(['top_shirt','top_tunic','top_masc_toggle','top_masc_buttoned','traveler_garb']);",
+    "  const RETIRED_TOPS=new Set(['top_shirt','top_tunic','top_masc_toggle','top_masc_buttoned','top_masc_lacework','traveler_garb']);",
+)
+replace(
+    'clothingLayers.js',
+    "      top_masc_lacework:'Lacework Shirt',top_masc_laced:'Laced Tunic',",
+    "      top_masc_laced:'Laced Tunic',",
 )
 
-# Preload the directional files explicitly. Lacework intentionally retains its
-# single-image fallback until separate side/back art exists.
+replace(
+    'clothingSystem.js',
+    "  const RETIRED_GARMENTS=new Set(['fine_tunic','noble_doublet','scholars_robe','traveler_garb','top_masc_toggle','top_masc_buttoned']);",
+    "  const RETIRED_GARMENTS=new Set(['fine_tunic','noble_doublet','scholars_robe','traveler_garb','top_masc_toggle','top_masc_buttoned','top_masc_lacework']);",
+)
+
 replace(
     'assetLoadScheduler.js',
-    "        const selectedTops=allViews ? tops : [tops[hash(`${race}_${gender}|top`)%tops.length]];\n"
-    "        const paths=[...selectedTops.map(top=>`images/equipment/clothing/${top}.png`),'images/equipment/clothing/pants_trousers_front.png'];\n"
-    "        if (allViews) paths.push('images/equipment/clothing/pants_trousers_back.png');",
-    "        const selectedTops=allViews ? tops : [tops[hash(`${race}_${gender}|top`)%tops.length]];\n"
-    "        const directionalTops=new Set(['top_blouse','top_dress','top_shirt_f','top_masc_laced']);\n"
-    "        const topPath=(top,view='front')=>directionalTops.has(top)\n"
-    "            ? `images/equipment/clothing/${top}_${view}.png`\n"
-    "            : `images/equipment/clothing/${top}.png`;\n"
-    "        const paths=[...selectedTops.map(top=>topPath(top,'front')),'images/equipment/clothing/pants_trousers_front.png'];\n"
-    "        if (allViews) {\n"
-    "            for (const top of selectedTops) {\n"
-    "                if (directionalTops.has(top)) paths.push(topPath(top,'side'),topPath(top,'back'));\n"
-    "            }\n"
-    "            paths.push('images/equipment/clothing/pants_trousers_back.png');\n"
-    "        }",
+    "            : ['top_masc_lacework','top_masc_laced'];",
+    "            : ['top_masc_laced'];",
 )
-
-# Strengthen regression coverage for the new top families.
+remove_line('companionFashionPreferences.js', "  top_masc_lacework:{ masculine:.9, structured:.45, fitted:.45, ornate:.55 },")
 replace(
-    'tests-unit/clothing-render-regression.test.js',
-    "test('masculine starter tops use the two retained two-tone PNG overlays', () => {\n"
-    "    const layersSource = read('clothingLayers.js');\n"
-    "    const masculineAssets = [\n"
-    "        'top_masc_lacework.png',\n"
-    "        'top_masc_laced.png',\n"
-    "    ];\n\n"
-    "    for (const asset of masculineAssets) {\n"
-    "        contains(layersSource, `images/equipment/clothing/${asset}`);\n"
-    "    }",
-    "test('starter tops use retained assets and explicit directional views where authored', () => {\n"
-    "    const layersSource = read('clothingLayers.js');\n"
-    "    contains(layersSource, 'images/equipment/clothing/top_masc_lacework.png');\n"
-    "    for (const id of ['top_blouse','top_dress','top_shirt_f','top_masc_laced']) {\n"
-    "        contains(layersSource, `front:'images/equipment/clothing/${id}_front.png'`);\n"
-    "        contains(layersSource, `side:'images/equipment/clothing/${id}_side.png'`);\n"
-    "        contains(layersSource, `back:'images/equipment/clothing/${id}_back.png'`);\n"
-    "        excludes(layersSource, `images/equipment/clothing/${id}.png`);\n"
-    "    }",
+    'fashionMarket.js',
+    "    top_blouse:28,top_dress:48,top_shirt_f:26,top_masc_lacework:30,\n    top_masc_laced:28,pants_baggy_wraps:18,pants_breeches:28,",
+    "    top_blouse:28,top_dress:48,top_shirt_f:26,top_masc_laced:28,\n    pants_baggy_wraps:18,pants_breeches:28,",
 )
 
-# Assertions: no uploaded clothing remains at repo root, no obsolete unsuffixed
-# file remains for a family that now has all three views, and all new files have alpha.
-for name in NEW_ROOT_ASSETS:
-    if (ROOT / name).exists():
-        raise RuntimeError(f'orphaned root clothing asset remains: {name}')
+# Regression coverage now requires every active starter top to have three explicit views.
+t = 'tests-unit/clothing-render-regression.test.js'
+replace(
+    t,
+    "    contains(layersSource, 'images/equipment/clothing/top_masc_lacework.png');\n"
+    "    for (const id of ['top_blouse','top_dress','top_shirt_f','top_masc_laced']) {",
+    "    for (const id of ['top_blouse','top_dress','top_shirt_f','top_masc_laced']) {",
+)
+replace(
+    t,
+    "    contains(layersSource, \"const MASCULINE_START_TOPS=['top_masc_lacework','top_masc_laced'];\");",
+    "    contains(layersSource, \"const MASCULINE_START_TOPS=['top_masc_laced'];\");",
+)
+replace(
+    t,
+    "    contains(layersSource, \"const RETIRED_TOPS=new Set(['top_shirt','top_tunic','top_masc_toggle','top_masc_buttoned','traveler_garb']);\");",
+    "    contains(layersSource, \"const RETIRED_TOPS=new Set(['top_shirt','top_tunic','top_masc_toggle','top_masc_buttoned','top_masc_lacework','traveler_garb']);\");",
+)
+replace(
+    t,
+    "    excludes(layersSource, \"top_tunic:singleLayer('shirt'\");",
+    "    excludes(layersSource, \"top_tunic:singleLayer('shirt'\");\n"
+    "    excludes(layersSource, 'images/equipment/clothing/top_masc_lacework.png');",
+)
 
+# Validate all four newly directional top families remain transparent after flips.
 for stem in ['top_blouse', 'top_dress', 'top_shirt_f', 'top_masc_laced']:
     if (CLOTHING / f'{stem}.png').exists():
         raise RuntimeError(f'legacy unsuffixed asset remains: {stem}.png')
     for view in ['front', 'side', 'back']:
-        p = CLOTHING / f'{stem}_{view}.png'
-        if not p.exists():
-            raise RuntimeError(f'missing directional asset: {p}')
-        im = Image.open(p).convert('RGBA')
+        path = CLOTHING / f'{stem}_{view}.png'
+        if not path.exists():
+            raise RuntimeError(f'missing directional asset: {path}')
+        im = Image.open(path).convert('RGBA')
         amin, amax = im.getchannel('A').getextrema()
         if amin != 0 or amax == 0:
-            raise RuntimeError(f'bad transparency: {p} alpha={amin}..{amax}')
-        print(f'verified {p}: alpha={amin}..{amax} bbox={im.getbbox()}')
+            raise RuntimeError(f'bad transparency: {path}, alpha={amin}..{amax}')
 
-print('directional top cleanup assertions passed')
+if (CLOTHING / 'top_masc_lacework.png').exists():
+    raise RuntimeError('retired lacework shirt asset still exists')
+
+# top_masc_lacework may remain only in explicit retirement/migration declarations
+# and the regression test that confirms it cannot return from old saves.
+allowed_lacework = {
+    'clothingLayers.js',
+    'clothingSystem.js',
+    'tests-unit/clothing-render-regression.test.js',
+    'scripts/tmp_directional_top_cleanup.py',
+}
+unexpected = []
+for path in ROOT.rglob('*'):
+    if not path.is_file() or '.git' in path.parts:
+        continue
+    if path.as_posix() == '.github/workflows/directional-top-cleanup.yml':
+        continue
+    if path.suffix.lower() in {'.png', '.jpg', '.jpeg', '.svg'}:
+        continue
+    try:
+        text = path.read_text()
+    except UnicodeDecodeError:
+        continue
+    if 'top_masc_lacework' in text and path.as_posix() not in allowed_lacework:
+        unexpected.append(path.as_posix())
+if unexpected:
+    raise RuntimeError(f'unexpected live top_masc_lacework references: {unexpected}')
+
+# The file audit also documents the one remaining exception rather than hiding it:
+# trousers still lack a true side image and intentionally use their front image.
+if (CLOTHING / 'pants_trousers_side.png').exists():
+    print('pants_trousers now has a true side asset')
+else:
+    print('AUDIT: pants_trousers_side.png is still missing; renderer currently uses front fallback')
+
+print('final clothing direction cleanup assertions passed')
