@@ -4,7 +4,7 @@
 (() => {
     'use strict';
 
-    const SCHEDULER_VERSION = '10';
+    const SCHEDULER_VERSION = '6';
     if (window.__assetLoadSchedulerInstalled && window.__assetLoadSchedulerVersion === SCHEDULER_VERSION) return;
     // index.html loads this before the other game scripts in a normal page load.
     if (window.__assetLoadSchedulerInstalled) return;
@@ -175,20 +175,6 @@
     const managerRecords = new Map();
     const domBindingTokens = new WeakMap();
 
-    // The installed iOS app prepares/verifies its complete local copy before
-    // renderer-owned images are allowed to begin fetching/decoding. This was
-    // present in the healthy performance build and was lost when the transient
-    // recovery loader was restored. Park requests rather than competing with
-    // Cache Storage/GitHub work on the main thread; release them all when ready.
-    let offlineStartupPending = Boolean(window.__hexOfflineReady && typeof window.__hexOfflineReady.then === 'function');
-    if (offlineStartupPending) {
-        window.__hexOfflineReady.finally(() => {
-            offlineStartupPending = false;
-            releaseManagedDeferred();
-            schedulePump();
-        });
-    }
-
     function normalise(src) {
         try {
             const url = new URL(String(src), document.baseURI);
@@ -209,7 +195,7 @@
     }
 
     function currentBuild() {
-        return document.querySelector('meta[name="app-build"]')?.content || window.PRESENTATION_BUILD || 'asset-manager-v10';
+        return document.querySelector('meta[name="app-build"]')?.content || window.PRESENTATION_BUILD || 'asset-manager-v6';
     }
 
     function managedUrl(value, {retry=0, freshReason='retry'}={}) {
@@ -253,7 +239,6 @@
     }
 
     function mayStartNow(path) {
-        if (offlineStartupPending) return false;
         if (phase === 'game') return true;
         if (phaseCritical.has(path)) return true;
         return creatorRelevant(path);
@@ -418,9 +403,6 @@
 
     function requestManaged(value,{priority=null,immediate=false}={}) {
         const record=recordFor(value);
-        // A request can have been parked while the local-copy barrier was active.
-        // Wake it on the first subsequent request once that barrier has cleared.
-        if (record.status==='deferred' && !offlineStartupPending) record.status='idle';
         if (record.status==='suppressed') return record.image;
         if (record.status==='error') {
             if (record.nextRetryAt && performance.now() < record.nextRetryAt) return record.image;
@@ -432,7 +414,7 @@
             record.queued=true;
             enqueue(record.path, done=>startManagerRecord(record,done), priority);
         };
-        if ((immediate && !offlineStartupPending) || mayStartNow(record.path)) start();
+        if (immediate || mayStartNow(record.path)) start();
         else record.status='deferred';
         return record.image;
     }
@@ -755,6 +737,5 @@
         get deferred(){return [...managerRecords.values()].filter(record=>record.status==='deferred').length;},
         get active(){return active;},
         get cacheSize(){return managerRecords.size;},
-        get offlineStartupPending(){return offlineStartupPending;},
     };
 })();
