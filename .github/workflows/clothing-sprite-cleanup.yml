@@ -27,14 +27,14 @@ jobs:
           from PIL import Image
           paths = [
             'images/equipment/clothing/bra_side.png',
-            'images/equipment/clothing/bra_back.png',
-            'images/equipment/clothing/pants_baggy_side.png',
+            'images/equipment/clothing/briefs_female_side.png',
             'images/equipment/clothing/pants_baggy_wraps_back.png',
+            'images/equipment/clothing/pants_baggy_wraps_front.png',
             'images/equipment/clothing/pants_baggy_wraps_side.png',
-            'images/equipment/clothing/shirt_dark_drape_back.png',
-            'images/equipment/clothing/shirt_dark_drape_side.png',
-            'images/equipment/clothing/tights_side.png',
-            'images/equipment/clothing/trousers_single_leg_side.png',
+            'images/equipment/clothing/pants_breaches_back.png',
+            'images/equipment/clothing/pants_breaches_side.png',
+            'images/equipment/clothing/pants_hose_back.png',
+            'images/equipment/clothing/pants_hose_side.png',
           ]
           for p in paths:
               im = Image.open(p).convert('RGBA')
@@ -44,13 +44,11 @@ jobs:
               amin,amax = im.getchannel('A').getextrema()
               print(f'{p}: size={w}x{h} alpha={amin}..{amax} edge={samples}')
           PY
-      - name: Find deprecated clothing references
+      - name: Find clothing references and naming mismatches
         run: |
-          echo '--- traveler garb references ---'
-          grep -RInE 'travell?er(s)?[_ -]?garb|traveler_garb' . --exclude-dir=.git || true
-          echo '--- top_masc_buttoned references ---'
-          grep -RIn 'top_masc_buttoned' . --exclude-dir=.git || true
-          echo '--- top_masc_toggle references ---'
-          grep -RIn 'top_masc_toggle' . --exclude-dir=.git || true
-          echo '--- related item labels ---'
-          grep -RInEi 'travell?er.s garb|buttoned shirt|toggle shirt' . --exclude-dir=.git --exclude='*.png' --exclude='*.svg' || true
+          for pattern in traveler_garb top_masc_buttoned top_masc_toggle pants_baggy_wraps pants_breaches pants_breeches pants_hose briefs_female bra_side; do
+            echo "--- $pattern ---"
+            grep -RIn "$pattern" . --exclude-dir=.git --exclude='.github/workflows/clothing-sprite-cleanup.yml' || true
+          done
+          echo '--- item labels ---'
+          grep -RInEi 'travell?er.s garb|buttoned shirt|toggle shirt|baggy.*wrap|breeches|hose' . --exclude-dir=.git --exclude='*.png' --exclude='*.svg' --exclude='.github/workflows/clothing-sprite-cleanup.yml' || true
