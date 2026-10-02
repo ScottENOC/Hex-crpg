@@ -4,6 +4,7 @@
     'use strict';
 
     const BUILD = '20261002-player-wren-cache-v3';
+    const DIAGNOSTIC_MARKER = 'DIRECTIONAL-ENTITY-ITERATION-FIX-20261003';
     const CACHE_PAD_HEXES = 4;
     const FACING_ORDER = Object.freeze(['down', 'up', 'right', 'left']);
     const FACING_LABELS = Object.freeze({down:'front', up:'back', right:'side-right', left:'side-left'});
@@ -573,7 +574,8 @@
             window.__humanoidCacheDiagnostic = lastDiagnostic;
             const sourceType = 'focused player + Wren';
             showCacheDetail(
-                'Stage: ' + stage +
+                'DIAGNOSTIC MARKER: ' + DIAGNOSTIC_MARKER +
+                '\nStage: ' + stage +
                 '\nSource type: ' + sourceType +
                 '\nCharacters discovered: ' + characters.length +
                 '\nCurrent character: ' + (diagnosticEntity?.name || diagnosticEntity?.id || 'none') +
