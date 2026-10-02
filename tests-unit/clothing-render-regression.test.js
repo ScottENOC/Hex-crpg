@@ -55,15 +55,14 @@ test('outerwear keeps a canonical armour-relative envelope while runtime tops us
     contains(layersSource, "if(itemId==='underwear_bra'){");
 });
 
-test('masculine starter tops use the two retained two-tone PNG overlays', () => {
+test('starter tops use retained assets and explicit directional views where authored', () => {
     const layersSource = read('clothingLayers.js');
-    const masculineAssets = [
-        'top_masc_lacework.png',
-        'top_masc_laced.png',
-    ];
-
-    for (const asset of masculineAssets) {
-        contains(layersSource, `images/equipment/clothing/${asset}`);
+    contains(layersSource, 'images/equipment/clothing/top_masc_lacework.png');
+    for (const id of ['top_blouse','top_dress','top_shirt_f','top_masc_laced']) {
+        contains(layersSource, `front:'images/equipment/clothing/${id}_front.png'`);
+        contains(layersSource, `side:'images/equipment/clothing/${id}_side.png'`);
+        contains(layersSource, `back:'images/equipment/clothing/${id}_back.png'`);
+        excludes(layersSource, `images/equipment/clothing/${id}.png`);
     }
     contains(layersSource, "const MASCULINE_START_TOPS=['top_masc_lacework','top_masc_laced'];");
     contains(layersSource, "const FEMININE_START_TOPS=['top_blouse','top_dress','top_shirt_f'];");

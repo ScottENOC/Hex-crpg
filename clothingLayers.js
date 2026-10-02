@@ -61,14 +61,15 @@
     {id:'dark',label:labelDark,defaultColor:{hue:110,saturation:60,value:42,opacity:1},views,sourceTone:'darkGreen'},
     {id:'light',label:labelLight,defaultColor:{hue:110,saturation:45,value:72,opacity:1},views,sourceTone:'lightGreen'},
   ]});
-  const twoToneTop=(path)=>twoToneGarment('shirt',{front:path,side:path,back:path},'Main','Trim');
+  const twoToneTopViews=(views)=>twoToneGarment('shirt',views,'Main','Trim');
+  const twoToneTop=(path)=>twoToneTopViews({front:path,side:path,back:path});
 
   const GARMENTS={
-    top_blouse:twoToneTop('images/equipment/clothing/top_blouse.png'),
-    top_dress:{...twoToneTop('images/equipment/clothing/top_dress.png'),fitMode:'dressSplit',waistFraction:.39,maxSkirtWidth:.98},
-    top_shirt_f:twoToneTop('images/equipment/clothing/top_shirt_f.png'),
+    top_blouse:twoToneTopViews({front:'images/equipment/clothing/top_blouse_front.png',side:'images/equipment/clothing/top_blouse_side.png',back:'images/equipment/clothing/top_blouse_back.png'}),
+    top_dress:{...twoToneTopViews({front:'images/equipment/clothing/top_dress_front.png',side:'images/equipment/clothing/top_dress_side.png',back:'images/equipment/clothing/top_dress_back.png'}),fitMode:'dressSplit',waistFraction:.39,maxSkirtWidth:.98},
+    top_shirt_f:twoToneTopViews({front:'images/equipment/clothing/top_shirt_f_front.png',side:'images/equipment/clothing/top_shirt_f_side.png',back:'images/equipment/clothing/top_shirt_f_back.png'}),
     top_masc_lacework:twoToneTop('images/equipment/clothing/top_masc_lacework.png'),
-    top_masc_laced:twoToneTop('images/equipment/clothing/top_masc_laced.png'),
+    top_masc_laced:twoToneTopViews({front:'images/equipment/clothing/top_masc_laced_front.png',side:'images/equipment/clothing/top_masc_laced_side.png',back:'images/equipment/clothing/top_masc_laced_back.png'}),
     pants_baggy_wraps:singleLayerViews('pants',{front:'images/equipment/clothing/pants_baggy_wraps_front.png',side:'images/equipment/clothing/pants_baggy_wraps_side.png',back:'images/equipment/clothing/pants_baggy_wraps_back.png'},'Baggy wraps'),
     pants_breeches:singleLayerViews('pants',{front:'images/equipment/clothing/pants_breeches_front.png',side:'images/equipment/clothing/pants_breeches_side.png',back:'images/equipment/clothing/pants_breeches_back.png'},'Breeches'),
     pants_hose:singleLayerViews('pants',{front:'images/equipment/clothing/pants_hose_front.png',side:'images/equipment/clothing/pants_hose_side.png',back:'images/equipment/clothing/pants_hose_back.png'},'Hose'),

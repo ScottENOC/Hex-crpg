@@ -530,8 +530,17 @@
             ? ['top_blouse','top_dress','top_shirt_f']
             : ['top_masc_lacework','top_masc_laced'];
         const selectedTops=allViews ? tops : [tops[hash(`${race}_${gender}|top`)%tops.length]];
-        const paths=[...selectedTops.map(top=>`images/equipment/clothing/${top}.png`),'images/equipment/clothing/pants_trousers_front.png'];
-        if (allViews) paths.push('images/equipment/clothing/pants_trousers_back.png');
+        const directionalTops=new Set(['top_blouse','top_dress','top_shirt_f','top_masc_laced']);
+        const topPath=(top,view='front')=>directionalTops.has(top)
+            ? `images/equipment/clothing/${top}_${view}.png`
+            : `images/equipment/clothing/${top}.png`;
+        const paths=[...selectedTops.map(top=>topPath(top,'front')),'images/equipment/clothing/pants_trousers_front.png'];
+        if (allViews) {
+            for (const top of selectedTops) {
+                if (directionalTops.has(top)) paths.push(topPath(top,'side'),topPath(top,'back'));
+            }
+            paths.push('images/equipment/clothing/pants_trousers_back.png');
+        }
         paths.push('images/equipment/clothing/briefs_female_front.png');
         if (allViews) paths.push('images/equipment/clothing/briefs_female_side.png','images/equipment/clothing/briefs_female_back.png');
         if (feminine) {
