@@ -5,6 +5,7 @@
 const SW_VERSION = '15';
 const META_CACHE = `hex-game-meta-v${SW_VERSION}`;
 const GAME_CACHE_PREFIX = `hex-game-v${SW_VERSION}-`;
+const ACTIVE_CACHE_NAME = `hex-game-v${SW_VERSION}-active`;
 const LEGACY_GAME_CACHE_PREFIXES = [];
 const SCOPE_URL = self.registration.scope;
 const META_KEY = new URL('__hex_offline_meta__/active.json', SCOPE_URL).href;
@@ -114,6 +115,24 @@ async function inspectGameCache(cacheName, expectedCommit = null) {
 }
 
 async function statusResult() {
+    // Always check the stable active cache directly first. This avoids relying on
+    // caches.keys() to rediscover the install on iOS/WebKit.
+    const directActive = await inspectGameCache(ACTIVE_CACHE_NAME);
+    if (directActive?.valid) {
+        const meta = await readActiveMeta(true);
+        if (!meta || meta.cacheName !== ACTIVE_CACHE_NAME || meta.commit !== directActive.activeCommit) {
+            await writeActiveMeta({
+                version: SW_VERSION,
+                cacheName: ACTIVE_CACHE_NAME,
+                commit: directActive.activeCommit,
+                fileCount: directActive.fileCount,
+                totalBytes: directActive.totalBytes,
+                recoveredAt: Date.now(),
+            });
+        }
+        return { ...directActive, recovered: Boolean(!meta || meta.cacheName !== ACTIVE_CACHE_NAME) };
+    }
+
     const meta = await readActiveMeta(true);
     if (meta?.cacheName) {
         const direct = await inspectGameCache(meta.cacheName, meta.commit || null);
@@ -126,7 +145,7 @@ async function statusResult() {
     const names = await caches.keys();
     const candidates = names.filter(name =>
         (name.startsWith(GAME_CACHE_PREFIX) || /^hex-game-v\d+-/.test(name) || LEGACY_GAME_CACHE_PREFIXES.some(prefix => name.startsWith(prefix))) &&
-        true
+        name !== ACTIVE_CACHE_NAME
     );
     for (const name of candidates) {
         const recovered = await inspectGameCache(name);
@@ -382,7 +401,9 @@ async function cacheGame(message, port) {
     const missingActivePaths = new Set(before.missingPaths || []);
     const newPaths = new Set(files.map(file => file.path));
 
-    const patchCacheName = `${GAME_CACHE_PREFIX}patch-${commit}`;
+    const patchCacheName = before.valid
+        ? `${GAME_CACHE_PREFIX}patch-${commit}`
+        : ACTIVE_CACHE_NAME;
     const patchCache = await caches.open(patchCacheName);
 
     // Work out the patch before downloading anything so the UI can tell the
@@ -545,7 +566,7 @@ async function cacheGame(message, port) {
         // First install: the staging cache already contains the whole verified
         // build, so simply promote it instead of copying it again.
         await writeCacheManifest(patchCache, commit, files);
-        finalCacheName = patchCacheName;
+        finalCacheName = ACTIVE_CACHE_NAME;
         finalCache = patchCache;
     }
 
