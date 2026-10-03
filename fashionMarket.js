@@ -6,7 +6,7 @@
     top_blouse:28,top_dress:48,top_shirt_f:26,top_masc_laced:28,
     pants_baggy_wraps:18,pants_breeches:28,
     pants_hose:24,pants_trousers:22,pants_shorts:18,pants_skirt:30,underwear_briefs:7,
-    underwear_briefs_gstring:9,underwear_bra:12,underwear_bra_strapless:14
+    underwear_briefs_gstring:9,underwear_bra:12,underwear_bra_halter:30,underwear_bra_strapless:14
   };
   const STANDARD_ARMOUR=['light_armor','medium_armor','heavy_armor'];
   const PALETTE=[

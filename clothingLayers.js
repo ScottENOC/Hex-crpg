@@ -25,6 +25,7 @@
     underwear_briefs:twoToneGarment('underwear',{front:'images/equipment/clothing/briefs_female_front.png',side:'images/equipment/clothing/briefs_female_side.png',back:'images/equipment/clothing/briefs_female_back.png'},'Main','Trim'),
     underwear_briefs_gstring:twoToneGarment('underwear',{front:'images/equipment/clothing/briefs_gstring_front.png',side:'images/equipment/clothing/briefs_gstring_side.png',back:'images/equipment/clothing/briefs_gstring_back.png'},'Main','Trim'),
     underwear_bra:twoToneGarment('bra',{front:'images/equipment/clothing/bra_front.png',side:'images/equipment/clothing/bra_side.png',back:'images/equipment/clothing/bra_back.png'},'Main','Trim'),
+    underwear_bra_halter:twoToneGarment('bra',{front:'images/equipment/clothing/bra_halter_front.png',side:'images/equipment/clothing/bra_halter_side.png',back:'images/equipment/clothing/bra_halter_back.png'},'Main','Trim'),
     underwear_bra_strapless:twoToneGarment('bra',{front:'images/equipment/clothing/bra_strapless_front.png',side:'images/equipment/clothing/bra_strapless_side.png',back:'images/equipment/clothing/bra_strapless_back.png'},'Main','Trim')
   };
   const FEMININE_START_TOPS=['top_blouse','top_dress','top_shirt_f'],MASCULINE_START_TOPS=['top_masc_laced'];
