@@ -385,6 +385,27 @@ async function cacheGame(message, port) {
     const patchCacheName = `${GAME_CACHE_PREFIX}patch-${commit}`;
     const patchCache = await caches.open(patchCacheName);
 
+    // Work out the patch before downloading anything so the UI can tell the
+    // player exactly what is about to happen. This compares the saved manifest
+    // with the new GitHub tree, rather than treating every file as a download.
+    const oldFiles = Array.isArray(activeManifest?.files) ? activeManifest.files : [];
+    const oldPaths = new Set(oldFiles.map(file => file.path));
+    const newFileByPath = new Map(files.map(file => [file.path, file]));
+    let patchNew = 0;
+    let patchChanged = 0;
+    let patchRemoved = 0;
+    for (const file of files) {
+        if (!oldPaths.has(file.path)) patchNew++;
+        else if (activeShaByPath.get(file.path) !== file.sha) patchChanged++;
+    }
+    if (before.valid) {
+        for (const oldFile of oldFiles) {
+            if (!newFileByPath.has(oldFile.path)) patchRemoved++;
+        }
+    }
+    const existingFileCount = oldFiles.length || (before.valid ? Number(before.fileCount) || 0 : 0);
+    const patchFinalCount = files.length;
+
     let processed = 0;
     let stored = 0;
     let downloaded = 0;
@@ -466,8 +487,8 @@ async function cacheGame(message, port) {
     }
 
     sendProgress('', 'storing', before.valid
-        ? `Checking ${files.length} files; unchanged files stay in place…`
-        : `Saving ${files.length} files locally…`);
+        ? `Existing install: ${existingFileCount} files. Patch: ${patchNew} new, ${patchChanged} changed, ${patchRemoved} removed. Final install: ${patchFinalCount} files.`
+        : `New install: ${patchFinalCount} files will be saved locally.`);
     await Promise.all(Array.from({ length: MAX_CONCURRENT_DOWNLOADS }, () => workerLoop()));
 
     if (quotaFailure || failures.length) {
