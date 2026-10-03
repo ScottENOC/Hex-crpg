@@ -5,12 +5,12 @@
 (() => {
     'use strict';
 
-    const VERSION = '14';
+    const VERSION = '15';
     const OWNER = 'ScottENOC';
     const REPO = 'Hex-crpg';
     const BRANCH = 'development';
     const API_BASE = `https://api.github.com/repos/${OWNER}/${REPO}`;
-    const SW_URL = 'offlineServiceWorker.js?v=14';
+    const SW_URL = 'offlineServiceWorker.js?v=15';
     const BRANCH_CACHE_MS = 15000;
     const REQUEST_TIMEOUT_MS = 25000;
     const WORKER_STALL_TIMEOUT_MS = 45000;
@@ -60,6 +60,13 @@
         totalBytes: 0,
         current: '',
         message: '',
+        existingFileCount: 0,
+        patchNew: 0,
+        patchChanged: 0,
+        patchRemoved: 0,
+        patchUnchanged: 0,
+        patchFinalCount: 0,
+        patchTotal: 0,
     };
 
     function emit(patch) {
@@ -371,6 +378,13 @@
             totalBytes: progress.totalBytes || 0,
             current: progress.current || '',
             message: progress.message || '',
+            existingFileCount: progress.existingFileCount || 0,
+            patchNew: progress.patchNew || 0,
+            patchChanged: progress.patchChanged || 0,
+            patchRemoved: progress.patchRemoved || 0,
+            patchUnchanged: progress.patchUnchanged || 0,
+            patchFinalCount: progress.patchFinalCount || 0,
+            patchTotal: progress.patchTotal || progress.total || 0,
         });
     }
 
@@ -636,15 +650,27 @@
         else title.textContent = 'Preparing local game copy…';
 
         if (progress.total > 0) {
-            count.textContent = `Stored ${progress.stored || 0} / ${progress.total} files locally`;
-            bar.style.width = `${Math.max(0, Math.min(100, Math.round((progress.stored || 0) * 100 / progress.total)))}%`;
+            const patchMode = progress.patchFinalCount > 0;
+            if (patchMode && progress.existingFileCount) {
+                count.textContent = `Patch: ${Math.min(progress.processed || 0, progress.total)} / ${progress.total} files · Final: ${progress.patchFinalCount} files`;
+                bar.style.width = `${Math.max(0, Math.min(100, Math.round((progress.processed || 0) * 100 / progress.total)))}%`;
+            } else {
+                count.textContent = `Stored ${progress.stored || 0} / ${progress.total} files locally`;
+                bar.style.width = `${Math.max(0, Math.min(100, Math.round((progress.stored || 0) * 100 / progress.total)))}%`;
+            }
             const parts = [];
             if (progress.message) parts.push(progress.message);
+            if (patchMode && progress.existingFileCount) {
+                parts.push(`Existing: ${progress.existingFileCount}`);
+                parts.push(`+${progress.patchNew} new`);
+                parts.push(`${progress.patchChanged} changed`);
+                parts.push(`-${progress.patchRemoved} removed`);
+                parts.push(`${progress.patchUnchanged} unchanged`);
+            }
             if (progress.downloaded) parts.push(`${progress.downloaded} downloaded`);
             if (progress.reused) parts.push(`${progress.reused} reused`);
             if (progress.retried) parts.push(`${progress.retried} retries`);
             if (progress.failed) parts.push(`${progress.failed} still failed`);
-            if (progress.totalBytes) parts.push(formatBytes(progress.totalBytes));
             if (progress.current) parts.push(progress.current);
             detail.textContent = parts.join(' · ') || progress.message || '';
         } else {
