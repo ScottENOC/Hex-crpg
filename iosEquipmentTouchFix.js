@@ -9,7 +9,7 @@
   window.__iosEquipmentTouchFixInstalled = true;
 
   document.addEventListener('touchend', event => {
-    const button = event.target?.closest?.('[data-equipment-slot-picker] button');
+    const button = event.target?.closest?.('[data-equipment-slot-picker] button, #inventory-content button');
     if (!button || button.disabled) return;
 
     event.preventDefault();
