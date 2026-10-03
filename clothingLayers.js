@@ -69,6 +69,12 @@
   function drawSlot(ctx,e,slot,v,bounds){migrate(e);if(e.displayClothes===false)return false;if(window.equipmentAppearanceSystem?.isSlotVisible?.(e,slot)===false)return false;ensureDefaultOutfit(e,{player:e?.side==='player'});const itemId=e?.equipped?.[slot],s=itemId&&spec(itemId);if(!s||s.slot!==slot)return false;let drew=false;for(const l of s.layers){const src=sourceForLayer(l,v),img=load(src);if(!img?.complete||!img.naturalWidth)continue;const rendered=l.tint?tint(img,colour(e,itemId,l),l):img,target=clothingTarget(slot,itemId,v),trim=l.sourceTone?toneBounds(img):opaqueBounds(img);if(target)drew=drawFittedGarment(ctx,rendered,trim,target,bounds,slot,e,itemId,v,s,img)||drew;else{ctx.drawImage(rendered,bounds.left,bounds.top,bounds.width,bounds.height);drew=true;}}return drew;}
   function install(){registerBuiltinItems();const p=window.player;if(p)ensureDefaultOutfit(p,{player:true});for(const e of window.entities||[])ensureDefaultOutfit(e,{player:e?.side==='player'});}
   const timer=setInterval(()=>{if(registerBuiltinItems()){install();clearInterval(timer);}},50);setInterval(()=>{for(const e of window.entities||[])ensureDefaultOutfit(e,{player:e?.side==='player'});if(window.player)ensureDefaultOutfit(window.player,{player:true});},1000);if(document.readyState==='complete')install();else window.addEventListener('load',install,{once:true});
-  window.clothingSystem={build:BUILD,slots,preloadSlots,slotLabels:labels,builtinGarments:GARMENTS,clothingTargets:CLOTHING_TARGETS,outerwearGeometry:{...OUTERWEAR},playerDefault:PLAYER_DEFAULT,starterTops:{feminine:[...FEMININE_START_TOPS],masculine:[...MASCULINE_START_TOPS]},starterPants:STARTER_PANTS,getItemSpec:spec,migrateLegacyEquipment:migrate,ensureDefaultOutfit,resolveOutfitAssetPaths,preloadOutfit,visibleSlotsReady,getLayerColour:colour,setLayerColour:setColour,drawSlot,tintWholeLayer:tint,registerBuiltinItems};
+  function releaseRenderSources(){
+    // Final humanoid composites are the long-lived cache. Source images and
+    // generated tint canvases are disposable working data.
+    images.clear();
+    tinted.clear();
+  }
+  window.clothingSystem={build:BUILD,slots,preloadSlots,slotLabels:labels,builtinGarments:GARMENTS,clothingTargets:CLOTHING_TARGETS,outerwearGeometry:{...OUTERWEAR},playerDefault:PLAYER_DEFAULT,starterTops:{feminine:[...FEMININE_START_TOPS],masculine:[...MASCULINE_START_TOPS]},starterPants:STARTER_PANTS,getItemSpec:spec,migrateLegacyEquipment:migrate,ensureDefaultOutfit,resolveOutfitAssetPaths,preloadOutfit,visibleSlotsReady,getLayerColour:colour,setLayerColour:setColour,drawSlot,tintWholeLayer:tint,registerBuiltinItems,releaseRenderSources};
   window.CLOTHING_SLOTS=slots;
 })();
