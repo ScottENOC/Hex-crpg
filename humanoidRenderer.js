@@ -890,8 +890,10 @@
         }
     }
 
-    function spriteCacheKey(entity, facing, width, height) {
-        return [safeAppearanceKey(entity), facing, Math.ceil(width), Math.ceil(height)].join('::');
+    function spriteCacheKey(entity, facing) {
+        // One completed appearance per character appearance + facing. Zoom and
+        // hex size only affect the final draw scale, not the cached artwork.
+        return [safeAppearanceKey(entity), facing].join('::');
     }
 
     function cacheGet(key) {
@@ -925,7 +927,7 @@
         const visualW = legacyH * HUMAN_RENDER_ASPECT;
         const bounds = {left:x-visualW/2,top:legacyTop,width:visualW,height:legacyH};
         const facing = VALID_FACINGS.has(entity.facing) ? entity.facing : 'down';
-        const key = spriteCacheKey(entity, facing, bounds.width, bounds.height);
+        const key = spriteCacheKey(entity, facing);
         const cached = cacheGet(key);
         if (cached) {
             ctx.drawImage(cached, bounds.left, bounds.top, bounds.width, bounds.height);
@@ -1130,7 +1132,7 @@
     };
     window.getHumanoidSpriteCacheDetails = () => [...humanoidSpriteCache.keys()].map(key => {
         const parts = key.split('::');
-        return { facing: parts[parts.length - 3] || 'unknown', width: parts[parts.length - 2] || '', height: parts[parts.length - 1] || '' };
+        return { facing: parts[parts.length - 1] || 'unknown' };
     });
     window.drawDirectionalHumanoidInBounds = drawDirectionalHumanoidInBounds;
     window.refreshDirectionalTurnPortraits = renderTurnPortraits;
