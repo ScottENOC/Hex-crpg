@@ -5,7 +5,7 @@
 const SW_VERSION = '11';
 const META_CACHE = `hex-game-meta-v${SW_VERSION}`;
 const GAME_CACHE_PREFIX = `hex-game-v${SW_VERSION}-`;
-const LEGACY_GAME_CACHE_PREFIXES = ['hex-game-v9-', 'hex-game-v8-', 'hex-game-v7-', 'hex-game-v6-', 'hex-game-v5-', 'hex-game-v4-', 'hex-game-v3-', 'hex-game-v2-', 'hex-game-v1-'];
+const LEGACY_GAME_CACHE_PREFIXES = [];
 const SCOPE_URL = self.registration.scope;
 const META_KEY = new URL('__hex_offline_meta__/active.json', SCOPE_URL).href;
 const MANIFEST_KEY = new URL('__hex_offline_meta__/manifest.json', SCOPE_URL).href;
@@ -140,7 +140,7 @@ async function statusResult() {
     // re-downloading every file.
     const names = await caches.keys();
     const candidates = names.filter(name =>
-        (name.startsWith(GAME_CACHE_PREFIX) || LEGACY_GAME_CACHE_PREFIXES.some(prefix => name.startsWith(prefix))) &&
+        (name.startsWith(GAME_CACHE_PREFIX) || /^hex-game-v\\d+-/.test(name) || LEGACY_GAME_CACHE_PREFIXES.some(prefix => name.startsWith(prefix))) &&
         !name.includes('-patch-')
     );
     for (const name of candidates) {
@@ -327,10 +327,7 @@ async function cleanupLegacyCaches(keepNames = []) {
     const names = await caches.keys();
     await Promise.all(names
         .filter(name => !keep.has(name) && (
-            name === 'hex-game-meta-v1' || name === 'hex-game-meta-v2' || name === 'hex-game-meta-v3' ||
-            name === 'hex-game-meta-v4' || name === 'hex-game-meta-v5' || name === 'hex-game-meta-v6' || name === 'hex-game-meta-v7' || name === 'hex-game-meta-v8' || name === 'hex-game-meta-v9' || name === 'hex-game-meta-v8' ||
-            name.startsWith('hex-game-v1-') || name.startsWith('hex-game-v2-') || name.startsWith('hex-game-v3-') ||
-            name.startsWith('hex-game-v4-') || name.startsWith('hex-game-v5-') || name.startsWith('hex-game-v6-') || name.startsWith('hex-game-v7-') || name.startsWith('hex-game-v8-') || name.startsWith('hex-game-v9-') || name.startsWith('hex-game-v8-')
+            /^hex-game-meta-v\\d+$/.test(name) || /^hex-game-v\\d+-/.test(name)
         ))
         .map(name => caches.delete(name)));
 }
