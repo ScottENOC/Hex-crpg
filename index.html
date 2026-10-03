@@ -152,6 +152,9 @@
                 <button id="load-btn-initial" style="background-color: #9C27B0; font-size: 0.8em;">Load Save</button>
             </div>
             <h1>Create Your Character</h1>
+            <div class="button-group" style="margin-bottom: 15px;">
+                <button id="createCharacterButton">Start Game</button>
+            </div>
             <div class="form-group">
                 <label for="character-name">Name:</label>
                 <input type="text" id="character-name" placeholder="Enter name" oninput="if(window.syncCharacterToServer) window.syncCharacterToServer()">
@@ -188,7 +191,7 @@
                         </select>
                         <label for="body-type-select" style="font-weight: normal; font-size: 0.85em;">Body Type</label>
                         <select id="body-type-select" onchange="if(window.updateAppearancePreview) window.updateAppearancePreview(); if(window.syncCharacterToServer) window.syncCharacterToServer()">
-                            <option value="average">Average</option>
+                            <option value="average" selected>Average</option>
                             <option value="broad">Broad</option>
                         </select>
                         <label for="skin-tone-slider" style="font-weight: normal; font-size: 0.85em;">Skin Tone</label>
@@ -231,10 +234,6 @@
             
             <div id="selection-preview" style="background: #222; padding: 10px; border: 1px solid #444; border-radius: 5px; margin-bottom: 15px; font-size: 0.85em; line-height: 1.4; color: #ccc;">
                 <!-- Filled by JS -->
-            </div>
-
-            <div class="button-group" style="margin-bottom: 15px;">
-                <button id="createCharacterButton">Start Game</button>
             </div>
 
             <!-- Multiplayer Section -->
