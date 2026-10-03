@@ -15,7 +15,8 @@
     // Several humanoid rigs intentionally share the same authored hair paths.
     // Keep one HTMLImageElement per source so a failed request/retry cannot leave
     // one race's private copy broken while another copy of the same file succeeds.
-    const rendererImageCache = new Map();
+    const rendererPendingLoads = new Set();
+    let activeSourcePaths = null;
 
     // Completed map sprites are built lazily. We deliberately do not prebuild a
     // fixed set for the player: every character/facing gets a composite only when
@@ -318,38 +319,37 @@
 
     function loadImage(src) {
         if (!src) return null;
-        if (rendererImageCache.has(src)) return rendererImageCache.get(src);
-        const image = window.assetManager.request(src);
-        rendererImageCache.set(src, image);
-        window.assetManager.whenReady(src).then(() => {
-            window.drawMap?.();
-            window.renderEntities?.();
-            queuePortraitRefresh();
-            // The creator preview may have tried to draw while this image was
-            // still deferred. Redraw it now rather than leaving a blank canvas
-            // until the player happens to touch another appearance control.
-            if (document.getElementById('appearance-preview-canvas')) {
-                requestAnimationFrame(() => window.updateAppearancePreview?.());
-            }
-        }).catch((error) => {
-            console.warn('Humanoid renderer art failed to load:', src, error);
-            if (!rendererImageCache.get(`reported:${src}`)) {
-                rendererImageCache.set(`reported:${src}`, true);
-                window.showMessage?.(`Art asset failed to load: ${src.split('/').pop()} — ${error?.message || 'load failed'}`);
-            }
-        });
+        const canonical = window.assetManager?.canonicalPathFor?.(src) || src;
+        if (activeSourcePaths) activeSourcePaths.add(canonical);
+        const image = window.assetManager.request(canonical);
+        if (!rendererPendingLoads.has(canonical) && !imageReady(image)) {
+            rendererPendingLoads.add(canonical);
+            window.assetManager.whenReady(canonical).then(() => {
+                rendererPendingLoads.delete(canonical);
+                window.drawMap?.();
+                window.renderEntities?.();
+                queuePortraitRefresh();
+                if (document.getElementById('appearance-preview-canvas')) {
+                    requestAnimationFrame(() => window.updateAppearancePreview?.());
+                }
+            }).catch((error) => {
+                rendererPendingLoads.delete(canonical);
+                console.warn('Humanoid renderer art failed to load:', canonical, error);
+            });
+        }
         return image;
     }
 
+    // These structures contain source paths, not retained Image objects.
     function loadSet(paths) {
         return {
             body:Object.fromEntries(Object.entries(paths.body).map(([bodyType, views]) => [
                 bodyType,
-                Object.fromEntries(Object.entries(views).map(([view, src]) => [view, loadImage(src)])),
+                Object.fromEntries(Object.entries(views).map(([view, src]) => [view, src])),
             ])),
-            hair:Object.fromEntries(Object.entries(paths.hair).map(([style, views]) => [
+            hair:Object.fromEntries(Object.entries(paths.hair || {}).map(([style, views]) => [
                 style,
-                Object.fromEntries(Object.entries(views).map(([view, src]) => [view, loadImage(src)])),
+                Object.fromEntries(Object.entries(views).map(([view, src]) => [view, src])),
             ])),
         };
     }
@@ -357,13 +357,12 @@
     const CHARACTER_ASSETS = Object.fromEntries(Object.entries(CHARACTER_PATHS)
         .map(([key, paths]) => [key, loadSet(paths)]));
     const SHIELD_ASSETS = Object.fromEntries(Object.entries(SHIELD_PATHS)
-        .map(([visual, paths]) => [visual, {front:loadImage(paths.front), back:loadImage(paths.back)}]));
+        .map(([visual, paths]) => [visual, {front:paths.front, back:paths.back}]));
     const ARMOUR_ASSETS = Object.fromEntries(Object.entries(ARMOUR_PATHS)
-        .map(([tier, paths]) => [tier, {front:loadImage(paths.front), back:loadImage(paths.back)}]));
+        .map(([tier, paths]) => [tier, {front:paths.front, back:paths.back}]));
     const REAR_EQUIPMENT_ASSETS = {
-        // Compatibility aliases for existing readiness checks and legacy consumers.
         shield:SHIELD_ASSETS.round.back,
-        helmet:loadImage(REAR_EQUIPMENT_PATHS.helmet),
+        helmet:REAR_EQUIPMENT_PATHS.helmet,
         armour:Object.fromEntries(Object.entries(ARMOUR_ASSETS)
             .map(([tier, views]) => [tier, views.back])),
     };
@@ -512,7 +511,8 @@
         const reduction = Number(item?.reduction || 0);
         const visuals = window.gameVisuals || {};
         const tier = reduction >= 3 ? 'heavy' : reduction >= 2 ? 'medium' : 'light';
-        const authored = view === 'back' ? ARMOUR_ASSETS[tier]?.back : ARMOUR_ASSETS[tier]?.front;
+        const authoredPath = view === 'back' ? ARMOUR_ASSETS[tier]?.back : ARMOUR_ASSETS[tier]?.front;
+        const authored = authoredPath ? loadImage(authoredPath) : null;
         // The canonical organised pair is the normal rendering source. Keep the
         // compatibility preload as a temporary load-failure fallback only.
         const legacy = tier === 'heavy' ? visuals.humanHeavy : tier === 'medium' ? visuals.humanMedium : visuals.humanLight;
@@ -524,7 +524,8 @@
 
     function helmetImage(entity, view) {
         if (!entity.equipped?.helmet) return null;
-        let image = rearPreferred(view, REAR_EQUIPMENT_ASSETS.helmet, window.gameVisuals?.nasal_helm || null);
+        const helmetSource = REAR_EQUIPMENT_ASSETS.helmet ? loadImage(REAR_EQUIPMENT_ASSETS.helmet) : null;
+        let image = rearPreferred(view, helmetSource, window.gameVisuals?.nasal_helm || null);
         if (image && entity.goldGear && window.getGoldTintedSprite) image = window.getGoldTintedSprite(image) || image;
         return image;
     }
@@ -548,8 +549,10 @@
         const item = window.items?.[id];
         if (item?.type === 'shield') {
             const shieldSet = SHIELD_ASSETS[item.shieldVisual] || SHIELD_ASSETS.round;
-            const front = imageReady(shieldSet?.front) ? shieldSet.front : window.gameVisuals?.shield;
-            return {image:rearPreferred(view, shieldSet?.back, front),kind:'shield',scale:.73,itemId:id};
+            const frontSource = shieldSet?.front ? loadImage(shieldSet.front) : null;
+            const backSource = shieldSet?.back ? loadImage(shieldSet.back) : null;
+            const front = imageReady(frontSource) ? frontSource : window.gameVisuals?.shield;
+            return {image:rearPreferred(view, backSource, front),kind:'shield',scale:.73,itemId:id};
         }
         const spec = weaponSpec(id);
         return spec ? {...spec,itemId:id} : null;
@@ -738,7 +741,8 @@
         // missing/slow garment suppress the body layer for the entire character.
         window.clothingSystem?.ensureDefaultOutfit?.(entity,{player:entity.side==='player'});
         window.clothingSystem?.preloadOutfit?.(entity,view);
-        const sourceBody = (set?.body?.[bodyType] || set?.body?.average)?.[view];
+        const sourceBodyPath = (set?.body?.[bodyType] || set?.body?.average)?.[view];
+        const sourceBody = sourceBodyPath ? loadImage(sourceBodyPath) : null;
         // A direct body image can be temporarily unavailable or permanently broken.
         // Do not claim an empty frame: decline it so the established renderer can
         // draw the character while the direct asset loads or recovers.
@@ -747,7 +751,8 @@
         const layout = DIRECTIONAL_LAYOUT[view];
         const hairStyle = entity.hairStyle || 'brown_1';
         const hairSet = set?.hair?.[hairStyle] || set?.hair?.brown_1;
-        const sourceHair = hairSet?.[view] || set?.hair?.brown_1?.[view];
+        const sourceHairPath = hairSet?.[view] || set?.hair?.brown_1?.[view];
+        const sourceHair = sourceHairPath ? loadImage(sourceHairPath) : null;
         const bodyImage = resolvedBodyImage(entity, sourceBody);
         const hairImage = resolvedHairImage(entity, sourceHair);
         const hasHelmet = !!entity.equipped?.helmet && equipmentSlotVisible(entity,'helmet');
@@ -932,7 +937,19 @@
         const offscreenCtx = canvas.getContext('2d');
         if (!offscreenCtx) return false;
         humanoidSpriteCacheBuilds++;
-        const rendered = drawDirectionalHumanoidInBounds(offscreenCtx, entity, offscreenBounds, facing);
+        const previousSources = activeSourcePaths;
+        const sources = new Set();
+        activeSourcePaths = sources;
+        let rendered = false;
+        try {
+            rendered = drawDirectionalHumanoidInBounds(offscreenCtx, entity, offscreenBounds, facing);
+        } finally {
+            activeSourcePaths = previousSources;
+            // The final appearance is now the cache. Release the individual source
+            // image records so decoded body/hair/equipment art can be reclaimed.
+            window.assetManager?.release?.([...sources]);
+            window.clothingSystem?.releaseRenderSources?.();
+        }
         if (!rendered) return false;
         if (window.__humanoidRendererLastComplete) cachePut(key, canvas);
         ctx.drawImage(canvas, bounds.left, bounds.top, bounds.width, bounds.height);
@@ -1106,6 +1123,10 @@
         get hits() { return humanoidSpriteCacheHits; },
         max: MAX_HUMANOID_SPRITE_CACHE,
     };
+    window.getHumanoidSpriteCacheDetails = () => [...humanoidSpriteCache.keys()].map(key => {
+        const parts = key.split('::');
+        return { facing: parts[parts.length - 3] || 'unknown', width: parts[parts.length - 2] || '', height: parts[parts.length - 1] || '' };
+    });
     window.drawDirectionalHumanoidInBounds = drawDirectionalHumanoidInBounds;
     window.refreshDirectionalTurnPortraits = renderTurnPortraits;
     window.__humanoidRendererReady = true;
