@@ -379,8 +379,17 @@
             record.resolve(record.image);
             if (recovered) redrawAfterRecovery();
         };
-        if (typeof record.image.decode === 'function') record.image.decode().then(finish, finish);
-        else finish();
+        if (typeof record.image.decode === 'function') {
+            // A successful network load is not necessarily a usable decoded
+            // image on iOS/WebKit. Decode failures must enter the same retry
+            // path as network failures rather than being reported as ready.
+            return record.image.decode().then(
+                () => finish(),
+                error => Promise.reject(error || new Error(`Failed to decode image: ${record.path}`))
+            );
+        }
+        finish();
+        return Promise.resolve();
     }
 
     function startManagerRecord(record, done) {
@@ -393,8 +402,13 @@
             };
             const onLoad = () => {
                 cleanup();
-                settleLoaded(record);
-                done();
+                settleLoaded(record).then(
+                    () => done(),
+                    error => {
+                        console.warn('Image decoded load failed; retrying:', record.path, error);
+                        onError();
+                    }
+                );
             };
             const onError = () => {
                 cleanup();
