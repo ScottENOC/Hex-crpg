@@ -452,6 +452,20 @@
         });
     }
 
+    async function runWorkerCache(worker, commit, files) {
+        return workerRequest(worker, {
+            type: 'HEX_CACHE_GAME',
+            commit,
+            branch: BRANCH,
+            owner: OWNER,
+            repo: REPO,
+            files,
+        }, {
+            timeout: WORKER_STALL_TIMEOUT_MS,
+            onProgress: emitWorkerProgress,
+        });
+    }
+
     function isStandaloneWebApp() {
         return window.matchMedia?.('(display-mode: standalone)')?.matches || navigator.standalone === true;
     }
