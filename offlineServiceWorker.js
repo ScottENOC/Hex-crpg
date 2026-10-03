@@ -140,7 +140,7 @@ async function statusResult() {
     // re-downloading every file.
     const names = await caches.keys();
     const candidates = names.filter(name =>
-        (name.startsWith(GAME_CACHE_PREFIX) || /^hex-game-v\\d+-/.test(name) || LEGACY_GAME_CACHE_PREFIXES.some(prefix => name.startsWith(prefix))) &&
+        (name.startsWith(GAME_CACHE_PREFIX) || /^hex-game-v\d+-/.test(name) || LEGACY_GAME_CACHE_PREFIXES.some(prefix => name.startsWith(prefix))) &&
         !name.includes('-patch-')
     );
     for (const name of candidates) {
@@ -327,7 +327,7 @@ async function cleanupLegacyCaches(keepNames = []) {
     const names = await caches.keys();
     await Promise.all(names
         .filter(name => !keep.has(name) && (
-            /^hex-game-meta-v\\d+$/.test(name) || /^hex-game-v\\d+-/.test(name)
+            /^hex-game-meta-v\d+$/.test(name) || /^hex-game-v\d+-/.test(name)
         ))
         .map(name => caches.delete(name)));
 }
