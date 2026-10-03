@@ -86,24 +86,39 @@ async function writeCacheManifest(cache, commit, files) {
     }));
 }
 
-async function inspectGameCache(cacheName, expectedCommit = null) {
+async function inspectGameCache(cacheName, expectedCommit = null, verifyFiles = false) {
     if (!cacheName) return null;
     try {
         const manifest = await readCacheManifest(cacheName);
         if (!manifest?.commit || !Array.isArray(manifest.files) || !manifest.files.length) return null;
         if (expectedCommit && manifest.commit !== expectedCommit) return null;
 
-        // Do not require CacheStorage.keys() to succeed here. iOS/WebKit can
-        // have trouble enumerating a large cache even when cache.match() works.
-        // The manifest is our durable record of what was saved. Individual
-        // files are checked when they are actually needed.
         const expectedCount = manifest.files.length;
+        const missingPaths = [];
+        if (verifyFiles) {
+            // Never enumerate a large CacheStorage cache on iOS. Instead, verify
+            // the manifest entries one at a time with exact cache.match() calls.
+            // This is slower, but it is only used when explicitly checking for
+            // updates, where correctness matters more than startup speed.
+            const cache = await caches.open(cacheName);
+            for (const file of manifest.files) {
+                if (!file?.path) continue;
+                try {
+                    const response = await cache.match(localUrl(file.path), { ignoreSearch: true });
+                    if (!response) missingPaths.push(file.path);
+                } catch (_) {
+                    missingPaths.push(file.path);
+                }
+            }
+        }
+
+        const missingCount = missingPaths.length;
         return {
             valid: true,
-            healthy: true,
-            missingCount: 0,
-            missingPaths: [],
-            availableCount: expectedCount,
+            healthy: missingCount === 0,
+            missingCount,
+            missingPaths,
+            availableCount: Math.max(0, expectedCount - missingCount),
             activeCommit: manifest.commit,
             fileCount: expectedCount,
             totalBytes: manifest.files.reduce((sum, file) => sum + (Number(file.size) || 0), 0),
@@ -153,10 +168,10 @@ async function diagnosticResult() {
     };
 }
 
-async function statusResult() {
+async function statusResult(verifyFiles = false) {
     // Always check the stable active cache directly first. This avoids relying on
     // caches.keys() to rediscover the install on iOS/WebKit.
-    const directActive = await inspectGameCache(ACTIVE_CACHE_NAME);
+    const directActive = await inspectGameCache(ACTIVE_CACHE_NAME, null, verifyFiles);
     if (directActive?.valid) {
         const meta = await readActiveMeta(true);
         if (!meta || meta.cacheName !== ACTIVE_CACHE_NAME || meta.commit !== directActive.activeCommit) {
@@ -174,7 +189,7 @@ async function statusResult() {
 
     const meta = await readActiveMeta(true);
     if (meta?.cacheName) {
-        const direct = await inspectGameCache(meta.cacheName, meta.commit || null);
+        const direct = await inspectGameCache(meta.cacheName, meta.commit || null, verifyFiles);
         if (direct?.valid) return { ...direct, recovered: false };
     }
 
@@ -187,7 +202,7 @@ async function statusResult() {
         name !== ACTIVE_CACHE_NAME
     );
     for (const name of candidates) {
-        const recovered = await inspectGameCache(name);
+        const recovered = await inspectGameCache(name, null, verifyFiles);
         if (!recovered?.valid) continue;
         await writeActiveMeta({
             version: SW_VERSION,
@@ -403,7 +418,7 @@ async function cacheGame(message, port) {
     statusHeartbeat();
     const statusHeartbeatTimer = setInterval(statusHeartbeat, 5000);
     try {
-        before = await statusResult();
+        before = await statusResult(true);
     } finally {
         clearInterval(statusHeartbeatTimer);
     }
