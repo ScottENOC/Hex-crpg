@@ -357,97 +357,79 @@
     }
 
     async function showCacheDiagnostic(gate) {
-        const result = await getWorkerDiagnostic(
-            (await ensureRegistration()).active
-        );
-        const lines = [
-            `Offline engine: v${result.serviceWorkerVersion || 'unknown'}`,
-            `Worker: ${result.serviceWorkerScript || 'unknown'}`,
-            `Active pointer: ${result.activeMeta?.cacheName || 'NONE'}`,
-            `Installed commit: ${result.activeMeta?.commit || 'NONE'}`,
-            `Last saved: ${formatDiagnosticDate(result.activeMeta?.updatedAt || result.activeMeta?.recoveredAt)}`,
-            `Expected files: ${result.activeMeta?.fileCount ?? 'unknown'}`,
-            `Active manifest present: ${result.activeCacheExists ? 'YES' : 'NO'}`,
-            '',
-            'Cache Storage entries:',
-            ...(result.caches || []).map(cache =>
-                `• ${cache.name} — ${cache.entryCount ?? '?'} entries${cache.manifestCommit ? ` · commit ${cache.manifestCommit.slice(0, 10)} · manifest says ${cache.manifestFileCount} files` : ' · no game manifest'}`
-            ),
-        ];
-        const message = lines.join('\\n');
         const errorBox = gate.querySelector('.hex-offline-error');
         const title = gate.querySelector('.hex-offline-title');
         const count = gate.querySelector('.hex-offline-count');
+        const launchButton = gate.querySelector('.hex-offline-launch');
+        const updateButton = gate.querySelector('.hex-offline-update');
+
+        // Give immediate feedback before touching Cache Storage. iOS/WebKit can
+        // take a while to answer storage operations, so a blank screen makes
+        // the button look broken.
         title.textContent = 'Local cache diagnostic';
-        count.textContent = `${result.activeMeta?.fileCount ?? 0} files recorded`;
-        errorBox.textContent = message;
+        count.textContent = 'Reading what is installed…';
+        errorBox.textContent = 'Reading Cache Storage…';
         errorBox.hidden = false;
-        gate.querySelector('.hex-offline-launch').hidden = false;
-        gate.querySelector('.hex-offline-launch').textContent = 'Close';
-        gate.querySelector('.hex-offline-update').hidden = true;
-        return new Promise(resolve => {
-            gate.querySelector('.hex-offline-launch').onclick = () => resolve();
-        }).finally(() => {
-            gate.querySelector('.hex-offline-launch').onclick = null;
-            gate.querySelector('.hex-offline-launch').hidden = true;
-            gate.querySelector('.hex-offline-launch').textContent = 'Launch now';
-            errorBox.hidden = true;
-        });
-    }
+        launchButton.hidden = false;
+        launchButton.textContent = 'Close';
+        updateButton.hidden = true;
 
-    function isRuntimeFile(entry) {
-        if (!entry || entry.type !== 'blob' || !entry.path) return false;
-        const path = entry.path;
-        if (path === 'index.html' || path === 'manifest.webmanifest' || path === 'appstore/icon-1024.png') return true;
-        if (/^(?:images|audio|vendor)\//.test(path)) return true;
-        if (!path.includes('/') && /\.(?:js|css)$/i.test(path)) {
-            return !new Set(['server.js', 'gameEngine.js_new', 'learnSkill_fixed.js']).has(path);
+        try {
+            const names = await Promise.race([
+                caches.keys(),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Cache Storage did not respond within 10 seconds.')), 10000)),
+            ]);
+            const details = [];
+            for (const name of names) {
+                if (!name.startsWith('hex-game-') && !name.startsWith('hex-game-meta-')) continue;
+                const cache = await caches.open(name);
+                let manifest = null;
+                try {
+                    const response = await cache.match(new Request(new URL('__hex_offline_meta__/manifest.json', location.href).href));
+                    manifest = response ? await response.json() : null;
+                } catch (_) {}
+                let entryCount = '?';
+                try {
+                    entryCount = String((await Promise.race([
+                        cache.keys(),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
+                    ])).length);
+                } catch (_) {}
+                details.push(`${name} — ${entryCount} entries${manifest?.commit ? ` · commit ${manifest.commit.slice(0, 10)} · manifest says ${manifest.files?.length ?? '?'} files` : ' · no game manifest'}`);
+            }
+
+            let meta = null;
+            try {
+                const metaCache = await caches.open(`hex-game-meta-v${VERSION}`);
+                const response = await metaCache.match(new Request(new URL('__hex_offline_meta__/active.json', location.href).href));
+                meta = response ? await response.json() : null;
+            } catch (_) {}
+
+            const lines = [
+                `Offline engine in page: v${VERSION}`,
+                `Active pointer: ${meta?.cacheName || 'NONE'}`,
+                `Installed commit: ${meta?.commit || 'NONE'}`,
+                `Last saved: ${formatDiagnosticDate(meta?.updatedAt || meta?.recoveredAt)}`,
+                `Expected files: ${meta?.fileCount ?? 'unknown'}`,
+                '',
+                'Cache Storage:',
+                ...(details.length ? details.map(line => `• ${line}`) : ['• No Hex game caches found']),
+            ];
+            count.textContent = meta?.fileCount ? `${meta.fileCount} files recorded` : 'No active install recorded';
+            errorBox.textContent = lines.join('\\n');
+        } catch (error) {
+            count.textContent = 'Could not read Cache Storage';
+            errorBox.textContent = `Diagnostic failed: ${error?.message || error}`;
         }
-        return false;
-    }
 
-    function runtimeFilesFromTree(tree) {
-        return (tree || [])
-            .filter(isRuntimeFile)
-            .map(entry => ({ path: entry.path, sha: entry.sha, size: Number(entry.size) || 0 }))
-            .sort((a, b) => a.path.localeCompare(b.path));
-    }
-
-    function emitWorkerProgress(progress) {
-        emit({
-            phase: progress.phase || 'storing',
-            stored: progress.stored || 0,
-            processed: progress.processed || 0,
-            total: progress.total || 0,
-            downloaded: progress.downloaded || 0,
-            reused: progress.reused || 0,
-            retried: progress.retried || 0,
-            failed: progress.failed || 0,
-            totalBytes: progress.totalBytes || 0,
-            current: progress.current || '',
-            message: progress.message || '',
-            firstInstall: Boolean(progress.firstInstall),
-            existingFileCount: progress.existingFileCount || 0,
-            patchNew: progress.patchNew || 0,
-            patchChanged: progress.patchChanged || 0,
-            patchRemoved: progress.patchRemoved || 0,
-            patchUnchanged: progress.patchUnchanged || 0,
-            patchFinalCount: progress.patchFinalCount || 0,
-            patchTotal: progress.patchTotal || progress.total || 0,
-        });
-    }
-
-    async function runWorkerCache(worker, commit, files) {
-        return workerRequest(worker, {
-            type: 'HEX_CACHE_GAME',
-            commit,
-            branch: BRANCH,
-            owner: OWNER,
-            repo: REPO,
-            files,
-        }, {
-            timeout: WORKER_STALL_TIMEOUT_MS,
-            onProgress: emitWorkerProgress,
+        return new Promise(resolve => {
+            launchButton.onclick = () => resolve();
+        }).finally(() => {
+            launchButton.onclick = null;
+            launchButton.hidden = true;
+            launchButton.textContent = 'Launch now';
+            updateButton.hidden = false;
+            errorBox.hidden = true;
         });
     }
 
