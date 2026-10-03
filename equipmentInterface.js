@@ -1,7 +1,7 @@
 // Slot-first equipment UI: equipped boxes + one appearance-aware inventory list.
 (()=>{'use strict';
 
-const BUILD=window.PRESENTATION_BUILD||'20261002-equipment-ui-v7';
+const BUILD=window.PRESENTATION_BUILD||'20261002-equipment-ui-v6';
 const SLOT_DEFS=[
   {key:'helmet',label:'Helmet',area:'helmet'},
   {key:'cloak',label:'Cloak',area:'cloak'},
@@ -422,7 +422,7 @@ function unequipSlot(slot){
 function slotBox(p,s){
   const id=p.equipped?.[s.key],raw=(id&&physicalFor(p,id,s.key))||id,b=document.createElement('button');
   b.type='button';
-  b.style.cssText=`grid-area:${s.area};min-height:92px;padding:6px;border:1px solid #666;border-radius:7px;background:#262626;color:#eee;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;overflow:hidden;touch-action:manipulation;`;
+  b.style.cssText=`grid-area:${s.area};min-height:92px;padding:6px;border:1px solid #666;border-radius:7px;background:#262626;color:#eee;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;overflow:hidden;`;
   b.appendChild(itemImage(raw));
   const sl=document.createElement('span');
   sl.textContent=s.label;
@@ -438,24 +438,22 @@ function slotBox(p,s){
 function picker(p,slot){
   const modal=document.createElement('div');
   modal.dataset.equipmentSlotPicker='true';
-  modal.style.cssText='position:fixed;inset:0;background:#000b;z-index:10020;display:flex;align-items:flex-end;justify-content:center;overflow:hidden;touch-action:pan-y;padding-top:env(safe-area-inset-top);box-sizing:border-box';
+  modal.style.cssText='position:fixed;inset:0;background:#000b;z-index:10020;display:flex;align-items:flex-end;justify-content:center';
   const panel=document.createElement('div');
-  panel.style.cssText='background:#202020;border:1px solid #666;border-radius:12px 12px 0 0;width:min(680px,100%);max-height:min(82dvh,720px);overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;padding:12px max(12px,env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));box-sizing:border-box';
+  panel.style.cssText='background:#202020;border:1px solid #666;border-radius:12px 12px 0 0;width:min(680px,100%);max-height:72vh;overflow:auto;padding:12px';
   const s=SLOT_DEFS.find(x=>x.key===slot),head=document.createElement('div');
-  head.style.cssText='display:flex;justify-content:space-between;align-items:center;margin:-12px -12px 8px;padding:12px;position:sticky;top:-12px;z-index:1;background:#202020;border-bottom:1px solid #444';
+  head.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:8px';
   head.innerHTML=`<strong>${s?.label||slot}</strong>`;
   const close=document.createElement('button');
-  close.type='button';
   close.textContent='Close';
-  close.style.cssText='width:auto;min-height:44px;padding:8px 12px;touch-action:manipulation';
+  close.style.cssText='width:auto;padding:5px 9px';
   close.onclick=()=>{state.picker=null;render();};
   head.appendChild(close);
   panel.appendChild(head);
 
   const none=document.createElement('button');
-  none.type='button';
   none.textContent='Unequip / empty slot';
-  none.style.cssText='width:100%;min-height:44px;margin-bottom:8px;padding:9px;touch-action:manipulation';
+  none.style.cssText='width:100%;margin-bottom:8px;padding:9px';
   none.onclick=()=>unequipSlot(slot);
   panel.appendChild(none);
 
@@ -465,7 +463,7 @@ function picker(p,slot){
   for(const g of choices){
     const raw=g.raw,row=document.createElement('button');
     row.type='button';
-    row.style.cssText='width:100%;min-height:56px;display:grid;grid-template-columns:54px 1fr auto;gap:8px;align-items:center;text-align:left;padding:7px;margin:4px 0;background:#2d2d2d;color:#eee;border:1px solid #444;border-radius:6px;touch-action:manipulation';
+    row.style.cssText='width:100%;display:grid;grid-template-columns:54px 1fr auto;gap:8px;align-items:center;text-align:left;padding:7px;margin:4px 0;background:#2d2d2d;color:#eee;border:1px solid #444;border-radius:6px';
     row.appendChild(itemImage(raw));
     const txt=document.createElement('span');
     txt.innerHTML=`<strong>${label(raw)}${g.count>1?` ×${g.count}`:''}</strong><br><small>${weight(raw).toFixed(1)} wt · ${value(raw)}g</small>`;
@@ -493,7 +491,6 @@ function backpack(p,host){
   top.appendChild(h);
 
   const f=document.createElement('select');
-  f.style.touchAction='manipulation';
   for(const[v,t]of[
     ['all','All'],['weapon','Weapons'],['offhand','Off hand / shields'],['armor','Armour'],
     ['helmet','Helmets'],['cloak','Cloaks'],['coat','Coats'],['topOuter','Top outer / Corsets'],
@@ -506,7 +503,6 @@ function backpack(p,host){
   f.onchange=()=>{state.filter=f.value;render();};
 
   const sort=document.createElement('select');
-  sort.style.touchAction='manipulation';
   for(const[v,t]of[['name','Name'],['slot','Slot'],['weight','Weight'],['value','Value']]){
     const o=document.createElement('option');o.value=v;o.textContent=`Sort: ${t}`;sort.appendChild(o);
   }
@@ -545,110 +541,8 @@ function backpack(p,host){
   host.appendChild(section);
 }
 
-function closeInventoryModal(){
-  state.picker=null;
-  document.querySelector('[data-equipment-slot-picker]')?.remove();
-  const modal=document.getElementById('inventory-modal');
-  if(!modal)return;
-  modal.style.display='none';
-  window.isPausedForReaction=false;
-  window.lastModalClosedTime=Date.now();
-  window.updateMusicState?.();
-}
-
-function installInputProbe(){
-  if(window.__hexInputProbeInstalled)return;
-  let enabled=false;
-  try{
-    enabled=new URLSearchParams(window.location.search).get('inputProbe')==='1'||localStorage.getItem('hex_input_probe')==='1';
-  }catch(_){enabled=new URLSearchParams(window.location.search).get('inputProbe')==='1';}
-  if(!enabled)return;
-  window.__hexInputProbeInstalled=true;
-  const out=document.createElement('pre');
-  out.id='hex-input-probe';
-  out.style.cssText='position:fixed;z-index:2147483647;left:6px;right:6px;top:max(6px,env(safe-area-inset-top));margin:0;padding:6px;background:#000d;color:#9f9;font:11px/1.25 monospace;white-space:pre-wrap;pointer-events:none;max-height:28vh;overflow:hidden;border:1px solid #597';
-  document.body.appendChild(out);
-  const lines=[];
-  const describe=el=>{
-    if(!el)return'—';
-    const id=el.id?`#${el.id}`:'';
-    const cls=el.classList?.length?`.${[...el.classList].slice(0,2).join('.')}`:'';
-    return`${el.tagName||'?'}${id}${cls}`;
-  };
-  const record=event=>{
-    const touch=event.changedTouches?.[0]||event.touches?.[0];
-    const x=Number.isFinite(touch?.clientX)?touch.clientX:event.clientX;
-    const y=Number.isFinite(touch?.clientY)?touch.clientY:event.clientY;
-    const hit=Number.isFinite(x)&&Number.isFinite(y)?document.elementFromPoint(x,y):null;
-    lines.push(`${event.type}: ${describe(event.target)} | hit ${describe(hit)}${event.defaultPrevented?' | prevented':''}`);
-    if(lines.length>8)lines.shift();
-    out.textContent=lines.join('\n');
-  };
-  for(const type of ['touchstart','pointerdown','touchend','pointerup','click']){
-    document.addEventListener(type,record,{capture:true,passive:true});
-  }
-}
-
-function installInventoryShell(){
-  const modal=document.getElementById('inventory-modal');
-  const content=modal?.querySelector('.modal-content');
-  const host=document.getElementById('inventory-content');
-  const close=document.getElementById('close-inventory-modal');
-  if(!modal||!content||!host||!close)return false;
-  if(modal.dataset.iosFirstInventory==='true')return true;
-
-  modal.dataset.iosFirstInventory='true';
-  content.classList.add('inventory-sheet');
-  host.classList.add('inventory-sheet-scroll');
-
-  const title=content.querySelector('h2');
-  const header=document.createElement('div');
-  header.className='inventory-sheet-header';
-  if(title)header.appendChild(title);
-  close.type='button';
-  close.textContent='Close';
-  close.setAttribute('aria-label','Close inventory');
-  close.classList.add('inventory-sheet-close');
-  header.appendChild(close);
-  content.insertBefore(header,host);
-
-  if(!document.getElementById('inventory-ios-first-style')){
-    const style=document.createElement('style');
-    style.id='inventory-ios-first-style';
-    style.textContent=`
-      #inventory-modal[data-ios-first-inventory="true"] .inventory-sheet-header{display:flex;align-items:center;gap:12px;border-bottom:1px solid #555;background:#333;z-index:2}
-      #inventory-modal[data-ios-first-inventory="true"] .inventory-sheet-header h2{margin:0 auto 0 0;font-size:1.2rem}
-      #inventory-modal[data-ios-first-inventory="true"] .inventory-sheet-close{position:static!important;min-width:64px;min-height:44px;padding:9px 12px!important;font-size:16px!important;line-height:1.1;background:#4a4a4a!important;color:#fff!important;border:1px solid #777!important;border-radius:7px!important;touch-action:manipulation}
-      #inventory-modal[data-ios-first-inventory="true"] button,#inventory-modal[data-ios-first-inventory="true"] select{touch-action:manipulation}
-      @media (max-width:850px),(pointer:coarse){
-        #inventory-modal[data-ios-first-inventory="true"]{inset:0!important;width:auto!important;height:auto!important;overflow:hidden!important;overscroll-behavior:none;touch-action:pan-y;background:#333!important}
-        #inventory-modal[data-ios-first-inventory="true"]>.inventory-sheet{box-sizing:border-box;width:100%!important;max-width:none!important;height:100dvh!important;max-height:none!important;margin:0!important;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)!important;border:0!important;border-radius:0!important;display:flex;flex-direction:column;overflow:hidden!important;touch-action:pan-y}
-        #inventory-modal[data-ios-first-inventory="true"] .inventory-sheet-header{flex:none;min-height:56px;padding:8px max(12px,env(safe-area-inset-right)) 8px max(12px,env(safe-area-inset-left));box-sizing:border-box}
-        #inventory-modal[data-ios-first-inventory="true"] .inventory-sheet-scroll{flex:1;min-height:0;overflow-y:auto!important;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;padding:12px max(12px,env(safe-area-inset-right)) 18px max(12px,env(safe-area-inset-left));box-sizing:border-box}
-      }
-    `;
-    document.head.appendChild(style);
-  }
-
-  // main.js still contains a legacy window-level touchend shim for old mobile
-  // controls. Do not let it call preventDefault() for Inventory: Safari should
-  // perform normal hit-testing and synthesize the ordinary click itself.
-  modal.addEventListener('touchend',event=>event.stopPropagation(),{passive:true});
-
-  // Close is deliberately a direct native click path rather than relying on the
-  // old delegated touch shim. Stopping the click here also prevents a second
-  // delegated close at window level.
-  close.addEventListener('click',event=>{
-    event.stopPropagation();
-    closeInventoryModal();
-  });
-
-  return true;
-}
-
 function render(){
   document.querySelector('[data-equipment-slot-picker]')?.remove();
-  installInventoryShell();
   const host=document.getElementById('inventory-content'),p=window.player;
   if(!host||!p)return;
   window.clothingSystem?.migrateLegacyEquipment?.(p);
@@ -671,10 +565,8 @@ function render(){
 }
 
 function install(){
-  installInputProbe();
-  installInventoryShell();
   if(typeof window.showInventoryScreen!=='function'||window.showInventoryScreen.__slotEquipmentUI)return false;
-  window.showInventoryScreen=function(){installInventoryShell();render();};
+  window.showInventoryScreen=function(){render();};
   window.showInventoryScreen.__slotEquipmentUI=true;
   window.renderEquipmentInterface=render;
   return true;
