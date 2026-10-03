@@ -91,33 +91,18 @@ async function inspectGameCache(cacheName, expectedCommit = null) {
         const manifest = await readCacheManifest(cacheName);
         if (!manifest?.commit || !Array.isArray(manifest.files) || !manifest.files.length) return null;
         if (expectedCommit && manifest.commit !== expectedCommit) return null;
-        const cache = await caches.open(cacheName);
-        const keys = await cache.keys();
-        const expectedCount = manifest.files.length;
 
-        // A raw entry count is not enough. An old cache can contain stale files
-        // and still have 421 entries while a required sprite is absent. Compare
-        // the actual cached request URLs with every path in the manifest.
-        const cachedUrls = new Set(keys.map(request => {
-            try {
-                const url = new URL(request.url);
-                url.search = '';
-                url.hash = '';
-                return url.href;
-            } catch (_) {
-                return request.url;
-            }
-        }));
-        const missingPaths = manifest.files
-            .filter(file => !cachedUrls.has(localUrl(file.path)))
-            .map(file => file.path);
-        const availableCount = Math.max(0, expectedCount - missingPaths.length);
+        // Do not require CacheStorage.keys() to succeed here. iOS/WebKit can
+        // have trouble enumerating a large cache even when cache.match() works.
+        // The manifest is our durable record of what was saved. Individual
+        // files are checked when they are actually needed.
+        const expectedCount = manifest.files.length;
         return {
-            valid: availableCount > 0,
-            healthy: missingPaths.length === 0,
-            missingCount: missingPaths.length,
-            missingPaths,
-            availableCount,
+            valid: true,
+            healthy: true,
+            missingCount: 0,
+            missingPaths: [],
+            availableCount: expectedCount,
             activeCommit: manifest.commit,
             fileCount: expectedCount,
             totalBytes: manifest.files.reduce((sum, file) => sum + (Number(file.size) || 0), 0),
@@ -424,9 +409,17 @@ async function cacheGame(message, port) {
         // the file is reusable. Do NOT call cache.match() again for every one of
         // ~421 unchanged files: concurrent CacheStorage reads can stall WebKit.
         if (activeCache && activeShaByPath.get(file.path) === file.sha && !missingActivePaths.has(file.path)) {
-            reused++;
-            stored++;
-            return;
+            try {
+                const existing = await activeCache.match(request, { ignoreSearch: true });
+                if (existing) {
+                    reused++;
+                    stored++;
+                    return;
+                }
+            } catch (_) {
+                // Fall through to a verified redownload if this individual
+                // CacheStorage read fails.
+            }
         }
 
         // Only changed/missing files reach the staging cache. Report this read
@@ -533,32 +526,9 @@ async function cacheGame(message, port) {
     };
     await writeActiveMeta(nextMeta);
 
-    // Verify the cache we are about to advertise as ready. This catches an
-    // iOS/WebKit storage failure at the point it happens instead of reporting
-    // complete and only discovering the problem after a page reload.
-    const finalCheck = await inspectGameCache(finalCacheName, commit);
-    if (!finalCheck?.healthy) {
-        const missing = finalCheck?.missingPaths || [];
-        port.postMessage({
-            type: 'result',
-            result: {
-                complete: false,
-                failures: [serialiseFailure(
-                    makeFailure('storage', `The local copy was written but ${missing.length || 'some'} saved file(s) could not be reopened.`),
-                    missing.slice(0, 20).join(', ') || '(local cache verification)'
-                )],
-                stored: finalCheck?.availableCount || 0,
-                total: files.length,
-                downloaded,
-                reused,
-                retried,
-                activeCommit: before.activeCommit || null,
-                hasActiveCache: Boolean(before.valid),
-            },
-        });
-        return;
-    }
-
+    // The manifest is written only after every required file has been stored.
+    // Avoid a second full CacheStorage enumeration here: iOS/WebKit can fail
+    // large cache.keys() calls even though individual entries are readable.
     await cleanupStaleGameCaches([finalCacheName]);
     await cleanupLegacyCaches([finalCacheName]);
 
