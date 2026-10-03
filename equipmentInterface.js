@@ -372,16 +372,26 @@ function equip(raw,slot){
   // The slot picker is an explicit choice. For flexible garments such as a
   // corset, honour the clicked slot instead of prompting again or silently
   // falling back to the garment's default slot.
-  if(d?.type==='clothes'&&window.equipClothingToSlot){
-    window.equipClothingToSlot(id,slot);
+  if(d?.type==='clothes'){
+    // The picker has already made the slot choice. Do the same direct
+    // assignment as the known-working unequip path instead of routing back
+    // through equipItem -> clothingSlotExpansion -> equipment UI again.
+    window.clothingSystem?.migrateLegacyEquipment?.(p);
+    p.equipped=p.equipped||{};
+    const previous=p.equipped[slot];
+    p.equipped[slot]=id;
     if(isInst(raw)){
       p.equippedInstances=p.equippedInstances||{};
       for(const[otherSlot,other]of Object.entries(p.equippedInstances)){
         if(otherSlot!==slot&&other===raw)delete p.equippedInstances[otherSlot];
       }
       p.equippedInstances[slot]=raw;
-      window.syncPlayerEntity?.();
+    }else if(p.equippedInstances){
+      delete p.equippedInstances[slot];
     }
+    window.syncPlayerEntity?.();
+    window.showCharacter?.();
+    window.renderEntities?.();
     state.picker=null;
     render();
     return;
