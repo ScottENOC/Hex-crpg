@@ -1,7 +1,7 @@
-// iOS touch hardening for the slot-based equipment picker.
-// Safari can show :active feedback on these dynamically-created buttons without
-// dispatching the follow-up click. Mirror the existing Start-button workaround:
-// turn touchend into the button's normal click path and suppress the ghost click.
+// iOS touch hardening for dynamically-rendered inventory equipment buttons.
+// Keep this deliberately narrow: the normal modal/global touch handling in
+// main.js owns close buttons and modal chrome. This only supplies the missing
+// click for Equip buttons that Safari sometimes leaves at :active state.
 (() => {
   'use strict';
 
@@ -9,15 +9,19 @@
   window.__iosEquipmentTouchFixInstalled = true;
 
   document.addEventListener('touchend', event => {
-    const button = event.target?.closest?.('[data-equipment-slot-picker] button, #inventory-content button');
+    const target = event.target;
+    const button = target?.closest?.('#inventory-content button');
     if (!button || button.disabled) return;
+
     const label = (button.textContent || '').trim().toLowerCase();
     const inline = String(button.getAttribute('onclick') || '').toLowerCase();
-    const isEquipAction = label.startsWith('equip') || inline.includes('equipitem') || inline.includes('physicalwearables');
+    const isEquipAction = label.startsWith('equip') || inline.includes('equipitem');
     if (!isEquipAction) return;
 
+    // This is the one case where we intentionally replace Safari's missing
+    // synthetic click. Do not stop propagation: main.js still owns all of the
+    // global touch/modal handling, and other buttons must remain untouched.
     event.preventDefault();
-    event.stopPropagation();
     button.click();
   }, { passive: false });
 })();
