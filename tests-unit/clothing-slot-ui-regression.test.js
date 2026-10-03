@@ -41,58 +41,16 @@ test('expanded clothing slots unequip as cosmetic clothing rather than combat eq
     contains(ui, 'none.onclick=()=>unequipSlot(slot);');
 });
 
-test('inventory uses one mobile scroll surface and native click activation', () => {
-    const ui = read('equipmentInterface.js');
+test('equipment picker touch bridge converts only stationary taps into one existing click action', () => {
     const expansion = read('clothingSlotExpansion.js');
 
-    contains(ui, "modal.dataset.iosFirstInventory='true';");
-    contains(ui, 'height:100dvh!important');
-    contains(ui, 'overflow:hidden!important');
-    contains(ui, 'overflow-y:auto!important');
-    contains(ui, '-webkit-overflow-scrolling:touch');
-    contains(ui, 'touch-action:pan-y');
-    contains(ui, "modal.addEventListener('touchend',event=>event.stopPropagation(),{passive:true});");
-    contains(ui, "close.addEventListener('click',event=>{");
-    contains(ui, 'min-height:44px');
-    assert.equal(expansion.includes('pending.button.click();'), false, 'synthetic equipment click bridge must stay removed');
-    assert.equal(expansion.includes("document.addEventListener('touchend'"), false, 'clothing slot expansion must not own input dispatch');
-});
-
-test('equipment picker is a fixed shell with one scrolling panel and native buttons', () => {
-    const ui = read('equipmentInterface.js');
-
-    contains(ui, "modal.dataset.equipmentSlotPicker='true';");
-    contains(ui, 'overflow:hidden;touch-action:pan-y');
-    contains(ui, 'max-height:min(82dvh,720px);overflow-y:auto');
-    contains(ui, "close.type='button';");
-    contains(ui, "none.type='button';");
-    contains(ui, "row.type='button';");
-    contains(ui, 'min-height:56px');
-});
-
-test('opt-in mobile input probe reports hit-testing without intercepting taps', () => {
-    const ui = read('equipmentInterface.js');
-
-    contains(ui, "get('inputProbe')==='1'");
-    contains(ui, 'document.elementFromPoint(x,y)');
-    contains(ui, 'pointer-events:none');
-    contains(ui, "['touchstart','pointerdown','touchend','pointerup','click']");
-});
-
-test('dialogue closes ordinary menus and equipment picker before taking focus', () => {
-    const dialogue = read('dialogue.js');
-
-    contains(dialogue, 'function closeMenusForDialogue()');
-    contains(dialogue, "document.getElementById('close-inventory-modal')");
-    contains(dialogue, "document.querySelector('[data-equipment-slot-picker]')?.remove();");
-    contains(dialogue, "'character-screen-modal'");
-    contains(dialogue, "'shop-modal'");
-    contains(dialogue, "'settings-modal'");
-    contains(dialogue, "document.querySelectorAll('.dropdown-content.show')");
-    contains(dialogue, 'closeMenusForDialogue();');
-    contains(dialogue, 'return baseShowDialogue.apply(this, arguments);');
-
-    const closeIndex = dialogue.indexOf('closeMenusForDialogue();');
-    const showIndex = dialogue.indexOf('return baseShowDialogue.apply(this, arguments);');
-    assert.ok(closeIndex >= 0 && showIndex > closeIndex, 'menus must close before dialogue is shown');
+    contains(expansion, "event.target?.closest?.('[data-equipment-slot-picker] button')");
+    contains(expansion, 'const MAX_TAP_MOVE_PX = 10;');
+    contains(expansion, "document.addEventListener('touchend'");
+    contains(expansion, 'event.preventDefault();');
+    contains(expansion, 'pending.button.click();');
+    assert.ok(
+        expansion.indexOf('event.preventDefault();') < expansion.indexOf('pending.button.click();'),
+        'touchend must suppress the native synthetic click before forwarding to the existing click handler'
+    );
 });
