@@ -114,6 +114,45 @@ async function inspectGameCache(cacheName, expectedCommit = null) {
     }
 }
 
+async function diagnosticResult() {
+    const names = await caches.keys();
+    const cacheDetails = [];
+    for (const name of names) {
+        if (!name.startsWith('hex-game-') && !name.startsWith('hex-game-meta-')) continue;
+        try {
+            const cache = await caches.open(name);
+            const manifest = await readCacheManifest(name);
+            let entryCount = null;
+            try { entryCount = (await cache.keys()).length; } catch (_) {}
+            cacheDetails.push({
+                name,
+                entryCount,
+                manifestCommit: manifest?.commit || null,
+                manifestFileCount: Array.isArray(manifest?.files) ? manifest.files.length : null,
+                manifestVersion: manifest?.version || null,
+            });
+        } catch (error) {
+            cacheDetails.push({ name, error: error?.message || String(error) });
+        }
+    }
+    const meta = await readActiveMeta(true);
+    let activeExists = false;
+    if (meta?.cacheName) {
+        try {
+            const active = await caches.open(meta.cacheName);
+            activeExists = Boolean(await active.match(MANIFEST_KEY));
+        } catch (_) {}
+    }
+    return {
+        serviceWorkerVersion: SW_VERSION,
+        serviceWorkerScript: self.registration.active?.scriptURL || '',
+        activeMeta: meta || null,
+        activeCacheExists: activeExists,
+        caches: cacheDetails,
+        generatedAt: Date.now(),
+    };
+}
+
 async function statusResult() {
     // Always check the stable active cache directly first. This avoids relying on
     // caches.keys() to rediscover the install on iOS/WebKit.
@@ -602,6 +641,13 @@ async function cacheGame(message, port) {
 self.addEventListener('message', event => {
     const port = event.ports?.[0];
     if (!port) return;
+    if (event.data?.type === 'HEX_CACHE_DIAGNOSTIC') {
+        event.waitUntil((async () => {
+            try { port.postMessage({ type: 'result', result: await diagnosticResult() }); }
+            catch (error) { port.postMessage({ type: 'error', kind: 'diagnostic', message: error?.message || String(error) }); }
+        })());
+        return;
+    }
     if (event.data?.type === 'HEX_CACHE_STATUS') {
         event.waitUntil((async () => {
             try {
