@@ -16,6 +16,16 @@
     // Keep one HTMLImageElement per source so a failed request/retry cannot leave
     // one race's private copy broken while another copy of the same file succeeds.
     const rendererImageCache = new Map();
+
+    // Completed map sprites are built lazily. We deliberately do not prebuild a
+    // fixed set for the player: every character/facing gets a composite only when
+    // the map actually asks for it. The cache is bounded so NPC-heavy fights cannot
+    // turn a useful optimisation into another source of iOS canvas memory pressure.
+    const humanoidSpriteCache = new Map();
+    const MAX_HUMANOID_SPRITE_CACHE = 48;
+    let humanoidSpriteCacheBuilds = 0;
+    let humanoidSpriteCacheHits = 0;
+
     let legacyDrawPlayerCharacter = null;
     let installed = false;
     let creatorLegacy = null;
@@ -719,6 +729,7 @@
 
     function drawDirectionalHumanoidInBounds(ctx, entity, bounds, facing='down') {
         if (!ctx || !entity || !bounds || !canDirectRender(entity)) return false;
+        let compositionComplete = true;
         const key = keyFor(entity);
         const view = facingToView(facing);
         const set = CHARACTER_ASSETS[key];
@@ -786,10 +797,21 @@
                 : drawCropped(ctx, bodySource, layout.bodyCrop, layout.bodyDest, bounds);
             if (bodyDrawn) layerOrder.push('body');
             for (const slot of ['underwear','bra','pants','shirt']) {
-                if (window.clothingSystem?.drawSlot?.(ctx, entity, slot, view, bounds)) layerOrder.push(slot);
+                const expected = entity.displayClothes !== false
+                    && !!entity.equipped?.[slot]
+                    && equipmentSlotVisible(entity, slot);
+                const drawn = window.clothingSystem?.drawSlot?.(ctx, entity, slot, view, bounds) || false;
+                if (drawn) layerOrder.push(slot);
+                if (expected && !drawn) compositionComplete = false;
             }
-            if (entity.displayArmour !== false && equipmentSlotVisible(entity,'armor') && entity.equipped?.armor && drawArmour(ctx, entity, view, bounds)) layerOrder.push('armour');
+            const armourExpected = entity.displayArmour !== false
+                && equipmentSlotVisible(entity,'armor')
+                && !!entity.equipped?.armor;
+            const armourDrawn = armourExpected ? drawArmour(ctx, entity, view, bounds) : false;
+            if (armourDrawn) layerOrder.push('armour');
+            if (armourExpected && !armourDrawn) compositionComplete = false;
             if (typeof window.drawFacialHairLayer === 'function' && window.drawFacialHairLayer(ctx,entity,view,bounds)) layerOrder.push('facialHair');
+            if (!hasHelmet && sourceHair && !imageReady(sourceHair)) compositionComplete = false;
             if (!hasHelmet && imageReady(hairImage)) {
                 const tightDirectional = hairStyle === 'braid' && view !== 'front';
                 const tightDest = tightDirectional
@@ -809,18 +831,78 @@
                     sourceHeight:sourceHair?.naturalHeight || sourceHair?.height || 0,
                     drew:!!hairDrawn,
                 };
-            } else if (hasHelmet && drawHelmet(ctx, entity, view, bounds)) layerOrder.push('helmet');
+            } else if (hasHelmet) {
+                const helmetDrawn = drawHelmet(ctx, entity, view, bounds);
+                if (helmetDrawn) layerOrder.push('helmet');
+                if (!helmetDrawn) compositionComplete = false;
+            }
 
             if (!shieldBehindBody) drawShieldLayer();
             if (view !== 'back') drawWeaponLayer();
+
+            // A selected/visible weapon or shield is part of the requested
+            // character appearance. If neither held-item pass managed to draw it,
+            // keep this frame out of the composite cache so a transient asset load
+            // can recover on the next render instead of becoming permanent.
+            for (const slot of ['main','off']) {
+                const equipmentSlot = slot === 'main' ? 'weapon' : 'offhand';
+                const id = slot === 'main' ? entity.equipped?.weapon : entity.equipped?.offhand;
+                if (!id || !equipmentSlotVisible(entity, equipmentSlot)) continue;
+                const spec = slotSpec(entity, slot, view);
+                if (!spec) continue;
+                const expectedLayer = spec.kind === 'shield' ? 'shield' : 'weapons';
+                if (!layerOrder.includes(expectedLayer)) compositionComplete = false;
+            }
         } finally {
             ctx.restore();
         }
 
         window.__humanoidRendererLastLayerOrder = layerOrder;
+        window.__humanoidRendererLastComplete = compositionComplete;
         window.__humanoidRendererLastDraw = {entity,key,view,facing,bounds:{...bounds},timestamp:Date.now()};
         window.__humanoidRendererDrawCount = (window.__humanoidRendererDrawCount || 0) + 1;
         return true;
+    }
+
+    function safeAppearanceKey(entity) {
+        try {
+            return JSON.stringify({
+                race:entity.race, gender:entity.gender, bodyType:entity.bodyType,
+                hairStyle:entity.hairStyle, hairHue:entity.hairHue,
+                hairLightMult:entity.hairLightMult, hairSatMult:entity.hairSatMult,
+                skinHue:entity.skinHue, skinSaturation:entity.skinSaturation, skinLightness:entity.skinLightness,
+                equipped:entity.equipped, clothingColors:entity.clothingColors,
+                displayArmour:entity.displayArmour, displayClothes:entity.displayClothes,
+                goldGear:entity.goldGear, equipmentAppearance:entity.equipmentAppearance,
+            });
+        } catch (_) {
+            return String(entity?.name || 'humanoid');
+        }
+    }
+
+    function spriteCacheKey(entity, facing, width, height) {
+        return [safeAppearanceKey(entity), facing, Math.ceil(width), Math.ceil(height)].join('::');
+    }
+
+    function cacheGet(key) {
+        const value = humanoidSpriteCache.get(key);
+        if (!value) return null;
+        humanoidSpriteCache.delete(key);
+        humanoidSpriteCache.set(key, value); // LRU touch.
+        humanoidSpriteCacheHits++;
+        return value;
+    }
+
+    function cachePut(key, canvas) {
+        humanoidSpriteCache.delete(key);
+        humanoidSpriteCache.set(key, canvas);
+        while (humanoidSpriteCache.size > MAX_HUMANOID_SPRITE_CACHE) {
+            humanoidSpriteCache.delete(humanoidSpriteCache.keys().next().value);
+        }
+    }
+
+    function clearHumanoidSpriteCache() {
+        humanoidSpriteCache.clear();
     }
 
     function drawHumanoidCharacter(ctx, entity, x, y, z=1, flyOff=0) {
@@ -832,7 +914,29 @@
         const legacyTop = y - legacyW/2 + rig.yOff*hs*z + (flyOff || 0);
         const visualW = legacyH * HUMAN_RENDER_ASPECT;
         const bounds = {left:x-visualW/2,top:legacyTop,width:visualW,height:legacyH};
-        return drawDirectionalHumanoidInBounds(ctx, entity, bounds, VALID_FACINGS.has(entity.facing) ? entity.facing : 'down');
+        const facing = VALID_FACINGS.has(entity.facing) ? entity.facing : 'down';
+        const key = spriteCacheKey(entity, facing, bounds.width, bounds.height);
+        const cached = cacheGet(key);
+        if (cached) {
+            ctx.drawImage(cached, bounds.left, bounds.top, bounds.width, bounds.height);
+            return true;
+        }
+
+        // Build off-screen once. The compositor writes a completion flag after
+        // all requested layers have had a chance to draw. Incomplete frames are
+        // still usable for this draw, but are never retained in the cache.
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.ceil(bounds.width));
+        canvas.height = Math.max(1, Math.ceil(bounds.height));
+        const offscreenBounds = {left:0, top:0, width:canvas.width, height:canvas.height};
+        const offscreenCtx = canvas.getContext('2d');
+        if (!offscreenCtx) return false;
+        humanoidSpriteCacheBuilds++;
+        const rendered = drawDirectionalHumanoidInBounds(offscreenCtx, entity, offscreenBounds, facing);
+        if (!rendered) return false;
+        if (window.__humanoidRendererLastComplete) cachePut(key, canvas);
+        ctx.drawImage(canvas, bounds.left, bounds.top, bounds.width, bounds.height);
+        return true;
     }
 
     function installDrawOverride() {
@@ -995,6 +1099,13 @@
     window.drawDirectionalCharacterBase = (ctx,entity,bounds,facing='down') => drawDirectionalHumanoidInBounds(ctx,entity,bounds,facing);
     window.drawHumanFemaleDirectionalBase = window.drawDirectionalCharacterBase;
     window.drawHumanoidCharacter = drawHumanoidCharacter;
+    window.clearHumanoidSpriteCache = clearHumanoidSpriteCache;
+    window.humanoidSpriteCacheStats = {
+        get size() { return humanoidSpriteCache.size; },
+        get builds() { return humanoidSpriteCacheBuilds; },
+        get hits() { return humanoidSpriteCacheHits; },
+        max: MAX_HUMANOID_SPRITE_CACHE,
+    };
     window.drawDirectionalHumanoidInBounds = drawDirectionalHumanoidInBounds;
     window.refreshDirectionalTurnPortraits = renderTurnPortraits;
     window.__humanoidRendererReady = true;
