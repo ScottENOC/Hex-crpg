@@ -46,3 +46,10 @@ test('bootstrap files are network-first so updater code cannot be trapped in its
     assert.ok(networkPos > bootstrapPos);
     assert.ok(fallbackPos > networkPos, 'Network refresh must be attempted before local fallback');
 });
+
+
+test('partial patch caches are never recovered as the active complete game cache', () => {
+    const recoveryBlock = worker.match(/const candidates = names\.filter\(name =>([\\s\\S]*?)\\n    \);/);
+    assert.ok(recoveryBlock, 'Expected cache recovery candidate filter');
+    assert.match(recoveryBlock[1], /!name\.includes\('-patch-'\)/);
+});
