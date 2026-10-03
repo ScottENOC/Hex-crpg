@@ -10,7 +10,7 @@
 
   document.addEventListener('touchend', event => {
     const target = event.target;
-    const button = target?.closest?.('#inventory-content button');
+    const button = target?.closest?.('#inventory-content button, [data-equipment-slot-picker] button');
     if (!button || button.disabled) return;
 
     const label = (button.textContent || '').trim().toLowerCase();
