@@ -343,6 +343,25 @@
         });
     }
 
+    function isRuntimeFile(entry) {
+        if (!entry || entry.type !== 'blob' || !entry.path) return false;
+        const path = entry.path;
+        if (path === 'index.html' || path === 'manifest.webmanifest' || path === 'appstore/icon-1024.png') return true;
+        if (/^(?:images|audio|vendor)\//.test(path)) return true;
+        if (!path.includes('/') && /\.(?:js|css)$/i.test(path)) {
+            return !new Set(['server.js', 'gameEngine.js_new', 'learnSkill_fixed.js']).has(path);
+        }
+        return false;
+    }
+
+    function runtimeFilesFromTree(tree) {
+        return (tree || [])
+            .filter(isRuntimeFile)
+            .map(entry => ({ path: entry.path, sha: entry.sha, size: Number(entry.size) || 0 }))
+            .sort((a, b) => a.path.localeCompare(b.path));
+    }
+
+    
     async function getWorkerStatus(worker) {
         return workerRequest(worker, { type: 'HEX_CACHE_STATUS' }, { timeout: STARTUP_WORKER_TIMEOUT_MS });
     }
