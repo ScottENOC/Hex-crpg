@@ -324,6 +324,10 @@ async function assertCacheStorageWorks() {
 
 async function cleanupLegacyCaches(keepNames = []) {
     const keep = new Set((keepNames || []).filter(Boolean));
+    // The metadata cache is the small pointer to the active game cache.
+    // Never delete the current metadata cache here: doing so immediately after
+    // a successful update makes the next startup depend on cache recovery.
+    keep.add(META_CACHE);
     const names = await caches.keys();
     await Promise.all(names
         .filter(name => !keep.has(name) && (
@@ -528,6 +532,33 @@ async function cacheGame(message, port) {
         updatedAt: Date.now(),
     };
     await writeActiveMeta(nextMeta);
+
+    // Verify the cache we are about to advertise as ready. This catches an
+    // iOS/WebKit storage failure at the point it happens instead of reporting
+    // complete and only discovering the problem after a page reload.
+    const finalCheck = await inspectGameCache(finalCacheName, commit);
+    if (!finalCheck?.healthy) {
+        const missing = finalCheck?.missingPaths || [];
+        port.postMessage({
+            type: 'result',
+            result: {
+                complete: false,
+                failures: [serialiseFailure(
+                    makeFailure('storage', `The local copy was written but ${missing.length || 'some'} saved file(s) could not be reopened.`),
+                    missing.slice(0, 20).join(', ') || '(local cache verification)'
+                )],
+                stored: finalCheck?.availableCount || 0,
+                total: files.length,
+                downloaded,
+                reused,
+                retried,
+                activeCommit: before.activeCommit || null,
+                hasActiveCache: Boolean(before.valid),
+            },
+        });
+        return;
+    }
+
     await cleanupStaleGameCaches([finalCacheName]);
     await cleanupLegacyCaches([finalCacheName]);
 
