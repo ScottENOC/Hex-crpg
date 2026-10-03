@@ -202,3 +202,324 @@ function getMeleeLungeTransform(entity, hexToPixel, zoom) {
     };
 }
 window.getMeleeLungeTransform = getMeleeLungeTransform;
+
+// SPELL VFX -----------------------------------------------------------------
+// Reuses the existing transient combat-FX render hook rather than introducing
+// another canvas/layer or any persisted state. These are deliberately drawn
+// with primitives: they work offline, add no preload traffic, and scale cleanly
+// with the map. `simple` is selected for reduced-motion / low render-scale;
+// otherwise effects gain particles, trails and flicker while keeping the same
+// readable silhouette.
+window.spellEffects = window.spellEffects || [];
+window.spellVisualProjectiles = window.spellVisualProjectiles || [];
+
+const SPELL_FX_BY_BASE = {
+    firebolt: 'firebolt',
+    heal: 'heal',
+    smite_evil: 'smite',
+    divine_silence: 'silence',
+    sanctuary: 'sanctuary',
+    divine_protection: 'protection',
+    summon_animal: 'summon',
+    counterspell: 'counterspell',
+    dragon_breath: 'dragon_breath',
+    entangle: 'entangle',
+    wild_fury: 'wild_fury',
+    calm_animal: 'calm_animal',
+    temporal_rift: 'temporal_rift',
+};
+window.SPELL_FX_BY_BASE = SPELL_FX_BY_BASE;
+
+function getSpellFxDetail() {
+    if (window.reduceMotion) return 'simple';
+    if (typeof window.renderScale === 'number' && window.renderScale < 0.75) return 'simple';
+    return 'full';
+}
+window.getSpellFxDetail = getSpellFxDetail;
+
+let _spellFxAnimRunning = false;
+function _spellFxAlive(now = performance.now()) {
+    const moving = window.spellVisualProjectiles?.some(p => now - p.start < p.durationMs);
+    const bursts = window.spellEffects?.some(e => now - e.start < e.durationMs);
+    return !!(moving || bursts);
+}
+function _driveSpellFxAnimation() {
+    if (!_spellFxAlive()) { _spellFxAnimRunning = false; return; }
+    if (window.drawMap) window.drawMap();
+    requestAnimationFrame(_driveSpellFxAnimation);
+}
+function _startSpellFxAnimation() {
+    if (_spellFxAnimRunning) return;
+    _spellFxAnimRunning = true;
+    requestAnimationFrame(_driveSpellFxAnimation);
+}
+
+function spawnSpellVisualProjectile(fromHex, toHex, style = 'firebolt') {
+    if (!fromHex || !toHex) return;
+    window.spellVisualProjectiles.push({
+        fromQ: fromHex.q, fromR: fromHex.r,
+        toQ: toHex.q, toR: toHex.r,
+        style,
+        start: performance.now(),
+        durationMs: window.reduceMotion ? 180 : 360,
+    });
+    _startSpellFxAnimation();
+}
+window.spawnSpellVisualProjectile = spawnSpellVisualProjectile;
+
+function spawnSpellBurst(hex, style, durationMs = 520) {
+    if (!hex) return;
+    window.spellEffects.push({ q: hex.q, r: hex.r, style, start: performance.now(), durationMs });
+    _startSpellFxAnimation();
+}
+window.spawnSpellBurst = spawnSpellBurst;
+
+function _circle(ctx, x, y, radius, fill, alpha = 1) {
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.arc(x, y, Math.max(0.5, radius), 0, Math.PI * 2);
+    ctx.fill();
+}
+
+function _ring(ctx, x, y, radius, stroke, lineWidth, alpha = 1) {
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = lineWidth;
+    ctx.beginPath();
+    ctx.arc(x, y, Math.max(0.5, radius), 0, Math.PI * 2);
+    ctx.stroke();
+}
+
+function renderSpellVisualProjectile(ctx, hexToPixel, zoom, p, now) {
+    const t = Math.max(0, Math.min(1, (now - p.start) / p.durationMs));
+    const from = hexToPixel(p.fromQ, p.fromR);
+    const to = hexToPixel(p.toQ, p.toR);
+    const angle = Math.atan2(to.y - from.y, to.x - from.x);
+    // Lift the source slightly toward a humanoid hand while the destination
+    // remains the target hex centre (centre of mass at map scale).
+    const handX = from.x + Math.cos(angle) * 9 * zoom;
+    const handY = from.y - 10 * zoom + Math.sin(angle) * 3 * zoom;
+    const x = handX + (to.x - handX) * t;
+    const y = handY + (to.y - handY) * t;
+    const detail = getSpellFxDetail();
+
+    ctx.save();
+    if (p.style === 'firebolt') {
+        if (detail === 'full') {
+            // Warm trail behind a flickering core: a cheap moving-fire read,
+            // not a frame sprite, so it remains smooth at arbitrary zoom.
+            for (let i = 4; i >= 1; i--) {
+                const backT = Math.max(0, t - i * 0.035);
+                const tx = handX + (to.x - handX) * backT;
+                const ty = handY + (to.y - handY) * backT;
+                const wobble = Math.sin(now * 0.035 + i * 2.1) * 2 * zoom;
+                _circle(ctx, tx - Math.sin(angle) * wobble, ty + Math.cos(angle) * wobble,
+                    (7 - i) * zoom, i < 3 ? '#ff7a00' : '#d94801', 0.15 + (4 - i) * 0.12);
+            }
+            const flicker = 1 + Math.sin(now * 0.06) * 0.16;
+            _circle(ctx, x, y, 11 * zoom * flicker, '#ff5a00', 0.25);
+            _circle(ctx, x, y, 7 * zoom * flicker, '#ff8c00', 0.95);
+            _circle(ctx, x + 1.5 * zoom, y - 1.5 * zoom, 3.6 * zoom, '#ffe066', 1);
+        } else {
+            _circle(ctx, x, y, 8 * zoom, '#e85d04', 0.95);
+            _circle(ctx, x, y, 5.5 * zoom, '#ff9f1c', 1);
+            _circle(ctx, x + zoom, y - zoom, 2.5 * zoom, '#ffe66d', 1);
+        }
+    } else if (p.style === 'dragon_breath') {
+        const spread = detail === 'full' ? 5 : 2;
+        for (let i = 0; i < spread; i++) {
+            const offset = (i - (spread - 1) / 2) * 5 * zoom * t;
+            const px = x - Math.sin(angle) * offset;
+            const py = y + Math.cos(angle) * offset;
+            _circle(ctx, px, py, (6 + t * 5) * zoom, i % 2 ? '#ff9f1c' : '#e85d04', 0.8 - t * 0.2);
+        }
+    }
+    ctx.restore();
+}
+
+function renderSpellBurst(ctx, hexToPixel, zoom, e, now) {
+    const age = Math.max(0, Math.min(1, (now - e.start) / e.durationMs));
+    const fade = 1 - age;
+    const { x, y } = hexToPixel(e.q, e.r);
+    const full = getSpellFxDetail() === 'full';
+    ctx.save();
+
+    switch (e.style) {
+        case 'heal': {
+            _circle(ctx, x, y - 5 * zoom, (10 + age * 13) * zoom, '#78d6ff', 0.22 * fade);
+            _ring(ctx, x, y, (7 + age * 20) * zoom, '#8be9fd', Math.max(1.5, 2.5 * zoom), 0.9 * fade);
+            const count = full ? 6 : 3;
+            for (let i = 0; i < count; i++) {
+                const ox = (i - (count - 1) / 2) * 5 * zoom;
+                const oy = y + 10 * zoom - age * (22 + (i % 3) * 7) * zoom;
+                _circle(ctx, x + ox, oy, 2.2 * zoom, '#bdefff', 0.9 * fade);
+            }
+            break;
+        }
+        case 'smite':
+            ctx.globalAlpha = fade;
+            ctx.strokeStyle = '#fff1a8';
+            ctx.lineWidth = Math.max(2, 4 * zoom);
+            ctx.beginPath(); ctx.moveTo(x, y - (30 + 25 * age) * zoom); ctx.lineTo(x, y + 10 * zoom); ctx.stroke();
+            _ring(ctx, x, y, (5 + 18 * age) * zoom, '#ffd166', 2 * zoom, fade);
+            break;
+        case 'silence':
+            _circle(ctx, x, y, (12 + 15 * age) * zoom, '#596275', 0.18 * fade);
+            _ring(ctx, x, y, (10 + 21 * age) * zoom, '#c8d6e5', 2 * zoom, 0.65 * fade);
+            if (full) _ring(ctx, x, y, (6 + 13 * age) * zoom, '#8395a7', 1.5 * zoom, 0.5 * fade);
+            break;
+        case 'sanctuary':
+            _circle(ctx, x, y, (13 + 5 * Math.sin(age * Math.PI)) * zoom, '#fff3b0', 0.16 * fade);
+            _ring(ctx, x, y, (15 + age * 4) * zoom, '#ffe08a', 2.5 * zoom, 0.8 * fade);
+            break;
+        case 'protection':
+            _ring(ctx, x, y, (10 + 12 * age) * zoom, '#9ad1ff', 3 * zoom, 0.8 * fade);
+            _ring(ctx, x, y, (6 + 6 * age) * zoom, '#e0f2ff', 1.5 * zoom, 0.7 * fade);
+            break;
+        case 'summon': {
+            _ring(ctx, x, y, (5 + 21 * age) * zoom, '#b7e4c7', 2.5 * zoom, 0.9 * fade);
+            const count = full ? 8 : 4;
+            for (let i = 0; i < count; i++) {
+                const a = (i / count) * Math.PI * 2 + age * 0.8;
+                const rr = (7 + age * 18) * zoom;
+                _circle(ctx, x + Math.cos(a) * rr, y + Math.sin(a) * rr * 0.55,
+                    (3 + age * 3) * zoom, '#d8f3dc', 0.45 * fade);
+            }
+            break;
+        }
+        case 'counterspell':
+            _ring(ctx, x, y, (20 - age * 12) * zoom, '#d0a2f7', 3 * zoom, 0.9 * fade);
+            _circle(ctx, x, y, (6 + age * 6) * zoom, '#8e44ad', 0.28 * fade);
+            break;
+        case 'dragon_breath':
+            _ring(ctx, x, y, (8 + 25 * age) * zoom, '#ff6b00', 3 * zoom, 0.85 * fade);
+            if (full) _circle(ctx, x, y, (8 + 18 * age) * zoom, '#ffb703', 0.22 * fade);
+            break;
+        case 'entangle': {
+            _ring(ctx, x, y, (7 + 18 * age) * zoom, '#52b788', 3 * zoom, 0.9 * fade);
+            const tendrils = full ? 6 : 3;
+            ctx.globalAlpha = 0.8 * fade;
+            ctx.strokeStyle = '#2d6a4f';
+            ctx.lineWidth = Math.max(1.5, 2 * zoom);
+            for (let i = 0; i < tendrils; i++) {
+                const a = i / tendrils * Math.PI * 2;
+                ctx.beginPath(); ctx.moveTo(x, y);
+                ctx.quadraticCurveTo(x + Math.cos(a + 0.4) * 10 * zoom, y + Math.sin(a + 0.4) * 7 * zoom,
+                    x + Math.cos(a) * (12 + age * 16) * zoom, y + Math.sin(a) * (8 + age * 10) * zoom);
+                ctx.stroke();
+            }
+            break;
+        }
+        case 'wild_fury':
+            _circle(ctx, x, y, (8 + age * 14) * zoom, '#f4a261', 0.22 * fade);
+            _ring(ctx, x, y, (8 + age * 18) * zoom, '#e76f51', 3 * zoom, 0.85 * fade);
+            break;
+        case 'calm_animal':
+            _ring(ctx, x, y, (6 + age * 19) * zoom, '#80ed99', 2.5 * zoom, 0.85 * fade);
+            if (full) _ring(ctx, x, y, (3 + age * 12) * zoom, '#c7f9cc', 1.5 * zoom, 0.65 * fade);
+            break;
+        case 'temporal_rift':
+            _ring(ctx, x, y, (20 - age * 13) * zoom, '#9d4edd', 3 * zoom, 0.9 * fade);
+            _ring(ctx, x, y, (5 + age * 18) * zoom, '#5a189a', 2 * zoom, 0.7 * fade);
+            if (full) {
+                ctx.globalAlpha = 0.5 * fade;
+                ctx.strokeStyle = '#e0aaff';
+                ctx.beginPath();
+                for (let i = 0; i <= 12; i++) {
+                    const a = i / 12 * Math.PI * 4;
+                    const rr = i / 12 * 22 * zoom;
+                    const px = x + Math.cos(a) * rr;
+                    const py = y + Math.sin(a) * rr * 0.55;
+                    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                }
+                ctx.stroke();
+            }
+            break;
+    }
+    ctx.restore();
+}
+
+// combatFX's existing renderProjectiles is already called in the correct
+// top-of-map FX layer. Wrap it once so spells share that layer and inherit
+// zoom-based graphics suppression from graphicsSettings.js.
+const _renderPhysicalProjectiles = window.renderProjectiles;
+window.renderProjectiles = function renderCombatProjectilesWithSpells(ctx, hexToPixel, zoom) {
+    _renderPhysicalProjectiles(ctx, hexToPixel, zoom);
+    const now = performance.now();
+    window.spellVisualProjectiles = window.spellVisualProjectiles.filter(p => now - p.start < p.durationMs);
+    window.spellEffects = window.spellEffects.filter(e => now - e.start < e.durationMs);
+    window.spellVisualProjectiles.forEach(p => renderSpellVisualProjectile(ctx, hexToPixel, zoom, p, now));
+    window.spellEffects.forEach(e => renderSpellBurst(ctx, hexToPixel, zoom, e, now));
+};
+
+function spellFxBaseId(spell) {
+    if (!spell) return '';
+    if (spell.baseId) return spell.baseId;
+    const name = String(spell.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+    return name;
+}
+window.spellFxBaseId = spellFxBaseId;
+
+function playSpellVisualEffect(caster, spell, target, clickedHex) {
+    if (!caster?.hex || !spell) return;
+    const baseId = spellFxBaseId(spell);
+    const style = SPELL_FX_BY_BASE[baseId];
+    if (!style) return;
+    const targetHex = target?.hex || clickedHex || caster.hex;
+
+    switch (style) {
+        case 'firebolt':
+            spawnSpellVisualProjectile(caster.hex, targetHex, 'firebolt');
+            break;
+        case 'dragon_breath':
+            spawnSpellVisualProjectile(caster.hex, targetHex, 'dragon_breath');
+            spawnSpellBurst(targetHex, 'dragon_breath', 500);
+            break;
+        case 'heal':
+            spawnSpellBurst(targetHex, 'heal', 650);
+            break;
+        case 'summon':
+            // The summon exists by the time this runs; the pale smoke/ring
+            // makes its sudden appearance read as magical materialisation.
+            spawnSpellBurst(clickedHex || targetHex, 'summon', 700);
+            break;
+        case 'entangle':
+            spawnSpellBurst(clickedHex || targetHex, 'entangle', 700);
+            break;
+        case 'temporal_rift':
+            spawnSpellBurst(clickedHex || targetHex, 'temporal_rift', 750);
+            break;
+        default:
+            spawnSpellBurst(targetHex, style, 560);
+            break;
+    }
+}
+window.playSpellVisualEffect = playSpellVisualEffect;
+
+// tryCastSpell is defined later in gameEngine.js, so install the wrapper once
+// all ordinary scripts have executed. Real-time casts call tryCastSpell once
+// to start their cast bar and again with bypassCooldown=true when the spell
+// actually fires; only the second call gets VFX. Failed/counter-pending casts
+// likewise do not launch a misleading projectile.
+function installSpellFxCastHook() {
+    const original = window.tryCastSpell;
+    if (!original || original.__spellFxWrapped) return false;
+    const wrapped = function(caster, spell, target, clickedHex, bypassCooldown = false) {
+        const delayedStart = !window.isInCombat && !bypassCooldown;
+        const result = original.apply(this, arguments);
+        if (!delayedStart && result !== false && result !== 'counter_pending') {
+            playSpellVisualEffect(caster, spell, target, clickedHex);
+        }
+        return result;
+    };
+    wrapped.__spellFxWrapped = true;
+    wrapped.__original = original;
+    window.tryCastSpell = wrapped;
+    return true;
+}
+window.installSpellFxCastHook = installSpellFxCastHook;
+
+if (!installSpellFxCastHook()) {
+    document.addEventListener('DOMContentLoaded', installSpellFxCastHook, { once: true });
+}
