@@ -741,6 +741,11 @@
         // missing/slow garment suppress the body layer for the entire character.
         window.clothingSystem?.ensureDefaultOutfit?.(entity,{player:entity.side==='player'});
         window.clothingSystem?.preloadOutfit?.(entity,view);
+        if (activeSourcePaths) {
+            for (const path of window.clothingSystem?.resolveOutfitAssetPaths?.(entity,[view]) || []) {
+                activeSourcePaths.add(window.assetManager?.canonicalPathFor?.(path) || path);
+            }
+        }
         const sourceBodyPath = (set?.body?.[bodyType] || set?.body?.average)?.[view];
         const sourceBody = sourceBodyPath ? loadImage(sourceBodyPath) : null;
         // A direct body image can be temporarily unavailable or permanently broken.
