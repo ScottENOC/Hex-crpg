@@ -5,12 +5,12 @@
 (() => {
     'use strict';
 
-    const VERSION = '11';
+    const VERSION = '12';
     const OWNER = 'ScottENOC';
     const REPO = 'Hex-crpg';
     const BRANCH = 'development';
     const API_BASE = `https://api.github.com/repos/${OWNER}/${REPO}`;
-    const SW_URL = 'offlineServiceWorker.js?v=11';
+    const SW_URL = 'offlineServiceWorker.js?v=12';
     const BRANCH_CACHE_MS = 15000;
     const REQUEST_TIMEOUT_MS = 25000;
     const WORKER_STALL_TIMEOUT_MS = 45000;
