@@ -521,6 +521,19 @@
         canonicalPathFor:canonicalPath,
         urlFor:managedUrl,
         get(path){return managerRecords.get(recordKey(path))?.image || null;},
+        // Release a decoded source image once a final composite has been built.
+        // A later appearance can request the path again; this is deliberately
+        // not persistent image caching.
+        release(paths) {
+            const list = Array.isArray(paths) ? paths : [paths];
+            for (const value of list) {
+                const key = recordKey(value);
+                const record = managerRecords.get(key);
+                if (!record || record.status === 'loading' || record.queued) continue;
+                managerRecords.delete(key);
+                try { record.image.removeAttribute('src'); } catch (_) {}
+            }
+        },
         status(path){return managerRecords.get(recordKey(path))?.status || 'unrequested';},
         get cacheSize(){return managerRecords.size;},
     };
