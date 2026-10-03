@@ -266,6 +266,10 @@
             if (baseRandomize && !baseRandomize.__identityAware) {
                 const wrappedRandomize = function(...args) {
                     const result = baseRandomize.apply(this, args);
+                    // Randomise cosmetic details, but keep the physical build
+                    // at the neutral default rather than randomly changing it.
+                    const build = document.getElementById('body-type-select');
+                    if (build) build.value = 'average';
                     const body = document.getElementById('body-presentation-select');
                     if (body) body.value = Math.random() < 0.5 ? 'female' : 'male';
                     preloadSelectedBody();
