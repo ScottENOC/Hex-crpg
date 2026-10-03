@@ -956,6 +956,7 @@
             // image records so decoded body/hair/equipment art can be reclaimed.
             window.assetManager?.release?.([...sources]);
             window.clothingSystem?.releaseRenderSources?.();
+            window.releaseRecoloredSpriteCache?.();
         }
         if (!rendered) return false;
         if (window.__humanoidRendererLastComplete) cachePut(key, canvas);
