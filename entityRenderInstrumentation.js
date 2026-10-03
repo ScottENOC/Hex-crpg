@@ -1,54 +1,88 @@
 // entityRenderInstrumentation.js
-// Four-direction humanoid composite cache + deterministic post-construction art gate.
-// This is the sole gameplay humanoid composite cache. Every direction is prebuilt before gameplay;
-// rendering during gameplay is a single cached-canvas draw, including during combat.
+// Lightweight entity-render diagnostics bridge.
+//
+// Humanoid compositing and caching now belong to humanoidRenderer.js.
+// This file deliberately does NOT prebuild four views, wrap drawPlayerCharacter,
+// or keep a second per-entity composite cache. Those behaviours caused the
+// loading screen to build four sprites per character and duplicated memory.
+//
+// The performance UI reads the authoritative lazy final-sprite cache through
+// getHumanoidCompositeCacheDiagnostics().
+
 (() => {
-'use strict';
-if(window.__entityRenderInstrumentationInstalled)return;
-window.__entityRenderInstrumentationInstalled=true;
-const cache=new WeakMap(),PAD=4,DIRECTIONS=['down','up','left','right'];
-const stats=window.entityRenderInstrumentationStats={installed:false,calls:0,totalMs:0,maxMs:0,humanoidCalls:0,humanoidMs:0,humanoidMaxMs:0,customCalls:0,customMs:0,customMaxMs:0,creatureCalls:0,creatureMs:0,creatureMaxMs:0,otherCalls:0,otherMs:0,otherMaxMs:0,cacheHits:0,cacheMisses:0,cacheBuilds:0,cacheFailed:0,cacheBuildMs:0,cacheMaxBuildMs:0,directionHits:0,appearanceInvalidations:0,sideMirrorHits:0,readinessBypasses:0,postStartAssets:0,postStartFailures:0,postStartGateMs:0,manifestEntities:0,manifestPaths:0,prebuildEntities:0,prebuildViews:0,prebuildFailures:0,prebuildMs:0,lazyBuilds:0,cacheReadyEntities:0,cacheReadyViews:0,cacheMissingViews:0,assetLoadResults:[],characterCacheResults:[],samples:[],installs:0,rosterWaitMs:0,rosterStableEntities:0,loadRebuilds:0};
-let ready=false,gateRunning=false;
-function publish(v){ready=!!v;const s=window.__assetLoadScheduler;if(s){try{Object.defineProperty(s,'compositeCacheReady',{configurable:true,get:()=>ready});}catch(_){}}}
-publish(false);
-function classify(e){if(!e)return'other';if(e.customImage)return'custom';if(e.race&&e.gender)return'humanoid';if(e.image||e.sprite||e.type)return'creature';return'other';}
-function safe(v){try{return JSON.stringify(v)||'';}catch(_){return String(v??'');}}
-function appearanceKey(e,z,f){return[e.race||'',e.gender||'',e.bodyType||'',e.hairStyle||'',e.facialHairStyle||'',e.hairHue??'',e.skinHue??'',e.displayArmour===false?0:1,e.displayClothes===false?0:1,e.goldGear?1:0,Number(z||1).toFixed(3),Number(f||0).toFixed(3),Number(window.hexSize||30).toFixed(2),safe(e.equipped),safe(e.clothingColors),safe(e.tattoos),safe(e.scars)].join('|');}
-function facing(e){return DIRECTIONS.includes(e?.facing)?e.facing:'down';}
-function record(kind,ms,e){stats.calls++;stats.totalMs+=ms;stats.maxMs=Math.max(stats.maxMs,ms);stats[`${kind}Calls`]++;stats[`${kind}Ms`]+=ms;stats[`${kind}MaxMs`]=Math.max(stats[`${kind}MaxMs`],ms);if(ms>=1){stats.samples.push({ms,kind,name:e?.name||e?.id||e?.type||'unknown',race:e?.race||'',gender:e?.gender||'',side:e?.side||''});stats.samples.sort((a,b)=>b.ms-a.ms);if(stats.samples.length>30)stats.samples.length=30;}}
-function cropComposite(c,cx,cy){try{const x=c.getContext('2d',{willReadFrequently:true}),d=x.getImageData(0,0,c.width,c.height).data;let minX=c.width,minY=c.height,maxX=-1,maxY=-1;for(let y=0;y<c.height;y++)for(let xx=0;xx<c.width;xx++)if(d[(y*c.width+xx)*4+3]){if(xx<minX)minX=xx;if(xx>maxX)maxX=xx;if(y<minY)minY=y;if(y>maxY)maxY=y;}if(maxX<0)return{canvas:c,cx,cy};const margin=2,left=Math.max(0,minX-margin),top=Math.max(0,minY-margin),right=Math.min(c.width-1,maxX+margin),bottom=Math.min(c.height-1,maxY+margin),w=right-left+1,h=bottom-top+1;if(w===c.width&&h===c.height)return{canvas:c,cx,cy};const out=document.createElement('canvas');out.width=w;out.height=h;out.getContext('2d').drawImage(c,left,top,w,h,0,0,w,h);return{canvas:out,cx:cx-left,cy:cy-top};}catch(_){return{canvas:c,cx,cy};}}
-function build(original,e,z,fly){const hs=Math.max(1,Number(window.hexSize||30)),scale=Math.max(.1,Number(z||1)),size=Math.max(64,Math.ceil(hs*scale*PAD*2)),c=document.createElement('canvas');c.width=size;c.height=size;const x=c.getContext('2d');if(!x)return null;const cx=size/2,cy=size/2,t=performance.now();original(x,e,cx,cy,z,fly);const made=cropComposite(c,cx,cy),ms=performance.now()-t;stats.cacheBuildMs+=ms;stats.cacheMaxBuildMs=Math.max(stats.cacheMaxBuildMs,ms);stats.cacheBuilds++;return made;}
-function chain(fn,mark){const seen=new Set();while(typeof fn==='function'&&!seen.has(fn)){seen.add(fn);if(fn[mark])return true;fn=fn.__original;}return false;}
-function bucket(e,z=1,fly=0){const key=appearanceKey(e,z,fly);let b=cache.get(e);if(!b||b.key!==key){if(b)stats.appearanceInvalidations++;b={key,views:new Map()};cache.set(e,b);}return b;}
-function installDraw(){const current=window.drawPlayerCharacter;if(typeof current!=='function')return false;if(chain(current,'__fourDirectionHumanoidCompositeCache'))return true;const wrapped=function(ctx,e,...rest){const kind=classify(e),x=rest[0],y=rest[1],z=rest[2]??1,fly=rest[3]??0,t=performance.now();try{const humanoid=kind==='humanoid'&&!e.customImage&&ctx;if(humanoid&&!ready){stats.readinessBypasses++;return current.call(this,ctx,e,...rest);}if(humanoid){const b=bucket(e,z,fly),f=facing(e),entry=b.views.get(f);if(entry){stats.cacheHits++;stats.directionHits++;ctx.drawImage(entry.canvas,x-entry.cx,y-entry.cy);return;}stats.cacheMisses++;stats.lazyBuilds++;try{const made=build(current,e,z,fly);if(made){b.views.set(f,made);ctx.drawImage(made.canvas,x-made.cx,y-made.cy);return;}}catch(err){console.warn('[humanoid-cache] emergency build failed',e?.name,f,err);}stats.cacheFailed++;}return current.call(this,ctx,e,...rest);}finally{record(kind,performance.now()-t,e);}};wrapped.__fourDirectionHumanoidCompositeCache=true;wrapped.__directionalHumanoidCompositeCache=true;wrapped.__liveHumanoidCompositeCache=true;wrapped.__entityRenderInstrumentation=true;wrapped.__original=current;if(chain(current,'__directHumanoidCompositor'))wrapped.__directHumanoidCompositor=true;window.drawPlayerCharacter=wrapped;window.__hexInstrumentedDrawPlayerCharacter=wrapped;try{(0,eval)('drawPlayerCharacter = window.__hexInstrumentedDrawPlayerCharacter');}catch(_){}window.clearHumanoidSpriteCache=e=>{if(e)cache.delete(e);};
-window.getHumanoidCompositeCacheDiagnostics=()=>{
-const entities=humanoids(),details=entities.map(e=>{const b=cache.get(e),views=b?.views?.size||0;return{name:e?.name||e?.id||'unknown',views,complete:DIRECTIONS.every(f=>b?.views?.has(f))};});
-return{installed:!!stats.installed,ready:!!ready,prebuildEntities:stats.prebuildEntities||0,prebuildViews:stats.prebuildViews||0,prebuildFailures:stats.prebuildFailures||0,entities:entities.length,completeEntities:details.filter(x=>x.complete).length,totalViews:details.reduce((n,x)=>n+x.views,0),expectedViews:entities.length*4,cacheHits:stats.cacheHits||0,cacheMisses:stats.cacheMisses||0,lazyBuilds:stats.lazyBuilds||0,cacheFailed:stats.cacheFailed||0,details};
-};
-stats.installs++;stats.installed=true;return true;}
-function add(set,p){if(typeof p!=='string')return;const s=p.replace(/^\.\//,'').split('?')[0];if(s.startsWith('images/'))set.add(window.assetManager?.canonicalPathFor?.(s)||s);}
-function viewPaths(obj,set){if(!obj)return;for(const v of ['front','side','back'])add(set,obj[v]);}
-function genericItemAssets(e,set){for(const id of Object.values(e?.equipped||{})){if(typeof id!=='string')continue;const item=window.items?.[id];if(!item)continue;viewPaths(item.clothingViews,set);for(const l of item.clothingLayers||[])viewPaths(l.views,set);add(set,item.image);add(set,item.sprite);}}
-function humanoidAssets(e,set){const key=`${e.race}_${e.gender}`,body=e.bodyType==='broad'?'body_broad':'body';if(key==='human_female'||key==='human_male'){for(const v of ['front','side','back'])add(set,`images/characters/${key}/${body}_${v}.png`);}else if(key==='elf_female'){for(const v of ['front','side','back'])add(set,`images/characters/elf_female/body_${v}.png`);}else if(key==='elf_male'||key==='dwarf_female'||key==='dwarf_male'){add(set,`images/characters/${key}/body.png`);}else if(key==='goblin_female'||key==='goblin_male'||key==='orc_female'||key==='orc_male'){for(const v of ['front','side','back'])add(set,`images/characters/${key}/body_${v}.png`);}const hair=e.hairStyle||'brown_1';for(const v of ['front','side','back'])add(set,`images/characters/human_female/hair_${hair}_${v}.png`);for(const p of window.clothingSystem?.resolveOutfitAssetPaths?.(e,['front','side','back'])||[])add(set,p);genericItemAssets(e,set);if(e.displayArmour!==false&&e.equipped?.armor){const item=window.items?.[e.equipped.armor],r=Number(item?.reduction||0),tier=r>=3?'heavy':r>=2?'medium':'light';add(set,`images/equipment/armour/human/${tier}.png`);add(set,`images/equipment/armour/human/${tier}_back.webp`);}if(e.equipped?.helmet){add(set,'images/equipment/helmets/nasal_helm.png');add(set,'images/equipment/helmets/nasal_helm_back.svg');}const eq=Object.values(e.equipped||{}).filter(v=>typeof v==='string');for(const id of eq){const l=id.toLowerCase();if(l.includes('shield')){const kite=l.includes('kite');add(set,kite?'images/equipment/shields/kite.png':'images/equipment/shields/round.png');add(set,kite?'images/equipment/shields/kite_back.png':'images/equipment/shields/round_back.svg');}else if(l.includes('bow'))add(set,'images/equipment/weapons/bow.svg');else if(l.includes('spear'))add(set,'images/equipment/weapons/spear.png');else if(l.includes('axe')||l.includes('pickaxe'))add(set,'images/equipment/weapons/axe.png');else if(l.includes('club'))add(set,'images/equipment/weapons/club.svg');else if(l.includes('dagger')||l.includes('sword'))add(set,'images/equipment/weapons/sword.png');}if(e.facialHairStyle==='moustache'){add(set,'images/characters/facial_hair/moustache_front.svg');add(set,'images/characters/facial_hair/moustache_side.svg');}if(e.facialHairStyle==='beard_full'){add(set,'images/characters/facial_hair/beard_full_front.png');add(set,'images/characters/facial_hair/beard_full_side.png');}}
-function campaignEntities(){const entities=[...(window.entities||[])];if(window.player&&!entities.includes(window.player))entities.push(window.player);return entities;}
-function humanoids(){return campaignEntities().filter(e=>e?.race&&e?.gender&&!e.customImage);}
-function campaignManifest(){const set=new Set(),entities=campaignEntities();for(const e of entities){if(!e)continue;if(e.race&&e.gender&&!e.customImage)humanoidAssets(e,set);else{add(set,e.customImage);add(set,e.image);add(set,e.sprite);genericItemAssets(e,set);}}stats.manifestEntities=entities.length;stats.manifestPaths=set.size;stats.postStartAssets=set.size;return[...set];}
-function overlay(){let el=document.getElementById('hex-post-start-asset-gate');if(el)return el;el=document.createElement('div');el.id='hex-post-start-asset-gate';el.style.cssText='position:fixed;inset:0;z-index:2147483647;background:linear-gradient(180deg,#151515,#090909);display:none;align-items:center;justify-content:center;color:#f4ead2;font-family:Georgia,serif;padding:18px;box-sizing:border-box';el.innerHTML='<div style="width:min(620px,94vw);max-height:92vh;padding:22px;border:1px solid #8f7445;border-radius:10px;background:#201d19;text-align:center;display:flex;flex-direction:column;box-sizing:border-box"><h2 data-title style="margin:0 0 8px">Preparing campaign…</h2><p data-count style="margin:4px 0 10px">Constructing campaign…</p><div style="height:12px;flex:0 0 auto;border-radius:999px;overflow:hidden;background:#0d0c0a;border:1px solid #5f5037"><div data-bar style="height:100%;width:4%;background:#b89a5c"></div></div><div data-list style="margin:12px 0;min-height:100px;max-height:48vh;overflow-y:auto;-webkit-overflow-scrolling:touch;text-align:left;background:#11100e;border:1px solid #514631;border-radius:6px;padding:8px;font:12px/1.45 -apple-system,BlinkMacSystemFont,sans-serif;word-break:break-all"></div><p data-error style="color:#efb0a8;word-break:break-word" hidden></p><div style="flex:0 0 auto"><button data-retry hidden>Retry failed assets</button> <button data-danger hidden>⚠ Proceed anyway — danger</button> <button data-start hidden style="padding:11px 22px;background:#2e7d32;color:white;font-weight:bold">Start game</button></div></div>';document.body.appendChild(el);return el;}
-function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function setList(el,rows){const box=el.querySelector('[data-list]');if(!box)return;box.innerHTML=rows.map(r=>`<div style="padding:2px 0;color:${r.ok===false?'#ef9a9a':r.ok===true?'#a5d6a7':'#d7c9aa'}">${r.ok===false?'✗':r.ok===true?'✓':'…'} ${esc(r.label)}</div>`).join('');box.scrollTop=box.scrollHeight;}
-function progress(el,n,total,label='Loading campaign art…'){el.querySelector('[data-title]').textContent=label;el.querySelector('[data-count]').textContent=`Loaded ${n} / ${total} required campaign art assets`;el.querySelector('[data-bar]').style.width=`${total?Math.max(4,Math.round(n*100/total)):4}%`;}
-async function loadManifest(el,paths){let n=0;const failed=[],rows=paths.map(p=>({label:p,ok:null}));stats.assetLoadResults=rows;progress(el,0,paths.length);setList(el,rows);const workers=Math.min(4,paths.length);let cursor=0;await Promise.all(Array.from({length:workers},async()=>{while(cursor<paths.length){const i=cursor++,p=paths[i];try{await window.assetManager.load(p,{priority:-100,immediate:true});rows[i].ok=true;}catch(err){rows[i].ok=false;rows[i].error=String(err?.message||err||'load failed');failed.push(p);}finally{progress(el,++n,paths.length);setList(el,rows);}}}));return failed;}
-function yieldFrame(){return new Promise(r=>requestAnimationFrame(()=>r()));}
-async function waitForRoster(el){const started=performance.now();let last=-1,stable=0;while(performance.now()-started<3000){const n=campaignEntities().length;el.querySelector('[data-title]').textContent='Constructing campaign…';el.querySelector('[data-count]').textContent=`Waiting for full character roster… ${n} entities found`;if(n===last&&n>1)stable++;else stable=0;last=n;if(stable>=4)break;await new Promise(r=>setTimeout(r,50));}stats.rosterWaitMs=performance.now()-started;stats.rosterStableEntities=campaignEntities().length;}
-function updateCacheTotals(entities){let views=0,complete=0;for(const e of entities){const b=cache.get(e),n=b?.views?.size||0;views+=n;if(DIRECTIONS.every(f=>b?.views?.has(f)))complete++;}stats.cacheReadyEntities=complete;stats.cacheReadyViews=views;stats.cacheMissingViews=Math.max(0,entities.length*4-views);}
-async function prebuildComposites(el){installDraw();let original=window.drawPlayerCharacter?.__original;if(typeof original!=='function')return[];const entities=humanoids();for(const e of entities){if(e.skinHue===undefined){const tone=window.pickNaturalSkinTone?.(`${e.name||'x'}_skin`);e.skinHue=tone?.hue??20;e.skinSaturation=tone?.saturation;e.skinLightness=tone?.lightness;}if(e.hairHue===undefined)e.hairHue=25;}stats.prebuildEntities=entities.length;stats.prebuildViews=0;stats.prebuildFailures=0;const failures=[],total=entities.length*4,rows=[];for(const e of entities)for(const f of DIRECTIONS)rows.push({label:`${e.name||e.id||'character'} — ${f}`,ok:null});stats.characterCacheResults=rows;setList(el,rows);let done=0;const started=performance.now();for(const e of entities){const oldFacing=e.facing;for(const f of DIRECTIONS){const row=rows[done];el.querySelector('[data-title]').textContent='Preparing characters…';el.querySelector('[data-count]').textContent=`${entities.length} humanoids — built ${done} / ${total} directional views`;el.querySelector('[data-bar]').style.width=`${total?Math.max(4,Math.round(done*100/total)):4}%`;try{e.facing=f;const b=bucket(e,1,0);if(!b.views.has(f)){const made=build(original,e,1,0);if(!made)throw new Error('No canvas');b.views.set(f,made);}stats.prebuildViews++;row.ok=true;}catch(err){stats.prebuildFailures++;row.ok=false;row.error=String(err?.message||err);failures.push(`${e.name||e.id||'character'} (${f})`);console.warn('[humanoid-cache] preload failed',e?.name,f,err);}finally{done++;setList(el,rows);}await yieldFrame();}e.facing=oldFacing;}stats.prebuildMs=performance.now()-started;updateCacheTotals(entities);el.querySelector('[data-count]').textContent=`Built ${done} / ${total} directional views — ${stats.cacheReadyEntities}/${entities.length} characters complete`;el.querySelector('[data-bar]').style.width='100%';return failures;}
-async function startButton(el,count){el.querySelector('[data-title]').textContent='Ready to start';el.querySelector('[data-count]').textContent=`${count} required art assets loaded; ${stats.cacheReadyViews} directional views cached for ${stats.cacheReadyEntities}/${stats.prebuildEntities} characters. Tap Start game when ready.`;el.querySelector('[data-bar]').style.width='100%';const b=el.querySelector('[data-start]');b.hidden=false;await new Promise(r=>b.onclick=r);b.onclick=null;b.hidden=true;}
-async function chooseFailure(el,message){const er=el.querySelector('[data-error]'),re=el.querySelector('[data-retry]'),da=el.querySelector('[data-danger]');er.textContent=message;er.hidden=false;re.hidden=false;da.hidden=false;const action=await new Promise(r=>{re.onclick=()=>r('retry');da.onclick=()=>r('danger');});re.onclick=da.onclick=null;re.hidden=da.hidden=true;er.hidden=true;return action;}
-async function runGate(el,started,{requireStartButton=true}={}){if(gateRunning)return;gateRunning=true;try{publish(false);await waitForRoster(el);const paths=campaignManifest();let failed=await loadManifest(el,paths);while(failed.length){stats.postStartFailures=failed.length;const action=await chooseFailure(el,`${failed.length} required art asset${failed.length===1?'':'s'} failed: ${failed.slice(0,5).map(p=>p.split('/').pop()).join(', ')}. Retry is safest.`);if(action==='danger')break;failed=await loadManifest(el,failed);}let compositeFailures=await prebuildComposites(el);while(compositeFailures.length){const action=await chooseFailure(el,`${compositeFailures.length} directional character view${compositeFailures.length===1?'':'s'} failed to build: ${compositeFailures.slice(0,4).join(', ')}. Retry is safest.`);if(action==='danger')break;compositeFailures=await prebuildComposites(el);}stats.postStartFailures=failed.length;publish(true);stats.postStartGateMs=performance.now()-started;if(requireStartButton)await startButton(el,paths.length-failed.length);el.style.display='none';try{window.drawMap?.();window.renderEntities?.();}catch(_){}}finally{gateRunning=false;}}
-function resetGateStats(){stats.postStartAssets=stats.postStartFailures=stats.prebuildViews=stats.prebuildFailures=stats.cacheReadyEntities=stats.cacheReadyViews=stats.cacheMissingViews=0;stats.assetLoadResults=[];stats.characterCacheResults=[];}
-function beginGate(requireStartButton=true){resetGateStats();const el=overlay();el.style.display='flex';el.querySelector('[data-title]').textContent='Initialising campaign…';el.querySelector('[data-count]').textContent='Constructing the complete character roster before loading art…';el.querySelector('[data-bar]').style.width='4%';setList(el,[]);const started=performance.now();setTimeout(()=>runGate(el,started,{requireStartButton}).catch(err=>{console.error('[asset-gate]',err);publish(false);const er=el.querySelector('[data-error]');er.textContent=String(err?.message||err);er.hidden=false;}),0);}
-function installStart(){const current=window.startGame;if(typeof current!=='function'||current.__postStartAssetGate)return false;const wrapped=function(...args){publish(false);let result;try{result=current.apply(this,args);}catch(err){throw err;}beginGate(true);return result;};wrapped.__postStartAssetGate=true;wrapped.__original=current;window.startGame=wrapped;try{(0,eval)('startGame = window.startGame');}catch(_){}return true;}
-function installLoad(){const current=window.loadGame;if(typeof current!=='function'||current.__postLoadCompositeRebuild)return false;const wrapped=function(...args){publish(false);const result=current.apply(this,args);stats.loadRebuilds++;beginGate(false);return result;};wrapped.__postLoadCompositeRebuild=true;wrapped.__original=current;window.loadGame=wrapped;try{(0,eval)('loadGame = window.loadGame');}catch(_){}return true;}
-window.rebuildAllHumanoidCaches=async function(){const el=overlay();el.style.display='flex';publish(false);await runGate(el,performance.now(),{requireStartButton:false});};
-let tries=0;const timer=setInterval(()=>{installDraw();installStart();installLoad();if(++tries>400||(stats.installed&&window.startGame?.__postStartAssetGate&&window.loadGame?.__postLoadCompositeRebuild))clearInterval(timer);},25);
+    'use strict';
+    if (window.__entityRenderInstrumentationInstalled) return;
+    window.__entityRenderInstrumentationInstalled = true;
+
+    const stats = window.entityRenderInstrumentationStats = {
+        installed: true,
+        calls: 0,
+        totalMs: 0,
+        maxMs: 0,
+        humanoidCalls: 0,
+        humanoidMs: 0,
+        humanoidMaxMs: 0,
+        customCalls: 0,
+        customMs: 0,
+        customMaxMs: 0,
+        creatureCalls: 0,
+        creatureMs: 0,
+        creatureMaxMs: 0,
+        otherCalls: 0,
+        otherMs: 0,
+        otherMaxMs: 0,
+        installs: 1,
+        prebuildEntities: 0,
+        prebuildViews: 0,
+        prebuildFailures: 0,
+        lazyBuilds: 0,
+        cacheHits: 0,
+        cacheMisses: 0,
+        cacheFailed: 0
+    };
+
+    window.getHumanoidCompositeCacheDiagnostics = () => {
+        const cache = window.humanoidSpriteCacheStats || {};
+        const details = typeof window.getHumanoidSpriteCacheDetails === 'function'
+            ? window.getHumanoidSpriteCacheDetails()
+            : [];
+        const size = Number(cache.size || 0);
+        const max = Number(cache.max || 0);
+        const builds = Number(cache.builds || 0);
+        const hits = Number(cache.hits || 0);
+        const misses = Math.max(0, builds - hits);
+        return {
+            installed: true,
+            ready: true,
+            cacheType: 'lazy-final-appearance',
+            size,
+            max,
+            builds,
+            hits,
+            misses,
+            lazyBuilds: builds,
+            cacheHits: hits,
+            cacheMisses: misses,
+            cacheFailed: Number(cache.failed || 0),
+            entities: details.length,
+            completeEntities: details.length,
+            totalViews: size,
+            expectedViews: size,
+            details
+        };
+    };
+
+    window.EntityRenderInstrumentation = {
+        report() {
+            const s = window.entityRenderInstrumentationStats;
+            const sprite = window.getHumanoidCompositeCacheDiagnostics?.() || {};
+            return [
+                'ENTITY RENDER INSTRUMENTATION',
+                '=============================',
+                'No secondary humanoid compositor/cache is installed.',
+                `Final appearance cache: ${sprite.size || 0}/${sprite.max || 0} entries; builds=${sprite.builds || 0}; hits=${sprite.hits || 0}; misses=${sprite.misses || 0}`,
+                `Instrumentation calls=${s.calls || 0} (render timing remains in performanceMonitor)`
+            ].join('\\n');
+        }
+    };
 })();
