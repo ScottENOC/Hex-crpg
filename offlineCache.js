@@ -362,6 +362,30 @@
     }
 
     
+    function emitWorkerProgress(progress) {
+        emit({
+            phase: progress.phase || 'storing',
+            stored: progress.stored || 0,
+            processed: progress.processed || 0,
+            total: progress.total || 0,
+            downloaded: progress.downloaded || 0,
+            reused: progress.reused || 0,
+            retried: progress.retried || 0,
+            failed: progress.failed || 0,
+            totalBytes: progress.totalBytes || 0,
+            current: progress.current || '',
+            message: progress.message || '',
+            existingFileCount: progress.existingFileCount || 0,
+            patchNew: progress.patchNew || 0,
+            patchChanged: progress.patchChanged || 0,
+            patchRemoved: progress.patchRemoved || 0,
+            patchUnchanged: progress.patchUnchanged || 0,
+            patchFinalCount: progress.patchFinalCount || 0,
+            patchTotal: progress.patchTotal || progress.total || 0,
+            firstInstall: Boolean(progress.firstInstall),
+        });
+    }
+
     async function getWorkerStatus(worker) {
         return workerRequest(worker, { type: 'HEX_CACHE_STATUS' }, { timeout: STARTUP_WORKER_TIMEOUT_MS });
     }
