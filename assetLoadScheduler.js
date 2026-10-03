@@ -597,9 +597,18 @@
     }
 
     function gameManifest() {
+        // Character art is intentionally lazy. Do NOT preload all body/hair/clothing
+        // views here: the humanoid renderer loads only the source layers needed for
+        // the first appearance it must build, caches the completed appearance, then
+        // releases those source-image records.
         const scenario = selectedCampaign()==='1' ? [...ARENA_CRITICAL,...ARENA_SOON] : [...CAMPAIGN2_NEARBY];
-        const deferredArt = [...managerRecords.values()].filter(record=>record.status==='deferred').map(record=>record.path).filter(path=>path?.startsWith('images/'));
-        return [...new Set([...currentCreatorCharacterAssets(true),...currentClothingAssets(true),...currentStartingEquipmentAssets(),...scenario,...deferredArt])];
+        const deferredArt = [...managerRecords.values()]
+            .filter(record=>record.status==='deferred')
+            .map(record=>record.path)
+            .filter(path=>path?.startsWith('images/'))
+            .filter(path=>!path.includes('/characters/'))
+            .filter(path=>!path.includes('/equipment/clothing/'));
+        return [...new Set([...scenario,...deferredArt])];
     }
 
     function ensureOverlay() {
