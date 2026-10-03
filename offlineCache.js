@@ -448,12 +448,26 @@
                 meta = response ? await response.json() : null;
             } catch (_) {}
 
+            let workerDiagnostic = null;
+            try {
+                const registration = await navigator.serviceWorker.getRegistration('./');
+                const worker = registration?.active || navigator.serviceWorker.controller;
+                if (worker) workerDiagnostic = await getWorkerDiagnostic(worker);
+            } catch (_) {}
+
+            const bodyLines = (workerDiagnostic?.directionalBodies || []).map(file =>
+                `• ${file.present ? '✓' : '✗'} ${file.path}`
+            );
+
             const lines = [
                 `Offline engine in page: v${VERSION}`,
                 `Active pointer: ${meta?.cacheName || 'NONE'}`,
                 `Installed commit: ${meta?.commit || 'NONE'}`,
                 `Last saved: ${formatDiagnosticDate(meta?.updatedAt || meta?.recoveredAt)}`,
                 `Expected files: ${meta?.fileCount ?? 'unknown'}`,
+                '',
+                'Directional character bodies:',
+                ...(bodyLines.length ? bodyLines : ['• No directional body files found in the active manifest']),
                 '',
                 'Cache Storage:',
                 ...(details.length ? details.map(line => `• ${line}`) : ['• No Hex game caches found']),
