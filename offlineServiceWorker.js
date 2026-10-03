@@ -429,6 +429,7 @@ async function cacheGame(message, port) {
             downloaded, reused, retried, failed: failures.length,
             existingFileCount, patchNew, patchChanged, patchRemoved,
             patchUnchanged, patchFinalCount, patchTotal: patchFiles.length,
+            firstInstall: !before.valid,
             message: messageText,
         });
     };
