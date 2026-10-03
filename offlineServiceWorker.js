@@ -2,7 +2,7 @@
 // Atomic, integrity-checked local game cache for the development branch.
 'use strict';
 
-const SW_VERSION = '10';
+const SW_VERSION = '11';
 const META_CACHE = `hex-game-meta-v${SW_VERSION}`;
 const GAME_CACHE_PREFIX = `hex-game-v${SW_VERSION}-`;
 const LEGACY_GAME_CACHE_PREFIXES = ['hex-game-v9-', 'hex-game-v8-', 'hex-game-v7-', 'hex-game-v6-', 'hex-game-v5-', 'hex-game-v4-', 'hex-game-v3-', 'hex-game-v2-', 'hex-game-v1-'];
@@ -140,7 +140,8 @@ async function statusResult() {
     // re-downloading every file.
     const names = await caches.keys();
     const candidates = names.filter(name =>
-        name.startsWith(GAME_CACHE_PREFIX) || LEGACY_GAME_CACHE_PREFIXES.some(prefix => name.startsWith(prefix))
+        (name.startsWith(GAME_CACHE_PREFIX) || LEGACY_GAME_CACHE_PREFIXES.some(prefix => name.startsWith(prefix))) &&
+        !name.includes('-patch-')
     );
     for (const name of candidates) {
         const recovered = await inspectGameCache(name);
