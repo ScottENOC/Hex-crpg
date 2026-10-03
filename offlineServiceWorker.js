@@ -2,7 +2,7 @@
 // Atomic, integrity-checked local game cache for the development branch.
 'use strict';
 
-const SW_VERSION = '14';
+const SW_VERSION = '15';
 const META_CACHE = `hex-game-meta-v${SW_VERSION}`;
 const GAME_CACHE_PREFIX = `hex-game-v${SW_VERSION}-`;
 const LEGACY_GAME_CACHE_PREFIXES = [];
@@ -394,9 +394,14 @@ async function cacheGame(message, port) {
     let patchNew = 0;
     let patchChanged = 0;
     let patchRemoved = 0;
+    const patchFiles = [];
     for (const file of files) {
-        if (!oldPaths.has(file.path)) patchNew++;
-        else if (activeShaByPath.get(file.path) !== file.sha) patchChanged++;
+        const isNew = !oldPaths.has(file.path);
+        const isChanged = !isNew && activeShaByPath.get(file.path) !== file.sha;
+        const needsRepair = missingActivePaths.has(file.path);
+        if (isNew) patchNew++;
+        else if (isChanged) patchChanged++;
+        if (!before.valid || isNew || isChanged || needsRepair) patchFiles.push(file);
     }
     if (before.valid) {
         for (const oldFile of oldFiles) {
@@ -405,6 +410,8 @@ async function cacheGame(message, port) {
     }
     const existingFileCount = oldFiles.length || (before.valid ? Number(before.fileCount) || 0 : 0);
     const patchFinalCount = files.length;
+    const patchUnchanged = Math.max(0, existingFileCount - patchChanged - patchRemoved);
+    const patchBytes = patchFiles.reduce((sum, file) => sum + (Number(file.size) || 0), 0);
 
     let processed = 0;
     let stored = 0;
@@ -417,8 +424,12 @@ async function cacheGame(message, port) {
 
     const sendProgress = (current = '', phase = 'storing', messageText = '') => {
         port.postMessage({
-            type: 'progress', phase, current, processed, stored, total: files.length,
-            downloaded, reused, retried, failed: failures.length, totalBytes, message: messageText,
+            type: 'progress', phase, current, processed, stored,
+            total: patchFiles.length, totalBytes: patchBytes,
+            downloaded, reused, retried, failed: failures.length,
+            existingFileCount, patchNew, patchChanged, patchRemoved,
+            patchUnchanged, patchFinalCount, patchTotal: patchFiles.length,
+            message: messageText,
         });
     };
 
@@ -472,8 +483,8 @@ async function cacheGame(message, port) {
         while (true) {
             if (quotaFailure) return;
             const index = cursor++;
-            if (index >= files.length) return;
-            const file = files[index];
+            if (index >= patchFiles.length) return;
+            const file = patchFiles[index];
             try {
                 await cacheOne(file);
             } catch (error) {
@@ -487,7 +498,7 @@ async function cacheGame(message, port) {
     }
 
     sendProgress('', 'storing', before.valid
-        ? `Existing install: ${existingFileCount} files. Patch: ${patchNew} new, ${patchChanged} changed, ${patchRemoved} removed. Final install: ${patchFinalCount} files.`
+        ? `Existing install: ${existingFileCount} files. Patch: +${patchNew} new, ${patchChanged} changed, -${patchRemoved} removed. ${patchUnchanged} unchanged. Final install: ${patchFinalCount} files.`
         : `New install: ${patchFinalCount} files will be saved locally.`);
     await Promise.all(Array.from({ length: MAX_CONCURRENT_DOWNLOADS }, () => workerLoop()));
 
@@ -554,8 +565,8 @@ async function cacheGame(message, port) {
     await cleanupLegacyCaches([finalCacheName]);
 
     sendProgress('', 'ready', before.valid
-        ? `Update complete: ${downloaded} changed file${downloaded === 1 ? '' : 's'} downloaded, ${reused} reused in place.`
-        : 'Local copy complete.');
+        ? `Update complete: ${downloaded} file${downloaded === 1 ? '' : 's'} downloaded, ${patchRemoved} removed. Final install: ${patchFinalCount} files.`
+        : `Local copy complete: ${patchFinalCount} files installed.`);
     port.postMessage({
         type: 'result',
         result: {
