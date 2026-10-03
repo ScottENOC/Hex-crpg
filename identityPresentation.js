@@ -179,6 +179,9 @@
         }
 
         const defaults = defaultForGender(genderSelect.value);
+        // Build is independent of identity/body presentation: always start at Average.
+        const buildSelect = document.getElementById('body-type-select');
+        if (buildSelect) buildSelect.value = 'average';
         if (bodySelect && !bodySelect.dataset.identityInitialised) {
             bodySelect.value = defaults.bodyPresentation;
             bodySelect.dataset.identityInitialised = 'true';
@@ -196,6 +199,8 @@
         if (createButton && !createButton.dataset.identityBridgeInstalled) {
             createButton.dataset.identityBridgeInstalled = 'true';
             const prepareLegacyStart = () => {
+                const build = document.getElementById('body-type-select');
+                if (build) build.value = 'average';
                 const selection = getCreatorIdentitySelection();
                 const name = document.getElementById('character-name');
                 if (name && !name.value.trim() && window.getRandomName) {
