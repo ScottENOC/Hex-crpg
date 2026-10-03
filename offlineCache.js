@@ -5,7 +5,7 @@
 (() => {
     'use strict';
 
-    const VERSION = '13';
+    const VERSION = '14';
     const OWNER = 'ScottENOC';
     const REPO = 'Hex-crpg';
     const BRANCH = 'development';
