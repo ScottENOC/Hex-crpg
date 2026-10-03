@@ -280,7 +280,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (originalInvalidateVisibilityCache && !originalInvalidateVisibilityCache.__finalResultInvalidator) {
             const combinedInvalidator = function(...args) {
                 clearFinalVisibilityCache('explicit-invalidate');
-                visibilityFingerprint = null;
                 cachedVisibilityFriendlies = [];
                 cachedVisibilityRanges = [];
                 return originalInvalidateVisibilityCache.apply(this, args);
