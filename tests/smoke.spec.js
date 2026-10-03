@@ -10,7 +10,13 @@ const { createCharacter, readDialogue, clickDialogueOption } = require('./helper
 test.describe('Hollowmere real-time smoke test', () => {
     test('the full scripted entrance plays out and ends in the 3-choice prompt', async ({ page }) => {
         test.setTimeout(40000);
-        await createCharacter(page);
+        // Keep the development smoke path on the directional character that has
+        // historically been most cache-sensitive, without adding another slow test.
+        await createCharacter(page, { race:'human', gender:'female' });
+        await page.waitForFunction(() => {
+            const body = window.DIRECTIONAL_CHARACTER_ASSETS?.human_female?.body?.average;
+            return body && ['front','side','back'].every(view => body[view]?.naturalWidth > 0);
+        }, { timeout: 10000 });
 
         // Scene setup fires the shakedown ~8s after load; the scripted dialogue
         // then takes ~12s more before the choice prompt appears.

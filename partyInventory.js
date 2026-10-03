@@ -26,6 +26,11 @@ function wireSharedInventory(entity, opts = {}) {
     } else if (merge && Array.isArray(entity.inventory) && entity.inventory !== window.partyInventory) {
         window.partyInventory.push(...entity.inventory);
     }
+    // The Bag of Holding used to occupy the accessory slot. Saved games from
+    // that version can still contain the old equipment reference, so clear it
+    // as each party member is wired back onto the shared inventory. The item
+    // itself remains in the shared inventory and therefore keeps working.
+    if (entity.equipped?.accessory === 'magic_backpack') entity.equipped.accessory = null;
     Object.defineProperty(entity, 'inventory', {
         configurable: true,
         enumerable: true,
@@ -46,6 +51,45 @@ const BASE_CARRY_PER_MEMBER = 40;
 const STRONG_BACK_BONUS_PER_RANK = 15;
 const CARRY_PER_OWNED_MOUNT = 40;
 const CARRY_PER_ANIMAL_COMPANION = 20;
+const BAG_OF_HOLDING_WEIGHT_OFFSET = 40;
+
+// A Bag of Holding is inventory infrastructure, not worn equipment. Treat it
+// like Pathfinder-style negative carried weight: simply owning one in the
+// shared inventory offsets 40 weight. `carryBonus: 0` deliberately neutralises
+// the item's old accessory-slot bonus for compatibility with older code/tests.
+if (window.items?.magic_backpack) {
+    Object.assign(window.items.magic_backpack, {
+        type: 'container',
+        weight: -BAG_OF_HOLDING_WEIGHT_OFFSET,
+        carryBonus: 0,
+        description: 'Bigger on the inside. While carried in the shared inventory, it offsets 40 weight of other gear; no equipment slot required.'
+    });
+}
+
+// The ordinary dev cheat deliberately gives two of every item. Bags of
+// Holding are the one exception: having a deep stack available makes it easy
+// to test encumbrance thresholds, while normal loot/shop placement still
+// controls how many exist in an actual playthrough. ui.js defines the base
+// function later in the page, so install this small override once all classic
+// scripts have finished parsing.
+function installDevInventoryCheatOverride() {
+    if (typeof window.addAllEquipment !== 'function') return;
+    window.addAllEquipment = function addAllEquipmentWithBagStack() {
+        if (!window.player) return;
+        for (const itemId in window.items) {
+            const copies = itemId === 'magic_backpack' ? 20 : 2;
+            for (let i = 0; i < copies; i++) window.player.inventory.push(itemId);
+        }
+        window.showMessage('Cheat: Added 2 of every item and 20 Bags of Holding to inventory.');
+        if (document.getElementById('inventory-modal')?.style.display === 'block' && window.showInventoryScreen) {
+            window.showInventoryScreen();
+        }
+    };
+}
+if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installDevInventoryCheatOverride);
+    else installDevInventoryCheatOverride();
+}
 
 function getItemWeight(id) {
     const item = window.items && window.items[id];
@@ -61,14 +105,15 @@ function getItemWeight(id) {
 window.getItemWeight = getItemWeight;
 
 function getPartyCarryWeight() {
-    return (window.partyInventory || []).reduce((sum, id) => sum + getItemWeight(id), 0);
+    // Negative-weight containers may offset ordinary cargo, but never make
+    // the party's displayed/effective load less than zero.
+    return Math.max(0, (window.partyInventory || []).reduce((sum, id) => sum + getItemWeight(id), 0));
 }
 window.getPartyCarryWeight = getPartyCarryWeight;
 
-// Equipped-item carrying bonuses (magic_backpack, equipment.js) — any
-// party member's own accessory slot, checked generically off a
-// `carryBonus` field rather than hardcoding the backpack's item id, so a
-// future item could grant this the same way without touching this file.
+// Equipped-item carrying bonuses remain generic for any future equipment
+// that genuinely should increase capacity while worn. The Bag of Holding's
+// runtime carryBonus is zero because it now works passively via item weight.
 function getEquippedCarryBonus() {
     return (window.party || []).reduce((sum, p) => {
         const accessoryId = p.equipped?.accessory;
@@ -165,7 +210,7 @@ function openStorageChest(q, r) {
                 chest.items.push(...window.partyInventory);
                 window.partyInventory.length = 0;
                 window.showMessage('Everything you carried is now in the chest.');
-                if (window.showInventoryScreen && document.getElementById("inventory-modal")?.style.display === "block") window.showInventoryScreen();
+                if (document.getElementById("inventory-modal")?.style.display === "block" && window.showInventoryScreen) window.showInventoryScreen();
             }
         });
     }
@@ -186,12 +231,27 @@ function openStorageChest(q, r) {
 window.openStorageChest = openStorageChest;
 
 // Expedition systems are kept separate from this compatibility layer. Load
-// them with a dated URL so the new module itself is not trapped behind an old
-// mobile-Safari cache entry; it installs after the rest of the page scripts
-// have parsed (or immediately if DOMContentLoaded has already fired).
+// them with dated URLs so the modules themselves are not trapped behind old
+// mobile-Safari cache entries; campSystem waits for expeditionSystem's sleep
+// wrapper and then layers explicit camp setup on top of it.
 if (typeof document !== 'undefined' && !window.expeditionSystem && !document.querySelector('script[data-expedition-system]')) {
     const expeditionScript = document.createElement('script');
     expeditionScript.dataset.expeditionSystem = 'true';
-    expeditionScript.src = 'expeditionSystem.js?v=20260929';
+    expeditionScript.src = 'expeditionSystem.js?v=20261001-camp1';
+    expeditionScript.async = false;
     document.head.appendChild(expeditionScript);
+}
+if (typeof document !== 'undefined' && !window.campSystem && !document.querySelector('script[data-camp-system]')) {
+    const campScript = document.createElement('script');
+    campScript.dataset.campSystem = 'true';
+    campScript.src = 'campSystem.js?v=20261001-camp2';
+    campScript.async = false;
+    document.head.appendChild(campScript);
+}
+if (typeof document !== 'undefined' && !window.campDeploymentSystem && !document.querySelector('script[data-camp-deployment-system]')) {
+    const deploymentScript = document.createElement('script');
+    deploymentScript.dataset.campDeploymentSystem = 'true';
+    deploymentScript.src = 'campDeploymentSystem.js?v=20261001-camp4';
+    deploymentScript.async = false;
+    document.head.appendChild(deploymentScript);
 }

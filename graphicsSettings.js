@@ -163,6 +163,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // query is just a Map lookup (plus a cheap range reject on misses).
     let visibilityResultCache = new Map();
     let visibilityFingerprint = null;
+    let visibilityClearReasons = Object.create(null);
+    let visibilityLastClearReason = '';
+    let visibilityFingerprintChanges = 0;
     let cachedVisibilityFriendlies = [];
     let cachedVisibilityRanges = [];
     const visibilityStats = window.performanceVisibilityCacheStats = {
@@ -172,10 +175,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const originalIsVisibleToPlayer = window.isVisibleToPlayer;
         const originalInvalidateVisibilityCache = window.invalidateVisibilityCache;
 
-        function clearFinalVisibilityCache() {
+        function clearFinalVisibilityCache(reason = 'unknown') {
             visibilityResultCache.clear();
             visibilityStats.entries = 0;
             visibilityStats.clears++;
+            visibilityLastClearReason = reason;
+            visibilityClearReasons[reason] = (visibilityClearReasons[reason] || 0) + 1;
+            visibilityStats.clearReasons = {...visibilityClearReasons};
+            visibilityStats.lastClearReason = visibilityLastClearReason;
         }
 
         function refreshFinalVisibilityFingerprint() {
@@ -197,12 +204,32 @@ document.addEventListener('DOMContentLoaded', () => {
             if (lightParts.length) parts.push(`E${lightParts.join(';')}`);
             const next = parts.join('|');
             if (next !== visibilityFingerprint) {
+                let reason = 'fingerprint-change';
+                if (visibilityFingerprint !== null) {
+                    const oldParts = visibilityFingerprint.split('|');
+                    const newParts = next.split('|');
+                    const oldF = oldParts.filter(p => !p.startsWith('L') && !p.startsWith('E')).join('|');
+                    const newF = newParts.filter(p => !p.startsWith('L') && !p.startsWith('E')).join('|');
+                    const oldL = oldParts.find(p => p.startsWith('L')) || '';
+                    const newL = newParts.find(p => p.startsWith('L')) || '';
+                    const oldE = oldParts.find(p => p.startsWith('E')) || '';
+                    const newE = newParts.find(p => p.startsWith('E')) || '';
+                    if (oldF !== newF) reason = 'friendly-position-or-vision-change';
+                    else if (oldL !== newL) reason = 'ambient-light-change';
+                    else if (oldE !== newE) reason = 'emitting-light-source-change';
+                } else {
+                    reason = 'initial-fingerprint';
+                }
+                visibilityFingerprintChanges++;
                 visibilityFingerprint = next;
-                clearFinalVisibilityCache();
+                clearFinalVisibilityCache(reason);
             }
             cachedVisibilityFriendlies = friendlies;
             cachedVisibilityRanges = friendlies.map(f => (window.LIVE_VISION_RANGE || 25) + (f.visionBonus || 0));
             visibilityStats.refreshes++;
+            visibilityStats.clearReasons = {...visibilityClearReasons};
+            visibilityStats.lastClearReason = visibilityLastClearReason;
+            visibilityStats.fingerprintChanges = visibilityFingerprintChanges;
             return cachedVisibilityFriendlies;
         }
 
@@ -252,11 +279,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (originalInvalidateVisibilityCache && !originalInvalidateVisibilityCache.__finalResultInvalidator) {
             const combinedInvalidator = function(...args) {
-                clearFinalVisibilityCache();
-                visibilityFingerprint = null;
-                cachedVisibilityFriendlies = [];
-                cachedVisibilityRanges = [];
-                return originalInvalidateVisibilityCache.apply(this, args);
+                const result = originalInvalidateVisibilityCache.apply(this, args);
+                // The legacy invalidator is called very frequently, including from
+                // render paths that do not actually change the player's visibility
+                // state. Recompute the fingerprint first; only its actual change
+                // should throw away the expensive per-hex result cache.
+                refreshFinalVisibilityFingerprint();
+                return result;
             };
             combinedInvalidator.__finalResultInvalidator = true;
             combinedInvalidator.__original = originalInvalidateVisibilityCache;

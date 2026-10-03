@@ -72,8 +72,8 @@
         output.src = src;
         output.__directionalSourceView = view;
 
-        const img = new Image();
-        img.onload = () => {
+        const img = window.assetManager.request(src);
+        window.assetManager.whenReady(src).then(() => {
             const probe = document.createElement('canvas');
             probe.width = img.naturalWidth;
             probe.height = img.naturalHeight;
@@ -115,8 +115,7 @@
             output.__directionalReady = true;
             window.drawMap?.();
             window.refreshDirectionalTurnPortraits?.();
-        };
-        img.src = src;
+        }).catch(() => {});
         return output;
     }
 
@@ -300,9 +299,8 @@
         const imageCache = {};
         const load = src => {
             if (!imageCache[src]) {
-                const img = new Image();
-                img.onload = () => window.updateAppearancePreview?.();
-                img.src = src;
+                const img = window.assetManager.request(src);
+                window.assetManager.whenReady(src).then(() => window.updateAppearancePreview?.()).catch(() => {});
                 imageCache[src] = img;
             }
             return imageCache[src];

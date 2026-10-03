@@ -31,10 +31,8 @@ function ensureDirectionalNpcImages() {
     if (!window.gameVisuals || typeof Image === 'undefined') return false;
     Object.values(DIRECTIONAL_NPC_ART).forEach(views => {
         Object.values(views).forEach(({ key, src }) => {
-            if (window.gameVisuals[key]) return;
-            const img = new Image();
-            img.src = src;
-            img.addEventListener('load', () => window.drawMap?.());
+            if (window.gameVisuals[key]) return;            const img = window.assetManager.request(src);
+            window.assetManager.whenReady(src).then(() => window.drawMap?.()).catch(() => {});
             window.gameVisuals[key] = img;
         });
     });
@@ -96,6 +94,10 @@ function buildNPC({ name, title, race, gender, hex, classLevels, skillPicks, equ
     // training tendency without reverse-engineering skills or inventing a
     // class for creatures that were never built through the class system.
     ent.classLevels = [...(classLevels || [])];
+    // Some older entity/inspection code still reads classLevelSequence first.
+    // Keep that compatibility view synced to the genuine per-level history so
+    // repeated classes (fighter -> rogue -> fighter) are never collapsed.
+    ent.classLevelSequence = [...ent.classLevels];
 
     // Purchase skills from the pool (mirrors the real spend logic: decrement
     // the skill's tree, falling back to wildcard).

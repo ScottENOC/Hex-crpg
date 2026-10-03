@@ -10,9 +10,21 @@ test.describe('character banter', () => {
         await createCharacter(page);
     });
 
+    async function isolateAldricBanter(page) {
+        await page.evaluate(() => {
+            // Character creation can already satisfy Wren's earlier tavern
+            // nostalgia bark. checkCharacterBanter intentionally emits only
+            // one eligible bark per check, so consume unrelated earlier
+            // content when a test specifically targets the Aldric exchange.
+            window.firedBanterIds['wren_tavern_nostalgia'] = true;
+        });
+    }
+
     test('a multi-line exchange between two party members plays as a staggered back-and-forth', async ({ page }) => {
+        await isolateAldricBanter(page);
         await page.evaluate(() => {
             window.rescuePaladin();
+            window.recruitAldric();
             window.characterBanterAccum = 999;
             window.checkCharacterBanter(0);
         });
@@ -30,8 +42,10 @@ test.describe('character banter', () => {
     });
 
     test('a "once" bark never fires twice, even if its condition stays true', async ({ page }) => {
+        await isolateAldricBanter(page);
         const result = await page.evaluate(() => {
             window.rescuePaladin();
+            window.recruitAldric();
             window.characterBanterAccum = 999;
             window.checkCharacterBanter(0);
             const countAfterFirst = document.querySelectorAll('#message-log > div').length;
@@ -46,7 +60,7 @@ test.describe('character banter', () => {
 
     test('a bark whose condition is false never fires', async ({ page }) => {
         const fired = await page.evaluate(() => {
-            // Ser Aldric isn't rescued in this test, so the two-party-member banter's condition is false.
+            // Ser Aldric isn't recruited in this test, so the two-party-member banter's condition is false.
             window.characterBanterAccum = 999;
             window.checkCharacterBanter(0);
             return window.firedBanterIds['wren_aldric_banter_faith'];
@@ -55,8 +69,10 @@ test.describe('character banter', () => {
     });
 
     test('the accumulator gates checks to roughly every 5 seconds, not every call', async ({ page }) => {
+        await isolateAldricBanter(page);
         const result = await page.evaluate(() => {
             window.rescuePaladin();
+            window.recruitAldric();
             window.characterBanterAccum = 0;
             window.checkCharacterBanter(1); // under the 5s threshold
             const firedTooSoon = window.firedBanterIds['wren_aldric_banter_faith'];
@@ -66,6 +82,27 @@ test.describe('character banter', () => {
         });
         expect(result.firedTooSoon).toBeFalsy();
         expect(result.firedOnceEnough).toBe(true);
+    });
+
+    test('legacy and canonical Aldric approval keys stay synchronised, including immediately after load', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            window.rescuePaladin();
+            window.recruitAldric();
+            window.companionAttitude['Ser Aldric Thorne'] = 73;
+            const legacyReadsCanonical = window.companionAttitude['Ser Aldric'];
+            window.companionAttitude['Ser Aldric'] = 61;
+            const canonicalReadsLegacyWrite = window.companionAttitude['Ser Aldric Thorne'];
+
+            window.saveGame('aldric_attitude_alias_test');
+            window.loadGame('aldric_attitude_alias_test');
+            window.companionAttitude['Ser Aldric Thorne'] = 47;
+            const legacyAfterLoad = window.companionAttitude['Ser Aldric'];
+
+            return { legacyReadsCanonical, canonicalReadsLegacyWrite, legacyAfterLoad };
+        });
+        expect(result.legacyReadsCanonical).toBe(73);
+        expect(result.canonicalReadsLegacyWrite).toBe(61);
+        expect(result.legacyAfterLoad).toBe(47);
     });
 
     test('firedBanterIds persists through save/load', async ({ page }) => {

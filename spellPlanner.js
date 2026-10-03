@@ -233,3 +233,209 @@ function autoBuildSpellsForEntity(entity) {
 }
 
 window.autoBuildSpellsForEntity = autoBuildSpellsForEntity;
+
+// REAL-TIME IDLE BEHAVIOURS
+// Player preference, not save-state: like graphics/UI settings, this lives in
+// localStorage. Absent key means ON so new/existing installs get Auto Heal by
+// default. The controller only makes decisions in exploration; actual casts go
+// through tryCastSpell so cast time, mana payment, visuals and messages remain
+// owned by the normal spell pipeline.
+const AUTO_HEAL_STORAGE_KEY = 'rpg_idle_auto_heal';
+const AUTO_HEAL_APPROACH_HEXES = 5;
+
+function isAutoHealEnabled() {
+    try {
+        return !window.localStorage || window.localStorage.getItem(AUTO_HEAL_STORAGE_KEY) !== 'false';
+    } catch (_) {
+        return true;
+    }
+}
+
+function setAutoHealEnabled(enabled) {
+    const value = !!enabled;
+    try {
+        if (window.localStorage) window.localStorage.setItem(AUTO_HEAL_STORAGE_KEY, value ? 'true' : 'false');
+    } catch (_) {}
+    const checkbox = window.document && window.document.getElementById('idle-auto-heal');
+    if (checkbox) checkbox.checked = value;
+}
+
+function hasIdleInstruction(entity) {
+    if (!entity) return true;
+    return !!entity.destination || !!entity.pendingCast || (entity.castCooldown || 0) > 0;
+}
+
+function isHealingSpell(spell) {
+    return !!spell && spell.baseId === 'heal' && (spell.type === 'heal' || spell.type === 'aoe_heal');
+}
+
+function getAutoHealManaCost(caster, spell) {
+    const base = Math.max(0, Number(spell && spell.manaCost) || 0);
+    const penalty = typeof window.getArmorSpellPenalty === 'function'
+        ? Math.max(0, Number(window.getArmorSpellPenalty(caster, spell)) || 0)
+        : 0;
+    return base + penalty;
+}
+
+function healEfficiency(caster, spell) {
+    const mana = Math.max(1, getAutoHealManaCost(caster, spell));
+    const healing = Math.max(0, Number(spell && spell.magnitude) || 0);
+    return healing / mana;
+}
+
+function alreadyReceivingAutoHeal(target, party, caster) {
+    return party.some(member => member !== target && member !== caster && (
+        (member.pendingCast && member.pendingCast.target === target && isHealingSpell(member.pendingCast.spell)) ||
+        member._autoHealTarget === target
+    ));
+}
+
+function getAutoHealApproachDestination(caster, target, spell) {
+    if (!window.distance) return undefined;
+    const range = Math.max(1, Number(spell && spell.range) || 1);
+    const directDistance = window.distance(caster.hex, target.hex);
+    if (directDistance <= range) return null;
+    if (directDistance > range + AUTO_HEAL_APPROACH_HEXES || typeof window.findPath !== 'function') return undefined;
+
+    // Use the real movement path, not just straight-line hex distance. If a
+    // wall/detour means reaching casting range would take >5 actual steps,
+    // Auto Heal leaves the character alone. Path[0] is the caster's hex.
+    const path = window.findPath(caster.hex, target.hex, undefined, caster, true);
+    if (!path || path.length < 2) return undefined;
+    const furthestStep = Math.min(AUTO_HEAL_APPROACH_HEXES, path.length - 1);
+    for (let step = 1; step <= furthestStep; step++) {
+        const hex = path[step];
+        if (window.distance(hex, target.hex) <= range) return { q: hex.q, r: hex.r };
+    }
+    return undefined;
+}
+
+function selectAutoHealAction(caster, party = window.entities || []) {
+    if (!caster || !caster.alive || caster.side !== 'player' || caster.aiControlled || caster.rider || hasIdleInstruction(caster)) return null;
+    if (!(caster.maxMana > 0) || !(caster.currentMana > 0)) return null;
+
+    const prepared = (caster.createdSpells || []).filter(spell =>
+        isHealingSpell(spell) && Number.isFinite(spell.manaCost) && spell.manaCost > 0 &&
+        caster.currentMana >= getAutoHealManaCost(caster, spell) &&
+        Number.isFinite(spell.magnitude) && spell.magnitude > 0);
+    if (!prepared.length) return null;
+
+    const manaPct = caster.currentMana / caster.maxMana;
+    const candidates = [];
+    for (const target of party) {
+        if (!target || !target.alive || target.side !== 'player' || target.aiControlled || target.rider || !(target.maxHp > 0)) continue;
+        if (target.hp >= target.maxHp || hasIdleInstruction(target)) continue;
+        if ((target.hp / target.maxHp) >= manaPct) continue;
+        if (alreadyReceivingAutoHeal(target, party, caster)) continue;
+
+        const distance = window.distance ? window.distance(caster.hex, target.hex) : Infinity;
+        const usable = prepared.map(spell => {
+            const range = Math.max(1, Number(spell.range) || 1);
+            if (distance > range + AUTO_HEAL_APPROACH_HEXES) return null;
+            const approachDestination = getAutoHealApproachDestination(caster, target, spell);
+            if (distance > range && !approachDestination) return null;
+            return { spell, approachDestination };
+        }).filter(Boolean);
+        if (!usable.length) continue;
+
+        usable.sort((a, b) => {
+            const eff = healEfficiency(caster, b.spell) - healEfficiency(caster, a.spell);
+            if (Math.abs(eff) > 1e-9) return eff;
+            const aCost = getAutoHealManaCost(caster, a.spell);
+            const bCost = getAutoHealManaCost(caster, b.spell);
+            if (aCost !== bCost) return aCost - bCost;
+            return (b.spell.magnitude || 0) - (a.spell.magnitude || 0);
+        });
+        candidates.push({ target, spell: usable[0].spell, approachDestination: usable[0].approachDestination });
+    }
+
+    // "Fewest hitpoints" deliberately means absolute current HP, not health
+    // percentage. Percentage is only the mana-conservation gate above.
+    candidates.sort((a, b) => {
+        if (a.target.hp !== b.target.hp) return a.target.hp - b.target.hp;
+        const ap = a.target.hp / a.target.maxHp;
+        const bp = b.target.hp / b.target.maxHp;
+        return ap - bp;
+    });
+    if (!candidates.length) return null;
+    return { caster, target: candidates[0].target, spell: candidates[0].spell, approachDestination: candidates[0].approachDestination };
+}
+
+function processAutoHeal() {
+    if (!isAutoHealEnabled()) return false;
+    if (window.isInCombat || window.currentTurnEntity || window.isPausedForReaction || window.isResting || window.isSleeping) return false;
+    if (window.multiplayer && window.multiplayer.roomCode && !window.multiplayer.isHost) return false;
+    if (!Array.isArray(window.entities) || typeof window.tryCastSpell !== 'function') return false;
+
+    const party = window.entities.filter(entity => entity && entity.alive && entity.side === 'player' && !entity.rider && !entity.aiControlled);
+    let startedAny = false;
+    for (const caster of party) {
+        const action = selectAutoHealAction(caster, party);
+        if (!action) {
+            if (!caster.destination && !caster.pendingCast) caster._autoHealTarget = null;
+            continue;
+        }
+        if (action.approachDestination) {
+            caster._autoHealTarget = action.target;
+            caster.destination = { ...action.approachDestination };
+            startedAny = true;
+            continue;
+        }
+        caster._autoHealTarget = null;
+        const started = window.tryCastSpell(action.caster, action.spell, action.target, action.target.hex);
+        if (started !== false) startedAny = true;
+    }
+    return startedAny;
+}
+
+function installIdleBehaviourSettingsUI() {
+    if (!window.document) return;
+    const settingsContent = window.document.getElementById('settings-content');
+    if (!settingsContent || window.document.getElementById('idle-auto-heal')) return;
+
+    const heading = window.document.createElement('h3');
+    heading.textContent = 'Idle Behaviours';
+    const group = window.document.createElement('div');
+    group.className = 'form-group';
+    const label = window.document.createElement('label');
+    const checkbox = window.document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.id = 'idle-auto-heal';
+    checkbox.checked = isAutoHealEnabled();
+    checkbox.addEventListener('change', () => setAutoHealEnabled(checkbox.checked));
+    label.appendChild(checkbox);
+    label.appendChild(window.document.createTextNode(' Auto Heal while idle'));
+    group.appendChild(label);
+
+    const help = window.document.createElement('small');
+    help.style.color = '#aaa';
+    help.textContent = 'Outside combat, idle healers may walk up to 5 hexes to get within normal spell range, then heal nearby idle party members when the target\'s health % is below the caster\'s mana %.';
+    group.appendChild(help);
+
+    const graphicsHeading = Array.from(settingsContent.querySelectorAll('h3'))
+        .find(node => node.textContent.trim() === 'Graphics');
+    settingsContent.insertBefore(heading, graphicsHeading || null);
+    settingsContent.insertBefore(group, graphicsHeading || null);
+}
+
+window.idleBehaviours = {
+    isAutoHealEnabled,
+    setAutoHealEnabled,
+    hasIdleInstruction,
+    getAutoHealManaCost,
+    healEfficiency,
+    getAutoHealApproachDestination,
+    selectAutoHealAction,
+    processAutoHeal,
+    installSettingsUI: installIdleBehaviourSettingsUI,
+};
+window.setAutoHealEnabled = setAutoHealEnabled;
+
+if (window.document && typeof window.document.addEventListener === 'function') {
+    window.document.addEventListener('DOMContentLoaded', () => {
+        installIdleBehaviourSettingsUI();
+        if (!window._idleBehaviourInterval && typeof window.setInterval === 'function') {
+            window._idleBehaviourInterval = window.setInterval(processAutoHeal, 250);
+        }
+    });
+}

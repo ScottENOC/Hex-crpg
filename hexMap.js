@@ -281,7 +281,11 @@ function getVisibleHexesForRect(extraMargin) {
 let _terrainBuffer = null, _terrainBufferCtx = null;
 let _terrainBufferOriginX = 0, _terrainBufferOriginY = 0; // cameraX/Y the buffer was last rendered at
 let _terrainBufferZoom = null;
-let _terrainBufferExploredCount = -1;
+// Hexes actually baked into the current terrain buffer. Newly explored
+// on-screen hexes that are not in this set are drawn live until the camera's
+// next natural buffer rebuild, instead of rebuilding the whole oversized
+// buffer every time exploredHexes grows by one.
+let _terrainBufferHexKeys = new Set();
 let _terrainBufferFloor = 0;
 const TERRAIN_BUFFER_MARGIN = 500;
 
@@ -444,14 +448,14 @@ function drawMap() {
   // 2. PASS 1: Base Terrain & Foliage — via the camera-anchored buffer (see
   // comment above renderTerrainPass/TERRAIN_BUFFER_MARGIN). Rebuilt only
   // when the camera has drifted near the edge of its slack, zoom changed, or
-  // new terrain became explored; otherwise just blitted at an offset.
-  const exploredCount = window.exploredHexes ? window.exploredHexes.size : 0;
+  // the viewed floor changes; otherwise just blitted at an offset. Newly
+  // explored on-screen hexes are filled live below without invalidating the
+  // whole buffer.
   const dx = window.cameraX - _terrainBufferOriginX;
   const dy = window.cameraY - _terrainBufferOriginY;
   const rebuildMargin = TERRAIN_BUFFER_MARGIN * 0.6;
   const needsRebuild = !_terrainBuffer ||
       _terrainBufferZoom !== window.cameraZoom ||
-      _terrainBufferExploredCount !== exploredCount ||
       _terrainBufferFloor !== viewerFloor ||
       Math.abs(dx) > rebuildMargin || Math.abs(dy) > rebuildMargin;
 
@@ -470,7 +474,6 @@ function drawMap() {
       _terrainBufferOriginX = savedCameraX;
       _terrainBufferOriginY = savedCameraY;
       _terrainBufferZoom = window.cameraZoom;
-      _terrainBufferExploredCount = exploredCount;
       _terrainBufferFloor = viewerFloor;
 
       window.cameraX = savedCameraX + TERRAIN_BUFFER_MARGIN;
@@ -488,6 +491,7 @@ function drawMap() {
       const savedMapCtx = mapCtx;
       mapCtx = _terrainBufferCtx;
       renderTerrainPass(bufVisibleAndExplored, imgOk, viewerFloor);
+      _terrainBufferHexKeys = new Set(bufVisibleAndExplored.map(({q,r}) => `${q},${r}`));
       mapCtx = savedMapCtx;
       window.cameraX = savedCameraX;
       window.cameraY = savedCameraY;
@@ -496,6 +500,14 @@ function drawMap() {
   mapCtx.drawImage(_terrainBuffer,
       window.cameraX - _terrainBufferOriginX - TERRAIN_BUFFER_MARGIN,
       window.cameraY - _terrainBufferOriginY - TERRAIN_BUFFER_MARGIN);
+
+  // Exploration used to invalidate the entire oversized terrain buffer for
+  // every newly discovered hex. Draw only the newly revealed on-screen tiles
+  // live; once the camera naturally crosses the buffer slack boundary they are
+  // folded into the next full buffer build. This preserves immediate reveal
+  // without a several-hundred-millisecond rebuild while walking.
+  const unbufferedTerrain = visibleAndExplored.filter(({q,r}) => !_terrainBufferHexKeys.has(`${q},${r}`));
+  if (unbufferedTerrain.length) renderTerrainPass(unbufferedTerrain, imgOk, viewerFloor);
 
   // 2b. Fog-of-war dim for currently-unseen-but-explored hexes — kept live
   // (not baked into the buffer) since which hexes count as "visible" shifts
@@ -823,6 +835,32 @@ function connectAllRoadNetworks() {
 window.connectAllRoadNetworks = connectAllRoadNetworks;
 
 function findPath(start, target, availableTP, entity, ignoreTP = false, preferredPath = null) {
+    const pathFloor = entity.floor || 0;
+    const isPlayer = entity.side === 'player';
+
+    // Trivial/known-impossible targets should never fan out into a 5000-node
+    // A* search. Preserve fog-of-war semantics: an unexplored wall is still
+    // treated as unknown to the player, exactly as it is in the neighbour
+    // expansion below.
+    if (start.q === target.q && start.r === target.r) return [start];
+    const targetIsKnown = !isPlayer || window.isHexExplored(target.q, target.r);
+    if (targetIsKnown && window.getTerrainAtFloor(target.q, target.r, pathFloor).impassable) return null;
+
+    // These values depend only on the moving entity, not on each of the six
+    // neighbours of every expanded node. Hoisting them removes thousands of
+    // repeated equipment/skill lookups from longer searches.
+    const isLightOrNoArmorEntity = !entity.equipped || !entity.equipped.armor || window.items[entity.equipped.armor]?.id === 'light_armor';
+    let movementBaseCost = 5;
+    if (entity.skills) {
+        if (entity.skills.fastMovement && isLightOrNoArmorEntity) movementBaseCost -= entity.skills.fastMovement;
+        if (entity.skills.swift_step) {
+            const offhand = entity.equipped?.offhand;
+            const isUnarmored = !entity.equipped?.armor && (!offhand || window.items[offhand]?.type !== 'shield');
+            if (isUnarmored) movementBaseCost -= 1;
+        }
+    }
+    movementBaseCost = Math.max(1, movementBaseCost);
+
     // Built once per call instead of re-scanning window.entities (a linear
     // scan) for every single neighbor of every expanded node — with
     // iterations capped at 5000 and up to 6 neighbors each, that was up to
@@ -836,7 +874,6 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
     // one hex — keyed on floor instead of the .rider flag. entity.floor is
     // 0 for everything outside a registered multi-story building, so this
     // is a no-op filter almost everywhere.
-    const pathFloor = entity.floor || 0;
     const occupantsByHex = new Map();
     for (const e of window.entities) {
         if (!e.alive) continue;
@@ -892,10 +929,11 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
         for (let next of neighbors) {
             const key = `${next.q},${next.r}`;
 
-            // TASK 2: Knowledge-based pathing for player
-            const isPlayer = (entity.side === 'player');
-            const isVisible = window.isVisibleToPlayer(next);
-            const isExplored = window.isHexExplored(next.q, next.r);
+            // TASK 2: Knowledge-based pathing for player. NPCs have full
+            // terrain knowledge, so do not pay for an exploration lookup for
+            // every expanded neighbour when the caller is not a player.
+            const isExplored = !isPlayer || window.isHexExplored(next.q, next.r);
+            const terrain = window.getTerrainAtFloor(next.q, next.r, pathFloor);
 
             // Check for ENEMY obstacles (Living enemies only)
             // Friendlies DO NOT block movement
@@ -911,10 +949,13 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
             const occupant = (occupantsByHex.get(key) || []).find(e =>
                 isPlayer ? (e.side === 'enemy' || e.blocksPlayerPath) : e.side !== entity.side);
 
-            const isLightOrNoArmorEntity = !entity.equipped || !entity.equipped.armor || window.items[entity.equipped.armor]?.id === 'light_armor';
             let acrobaticsCost = 0;
             if (occupant) {
-                const isKnownObstacle = !isPlayer || isVisible;
+                // Visibility only matters when there is actually an occupant.
+                // The real-time player fast path deliberately has no blocking
+                // occupants, so this removes what used to be one visibility
+                // function call per neighbour from its hottest A* loop.
+                const isKnownObstacle = !isPlayer || window.isVisibleToPlayer(next);
                 if (isKnownObstacle) {
                     // Acrobatics lets a lightly-armored (or unarmored) entity
                     // cross an occupied hex instead of being blocked by it,
@@ -941,25 +982,14 @@ function findPath(start, target, availableTP, entity, ignoreTP = false, preferre
                 }
             }
 
-            // Calculate cost
-            let baseCost = 5;
-            if (entity.skills) {
-                if (entity.skills['fastMovement'] && isLightOrNoArmorEntity) {
-                    baseCost -= entity.skills['fastMovement'];
-                }
-                if (entity.skills['swift_step']) {
-                    const isUnarmored = (!entity.equipped || !entity.equipped.armor) && (!entity.equipped || !entity.equipped.offhand || window.items[entity.equipped.offhand].type !== 'shield');
-                    if (isUnarmored) baseCost -= 1;
-                }
-            }
-            baseCost = Math.max(1, baseCost) + acrobaticsCost;
+            // Calculate cost from the entity-wide base computed once above.
+            let baseCost = movementBaseCost + acrobaticsCost;
 
             // PREFERRED PATH DISCOUNT (Stay Together)
             if (preferredPath && preferredPath.includes(key)) {
                 baseCost = Math.max(1, baseCost - 2);
             }
 
-            const terrain = window.getTerrainAtFloor(next.q, next.r, pathFloor);
             // Impassable-terrain check (Wall, and now the keep's Keep Wall)
             if (terrain.impassable) {
                 const isKnownWall = !isPlayer || isExplored;

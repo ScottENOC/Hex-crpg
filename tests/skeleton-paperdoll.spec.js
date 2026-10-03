@@ -19,10 +19,18 @@ test.describe('Skeleton paperdoll rendering', () => {
         expect(result.customImage).toBeUndefined();
     });
 
-    test('skeleton base art asset is wired into gameVisuals', async ({ page }) => {
+    test('skeleton base art asset is wired into gameVisuals and eventually loads', async ({ page }) => {
         await createCharacter(page);
-        const result = await page.evaluate(() => ({ src: window.gameVisuals.skeletonBase?.src || '' }));
+        await page.waitForFunction(() => {
+            const img = window.gameVisuals?.skeletonBase;
+            return !!img && img.complete && img.naturalWidth > 0;
+        }, null, { timeout: 5000 });
+        const result = await page.evaluate(() => ({
+            src: window.gameVisuals.skeletonBase.src,
+            naturalWidth: window.gameVisuals.skeletonBase.naturalWidth,
+        }));
         expect(result.src).toContain('images/characters/creatures/skeleton_base.svg');
+        expect(result.naturalWidth).toBeGreaterThan(0);
     });
 
     test('an equipped skeleton still applies its weapon skill normally', async ({ page }) => {

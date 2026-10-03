@@ -1324,328 +1324,123 @@ function startGameCore(isLoading = false) {
   window.mapCtx = window.mapCanvas.getContext("2d");
   window.resizeCanvas();
 
-  const visuals = {
-      playerBase: new Image(),
-      leatherArmor: new Image(),
-      chainArmor: new Image(),
-      monsterDefault: new Image(),
-      orcBase: new Image(),
-      swordIcon: new Image(),
-      // New Human Visuals
-      humanBase: new Image(),
-      humanHair: new Image(),
-      humanMaleHair: new Image(),
-      humanLight: new Image(),
-      humanMedium: new Image(),
-      humanHeavy: new Image(),
-      horse: new Image(),
-      nasal_helm: new Image(),
-      humanMaleBase: new Image(),
-      elfMaleBase: new Image(),
-      elfMaleHair: new Image(),
-      elfFemaleBase: new Image(),
-      elfFemaleHair: new Image(),
-      dwarfMaleBase: new Image(),
-      dwarfMaleHair: new Image(),
-      dwarfFemaleBase: new Image(),
-      dwarfFemaleHair: new Image(),
-      shield: new Image(),
-      skeleton: new Image(),
-      zombie: new Image(),
-      imp: new Image(),
-      elite_goblin: new Image(),
-      harpy: new Image(),
-      wraith: new Image(),
-      basilisk: new Image(),
-      minotaur: new Image(),
-      revenantBase: new Image(),
-      skeletonBase: new Image(),
-      barding_light: new Image(),
-      barding_medium: new Image(),
-      barding_heavy: new Image(),
-      wolf: new Image(),
-      torch_lit: new Image(),
-      fireplace_base: new Image(),
-      fireplace_flame: new Image(),
-      fireplace_unlit: new Image(),
-      oil_barrel: new Image(),
-      axe: new Image(),
-      troll: new Image(),
-      dragon: new Image(),
-      ore_vein: new Image(),
-      tree_large: new Image(),
-      spear: new Image(),
-      club: new Image(),
-      giant_club: new Image(),
-      bow: new Image(),
-      battering_ram: new Image(),
-      spiderweb: new Image(),
-      spider1: new Image(),
-      spider2: new Image(),
-      arenaannouncer: new Image(),
-      arenamercenary: new Image(),
-      arenashopkeeper: new Image(),
-      grishnak: new Image(),
-      floor1: new Image(),
-      floor2: new Image(),
-      floor3: new Image(),
-      floor4: new Image(),
-      overlay_blood: new Image(),
-      overlay_skull: new Image(),
-      pedestal: new Image(),
-      water: new Image(),
-      boar: new Image(),
-      tiger: new Image(),
-      unicorn: new Image(),
-      eagle: new Image(),
-      eagleflying: new Image(),
-      foliage: new Image(),
-      wood_floor: new Image(),
-      table: new Image(),
-      bench: new Image(),
-      bed: new Image(),
-      throne: new Image(),
-      apple: new Image(),
-      door_open: new Image(),
-      door_closed: new Image(),
-      path: new Image(),
-      signpost: new Image(),
-      fountain: new Image(),
-      gate_arch: new Image(),
-      altar_unholy: new Image(),
-      locket: new Image(),
-      ladder: new Image(),
-      watchtower: new Image(),
-      corpse_marker: new Image(),
-      fence_h: new Image(),
-      fence_v: new Image(),
-      fence_broken: new Image(),
-      blood_spatter: new Image(),
-      blood_spatter_faint: new Image(),
-      sheep: new Image(),
-      dirt: new Image(),
-      hut: new Image(),
-      hut_large: new Image(),
-      journal: new Image(),
-      bush_small: new Image(),
-      bush_large: new Image(),
-      tree_small: new Image(),
-      grass_1: new Image(),
-      grass_2: new Image(),
-      grass_3: new Image(),
-      water_1: new Image(),
-      water_2: new Image()
-  };
-  visuals.playerBase.onload = () => { window.drawMap(); };
-  visuals.leatherArmor.onload = () => { window.drawMap(); };
-  visuals.chainArmor.onload = () => { window.drawMap(); };
-  visuals.monsterDefault.onload = () => { window.drawMap(); };
-  visuals.orcBase.onload = () => { window.drawMap(); };
-  visuals.swordIcon.onload = () => { window.drawMap(); };
-  visuals.humanBase.onload = () => { window.drawMap(); };
-  visuals.humanHair.onload = () => { window.drawMap(); };
-  visuals.humanMaleHair.onload = () => { window.drawMap(); };
-  visuals.humanLight.onload = () => { window.drawMap(); };
-  visuals.humanMedium.onload = () => { window.drawMap(); };
-  visuals.humanHeavy.onload = () => { window.drawMap(); };
-  visuals.horse.onload = () => { window.drawMap(); };
-  visuals.nasal_helm.onload = () => { window.drawMap(); };
-  visuals.humanMaleBase.onload = () => { window.drawMap(); };
-  visuals.elfMaleBase.onload = () => { window.drawMap(); };
-  visuals.elfMaleHair.onload = () => { window.drawMap(); };
-  visuals.elfFemaleBase.onload = () => { window.drawMap(); };
-  visuals.elfFemaleHair.onload = () => { window.drawMap(); };
-  visuals.dwarfMaleBase.onload = () => { window.drawMap(); };
-  visuals.dwarfMaleHair.onload = () => { window.drawMap(); };
-  visuals.dwarfFemaleBase.onload = () => { window.drawMap(); };
-  visuals.dwarfFemaleHair.onload = () => { window.drawMap(); };
-  visuals.shield.onload = () => { window.drawMap(); };
-  visuals.skeleton.onload = () => { window.drawMap(); };
-  visuals.zombie.onload = () => { window.drawMap(); };
-  visuals.imp.onload = () => { window.drawMap(); };
-  visuals.elite_goblin.onload = () => { window.drawMap(); };
-  visuals.harpy.onload = () => { window.drawMap(); };
-  visuals.wraith.onload = () => { window.drawMap(); };
-  visuals.basilisk.onload = () => { window.drawMap(); };
-  visuals.minotaur.onload = () => { window.drawMap(); };
-  visuals.revenantBase.onload = () => { window.drawMap(); };
-  visuals.wolf.onload = () => { window.drawMap(); };
-  visuals.torch_lit.onload = () => { window.drawMap(); };
-  visuals.fireplace_base.onload = () => { window.drawMap(); };
-  visuals.fireplace_flame.onload = () => { window.drawMap(); };
-  visuals.fireplace_unlit.onload = () => { window.drawMap(); };
-  visuals.oil_barrel.onload = () => { window.drawMap(); };
-  visuals.axe.onload = () => { window.drawMap(); };
-  visuals.troll.onload = () => { window.drawMap(); };
-  visuals.dragon.onload = () => { window.drawMap(); };
-  visuals.ore_vein.onload = () => { window.drawMap(); };
-  visuals.tree_large.onload = () => { window.drawMap(); };
-  visuals.spear.onload = () => { window.drawMap(); };
-  visuals.club.onload = () => { window.drawMap(); };
-  visuals.giant_club.onload = () => { window.drawMap(); };
-  visuals.spiderweb.onload = () => { window.drawMap(); };
-  visuals.spider1.onload = () => { window.drawMap(); };
-  visuals.spider2.onload = () => { window.drawMap(); };
-  visuals.arenaannouncer.onload = () => { window.drawMap(); };
-  visuals.arenamercenary.onload = () => { window.drawMap(); };
-  visuals.arenashopkeeper.onload = () => { window.drawMap(); };
-  visuals.grishnak.onload = () => { window.drawMap(); };
-  visuals.floor1.onload = () => { window.drawMap(); };
-  visuals.floor2.onload = () => { window.drawMap(); };
-  visuals.floor3.onload = () => { window.drawMap(); };
-  visuals.floor4.onload = () => { window.drawMap(); };
-  visuals.overlay_blood.onload = () => { window.drawMap(); };
-  visuals.overlay_skull.onload = () => { window.drawMap(); };
-  visuals.pedestal.onload = () => { window.drawMap(); };
-  visuals.water.onload = () => { window.drawMap(); };
-  visuals.boar.onload = () => { window.drawMap(); };
-  visuals.tiger.onload = () => { window.drawMap(); };
-  visuals.eagle.onload = () => { window.drawMap(); };
-  visuals.eagleflying.onload = () => { window.drawMap(); };
-  visuals.foliage.onload = () => { window.drawMap(); };
-  visuals.wood_floor.onload = () => { window.drawMap(); };
-  visuals.table.onload = () => { window.drawMap(); };
-  visuals.bench.onload = () => { window.drawMap(); };
-  visuals.bed.onload = () => { window.drawMap(); };
-  visuals.throne.onload = () => { window.drawMap(); };
-  visuals.apple.onload = () => { window.drawMap(); };
-  visuals.door_open.onload = () => { window.drawMap(); };
-  visuals.door_closed.onload = () => { window.drawMap(); };
-  visuals.path.onload = () => { window.drawMap(); };
-  visuals.signpost.onload = () => { window.drawMap(); };
-  visuals.ladder.onload = () => { window.drawMap(); };
-  visuals.watchtower.onload = () => { window.drawMap(); };
-  visuals.corpse_marker.onload = () => { window.drawMap(); };
-  visuals.fence_h.onload = () => { window.drawMap(); };
-  visuals.fence_v.onload = () => { window.drawMap(); };
-  visuals.fence_broken.onload = () => { window.drawMap(); };
-  visuals.blood_spatter.onload = () => { window.drawMap(); };
-  visuals.blood_spatter_faint.onload = () => { window.drawMap(); };
-  visuals.sheep.onload = () => { window.drawMap(); };
-  visuals.dirt.onload = () => { window.drawMap(); };
-  visuals.bush_small.onload = () => { window.drawMap(); };
-  visuals.bush_large.onload = () => { window.drawMap(); };
-  visuals.tree_small.onload = () => { window.drawMap(); };
-  visuals.grass_1.onload = () => { window.drawMap(); };
-  visuals.grass_2.onload = () => { window.drawMap(); };
-  visuals.grass_3.onload = () => { window.drawMap(); };
-  visuals.water_1.onload = () => { window.drawMap(); };
-  visuals.water_2.onload = () => { window.drawMap(); };
-  visuals.hut.onload = () => { window.drawMap(); };
-  visuals.hut_large.onload = () => { window.drawMap(); };
-  visuals.journal.onload = () => { window.drawMap(); };
-
-  visuals.playerBase.src = 'images/elf.png';
-  visuals.leatherArmor.src = 'images/elfleatherarmour.png';
-  visuals.chainArmor.src = 'images/elfchainarmour.png';
-  visuals.monsterDefault.src = 'images/goblin.png';
-  visuals.orcBase.src = 'images/orc.png';
-  visuals.swordIcon.src = 'images/sword.png';
-  // Human Sources
-  visuals.humanBase.src = 'images/humanfemale.png';
-  visuals.humanHair.src = 'images/humanfemalehair.png';
-  visuals.humanMaleHair.src = 'images/humanmalehair.png';
-  visuals.humanLight.src = 'images/humanlightarmour.png';
-  visuals.humanMedium.src = 'images/humanmediumarmour.png';
-  visuals.humanHeavy.src = 'images/humanheavyarmour.png';
-  visuals.horse.src = 'images/horse.png';
-  visuals.nasal_helm.src = 'images/nasalHelm.png';
-  visuals.humanMaleBase.src = 'images/humanmale.png';
-  visuals.elfMaleBase.src = 'images/elfmale.png';
-  visuals.elfMaleHair.src = 'images/elfmalehair.png';
-  visuals.elfFemaleBase.src = 'images/elffemale.png';
-  visuals.elfFemaleHair.src = 'images/elffemalehair.png';
-  visuals.dwarfMaleBase.src = 'images/dwarfmale.png';
-  visuals.dwarfMaleHair.src = 'images/dwarfmalehair.png';
-  visuals.dwarfFemaleBase.src = 'images/dwarffemale.png';
-  visuals.dwarfFemaleHair.src = 'images/dwarffemalehair.png';
-  visuals.shield.src = 'images/shield.png';
-  visuals.skeleton.src = 'images/skeleton.svg';
-  visuals.zombie.src = 'images/zombie.svg';
-  visuals.imp.src = 'images/imp.svg';
-  visuals.elite_goblin.src = 'images/elite_goblin.svg';
-  visuals.harpy.src = 'images/harpy.svg';
-  visuals.wraith.src = 'images/wraith.svg';
-  visuals.basilisk.src = 'images/basilisk.svg';
-  visuals.minotaur.src = 'images/minotaur.png';
-  visuals.revenantBase.src = 'images/revenant.svg';
-  visuals.skeletonBase.src = 'images/skeletonBase.svg';
-  visuals.barding_light.src = 'images/barding_light.svg';
-  visuals.barding_medium.src = 'images/barding_medium.svg';
-  visuals.barding_heavy.src = 'images/barding_heavy.svg';
-  visuals.wolf.src = 'images/wolf.png';
-  visuals.torch_lit.src = 'images/torch_lit.svg';
-  visuals.fireplace_base.src = 'images/fireplace_base.svg';
-  visuals.fireplace_flame.src = 'images/fireplace_flame.svg';
-  visuals.fireplace_unlit.src = 'images/fireplace_unlit.svg';
-  visuals.oil_barrel.src = 'images/oil_barrel.svg';
-  visuals.axe.src = 'images/axe.png';
-  visuals.troll.src = 'images/troll.png';
-  visuals.dragon.src = 'images/dragon.svg';
-  visuals.ore_vein.src = 'images/ore_vein.svg';
-  visuals.tree_large.src = 'images/tree_large.svg';
-  visuals.spear.src = 'images/spear.png';
-  visuals.club.src = 'images/club.svg';
-  visuals.giant_club.src = 'images/giant_club.png';
-  visuals.bow.src = 'images/bow.svg';
-  visuals.battering_ram.src = 'images/battering_ram.svg';
-  visuals.spiderweb.src = 'images/spiderweb.png';
-  visuals.spider1.src = 'images/spider1.png';
-  visuals.spider2.src = 'images/spider2.png';
-  visuals.arenaannouncer.src = 'images/arenaannouncer.png';
-  visuals.arenamercenary.src = 'images/arenamercenary.png';
-  visuals.arenashopkeeper.src = 'images/arenashopkeeper.png';
-  visuals.grishnak.src = 'images/Grishnak.png';
-  visuals.floor1.src = 'images/arenaHexFloor1.png';
-  visuals.floor2.src = 'images/arenaHexFloor2.png';
-  visuals.floor3.src = 'images/arenaHexFloor3.png';
-  visuals.floor4.src = 'images/arenaHexFloor4.png';
-  visuals.overlay_blood.src = 'images/overlay blood.png';
-  visuals.overlay_skull.src = 'images/overlay skull.png';
-  visuals.pedestal.src = 'images/mediumpillar.png';
-  visuals.water.src = 'images/water.png';
-  visuals.boar.src = 'images/boar.png';
-  visuals.tiger.src = 'images/tiger.png';
-  visuals.unicorn.src = 'images/unicorn.png';
-  visuals.eagle.src = 'images/eagle.png';
-  visuals.eagleflying.src = 'images/eagleflying.png';
-  visuals.foliage.src = 'images/foliage.png';
-  visuals.wood_floor.src = 'images/wood_floor.svg';
-  visuals.table.src = 'images/table.svg';
-  visuals.bench.src = 'images/bench.svg';
-  visuals.bed.src = 'images/bed.svg';
-  visuals.throne.src = 'images/throne.svg';
-  visuals.apple.src = 'images/apple.svg';
-  visuals.door_open.src = 'images/door_open.svg';
-  visuals.door_closed.src = 'images/door_closed.svg';
-  visuals.path.src = 'images/path.svg';
-  visuals.signpost.src = 'images/signpost.svg';
-  visuals.fountain.src = 'images/fountain.svg';
-  visuals.gate_arch.src = 'images/gate_arch.svg';
-  visuals.altar_unholy.src = 'images/altar_unholy.svg';
-  visuals.locket.src = 'images/locket.svg';
-  visuals.ladder.src = 'images/ladder.svg';
-  visuals.watchtower.src = 'images/watchtower.svg';
-  visuals.corpse_marker.src = 'images/corpse_marker.svg';
-  visuals.fence_h.src = 'images/fence_h.svg';
-  visuals.fence_v.src = 'images/fence_v.svg';
-  visuals.fence_broken.src = 'images/fence_broken.svg';
-  visuals.blood_spatter.src = 'images/overlay blood.png';
-  visuals.blood_spatter_faint.src = 'images/overlay blood.png';
-  visuals.sheep.src = 'images/sheep.svg';
-  visuals.dirt.src = 'images/dirt.svg';
-  visuals.hut.src = 'images/hut.svg';
-  visuals.hut_large.src = 'images/hut_large.svg';
-  visuals.journal.src = 'images/journal.svg';
-  visuals.bush_small.src = 'images/bush_small.svg';
-  visuals.bush_large.src = 'images/bush_large.svg';
-  visuals.tree_small.src = 'images/tree_small.svg';
-  visuals.grass_1.src = 'images/grass_1.svg';
-  visuals.grass_2.src = 'images/grass_2.svg';
-  visuals.grass_3.src = 'images/grass_3.svg';
-  visuals.water_1.src = 'images/water_1.svg';
-  visuals.water_2.src = 'images/water_2.svg';
-
+  const visualSources = Object.freeze({
+      playerBase: "images/elf.png",
+      leatherArmor: "images/elfleatherarmour.png",
+      chainArmor: "images/elfchainarmour.png",
+      monsterDefault: "images/goblin.png",
+      orcBase: "images/orc.png",
+      swordIcon: "images/sword.png",
+      humanBase: "images/humanfemale.png",
+      humanHair: "images/humanfemalehair.png",
+      humanMaleHair: "images/humanmalehair.png",
+      humanLight: "images/humanlightarmour.png",
+      humanMedium: "images/humanmediumarmour.png",
+      humanHeavy: "images/humanheavyarmour.png",
+      horse: "images/horse.png",
+      nasal_helm: "images/nasalHelm.png",
+      humanMaleBase: "images/humanmale.png",
+      elfMaleBase: "images/elfmale.png",
+      elfMaleHair: "images/elfmalehair.png",
+      elfFemaleBase: "images/elffemale.png",
+      elfFemaleHair: "images/elffemalehair.png",
+      dwarfMaleBase: "images/dwarfmale.png",
+      dwarfMaleHair: "images/dwarfmalehair.png",
+      dwarfFemaleBase: "images/dwarffemale.png",
+      dwarfFemaleHair: "images/dwarffemalehair.png",
+      shield: "images/shield.png",
+      skeleton: "images/skeleton.svg",
+      zombie: "images/zombie.svg",
+      imp: "images/imp.svg",
+      elite_goblin: "images/elite_goblin.svg",
+      harpy: "images/harpy.svg",
+      wraith: "images/wraith.svg",
+      basilisk: "images/basilisk.svg",
+      minotaur: "images/minotaur.png",
+      revenantBase: "images/revenant.svg",
+      skeletonBase: "images/skeletonBase.svg",
+      barding_light: "images/barding_light.svg",
+      barding_medium: "images/barding_medium.svg",
+      barding_heavy: "images/barding_heavy.svg",
+      wolf: "images/wolf.png",
+      torch_lit: "images/torch_lit.svg",
+      fireplace_base: "images/fireplace_base.svg",
+      fireplace_flame: "images/fireplace_flame.svg",
+      fireplace_unlit: "images/fireplace_unlit.svg",
+      oil_barrel: "images/oil_barrel.svg",
+      axe: "images/axe.png",
+      troll: "images/troll.png",
+      dragon: "images/dragon.svg",
+      ore_vein: "images/ore_vein.svg",
+      tree_large: "images/tree_large.svg",
+      spear: "images/spear.png",
+      club: "images/club.svg",
+      giant_club: "images/giant_club.png",
+      bow: "images/bow.svg",
+      battering_ram: "images/battering_ram.svg",
+      spiderweb: "images/spiderweb.png",
+      spider1: "images/spider1.png",
+      spider2: "images/spider2.png",
+      arenaannouncer: "images/arenaannouncer.png",
+      arenamercenary: "images/arenamercenary.png",
+      arenashopkeeper: "images/arenashopkeeper.png",
+      grishnak: "images/Grishnak.png",
+      floor1: "images/arenaHexFloor1.png",
+      floor2: "images/arenaHexFloor2.png",
+      floor3: "images/arenaHexFloor3.png",
+      floor4: "images/arenaHexFloor4.png",
+      overlay_blood: "images/overlay blood.png",
+      overlay_skull: "images/overlay skull.png",
+      pedestal: "images/mediumpillar.png",
+      water: "images/water.png",
+      boar: "images/boar.png",
+      tiger: "images/tiger.png",
+      unicorn: "images/unicorn.png",
+      eagle: "images/eagle.png",
+      eagleflying: "images/eagleflying.png",
+      foliage: "images/foliage.png",
+      wood_floor: "images/wood_floor.svg",
+      table: "images/table.svg",
+      bench: "images/bench.svg",
+      bed: "images/bed.svg",
+      throne: "images/throne.svg",
+      apple: "images/apple.svg",
+      door_open: "images/door_open.svg",
+      door_closed: "images/door_closed.svg",
+      path: "images/path.svg",
+      signpost: "images/signpost.svg",
+      fountain: "images/fountain.svg",
+      gate_arch: "images/gate_arch.svg",
+      altar_unholy: "images/altar_unholy.svg",
+      locket: "images/locket.svg",
+      ladder: "images/ladder.svg",
+      watchtower: "images/watchtower.svg",
+      corpse_marker: "images/corpse_marker.svg",
+      fence_h: "images/fence_h.svg",
+      fence_v: "images/fence_v.svg",
+      fence_broken: "images/fence_broken.svg",
+      blood_spatter: "images/overlay blood.png",
+      blood_spatter_faint: "images/overlay blood.png",
+      sheep: "images/sheep.svg",
+      dirt: "images/dirt.svg",
+      hut: "images/hut.svg",
+      hut_large: "images/hut_large.svg",
+      journal: "images/journal.svg",
+      bush_small: "images/bush_small.svg",
+      bush_large: "images/bush_large.svg",
+      tree_small: "images/tree_small.svg",
+      grass_1: "images/grass_1.svg",
+      grass_2: "images/grass_2.svg",
+      grass_3: "images/grass_3.svg",
+      water_1: "images/water_1.svg",
+      water_2: "images/water_2.svg",
+  });
+  const visuals = Object.fromEntries(
+      Object.entries(visualSources).map(([key, src]) => [key, window.assetManager.request(src)])
+  );
+  for (const src of new Set(Object.values(visualSources))) {
+      window.assetManager.whenReady(src).then(() => drawMap()).catch(() => {});
+  }
   window.gameVisuals = visuals;
 
   if (window.loadWorldMap) window.loadWorldMap();
@@ -1832,7 +1627,6 @@ const CHAR_CONFIG = {
 // screen's toggle, ui.js) — 'clothes' always shows them; the default
 // 'armor' mode only shows them when no armor is equipped to compete with.
 window.CLOTHING_PRESETS = {
-    traveler_garb:  { shirtHue: 30,  pantsHue: 25,  satMult: 0.7 },
     fine_tunic:     { shirtHue: 220, pantsHue: 0,   satMult: 0.9 },
     noble_doublet:  { shirtHue: 280, pantsHue: 0,   satMult: 1.1 },
     scholars_robe:  { shirtHue: 0,   pantsHue: 0,   satMult: 0.15 },
@@ -2465,7 +2259,7 @@ function renderEntities() {
       // Enemy humanoids with sprite config are drawn the same way as player characters
       const hasEnemySpriteCfg = !isSentientAlly && e.race && e.gender && CHAR_CONFIG[`${e.race}_${e.gender}`];
       if ((isSentientAlly || hasEnemySpriteCfg) && !e.customImage && window.gameVisuals) {
-          drawPlayerCharacter(window.mapCtx, e, x, y, z, flyOff);
+          window.drawPlayerCharacter(window.mapCtx, e, x, y, z, flyOff);
       } else if ((e instanceof window.Enemy || e.customImage) && window.gameVisuals) {
                           let size = window.hexSize * 1.5 * z;
                           let yOffset = 0;

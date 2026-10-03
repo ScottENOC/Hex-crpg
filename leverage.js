@@ -37,6 +37,26 @@ function readTheRoom(npc, player) {
     return { text: npc.vagueFlavor || "Hard to get a read on them.", signal: 0 };
 }
 
+function recordGoldLeverageChoice(npc) {
+    const offerLabel = String(npc?.wants?.offerLabel || 'bribe');
+    const tags = ['transactional', 'material_concession', 'persuasion_by_payment'];
+    if (/bribe/i.test(offerLabel)) tags.push('bribery');
+    const source = String(npc?.dialogueId || npc?.name || 'npc').replace(/\s+/g, '_').toLowerCase();
+    if (window.partyConversationRollout?.recordDialogueChoice) {
+        return window.partyConversationRollout.recordDialogueChoice(`leverage:${source}`, 'gold_leverage', {
+            context: 'persuasion_by_payment', tags, strength: 0.75
+        });
+    }
+    return window.partyConversationDynamics?.recordPlayerChoice?.({
+        sourceId: `dialogue:leverage:${source}`,
+        choiceId: 'gold_leverage',
+        context: 'persuasion_by_payment',
+        tags,
+        strength: 0.75,
+        witnessedBy: (window.party || []).slice(1).map(c => c?.name).filter(Boolean)
+    }) || false;
+}
+
 // Only ever returns options once there's enough signal (>=1) to know it's
 // safe to try — a player with no Insight and no clues simply never sees a
 // risky option at all, rather than being invited to gamble blind.
@@ -57,6 +77,7 @@ function getLeverageOptions(npc, player) {
                 }
                 window.party[0].gold -= cost;
                 window.showMessage(`You hand over ${cost} gold.`);
+                recordGoldLeverageChoice(npc);
                 if (npc.onBribeSuccess) npc.onBribeSuccess();
             }
         });
@@ -69,3 +90,12 @@ window.getPersuasionDiscount = getPersuasionDiscount;
 window.getLeverageSignal = getLeverageSignal;
 window.readTheRoom = readTheRoom;
 window.getLeverageOptions = getLeverageOptions;
+window.recordGoldLeverageChoice = recordGoldLeverageChoice;
+
+// Load ordinary-dialogue semantic consequences from a fresh URL. The module
+// waits until DOMContentLoaded before wrapping campaign dialogue trees, because
+// leverage.js itself is intentionally loaded much earlier than campaign2Dialogue.js.
+if (typeof document !== 'undefined' && !window.__ordinaryDialogueConsequencesModuleLoaded) {
+    window.__ordinaryDialogueConsequencesModuleLoaded = true;
+    document.write('<script src="ordinaryDialogueConsequences.js?build=20261001-ordinary-dialogue-consequences-v2"><\\/script>');
+}

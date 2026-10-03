@@ -39,12 +39,11 @@ window.generateName = window.getRandomName;
     window.randomizeCharacterAppearance({sync:false});
 })();
 
-const PRESENTATION_BUILD = '20260930-equipment-interface-v1';
+const PRESENTATION_BUILD = document.querySelector('meta[name="app-build"]')?.content || 'unversioned-dev-build';
 const freshScriptUrl = (path) => `${path}?build=${encodeURIComponent(PRESENTATION_BUILD)}`;
 window.PRESENTATION_BUILD = PRESENTATION_BUILD;
-const presentationBuildMeta=document.querySelector('meta[name="app-build"]');if(presentationBuildMeta)presentationBuildMeta.content=PRESENTATION_BUILD;
 
-async function fetchRemotePresentationBuild(){const response=await fetch(`name.js?app-update-check=${Date.now()}`,{cache:'no-store'});if(!response.ok)return null;const source=await response.text();const match=source.match(/const\s+PRESENTATION_BUILD\s*=\s*['\"]([^'\"]+)['\"]/);return match?.[1]||null;}
+async function fetchRemotePresentationBuild(){const response=await fetch(`index.html?app-update-check=${Date.now()}`,{cache:'no-store'});if(!response.ok)return null;const source=await response.text();const match=source.match(/<meta\s+name=["']app-build["']\s+content=["']([^"']+)["']/i);return match?.[1]||null;}
 window.fetchRemotePresentationBuild=fetchRemotePresentationBuild;
 let appBuildCheckInFlight=null;
 window.checkForAppUpdate=function({reload=false}={}){if(appBuildCheckInFlight)return appBuildCheckInFlight;appBuildCheckInFlight=(async()=>{try{const remoteBuild=await fetchRemotePresentationBuild();if(!remoteBuild||remoteBuild===PRESENTATION_BUILD){window.__appUpdateAvailable=null;return false;}window.__appUpdateAvailable=remoteBuild;window.dispatchEvent(new CustomEvent('appupdateavailable',{detail:{build:remoteBuild}}));if(reload){if('caches'in window){const keys=await caches.keys();await Promise.all(keys.map(key=>caches.delete(key)));}const target=new URL(window.location.href);target.searchParams.set('build',remoteBuild);window.location.replace(target.href);}return true;}catch(err){console.warn('App update check failed',err);return false;}finally{appBuildCheckInFlight=null;}})();return appBuildCheckInFlight;};
@@ -56,17 +55,36 @@ if('serviceWorker'in navigator){navigator.serviceWorker.register(`sw.js?build=${
 
 (() => {
     const scripts = [
-        ['assetLoadScheduler.js','assetLoadScheduler'],
+        // assetLoadScheduler.js is an explicit parser-time entry in index.html,
+        // before data.js and all dynamically installed render modules.
         ['movementInputFix.js','movementInputFix'],
         ['spriteRigging.js','spriteRigging'],
         ['scenario5ArmourLab.js','scenario5ArmourLab'],
         ['renderPerfTuning.js','renderPerfTuning'],
+        // Preserve 10 ms combat ticks, but coalesce expensive real-time
+        // exploration simulation to a phone-friendly cadence.
+        ['realtimeTickCadence.js','realtimeTickCadence'],
         ['raceSkinPalettes.js','raceSkinPalettes'],
         ['humanoidRenderer.js','humanoidRenderer'],
+        // The bridge owns real-time held/sheathed weapon presentation and the
+        // stable tactical binding. Load it before readiness decorates that path.
+        ['humanoidRendererBridge.js','humanoidRendererBridge'],
+        ['rendererAssetRecovery.js','rendererAssetRecovery'],
         ['braidDirectionalHair.js','braidDirectionalHair'],
         ['shieldAppearance.js','shieldAppearance'],
         ['shieldAppearanceUI.js','shieldAppearanceUI'],
         ['equipmentInterface.js','equipmentInterface'],
+        ['weaponReadiness.js','weaponReadiness'],
+        // Footwear used to rely only on clothingSystem.js's nested loader. Keep
+        // the same data-footwear-system marker, but bootstrap it here too so a
+        // stale/missed clothing child load cannot silently remove all shoes.
+        ['footwearSystem.js','footwearSystem'],
+        ['renderHotPathCache.js','renderHotPathCache'],
+        // The experiment with extra visibility/static-dictionary wrappers made
+        // the measured render path worse on iPhone. Keep only the cheap UI
+        // throttle here; the base renderer already has viewport culling and its
+        // own visibility cache.
+        ['realtimeUiThrottle.js','realtimeUiThrottle'],
     ];
     for (const [src,key] of scripts) {
         const attr = `data-${key.replace(/[A-Z]/g,m=>'-'+m.toLowerCase())}`;

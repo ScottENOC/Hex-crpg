@@ -16,9 +16,9 @@
         bald: 'brown_1',
     };
     const OCCUPATION_CLOTHES = {
-        farmer: 'traveler_garb', labourer: 'traveler_garb', merchant: 'fine_tunic',
-        smith: 'traveler_garb', fisher: 'traveler_garb', hunter: 'traveler_garb',
-        clerk: 'scholars_robe', tavern_worker: 'traveler_garb', craftsperson: 'traveler_garb',
+        farmer: 'fine_tunic', labourer: 'fine_tunic', merchant: 'fine_tunic',
+        smith: 'fine_tunic', fisher: 'fine_tunic', hunter: 'fine_tunic',
+        clerk: 'scholars_robe', tavern_worker: 'fine_tunic', craftsperson: 'fine_tunic',
         unemployed: null,
     };
     const OCCUPATION_HUES = {

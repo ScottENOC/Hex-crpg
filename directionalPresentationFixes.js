@@ -8,7 +8,6 @@
     const BUILD = '20260928-character-presentation-v6';
     const processed = new WeakSet();
     let registryReady = false;
-    let clothingAssetsRefreshed = false;
 
     const HAIR_STYLE_WIDTH = {
         braid: {front:1.22, side:1.12, back:1.20},
@@ -217,30 +216,11 @@
         document.head.appendChild(script);
     }
 
-    function refreshClothingAssets() {
-        const target = window.CLOTHING_ASSETS?.traveler_garb;
-        if (!target || clothingAssetsRefreshed) return false;
-        const paths = {
-            front:'images/equipment/clothing/traveler_garb_front.svg',
-            side:'images/equipment/clothing/traveler_garb_side.svg',
-            back:'images/equipment/clothing/traveler_garb_back.svg',
-        };
-        for (const [view,path] of Object.entries(paths)) {
-            const img = new Image();
-            img.addEventListener('load', () => { window.drawMap?.(); window.renderEntities?.(); });
-            img.src = `${path}?build=${BUILD}`;
-            target[view] = img;
-        }
-        clothingAssetsRefreshed = true;
-        return true;
-    }
-
     function install() {
         ensureFemaleBaseRecolor();
         ensureClothingSystem();
         normaliseDirectionalAssets();
         applyNpcAppearances();
-        refreshClothingAssets();
         window.drawMap?.();
         window.refreshDirectionalTurnPortraits?.();
     }
@@ -252,7 +232,7 @@
     install();
     const timer=setInterval(() => {
         install();
-        if (registryReady && window.CLOTHING_VISUALS && clothingAssetsRefreshed && window.__femaleBaseClothingRecolorV4Installed) {
+        if (registryReady && window.CLOTHING_VISUALS && window.__femaleBaseClothingRecolorV4Installed) {
             clearInterval(timer);
             setInterval(applyNpcAppearances,1000);
         }

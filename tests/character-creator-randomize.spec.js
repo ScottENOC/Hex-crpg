@@ -12,7 +12,7 @@ test.describe('character creator randomizers', () => {
         await expect(page.locator('#randomize-appearance-btn')).toBeVisible();
         await expect(page.locator('#hair-hue-slider')).toHaveValue('359');
         expect(['curly','bald']).toContain(await page.locator('#hair-style-select').inputValue());
-        await expect(page.locator('#body-type-select')).toHaveValue('broad');
+        await expect(page.locator('#body-type-select')).toHaveValue('average');
         await expect(page.locator('#skin-tone-slider')).toHaveValue('100');
         await expect(page.locator('#fantasy-skin-check')).not.toBeChecked();
         await expect(page.locator('#shirt-hue-slider')).toHaveCount(0);
@@ -43,7 +43,7 @@ test.describe('character creator randomizers', () => {
         expect(natural.hair).toBeGreaterThanOrEqual(0);
         expect(natural.hair).toBeLessThanOrEqual(359);
         expect(['brown_1','braid','curly','bald']).toContain(natural.hairStyle);
-        expect(['average','broad']).toContain(natural.bodyType);
+        expect(natural.bodyType).toBe('average');
         expect(natural.skinTone).toBeGreaterThanOrEqual(0);
         expect(natural.skinTone).toBeLessThanOrEqual(100);
         expect(natural.skinTone).not.toBe(10);

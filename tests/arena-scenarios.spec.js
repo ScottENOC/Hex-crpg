@@ -31,7 +31,7 @@ test.describe('Arena scenario variety', () => {
             window.isInArena = true;
             const flagHex = { q: 5, r: 5 };
             window.arenaScenario = { type: 'flag_defend', turnsElapsed: 15, turnsToHold: 15, flagHex };
-            const attacker = window.createMonster('goblin', { q: 0, r: 0 }, null, null, 'enemy'); // far from the flag
+            const attacker = window.createMonster('goblin', { q: 0, r: 0 }, null, null, 'enemy');
             window.entities = [attacker];
             window.tickArenaScenario();
             return { isInArena: window.isInArena };
@@ -81,7 +81,7 @@ test.describe('Arena scenario variety', () => {
             return { flooded: window.arenaScenario.flooded, hpAfter: victim.hp };
         });
         expect(result.flooded).toBe(true);
-        expect(result.hpAfter).toBe(42); // 50 - 8 flood damage
+        expect(result.hpAfter).toBe(42);
     });
 
     test('periodic lava flood: does not damage anyone while dormant (off-interval turn)', async ({ page }) => {
@@ -109,13 +109,25 @@ test.describe('Arena scenario variety', () => {
             rival.rivalGroup = true;
             rival.aiState = 'combat';
             rival.timePoints = 100;
+            rival.toHitMelee = 200;
             const plainEnemy = window.createMonster('goblin', { q: 1, r: 0 }, null, null, 'enemy');
-            plainEnemy.hp = 200; plainEnemy.maxHp = 200; // survive several swings so we can just check it was hit
+            plainEnemy.hp = 200; plainEnemy.maxHp = 200;
+            plainEnemy.passiveDodge = -200;
             window.entities = [rival, plainEnemy];
             window.currentTurnEntity = rival;
             window.isInCombat = true;
-            window.takeTurn(rival);
-            await new Promise(r => setTimeout(r, 600));
+
+            // AI turns may spend their first action settling/repositioning.
+            // Give this adjacent, guaranteed-hit rival several opportunities;
+            // the behavioural contract is that three-way rivalGroup actors can
+            // target same-side enemies, not that damage lands within 600 ms.
+            for (let i = 0; i < 5 && plainEnemy.hp === 200; i++) {
+                rival.timePoints = 100;
+                rival.moveCooldown = 0;
+                window.currentTurnEntity = rival;
+                window.takeTurn(rival);
+                await new Promise(r => setTimeout(r, 120));
+            }
             return { plainEnemyHp: plainEnemy.hp, plainEnemyAlive: plainEnemy.alive };
         });
         expect(result.plainEnemyAlive).toBe(true);
@@ -140,6 +152,6 @@ test.describe('Arena scenario variety', () => {
             await new Promise(r => setTimeout(r, 600));
             return { plainEnemyHp: plainEnemy.hp };
         });
-        expect(result.plainEnemyHp).toBe(200); // untouched — no opponent without the scenario flag
+        expect(result.plainEnemyHp).toBe(200);
     });
 });

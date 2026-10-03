@@ -17,29 +17,10 @@ function initializePlayer(race, cls, gender, campaign = "3", voice = "pc_1") {
   window.greenskinWaveSpawned = false;
   window.catapultHasFired = false;
 
-  // Human-female average body art is actively being iterated. The direct
-  // renderer owns Image objects for these three files, so an aggressively
-  // cached/broken prior response can survive even after the repository asset
-  // has been replaced. Refresh just this selected body set with a build token
-  // when a fresh game starts; broad and every other race/build are untouched.
-  const selectedBodyType = document.getElementById('body-type-select')?.value || 'average';
-  if (race === 'human' && gender === 'female' && selectedBodyType === 'average') {
-    const averageAssets = window.HUMAN_FEMALE_DIRECTIONAL_ASSETS?.body;
-    if (averageAssets) {
-      const paths = {
-        front:'images/characters/human_female/body_front.png',
-        side:'images/characters/human_female/body_side.png',
-        back:'images/characters/human_female/body_back.png',
-      };
-      Object.entries(paths).forEach(([view, path]) => {
-        const image = averageAssets[view];
-        if (image && typeof image.src === 'string') {
-          const bodyBuild = encodeURIComponent(window.PRESENTATION_BUILD || 'human-female-body-v1');
-          image.src = `${path}?build=${bodyBuild}`;
-        }
-      });
-    }
-  }
+  // Renderer-owned humanoid body images are loaded once by humanoidRenderer.js
+  // with the current PRESENTATION_BUILD cache token. Do not rewrite Image.src
+  // here: doing so makes only human-female/average temporarily unready exactly
+  // when the game starts, while male and other direct-rendered bodies stay ready.
   
   const mainChar = createCharacterData(race, cls, "Player (Main)", gender, voice);
   // Bumped from 100/40 now that armor no longer comes free — enough left
@@ -123,6 +104,7 @@ function createCharacterData(race, cls, name, gender = "female", voice = "pc_1")
         helmet: null,
         shirt: null,
         pants: null,
+        shoes: null,
         bra: null,
         underwear: null
     }
@@ -193,6 +175,16 @@ if (!document.querySelector('script[data-identity-presentation]')) {
   document.head.appendChild(identityScript);
 }
 
+// Facial hair is a separate cosmetic presentation layer: front/side only,
+// colourable like hair, and independently selectable in the creator.
+if (!document.querySelector('script[data-facial-hair-system]')) {
+  const facialHairScript = document.createElement('script');
+  facialHairScript.src = `facialHairSystem.js?build=${encodeURIComponent(window.PRESENTATION_BUILD || '20261001-facial-hair-v2')}&facial=20261001-beard-v1`;
+  facialHairScript.dataset.facialHairSystem = 'true';
+  facialHairScript.async = false;
+  document.head.appendChild(facialHairScript);
+}
+
 // Northwatch defenders exist in the persistent Campaign 2 world, but the
 // attacking siege force must not exist until an explicit siege dialogue/cheat
 // path activates it. This compatibility module wraps world setup + activation
@@ -210,8 +202,19 @@ if (!document.querySelector('script[data-northwatch-siege-spawn]')) {
 // before inventory UI setup finishes.
 if (!document.querySelector('script[data-layered-clothing]')) {
   const clothingScript = document.createElement('script');
-  clothingScript.src = 'clothingSystem.js?build=20260928-clothing-v8';
+  clothingScript.src = `clothingSystem.js?build=${encodeURIComponent(window.PRESENTATION_BUILD || '20260930-visibility-assets-v1')}`;
   clothingScript.dataset.layeredClothing = 'true';
   clothingScript.async = false;
   document.head.appendChild(clothingScript);
+}
+
+// Monk-specific clothing is data-driven in its own small compatibility module.
+// It registers the wrap/trousers, equips monks at character creation, adds the
+// set to the clothier, and gives ordinary humanoid NPCs a rare deterministic roll.
+if (!document.querySelector('script[data-monk-gear]')) {
+  const monkGearScript = document.createElement('script');
+  monkGearScript.src = `monkGear.js?build=${encodeURIComponent(window.PRESENTATION_BUILD || '20261002-monk-gear-v1')}`;
+  monkGearScript.dataset.monkGear = 'true';
+  monkGearScript.async = false;
+  document.head.appendChild(monkGearScript);
 }
