@@ -349,14 +349,35 @@
         return record;
     }
 
+    let recoveryRedrawQueued = false;
+    function redrawAfterRecovery() {
+        if (recoveryRedrawQueued) return;
+        recoveryRedrawQueued = true;
+        const run = () => {
+            recoveryRedrawQueued = false;
+            try {
+                window.drawMap?.();
+                window.renderEntities?.();
+                window.refreshDirectionalTurnPortraits?.();
+                window.updateAppearancePreview?.();
+            } catch (error) {
+                console.warn('Asset recovery redraw failed', error);
+            }
+        };
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+        else setTimeout(run, 0);
+    }
+
     function settleLoaded(record) {
         const finish = () => {
             if (record.status === 'ready') return;
+            const recovered = record.failureCount > 0;
             record.status='ready';
             record.error=null;
             record.failureCount=0;
             record.nextRetryAt=0;
             record.resolve(record.image);
+            if (recovered) redrawAfterRecovery();
         };
         if (typeof record.image.decode === 'function') record.image.decode().then(finish, finish);
         else finish();
@@ -474,8 +495,22 @@
         }
     }
 
+    const SWEEP_INTERVAL_MS = 2000;
+    const SWEEP_MAX_FAILURES = 6;
+    function sweepFailedRecords() {
+        if (phase !== 'game') return;
+        const now = performance.now();
+        for (const record of managerRecords.values()) {
+            if (record.status !== 'error') continue;
+            if (record.failureCount >= SWEEP_MAX_FAILURES) continue;
+            if (record.nextRetryAt && now < record.nextRetryAt) continue;
+            requestManaged(record.path, { immediate: true });
+        }
+    }
+
     window.assetManager = {
         version:SCHEDULER_VERSION,
+        sweepFailed:sweepFailedRecords,
         request:requestManaged,
         load:loadManaged,
         wait:waitManaged,
@@ -712,6 +747,7 @@
     }
 
     ensureOverlay();
+    setInterval(sweepFailedRecords, SWEEP_INTERVAL_MS);
     showOverlay('Loading character creator…',0,0);
     document.addEventListener('click',interceptStart,true);
     document.addEventListener('touchend',interceptStart,true);

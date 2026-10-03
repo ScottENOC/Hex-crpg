@@ -115,11 +115,13 @@
         canvas.height = Math.max(1, height);
         const ctx = canvas.getContext('2d');
         let drew = false;
+        // Only cacheable once EVERY layer drew; a partial composite would pin missing layers as invisible.
+        let complete = true;
 
         for (const layer of spec.layers) {
             const src = sourceForLayer(layer, view);
             const img = loadSource(src);
-            if (!imageReady(img)) continue;
+            if (!imageReady(img)) { complete = false; continue; }
             const colour = system.getLayerColour(entity, itemId, layer);
             const rendered = layer.tint === false
                 ? img
@@ -132,7 +134,9 @@
             ctx.drawImage(rendered, trim.x, trim.y, trim.w, trim.h, dx, dy, dw, dh);
             drew = true;
         }
-        return drew ? canvas : null;
+        if (!drew) return null;
+        canvas.__complete = complete;
+        return canvas;
     }
 
     function installSimpleShirtRenderer() {
@@ -163,7 +167,8 @@
             if (!composite) {
                 composite = buildSimpleShirt(system, entity, itemId, spec, view, width, height);
                 if (!composite) return false; // source still loading; normal redraw fires on load
-                cachePut(key, composite);
+                // Draw a partial composite this frame, but never cache it.
+                if (composite.__complete) cachePut(key, composite);
             }
             ctx.drawImage(composite, bounds.left, bounds.top, bounds.width, bounds.height);
             return true;
