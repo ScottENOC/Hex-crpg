@@ -656,7 +656,7 @@
                 count.textContent = `Patch: ${Math.min(progress.processed || 0, progress.total)} / ${progress.total} files · Final: ${progress.patchFinalCount} files`;
                 bar.style.width = `${Math.max(0, Math.min(100, Math.round((progress.processed || 0) * 100 / progress.total)))}%`;
             } else if (progress.firstInstall) {
-                count.textContent = 'purple monkey dishwasher';
+                count.textContent = 'performing fresh install';
                 bar.style.width = `${Math.max(0, Math.min(100, Math.round((progress.stored || 0) * 100 / progress.total)))}%`;
             } else {
                 count.textContent = `Stored ${progress.stored || 0} / ${progress.total} files locally`;
