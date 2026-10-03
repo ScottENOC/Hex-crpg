@@ -151,6 +151,21 @@ async function diagnosticResult() {
         }
     }
     const meta = await readActiveMeta(true);
+    const directionalBodies = [];
+    if (meta?.cacheName) {
+        try {
+            const active = await caches.open(meta.cacheName);
+            const manifest = await readCacheManifest(meta.cacheName);
+            const bodyFiles = (manifest?.files || [])
+                .filter(file => /^images\/characters\/[^/]+\/body_(?:front|side|back)\.png$/i.test(file.path))
+                .sort((a, b) => a.path.localeCompare(b.path));
+            for (const file of bodyFiles) {
+                let present = false;
+                try { present = Boolean(await active.match(localUrl(file.path), { ignoreSearch: true })); } catch (_) {}
+                directionalBodies.push({ path: file.path, present });
+            }
+        } catch (_) {}
+    }
     let activeExists = false;
     if (meta?.cacheName) {
         try {
@@ -164,6 +179,7 @@ async function diagnosticResult() {
         activeMeta: meta || null,
         activeCacheExists: activeExists,
         caches: cacheDetails,
+        directionalBodies,
         generatedAt: Date.now(),
     };
 }
