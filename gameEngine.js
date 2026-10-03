@@ -2259,7 +2259,7 @@ function renderEntities() {
       // Enemy humanoids with sprite config are drawn the same way as player characters
       const hasEnemySpriteCfg = !isSentientAlly && e.race && e.gender && CHAR_CONFIG[`${e.race}_${e.gender}`];
       if ((isSentientAlly || hasEnemySpriteCfg) && !e.customImage && window.gameVisuals) {
-          drawPlayerCharacter(window.mapCtx, e, x, y, z, flyOff);
+          window.drawPlayerCharacter(window.mapCtx, e, x, y, z, flyOff);
       } else if ((e instanceof window.Enemy || e.customImage) && window.gameVisuals) {
                           let size = window.hexSize * 1.5 * z;
                           let yOffset = 0;
