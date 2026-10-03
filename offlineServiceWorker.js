@@ -126,7 +126,7 @@ async function statusResult() {
     const names = await caches.keys();
     const candidates = names.filter(name =>
         (name.startsWith(GAME_CACHE_PREFIX) || /^hex-game-v\d+-/.test(name) || LEGACY_GAME_CACHE_PREFIXES.some(prefix => name.startsWith(prefix))) &&
-        !name.includes('-patch-')
+        true
     );
     for (const name of candidates) {
         const recovered = await inspectGameCache(name);
