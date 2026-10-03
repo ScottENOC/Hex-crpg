@@ -279,10 +279,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (originalInvalidateVisibilityCache && !originalInvalidateVisibilityCache.__finalResultInvalidator) {
             const combinedInvalidator = function(...args) {
-                clearFinalVisibilityCache('explicit-invalidate');
-                cachedVisibilityFriendlies = [];
-                cachedVisibilityRanges = [];
-                return originalInvalidateVisibilityCache.apply(this, args);
+                const result = originalInvalidateVisibilityCache.apply(this, args);
+                // The legacy invalidator is called very frequently, including from
+                // render paths that do not actually change the player's visibility
+                // state. Recompute the fingerprint first; only its actual change
+                // should throw away the expensive per-hex result cache.
+                refreshFinalVisibilityFingerprint();
+                return result;
             };
             combinedInvalidator.__finalResultInvalidator = true;
             combinedInvalidator.__original = originalInvalidateVisibilityCache;
