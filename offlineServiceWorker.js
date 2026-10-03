@@ -339,8 +339,8 @@ async function cacheGame(message, port) {
     let before;
     const statusHeartbeat = () => port.postMessage({
         type: 'progress', phase: 'checking', current: 'Inspecting saved local files…',
-        processed: 0, stored: 0, total: files.length, downloaded: 0, reused: 0, retried: 0, failed: 0,
-        totalBytes, message: 'Inspecting the saved local game file list…',
+        processed: 0, stored: 0, total: 0, downloaded: 0, reused: 0, retried: 0, failed: 0,
+        totalBytes: 0, message: 'Inspecting the saved local game file list…',
     });
     statusHeartbeat();
     const statusHeartbeatTimer = setInterval(statusHeartbeat, 5000);
@@ -352,8 +352,8 @@ async function cacheGame(message, port) {
     if (!before.valid) {
         port.postMessage({
             type: 'progress', phase: 'storage-check', current: 'Testing a local Cache Storage write…',
-            processed: 0, stored: 0, total: files.length, downloaded: 0, reused: 0, retried: 0, failed: 0,
-            totalBytes, message: 'Checking that iOS can save game files locally…',
+            processed: 0, stored: 0, total: 0, downloaded: 0, reused: 0, retried: 0, failed: 0,
+            totalBytes: 0, message: 'Checking that iOS can save game files locally…',
         });
         try {
             await assertCacheStorageWorks();
