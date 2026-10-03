@@ -397,6 +397,32 @@ function equip(raw,slot){
     return;
   }
 
+  // Armour needs the same direct slot update as clothing. Routing it
+  // through equipItem() triggers its legacy inventory/character refresh chain,
+  // which can stall on iOS when the armour renderer/cache is rebuilt.
+  if(d?.type==='armor'){
+    const reqMap={light_armor:'light_armor_training',medium_armor:'medium_armor_training',heavy_armor:'heavy_armor_training'};
+    const reqSkill=reqMap[id];
+    if(reqSkill&&(!p.skills?.[reqSkill]||p.skills[reqSkill]===0)){
+      window.showMessage?.(`You need ${window.skills?.[reqSkill]?.name||reqSkill} to equip this. Learn it from your character screen's skill tree, if you have a free skill point.`);
+      return;
+    }
+    p.equipped=p.equipped||{};
+    p.equipped.armor=id;
+    if(isInst(raw)){
+      p.equippedInstances=p.equippedInstances||{};
+      p.equippedInstances[slot]=raw;
+    }else if(p.equippedInstances){
+      delete p.equippedInstances[slot];
+    }
+    window.syncPlayerEntity?.();
+    window.showCharacter?.();
+    window.renderEntities?.();
+    state.picker=null;
+    render();
+    return;
+  }
+
   if(isInst(raw)&&window.physicalEquipment&&slot===slotFor(raw)){
     window.physicalEquipment.equip(raw.instanceId);
     state.picker=null;
