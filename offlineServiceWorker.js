@@ -2,7 +2,7 @@
 // Atomic, integrity-checked local game cache for the development branch.
 'use strict';
 
-const SW_VERSION = '11';
+const SW_VERSION = '12';
 const META_CACHE = `hex-game-meta-v${SW_VERSION}`;
 const GAME_CACHE_PREFIX = `hex-game-v${SW_VERSION}-`;
 const LEGACY_GAME_CACHE_PREFIXES = [];
@@ -597,7 +597,11 @@ async function rangedResponse(request, response) {
 }
 
 async function serveFromActiveCache(request) {
-    const meta = await readActiveMeta();
+    let meta = await readActiveMeta();
+    if (!meta?.cacheName) {
+        const recovered = await statusResult();
+        if (recovered?.valid) meta = recovered;
+    }
     if (!meta?.cacheName) return null;
     const cache = await caches.open(meta.cacheName);
     let response = await cache.match(request, { ignoreSearch: true });
