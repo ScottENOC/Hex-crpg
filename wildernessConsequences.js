@@ -236,11 +236,14 @@
                 if (outcome==='reunite') {
                     finish(incident,'reunited');
                     window.showMessage?.('After a long, increasingly frantic search, two figures come running down the road. The girl bolts toward them. Her mother drops to her knees and holds on so tightly that nobody says much for a while.');
-                    recordOutcome({incidentId:incident.id,kind:'flavour',person:p.person,destination:inferDestination(incident),tags:['child_reunited','safe_arrival','small_kindness'],note:'A lost child was reunited with her parents.'});
+                    // This is an emotional/family outcome, not evidence that a
+                    // merchant or traveller completed a trade route. Keep it
+                    // out of generic safe-arrival gates.
+                    recordOutcome({incidentId:incident.id,kind:'flavour',person:p.person,destination:inferDestination(incident),tags:['child_reunited','small_kindness'],note:'A lost child was reunited with her parents.'});
                 } else if (outcome==='safe_road') {
                     finish(incident,'safe_road');
                     window.showMessage?.('You stay with her until a family wagon agrees to take her to the next settlement and send word back along the road.');
-                    recordOutcome({incidentId:incident.id,kind:'flavour',person:p.person,destination:inferDestination(incident),tags:['child_helped','safe_arrival','small_kindness'],note:'A lost child was placed in safe hands.'});
+                    recordOutcome({incidentId:incident.id,kind:'flavour',person:p.person,destination:inferDestination(incident),tags:['child_helped','small_kindness'],note:'A lost child was placed in safe hands.'});
                 }
                 return incident;
             }
