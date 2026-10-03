@@ -11,6 +11,10 @@
   document.addEventListener('touchend', event => {
     const button = event.target?.closest?.('[data-equipment-slot-picker] button, #inventory-content button');
     if (!button || button.disabled) return;
+    const label = (button.textContent || '').trim().toLowerCase();
+    const inline = String(button.getAttribute('onclick') || '').toLowerCase();
+    const isEquipAction = label.startsWith('equip') || inline.includes('equipitem') || inline.includes('physicalwearables');
+    if (!isEquipAction) return;
 
     event.preventDefault();
     event.stopPropagation();
