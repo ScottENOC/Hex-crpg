@@ -461,17 +461,22 @@ function picker(p,slot){
   if(!choices.length)panel.insertAdjacentHTML('beforeend','<p>Nothing compatible in the shared inventory.</p>');
 
   for(const g of choices){
-    const raw=g.raw,row=document.createElement('button');
-    row.type='button';
-    row.style.cssText='width:100%;display:grid;grid-template-columns:54px 1fr auto;gap:8px;align-items:center;text-align:left;padding:7px;margin:4px 0;background:#2d2d2d;color:#eee;border:1px solid #444;border-radius:6px';
+    const raw=g.raw,row=document.createElement('div');
+    row.style.cssText='width:100%;display:grid;grid-template-columns:54px 1fr auto;gap:8px;align-items:center;text-align:left;padding:7px;margin:4px 0;background:#2d2d2d;color:#eee;border:1px solid #444;border-radius:6px;box-sizing:border-box';
     row.appendChild(itemImage(raw));
     const txt=document.createElement('span');
     txt.innerHTML=`<strong>${label(raw)}${g.count>1?` ×${g.count}`:''}</strong><br><small>${weight(raw).toFixed(1)} wt · ${value(raw)}g</small>`;
     row.appendChild(txt);
-    const use=document.createElement('span');
+    const use=document.createElement('button');
+    use.type='button';
     use.textContent='Equip';
+    use.style.cssText='padding:9px 14px;min-height:44px;min-width:72px;touch-action:manipulation';
+    use.addEventListener('click',event=>{
+      event.preventDefault();
+      event.stopPropagation();
+      equip(raw,slot);
+    });
     row.appendChild(use);
-    row.onclick=()=>equip(raw,slot);
     panel.appendChild(row);
   }
 
