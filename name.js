@@ -51,7 +51,9 @@ setTimeout(()=>window.checkForAppUpdate({reload:false}),15000);
 setInterval(()=>{if(document.visibilityState==='visible')window.checkForAppUpdate({reload:false});},5*60*1000);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')window.checkForAppUpdate({reload:false});});
 
-if('serviceWorker'in navigator){navigator.serviceWorker.register(`sw.js?build=${encodeURIComponent(PRESENTATION_BUILD)}`,{updateViaCache:'none'}).catch(err=>console.warn('Service worker registration failed:',err));}
+// Service-worker registration is owned by offlineCache.js. Do not register the
+// legacy sw.js here: both workers use the same scope, and sw.js clears Cache
+// Storage when it activates, which would erase the offline game copy.
 
 (() => {
     const scripts = [
