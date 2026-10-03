@@ -149,7 +149,16 @@
     cs.drawSlot=function(ctx,e,slot,v,bounds){
       if(slot==='pants'){
         syncPhysicalShapes(e);
-        if(e?.equipped?.pants===TROUSERS_ID&&drawTrousers(ctx,e,v,bounds))return true;
+        // Trousers have a large-source optimisation for the front view, but
+        // side/back should use the normal clothing renderer. That renderer
+        // already resolves the authored directional asset exactly like every
+        // other garment. Keeping the special path for side/back could make
+        // trousers behave differently from the rest of the clothing system.
+        const resolvedView=view(v);
+        if(e?.equipped?.pants===TROUSERS_ID){
+          if(resolvedView==='front'&&drawTrousers(ctx,e,v,bounds))return true;
+          return base(ctx,e,slot,v,bounds);
+        }
         if(e?.equipped?.pants===SKIRT_ID){
           const narrower={...bounds,left:bounds.left+bounds.width*(1-SKIRT_WIDTH_SCALE)/2,width:bounds.width*SKIRT_WIDTH_SCALE};
           return base(ctx,e,slot,v,narrower);
