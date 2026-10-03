@@ -347,6 +347,54 @@
         return workerRequest(worker, { type: 'HEX_CACHE_STATUS' }, { timeout: STARTUP_WORKER_TIMEOUT_MS });
     }
 
+    async function getWorkerDiagnostic(worker) {
+        return workerRequest(worker, { type: 'HEX_CACHE_DIAGNOSTIC' }, { timeout: 30000 });
+    }
+
+    function formatDiagnosticDate(value) {
+        if (!value) return 'unknown';
+        try { return new Date(value).toLocaleString(); } catch (_) { return String(value); }
+    }
+
+    async function showCacheDiagnostic(gate) {
+        const result = await getWorkerDiagnostic(
+            (await ensureRegistration()).active
+        );
+        const lines = [
+            `Offline engine: v${result.serviceWorkerVersion || 'unknown'}`,
+            `Worker: ${result.serviceWorkerScript || 'unknown'}`,
+            `Active pointer: ${result.activeMeta?.cacheName || 'NONE'}`,
+            `Installed commit: ${result.activeMeta?.commit || 'NONE'}`,
+            `Last saved: ${formatDiagnosticDate(result.activeMeta?.updatedAt || result.activeMeta?.recoveredAt)}`,
+            `Expected files: ${result.activeMeta?.fileCount ?? 'unknown'}`,
+            `Active manifest present: ${result.activeCacheExists ? 'YES' : 'NO'}`,
+            '',
+            'Cache Storage entries:',
+            ...(result.caches || []).map(cache =>
+                `• ${cache.name} — ${cache.entryCount ?? '?'} entries${cache.manifestCommit ? ` · commit ${cache.manifestCommit.slice(0, 10)} · manifest says ${cache.manifestFileCount} files` : ' · no game manifest'}`
+            ),
+        ];
+        const message = lines.join('\\n');
+        const errorBox = gate.querySelector('.hex-offline-error');
+        const title = gate.querySelector('.hex-offline-title');
+        const count = gate.querySelector('.hex-offline-count');
+        title.textContent = 'Local cache diagnostic';
+        count.textContent = `${result.activeMeta?.fileCount ?? 0} files recorded`;
+        errorBox.textContent = message;
+        errorBox.hidden = false;
+        gate.querySelector('.hex-offline-launch').hidden = false;
+        gate.querySelector('.hex-offline-launch').textContent = 'Close';
+        gate.querySelector('.hex-offline-update').hidden = true;
+        return new Promise(resolve => {
+            gate.querySelector('.hex-offline-launch').onclick = () => resolve();
+        }).finally(() => {
+            gate.querySelector('.hex-offline-launch').onclick = null;
+            gate.querySelector('.hex-offline-launch').hidden = true;
+            gate.querySelector('.hex-offline-launch').textContent = 'Launch now';
+            errorBox.hidden = true;
+        });
+    }
+
     function isRuntimeFile(entry) {
         if (!entry || entry.type !== 'blob' || !entry.path) return false;
         const path = entry.path;
@@ -632,7 +680,7 @@
         if (!gate) {
             gate = document.createElement('div');
             gate.id = 'hex-offline-gate';
-            gate.innerHTML = '<div class="hex-offline-card"><h2 class="hex-offline-title">Preparing local game copy…</h2><p class="hex-offline-count">Starting…</p><div class="hex-offline-track"><div class="hex-offline-bar"></div></div><p class="hex-offline-detail"></p><div class="hex-offline-error" hidden></div><div class="hex-offline-actions"><button class="hex-offline-launch" hidden>Launch now</button><button class="hex-offline-update" hidden>Check for updates</button><button class="hex-offline-retry" hidden>Retry</button><button class="hex-offline-continue" hidden>Continue</button></div></div>';
+            gate.innerHTML = '<div class="hex-offline-card"><h2 class="hex-offline-title">Preparing local game copy…</h2><p class="hex-offline-count">Starting…</p><div class="hex-offline-track"><div class="hex-offline-bar"></div></div><p class="hex-offline-detail"></p><div class="hex-offline-error" hidden></div><div class="hex-offline-actions"><button class="hex-offline-launch" hidden>Launch now</button><button class="hex-offline-update" hidden>Check for updates</button><button class="hex-offline-diagnostic" hidden>Tell me what is installed</button><button class="hex-offline-retry" hidden>Retry</button><button class="hex-offline-continue" hidden>Continue</button></div></div>';
             document.body.appendChild(gate);
         }
         return gate;
@@ -776,6 +824,7 @@
         const launchButton = gate.querySelector('.hex-offline-launch');
         const updateButton = gate.querySelector('.hex-offline-update');
         const errorBox = gate.querySelector('.hex-offline-error');
+        const diagnosticButton = gate.querySelector('.hex-offline-diagnostic');
 
         title.textContent = 'Silverhart Saga';
         count.textContent = local.statusUnavailable || local.unverified
@@ -792,6 +841,12 @@
         errorBox.hidden = true;
         launchButton.hidden = false;
         updateButton.hidden = false;
+        diagnosticButton.hidden = false;
+        diagnosticButton.disabled = false;
+        diagnosticButton.onclick = async () => {
+            try { await showCacheDiagnostic(gate); }
+            catch (error) { errorBox.textContent = `Diagnostic failed: ${error?.message || error}`; errorBox.hidden = false; }
+        };
         updateButton.disabled = navigator.onLine === false;
         updateButton.textContent = navigator.onLine === false ? 'Check for updates (offline)' : 'Check for updates';
 
@@ -801,6 +856,8 @@
         }).finally(() => {
             launchButton.onclick = null;
             updateButton.onclick = null;
+            diagnosticButton.onclick = null;
+            diagnosticButton.hidden = true;
             launchButton.hidden = true;
             updateButton.hidden = true;
             updateButton.disabled = false;
