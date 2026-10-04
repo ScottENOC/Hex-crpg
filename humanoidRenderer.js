@@ -30,6 +30,12 @@
     // turn a useful optimisation into another source of iOS canvas memory pressure.
     const humanoidSpriteCache = new Map();
     const MAX_HUMANOID_SPRITE_CACHE = 48;
+    // Build cached composites at 2x their map display resolution. The previous
+    // cache stored each sprite at its final on-map pixel size, so a small
+    // character could be permanently reduced to a small bitmap and then
+    // enlarged by the map renderer. Other/legacy characters did not go through
+    // this cache, making the direct-compositor player look noticeably softer.
+    const HUMANOID_CACHE_SCALE = 2;
     let humanoidSpriteCacheBuilds = 0;
     let humanoidSpriteCacheHits = 0;
 
@@ -955,8 +961,8 @@
         // all requested layers have had a chance to draw. Incomplete frames are
         // still usable for this draw, but are never retained in the cache.
         const canvas = document.createElement('canvas');
-        canvas.width = Math.max(1, Math.ceil(bounds.width));
-        canvas.height = Math.max(1, Math.ceil(bounds.height));
+        canvas.width = Math.max(1, Math.ceil(bounds.width * HUMANOID_CACHE_SCALE));
+        canvas.height = Math.max(1, Math.ceil(bounds.height * HUMANOID_CACHE_SCALE));
         const offscreenBounds = {left:0, top:0, width:canvas.width, height:canvas.height};
         const offscreenCtx = canvas.getContext('2d');
         if (!offscreenCtx) return false;
