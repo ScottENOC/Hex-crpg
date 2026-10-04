@@ -1,0 +1,21 @@
+name: Aldric Targeted Validation
+
+on:
+  pull_request:
+
+jobs:
+  aldric:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+      - name: Run Aldric-focused browser tests
+        run: npx playwright test tests/goblin-tribe.spec.js tests/character-banter.spec.js tests/aldric-broken-vigil.spec.js
