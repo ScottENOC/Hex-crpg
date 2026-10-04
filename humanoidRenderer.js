@@ -737,10 +737,9 @@
         const view = facingToView(facing);
         const set = CHARACTER_ASSETS[key];
         const bodyType = entity.bodyType || 'average';
-        // Clothing is optional decoration. Start its loads, but never let a
-        // missing/slow garment suppress the body layer for the entire character.
+        // Establish the deterministic outfit, then let drawSlot request only
+        // the layers actually needed for this visible character/facing.
         window.clothingSystem?.ensureDefaultOutfit?.(entity,{player:entity.side==='player'});
-        window.clothingSystem?.preloadOutfit?.(entity,view);
         if (activeSourcePaths) {
             for (const path of window.clothingSystem?.resolveOutfitAssetPaths?.(entity,[view]) || []) {
                 activeSourcePaths.add(window.assetManager?.canonicalPathFor?.(path) || path);
