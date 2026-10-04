@@ -322,6 +322,21 @@ document.addEventListener("DOMContentLoaded", () => {
         handleModalCloseClick(e);
     }, { passive: false });
 
+    // Character creation has its own action and is deliberately kept
+    // outside the generic global-button dispatcher. The button has no inline
+    // onclick, so this explicit binding is the only path into startGame().
+    const createCharacterButton = document.getElementById('createCharacterButton');
+    if (createCharacterButton) {
+        createCharacterButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            window.startGame();
+        });
+        createCharacterButton.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            window.startGame();
+        }, { passive: false });
+    }
+
     window.initHexMap();
     if (window.initWorldMapEvents) window.initWorldMapEvents();
     
