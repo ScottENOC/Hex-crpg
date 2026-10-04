@@ -1,6 +1,6 @@
 // assetLoadScheduler.js
-// Shared image loading and phase-aware preload gates. AssetManager is the sole
-// owner of local image network requests, decoding, cache reuse and retries.
+// Shared image loading. AssetManager is the sole owner of image requests,
+// decoding, cache reuse and retries. Assets are loaded lazily on demand.
 (() => {
     'use strict';
 
@@ -128,13 +128,10 @@
         'images/humanfemale.png','images/humanfemalehair.png','images/humanmale.png','images/humanmalehair.png',
         'images/elffemale.png','images/elffemalehair.png','images/elf.png','images/elfleatherarmour.png','images/elfchainarmour.png',
     ]);
-    const CREATOR_MAX_CONCURRENT = 4;
-    const GAME_MAX_CONCURRENT = 4;
     const MANAGER_MAX_RETRIES = 2;
     const MANAGER_RETRY_DELAYS_MS = [180, 600];
     const MANAGER_ERROR_RETRY_BASE_MS = 1800;
     const MANAGER_ERROR_RETRY_MAX_MS = 15000;
-    const GAMEPLAY_WARMUP_GRACE_MS = 750;
 
     const ARENA_CRITICAL = [
         'images/terrain/bases/arena/floor_1.png','images/terrain/bases/arena/floor_2.png',
@@ -163,15 +160,9 @@
     ];
 
     let active = 0;
-    let gameStarted = false;
     let order = 0;
-    let phase = 'creator-loading';
-    let gameplayWarmupResumeAt = 0;
-    let warmupResumeTimer = null;
     let pumpScheduled = false;
-    let startGateRunning = false;
     const queue = [];
-    const phaseCritical = new Set();
     const managerRecords = new Map();
     const domBindingTokens = new WeakMap();
 
@@ -225,56 +216,13 @@
         return document.getElementById('campaign-select')?.value || '1';
     }
 
-    function creatorRelevant(path) {
-        if (path.startsWith('images/equipment/clothing/')) return true;
-        if (path.startsWith('images/characters/legacy/elf_male/')) return true;
-        if (path.startsWith('images/characters/legacy/dwarf_')) return true;
-        if (path === 'images/characters/creatures/goblin.png' || path === 'images/characters/creatures/orc.png') return true;
-        if (path.startsWith('images/characters/human_female/') ||
-            path.startsWith('images/characters/human_male/') ||
-            path.startsWith('images/characters/elf_female/')) {
-            return /_front\.png$|\/body_front\.png$/.test(path);
-        }
-        return false;
-    }
-
-    function mayStartNow(path) {
-        if (phase === 'game') return true;
-        if (phaseCritical.has(path)) return true;
-        return creatorRelevant(path);
-    }
-
-    function priorityFor(path) {
-        if (phaseCritical.has(path)) return -100;
-        if (gameStarted) return -10;
-        if (creatorRelevant(path)) return 0;
-        return 20;
-    }
-
-    function concurrencyLimit() {
-        return gameStarted ? GAME_MAX_CONCURRENT : CREATOR_MAX_CONCURRENT;
-    }
-
-    function scheduleWarmupResume() {
-        if (warmupResumeTimer || !gameStarted) return;
-        const delay = Math.max(0, gameplayWarmupResumeAt - performance.now());
-        if (delay <= 0) return;
-        warmupResumeTimer = setTimeout(() => {
-            warmupResumeTimer = null;
-            pump();
-        }, delay + 1);
-    }
+    function priorityFor(path) { return 0; }
 
     function pump() {
-        const limit = concurrencyLimit();
+        const limit = 4;
         while (active < limit && queue.length) {
             queue.sort((a,b) => a.priority - b.priority || a.order - b.order);
-            const job = queue[0];
-            if (gameStarted && job.queuedBeforeGameStart && performance.now() < gameplayWarmupResumeAt && job.priority > -100) {
-                scheduleWarmupResume();
-                return;
-            }
-            queue.shift();
+            const job = queue.shift();
             active++;
             job.start(() => {
                 active = Math.max(0, active - 1);
@@ -298,7 +246,6 @@
             start,
             priority:priorityOverride ?? priorityFor(path),
             order:order++,
-            queuedBeforeGameStart:!gameStarted,
         });
         schedulePump();
     }
@@ -449,8 +396,7 @@
             record.queued=true;
             enqueue(record.path, done=>startManagerRecord(record,done), priority);
         };
-        if (immediate || mayStartNow(record.path)) start();
-        else record.status='deferred';
+        start();
         return record.image;
     }
 
@@ -497,22 +443,9 @@
         return element;
     }
 
-    async function preloadManaged(values,opts={}) {
-        return Promise.allSettled([...new Set(values.map(recordKey))].map(path=>loadManaged(path,opts)));
-    }
-
-    function releaseManagedDeferred(predicate=()=>true) {
-        for (const record of managerRecords.values()) {
-            if (record.status!=='deferred' || !predicate(record.path)) continue;
-            record.status='idle';
-            requestManaged(record.path,{immediate:true});
-        }
-    }
-
     const SWEEP_INTERVAL_MS = 2000;
     const SWEEP_MAX_FAILURES = 6;
     function sweepFailedRecords() {
-        if (phase !== 'game') return;
         const now = performance.now();
         for (const record of managerRecords.values()) {
             if (record.status !== 'error') continue;
@@ -531,7 +464,6 @@
         whenReady,
         bind:bindManagedElement,
         createDOMImage:createManagedDOMImage,
-        preload:preloadManaged,
         canonicalPathFor:canonicalPath,
         urlFor:managedUrl,
         get(path){return managerRecords.get(recordKey(path))?.image || null;},
@@ -552,261 +484,15 @@
         get cacheSize(){return managerRecords.size;},
     };
 
-    function hash(text) {
-        let h=2166136261;
-        for (const ch of String(text||'')) { h^=ch.charCodeAt(0); h=Math.imul(h,16777619); }
-        return h>>>0;
-    }
-
-    function currentCreatorCharacterAssets(allViews=false) {
-        const race=document.getElementById('race-select')?.value||'human';
-        const gender=document.getElementById('gender-select')?.value||'female';
-        const bodyType=document.getElementById('body-type-select')?.value||'average';
-        const hair=document.getElementById('hair-style-select')?.value||'brown_1';
-        const views=allViews?['front','side','back']:['front'];
-        const paths=[];
-        if (race==='human' || (race==='elf'&&gender==='female')) {
-            const root=race==='elf'?'images/characters/elf_female':`images/characters/human_${gender}`;
-            const bodyBase=(race==='human'&&bodyType==='broad')?'body_broad':'body';
-            for (const view of views) {
-                paths.push(`${root}/${bodyBase}_${view}.png`);
-                paths.push(`images/characters/human_female/hair_${hair}_${view}.png`);
-            }
-        } else if (race==='elf') {
-            paths.push('images/characters/legacy/elf_male/body.png','images/characters/legacy/elf_male/hair.png');
-        } else if (race==='dwarf') {
-            paths.push(`images/characters/legacy/dwarf_${gender}/body.png`,`images/characters/legacy/dwarf_${gender}/hair.png`);
-        } else if (race==='goblin') {
-            paths.push('images/characters/creatures/goblin.png');
-        } else if (race==='orc') {
-            paths.push('images/characters/creatures/orc.png');
-        }
-        return paths;
-    }
-
-    function currentClothingAssets(allViews=false) {
-        const race=document.getElementById('race-select')?.value||'human';
-        const gender=document.getElementById('gender-select')?.value||'female';
-        const feminine=gender==='female';
-        const tops=feminine
-            ? ['top_blouse','top_dress','top_shirt_f']
-            : ['top_masc_laced'];
-        const selectedTops=allViews ? tops : [tops[hash(`${race}_${gender}|top`)%tops.length]];
-        const directionalTops=new Set(['top_blouse','top_dress','top_shirt_f','top_masc_laced']);
-        const topPath=(top,view='front')=>directionalTops.has(top)
-            ? `images/equipment/clothing/${top}_${view}.png`
-            : `images/equipment/clothing/${top}.png`;
-        const paths=[...selectedTops.map(top=>topPath(top,'front')),'images/equipment/clothing/pants_trousers_front.png'];
-        if (allViews) {
-            for (const top of selectedTops) {
-                if (directionalTops.has(top)) paths.push(topPath(top,'side'),topPath(top,'back'));
-            }
-            paths.push('images/equipment/clothing/pants_trousers_back.png');
-        }
-        paths.push('images/equipment/clothing/briefs_female_front.png');
-        if (allViews) paths.push('images/equipment/clothing/briefs_female_side.png','images/equipment/clothing/briefs_female_back.png');
-        if (feminine) {
-            paths.push('images/equipment/clothing/bra_front.png');
-            if (allViews) paths.push('images/equipment/clothing/bra_side.png','images/equipment/clothing/bra_back.png');
-        }
-        return paths;
-    }
-
-    function currentStartingEquipmentAssets() {
-        const cls=document.getElementById('class-select')?.value||'fighter';
-        if (cls==='cleric') return ['images/equipment/weapons/club.svg','images/equipment/shields/round.png'];
-        if (cls==='druid') return ['images/equipment/weapons/club.svg'];
-        return ['images/equipment/weapons/sword.png'];
-    }
-
-    function creatorManifest() {
-        return [...new Set([...currentCreatorCharacterAssets(false),...currentClothingAssets(false)])];
-    }
-
-    function gameManifest() {
-        // Character art is intentionally lazy. Do NOT preload all body/hair/clothing
-        // views here: the humanoid renderer loads only the source layers needed for
-        // the first appearance it must build, caches the completed appearance, then
-        // releases those source-image records.
-        const scenario = selectedCampaign()==='1' ? [...ARENA_CRITICAL,...ARENA_SOON] : [...CAMPAIGN2_NEARBY];
-        const deferredArt = [...managerRecords.values()]
-            .filter(record=>record.status==='deferred')
-            .map(record=>record.path)
-            .filter(path=>path?.startsWith('images/'))
-            .filter(path=>!path.includes('/characters/'))
-            .filter(path=>!path.includes('/equipment/clothing/'));
-        return [...new Set([...scenario,...deferredArt])];
-    }
-
-    function ensureOverlay() {
-        let style=document.getElementById('hex-loading-gate-style');
-        if (!style) {
-            style=document.createElement('style');
-            style.id='hex-loading-gate-style';
-            style.textContent=`
-                #hex-loading-gate{position:fixed;inset:0;z-index:2147483647;background:linear-gradient(180deg,#151515,#090909);display:flex;align-items:center;justify-content:center;color:#f4ead2;font-family:Georgia,serif;padding:24px;box-sizing:border-box}
-                #hex-loading-gate[hidden]{display:none!important}
-                .hex-loading-card{width:min(520px,92vw);padding:28px;border:1px solid #8f7445;border-radius:10px;background:#201d19;box-shadow:0 18px 60px #000a;text-align:center}
-                .hex-loading-title{font-size:1.55rem;margin:0 0 14px}.hex-loading-count{font-size:1rem;margin:0 0 14px;color:#d7c9a7}
-                .hex-loading-track{height:12px;border-radius:999px;overflow:hidden;background:#0d0c0a;border:1px solid #5f5037}.hex-loading-bar{height:100%;width:0;background:#b89a5c;transition:width .12s linear}
-                .hex-loading-error{margin-top:14px;color:#efb0a8;word-break:break-word}.hex-loading-actions{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}.hex-loading-retry,.hex-loading-continue{margin-top:12px;padding:9px 16px;cursor:pointer}
-            `;
-            document.head.appendChild(style);
-        }
-        let overlay=document.getElementById('hex-loading-gate');
-        if (!overlay) {
-            overlay=document.createElement('div');
-            overlay.id='hex-loading-gate';
-            overlay.innerHTML='<div class="hex-loading-card"><h2 class="hex-loading-title"></h2><p class="hex-loading-count"></p><div class="hex-loading-track"><div class="hex-loading-bar"></div></div><div class="hex-loading-error" hidden></div><div class="hex-loading-actions"><button class="hex-loading-retry" hidden>Retry failed assets</button><button class="hex-loading-continue" hidden>Start game anyway</button></div></div>';
-            document.body.appendChild(overlay);
-        }
-        return overlay;
-    }
-
-    function showOverlay(title,total,loaded=0) {
-        const overlay=ensureOverlay();
-        overlay.hidden=false;
-        overlay.querySelector('.hex-loading-title').textContent=title;
-        updateOverlay(loaded,total);
-        overlay.querySelector('.hex-loading-error').hidden=true;
-        overlay.querySelector('.hex-loading-retry').hidden=true;
-        overlay.querySelector('.hex-loading-continue').hidden=true;
-        return overlay;
-    }
-
-    function updateOverlay(loaded,total) {
-        const overlay=ensureOverlay();
-        overlay.querySelector('.hex-loading-count').textContent=`Loaded ${loaded} / ${total} art assets`;
-        overlay.querySelector('.hex-loading-bar').style.width=`${total ? Math.round(loaded*100/total) : 100}%`;
-    }
-
-    function hideOverlay() {
-        const overlay=document.getElementById('hex-loading-gate');
-        if (overlay) overlay.hidden=true;
-    }
-
-    async function runGate(title,manifest,{allowBypass=false}={}) {
-        const paths=[...new Set(manifest.map(canonicalPath))];
-        paths.forEach(path=>phaseCritical.add(path));
-        let loaded=0;
-        let pending=[...paths];
-        let bypassedFailures=[];
-        const overlay=showOverlay(title,paths.length,0);
-
-        try {
-            while (pending.length) {
-                const results=await Promise.allSettled(pending.map(path=>loadManaged(path,{priority:-100,immediate:true}).then(()=>{
-                    loaded+=1;
-                    updateOverlay(Math.min(loaded,paths.length),paths.length);
-                    return path;
-                })));
-                const failed=results.map((result,i)=>result.status==='rejected'?pending[i]:null).filter(Boolean);
-                if (!failed.length) break;
-
-                const error=overlay.querySelector('.hex-loading-error');
-                const retry=overlay.querySelector('.hex-loading-retry');
-                const continueButton=overlay.querySelector('.hex-loading-continue');
-                const names=failed.slice(0,4).map(path=>path.split('/').pop()).join(', ');
-                error.textContent=`Could not load ${failed.length} art asset${failed.length===1?'':'s'}${names?`: ${names}`:''}.${allowBypass?' You can also start the game with the missing art.':''}`;
-                error.hidden=false;
-                retry.hidden=false;
-                continueButton.hidden=!allowBypass;
-
-                const action=await new Promise(resolve=>{
-                    retry.onclick=()=>resolve('retry');
-                    continueButton.onclick=()=>resolve('continue');
-                });
-                retry.onclick=null;
-                continueButton.onclick=null;
-                retry.hidden=true;
-                continueButton.hidden=true;
-                error.hidden=true;
-
-                if (action==='continue') {
-                    bypassedFailures=failed;
-                    break;
-                }
-                for (const path of failed) managerRecords.delete(path);
-                pending=failed;
-            }
-        } finally {
-            paths.forEach(path=>phaseCritical.delete(path));
-        }
-
-        return {complete:bypassedFailures.length===0,failed:bypassedFailures};
-    }
-
-    function beginGameplayLoading() {
-        if (gameStarted) return;
-        gameStarted=true;
-        gameplayWarmupResumeAt=performance.now()+GAMEPLAY_WARMUP_GRACE_MS;
-        for (const job of queue) if (job.queuedBeforeGameStart) job.priority=Math.max(job.priority,50);
-        releaseManagedDeferred();
-        pump();
-    }
-
-    async function loadCreator() {
-        try {
-            await runGate('Loading character creator…',creatorManifest());
-            phase='creator-ready';
-            hideOverlay();
-            window.updateAppearancePreview?.();
-        } catch (error) {
-            console.error('Character creator loading gate failed',error);
-        }
-    }
-
-    async function loadGameAndStart() {
-        if (startGateRunning || phase==='game') return;
-        startGateRunning=true;
-        phase='game-loading';
-        try {
-            const gateResult=await runGate('Loading game…',gameManifest(),{allowBypass:true});
-            if (!gateResult.complete) console.warn('Starting game with art assets still unavailable:',gateResult.failed);
-            phase='game';
-            beginGameplayLoading();
-            if (typeof window.startGame==='function') window.startGame();
-            requestAnimationFrame(hideOverlay);
-        } catch (error) {
-            console.error('Game loading gate failed',error);
-            phase='creator-ready';
-            startGateRunning=false;
-        }
-    }
-
-    function interceptStart(event) {
-        const target=event.target?.closest?.('#createCharacterButton');
-        if (!target || phase==='game') return;
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        loadGameAndStart();
-    }
-
-    ensureOverlay();
-    setInterval(sweepFailedRecords, SWEEP_INTERVAL_MS);
-    showOverlay('Loading character creator…',0,0);
-    document.addEventListener('click',interceptStart,true);
-    document.addEventListener('touchend',interceptStart,true);
-    if (document.readyState==='loading') document.addEventListener('DOMContentLoaded',loadCreator,{once:true});
-    else loadCreator();
-
     window.__assetLoadScheduler={
         version:SCHEDULER_VERSION,
-        creatorMaxConcurrent:CREATOR_MAX_CONCURRENT,
-        gameMaxConcurrent:GAME_MAX_CONCURRENT,
-        gameplayWarmupGraceMs:GAMEPLAY_WARMUP_GRACE_MS,
+        maxConcurrent:4,
         transientRetryDelayMs:MANAGER_RETRY_DELAYS_MS[0],
         suppressed:[...SUPPRESSED],
         legacyRedirectCount:LEGACY_ASSET_REDIRECTS.size,
         canonicalPathFor:canonicalPath,
         priorityFor:path=>priorityFor(canonicalPath(path)),
-        beginGameplayLoading,
-        reprioritiseCreatorQueue(){for(const job of queue)job.priority=priorityFor(job.path);schedulePump();},
-        warmSelectedScenario(){},
-        get gameStarted(){return gameStarted;},
-        get phase(){return phase;},
         get queued(){return queue.length;},
-        get deferred(){return [...managerRecords.values()].filter(record=>record.status==='deferred').length;},
         get active(){return active;},
         get cacheSize(){return managerRecords.size;},
     };
