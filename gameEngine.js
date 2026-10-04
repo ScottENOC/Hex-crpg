@@ -1386,14 +1386,40 @@ function startGameCore(isLoading = false) {
       hut_large: "images/hut_large.svg",
       journal: "images/journal.svg",
   });
-  const visuals = Object.fromEntries(
-      Object.entries(visualSources).map(([key, src]) => [key, window.assetManager.request(src)])
-  );
+  // Keep the complete visual catalogue as paths, but do NOT request every
+  // asset at game startup. The old implementation called assetManager.request()
+  // for every entry here, which meant monsters, arena NPCs, scenery, weapons
+  // and other unrelated assets were all queued before the current world had
+  // even been created. That defeated the renderer's lazy-loading design and
+  // made minimal renderer tests impossible to reason about.
+  //
+  // gameVisuals remains API-compatible: callers still use gameVisuals.foo.
+  // The request now happens only when that specific visual is actually read.
   window.visualSourcePaths = visualSources;
-  for (const src of new Set(Object.values(visualSources))) {
-      window.assetManager.whenReady(src).then(() => drawMap()).catch(() => {});
-  }
-  window.gameVisuals = visuals;
+  const lazyVisuals = new Proxy(Object.create(null), {
+      get(_target, key) {
+          if (typeof key !== 'string') return undefined;
+          const src = visualSources[key];
+          return src ? window.assetManager.request(src) : undefined;
+      },
+      has(_target, key) {
+          return typeof key === 'string' && Object.prototype.hasOwnProperty.call(visualSources, key);
+      },
+      ownKeys() {
+          return Reflect.ownKeys(visualSources);
+      },
+      getOwnPropertyDescriptor(_target, key) {
+          if (!Object.prototype.hasOwnProperty.call(visualSources, key)) return undefined;
+          return {
+              enumerable: true,
+              configurable: true,
+              get() {
+                  return window.assetManager.request(visualSources[key]);
+              },
+          };
+      },
+  });
+  window.gameVisuals = lazyVisuals;
 
   if (window.loadWorldMap) window.loadWorldMap();
 
