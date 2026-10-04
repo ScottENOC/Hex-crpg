@@ -75,7 +75,10 @@
         for (const set of Object.values(sets)) {
             const braid = set?.hair?.[STYLE];
             if (!braid) continue;
-            braid.back = image;
+            // Keep the shared directional asset table path-based. Passing the
+            // HTMLImageElement itself here makes assetManager treat it as the
+            // literal path "[object HTMLImageElement]".
+            braid.back = BACK_RIGHT_PATH;
             installed = true;
         }
         return installed;
@@ -165,7 +168,9 @@
         if (!braid) return draw();
         // Keep the corrected rear source installed even if another presentation
         // module refreshes the shared directional asset tables.
-        braid.back = ensureBackRightImage();
+        // Keep CHARACTER_ASSETS path-based; load the actual image only through
+        // the renderer's normal asset pipeline.
+        braid.back = BACK_RIGHT_PATH;
         if (facing !== 'left') return draw();
         const originalSide = braid.side;
         const left = leftRenderSource(entity);
