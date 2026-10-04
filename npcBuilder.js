@@ -26,6 +26,7 @@ const DIRECTIONAL_NPC_ART = {
         left:  { key: 'npcOrcLeft', src: 'images/characters/npc_orc/body_side_left.svg' },
     },
 };
+const directionalNpcRequested = new Set();
 
 function ensureDirectionalNpcImage(ent) {
     if (!ent?.directionalArtKey || !window.gameVisuals || typeof Image === 'undefined') return false;
@@ -35,11 +36,11 @@ function ensureDirectionalNpcImage(ent) {
     const view = art[facing] || art.down;
     // Request only the one view this NPC currently needs. The asset manager
     // retains it while loading; later facing changes request only the new view.
-    if (!window.gameVisuals[view.key]) {
-        const img = window.assetManager.request(view.src);
-        window.assetManager.whenReady(view.src).then(() => window.drawMap?.()).catch(() => {});
-        window.gameVisuals[view.key] = img;
-    }
+    if (directionalNpcRequested.has(view.key)) return true;
+    directionalNpcRequested.add(view.key);
+    const img = window.assetManager.request(view.src);
+    window.assetManager.whenReady(view.src).then(() => window.drawMap?.()).catch(() => {});
+    window.gameVisuals[view.key] = img;
     return true;
 }
 
