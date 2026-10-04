@@ -986,14 +986,14 @@
             // been produced. Releasing them during an incomplete attempt causes
             // the same character to start over on every redraw.
             if (window.__humanoidRendererLastComplete) {
-                window.performanceAssetTraceApi?.compositeEnd?.(key, true, 'painted', {layerOrder:window.__humanoidRendererLastLayerOrder || []});
+                window.performanceAssetTraceApi?.compositeEnd?.(key, true, 'painted', {requestedSources:[...sources],layerOrder:window.__humanoidRendererLastLayerOrder || []});
                 window.assetManager?.release?.([...sources]);
                 window.clothingSystem?.releaseRenderSources?.();
                 window.releaseRecoloredSpriteCache?.();
             }
         }
         if (!rendered) {
-            window.performanceAssetTraceApi?.compositeEnd?.(key, false, 'renderer returned false');
+            window.performanceAssetTraceApi?.compositeEnd?.(key, false, 'renderer returned false', {requestedSources:[...sources],failureSource:[...sources].filter(src => window.assetManager?.status?.(src) !== 'ready')});
             pendingCompositeKey = key;
             pendingCompositeSince = pendingCompositeSince || Date.now();
             return true;
@@ -1003,7 +1003,7 @@
         // body/clothing/hair stack while another required layer is still loading.
         const complete = !!window.__humanoidRendererLastComplete;
         if (!complete) {
-            window.performanceAssetTraceApi?.compositeEnd?.(key, false, 'required layer not ready', {layerOrder:window.__humanoidRendererLastLayerOrder || []});
+            window.performanceAssetTraceApi?.compositeEnd?.(key, false, 'required layer not ready', {requestedSources:[...sources],failureSource:[...sources].filter(src => window.assetManager?.status?.(src) !== 'ready'),layerOrder:window.__humanoidRendererLastLayerOrder || []});
             pendingCompositeKey = key;
             pendingCompositeSince = pendingCompositeSince || Date.now();
             return true;
