@@ -840,7 +840,14 @@
                     : null;
                 const hairCrop = tightDest ? {x:0,y:0,w:1,h:1} : layout.hairCrop;
                 const hairDest = tightDest || layout.hairDest;
-                const hairDrawn = drawCropped(ctx, hairImage, hairCrop, hairDest, bounds);
+                const hairDrawn = tightDest
+                    ? drawCropped(ctx, hairImage, hairCrop, hairDest, bounds)
+                    : drawVisibleFit(ctx, hairImage, bounds, {
+                        x:hairDest.x,
+                        y:-0.10,
+                        w:hairDest.w,
+                        h:0.47,
+                    });
                 if (hairDrawn) layerOrder.push('hair');
                 window.__humanoidRendererLastHair = {
                     style:hairStyle,
@@ -1086,10 +1093,10 @@
             if (!canDirectRender(entity)) return;
             const portrait = item.querySelector('.turn-indicator-portrait');
             if (!portrait) return;
-            portrait.querySelectorAll('img.portrait-layer').forEach(img => {
-                const src = img.getAttribute('src') || '';
-                if (/images\/human(?:female|male)(?:hair)?\.png/.test(src)) img.remove();
-            });
+            // Direct-rendered humanoids now have one authoritative portrait canvas.
+            // Remove every old layered portrait image so legacy body/hair/clothing
+            // sprites cannot sit behind or over the complete compositor result.
+            portrait.querySelectorAll('img.portrait-layer').forEach(img => img.remove());
             let canvas = portrait.querySelector('canvas[data-direct-humanoid-canvas="true"]');
             if (!canvas) {
                 canvas = document.createElement('canvas');
