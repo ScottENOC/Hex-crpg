@@ -23,6 +23,7 @@
     // requests on iOS.
     let pendingCompositeKey = null;
     let pendingCompositeSince = 0;
+    let pendingCompositeSources = null;
 
     // Completed map sprites are built lazily. We deliberately do not prebuild a
     // fixed set for the player: every character/facing gets a composite only when
@@ -959,15 +960,22 @@
             if (Date.now() - pendingCompositeSince < 15000) return true;
             pendingCompositeKey = null;
             pendingCompositeSince = 0;
+            pendingCompositeSources = null;
         }
 
         // If this exact appearance is already waiting for one or more assets,
         // do not rebuild it every render frame. The asset manager retains each
         // requested image (including the six that are already ready) and its
         // whenReady callback redraws the map when the missing layer arrives.
-        // Re-entering the compositor here would otherwise create hundreds of
-        // identical incomplete canvases while waiting for one slow source.
-        if (pendingCompositeKey === key) return true;
+        // Re-enter only once the same source set is fully ready.
+        if (pendingCompositeKey === key) {
+            const waitingSources = pendingCompositeSources || [];
+            const stillWaiting = waitingSources.some(src => window.assetManager?.status?.(src) !== 'ready');
+            if (stillWaiting) return true;
+            pendingCompositeKey = null;
+            pendingCompositeSince = 0;
+            pendingCompositeSources = null;
+        }
 
         // Build off-screen once. The compositor writes a completion flag only
         // when every required layer is ready. Incomplete frames are never drawn
@@ -1004,6 +1012,7 @@
             window.performanceAssetTraceApi?.compositeEnd?.(key, false, 'renderer returned false', {requestedSources:[...sources],failureSource:[...sources].filter(src => window.assetManager?.status?.(src) !== 'ready')});
             pendingCompositeKey = key;
             pendingCompositeSince = pendingCompositeSince || Date.now();
+            pendingCompositeSources = [...sources];
             return true;
         }
 
@@ -1014,6 +1023,7 @@
             window.performanceAssetTraceApi?.compositeEnd?.(key, false, 'required layer not ready', {requestedSources:[...sources],failureSource:[...sources].filter(src => window.assetManager?.status?.(src) !== 'ready'),layerOrder:window.__humanoidRendererLastLayerOrder || []});
             pendingCompositeKey = key;
             pendingCompositeSince = pendingCompositeSince || Date.now();
+            pendingCompositeSources = [...sources];
             return true;
         }
 
