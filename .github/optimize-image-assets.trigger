@@ -1,1 +1,1 @@
-one-shot image optimisation trigger
+one-shot image optimisation trigger v2
