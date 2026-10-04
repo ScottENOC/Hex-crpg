@@ -1064,7 +1064,7 @@
         if (!complete) {
             const failureSources = [...sources];
             const retryAfter = performance.now() + COMPOSITE_RETRY_DELAY_MS;
-            window.performanceAssetTraceApi?.compositeEnd?.(key, false, 'required layer not ready', {requestedSources:failureSources,failureSource:failureSources.map(src => src+'='+String(window.assetManager?.status?.(src) || 'unavailable')),layerOrder:window.__humanoidRendererLastLayerOrder || [],retryAfterMs:COMPOSITE_RETRY_DELAY_MS});
+            window.performanceAssetTraceApi?.compositeEnd?.(key, false, 'required layer not ready', {requestedSources:failureSources,failureSource:failureSources.map(src => src+'='+String(window.assetManager?.status?.(src) || 'unavailable')),layerOrder:window.__humanoidRendererLastLayerOrder || [],layerDiagnostics:window.__humanoidRendererLastLayerDiagnostics || [],hairDiagnostics:window.__humanoidRendererLastHairDiagnostics || null,complete:!!window.__humanoidRendererLastComplete,retryAfterMs:COMPOSITE_RETRY_DELAY_MS});
             pendingCompositeRequests.set(key, {entity, facing, sources:failureSources, retryAfter});
             return true;
         }
