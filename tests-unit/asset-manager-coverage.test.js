@@ -83,4 +83,7 @@ test('directional NPC art is loaded only for the NPC view being rendered', () =>
   assert.doesNotMatch(npc, /Object\.values\(DIRECTIONAL_NPC_ART\)\.forEach\(views/);
   assert.doesNotMatch(npc, /Object\.values\(views\)\.forEach\(\{ key, src \}/);
   assert.match(npc, /const view = art\[facing\] \|\| art\.down/);
+  assert.doesNotMatch(npc, /ensureDirectionalNpcImage\(ent\);/);
+  const engine = fs.readFileSync(path.join(ROOT, 'gameEngine.js'), 'utf8');
+  assert.match(engine, /window\.ensureDirectionalNpcImage\?\.\(e\);/);
 });
