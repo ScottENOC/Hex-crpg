@@ -1228,6 +1228,7 @@ function updatePlayerUI() {
 window.SPRITE_TEST_ORIGIN = { q: 0, r: -6000 };
 
 function setupSpriteTestScenario() {
+    window.showMessage('[Renderer Test] Campaign 4 started — diagnostic path active.');
     window.entities = [];
     window.isInCombat = false;
     window.currentTurnEntity = null;
@@ -2249,7 +2250,11 @@ function renderEntities() {
   
       // Enemy humanoids with sprite config are drawn the same way as player characters
       const hasEnemySpriteCfg = !isSentientAlly && e.race && e.gender && CHAR_CONFIG[`${e.race}_${e.gender}`];
-      if ((isSentientAlly || hasEnemySpriteCfg) && !e.customImage && window.gameVisuals) {
+      if ((isSentientAlly || hasEnemySpriteCfg) && !e.customImage) {
+          // Always enter the character-render path even if the visual asset
+          // manager has not finished loading (or has failed). The renderer's
+          // diagnostic must remain reachable in exactly the situation where
+          // gameVisuals is missing.
           window.drawPlayerCharacter(window.mapCtx, e, x, y, z, flyOff);
       } else if ((e instanceof window.Enemy || e.customImage) && window.gameVisuals) {
                           let size = window.hexSize * 1.5 * z;
