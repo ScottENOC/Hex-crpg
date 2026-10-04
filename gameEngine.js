@@ -1388,6 +1388,7 @@ function startGameCore(isLoading = false) {
   const visuals = Object.fromEntries(
       Object.entries(visualSources).map(([key, src]) => [key, window.assetManager.request(src)])
   );
+  window.visualSourcePaths = visualSources;
   for (const src of new Set(Object.values(visualSources))) {
       window.assetManager.whenReady(src).then(() => drawMap()).catch(() => {});
   }
@@ -1582,8 +1583,48 @@ window.CLOTHING_PRESETS = {
     scholars_robe:  { shirtHue: 0,   pantsHue: 0,   satMult: 0.15 },
 };
 
+function rendererDiagnosticLine(label, img, src) {
+    if (!img) return `${label}: NOT REQUESTED`;
+    const state = img.complete ? (img.naturalWidth > 0 ? 'LOADED' : 'FAILED') : 'LOADING';
+    const size = img.naturalWidth && img.naturalHeight ? ` ${img.naturalWidth}x${img.naturalHeight}` : '';
+    return `${label}: ${state}${size} ${src || ''}`;
+}
+
+function writeSpriteRendererDiagnostic(e, cfg) {
+    if (window.currentCampaign !== "4" || e.side !== 'player' || e._rendererDiagnosticWritten) return;
+    e._rendererDiagnosticWritten = true;
+    const gv = window.gameVisuals || {};
+    const sources = window.visualSourcePaths || {};
+    const add = (label, key) => window.showMessage(rendererDiagnosticLine(label, gv[key], sources[key]));
+
+    window.showMessage(`[Renderer] Attempting sprite for ${e.name || 'player'} (${e.race || '?'} ${e.gender || '?'})`);
+    window.showMessage(`[Renderer] CHAR_CONFIG: ${cfg ? 'FOUND' : 'MISSING'}; gameVisuals: ${window.gameVisuals ? 'READY' : 'MISSING'}`);
+    if (!cfg) {
+        window.showMessage('[Renderer] No character config — fallback circle should render.');
+        return;
+    }
+    add('BASE ' + cfg.baseKey, cfg.baseKey);
+    if (cfg.hair?.key) add('HAIR ' + cfg.hair.key, cfg.hair.key);
+    const armorId = e.equipped?.armor;
+    const armorKey = armorId === 'light_armor' ? 'humanLight' : armorId === 'medium_armor' ? 'humanMedium' : armorId === 'heavy_armor' ? 'humanHeavy' : null;
+    if (armorKey) add('ARMOR ' + armorId + ' -> ' + armorKey, armorKey);
+    else window.showMessage('[Renderer] ARMOR: none or unmapped');
+    if (e.equipped?.helmet === 'nasal_helm') add('HELMET nasal_helm', 'nasal_helm');
+    else window.showMessage('[Renderer] HELMET: none');
+    const weaponId = e.equipped?.weapon;
+    const weaponKey = weaponId === 'sword' || weaponId === 'sword_arrow_deflection' || weaponId === 'dagger' ? 'swordIcon' : weaponId === 'axe' ? 'axe' : weaponId === 'spear' ? 'spear' : weaponId === 'club' ? 'club' : weaponId === 'bow' ? 'bow' : null;
+    if (weaponKey) add('WEAPON ' + weaponId + ' -> ' + weaponKey, weaponKey);
+    else window.showMessage('[Renderer] WEAPON: none');
+    const offId = e.equipped?.offhand;
+    const offKey = offId === 'sword' || offId === 'sword_arrow_deflection' || offId === 'dagger' ? 'swordIcon' : offId === 'axe' ? 'axe' : offId === 'spear' ? 'spear' : offId === 'club' ? 'club' : offId === 'bow' ? 'bow' : null;
+    if (offKey && window.items?.[offId]?.type === 'weapon') add('OFFHAND ' + offId + ' -> ' + offKey, offKey);
+    else window.showMessage('[Renderer] OFFHAND: none');
+    window.showMessage('[Renderer] Layer load check complete.');
+}
+
 function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
     const cfg = CHAR_CONFIG[`${e.race}_${e.gender}`];
+    writeSpriteRendererDiagnostic(e, cfg);
     if (!cfg || !window.gameVisuals) {
         // Note: orc and goblin both now have real CHAR_CONFIG entries
         // (baseKey:'orcBase'/'monsterDefault' respectively), so they go
