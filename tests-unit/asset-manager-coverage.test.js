@@ -56,3 +56,15 @@ test('the asset manager has one explicit parser-time bootstrap', () => {
   assert.ok(!data.includes('assetLoadScheduler.js?v='), 'data.js must not inject the scheduler');
   assert.ok(!data.includes('__assetLoadSchedulerInstalled'), 'data.js must not own scheduler installation');
 });
+
+
+test('game visual catalogue remains demand-driven', () => {
+  const engine = fs.readFileSync(path.join(ROOT, 'gameEngine.js'), 'utf8');
+  const scheduler = fs.readFileSync(path.join(ROOT, 'assetLoadScheduler.js'), 'utf8');
+
+  assert.match(engine, /const lazyVisuals = new Proxy/);
+  assert.doesNotMatch(engine, /Object\.entries\(visualSources\)\.map\(\(\[key, src\]\) => \[key, window\.assetManager\.request\(src\)\]\)/);
+  assert.doesNotMatch(engine, /for \(const src of new Set\(Object\.values\(visualSources\)\)\)/);
+
+  assert.doesNotMatch(scheduler, /ARENA_CRITICAL|ARENA_SOON|CAMPAIGN2_NEARBY/);
+});
