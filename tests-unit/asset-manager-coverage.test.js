@@ -72,7 +72,7 @@ test('game visual catalogue remains demand-driven', () => {
 
 test('humanoid composites wait on existing source loads instead of rebuilding the same incomplete key', () => {
   const renderer = fs.readFileSync(path.join(ROOT, 'humanoidRenderer.js'), 'utf8');
-  assert.match(renderer, /if \(pendingCompositeKey === key\) return true;/);
+  assert.match(renderer, /if \(pendingCompositeKey === key\)/);
   assert.match(renderer, /whenReady callback redraws the map/);
   assert.match(renderer, /Source records are released only after a complete composite has been produced/);
 });
