@@ -958,7 +958,13 @@
             window.releaseRecoloredSpriteCache?.();
         }
         if (!rendered) return false;
-        if (window.__humanoidRendererLastComplete) cachePut(key, canvas);
+
+        // Character composition is atomic: never display or cache a partial
+        // body/clothing/hair stack while another required layer is still loading.
+        const complete = !!window.__humanoidRendererLastComplete;
+        if (!complete) return false;
+
+        cachePut(key, canvas);
         ctx.drawImage(canvas, bounds.left, bounds.top, bounds.width, bounds.height);
         return true;
     }
