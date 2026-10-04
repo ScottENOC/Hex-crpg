@@ -1228,6 +1228,10 @@ function updatePlayerUI() {
 window.SPRITE_TEST_ORIGIN = { q: 0, r: -6000 };
 
 function setupSpriteTestScenario() {
+    // Campaign 4 is a renderer diagnostic: discard any composites built by
+    // character creation/previous scenarios so the first map render exercises
+    // the current lazy source-request path.
+    window.clearHumanoidSpriteCache?.();
     window.showMessage('[Renderer Test] Campaign 4 started — diagnostic path active.');
     window.entities = [];
     window.isInCombat = false;
