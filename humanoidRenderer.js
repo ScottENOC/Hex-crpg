@@ -24,6 +24,126 @@
     const lastRequestedFacing = new WeakMap();
     const COMPOSITE_RETRY_DELAY_MS = 1500;
 
+    // Temporary on-device renderer diagnostics. This is intentionally kept outside
+    // the performance report so we can inspect the exact facing/layer decision that
+    // caused a composite to be rejected without turning every frame into log spam.
+    const rendererDebugHistory = [];
+    const RENDERER_DEBUG_HISTORY_LIMIT = 40;
+    let rendererDebugPanel = null;
+
+    function rendererDebugRecord(entry) {
+        const snapshot = {
+            time: new Date().toISOString(),
+            ...entry,
+            layerDiagnostics: Array.isArray(window.__humanoidRendererLastLayerDiagnostics)
+                ? window.__humanoidRendererLastLayerDiagnostics.map(item => ({...item}))
+                : [],
+            hairDiagnostics: window.__humanoidRendererLastHairDiagnostics
+                ? {...window.__humanoidRendererLastHairDiagnostics}
+                : null,
+        };
+        rendererDebugHistory.push(snapshot);
+        while (rendererDebugHistory.length > RENDERER_DEBUG_HISTORY_LIMIT) rendererDebugHistory.shift();
+        rendererDebugRefresh();
+    }
+
+    function rendererDebugText() {
+        const lines = ['HEX-CRPG RENDERER DEBUG', ''];
+        if (!rendererDebugHistory.length) {
+            lines.push('No direct compositor calls captured yet.');
+            return lines.join('\\n');
+        }
+        for (const [index, item] of rendererDebugHistory.entries()) {
+            lines.push('#' + (index + 1) + ' ' + item.time);
+            lines.push('  entity: ' + (item.entityName || '?') + ' | ' + (item.race || '?') + '_' + (item.gender || '?'));
+            lines.push('  requested: ' + (item.requestedFacing || 'none') +
+                ' | entity.facing: ' + (item.entityFacing || 'none') +
+                ' | resolved: ' + (item.facing || 'none') +
+                ' | view: ' + (item.view || 'none'));
+            lines.push('  result: ' + (item.result || 'unknown'));
+            if (item.key) lines.push('  cache key: ' + item.key);
+            if (item.layerDiagnostics?.length) {
+                lines.push('  layers:');
+                for (const d of item.layerDiagnostics) {
+                    lines.push('    ' + d.slot + '/' + (d.layerId || 'base') +
+                        ' expected=' + (!!d.expected) +
+                        ' ready=' + (!!d.imageComplete && !!d.naturalWidth && !!d.naturalHeight) +
+                        ' drawn=' + (!!d.drawn) +
+                        ' reason=' + (d.reason || '?') +
+                        ' src=' + (d.source || '?'));
+                }
+            }
+            if (item.hairDiagnostics) {
+                const h = item.hairDiagnostics;
+                lines.push('  hair: expected=' + (!!h.expected) +
+                    ' ready=' + (!!h.imageComplete && !!h.naturalWidth && !!h.naturalHeight) +
+                    ' drawn=' + (!!h.drawn) + ' src=' + (h.source || '?'));
+            }
+            lines.push('');
+        }
+        return lines.join('\\n');
+    }
+
+    function rendererDebugRefresh() {
+        if (!rendererDebugPanel) return;
+        const output = rendererDebugPanel.querySelector('pre');
+        if (output) output.textContent = rendererDebugText();
+    }
+
+    function installRendererDebugPanel() {
+        if (rendererDebugPanel || !document.body) return;
+        const wrap = document.createElement('div');
+        wrap.id = 'hex-crpg-renderer-debug';
+        Object.assign(wrap.style, {
+            position:'fixed', right:'8px', bottom:'8px', zIndex:'2147483647',
+            width:'min(94vw, 560px)', maxHeight:'70vh', display:'none',
+            background:'rgba(0,0,0,.92)', color:'#fff', border:'1px solid #888',
+            borderRadius:'8px', padding:'8px', font:'12px/1.35 monospace',
+            boxSizing:'border-box', overflow:'hidden',
+        });
+        const bar=document.createElement('div');
+        bar.style.cssText='display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;';
+        const button=(label,fn)=>{
+            const b=document.createElement('button');
+            b.textContent=label; b.type='button'; b.style.cssText='padding:6px 9px;';
+            b.addEventListener('click',fn); bar.appendChild(b); return b;
+        };
+        button('Refresh',rendererDebugRefresh);
+        button('Clear',()=>{rendererDebugHistory.length=0;rendererDebugRefresh();});
+        button('Copy',async()=>{
+            const text=rendererDebugText();
+            try {
+                await navigator.clipboard?.writeText(text);
+            } catch (_) {
+                const area=document.createElement('textarea');
+                area.value=text; area.style.position='fixed'; area.style.opacity='0';
+                document.body.appendChild(area); area.select();
+                try { document.execCommand('copy'); } catch (_) {}
+                area.remove();
+            }
+        });
+        const close=button('Close',()=>{wrap.style.display='none';});
+        close.style.marginLeft='auto';
+        const pre=document.createElement('pre');
+        pre.style.cssText='margin:0;white-space:pre-wrap;overflow:auto;max-height:calc(70vh - 50px);';
+        wrap.append(bar,pre);
+        document.body.appendChild(wrap);
+        rendererDebugPanel=wrap;
+
+        const toggle=document.createElement('button');
+        toggle.type='button'; toggle.textContent='Renderer debug';
+        toggle.id='hex-crpg-renderer-debug-toggle';
+        Object.assign(toggle.style,{
+            position:'fixed',right:'8px',bottom:'8px',zIndex:'2147483646',
+            padding:'7px 9px',font:'12px sans-serif',
+        });
+        toggle.addEventListener('click',()=>{wrap.style.display='block';rendererDebugRefresh();});
+        document.body.appendChild(toggle);
+    }
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',installRendererDebugPanel,{once:true});
+    else installRendererDebugPanel();
+
     // Completed map sprites are built lazily. We deliberately do not prebuild a
     // fixed set for the player: every character/facing gets a composite only when
     // the map actually asks for it. The cache is bounded so NPC-heavy fights cannot
@@ -992,12 +1112,28 @@
         const bounds = explicitBounds || {left:x-visualW/2,top:legacyTop,width:visualW,height:legacyH};
         const facing = explicitFacing || (VALID_FACINGS.has(entity.facing) ? entity.facing : 'down');
         const key = spriteCacheKey(entity, facing);
+        rendererDebugRecord({
+            entityName:entity.name || entity.id || null,
+            race:entity.race || null,
+            gender:entity.gender || null,
+            requestedFacing:explicitFacing || null,
+            entityFacing:entity.facing || null,
+            facing,
+            view:facingToView(facing),
+            key,
+            result:'started',
+        });
         abandonStaleCompositeRequests(entity, facing, key);
 
         const cached = cacheGet(key);
         if (cached) {
             pendingCompositeRequests.delete(key);
             ctx.drawImage(cached, bounds.left, bounds.top, bounds.width, bounds.height);
+            rendererDebugRecord({
+                entityName:entity.name || entity.id || null, race:entity.race || null, gender:entity.gender || null,
+                requestedFacing:explicitFacing || null, entityFacing:entity.facing || null,
+                facing, view:facingToView(facing), key, result:'cache-hit',
+            });
             return true;
         }
 
@@ -1051,6 +1187,11 @@
             }
         }
         if (!rendered) {
+            rendererDebugRecord({
+                entityName:entity.name || entity.id || null, race:entity.race || null, gender:entity.gender || null,
+                requestedFacing:explicitFacing || null, entityFacing:entity.facing || null,
+                facing, view:facingToView(facing), key, result:'renderer-returned-false',
+            });
             const failureSources = [...sources];
             const retryAfter = performance.now() + COMPOSITE_RETRY_DELAY_MS;
             window.performanceAssetTraceApi?.compositeEnd?.(key, false, 'renderer returned false', {requestedSources:failureSources,failureSource:failureSources.map(src => src+'='+String(window.assetManager?.status?.(src) || 'unavailable')),retryAfterMs:COMPOSITE_RETRY_DELAY_MS});
@@ -1062,6 +1203,11 @@
         // body/clothing/hair stack while another required layer is still loading.
         const complete = !!window.__humanoidRendererLastComplete;
         if (!complete) {
+            rendererDebugRecord({
+                entityName:entity.name || entity.id || null, race:entity.race || null, gender:entity.gender || null,
+                requestedFacing:explicitFacing || null, entityFacing:entity.facing || null,
+                facing, view:facingToView(facing), key, result:'incomplete',
+            });
             const failureSources = [...sources];
             const retryAfter = performance.now() + COMPOSITE_RETRY_DELAY_MS;
             window.performanceAssetTraceApi?.compositeEnd?.(key, false, 'required layer not ready', {requestedSources:failureSources,failureSource:failureSources.map(src => src+'='+String(window.assetManager?.status?.(src) || 'unavailable')),layerOrder:window.__humanoidRendererLastLayerOrder || [],layerDiagnostics:window.__humanoidRendererLastLayerDiagnostics || [],hairDiagnostics:window.__humanoidRendererLastHairDiagnostics || null,complete:!!window.__humanoidRendererLastComplete,retryAfterMs:COMPOSITE_RETRY_DELAY_MS});
@@ -1072,6 +1218,11 @@
         pendingCompositeRequests.delete(key);
         cachePut(key, canvas);
         ctx.drawImage(canvas, bounds.left, bounds.top, bounds.width, bounds.height);
+        rendererDebugRecord({
+            entityName:entity.name || entity.id || null, race:entity.race || null, gender:entity.gender || null,
+            requestedFacing:explicitFacing || null, entityFacing:entity.facing || null,
+            facing, view:facingToView(facing), key, result:'painted',
+        });
         return true;
     }
 
