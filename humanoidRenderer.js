@@ -331,6 +331,13 @@
 
     function loadImage(src) {
         if (!src) return null;
+        // Directional presentation extensions may temporarily supply an already
+        // prepared Image/Canvas (for example the asymmetric left braid). These
+        // are drawable sources, not asset-manager paths. Never stringify them
+        // into a bogus request such as "[object HTMLImageElement]".
+        if (typeof src !== 'string') {
+            return src;
+        }
         const canonical = window.assetManager?.canonicalPathFor?.(src) || src;
         if (activeSourcePaths) activeSourcePaths.add(canonical);
         const image = window.assetManager.request(canonical);
