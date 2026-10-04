@@ -1009,7 +1009,7 @@
             }
         }
         if (!rendered) {
-            window.performanceAssetTraceApi?.compositeEnd?.(key, false, 'renderer returned false', {requestedSources:[...sources],failureSource:[...sources].filter(src => window.assetManager?.status?.(src) !== 'ready')});
+            window.performanceAssetTraceApi?.compositeEnd?.(key, false, 'renderer returned false', {requestedSources:[...sources],failureSource:[...sources].map(src => src+'='+String(window.assetManager?.status?.(src) || 'unavailable')),pendingKey:pendingCompositeKey,pendingSources:pendingCompositeSources || []});
             pendingCompositeKey = key;
             pendingCompositeSince = pendingCompositeSince || Date.now();
             pendingCompositeSources = [...sources];
@@ -1020,7 +1020,7 @@
         // body/clothing/hair stack while another required layer is still loading.
         const complete = !!window.__humanoidRendererLastComplete;
         if (!complete) {
-            window.performanceAssetTraceApi?.compositeEnd?.(key, false, 'required layer not ready', {requestedSources:[...sources],failureSource:[...sources].filter(src => window.assetManager?.status?.(src) !== 'ready'),layerOrder:window.__humanoidRendererLastLayerOrder || []});
+            window.performanceAssetTraceApi?.compositeEnd?.(key, false, 'required layer not ready', {requestedSources:[...sources],failureSource:[...sources].map(src => src+'='+String(window.assetManager?.status?.(src) || 'unavailable')),layerOrder:window.__humanoidRendererLastLayerOrder || [],pendingKey:pendingCompositeKey,pendingSources:pendingCompositeSources || []});
             pendingCompositeKey = key;
             pendingCompositeSince = pendingCompositeSince || Date.now();
             pendingCompositeSources = [...sources];
