@@ -957,9 +957,9 @@
             pendingCompositeSince = 0;
         }
 
-        // Build off-screen once. The compositor writes a completion flag after
-        // all requested layers have had a chance to draw. Incomplete frames are
-        // still usable for this draw, but are never retained in the cache.
+        // Build off-screen once. The compositor writes a completion flag only
+        // when every required layer is ready. Incomplete frames are never drawn
+        // and never retained in the cache.
         const canvas = document.createElement('canvas');
         canvas.width = Math.max(1, Math.ceil(bounds.width * HUMANOID_CACHE_SCALE));
         canvas.height = Math.max(1, Math.ceil(bounds.height * HUMANOID_CACHE_SCALE));
@@ -1102,14 +1102,20 @@
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0,0,100,100);
             const height=92,width=height*HUMAN_RENDER_ASPECT;
-            const rendered = drawDirectionalHumanoidInBounds(ctx,entity,{left:(100-width)/2,top:4,width,height},'down');
-            // Do not suppress the established IMG portrait until this frame has
-            // actually drawn. Image decoding is asynchronous on iOS; tagging an
-            // empty canvas as authoritative made the tracker blank even though
-            // the same entity rendered correctly on the map a moment later.
-            portrait.classList.toggle('direct-humanoid-ready', !!rendered);
-            canvas.style.display = rendered ? 'block' : 'none';
-            if (rendered) canvas.dataset.directHumanoid='true';
+            // Initiative portraits are deliberately always front-facing,
+            // regardless of the entity's current map facing.
+            const portraitFacing = 'down';
+            window.__humanoidRendererLastComplete = false;
+            const rendered = drawDirectionalHumanoidInBounds(
+                ctx, entity, {left:(100-width)/2,top:4,width,height}, portraitFacing
+            );
+            // A portrait is authoritative only when the COMPLETE compositor
+            // stack was drawn. Never expose a body-only/hair-only/intermediate
+            // canvas while another required layer is still loading.
+            const complete = !!window.__humanoidRendererLastComplete;
+            portrait.classList.toggle('direct-humanoid-ready', complete);
+            canvas.style.display = complete ? 'block' : 'none';
+            if (complete) canvas.dataset.directHumanoid='true';
             else delete canvas.dataset.directHumanoid;
         });
     }
