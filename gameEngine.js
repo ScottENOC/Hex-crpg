@@ -2283,6 +2283,10 @@ function renderEntities() {
           // gameVisuals is missing.
           window.drawPlayerCharacter(window.mapCtx, e, x, y, z, flyOff);
       } else if ((e instanceof window.Enemy || e.customImage) && window.gameVisuals) {
+                          // Directional NPC art is requested only when this NPC actually
+                          // reaches the visible entity-render path. Building an NPC roster
+                          // must not download every possible facing in the background.
+                          window.ensureDirectionalNpcImage?.(e);
                           let size = window.hexSize * 1.5 * z;
                           let yOffset = 0;
                           let widthMult = 1.0;
