@@ -28,7 +28,7 @@ jobs:
             -type f -iname '*.png' -size +1M -print0 |
           while IFS= read -r -d '' file; do
             echo "Optimising $file"
-            magick "$file" -filter Lanczos -resize '50%' -strip -depth 8 -type TrueColorAlpha \
+            convert "$file" -filter Lanczos -resize '50%' -strip -depth 8 -type TrueColorAlpha \
               -define png:compression-level=9 \
               -define png:compression-filter=5 \
               -define png:compression-strategy=1 "$file"
