@@ -1,0 +1,46 @@
+name: Optimise oversized gameplay images
+
+on:
+  push:
+    branches: [development]
+    paths:
+      - ".github/optimize-image-assets.trigger"
+
+permissions:
+  contents: write
+
+jobs:
+  optimise:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+
+      - name: Resize oversized character/equipment PNGs
+        shell: bash
+        run: |
+          set -euo pipefail
+          find images/characters images/equipment/clothing images/equipment/armour images/equipment/weapons \
+            -type f -iname '*.png' -size +1M -print0 |
+          while IFS= read -r -d '' file; do
+            echo "Optimising $file"
+            magick "$file" -filter Lanczos -resize '50%' -strip -depth 8 -type TrueColorAlpha \
+              -define png:compression-level=9 \
+              -define png:compression-filter=5 \
+              -define png:compression-strategy=1 "$file"
+          done
+
+      - name: Commit optimised images
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add images/characters images/equipment/clothing images/equipment/armour images/equipment/weapons
+          if git diff --cached --quiet; then
+            echo "No oversized PNGs required optimisation."
+            exit 0
+          fi
+          git commit -m "Optimise oversized gameplay PNGs"
+          git push origin development
