@@ -928,7 +928,7 @@
         humanoidSpriteCache.clear();
     }
 
-    function drawHumanoidCharacter(ctx, entity, x, y, z=1, flyOff=0) {
+    function drawHumanoidCharacter(ctx, entity, x, y, z=1, flyOff=0, explicitBounds=null, explicitFacing=null) {
         if (!canDirectRender(entity)) return false;
         const rig = CHARACTER_RIGS[keyFor(entity)];
         const hs = window.hexSize || 1;
@@ -936,8 +936,8 @@
         const legacyH = rig.bodyH * hs * z;
         const legacyTop = y - legacyW/2 + rig.yOff*hs*z + (flyOff || 0);
         const visualW = legacyH * HUMAN_RENDER_ASPECT;
-        const bounds = {left:x-visualW/2,top:legacyTop,width:visualW,height:legacyH};
-        const facing = VALID_FACINGS.has(entity.facing) ? entity.facing : 'down';
+        const bounds = explicitBounds || {left:x-visualW/2,top:legacyTop,width:visualW,height:legacyH};
+        const facing = explicitFacing || (VALID_FACINGS.has(entity.facing) ? entity.facing : 'down');
         const key = spriteCacheKey(entity, facing);
         const cached = cacheGet(key);
         if (cached) {
@@ -1106,8 +1106,13 @@
             // regardless of the entity's current map facing.
             const portraitFacing = 'down';
             window.__humanoidRendererLastComplete = false;
-            const rendered = drawDirectionalHumanoidInBounds(
-                ctx, entity, {left:(100-width)/2,top:4,width,height}, portraitFacing
+            // Initiative portraits use the exact same cached compositor as the
+            // map. This prevents the portrait from briefly showing a naked body,
+            // an independently-scaled hair layer, or any other intermediate stack.
+            const rendered = drawHumanoidCharacter(
+                ctx, entity, 0, 0, 1, 0,
+                {left:(100-width)/2,top:4,width,height},
+                portraitFacing
             );
             // A portrait is authoritative only when the COMPLETE compositor
             // stack was drawn. Never expose a body-only/hair-only/intermediate
