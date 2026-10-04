@@ -1214,83 +1214,53 @@ function updatePlayerUI() {
     window.renderEntities();
 }
 
-// CAMPAIGN 4: SPRITE OVERLAY TEST SCENARIO — a plain grassland populated
-// with static NPCs covering every playable race/gender combo, each shown in
-// a few fixed loadouts so weapon/armor/helmet overlay anchors (CHAR_CONFIG's
-// mainHand/offHand/helm/weaponSizeMult etc., gameEngine.js's
-// drawPlayerCharacter) can be eyeballed and tuned side by side. All five
-// races now have a real CHAR_CONFIG entry (goblin/orc reuse their flat
-// monster sprite as the body layer, same pipeline as everyone else — see
-// CHAR_CONFIG's goblin_male/orc_male comments). Not a real fight: no
-// monsters, no combat, side left 'neutral' so nothing auto-engages.
-window.SPRITE_TEST_ORIGIN = { q: 0, r: -6000 }; // far off in unused coordinate space, well clear of every other campaign's hand-placed content
-const SPRITE_TEST_RACES = ['human', 'elf', 'dwarf', 'orc', 'goblin'];
-const SPRITE_TEST_GENDERS = ['male', 'female'];
-const SPRITE_TEST_LOADOUTS = [
-    { label: 'sword+light+helm', equipment: ['sword', 'light_armor', 'nasal_helm'] },
-    { label: 'spear+medium', equipment: ['spear', 'medium_armor'] },
-    { label: 'axe+heavy', equipment: ['axe', 'heavy_armor'] },
-    { label: 'dagger', equipment: ['dagger'] },
-    { label: 'club', equipment: ['club'] },
-    { label: 'bow', equipment: ['bow'] },
-];
+// CAMPAIGN 4: ISOLATED CHARACTER RENDERER TEST
+// Deliberately minimal renderer test: exactly one painted hex and the player's
+// main character. No NPCs, companions, horses, monsters, buildings, scenery,
+// equipment test grid, or surrounding generated terrain.
+//
+// The normal map is effectively infinite and defaults unpainted coordinates to
+// terrain, so the test uses zero vision range. That means drawMap() only paints
+// the single hex containing the player while still exercising the real map and
+// character rendering pipeline.
+//
+// This is intentionally a diagnostic scenario, not a gameplay campaign.
+window.SPRITE_TEST_ORIGIN = { q: 0, r: -6000 };
+
 function setupSpriteTestScenario() {
     window.entities = [];
     window.isInCombat = false;
     window.currentTurnEntity = null;
+    window.highlightedHexes = [];
+    window.tileObjects = {};
+    window.overrideTerrain = {};
+    window.exploredHexes = new Set();
 
     const origin = window.SPRITE_TEST_ORIGIN;
-    const radius = Math.max(SPRITE_TEST_RACES.length * SPRITE_TEST_GENDERS.length, SPRITE_TEST_LOADOUTS.length) * 2 + 6;
-    window.hexDisk(origin.q, origin.r, radius).forEach(h => window.setTerrainAt(h.q, h.r, 'Grass'));
 
-    // One row per race/gender combo, one column per loadout — 4 hexes of
-    // spacing both ways so a wide sprite (e.g. dwarf's 1.4x armour wMult)
-    // never visually overlaps its neighbor.
-    const rowSpacing = 4, colSpacing = 4;
-    const colStart = -Math.floor((SPRITE_TEST_LOADOUTS.length - 1) / 2) * colSpacing;
-    const combos = [];
-    SPRITE_TEST_RACES.forEach(race => SPRITE_TEST_GENDERS.forEach(gender => combos.push({ race, gender })));
-    const rowStart = -Math.floor((combos.length - 1) / 2) * rowSpacing;
+    // The only world terrain explicitly created by this scenario.
+    window.setTerrainAt(origin.q, origin.r, 'Grass');
 
-    // Visibility (isVisibleToPlayer, hexMap.js) is computed relative to a
-    // real side:'player' entity — without one, every hex here reads as
-    // unexplored and renders as blank canvas. A big visionBonus guarantees
-    // the whole grid is lit regardless of its final size; parked one row
-    // above the topmost combo row (not at the grid's exact center, which
-    // would land exactly on one of the NPCs since row/col spacing is even)
-    // so it never visually overlaps whatever's being inspected.
-    const playerHex = { q: origin.q, r: origin.r + rowStart - rowSpacing };
-    const playerEntity = new window.Entity(window.party[0].name, 'red', playerHex, window.party[0].attributes.agility + 10);
+    // Use the actual player character produced by character creation.
+    const playerEntity = new window.Entity(
+        window.party[0].name,
+        'red',
+        { q: origin.q, r: origin.r },
+        (window.party[0].attributes?.agility || 0) + 10
+    );
     playerEntity.side = 'player';
     Object.assign(playerEntity, window.party[0]);
-    playerEntity.hex = playerHex;
-    playerEntity.visualQ = playerHex.q; playerEntity.visualR = playerHex.r;
+    playerEntity.hex = { q: origin.q, r: origin.r };
+    playerEntity.visualQ = origin.q;
+    playerEntity.visualR = origin.r;
     playerEntity.skills = window.party[0].skills;
-    // A big flat bonus rather than radius-derived: vision range gets
-    // multiplied by the current light level (worldTime.js), floored at
-    // 0.2x at night — campaign 4 doesn't bother forcing full daylight (this
-    // is a static display, not a real scene), so the bonus needs enough
-    // headroom to clear that 5x worst-case reduction and still cover the
-    // whole grid.
-    playerEntity.visionBonus = 400;
-    window.entities.push(playerEntity);
 
-    combos.forEach((combo, row) => {
-        SPRITE_TEST_LOADOUTS.forEach((loadout, col) => {
-            const hex = { q: origin.q + colStart + col * colSpacing, r: origin.r + rowStart + row * rowSpacing };
-            const ent = window.buildNPC({
-                name: `${combo.race}_${combo.gender}_${loadout.label}`,
-                title: loadout.label,
-                race: combo.race, gender: combo.gender,
-                hex,
-                classLevels: ['fighter'],
-                skillPicks: [],
-                equipment: loadout.equipment,
-                side: 'neutral',
-            });
-            window.entities.push(ent);
-        });
-    });
+    // Zero vision means the current hex is visible but every neighbouring
+    // default/infinite-map coordinate is outside the visible range.
+    // This makes the rendered world literally one visible hex.
+    playerEntity.visionBonus = -(window.LIVE_VISION_RANGE || 25);
+
+    window.entities.push(playerEntity);
 
     window.drawMap();
     window.renderEntities();
