@@ -68,3 +68,19 @@ test('game visual catalogue remains demand-driven', () => {
 
   assert.doesNotMatch(scheduler, /ARENA_CRITICAL|ARENA_SOON|CAMPAIGN2_NEARBY/);
 });
+
+
+test('humanoid composites wait on existing source loads instead of rebuilding the same incomplete key', () => {
+  const renderer = fs.readFileSync(path.join(ROOT, 'humanoidRenderer.js'), 'utf8');
+  assert.match(renderer, /if \(pendingCompositeKey === key\) return true;/);
+  assert.match(renderer, /whenReady callback redraws the map/);
+  assert.match(renderer, /Source records are released only after a complete composite has been produced/);
+});
+
+test('directional NPC art is loaded only for the NPC view being rendered', () => {
+  const npc = fs.readFileSync(path.join(ROOT, 'npcBuilder.js'), 'utf8');
+  assert.match(npc, /function ensureDirectionalNpcImage\(ent\)/);
+  assert.doesNotMatch(npc, /Object\.values\(DIRECTIONAL_NPC_ART\)\.forEach\(views/);
+  assert.doesNotMatch(npc, /Object\.values\(views\)\.forEach\(\{ key, src \}/);
+  assert.match(npc, /const view = art\[facing\] \|\| art\.down/);
+});
