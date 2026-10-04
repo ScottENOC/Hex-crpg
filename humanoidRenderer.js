@@ -951,11 +951,14 @@
             rendered = drawDirectionalHumanoidInBounds(offscreenCtx, entity, offscreenBounds, facing);
         } finally {
             activeSourcePaths = previousSources;
-            // The final appearance is now the cache. Release the individual source
-            // image records so decoded body/hair/equipment art can be reclaimed.
-            window.assetManager?.release?.([...sources]);
-            window.clothingSystem?.releaseRenderSources?.();
-            window.releaseRecoloredSpriteCache?.();
+            // Source records are released only after a complete composite has
+            // been produced. Releasing them during an incomplete attempt causes
+            // the same character to start over on every redraw.
+            if (window.__humanoidRendererLastComplete) {
+                window.assetManager?.release?.([...sources]);
+                window.clothingSystem?.releaseRenderSources?.();
+                window.releaseRecoloredSpriteCache?.();
+            }
         }
         if (!rendered) return false;
 
@@ -1010,7 +1013,6 @@
             preview.displayArmour=true;
             preview.displayClothes=true;
             window.clothingSystem?.ensureDefaultOutfit?.(preview,{player:true});
-            window.clothingSystem?.preloadOutfit?.(preview,'front');
             if (!canDirectRender(preview)) return creatorLegacy.apply(this, arguments);
             const canvas = document.getElementById('appearance-preview-canvas');
             if (!canvas) return creatorLegacy.apply(this, arguments);
