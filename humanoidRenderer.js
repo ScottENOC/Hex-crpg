@@ -780,6 +780,7 @@
         const mirror = facing === 'left';
         const cx = bounds.left + bounds.width/2;
         const layerOrder = [];
+        const layerDiagnostics = [];
 
         const drawShieldLayer = () => {
             let shieldDrawn = false;
@@ -826,6 +827,10 @@
                     && !!entity.equipped?.[slot]
                     && equipmentSlotVisible(entity, slot);
                 const drawn = window.clothingSystem?.drawSlot?.(ctx, entity, slot, view, bounds) || false;
+                const slotDiagnostics = Array.isArray(window.__clothingRendererLastDrawDiagnostics)
+                    ? window.__clothingRendererLastDrawDiagnostics.map(item => ({...item, expected}))
+                    : [{slot,view,itemId:entity.equipped?.[slot]||null,expected,drawn,reason:'no-slot-diagnostics'}];
+                layerDiagnostics.push(...slotDiagnostics);
                 if (drawn) layerOrder.push(slot);
                 if (expected && !drawn) compositionComplete = false;
             }
@@ -889,7 +894,20 @@
             ctx.restore();
         }
 
+        const hairDiagnostics = {
+            style:hairStyle,
+            view,
+            source:sourceHairPath||null,
+            status:sourceHairPath?(window.assetManager?.status?.(sourceHairPath)||'unrequested'):'missing-source',
+            imageComplete:!!sourceHair?.complete,
+            naturalWidth:sourceHair?.naturalWidth||0,
+            naturalHeight:sourceHair?.naturalHeight||0,
+            drawn:layerOrder.includes('hair'),
+            expected:!hasHelmet,
+        };
         window.__humanoidRendererLastLayerOrder = layerOrder;
+        window.__humanoidRendererLastLayerDiagnostics = layerDiagnostics;
+        window.__humanoidRendererLastHairDiagnostics = hairDiagnostics;
         window.__humanoidRendererLastComplete = compositionComplete;
         window.__humanoidRendererLastDraw = {entity,key,view,facing,bounds:{...bounds},timestamp:Date.now()};
         window.__humanoidRendererDrawCount = (window.__humanoidRendererDrawCount || 0) + 1;
