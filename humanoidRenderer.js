@@ -981,7 +981,7 @@
         // a short cooldown before it may be attempted again.
         const pending = pendingCompositeRequests.get(key);
         if (pending) {
-            const stillWanted = entity.facing === pending.facing;
+            const stillWanted = facing === pending.facing;
             const stillWaiting = pending.sources.some(src =>
                 window.assetManager?.status?.(src) !== 'ready'
             );
