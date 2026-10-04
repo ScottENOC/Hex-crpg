@@ -432,21 +432,8 @@ function drawMap() {
   // 3. PASS 2: Entities & Items
   if (window.renderEntities) window.renderEntities();
 
-  // 4. PASS 3: Water Overlay (50% Transparency) - DRAWN ON TOP OF CHARACTERS
-  visibleAndExplored.forEach(({q, r}) => {
-      const terrain = window.getTerrainAt(q, r);
-      if (terrain.name === 'Water') {
-          const key = pickVariantKey(q, r, 311, WATER_VARIANTS);
-          const img = window.gameVisuals[key];
-          if (imgOk(img)) {
-              const {x, y} = hexToPixel(q, r);
-              const zoomedSize = hexSize * window.cameraZoom;
-              mapCtx.globalAlpha = 0.5;
-              drawHexImage(img, x, y, zoomedSize, key);
-              mapCtx.globalAlpha = 1.0;
-          }
-      }
-  });
+  // TEMPORARY MEMORY TEST: no separate water image overlay. Water is
+  // represented only by the plain terrain-colour hex above.
 
   // 4b. PASS 3b: Enemy vision-range overlay while stealthed. Only enemies the
   // player can currently see are shown (you don't get intel on enemies you
