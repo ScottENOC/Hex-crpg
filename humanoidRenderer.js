@@ -17,6 +17,12 @@
     // one race's private copy broken while another copy of the same file succeeds.
     const rendererPendingLoads = new Set();
     let activeSourcePaths = null;
+    // Only one uncached humanoid composition is allowed to be assembled at a
+    // time. Other direct humanoids wait silently until that complete sprite is
+    // available, preventing a visible thundering herd of body/hair/clothing
+    // requests on iOS.
+    let pendingCompositeKey = null;
+    let pendingCompositeSince = 0;
 
     // Completed map sprites are built lazily. We deliberately do not prebuild a
     // fixed set for the player: every character/facing gets a composite only when
@@ -929,8 +935,20 @@
         const key = spriteCacheKey(entity, facing);
         const cached = cacheGet(key);
         if (cached) {
+            if (pendingCompositeKey === key) {
+                pendingCompositeKey = null;
+                pendingCompositeSince = 0;
+            }
             ctx.drawImage(cached, bounds.left, bounds.top, bounds.width, bounds.height);
             return true;
+        }
+
+        // Single-focus rule: while one character is waiting for its complete
+        // source stack, do not start another character's stack.
+        if (pendingCompositeKey && pendingCompositeKey !== key) {
+            if (Date.now() - pendingCompositeSince < 15000) return true;
+            pendingCompositeKey = null;
+            pendingCompositeSince = 0;
         }
 
         // Build off-screen once. The compositor writes a completion flag after
@@ -960,13 +978,23 @@
                 window.releaseRecoloredSpriteCache?.();
             }
         }
-        if (!rendered) return false;
+        if (!rendered) {
+            pendingCompositeKey = key;
+            pendingCompositeSince = pendingCompositeSince || Date.now();
+            return true;
+        }
 
         // Character composition is atomic: never display or cache a partial
         // body/clothing/hair stack while another required layer is still loading.
         const complete = !!window.__humanoidRendererLastComplete;
-        if (!complete) return false;
+        if (!complete) {
+            pendingCompositeKey = key;
+            pendingCompositeSince = pendingCompositeSince || Date.now();
+            return true;
+        }
 
+        pendingCompositeKey = null;
+        pendingCompositeSince = 0;
         cachePut(key, canvas);
         ctx.drawImage(canvas, bounds.left, bounds.top, bounds.width, bounds.height);
         return true;
