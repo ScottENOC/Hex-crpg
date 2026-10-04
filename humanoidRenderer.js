@@ -965,6 +965,8 @@
         const sources = new Set();
         activeSourcePaths = sources;
         let rendered = false;
+        // Never inherit completion state from the previous character.
+        window.__humanoidRendererLastComplete = false;
         try {
             rendered = drawDirectionalHumanoidInBounds(offscreenCtx, entity, offscreenBounds, facing);
         } finally {
