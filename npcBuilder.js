@@ -27,15 +27,19 @@ const DIRECTIONAL_NPC_ART = {
     },
 };
 
-function ensureDirectionalNpcImages() {
-    if (!window.gameVisuals || typeof Image === 'undefined') return false;
-    Object.values(DIRECTIONAL_NPC_ART).forEach(views => {
-        Object.values(views).forEach(({ key, src }) => {
-            if (window.gameVisuals[key]) return;            const img = window.assetManager.request(src);
-            window.assetManager.whenReady(src).then(() => window.drawMap?.()).catch(() => {});
-            window.gameVisuals[key] = img;
-        });
-    });
+function ensureDirectionalNpcImage(ent) {
+    if (!ent?.directionalArtKey || !window.gameVisuals || typeof Image === 'undefined') return false;
+    const art = DIRECTIONAL_NPC_ART[ent.directionalArtKey];
+    if (!art) return false;
+    const facing = ['up', 'down', 'left', 'right'].includes(ent.facing) ? ent.facing : 'down';
+    const view = art[facing] || art.down;
+    // Request only the one view this NPC currently needs. The asset manager
+    // retains it while loading; later facing changes request only the new view.
+    if (!window.gameVisuals[view.key]) {
+        const img = window.assetManager.request(view.src);
+        window.assetManager.whenReady(view.src).then(() => window.drawMap?.()).catch(() => {});
+        window.gameVisuals[view.key] = img;
+    }
     return true;
 }
 
@@ -124,7 +128,7 @@ function buildNPC({ name, title, race, gender, hex, classLevels, skillPicks, equ
     ent.inventory = [];
     (equipment || []).forEach(itemId => window.equipToMonster(ent, itemId));
 
-    ensureDirectionalNpcImages();
+    ensureDirectionalNpcImage(ent);
     syncDirectionalNpcArt(ent);
     window.applyNpcRegionalAppearance?.(ent);
     return ent;
@@ -134,12 +138,14 @@ function buildNPC({ name, title, race, gender, hex, classLevels, skillPicks, equ
 // opt in by their untouched template names. Named bosses/hand-authored NPCs are
 // deliberately not matched here, so their existing art remains authoritative.
 setInterval(() => {
-    ensureDirectionalNpcImages();
     for (const ent of window.entities || []) {
         if (!ent) continue;
         if (!ent.directionalArtKey && ent.name === 'Goblin') ent.directionalArtKey = 'npc_goblin';
         if (!ent.directionalArtKey && ent.name === 'Orc') ent.directionalArtKey = 'npc_orc';
-        if (ent.directionalArtKey) syncDirectionalNpcArt(ent);
+        if (ent.directionalArtKey) {
+            ensureDirectionalNpcImage(ent);
+            syncDirectionalNpcArt(ent);
+        }
         window.applyNpcRegionalAppearance?.(ent);
     }
 }, 100);
@@ -170,6 +176,6 @@ setInterval(() => {
 })();
 
 window.DIRECTIONAL_NPC_ART = DIRECTIONAL_NPC_ART;
-window.ensureDirectionalNpcImages = ensureDirectionalNpcImages;
+window.ensureDirectionalNpcImage = ensureDirectionalNpcImage;
 window.syncDirectionalNpcArt = syncDirectionalNpcArt;
 window.buildNPC = buildNPC;
