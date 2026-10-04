@@ -521,15 +521,12 @@
         if (!id) return null;
         const item = window.items?.[id];
         const reduction = Number(item?.reduction || 0);
-        const visuals = window.gameVisuals || {};
         const tier = reduction >= 3 ? 'heavy' : reduction >= 2 ? 'medium' : 'light';
         const authoredPath = view === 'back' ? ARMOUR_ASSETS[tier]?.back : ARMOUR_ASSETS[tier]?.front;
-        const authored = authoredPath ? loadImage(authoredPath) : null;
-        // The canonical organised pair is the normal rendering source. Keep the
-        // compatibility preload as a temporary load-failure fallback only.
-        const legacy = tier === 'heavy' ? visuals.humanHeavy : tier === 'medium' ? visuals.humanMedium : visuals.humanLight;
-        let image = imageReady(authored) ? authored : legacy;
-        if (!image) return null;
+        const image = authoredPath ? loadImage(authoredPath) : null;
+        // The organised directional armour assets are authoritative. There is
+        // deliberately no legacy fallback: asking for armour should only ever
+        // initialise the armour asset actually being rendered.
         if (entity.goldGear && window.getGoldTintedSprite) image = window.getGoldTintedSprite(image) || image;
         return image;
     }
