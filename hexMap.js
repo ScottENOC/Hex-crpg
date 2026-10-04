@@ -1310,10 +1310,19 @@ function resizeCanvas() {
 }
 window.resizeCanvas = resizeCanvas;
 
+function installMapClickHandler() {
+    if (!mapCanvas || window.__mapClickHandlerInstalled) return;
+    if (typeof window.handleClick !== 'function') return;
+    mapCanvas.addEventListener("click", window.handleClick);
+    window.__mapClickHandlerInstalled = true;
+}
+window.installMapClickHandler = installMapClickHandler;
+
 function initHexMap() {
   mapCanvas = document.getElementById("mapCanvas");
   if (mapCanvas) {
     mapCtx = mapCanvas.getContext("2d");
+    installMapClickHandler();
     
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
