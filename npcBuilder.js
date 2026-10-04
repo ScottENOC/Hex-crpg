@@ -129,7 +129,6 @@ function buildNPC({ name, title, race, gender, hex, classLevels, skillPicks, equ
     ent.inventory = [];
     (equipment || []).forEach(itemId => window.equipToMonster(ent, itemId));
 
-    ensureDirectionalNpcImage(ent);
     syncDirectionalNpcArt(ent);
     window.applyNpcRegionalAppearance?.(ent);
     return ent;
@@ -143,10 +142,7 @@ setInterval(() => {
         if (!ent) continue;
         if (!ent.directionalArtKey && ent.name === 'Goblin') ent.directionalArtKey = 'npc_goblin';
         if (!ent.directionalArtKey && ent.name === 'Orc') ent.directionalArtKey = 'npc_orc';
-        if (ent.directionalArtKey) {
-            ensureDirectionalNpcImage(ent);
-            syncDirectionalNpcArt(ent);
-        }
+        if (ent.directionalArtKey) syncDirectionalNpcArt(ent);
         window.applyNpcRegionalAppearance?.(ent);
     }
 }, 100);
