@@ -961,6 +961,14 @@
             pendingCompositeSince = 0;
         }
 
+        // If this exact appearance is already waiting for one or more assets,
+        // do not rebuild it every render frame. The asset manager retains each
+        // requested image (including the six that are already ready) and its
+        // whenReady callback redraws the map when the missing layer arrives.
+        // Re-entering the compositor here would otherwise create hundreds of
+        // identical incomplete canvases while waiting for one slow source.
+        if (pendingCompositeKey === key) return true;
+
         // Build off-screen once. The compositor writes a completion flag only
         // when every required layer is ready. Incomplete frames are never drawn
         // and never retained in the cache.
