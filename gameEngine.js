@@ -1435,7 +1435,7 @@ function startGameCore(isLoading = false) {
           window.setupVillageScene(true);
       }
       document.addEventListener("keydown", window.handleMovement);
-      window.mapCanvas.addEventListener("click", window.handleClick);
+      if (window.installMapClickHandler) window.installMapClickHandler();
       if (!window.tickInterval) window.tickInterval = setInterval(tick, 10);
       return;
   }
@@ -1445,7 +1445,7 @@ function startGameCore(isLoading = false) {
   if (window.currentCampaign === "1") {
       setupArenaLobby();
       document.addEventListener("keydown", window.handleMovement);
-      window.mapCanvas.addEventListener("click", window.handleClick);
+      if (window.installMapClickHandler) window.installMapClickHandler();
       if (!window.tickInterval) window.tickInterval = setInterval(tick, 10);
       const fp = window.entities.find(e => e.side === 'player' && !e.rider);
       if (fp && window.centerCameraOn) window.centerCameraOn(fp.hex);
@@ -1455,7 +1455,7 @@ function startGameCore(isLoading = false) {
   if (window.currentCampaign === "2") {
       window.setupVillageScene();
       document.addEventListener("keydown", window.handleMovement);
-      window.mapCanvas.addEventListener("click", window.handleClick);
+      if (window.installMapClickHandler) window.installMapClickHandler();
       if (!window.tickInterval) window.tickInterval = setInterval(tick, 10);
       const fp = window.entities.find(e => e.side === 'player' && !e.rider);
       if (fp && window.centerCameraOn) window.centerCameraOn(fp.hex);
@@ -1465,7 +1465,7 @@ function startGameCore(isLoading = false) {
   if (window.currentCampaign === "4") {
       setupSpriteTestScenario();
       document.addEventListener("keydown", window.handleMovement);
-      window.mapCanvas.addEventListener("click", window.handleClick);
+      if (window.installMapClickHandler) window.installMapClickHandler();
       if (!window.tickInterval) window.tickInterval = setInterval(tick, 10);
       if (window.centerCameraOn) window.centerCameraOn(window.SPRITE_TEST_ORIGIN);
       return;
@@ -1501,7 +1501,7 @@ function startGameCore(isLoading = false) {
   }
 
   document.addEventListener("keydown", window.handleMovement);
-  window.mapCanvas.addEventListener("click", window.handleClick);
+  if (window.installMapClickHandler) window.installMapClickHandler();
   
   // Right-click for entity details
   window.mapCanvas.addEventListener("contextmenu", (e) => {
