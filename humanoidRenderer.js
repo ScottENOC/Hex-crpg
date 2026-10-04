@@ -977,6 +977,7 @@
         let rendered = false;
         // Never inherit completion state from the previous character.
         window.__humanoidRendererLastComplete = false;
+        window.performanceAssetTraceApi?.compositeStart?.(key, entity, facing, sources);
         try {
             rendered = drawDirectionalHumanoidInBounds(offscreenCtx, entity, offscreenBounds, facing);
         } finally {
@@ -985,12 +986,14 @@
             // been produced. Releasing them during an incomplete attempt causes
             // the same character to start over on every redraw.
             if (window.__humanoidRendererLastComplete) {
+                window.performanceAssetTraceApi?.compositeEnd?.(key, true, 'painted', {layerOrder:window.__humanoidRendererLastLayerOrder || []});
                 window.assetManager?.release?.([...sources]);
                 window.clothingSystem?.releaseRenderSources?.();
                 window.releaseRecoloredSpriteCache?.();
             }
         }
         if (!rendered) {
+            window.performanceAssetTraceApi?.compositeEnd?.(key, false, 'renderer returned false');
             pendingCompositeKey = key;
             pendingCompositeSince = pendingCompositeSince || Date.now();
             return true;
@@ -1000,6 +1003,7 @@
         // body/clothing/hair stack while another required layer is still loading.
         const complete = !!window.__humanoidRendererLastComplete;
         if (!complete) {
+            window.performanceAssetTraceApi?.compositeEnd?.(key, false, 'required layer not ready', {layerOrder:window.__humanoidRendererLastLayerOrder || []});
             pendingCompositeKey = key;
             pendingCompositeSince = pendingCompositeSince || Date.now();
             return true;
