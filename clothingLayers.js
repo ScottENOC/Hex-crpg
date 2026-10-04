@@ -7,6 +7,7 @@
   const labels={underwear:'Underwear',bra:'Bra',pants:'Pants',shirt:'Shirt / Dress'};
   const images=new Map(), tinted=new Map();
   const opaqueBoundsCache=new WeakMap(), toneBoundsCache=new WeakMap(), dressBandBoundsCache=new WeakMap();
+  let lastDrawDiagnostics=[];
   const OUTERWEAR={top:.195,waist:.535,bottom:1.005};
   function outerwearTargets(x,w){return {shirt:{x,y:OUTERWEAR.top,w,h:OUTERWEAR.waist-OUTERWEAR.top},pants:{x,y:OUTERWEAR.waist,w,h:OUTERWEAR.bottom-OUTERWEAR.waist},dress:{x,y:OUTERWEAR.top,w,h:OUTERWEAR.bottom-OUTERWEAR.top}};}
   const CLOTHING_TARGETS={front:{...outerwearTargets(.077,.846),bra:{x:.20,y:.30,w:.60,h:.18},underwear:{x:.20,y:.50,w:.60,h:.18}},side:{...outerwearTargets(.212,.576),bra:{x:.34,y:.30,w:.32,h:.18},underwear:{x:.34,y:.50,w:.32,h:.18}},back:{...outerwearTargets(.077,.846),bra:{x:.20,y:.30,w:.60,h:.18},underwear:{x:.20,y:.50,w:.60,h:.18}}};
@@ -67,7 +68,29 @@
     ctx.drawImage(source,trim.x,trim.y,trim.w,trim.h,dx,dy,dw,dh);
     return true;
   }
-  function drawSlot(ctx,e,slot,v,bounds){migrate(e);if(e.displayClothes===false)return false;if(window.equipmentAppearanceSystem?.isSlotVisible?.(e,slot)===false)return false;ensureDefaultOutfit(e,{player:e?.side==='player'});const itemId=e?.equipped?.[slot],s=itemId&&spec(itemId);if(!s||s.slot!==slot)return false;let drew=false;for(const l of s.layers){const src=sourceForLayer(l,v),img=load(src);if(!img?.complete||!img.naturalWidth)continue;const rendered=l.tint?tint(img,colour(e,itemId,l),l):img,target=clothingTarget(slot,itemId,v),trim=l.sourceTone?toneBounds(img):opaqueBounds(img);if(target)drew=drawFittedGarment(ctx,rendered,trim,target,bounds,slot,e,itemId,v,s,img)||drew;else{ctx.drawImage(rendered,bounds.left,bounds.top,bounds.width,bounds.height);drew=true;}}return drew;}
+  function drawSlot(ctx,e,slot,v,bounds){
+    migrate(e);
+    const diagnostics=[];
+    const record=(detail)=>diagnostics.push({slot,view:view(v),...detail});
+    if(e.displayClothes===false){record({reason:'displayClothes=false',drawn:false});lastDrawDiagnostics=diagnostics;window.__clothingRendererLastDrawDiagnostics=diagnostics;return false;}
+    if(window.equipmentAppearanceSystem?.isSlotVisible?.(e,slot)===false){record({reason:'slot-hidden',drawn:false});lastDrawDiagnostics=diagnostics;window.__clothingRendererLastDrawDiagnostics=diagnostics;return false;}
+    ensureDefaultOutfit(e,{player:e?.side==='player'});
+    const itemId=e?.equipped?.[slot],s=itemId&&spec(itemId);
+    if(!s||s.slot!==slot){record({itemId:itemId||null,reason:'no-valid-spec',drawn:false});lastDrawDiagnostics=diagnostics;window.__clothingRendererLastDrawDiagnostics=diagnostics;return false;}
+    let drew=false;
+    for(const l of s.layers){
+      const src=sourceForLayer(l,v),img=load(src);
+      const ready=!!img?.complete&&!!img.naturalWidth&&!!img.naturalHeight;
+      const detail={itemId,layerId:l.id,source:src||null,status:src?(window.assetManager?.status?.(src)||'unrequested'):'missing-source',imageComplete:!!img?.complete,naturalWidth:img?.naturalWidth||0,naturalHeight:img?.naturalHeight||0,tinted:l.tint,drawn:false,reason:ready?'not-drawn-yet':'image-not-ready'};
+      if(!ready){diagnostics.push(detail);continue;}
+      const rendered=l.tint?tint(img,colour(e,itemId,l),l):img,target=clothingTarget(slot,itemId,v),trim=l.sourceTone?toneBounds(img):opaqueBounds(img);
+      if(target) detail.drawn=!!drawFittedGarment(ctx,rendered,trim,target,bounds,slot,e,itemId,v,s,img);
+      else{ctx.drawImage(rendered,bounds.left,bounds.top,bounds.width,bounds.height);detail.drawn=true;}
+      detail.reason=detail.drawn?'drawn':'drawFittedGarment-failed';
+      diagnostics.push(detail); drew=detail.drawn||drew;
+    }
+    lastDrawDiagnostics=diagnostics;window.__clothingRendererLastDrawDiagnostics=diagnostics;return drew;
+  }
   function install(){registerBuiltinItems();const p=window.player;if(p)ensureDefaultOutfit(p,{player:true});for(const e of window.entities||[])ensureDefaultOutfit(e,{player:e?.side==='player'});}
   const timer=setInterval(()=>{if(registerBuiltinItems()){install();clearInterval(timer);}},50);setInterval(()=>{for(const e of window.entities||[])ensureDefaultOutfit(e,{player:e?.side==='player'});if(window.player)ensureDefaultOutfit(window.player,{player:true});},1000);if(document.readyState==='complete')install();else window.addEventListener('load',install,{once:true});
   function releaseRenderSources(){
