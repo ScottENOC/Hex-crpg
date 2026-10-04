@@ -133,31 +133,11 @@
     const MANAGER_ERROR_RETRY_BASE_MS = 1800;
     const MANAGER_ERROR_RETRY_MAX_MS = 15000;
 
-    const ARENA_CRITICAL = [
-        'images/terrain/bases/arena/floor_1.png','images/terrain/bases/arena/floor_2.png',
-        'images/terrain/bases/arena/floor_3.png','images/terrain/bases/arena/floor_4.png',
-        'images/characters/npcs/arena/announcer.png','images/characters/npcs/arena/shopkeeper.png',
-        'images/characters/npcs/arena/mercenary.png','images/props/structures/fence_horizontal.svg',
-        'images/props/structures/fence_vertical.svg',
-    ];
-    const ARENA_SOON = [
-        'images/characters/creatures/goblin.png','images/characters/creatures/orc.png',
-        'images/characters/creatures/skeleton.svg','images/characters/creatures/zombie.svg',
-        'images/characters/creatures/imp.svg','images/characters/creatures/spider_1.png',
-        'images/characters/creatures/spider_2.png','images/characters/creatures/troll.png',
-        'images/characters/creatures/wraith.svg','images/characters/creatures/basilisk.svg',
-        'images/characters/creatures/harpy.svg','images/characters/creatures/minotaur.png',
-        'images/characters/creatures/revenant.svg','images/characters/creatures/elite_goblin.svg',
-        'images/characters/creatures/wolf.png','images/characters/creatures/boar.png',
-        'images/characters/creatures/tiger.png','images/characters/creatures/horse.png',
-    ];
-    const CAMPAIGN2_NEARBY = [
-        'images/terrain/bases/wood_floor.svg','images/terrain/bases/path.svg',
-        'images/props/furniture/table.svg','images/props/furniture/bench.svg',
-        'images/props/furniture/fireplace_base.svg','images/props/furniture/fireplace_flame.svg',
-        'images/props/furniture/fireplace_unlit.svg','images/props/structures/door_open.svg',
-        'images/props/structures/door_closed.svg','images/props/structures/signpost.svg',
-    ];
+    // No campaign-specific preload lists live in the asset manager.
+    // Campaigns request assets through their actual render/content paths when
+    // those assets become necessary. Keeping "critical", "soon", or
+    // "nearby" lists here would make the loader own knowledge of game
+    // scenarios and would undermine true demand-driven loading.
 
     let active = 0;
     let order = 0;
