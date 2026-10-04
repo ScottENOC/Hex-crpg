@@ -938,6 +938,9 @@
 
     function clearHumanoidSpriteCache() {
         humanoidSpriteCache.clear();
+        pendingCompositeKey = null;
+        pendingCompositeSince = 0;
+        pendingCompositeSources = null;
     }
 
     function drawHumanoidCharacter(ctx, entity, x, y, z=1, flyOff=0, explicitBounds=null, explicitFacing=null) {
