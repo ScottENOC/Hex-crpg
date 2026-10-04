@@ -17,13 +17,12 @@
     // one race's private copy broken while another copy of the same file succeeds.
     const rendererPendingLoads = new Set();
     let activeSourcePaths = null;
-    // Only one uncached humanoid composition is allowed to be assembled at a
-    // time. Other direct humanoids wait silently until that complete sprite is
-    // available, preventing a visible thundering herd of body/hair/clothing
-    // requests on iOS.
-    let pendingCompositeKey = null;
-    let pendingCompositeSince = 0;
-    let pendingCompositeSources = null;
+    // Failed composites are remembered per appearance/facing rather than
+    // globally blocking every other humanoid. A broken front view must not
+    // prevent a visible side/back view, or another character, from rendering.
+    const pendingCompositeRequests = new Map();
+    const lastRequestedFacing = new WeakMap();
+    const COMPOSITE_RETRY_DELAY_MS = 1500;
 
     // Completed map sprites are built lazily. We deliberately do not prebuild a
     // fixed set for the player: every character/facing gets a composite only when
@@ -938,9 +937,23 @@
 
     function clearHumanoidSpriteCache() {
         humanoidSpriteCache.clear();
-        pendingCompositeKey = null;
-        pendingCompositeSince = 0;
-        pendingCompositeSources = null;
+        pendingCompositeRequests.clear();
+        lastRequestedFacing.clear?.();
+    }
+
+    function abandonStaleCompositeRequests(entity, facing, currentKey) {
+        const previousFacing = lastRequestedFacing.get(entity);
+        lastRequestedFacing.set(entity, facing);
+        if (!previousFacing || previousFacing === facing) return;
+
+        // The character has turned. Any failed request for its old facing is no
+        // longer useful; in particular, do not keep hammering a failed front
+        // composite after the character has turned sideways/backwards.
+        for (const [key, request] of pendingCompositeRequests) {
+            if (request.entity === entity && key !== currentKey) {
+                pendingCompositeRequests.delete(key);
+            }
+        }
     }
 
     function drawHumanoidCharacter(ctx, entity, x, y, z=1, flyOff=0, explicitBounds=null, explicitFacing=null) {
@@ -954,37 +967,31 @@
         const bounds = explicitBounds || {left:x-visualW/2,top:legacyTop,width:visualW,height:legacyH};
         const facing = explicitFacing || (VALID_FACINGS.has(entity.facing) ? entity.facing : 'down');
         const key = spriteCacheKey(entity, facing);
+        abandonStaleCompositeRequests(entity, facing, key);
+
         const cached = cacheGet(key);
         if (cached) {
-            if (pendingCompositeKey === key) {
-                pendingCompositeKey = null;
-                pendingCompositeSince = 0;
-            }
+            pendingCompositeRequests.delete(key);
             ctx.drawImage(cached, bounds.left, bounds.top, bounds.width, bounds.height);
             return true;
         }
 
-        // Single-focus rule: while one character is waiting for its complete
-        // source stack, do not start another character's stack.
-        if (pendingCompositeKey && pendingCompositeKey !== key) {
-            if (Date.now() - pendingCompositeSince < 15000) return true;
-            pendingCompositeKey = null;
-            pendingCompositeSince = 0;
-            pendingCompositeSources = null;
-        }
-
-        // If this exact appearance is already waiting for one or more assets,
-        // do not rebuild it every render frame. The asset manager retains each
-        // requested image (including the six that are already ready) and its
-        // whenReady callback redraws the map when the missing layer arrives.
-        // Re-enter only once the same source set is fully ready.
-        if (pendingCompositeKey === key) {
-            const waitingSources = pendingCompositeSources || [];
-            const stillWaiting = waitingSources.some(src => window.assetManager?.status?.(src) !== 'ready');
-            if (stillWaiting) return true;
-            pendingCompositeKey = null;
-            pendingCompositeSince = 0;
-            pendingCompositeSources = null;
+        // A failed composite is not allowed to monopolise the renderer. Other
+        // characters/facings proceed immediately, while this exact request gets
+        // a short cooldown before it may be attempted again.
+        const pending = pendingCompositeRequests.get(key);
+        if (pending) {
+            const stillWanted = entity.facing === pending.facing;
+            const stillWaiting = pending.sources.some(src =>
+                window.assetManager?.status?.(src) !== 'ready'
+            );
+            if (!stillWanted) {
+                pendingCompositeRequests.delete(key);
+            } else if (stillWaiting || performance.now() < pending.retryAfter) {
+                return true;
+            } else {
+                pendingCompositeRequests.delete(key);
+            }
         }
 
         // Build off-screen once. The compositor writes a completion flag only
@@ -1019,10 +1026,10 @@
             }
         }
         if (!rendered) {
-            window.performanceAssetTraceApi?.compositeEnd?.(key, false, 'renderer returned false', {requestedSources:[...sources],failureSource:[...sources].map(src => src+'='+String(window.assetManager?.status?.(src) || 'unavailable')),pendingKey:pendingCompositeKey,pendingSources:pendingCompositeSources || []});
-            pendingCompositeKey = key;
-            pendingCompositeSince = pendingCompositeSince || Date.now();
-            pendingCompositeSources = [...sources];
+            const failureSources = [...sources];
+            const retryAfter = performance.now() + COMPOSITE_RETRY_DELAY_MS;
+            window.performanceAssetTraceApi?.compositeEnd?.(key, false, 'renderer returned false', {requestedSources:failureSources,failureSource:failureSources.map(src => src+'='+String(window.assetManager?.status?.(src) || 'unavailable')),retryAfterMs:COMPOSITE_RETRY_DELAY_MS});
+            pendingCompositeRequests.set(key, {entity, facing, sources:failureSources, retryAfter});
             return true;
         }
 
@@ -1030,15 +1037,14 @@
         // body/clothing/hair stack while another required layer is still loading.
         const complete = !!window.__humanoidRendererLastComplete;
         if (!complete) {
-            window.performanceAssetTraceApi?.compositeEnd?.(key, false, 'required layer not ready', {requestedSources:[...sources],failureSource:[...sources].map(src => src+'='+String(window.assetManager?.status?.(src) || 'unavailable')),layerOrder:window.__humanoidRendererLastLayerOrder || [],pendingKey:pendingCompositeKey,pendingSources:pendingCompositeSources || []});
-            pendingCompositeKey = key;
-            pendingCompositeSince = pendingCompositeSince || Date.now();
-            pendingCompositeSources = [...sources];
+            const failureSources = [...sources];
+            const retryAfter = performance.now() + COMPOSITE_RETRY_DELAY_MS;
+            window.performanceAssetTraceApi?.compositeEnd?.(key, false, 'required layer not ready', {requestedSources:failureSources,failureSource:failureSources.map(src => src+'='+String(window.assetManager?.status?.(src) || 'unavailable')),layerOrder:window.__humanoidRendererLastLayerOrder || [],retryAfterMs:COMPOSITE_RETRY_DELAY_MS});
+            pendingCompositeRequests.set(key, {entity, facing, sources:failureSources, retryAfter});
             return true;
         }
 
-        pendingCompositeKey = null;
-        pendingCompositeSince = 0;
+        pendingCompositeRequests.delete(key);
         cachePut(key, canvas);
         ctx.drawImage(canvas, bounds.left, bounds.top, bounds.width, bounds.height);
         return true;
