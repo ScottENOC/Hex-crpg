@@ -752,7 +752,14 @@
         window.clothingSystem?.ensureDefaultOutfit?.(entity,{player:entity.side==='player'});
         if (activeSourcePaths) {
             for (const path of window.clothingSystem?.resolveOutfitAssetPaths?.(entity,[view]) || []) {
-                activeSourcePaths.add(window.assetManager?.canonicalPathFor?.(path) || path);
+                const canonical = window.assetManager?.canonicalPathFor?.(path) || path;
+                activeSourcePaths.add(canonical);
+                // Register every required clothing layer with the asset manager
+                // before attempting the body. The old path-only bookkeeping meant
+                // that an unavailable body could return early before drawSlot()
+                // ever requested the clothing assets, leaving the composite with
+                // a catalogued-but-never-started outfit stack.
+                loadImage(canonical);
             }
         }
         const sourceBodyPath = (set?.body?.[bodyType] || set?.body?.average)?.[view];
