@@ -71,7 +71,6 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
         // stable tactical binding. Load it before readiness decorates that path.
         ['humanoidRendererBridge.js','humanoidRendererBridge'],
         ['rendererAssetRecovery.js','rendererAssetRecovery'],
-        ['braidDirectionalHair.js','braidDirectionalHair'],
         ['shieldAppearance.js','shieldAppearance'],
         ['shieldAppearanceUI.js','shieldAppearanceUI'],
         ['equipmentInterface.js','equipmentInterface'],
