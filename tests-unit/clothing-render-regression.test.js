@@ -126,3 +126,22 @@ test('bootstrap clothing layers all consume the shared presentation build token'
     contains(nameSource, 'window.PRESENTATION_BUILD = PRESENTATION_BUILD;');
     contains(nameSource, "['renderHotPathCache.js','renderHotPathCache']");
 });
+
+
+test('core unified garments keep their authoritative directional assets even when stale item records contain clothingLayers', () => {
+    const layersSource = read('clothingLayers.js');
+
+    // The built-in GARMENTS table is the single source of truth for the core
+    // renderer. Otherwise an older window.items record can silently replace the
+    // directional front/back/side mapping and make a front render draw *_side.
+    const specLine = layersSource.match(/function spec\(itemId\)\{[^\n]+/s)?.[0] || '';
+    assert.match(specLine, /const raw=source\?\.layers\|\|/);
+    assert.match(specLine, /item\?\.clothingLayers/);
+
+    for (const id of ['underwear_briefs', 'underwear_bra', 'top_shirt_f']) {
+        contains(layersSource, id + ':');
+    }
+    contains(layersSource, "front:'images/equipment/clothing/briefs_female_front.png'");
+    contains(layersSource, "front:'images/equipment/clothing/bra_front.png'");
+    contains(layersSource, "front:'images/equipment/clothing/top_shirt_f_front.png'");
+});

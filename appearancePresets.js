@@ -201,7 +201,7 @@
                 },
             },
             pants:{
-                itemId:'pants_trousers',
+                itemId:'pants_lattice',
                 layers:{
                     base:{hue:110,saturation:60,value:42,opacity:1},
                     light:{hue:347,saturation:100,value:100,opacity:1},

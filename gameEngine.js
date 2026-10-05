@@ -1214,83 +1214,58 @@ function updatePlayerUI() {
     window.renderEntities();
 }
 
-// CAMPAIGN 4: SPRITE OVERLAY TEST SCENARIO — a plain grassland populated
-// with static NPCs covering every playable race/gender combo, each shown in
-// a few fixed loadouts so weapon/armor/helmet overlay anchors (CHAR_CONFIG's
-// mainHand/offHand/helm/weaponSizeMult etc., gameEngine.js's
-// drawPlayerCharacter) can be eyeballed and tuned side by side. All five
-// races now have a real CHAR_CONFIG entry (goblin/orc reuse their flat
-// monster sprite as the body layer, same pipeline as everyone else — see
-// CHAR_CONFIG's goblin_male/orc_male comments). Not a real fight: no
-// monsters, no combat, side left 'neutral' so nothing auto-engages.
-window.SPRITE_TEST_ORIGIN = { q: 0, r: -6000 }; // far off in unused coordinate space, well clear of every other campaign's hand-placed content
-const SPRITE_TEST_RACES = ['human', 'elf', 'dwarf', 'orc', 'goblin'];
-const SPRITE_TEST_GENDERS = ['male', 'female'];
-const SPRITE_TEST_LOADOUTS = [
-    { label: 'sword+light+helm', equipment: ['sword', 'light_armor', 'nasal_helm'] },
-    { label: 'spear+medium', equipment: ['spear', 'medium_armor'] },
-    { label: 'axe+heavy', equipment: ['axe', 'heavy_armor'] },
-    { label: 'dagger', equipment: ['dagger'] },
-    { label: 'club', equipment: ['club'] },
-    { label: 'bow', equipment: ['bow'] },
-];
+// CAMPAIGN 4: ISOLATED CHARACTER RENDERER TEST
+// Deliberately minimal renderer test: exactly one painted hex and the player's
+// main character. No NPCs, companions, horses, monsters, buildings, scenery,
+// equipment test grid, or surrounding generated terrain.
+//
+// The normal map is effectively infinite and defaults unpainted coordinates to
+// terrain, so the test uses zero vision range. That means drawMap() only paints
+// the single hex containing the player while still exercising the real map and
+// character rendering pipeline.
+//
+// This is intentionally a diagnostic scenario, not a gameplay campaign.
+window.SPRITE_TEST_ORIGIN = { q: 0, r: -6000 };
+
 function setupSpriteTestScenario() {
+    // Campaign 4 is a renderer diagnostic: discard any composites built by
+    // character creation/previous scenarios so the first map render exercises
+    // the current lazy source-request path.
+    window.clearHumanoidSpriteCache?.();
+    window.showMessage('[Renderer Test] Campaign 4 started — diagnostic path active.');
     window.entities = [];
     window.isInCombat = false;
     window.currentTurnEntity = null;
+    window.highlightedHexes = [];
+    window.tileObjects = {};
+    window.overrideTerrain = {};
+    window.exploredHexes = new Set();
 
     const origin = window.SPRITE_TEST_ORIGIN;
-    const radius = Math.max(SPRITE_TEST_RACES.length * SPRITE_TEST_GENDERS.length, SPRITE_TEST_LOADOUTS.length) * 2 + 6;
-    window.hexDisk(origin.q, origin.r, radius).forEach(h => window.setTerrainAt(h.q, h.r, 'Grass'));
 
-    // One row per race/gender combo, one column per loadout — 4 hexes of
-    // spacing both ways so a wide sprite (e.g. dwarf's 1.4x armour wMult)
-    // never visually overlaps its neighbor.
-    const rowSpacing = 4, colSpacing = 4;
-    const colStart = -Math.floor((SPRITE_TEST_LOADOUTS.length - 1) / 2) * colSpacing;
-    const combos = [];
-    SPRITE_TEST_RACES.forEach(race => SPRITE_TEST_GENDERS.forEach(gender => combos.push({ race, gender })));
-    const rowStart = -Math.floor((combos.length - 1) / 2) * rowSpacing;
+    // The only world terrain explicitly created by this scenario.
+    window.setTerrainAt(origin.q, origin.r, 'Grass');
 
-    // Visibility (isVisibleToPlayer, hexMap.js) is computed relative to a
-    // real side:'player' entity — without one, every hex here reads as
-    // unexplored and renders as blank canvas. A big visionBonus guarantees
-    // the whole grid is lit regardless of its final size; parked one row
-    // above the topmost combo row (not at the grid's exact center, which
-    // would land exactly on one of the NPCs since row/col spacing is even)
-    // so it never visually overlaps whatever's being inspected.
-    const playerHex = { q: origin.q, r: origin.r + rowStart - rowSpacing };
-    const playerEntity = new window.Entity(window.party[0].name, 'red', playerHex, window.party[0].attributes.agility + 10);
+    // Use the actual player character produced by character creation.
+    const playerEntity = new window.Entity(
+        window.party[0].name,
+        'red',
+        { q: origin.q, r: origin.r },
+        (window.party[0].attributes?.agility || 0) + 10
+    );
     playerEntity.side = 'player';
     Object.assign(playerEntity, window.party[0]);
-    playerEntity.hex = playerHex;
-    playerEntity.visualQ = playerHex.q; playerEntity.visualR = playerHex.r;
+    playerEntity.hex = { q: origin.q, r: origin.r };
+    playerEntity.visualQ = origin.q;
+    playerEntity.visualR = origin.r;
     playerEntity.skills = window.party[0].skills;
-    // A big flat bonus rather than radius-derived: vision range gets
-    // multiplied by the current light level (worldTime.js), floored at
-    // 0.2x at night — campaign 4 doesn't bother forcing full daylight (this
-    // is a static display, not a real scene), so the bonus needs enough
-    // headroom to clear that 5x worst-case reduction and still cover the
-    // whole grid.
-    playerEntity.visionBonus = 400;
-    window.entities.push(playerEntity);
 
-    combos.forEach((combo, row) => {
-        SPRITE_TEST_LOADOUTS.forEach((loadout, col) => {
-            const hex = { q: origin.q + colStart + col * colSpacing, r: origin.r + rowStart + row * rowSpacing };
-            const ent = window.buildNPC({
-                name: `${combo.race}_${combo.gender}_${loadout.label}`,
-                title: loadout.label,
-                race: combo.race, gender: combo.gender,
-                hex,
-                classLevels: ['fighter'],
-                skillPicks: [],
-                equipment: loadout.equipment,
-                side: 'neutral',
-            });
-            window.entities.push(ent);
-        });
-    });
+    // Zero vision means the current hex is visible but every neighbouring
+    // default/infinite-map coordinate is outside the visible range.
+    // This makes the rendered world literally one visible hex.
+    playerEntity.visionBonus = -(window.LIVE_VISION_RANGE || 25);
+
+    window.entities.push(playerEntity);
 
     window.drawMap();
     window.renderEntities();
@@ -1385,21 +1360,11 @@ function startGameCore(isLoading = false) {
       arenamercenary: "images/arenamercenary.png",
       arenashopkeeper: "images/arenashopkeeper.png",
       grishnak: "images/Grishnak.png",
-      floor1: "images/arenaHexFloor1.png",
-      floor2: "images/arenaHexFloor2.png",
-      floor3: "images/arenaHexFloor3.png",
-      floor4: "images/arenaHexFloor4.png",
-      overlay_blood: "images/overlay blood.png",
-      overlay_skull: "images/overlay skull.png",
-      pedestal: "images/mediumpillar.png",
-      water: "images/water.png",
       boar: "images/boar.png",
       tiger: "images/tiger.png",
       unicorn: "images/unicorn.png",
       eagle: "images/eagle.png",
       eagleflying: "images/eagleflying.png",
-      foliage: "images/foliage.png",
-      wood_floor: "images/wood_floor.svg",
       table: "images/table.svg",
       bench: "images/bench.svg",
       bed: "images/bed.svg",
@@ -1407,7 +1372,6 @@ function startGameCore(isLoading = false) {
       apple: "images/apple.svg",
       door_open: "images/door_open.svg",
       door_closed: "images/door_closed.svg",
-      path: "images/path.svg",
       signpost: "images/signpost.svg",
       fountain: "images/fountain.svg",
       gate_arch: "images/gate_arch.svg",
@@ -1422,26 +1386,44 @@ function startGameCore(isLoading = false) {
       blood_spatter: "images/overlay blood.png",
       blood_spatter_faint: "images/overlay blood.png",
       sheep: "images/sheep.svg",
-      dirt: "images/dirt.svg",
       hut: "images/hut.svg",
       hut_large: "images/hut_large.svg",
       journal: "images/journal.svg",
-      bush_small: "images/bush_small.svg",
-      bush_large: "images/bush_large.svg",
-      tree_small: "images/tree_small.svg",
-      grass_1: "images/grass_1.svg",
-      grass_2: "images/grass_2.svg",
-      grass_3: "images/grass_3.svg",
-      water_1: "images/water_1.svg",
-      water_2: "images/water_2.svg",
   });
-  const visuals = Object.fromEntries(
-      Object.entries(visualSources).map(([key, src]) => [key, window.assetManager.request(src)])
-  );
-  for (const src of new Set(Object.values(visualSources))) {
-      window.assetManager.whenReady(src).then(() => drawMap()).catch(() => {});
-  }
-  window.gameVisuals = visuals;
+  // Keep the complete visual catalogue as paths, but do NOT request every
+  // asset at game startup. The old implementation called assetManager.request()
+  // for every entry here, which meant monsters, arena NPCs, scenery, weapons
+  // and other unrelated assets were all queued before the current world had
+  // even been created. That defeated the renderer's lazy-loading design and
+  // made minimal renderer tests impossible to reason about.
+  //
+  // gameVisuals remains API-compatible: callers still use gameVisuals.foo.
+  // The request now happens only when that specific visual is actually read.
+  window.visualSourcePaths = visualSources;
+  const lazyVisuals = new Proxy(Object.create(null), {
+      get(_target, key) {
+          if (typeof key !== 'string') return undefined;
+          const src = visualSources[key];
+          return src ? window.assetManager.request(src) : undefined;
+      },
+      has(_target, key) {
+          return typeof key === 'string' && Object.prototype.hasOwnProperty.call(visualSources, key);
+      },
+      ownKeys() {
+          return Reflect.ownKeys(visualSources);
+      },
+      getOwnPropertyDescriptor(_target, key) {
+          if (!Object.prototype.hasOwnProperty.call(visualSources, key)) return undefined;
+          return {
+              enumerable: true,
+              configurable: true,
+              get() {
+                  return window.assetManager.request(visualSources[key]);
+              },
+          };
+      },
+  });
+  window.gameVisuals = lazyVisuals;
 
   if (window.loadWorldMap) window.loadWorldMap();
 
@@ -1457,7 +1439,7 @@ function startGameCore(isLoading = false) {
           window.setupVillageScene(true);
       }
       document.addEventListener("keydown", window.handleMovement);
-      window.mapCanvas.addEventListener("click", window.handleClick);
+      if (window.installMapClickHandler) window.installMapClickHandler();
       if (!window.tickInterval) window.tickInterval = setInterval(tick, 10);
       return;
   }
@@ -1467,7 +1449,7 @@ function startGameCore(isLoading = false) {
   if (window.currentCampaign === "1") {
       setupArenaLobby();
       document.addEventListener("keydown", window.handleMovement);
-      window.mapCanvas.addEventListener("click", window.handleClick);
+      if (window.installMapClickHandler) window.installMapClickHandler();
       if (!window.tickInterval) window.tickInterval = setInterval(tick, 10);
       const fp = window.entities.find(e => e.side === 'player' && !e.rider);
       if (fp && window.centerCameraOn) window.centerCameraOn(fp.hex);
@@ -1477,7 +1459,7 @@ function startGameCore(isLoading = false) {
   if (window.currentCampaign === "2") {
       window.setupVillageScene();
       document.addEventListener("keydown", window.handleMovement);
-      window.mapCanvas.addEventListener("click", window.handleClick);
+      if (window.installMapClickHandler) window.installMapClickHandler();
       if (!window.tickInterval) window.tickInterval = setInterval(tick, 10);
       const fp = window.entities.find(e => e.side === 'player' && !e.rider);
       if (fp && window.centerCameraOn) window.centerCameraOn(fp.hex);
@@ -1487,7 +1469,7 @@ function startGameCore(isLoading = false) {
   if (window.currentCampaign === "4") {
       setupSpriteTestScenario();
       document.addEventListener("keydown", window.handleMovement);
-      window.mapCanvas.addEventListener("click", window.handleClick);
+      if (window.installMapClickHandler) window.installMapClickHandler();
       if (!window.tickInterval) window.tickInterval = setInterval(tick, 10);
       if (window.centerCameraOn) window.centerCameraOn(window.SPRITE_TEST_ORIGIN);
       return;
@@ -1523,7 +1505,7 @@ function startGameCore(isLoading = false) {
   }
 
   document.addEventListener("keydown", window.handleMovement);
-  window.mapCanvas.addEventListener("click", window.handleClick);
+  if (window.installMapClickHandler) window.installMapClickHandler();
   
   // Right-click for entity details
   window.mapCanvas.addEventListener("contextmenu", (e) => {
@@ -1632,8 +1614,48 @@ window.CLOTHING_PRESETS = {
     scholars_robe:  { shirtHue: 0,   pantsHue: 0,   satMult: 0.15 },
 };
 
+function rendererDiagnosticLine(label, img, src) {
+    if (!img) return `${label}: NOT REQUESTED`;
+    const state = img.complete ? (img.naturalWidth > 0 ? 'LOADED' : 'FAILED') : 'LOADING';
+    const size = img.naturalWidth && img.naturalHeight ? ` ${img.naturalWidth}x${img.naturalHeight}` : '';
+    return `${label}: ${state}${size} ${src || ''}`;
+}
+
+function writeSpriteRendererDiagnostic(e, cfg) {
+    if (window.currentCampaign !== "4" || e.side !== 'player' || e._rendererDiagnosticWritten) return;
+    e._rendererDiagnosticWritten = true;
+    const gv = window.gameVisuals || {};
+    const sources = window.visualSourcePaths || {};
+    const add = (label, key) => window.showMessage(rendererDiagnosticLine(label, gv[key], sources[key]));
+
+    window.showMessage(`[Renderer] Attempting sprite for ${e.name || 'player'} (${e.race || '?'} ${e.gender || '?'})`);
+    window.showMessage(`[Renderer] CHAR_CONFIG: ${cfg ? 'FOUND' : 'MISSING'}; gameVisuals: ${window.gameVisuals ? 'READY' : 'MISSING'}`);
+    if (!cfg) {
+        window.showMessage('[Renderer] No character config — fallback circle should render.');
+        return;
+    }
+    add('BASE ' + cfg.baseKey, cfg.baseKey);
+    if (cfg.hair?.key) add('HAIR ' + cfg.hair.key, cfg.hair.key);
+    const armorId = e.equipped?.armor;
+    const armorKey = armorId === 'light_armor' ? 'humanLight' : armorId === 'medium_armor' ? 'humanMedium' : armorId === 'heavy_armor' ? 'humanHeavy' : null;
+    if (armorKey) add('ARMOR ' + armorId + ' -> ' + armorKey, armorKey);
+    else window.showMessage('[Renderer] ARMOR: none or unmapped');
+    if (e.equipped?.helmet === 'nasal_helm') add('HELMET nasal_helm', 'nasal_helm');
+    else window.showMessage('[Renderer] HELMET: none');
+    const weaponId = e.equipped?.weapon;
+    const weaponKey = weaponId === 'sword' || weaponId === 'sword_arrow_deflection' || weaponId === 'dagger' ? 'swordIcon' : weaponId === 'axe' ? 'axe' : weaponId === 'spear' ? 'spear' : weaponId === 'club' ? 'club' : weaponId === 'bow' ? 'bow' : null;
+    if (weaponKey) add('WEAPON ' + weaponId + ' -> ' + weaponKey, weaponKey);
+    else window.showMessage('[Renderer] WEAPON: none');
+    const offId = e.equipped?.offhand;
+    const offKey = offId === 'sword' || offId === 'sword_arrow_deflection' || offId === 'dagger' ? 'swordIcon' : offId === 'axe' ? 'axe' : offId === 'spear' ? 'spear' : offId === 'club' ? 'club' : offId === 'bow' ? 'bow' : null;
+    if (offKey && window.items?.[offId]?.type === 'weapon') add('OFFHAND ' + offId + ' -> ' + offKey, offKey);
+    else window.showMessage('[Renderer] OFFHAND: none');
+    window.showMessage('[Renderer] Layer load check complete.');
+}
+
 function drawPlayerCharacter(ctx, e, x, y, z, flyOff) {
     const cfg = CHAR_CONFIG[`${e.race}_${e.gender}`];
+    writeSpriteRendererDiagnostic(e, cfg);
     if (!cfg || !window.gameVisuals) {
         // Note: orc and goblin both now have real CHAR_CONFIG entries
         // (baseKey:'orcBase'/'monsterDefault' respectively), so they go
@@ -2258,9 +2280,29 @@ function renderEntities() {
   
       // Enemy humanoids with sprite config are drawn the same way as player characters
       const hasEnemySpriteCfg = !isSentientAlly && e.race && e.gender && CHAR_CONFIG[`${e.race}_${e.gender}`];
-      if ((isSentientAlly || hasEnemySpriteCfg) && !e.customImage && window.gameVisuals) {
-          window.drawPlayerCharacter(window.mapCtx, e, x, y, z, flyOff);
+      if ((isSentientAlly || hasEnemySpriteCfg) && !e.customImage) {
+          // Record the map-side gate before entering the compositor. This tells us
+          // whether the map is actually reaching the direct renderer, separately
+          // from whether the compositor can render this race/gender.
+          window.__recordHumanoidMapBoundary?.(e);
+          // Map rendering goes directly to the authoritative humanoid compositor.
+          // Initiative portraits already do this, but routing the map through the
+          // legacy drawPlayerCharacter wrapper made it possible for the map and
+          // portrait surfaces to take different paths depending on script timing.
+          // Keep the legacy renderer only as a temporary visual fallback while a
+          // direct composite is still loading.
+          const directRendered = window.drawHumanoidCharacter?.(
+              window.mapCtx, e, x, y, z, flyOff, null, null, 'map'
+          );
+          if (!directRendered) {
+              const legacy = window.drawPlayerCharacter?.__legacyDrawPlayerCharacter;
+              if (typeof legacy === 'function') legacy.call(window, window.mapCtx, e, x, y, z, flyOff);
+          }
       } else if ((e instanceof window.Enemy || e.customImage) && window.gameVisuals) {
+                          // Directional NPC art is requested only when this NPC actually
+                          // reaches the visible entity-render path. Building an NPC roster
+                          // must not download every possible facing in the background.
+                          window.ensureDirectionalNpcImage?.(e);
                           let size = window.hexSize * 1.5 * z;
                           let yOffset = 0;
                           let widthMult = 1.0;

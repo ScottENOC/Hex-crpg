@@ -301,113 +301,23 @@ window.invalidateTerrainBuffer = () => { _terrainBufferZoom = null; };
 // the buffer and offsets window.cameraX/Y before calling this, then restores
 // both afterward.
 function renderTerrainPass(visibleAndExplored, imgOk, viewerFloor) {
+  // TEMPORARY MEMORY TEST: terrain is deliberately rendered as plain coloured
+  // hexes. No terrain/floor/foliage artwork is requested or drawn here.
+  // This isolates decoded terrain artwork and terrain-image caches from the
+  // character-rendering memory budget. Restore the normal image renderer after
+  // the iPhone memory test.
   visibleAndExplored.forEach(({q, r}) => {
-      // Multi-story buildings (window.multiStoryBuildings, terrain.js): a hex
-      // outside every registered building's footprint is unaffected no
-      // matter what floor the viewer is on — getTerrainAtFloor already falls
-      // straight back to getTerrainAt for it. A hex INSIDE a building's
-      // footprint but not part of the viewer's actual floor (either the
-      // viewer is on floor 0 looking at upper-floor-only interior hexes, or
-      // on floor 1+ looking at a ground-floor hex the upper room doesn't
-      // cover) is the BG3 "roof cutaway" case — same ground terrain, drawn
-      // dimmed, so you still see the building's footprint from above.
       const building = viewerFloor ? window.getMultiStoryBuildingAt({ q, r }) : null;
       const onViewerFloor = !building || (building.floors[viewerFloor] && building.floors[viewerFloor].terrain[`${q},${r}`] !== undefined);
       const isCutaway = !!building && !onViewerFloor;
       const terrain = viewerFloor ? window.getTerrainAtFloor(q, r, viewerFloor) : window.getTerrainAt(q, r);
       const {x, y} = hexToPixel(q, r);
-      const zoomedSize = hexSize * window.cameraZoom;
+
       if (isCutaway) mapCtx.globalAlpha = 0.45;
-
-      // SPECIAL: Arena/Lobby Floor Randomization
-      if ((window.currentCampaign === "1" || window.isInArena) && terrain.name === 'Cave Floor') {
-          const noise = Math.abs(Math.sin(q * 12.9898 + r * 78.233));
-          const floorNum = Math.floor(noise * 4) + 1;
-          const floorImg = window.gameVisuals[`floor${floorNum}`];
-          if (imgOk(floorImg)) {
-              drawHexImage(floorImg, x, y, zoomedSize, `floor${floorNum}`);
-          } else {
-              drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
-          }
-
-          // Overlays (10% Blood, 1% Skull) — already smaller than the hex,
-          // so no clipping needed.
-          if (noise < 0.1 && imgOk(window.gameVisuals.overlay_blood)) {
-              mapCtx.drawImage(window.gameVisuals.overlay_blood, x - zoomedSize/2, y - zoomedSize/2, zoomedSize, zoomedSize);
-          } else if (noise > 0.99 && imgOk(window.gameVisuals.overlay_skull)) {
-              const skullSize = zoomedSize * 0.25;
-              mapCtx.drawImage(window.gameVisuals.overlay_skull, x - skullSize/2, y - skullSize/2, skullSize, skullSize);
-          }
-      } else if (terrain.name === 'Pedestal' && imgOk(window.gameVisuals.pedestal)) {
-          const blockedHexes = [{q: q, r: r-1}, {q: q+1, r: r-1}];
-          const needsTransparency = window.entities.some(e => e.alive && blockedHexes.some(bh => e.getAllHexes().some(h => h.q === bh.q && h.r === bh.r)));
-          if (needsTransparency) mapCtx.globalAlpha = 0.5;
-          drawHexImage(window.gameVisuals.pedestal, x, y, zoomedSize, 'pedestal');
-          if (needsTransparency) mapCtx.globalAlpha = 1.0;
-      } else if (terrain.name === 'Forest' || terrain.name === 'Foliage') {
-          // Both terrain types render the same way: the plain dark-green hex
-          // (terrain.js's 'foliage' image happens to be the same forest
-          // green) plus a randomly-picked bush/tree overlay for variety.
-          // 'Forest' is what campaign 2's wilderness actually paints;
-          // 'Foliage' exists as a distinct gameplay terrain (see the
-          // elf/druid foliage-expertise skills) but nothing paints it yet.
-          if (imgOk(window.gameVisuals.foliage)) {
-              drawHexImage(window.gameVisuals.foliage, x, y, zoomedSize, 'foliage');
-          } else {
-              drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
-          }
-          const overlayKey = pickVariantKey(q, r, 401, FOLIAGE_OVERLAYS);
-          const overlayImg = window.gameVisuals[overlayKey];
-          if (imgOk(overlayImg)) {
-              // Seasonal leaf color — see getSeasonalLeafTint (worldTime.js).
-              // Aspect ratio is read from the original <img> (naturalWidth/
-              // Height) before any tinting, since getRecoloredHairSprite
-              // returns a <canvas> (width/height only, no naturalWidth).
-              let drawImg = overlayImg;
-              // B1 graphics option: "Simple" foliage skips this recolor —
-              // one of the pricier per-hex operations in the terrain pass.
-              if (window.foliageDetail !== 'simple' && window.getSeasonalLeafTint && window.getRecoloredHairSprite) {
-                  const tint = window.getSeasonalLeafTint();
-                  const tinted = window.getRecoloredHairSprite(overlayImg, tint.hue, tint.light, tint.sat);
-                  if (tinted) drawImg = tinted;
-              }
-              const isTall = overlayKey === 'tree_small';
-              const footprint = isTall ? [{ q, r }, { q, r: r - 1 }] : [{ q, r }];
-              const occupied = footprint.some(fh => window.entities.some(e => e.alive && e.getAllHexes && e.getAllHexes().some(h => h.q === fh.q && h.r === fh.r)));
-              const w = zoomedSize * 1.7;
-              const h = w * (overlayImg.naturalHeight / overlayImg.naturalWidth);
-              if (occupied) mapCtx.globalAlpha = 0.4;
-              mapCtx.drawImage(drawImg, x - w / 2, y + zoomedSize * 0.6 - h, w, h);
-              if (occupied) mapCtx.globalAlpha = 1.0;
-          }
-      } else if (terrain.name === 'Wood Floor' && imgOk(window.gameVisuals.wood_floor)) {
-          drawHexImage(window.gameVisuals.wood_floor, x, y, zoomedSize, 'wood_floor');
-      } else if (terrain.name === 'Path' && imgOk(window.gameVisuals.path)) {
-          drawHexImage(window.gameVisuals.path, x, y, zoomedSize, 'path');
-      } else if (terrain.name === 'Dirt' && imgOk(window.gameVisuals.dirt)) {
-          drawHexImage(window.gameVisuals.dirt, x, y, zoomedSize, 'dirt');
-      } else if (terrain.name === 'Grass') {
-          // "Lusher"/darker variants weighted higher right next to water — a
-          // cheap direct lookup against the sparse overrideTerrain dict
-          // (water is always explicitly painted, never a fallback default),
-          // not a full getNeighbors()/getTerrainAt() call, since this runs
-          // for every grass hex on screen every frame.
-          const keys = isGrassNearWater(q, r) ? GRASS_VARIANTS_LUSH : GRASS_VARIANTS_DEFAULT;
-          const key = pickVariantKey(q, r, 211, keys);
-          if (imgOk(window.gameVisuals[key])) {
-              drawHexImage(window.gameVisuals[key], x, y, zoomedSize, key);
-          } else {
-              drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
-          }
-      } else if (terrain.name !== 'Water') {
-          drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
-      } else {
-          drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
-      }
+      drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
       if (isCutaway) mapCtx.globalAlpha = 1.0;
   });
 }
-
 function drawMap() {
   if (!mapCtx) return;
   invalidateLightSourcesCache();
@@ -522,21 +432,8 @@ function drawMap() {
   // 3. PASS 2: Entities & Items
   if (window.renderEntities) window.renderEntities();
 
-  // 4. PASS 3: Water Overlay (50% Transparency) - DRAWN ON TOP OF CHARACTERS
-  visibleAndExplored.forEach(({q, r}) => {
-      const terrain = window.getTerrainAt(q, r);
-      if (terrain.name === 'Water') {
-          const key = pickVariantKey(q, r, 311, WATER_VARIANTS);
-          const img = window.gameVisuals[key];
-          if (imgOk(img)) {
-              const {x, y} = hexToPixel(q, r);
-              const zoomedSize = hexSize * window.cameraZoom;
-              mapCtx.globalAlpha = 0.5;
-              drawHexImage(img, x, y, zoomedSize, key);
-              mapCtx.globalAlpha = 1.0;
-          }
-      }
-  });
+  // TEMPORARY MEMORY TEST: no separate water image overlay. Water is
+  // represented only by the plain terrain-colour hex above.
 
   // 4b. PASS 3b: Enemy vision-range overlay while stealthed. Only enemies the
   // player can currently see are shown (you don't get intel on enemies you
@@ -1413,10 +1310,19 @@ function resizeCanvas() {
 }
 window.resizeCanvas = resizeCanvas;
 
+function installMapClickHandler() {
+    if (!mapCanvas || window.__mapClickHandlerInstalled) return;
+    if (typeof window.handleClick !== 'function') return;
+    mapCanvas.addEventListener("click", window.handleClick);
+    window.__mapClickHandlerInstalled = true;
+}
+window.installMapClickHandler = installMapClickHandler;
+
 function initHexMap() {
   mapCanvas = document.getElementById("mapCanvas");
   if (mapCanvas) {
     mapCtx = mapCanvas.getContext("2d");
+    installMapClickHandler();
     
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);

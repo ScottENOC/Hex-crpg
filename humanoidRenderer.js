@@ -8,6 +8,7 @@
 (() => {
     'use strict';
 
+    const BUILD = '20261005-unified-humanoid-renderer-v7';
     const VALID_FACINGS = new Set(['up', 'down', 'left', 'right']);
     const HUMAN_RENDER_ASPECT = 0.48;
     const previousHex = new WeakMap();
@@ -15,12 +16,244 @@
     // Several humanoid rigs intentionally share the same authored hair paths.
     // Keep one HTMLImageElement per source so a failed request/retry cannot leave
     // one race's private copy broken while another copy of the same file succeeds.
-    const rendererImageCache = new Map();
+    const rendererPendingLoads = new Set();
+    const mirroredHairSources = new WeakMap();
+    let activeSourcePaths = null;
+    // Failed composites are remembered per appearance/facing rather than
+    // globally blocking every other humanoid. A broken front view must not
+    // prevent a visible side/back view, or another character, from rendering.
+    const pendingCompositeRequests = new Map();
+    const lastRequestedFacing = new WeakMap();
+    const COMPOSITE_RETRY_DELAY_MS = 1500;
+
+    // Temporary on-device renderer diagnostics. This is intentionally kept outside
+    // the performance report so we can inspect the exact facing/layer decision that
+    // caused a composite to be rejected without turning every frame into log spam.
+    // Keep renderer debug deliberately tiny. The panel is a troubleshooting
+    // instrument, not a session log: retain only the most recent completed
+    // attempts plus compact lifetime counters.
+    const rendererDebugHistory = [];
+    const RENDERER_DEBUG_HISTORY_LIMIT = 6;
+    const rendererDebugSummary = {
+        attempts:0, painted:0, cacheHits:0, pending:0, failures:0, incomplete:0, mapBranches:0, mapCalls:0,
+    };
+    let rendererDebugPanel = null;
+
+    function rendererDebugRecord(entry) {
+        const snapshot = {
+            time: new Date().toISOString(),
+            ...entry,
+            layerDiagnostics: Array.isArray(window.__humanoidRendererLastLayerDiagnostics)
+                ? window.__humanoidRendererLastLayerDiagnostics.map(item => ({...item}))
+                : [],
+            hairDiagnostics: window.__humanoidRendererLastHairDiagnostics
+                ? {...window.__humanoidRendererLastHairDiagnostics}
+                : null,
+        };
+
+        // "started" is an internal trace point. Keep it out of the visible
+        // history unless the attempt never produces a final result.
+        if (entry.result === 'started') {
+            rendererDebugSummary.attempts++;
+            rendererDebugSummary.pending++;
+            return;
+        }
+
+        if (entry.result === 'painted') rendererDebugSummary.painted++;
+        else if (entry.result === 'cache-hit') rendererDebugSummary.cacheHits++;
+        else if (entry.result === 'incomplete') rendererDebugSummary.incomplete++;
+        else rendererDebugSummary.failures++;
+
+        rendererDebugSummary.pending = Math.max(0, rendererDebugSummary.pending - 1);
+
+        rendererDebugHistory.push(snapshot);
+        while (rendererDebugHistory.length > RENDERER_DEBUG_HISTORY_LIMIT) rendererDebugHistory.shift();
+        rendererDebugRefresh();
+    }
+
+    function rendererDebugText() {
+        const lines = [
+            'HEX RENDER',
+            'build: ' + (window.__humanoidRendererBuild || '?') +
+                '  clothes: ' + (window.__clothingRendererBuild || '?'),
+            'summary: ' + rendererDebugSummary.attempts +
+                ' attempts | drawn ' + (rendererDebugSummary.painted + rendererDebugSummary.cacheHits) +
+                ' | built ' + rendererDebugSummary.painted +
+                ' | cache ' + rendererDebugSummary.cacheHits +
+                ' | incomplete ' + rendererDebugSummary.incomplete +
+                ' | failed ' + rendererDebugSummary.failures +
+                ' | map ' + rendererDebugSummary.mapBranches + '/' + rendererDebugSummary.mapCalls,
+            '',
+            'RECENT (last ' + RENDERER_DEBUG_HISTORY_LIMIT + ')',
+        ];
+        if (!rendererDebugHistory.length) {
+            lines.push('No renders yet.');
+            return lines.join('\\n');
+        }
+
+        const compactLayerStatus = (item) => {
+            const bySlot = new Map();
+            for (const d of (item.layerDiagnostics || [])) {
+                const slot = d.slot || d.layerId || '?';
+                const ready = !!d.imageComplete && !!d.naturalWidth && !!d.naturalHeight;
+                const ok = !!d.drawn;
+                bySlot.set(slot, ok ? '✓' : (ready ? '✗' : '…'));
+            }
+            const order = ['bra','shirt','pants','shoes','underwear'];
+            return order.filter(slot => bySlot.has(slot))
+                .map(slot => slot + bySlot.get(slot))
+                .concat([...bySlot.entries()]
+                    .filter(([slot]) => !order.includes(slot))
+                    .map(([slot,status]) => slot + status))
+                .join(' ');
+        };
+
+        const compactHairStatus = (item) => {
+            const h = item.hairDiagnostics;
+            if (!h) return '';
+            const ready = !!h.imageComplete && !!h.naturalWidth && !!h.naturalHeight;
+            return 'hair' + (h.drawn ? '✓' : (ready ? '✗' : '…'));
+        };
+
+        for (const [index, item] of rendererDebugHistory.entries()) {
+            const face = item.facing || '?';
+            const view = item.view || '?';
+            const layers = compactLayerStatus(item);
+            const hair = compactHairStatus(item);
+            const status = item.result === 'painted' ? '✓' :
+                item.result === 'cache-hit' ? 'cache✓' : '✗';
+            const surface = item.surface === 'portrait' ? 'P' : 'M';
+            const composite = item.compositeId ? 'C' + item.compositeId : '';
+            const parts = ['#' + (index + 1), surface, face + '/' + view, status];
+            if (composite) parts.push(composite);
+            if (layers) parts.push(layers);
+            if (hair) parts.push(hair);
+            lines.push(parts.join('  '));
+
+            if (item.result !== 'painted' && item.result !== 'cache-hit') {
+                const failed = (item.layerDiagnostics || [])
+                    .filter(d => d.expected && !d.drawn)
+                    .map(d => d.slot + (d.reason ? ':' + d.reason : ''))
+                    .slice(0, 3);
+                if (failed.length) lines.push('  FAIL: ' + failed.join(', '));
+                else if (item.result) lines.push('  FAIL: ' + item.result);
+            }
+        }
+        return lines.join('\\n');
+    }
+
+    function rendererDebugRefresh() {
+        if (!rendererDebugPanel) return;
+        const output = rendererDebugPanel.querySelector('pre');
+        if (output) output.textContent = rendererDebugText();
+    }
+
+    function installRendererDebugPanel() {
+        if (rendererDebugPanel || !document.body) return;
+        const wrap = document.createElement('div');
+        wrap.id = 'hex-crpg-renderer-debug';
+        Object.assign(wrap.style, {
+            position:'fixed', right:'8px', bottom:'8px', zIndex:'2147483647',
+            width:'min(94vw, 560px)', maxHeight:'70vh', display:'none',
+            background:'rgba(0,0,0,.92)', color:'#fff', border:'1px solid #888',
+            borderRadius:'8px', padding:'8px', font:'12px/1.35 monospace',
+            boxSizing:'border-box', overflow:'hidden',
+        });
+        const bar=document.createElement('div');
+        bar.style.cssText='display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;';
+        const button=(label,fn)=>{
+            const b=document.createElement('button');
+            b.textContent=label; b.type='button'; b.style.cssText='padding:6px 9px;';
+            b.addEventListener('click',fn); bar.appendChild(b); return b;
+        };
+        button('Refresh',rendererDebugRefresh);
+        button('Clear',()=>{rendererDebugHistory.length=0;rendererDebugRefresh();});
+        button('Copy',async()=>{
+            const text=rendererDebugText();
+            try {
+                await navigator.clipboard?.writeText(text);
+            } catch (_) {
+                const area=document.createElement('textarea');
+                area.value=text; area.style.position='fixed'; area.style.opacity='0';
+                document.body.appendChild(area); area.select();
+                try { document.execCommand('copy'); } catch (_) {}
+                area.remove();
+            }
+        });
+        const close=button('Close',()=>{wrap.style.display='none';});
+        close.style.marginLeft='auto';
+        const pre=document.createElement('pre');
+        pre.style.cssText='margin:0;white-space:pre-wrap;overflow:auto;max-height:calc(70vh - 50px);';
+        wrap.append(bar,pre);
+        document.body.appendChild(wrap);
+        rendererDebugPanel=wrap;
+
+        const toggle=document.createElement('button');
+        toggle.type='button'; toggle.textContent='Renderer debug';
+        toggle.id='hex-crpg-renderer-debug-toggle';
+        Object.assign(toggle.style,{
+            position:'fixed',right:'8px',bottom:'8px',zIndex:'2147483646',
+            padding:'7px 9px',font:'12px sans-serif',
+        });
+        toggle.addEventListener('click',()=>{wrap.style.display='block';rendererDebugRefresh();});
+        document.body.appendChild(toggle);
+    }
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',installRendererDebugPanel,{once:true});
+    else installRendererDebugPanel();
+
+    window.__humanoidRendererBuild = BUILD;
+
+    // Completed map sprites are built lazily. We deliberately do not prebuild a
+    // fixed set for the player: every character/facing gets a composite only when
+    // the map actually asks for it. The cache is bounded so NPC-heavy fights cannot
+    // turn a useful optimisation into another source of iOS canvas memory pressure.
+    // Cache composites in character groups: one appearance can retain up to four
+    // directional views, and map + initiative always share the same view canvas.
+    // 48 total entries therefore means up to 12 character appearances resident.
+    const humanoidSpriteCache = new Map();
+    const MAX_HUMANOID_SPRITE_VIEWS = 4;
+    const MAX_HUMANOID_CACHED_CHARACTERS = 12;
+    let nextHumanoidCompositeId = 1;
+    // Build cached composites at 2x their map display resolution. The previous
+    // cache stored each sprite at its final on-map pixel size, so a small
+    // character could be permanently reduced to a small bitmap and then
+    // enlarged by the map renderer. Other/legacy characters did not go through
+    // this cache, making the direct-compositor player look noticeably softer.
+    const HUMANOID_CACHE_SCALE = 2;
+    let humanoidSpriteCacheBuilds = 0;
+    let humanoidSpriteCacheHits = 0;
+
     let legacyDrawPlayerCharacter = null;
     let installed = false;
     let creatorLegacy = null;
     let portraitObserver = null;
     let portraitQueued = false;
+    let rendererAssetRedrawQueued = false;
+
+    // Asset-ready callbacks can arrive together when a new facing requests a
+    // body, hair and several clothing layers at once. Coalesce those callbacks
+    // into one browser-frame redraw; otherwise each ready asset can synchronously
+    // kick drawMap + renderEntities again and make a new-facing request look like
+    // an iPhone freeze.
+    function queueRendererAssetRedraw() {
+        if (rendererAssetRedrawQueued) return;
+        rendererAssetRedrawQueued = true;
+        const flush = () => {
+            rendererAssetRedrawQueued = false;
+            // drawMap() already invokes renderEntities() in the normal map
+            // pipeline, so do not call both here. This keeps one asset-ready event
+            // to one map/entity pass.
+            if (window.drawMap) window.drawMap();
+            else window.renderEntities?.();
+            queuePortraitRefresh();
+            if (document.getElementById('appearance-preview-canvas')) {
+                requestAnimationFrame(() => window.updateAppearancePreview?.());
+            }
+        };
+        if (window.requestAnimationFrame) window.requestAnimationFrame(flush);
+        else setTimeout(flush, 0);
+    }
 
     // All five playable races and both body presentations are compositor-owned.
     // bodyAssetMode is diagnostic metadata: it makes temporary art fallbacks explicit
@@ -61,7 +294,9 @@
                 braid: {
                     front:'images/characters/human_female/hair_braid_front.png',
                     side:'images/characters/human_female/hair_braid_side.png',
+                    sideLeft:'images/characters/human_female/hair_braid_side_left.png',
                     back:'images/characters/human_female/hair_braid_back.png',
+                    backRight:'images/characters/human_female/hair_braid_back_right.png',
                 },
                 curly: {
                     front:'images/characters/human_female/hair_curly_front.png',
@@ -295,6 +530,23 @@
         return !!CHARACTER_RIGS[keyFor(entity)] && !entity?.customImage;
     }
 
+    function recordMapHumanoidBoundary(entity) {
+        rendererDebugSummary.mapBranches++;
+        const canRender = canDirectRender(entity);
+        if (canRender) rendererDebugSummary.mapCalls++;
+        window.__humanoidRendererLastMapBoundary = {
+            entityName: entity?.name || entity?.id || null,
+            race: entity?.race || null,
+            gender: entity?.gender || null,
+            customImage: !!entity?.customImage,
+            facing: VALID_FACINGS.has(entity?.facing) ? entity.facing : 'down',
+            view: facingToView(VALID_FACINGS.has(entity?.facing) ? entity.facing : 'down'),
+            canDirectRender: canRender,
+            timestamp: Date.now(),
+        };
+        return canRender;
+    }
+
     function facingToView(facing) {
         if (facing === 'up') return 'back';
         if (facing === 'left' || facing === 'right') return 'side';
@@ -308,38 +560,39 @@
 
     function loadImage(src) {
         if (!src) return null;
-        if (rendererImageCache.has(src)) return rendererImageCache.get(src);
-        const image = window.assetManager.request(src);
-        rendererImageCache.set(src, image);
-        window.assetManager.whenReady(src).then(() => {
-            window.drawMap?.();
-            window.renderEntities?.();
-            queuePortraitRefresh();
-            // The creator preview may have tried to draw while this image was
-            // still deferred. Redraw it now rather than leaving a blank canvas
-            // until the player happens to touch another appearance control.
-            if (document.getElementById('appearance-preview-canvas')) {
-                requestAnimationFrame(() => window.updateAppearancePreview?.());
-            }
-        }).catch((error) => {
-            console.warn('Humanoid renderer art failed to load:', src, error);
-            if (!rendererImageCache.get(`reported:${src}`)) {
-                rendererImageCache.set(`reported:${src}`, true);
-                window.showMessage?.(`Art asset failed to load: ${src.split('/').pop()} — ${error?.message || 'load failed'}`);
-            }
-        });
+        // Directional presentation extensions may temporarily supply an already
+        // prepared Image/Canvas (for example the asymmetric left braid). These
+        // are drawable sources, not asset-manager paths. Never stringify them
+        // into a bogus request such as "[object HTMLImageElement]".
+        if (typeof src !== 'string') {
+            return src;
+        }
+        const canonical = window.assetManager?.canonicalPathFor?.(src) || src;
+        if (activeSourcePaths) activeSourcePaths.add(canonical);
+        const image = window.assetManager.request(canonical);
+        if (!rendererPendingLoads.has(canonical) && !imageReady(image)) {
+            rendererPendingLoads.add(canonical);
+            window.assetManager.whenReady(canonical).then(() => {
+                rendererPendingLoads.delete(canonical);
+                queueRendererAssetRedraw();
+            }).catch((error) => {
+                rendererPendingLoads.delete(canonical);
+                console.warn('Humanoid renderer art failed to load:', canonical, error);
+            });
+        }
         return image;
     }
 
+    // These structures contain source paths, not retained Image objects.
     function loadSet(paths) {
         return {
             body:Object.fromEntries(Object.entries(paths.body).map(([bodyType, views]) => [
                 bodyType,
-                Object.fromEntries(Object.entries(views).map(([view, src]) => [view, loadImage(src)])),
+                Object.fromEntries(Object.entries(views).map(([view, src]) => [view, src])),
             ])),
-            hair:Object.fromEntries(Object.entries(paths.hair).map(([style, views]) => [
+            hair:Object.fromEntries(Object.entries(paths.hair || {}).map(([style, views]) => [
                 style,
-                Object.fromEntries(Object.entries(views).map(([view, src]) => [view, loadImage(src)])),
+                Object.fromEntries(Object.entries(views).map(([view, src]) => [view, src])),
             ])),
         };
     }
@@ -347,13 +600,12 @@
     const CHARACTER_ASSETS = Object.fromEntries(Object.entries(CHARACTER_PATHS)
         .map(([key, paths]) => [key, loadSet(paths)]));
     const SHIELD_ASSETS = Object.fromEntries(Object.entries(SHIELD_PATHS)
-        .map(([visual, paths]) => [visual, {front:loadImage(paths.front), back:loadImage(paths.back)}]));
+        .map(([visual, paths]) => [visual, {front:paths.front, back:paths.back}]));
     const ARMOUR_ASSETS = Object.fromEntries(Object.entries(ARMOUR_PATHS)
-        .map(([tier, paths]) => [tier, {front:loadImage(paths.front), back:loadImage(paths.back)}]));
+        .map(([tier, paths]) => [tier, {front:paths.front, back:paths.back}]));
     const REAR_EQUIPMENT_ASSETS = {
-        // Compatibility aliases for existing readiness checks and legacy consumers.
         shield:SHIELD_ASSETS.round.back,
-        helmet:loadImage(REAR_EQUIPMENT_PATHS.helmet),
+        helmet:REAR_EQUIPMENT_PATHS.helmet,
         armour:Object.fromEntries(Object.entries(ARMOUR_ASSETS)
             .map(([tier, views]) => [tier, views.back])),
     };
@@ -432,6 +684,43 @@
             : source;
     }
 
+    // Asymmetry is an input to the normal compositor, not a second renderer.
+    function mirroredHairSource(image) {
+        if (!imageReady(image)) return null;
+        if (mirroredHairSources.has(image)) return mirroredHairSources.get(image);
+        const w = image.naturalWidth || image.width;
+        const h = image.naturalHeight || image.height;
+        if (!w || !h) return null;
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const mirrorCtx = canvas.getContext('2d');
+        if (!mirrorCtx) return null;
+        mirrorCtx.translate(w, 0);
+        mirrorCtx.scale(-1, 1);
+        mirrorCtx.drawImage(image, 0, 0);
+        mirroredHairSources.set(image, canvas);
+        return canvas;
+    }
+
+    function resolveDirectionalHair(entity, hairSet, view, facing) {
+        const asymmetricPath = view === 'side' && facing === 'left'
+            ? hairSet?.sideLeft
+            : view === 'back'
+                ? hairSet?.back
+                : hairSet?.[view];
+        const path = asymmetricPath || hairSet?.[view] || hairSet?.front;
+        const source = path ? loadImage(path) : null;
+        const recoloured = resolvedHairImage(entity, source);
+        const needsMirror = view === 'side' && facing === 'left' && !!hairSet?.sideLeft;
+        return {
+            path: path || null,
+            source,
+            image: needsMirror ? mirroredHairSource(recoloured) : recoloured,
+            asymmetric: needsMirror || (view === 'back' && !!hairSet?.backRight),
+        };
+    }
+
     function alphaTrim(image) {
         if (!image) return null;
         if (trimCache.has(image)) return trimCache.get(image);
@@ -500,21 +789,20 @@
         if (!id) return null;
         const item = window.items?.[id];
         const reduction = Number(item?.reduction || 0);
-        const visuals = window.gameVisuals || {};
         const tier = reduction >= 3 ? 'heavy' : reduction >= 2 ? 'medium' : 'light';
-        const authored = view === 'back' ? ARMOUR_ASSETS[tier]?.back : ARMOUR_ASSETS[tier]?.front;
-        // The canonical organised pair is the normal rendering source. Keep the
-        // compatibility preload as a temporary load-failure fallback only.
-        const legacy = tier === 'heavy' ? visuals.humanHeavy : tier === 'medium' ? visuals.humanMedium : visuals.humanLight;
-        let image = imageReady(authored) ? authored : legacy;
-        if (!image) return null;
+        const authoredPath = view === 'back' ? ARMOUR_ASSETS[tier]?.back : ARMOUR_ASSETS[tier]?.front;
+        const image = authoredPath ? loadImage(authoredPath) : null;
+        // The organised directional armour assets are authoritative. There is
+        // deliberately no legacy fallback: asking for armour should only ever
+        // initialise the armour asset actually being rendered.
         if (entity.goldGear && window.getGoldTintedSprite) image = window.getGoldTintedSprite(image) || image;
         return image;
     }
 
     function helmetImage(entity, view) {
         if (!entity.equipped?.helmet) return null;
-        let image = rearPreferred(view, REAR_EQUIPMENT_ASSETS.helmet, window.gameVisuals?.nasal_helm || null);
+        const helmetSource = REAR_EQUIPMENT_ASSETS.helmet ? loadImage(REAR_EQUIPMENT_ASSETS.helmet) : null;
+        let image = rearPreferred(view, helmetSource, window.gameVisuals?.nasal_helm || null);
         if (image && entity.goldGear && window.getGoldTintedSprite) image = window.getGoldTintedSprite(image) || image;
         return image;
     }
@@ -538,8 +826,10 @@
         const item = window.items?.[id];
         if (item?.type === 'shield') {
             const shieldSet = SHIELD_ASSETS[item.shieldVisual] || SHIELD_ASSETS.round;
-            const front = imageReady(shieldSet?.front) ? shieldSet.front : window.gameVisuals?.shield;
-            return {image:rearPreferred(view, shieldSet?.back, front),kind:'shield',scale:.73,itemId:id};
+            const frontSource = shieldSet?.front ? loadImage(shieldSet.front) : null;
+            const backSource = shieldSet?.back ? loadImage(shieldSet.back) : null;
+            const front = imageReady(frontSource) ? frontSource : window.gameVisuals?.shield;
+            return {image:rearPreferred(view, backSource, front),kind:'shield',scale:.73,itemId:id};
         }
         const spec = weaponSpec(id);
         return spec ? {...spec,itemId:id} : null;
@@ -719,15 +1009,28 @@
 
     function drawDirectionalHumanoidInBounds(ctx, entity, bounds, facing='down') {
         if (!ctx || !entity || !bounds || !canDirectRender(entity)) return false;
+        let compositionComplete = true;
         const key = keyFor(entity);
         const view = facingToView(facing);
         const set = CHARACTER_ASSETS[key];
         const bodyType = entity.bodyType || 'average';
-        // Clothing is optional decoration. Start its loads, but never let a
-        // missing/slow garment suppress the body layer for the entire character.
+        // Establish the deterministic outfit, then let drawSlot request only
+        // the layers actually needed for this visible character/facing.
         window.clothingSystem?.ensureDefaultOutfit?.(entity,{player:entity.side==='player'});
-        window.clothingSystem?.preloadOutfit?.(entity,view);
-        const sourceBody = (set?.body?.[bodyType] || set?.body?.average)?.[view];
+        if (activeSourcePaths) {
+            for (const path of window.clothingSystem?.resolveOutfitAssetPaths?.(entity,[view]) || []) {
+                const canonical = window.assetManager?.canonicalPathFor?.(path) || path;
+                activeSourcePaths.add(canonical);
+                // Register every required clothing layer with the asset manager
+                // before attempting the body. The old path-only bookkeeping meant
+                // that an unavailable body could return early before drawSlot()
+                // ever requested the clothing assets, leaving the composite with
+                // a catalogued-but-never-started outfit stack.
+                loadImage(canonical);
+            }
+        }
+        const sourceBodyPath = (set?.body?.[bodyType] || set?.body?.average)?.[view];
+        const sourceBody = sourceBodyPath ? loadImage(sourceBodyPath) : null;
         // A direct body image can be temporarily unavailable or permanently broken.
         // Do not claim an empty frame: decline it so the established renderer can
         // draw the character while the direct asset loads or recovers.
@@ -736,14 +1039,17 @@
         const layout = DIRECTIONAL_LAYOUT[view];
         const hairStyle = entity.hairStyle || 'brown_1';
         const hairSet = set?.hair?.[hairStyle] || set?.hair?.brown_1;
-        const sourceHair = hairSet?.[view] || set?.hair?.brown_1?.[view];
+        const hairSelection = resolveDirectionalHair(entity, hairSet || {}, view, facing);
+        const sourceHairPath = hairSelection.path;
+        const sourceHair = hairSelection.source;
         const bodyImage = resolvedBodyImage(entity, sourceBody);
-        const hairImage = resolvedHairImage(entity, sourceHair);
+        const hairImage = hairSelection.image;
         const hasHelmet = !!entity.equipped?.helmet && equipmentSlotVisible(entity,'helmet');
         window.clothingSystem?.migrateLegacyEquipment?.(entity);
         const mirror = facing === 'left';
         const cx = bounds.left + bounds.width/2;
         const layerOrder = [];
+        const layerDiagnostics = [];
 
         const drawShieldLayer = () => {
             let shieldDrawn = false;
@@ -785,20 +1091,43 @@
                 ? !!drawVisibleFit(ctx, bodySource, bounds, bodyTarget || {x:0,y:0,w:1,h:1})
                 : drawCropped(ctx, bodySource, layout.bodyCrop, layout.bodyDest, bounds);
             if (bodyDrawn) layerOrder.push('body');
-            for (const slot of ['underwear','bra','pants','shirt']) {
-                if (window.clothingSystem?.drawSlot?.(ctx, entity, slot, view, bounds)) layerOrder.push(slot);
+            for (const slot of ['underwear','bra','pants','shirt','shoes']) {
+                const expected = entity.displayClothes !== false
+                    && !!entity.equipped?.[slot]
+                    && equipmentSlotVisible(entity, slot);
+                const drawn = window.clothingSystem?.drawSlot?.(ctx, entity, slot, view, bounds) || false;
+                const slotDiagnostics = Array.isArray(window.__clothingRendererLastDrawDiagnostics)
+                    ? window.__clothingRendererLastDrawDiagnostics.map(item => ({...item, expected}))
+                    : [{slot,view,itemId:entity.equipped?.[slot]||null,expected,drawn,reason:'no-slot-diagnostics'}];
+                layerDiagnostics.push(...slotDiagnostics);
+                if (drawn) layerOrder.push(slot);
+                if (expected && !drawn) compositionComplete = false;
             }
-            if (entity.displayArmour !== false && equipmentSlotVisible(entity,'armor') && entity.equipped?.armor && drawArmour(ctx, entity, view, bounds)) layerOrder.push('armour');
+            const armourExpected = entity.displayArmour !== false
+                && equipmentSlotVisible(entity,'armor')
+                && !!entity.equipped?.armor;
+            const armourDrawn = armourExpected ? drawArmour(ctx, entity, view, bounds) : false;
+            if (armourDrawn) layerOrder.push('armour');
+            if (armourExpected && !armourDrawn) compositionComplete = false;
             if (typeof window.drawFacialHairLayer === 'function' && window.drawFacialHairLayer(ctx,entity,view,bounds)) layerOrder.push('facialHair');
+            if (!hasHelmet && (!hairImage || !imageReady(hairImage))) compositionComplete = false;
             if (!hasHelmet && imageReady(hairImage)) {
-                const tightDirectional = hairStyle === 'braid' && view !== 'front';
+                const tightDirectional = !!hairSelection.asymmetric && view !== 'front';
                 const tightDest = tightDirectional
                     ? tightDirectionalHairDestination(sourceHair, view, hairSet?.front)
                     : null;
                 const hairCrop = tightDest ? {x:0,y:0,w:1,h:1} : layout.hairCrop;
                 const hairDest = tightDest || layout.hairDest;
-                const hairDrawn = drawCropped(ctx, hairImage, hairCrop, hairDest, bounds);
+                const hairDrawn = tightDest
+                    ? drawCropped(ctx, hairImage, hairCrop, hairDest, bounds)
+                    : drawVisibleFit(ctx, hairImage, bounds, {
+                        x:hairDest.x,
+                        y:-0.10,
+                        w:hairDest.w,
+                        h:0.47,
+                    });
                 if (hairDrawn) layerOrder.push('hair');
+                if (!hairDrawn) compositionComplete = false;
                 window.__humanoidRendererLastHair = {
                     style:hairStyle,
                     view,
@@ -809,21 +1138,128 @@
                     sourceHeight:sourceHair?.naturalHeight || sourceHair?.height || 0,
                     drew:!!hairDrawn,
                 };
-            } else if (hasHelmet && drawHelmet(ctx, entity, view, bounds)) layerOrder.push('helmet');
+            } else if (hasHelmet) {
+                const helmetDrawn = drawHelmet(ctx, entity, view, bounds);
+                if (helmetDrawn) layerOrder.push('helmet');
+                if (!helmetDrawn) compositionComplete = false;
+            }
 
             if (!shieldBehindBody) drawShieldLayer();
             if (view !== 'back') drawWeaponLayer();
+
+            // A selected/visible weapon or shield is part of the requested
+            // character appearance. If neither held-item pass managed to draw it,
+            // keep this frame out of the composite cache so a transient asset load
+            // can recover on the next render instead of becoming permanent.
+            for (const slot of ['main','off']) {
+                const equipmentSlot = slot === 'main' ? 'weapon' : 'offhand';
+                const id = slot === 'main' ? entity.equipped?.weapon : entity.equipped?.offhand;
+                if (!id || !equipmentSlotVisible(entity, equipmentSlot)) continue;
+                const spec = slotSpec(entity, slot, view);
+                if (!spec) continue;
+                const expectedLayer = spec.kind === 'shield' ? 'shield' : 'weapons';
+                if (!layerOrder.includes(expectedLayer)) compositionComplete = false;
+            }
         } finally {
             ctx.restore();
         }
 
+        const hairDiagnostics = {
+            style:hairStyle,
+            view,
+            source:sourceHairPath||null,
+            status:sourceHairPath?(window.assetManager?.status?.(sourceHairPath)||'unrequested'):'missing-source',
+            imageComplete:!!hairImage?.complete,
+            naturalWidth:sourceHair?.naturalWidth||0,
+            naturalHeight:sourceHair?.naturalHeight||0,
+            drawn:layerOrder.includes('hair'),
+            expected:!hasHelmet,
+        };
         window.__humanoidRendererLastLayerOrder = layerOrder;
+        window.__humanoidRendererLastLayerDiagnostics = layerDiagnostics;
+        window.__humanoidRendererLastHairDiagnostics = hairDiagnostics;
+        window.__humanoidRendererLastComplete = compositionComplete;
         window.__humanoidRendererLastDraw = {entity,key,view,facing,bounds:{...bounds},timestamp:Date.now()};
         window.__humanoidRendererDrawCount = (window.__humanoidRendererDrawCount || 0) + 1;
         return true;
     }
 
-    function drawHumanoidCharacter(ctx, entity, x, y, z=1, flyOff=0) {
+    function safeAppearanceKey(entity) {
+        try {
+            return JSON.stringify({
+                race:entity.race, gender:entity.gender, bodyType:entity.bodyType,
+                hairStyle:entity.hairStyle, hairHue:entity.hairHue,
+                hairLightMult:entity.hairLightMult, hairSatMult:entity.hairSatMult,
+                skinHue:entity.skinHue, skinSaturation:entity.skinSaturation, skinLightness:entity.skinLightness,
+                equipped:entity.equipped, clothingColors:entity.clothingColors,
+                displayArmour:entity.displayArmour, displayClothes:entity.displayClothes,
+                goldGear:entity.goldGear, equipmentAppearance:entity.equipmentAppearance,
+            });
+        } catch (_) {
+            return String(entity?.name || 'humanoid');
+        }
+    }
+
+    function appearanceCacheKey(entity) {
+        return safeAppearanceKey(entity);
+    }
+
+    function spriteCacheKey(entity, facing) {
+        // The composite identity is appearance + facing. The actual cache is
+        // grouped by appearance so all four views of a character stay together.
+        return [appearanceCacheKey(entity), facing].join('::');
+    }
+
+    function cacheGet(appearanceKey, facing) {
+        const group = humanoidSpriteCache.get(appearanceKey);
+        const value = group?.get(facing);
+        if (!value) return null;
+        // Touch the character group and the individual view. Map and portrait
+        // deliberately receive the exact same cached canvas object.
+        humanoidSpriteCache.delete(appearanceKey);
+        humanoidSpriteCache.set(appearanceKey, group);
+        group.delete(facing);
+        group.set(facing, value);
+        humanoidSpriteCacheHits++;
+        return value;
+    }
+
+    function cachePut(appearanceKey, facing, canvas) {
+        let group = humanoidSpriteCache.get(appearanceKey);
+        if (!group) group = new Map();
+        group.delete(facing);
+        const entry = {canvas, compositeId: nextHumanoidCompositeId++};
+        group.set(facing, entry);
+        humanoidSpriteCache.delete(appearanceKey);
+        humanoidSpriteCache.set(appearanceKey, group);
+        while (humanoidSpriteCache.size > MAX_HUMANOID_CACHED_CHARACTERS) {
+            humanoidSpriteCache.delete(humanoidSpriteCache.keys().next().value);
+        }
+        return entry;
+    }
+
+    function clearHumanoidSpriteCache() {
+        humanoidSpriteCache.clear();
+        pendingCompositeRequests.clear();
+        lastRequestedFacing.clear?.();
+    }
+
+    function abandonStaleCompositeRequests(entity, facing, currentKey) {
+        const previousFacing = lastRequestedFacing.get(entity);
+        lastRequestedFacing.set(entity, facing);
+        if (!previousFacing || previousFacing === facing) return;
+
+        // The character has turned. Any failed request for its old facing is no
+        // longer useful; in particular, do not keep hammering a failed front
+        // composite after the character has turned sideways/backwards.
+        for (const [key, request] of pendingCompositeRequests) {
+            if (request.entity === entity && key !== currentKey) {
+                pendingCompositeRequests.delete(key);
+            }
+        }
+    }
+
+    function drawHumanoidCharacter(ctx, entity, x, y, z=1, flyOff=0, explicitBounds=null, explicitFacing=null, renderSurface='map') {
         if (!canDirectRender(entity)) return false;
         const rig = CHARACTER_RIGS[keyFor(entity)];
         const hs = window.hexSize || 1;
@@ -831,8 +1267,129 @@
         const legacyH = rig.bodyH * hs * z;
         const legacyTop = y - legacyW/2 + rig.yOff*hs*z + (flyOff || 0);
         const visualW = legacyH * HUMAN_RENDER_ASPECT;
-        const bounds = {left:x-visualW/2,top:legacyTop,width:visualW,height:legacyH};
-        return drawDirectionalHumanoidInBounds(ctx, entity, bounds, VALID_FACINGS.has(entity.facing) ? entity.facing : 'down');
+        const bounds = explicitBounds || {left:x-visualW/2,top:legacyTop,width:visualW,height:legacyH};
+        const facing = explicitFacing || (VALID_FACINGS.has(entity.facing) ? entity.facing : 'down');
+        const appearanceKey = appearanceCacheKey(entity);
+        const key = spriteCacheKey(entity, facing);
+        rendererDebugRecord({
+            entityName:entity.name || entity.id || null,
+            race:entity.race || null,
+            gender:entity.gender || null,
+            surface:renderSurface,
+            requestedFacing:explicitFacing || null,
+            entityFacing:entity.facing || null,
+            facing,
+            view:facingToView(facing),
+            key,
+            result:'started',
+        });
+        abandonStaleCompositeRequests(entity, facing, key);
+
+        const cached = cacheGet(appearanceKey, facing);
+        if (cached) {
+            pendingCompositeRequests.delete(key);
+            window.__humanoidRendererLastComplete = true;
+            window.__humanoidRendererLastDraw = {entity,key,view:facingToView(facing),facing,bounds:{...bounds},timestamp:Date.now(),fromCache:true};
+            ctx.drawImage(cached.canvas, bounds.left, bounds.top, bounds.width, bounds.height);
+            rendererDebugRecord({
+                entityName:entity.name || entity.id || null, race:entity.race || null, gender:entity.gender || null,
+                surface:renderSurface,
+                requestedFacing:explicitFacing || null, entityFacing:entity.facing || null,
+                facing, view:facingToView(facing), key, compositeId:cached.compositeId, result:'cache-hit',
+            });
+            return true;
+        }
+
+        // A failed composite is not allowed to monopolise the renderer. Other
+        // characters/facings proceed immediately, while this exact request gets
+        // a short cooldown before it may be attempted again.
+        const pending = pendingCompositeRequests.get(key);
+        if (pending) {
+            const stillWanted = facing === pending.facing;
+            const stillWaiting = pending.sources.some(src =>
+                window.assetManager?.status?.(src) !== 'ready'
+            );
+            if (!stillWanted) {
+                pendingCompositeRequests.delete(key);
+            } else if (stillWaiting || performance.now() < pending.retryAfter) {
+                return true;
+            } else {
+                pendingCompositeRequests.delete(key);
+            }
+        }
+
+        // Build off-screen once. The compositor writes a completion flag only
+        // when every required layer is ready. Incomplete frames are never drawn
+        // and never retained in the cache.
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.ceil(bounds.width * HUMANOID_CACHE_SCALE));
+        canvas.height = Math.max(1, Math.ceil(bounds.height * HUMANOID_CACHE_SCALE));
+        const offscreenBounds = {left:0, top:0, width:canvas.width, height:canvas.height};
+        const offscreenCtx = canvas.getContext('2d');
+        if (!offscreenCtx) return false;
+        humanoidSpriteCacheBuilds++;
+        const previousSources = activeSourcePaths;
+        const sources = new Set();
+        activeSourcePaths = sources;
+        let rendered = false;
+        // Never inherit completion state from the previous character.
+        window.__humanoidRendererLastComplete = false;
+        window.performanceAssetTraceApi?.compositeStart?.(key, entity, facing, sources);
+        try {
+            rendered = drawDirectionalHumanoidInBounds(offscreenCtx, entity, offscreenBounds, facing);
+        } finally {
+            activeSourcePaths = previousSources;
+            // Source records are released only after a complete composite has
+            // been produced. Releasing them during an incomplete attempt causes
+            // the same character to start over on every redraw.
+            if (window.__humanoidRendererLastComplete) {
+                window.performanceAssetTraceApi?.compositeEnd?.(key, true, 'painted', {requestedSources:[...sources],layerOrder:window.__humanoidRendererLastLayerOrder || []});
+                window.assetManager?.release?.([...sources]);
+                window.clothingSystem?.releaseRenderSources?.();
+                window.releaseRecoloredSpriteCache?.();
+            }
+        }
+        if (!rendered) {
+            rendererDebugRecord({
+                entityName:entity.name || entity.id || null, race:entity.race || null, gender:entity.gender || null,
+                surface:renderSurface,
+                requestedFacing:explicitFacing || null, entityFacing:entity.facing || null,
+                facing, view:facingToView(facing), key, result:'renderer-returned-false',
+            });
+            const failureSources = [...sources];
+            const retryAfter = performance.now() + COMPOSITE_RETRY_DELAY_MS;
+            window.performanceAssetTraceApi?.compositeEnd?.(key, false, 'renderer returned false', {requestedSources:failureSources,failureSource:failureSources.map(src => src+'='+String(window.assetManager?.status?.(src) || 'unavailable')),retryAfterMs:COMPOSITE_RETRY_DELAY_MS});
+            pendingCompositeRequests.set(key, {entity, facing, sources:failureSources, retryAfter});
+            return true;
+        }
+
+        // Character composition is atomic: never display or cache a partial
+        // body/clothing/hair stack while another required layer is still loading.
+        const complete = !!window.__humanoidRendererLastComplete;
+        if (!complete) {
+            rendererDebugRecord({
+                entityName:entity.name || entity.id || null, race:entity.race || null, gender:entity.gender || null,
+                surface:renderSurface,
+                requestedFacing:explicitFacing || null, entityFacing:entity.facing || null,
+                facing, view:facingToView(facing), key, result:'incomplete',
+            });
+            const failureSources = [...sources];
+            const retryAfter = performance.now() + COMPOSITE_RETRY_DELAY_MS;
+            window.performanceAssetTraceApi?.compositeEnd?.(key, false, 'required layer not ready', {requestedSources:failureSources,failureSource:failureSources.map(src => src+'='+String(window.assetManager?.status?.(src) || 'unavailable')),layerOrder:window.__humanoidRendererLastLayerOrder || [],layerDiagnostics:window.__humanoidRendererLastLayerDiagnostics || [],hairDiagnostics:window.__humanoidRendererLastHairDiagnostics || null,complete:!!window.__humanoidRendererLastComplete,retryAfterMs:COMPOSITE_RETRY_DELAY_MS});
+            pendingCompositeRequests.set(key, {entity, facing, sources:failureSources, retryAfter});
+            return true;
+        }
+
+        pendingCompositeRequests.delete(key);
+        const cachedComposite = cachePut(appearanceKey, facing, canvas);
+        ctx.drawImage(canvas, bounds.left, bounds.top, bounds.width, bounds.height);
+        rendererDebugRecord({
+            entityName:entity.name || entity.id || null, race:entity.race || null, gender:entity.gender || null,
+            surface:renderSurface,
+            requestedFacing:explicitFacing || null, entityFacing:entity.facing || null,
+            facing, view:facingToView(facing), key, compositeId:cachedComposite?.compositeId || null, result:'painted',
+        });
+        return true;
     }
 
     function installDrawOverride() {
@@ -876,7 +1433,6 @@
             preview.displayArmour=true;
             preview.displayClothes=true;
             window.clothingSystem?.ensureDefaultOutfit?.(preview,{player:true});
-            window.clothingSystem?.preloadOutfit?.(preview,'front');
             if (!canDirectRender(preview)) return creatorLegacy.apply(this, arguments);
             const canvas = document.getElementById('appearance-preview-canvas');
             if (!canvas) return creatorLegacy.apply(this, arguments);
@@ -885,11 +1441,14 @@
             const height = canvas.height*.90;
             const width = height*HUMAN_RENDER_ASPECT;
             const rendered = drawDirectionalHumanoidInBounds(ctx, preview, {left:(canvas.width-width)/2,top:(canvas.height-height)/2,width,height}, 'down');
-            // Never turn a temporarily-unready direct sprite into an empty
-            // preview. The legacy preview is a safe visual fallback while the
-            // directional body finishes decoding; the ready callback above will
-            // replace it as soon as the direct asset is available.
-            if (!rendered) return creatorLegacy.apply(this, arguments);
+            // Creator previews are atomic too: a body with only one half of a
+            // two-tone garment, or without a required hair layer, is never
+            // shown as a finished preview. Leave the canvas blank until the
+            // asset-ready redraw produces a complete stack.
+            if (!rendered || !window.__humanoidRendererLastComplete) {
+                ctx.clearRect(0,0,canvas.width,canvas.height);
+                return;
+            }
         };
         wrapped.__directHumanoidPreview = true;
         wrapped.__legacyPreview = creatorLegacy;
@@ -914,10 +1473,10 @@
             if (!canDirectRender(entity)) return;
             const portrait = item.querySelector('.turn-indicator-portrait');
             if (!portrait) return;
-            portrait.querySelectorAll('img.portrait-layer').forEach(img => {
-                const src = img.getAttribute('src') || '';
-                if (/images\/human(?:female|male)(?:hair)?\.png/.test(src)) img.remove();
-            });
+            // Direct-rendered humanoids now have one authoritative portrait canvas.
+            // Remove every old layered portrait image so legacy body/hair/clothing
+            // sprites cannot sit behind or over the complete compositor result.
+            portrait.querySelectorAll('img.portrait-layer').forEach(img => img.remove());
             let canvas = portrait.querySelector('canvas[data-direct-humanoid-canvas="true"]');
             if (!canvas) {
                 canvas = document.createElement('canvas');
@@ -930,14 +1489,26 @@
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0,0,100,100);
             const height=92,width=height*HUMAN_RENDER_ASPECT;
-            const rendered = drawDirectionalHumanoidInBounds(ctx,entity,{left:(100-width)/2,top:4,width,height},'down');
-            // Do not suppress the established IMG portrait until this frame has
-            // actually drawn. Image decoding is asynchronous on iOS; tagging an
-            // empty canvas as authoritative made the tracker blank even though
-            // the same entity rendered correctly on the map a moment later.
-            portrait.classList.toggle('direct-humanoid-ready', !!rendered);
-            canvas.style.display = rendered ? 'block' : 'none';
-            if (rendered) canvas.dataset.directHumanoid='true';
+            // Initiative portraits are deliberately always front-facing,
+            // regardless of the entity's current map facing.
+            const portraitFacing = 'down';
+            window.__humanoidRendererLastComplete = false;
+            // Initiative portraits use the exact same cached compositor as the
+            // map. This prevents the portrait from briefly showing a naked body,
+            // an independently-scaled hair layer, or any other intermediate stack.
+            const rendered = drawHumanoidCharacter(
+                ctx, entity, 0, 0, 1, 0,
+                {left:(100-width)/2,top:4,width,height},
+                portraitFacing,
+                'portrait'
+            );
+            // A portrait is authoritative only when the COMPLETE compositor
+            // stack was drawn. Never expose a body-only/hair-only/intermediate
+            // canvas while another required layer is still loading.
+            const complete = !!window.__humanoidRendererLastComplete;
+            portrait.classList.toggle('direct-humanoid-ready', complete);
+            canvas.style.display = complete ? 'block' : 'none';
+            if (complete) canvas.dataset.directHumanoid='true';
             else delete canvas.dataset.directHumanoid;
         });
     }
@@ -995,6 +1566,23 @@
     window.drawDirectionalCharacterBase = (ctx,entity,bounds,facing='down') => drawDirectionalHumanoidInBounds(ctx,entity,bounds,facing);
     window.drawHumanFemaleDirectionalBase = window.drawDirectionalCharacterBase;
     window.drawHumanoidCharacter = drawHumanoidCharacter;
+    window.__recordHumanoidMapBoundary = recordMapHumanoidBoundary;
+    window.clearHumanoidSpriteCache = clearHumanoidSpriteCache;
+    window.humanoidSpriteCacheStats = {
+        get size() { return [...humanoidSpriteCache.values()].reduce((n, group) => n + group.size, 0); },
+        get builds() { return humanoidSpriteCacheBuilds; },
+        get hits() { return humanoidSpriteCacheHits; },
+        max: MAX_HUMANOID_CACHED_CHARACTERS * MAX_HUMANOID_SPRITE_VIEWS,
+        maxCharacters: MAX_HUMANOID_CACHED_CHARACTERS,
+        viewsPerCharacter: MAX_HUMANOID_SPRITE_VIEWS,
+    };
+    window.getHumanoidSpriteCacheDetails = () => [...humanoidSpriteCache.entries()].flatMap(([appearanceKey, group]) =>
+        [...group.entries()].map(([facing, entry]) => ({
+            appearanceKey,
+            facing,
+            compositeId:entry.compositeId,
+        }))
+    );
     window.drawDirectionalHumanoidInBounds = drawDirectionalHumanoidInBounds;
     window.refreshDirectionalTurnPortraits = renderTurnPortraits;
     window.__humanoidRendererReady = true;

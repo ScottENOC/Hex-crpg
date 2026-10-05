@@ -238,6 +238,12 @@ window.getRecoloredHairSprite = getRecoloredHairSprite;
 // Character rendering uses a distinct public entry point so terrain foliage
 // instrumentation can measure seasonal leaf tinting without counting actors.
 window.getRecoloredCharacterHairSprite = getRecoloredHairSprite;
+window.releaseRecoloredSpriteCache = function(){
+    // Recoloured canvases are intermediate data. The humanoid renderer retains
+    // only the completed final appearance, so these canvases should not survive
+    // from one composite build to the next.
+    for (const key of Object.keys(_recolorCache)) delete _recolorCache[key];
+};
 
 // A dedicated gold-metal tint for equipment (armor/helm) art. The source
 // armor/helm images are near-grayscale steel, so getRecoloredHairSprite's

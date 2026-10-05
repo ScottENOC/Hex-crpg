@@ -2,189 +2,9 @@
 console.log("--- MAIN.JS VERSION 2.0 LOADED ---");
 
 document.addEventListener("DOMContentLoaded", () => {
-    console.log("DOM Content Loaded - Preloading assets and setting up listeners");
-    preloadAssets();
-
-    // Re-apply a persisted non-Auto frame-rate choice (graphicsSettings.js)
-    // now that gameEngine.js's _setManualRenderInterval hook actually
-    // exists — graphicsSettings.js itself loads before gameEngine.js, so it
-    // only reads the saved preference into window.frameRateMode, it can't
-    // act on it yet.
-    if (window.frameRateMode && window.frameRateMode !== 'auto' && window.setFrameRateMode) {
-        window.setFrameRateMode(window.frameRateMode);
-    }
-
-    const createCharacterButton = document.getElementById("createCharacterButton");
-    if (createCharacterButton) {
-        createCharacterButton.addEventListener("click", window.startGame);
-        // onclick/click alone has been unreliable on iOS Safari for this
-        // exact button — same touch-hardening already applied to the party
-        // tabs elsewhere in this UI. preventDefault stops the click that
-        // would otherwise follow touchend from firing startGame twice.
-        createCharacterButton.addEventListener("touchend", (e) => {
-            e.preventDefault();
-            window.startGame();
-        }, { passive: false });
-    }
-
-    // Asset Preloading Logic
-    //
-    // Character creation is useful idle time: warm likely gameplay assets in
-    // the background while the player is choosing a character. The global
-    // asset scheduler bounds concurrency and discards queued speculative work
-    // the instant Start is pressed, so preload work never gates scene loading.
-    async function preloadAssets() {
-        const priorityImages = [
-            {key: 'floor1', src: 'images/arenaHexFloor1.png'},
-            {key: 'floor2', src: 'images/arenaHexFloor2.png'},
-            {key: 'floor3', src: 'images/arenaHexFloor3.png'},
-            {key: 'floor4', src: 'images/arenaHexFloor4.png'}
-        ];
-
-        // All five playable races × both body presentations are now owned by
-        // humanoidRenderer.js. Keeping this map empty also prevents speculative
-        // creator loading from requesting the deleted root-level elf/dwarf files.
-        const raceGenderImages = {};
-
-        // Lightweight assets useful immediately after character creation.
-        const earlyRoomImages = [
-            {key: 'wood_floor', src: 'images/wood_floor.svg'},
-            {key: 'table', src: 'images/table.svg'},
-            {key: 'bench', src: 'images/bench.svg'},
-            {key: 'fireplace_base', src: 'images/fireplace_base.svg'},
-            {key: 'fireplace_flame', src: 'images/fireplace_flame.svg'},
-            {key: 'fireplace_unlit', src: 'images/fireplace_unlit.svg'},
-            {key: 'door_open', src: 'images/door_open.svg'},
-            {key: 'door_closed', src: 'images/door_closed.svg'},
-            {key: 'shield', src: 'images/shield.png'},
-            {key: 'nasal_helm', src: 'images/nasalHelm.png'},
-        ];
-
-        const restImages = [
-            // Legitimate but non-critical art: useful to warm while the player
-            // spends time in character creation, never something Start waits on.
-            {key: 'swordIcon', src: 'images/sword.png'},
-            {key: 'arenaannouncer', src: 'images/arenaannouncer.png'},
-            {key: 'arenamercenary', src: 'images/arenamercenary.png'},
-            {key: 'arenashopkeeper', src: 'images/arenashopkeeper.png'},
-            {key: 'monsterDefault', src: 'images/goblin.png'},
-            {key: 'orcBase', src: 'images/orc.png'},
-            {key: 'humanLight', src: 'images/equipment/armour/human/light.png'},
-            {key: 'humanMedium', src: 'images/equipment/armour/human/medium.png'},
-            {key: 'humanHeavy', src: 'images/equipment/armour/human/heavy.png'},
-            {key: 'horse', src: 'images/horse.png'},
-            {key: 'skeleton', src: 'images/skeleton.svg'},
-            {key: 'zombie', src: 'images/zombie.svg'},
-            {key: 'imp', src: 'images/imp.svg'},
-            {key: 'elite_goblin', src: 'images/elite_goblin.svg'},
-            {key: 'harpy', src: 'images/harpy.svg'},
-            {key: 'wraith', src: 'images/wraith.svg'},
-            {key: 'basilisk', src: 'images/basilisk.svg'},
-            {key: 'minotaur', src: 'images/minotaur.png'},
-            {key: 'revenantBase', src: 'images/revenant.svg'},
-            {key: 'wolf', src: 'images/wolf.png'},
-            {key: 'torch_lit', src: 'images/torch_lit.svg'},
-            {key: 'axe', src: 'images/axe.png'},
-            {key: 'troll', src: 'images/troll.png'},
-            {key: 'spear', src: 'images/spear.png'},
-            {key: 'club', src: 'images/club.svg'},
-            {key: 'spiderweb', src: 'images/spiderweb.png'},
-            {key: 'spider1', src: 'images/spider1.png'},
-            {key: 'spider2', src: 'images/spider2.png'},
-            {key: 'grishnak', src: 'images/Grishnak.png'},
-            {key: 'overlay_blood', src: 'images/overlay blood.png'},
-            {key: 'overlay_skull', src: 'images/overlay skull.png'},
-            {key: 'pedestal', src: 'images/mediumpillar.png'},
-            {key: 'water', src: 'images/water.png'},
-            {key: 'boar', src: 'images/boar.png'},
-            {key: 'tiger', src: 'images/tiger.png'},
-            {key: 'eagle', src: 'images/eagle.png'},
-            {key: 'eagleflying', src: 'images/eagleflying.png'},
-            {key: 'foliage', src: 'images/foliage.png'},
-            {key: 'bed', src: 'images/bed.svg'},
-            {key: 'throne', src: 'images/throne.svg'},
-            {key: 'apple', src: 'images/apple.svg'},
-            {key: 'path', src: 'images/path.svg'},
-            {key: 'signpost', src: 'images/signpost.svg'},
-            {key: 'fountain', src: 'images/fountain.svg'},
-            {key: 'locket', src: 'images/locket.svg'},
-            {key: 'gate_arch', src: 'images/gate_arch.svg'},
-            {key: 'altar_unholy', src: 'images/altar_unholy.svg'},
-            {key: 'ladder', src: 'images/ladder.svg'},
-            {key: 'watchtower', src: 'images/watchtower.svg'},
-            {key: 'corpse_marker', src: 'images/corpse_marker.svg'},
-            {key: 'fence_h', src: 'images/fence_h.svg'},
-            {key: 'fence_v', src: 'images/fence_v.svg'},
-            {key: 'dirt', src: 'images/dirt.svg'},
-            {key: 'hut', src: 'images/hut.svg'},
-            {key: 'hut_large', src: 'images/hut_large.svg'},
-            {key: 'journal', src: 'images/journal.svg'}
-        ];
-
-        window.gameVisuals = {};
-        const _loadedKeys = new Set();
-
-function load(asset) {
-    if (_loadedKeys.has(asset.key)) return Promise.resolve();
-    _loadedKeys.add(asset.key);
-    const img = window.assetManager.request(asset.src);
-    window.gameVisuals[asset.key] = img;
-    return window.assetManager.wait(asset.src).catch((error) => {
-        console.warn('Failed:', asset.src, error);
-    });
-}
-
-        // Re-prioritizable on demand for combinations still using legacy flat
-        // creator/game art. Direct-rendered humanoids load through their own
-        // directional asset table instead.
-        function loadRaceGender(race, gender) {
-            const images = raceGenderImages[`${race}_${gender}`];
-            if (!images) return Promise.resolve();
-            return Promise.all(images.map(load));
-        }
-        window._preloadRaceGender = loadRaceGender;
-
-        function currentRaceGender() {
-            const raceSelect = document.getElementById('race-select');
-            const genderSelect = document.getElementById('gender-select');
-            return { race: raceSelect?.value || 'human', gender: genderSelect?.value || 'female' };
-        }
-
-        await Promise.all([
-            ...priorityImages.map(load),
-            ...earlyRoomImages.map(load),
-            loadRaceGender(currentRaceGender().race, currentRaceGender().gender),
-        ]);
-        console.log("Priority assets loaded");
-        if (window.updateAppearancePreview) window.updateAppearancePreview();
-
-        // Opportunistic creator-time warmup. assetLoadScheduler.js keeps this
-        // bounded and drops queued work immediately when gameplay starts.
-        await Promise.all([
-            ...Object.entries(raceGenderImages).flatMap(([key, images]) => images.map(load)),
-            ...restImages.map(load),
-        ]);
-        console.log("All creator-time background assets loaded");
-
-        // Audio pre-fetch (minimal)
-        if (typeof window.playMusic === 'function') {
-            console.log("Preloading audio buffers...");
-        }
-    }
-
-    // If the player changes to a legacy-rendered race/gender while background
-    // assets are still loading, jump that pair into the scheduler.
-    ['race-select', 'gender-select'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.addEventListener('change', () => {
-            const raceSelect = document.getElementById('race-select');
-            const genderSelect = document.getElementById('gender-select');
-            if (window._preloadRaceGender && raceSelect && genderSelect) {
-                window._preloadRaceGender(raceSelect.value, genderSelect.value);
-            }
-        });
-    });
-
+    // Character/game art is loaded lazily by AssetManager. There is no
+    // speculative preload queue: Start Game should never wait behind art that
+    // the player has not asked to see.
     // Menu/Cheat dropdowns rely on CSS :hover, which is unreliable on
     // trackpads/touch — also toggle them on click, closing any other open
     // dropdown and closing when the click lands outside of one entirely.
@@ -501,6 +321,21 @@ function load(asset) {
         handleGlobalButtonAction(e);
         handleModalCloseClick(e);
     }, { passive: false });
+
+    // Character creation has its own action and is deliberately kept
+    // outside the generic global-button dispatcher. The button has no inline
+    // onclick, so this explicit binding is the only path into startGame().
+    const createCharacterButton = document.getElementById('createCharacterButton');
+    if (createCharacterButton) {
+        createCharacterButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            window.startGame();
+        });
+        createCharacterButton.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            window.startGame();
+        }, { passive: false });
+    }
 
     window.initHexMap();
     if (window.initWorldMapEvents) window.initWorldMapEvents();
@@ -864,8 +699,6 @@ window.cheatMaxSkills = function() {
     window.showCharacterScreen();
 };
 window.startGame = function() {
-  // End speculative character-creator preloading before gameplay requests begin.
-  window.__assetLoadScheduler?.beginGameplayLoading?.();
   console.log("Starting game...");
 
   // Set timestamp to prevent the click that started the game from bleeding through to the map

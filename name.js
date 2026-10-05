@@ -67,20 +67,14 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
         // exploration simulation to a phone-friendly cadence.
         ['realtimeTickCadence.js','realtimeTickCadence'],
         ['raceSkinPalettes.js','raceSkinPalettes'],
-        ['humanoidRenderer.js','humanoidRenderer'],
         // The bridge owns real-time held/sheathed weapon presentation and the
         // stable tactical binding. Load it before readiness decorates that path.
         ['humanoidRendererBridge.js','humanoidRendererBridge'],
         ['rendererAssetRecovery.js','rendererAssetRecovery'],
-        ['braidDirectionalHair.js','braidDirectionalHair'],
         ['shieldAppearance.js','shieldAppearance'],
         ['shieldAppearanceUI.js','shieldAppearanceUI'],
         ['equipmentInterface.js','equipmentInterface'],
         ['weaponReadiness.js','weaponReadiness'],
-        // Footwear used to rely only on clothingSystem.js's nested loader. Keep
-        // the same data-footwear-system marker, but bootstrap it here too so a
-        // stale/missed clothing child load cannot silently remove all shoes.
-        ['footwearSystem.js','footwearSystem'],
         ['renderHotPathCache.js','renderHotPathCache'],
         // The experiment with extra visibility/static-dictionary wrappers made
         // the measured render path worse on iPhone. Keep only the cheap UI

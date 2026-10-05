@@ -2,7 +2,7 @@
 // Compatibility loader for the explicit garment-layer model.
 (() => {
   'use strict';
-  const BUILD=window.PRESENTATION_BUILD||'20261002-ios-equipment-touch-v1';
+  const BUILD=window.PRESENTATION_BUILD||'20261005-unified-clothing-v1';
   const RETIRED_GARMENTS=new Set(['fine_tunic','noble_doublet','scholars_robe','traveler_garb','top_masc_toggle','top_masc_buttoned','top_masc_lacework']);
 
   function load(src,key){
@@ -50,7 +50,6 @@
   load('equipmentAppearance.js','equipment-appearance');
   load('clothingInventoryUI.js','clothing-inventory-ui');
   load('iosEquipmentTouchFix.js','ios-equipment-touch-fix');
-  load('footwearSystem.js','footwear-system');
   load('seasonalClothing.js','seasonal-clothing');
   load('skirtClothing.js','skirt-clothing');
   load('pantsVariantFixes.js','pants-variant-fixes');
