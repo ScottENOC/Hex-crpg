@@ -2728,33 +2728,90 @@ function sceneNeedsRedraw() {
 }
 
 let _pausedForReactionSince = 0;
-// Multi-story buildings: stepping onto a stair_up/stair_down tileObject
-// changes an entity's floor immediately — no loading screen, since the
-// destination floor's terrain/tileObjects already live in
-// window.multiStoryBuildings (see terrain.js). Idempotent (re-checking an
-// entity already on its stair's toFloor is a no-op), so it's cheap to run
-// for every entity every tick rather than hooking each of the many separate
-// "entity.hex = next" movement call sites individually.
-function checkStairTransitions() {
-    if (!window.multiStoryBuildings || !window.multiStoryBuildings.length) return;
-    // Same "don't simulate what's nowhere near the player" discipline as
-    // isDormantAmbientNpc above (this is a fresh full-entity scan every
-    // tick otherwise — exactly the 80+-NPC-every-10ms cost that pattern
-    // exists to avoid; a dormant NPC's position is also just snapped by its
-    // schedule, never resolved via real stairs, so it can't have actually
-    // used one anyway).
-    const partyHexes = window.collectPartyHexes();
-    for (const e of window.entities) {
-        if (!e.alive || e.rider) continue; // a rider piggybacks on its mount's hex/floor, not its own
-        if (window.isDormantAmbientNpc(e, partyHexes)) continue;
-        const obj = window.getTileObjectAtFloor(e.hex.q, e.hex.r, e.floor || 0);
-        if (obj && (obj.type === 'stair_up' || obj.type === 'stair_down') && obj.toFloor !== undefined && obj.toFloor !== e.floor) {
-            e.floor = obj.toFloor;
-            if (e.riding) e.riding.floor = obj.toFloor;
+// Multi-story stairs are deliberately click-activated.
+// IMPORTANT: do not reintroduce an automatic "standing on stairs => change floor"
+// scan here. A floor transition is an interaction, not a movement side effect.
+// Keeping this compatibility no-op also makes old callers harmless.
+function checkStairTransitions() {}
+window.checkStairTransitions = checkStairTransitions;
+
+function findNearestPassableHexAtFloor(startHex, floor, reserved = new Set()) {
+    const queue = [startHex];
+    const visited = new Set([startHex.q + ',' + startHex.r]);
+    let iterations = 0;
+
+    while (queue.length && iterations++ < 200) {
+        const current = queue.shift();
+        const key = current.q + ',' + current.r;
+        const terrain = window.getTerrainAtFloor(current.q, current.r, floor);
+        if (!terrain?.impassable && !reserved.has(key)) return current;
+        for (const n of window.getNeighbors(current.q, current.r)) {
+            const nKey = n.q + ',' + n.r;
+            if (!visited.has(nKey)) {
+                visited.add(nKey);
+                queue.push(n);
+            }
         }
     }
+    return startHex;
 }
-window.checkStairTransitions = checkStairTransitions;
+
+// Explicit stair interaction. Walking onto a stair never changes floors.
+// The player must click the stair itself while adjacent to activate it.
+function useStairFromClick(q, r, player) {
+    const floor = player?.floor || 0;
+    const stair = window.getTileObjectAtFloor(q, r, floor);
+    if (!stair || (stair.type !== 'stair_up' && stair.type !== 'stair_down') || stair.toFloor === undefined) return false;
+    if (window.distance(player.hex, { q, r }) > 1) return false;
+
+    const targetFloor = stair.toFloor;
+    const group = window.groupMoveMode
+        ? window.entities.filter(e => e.alive && e.side === 'player' && !e.rider && !e.aiControlled)
+        : [player];
+
+    const offsets = new Map();
+    group.forEach(e => {
+        offsets.set(e, e === player ? { q: 0, r: 0 } : window.getFormationOffset(e, player));
+    });
+
+    const reserved = new Set([q + ',' + r]);
+    const placements = [{ entity: player, hex: { q, r } }];
+
+    for (const e of group) {
+        if (e === player) continue;
+        const offset = offsets.get(e);
+        const raw = { q: q + offset.q, r: r + offset.r };
+        const terrain = window.getTerrainAtFloor(raw.q, raw.r, targetFloor);
+        const key = raw.q + ',' + raw.r;
+        const hex = terrain?.impassable || reserved.has(key)
+            ? findNearestPassableHexAtFloor(raw, targetFloor, reserved)
+            : raw;
+        placements.push({ entity: e, hex });
+        reserved.add(hex.q + ',' + hex.r);
+    }
+
+    for (const { entity, hex } of placements) {
+        entity.floor = targetFloor;
+        entity.hex = { q: hex.q, r: hex.r };
+        entity.destination = null;
+        if (entity.riding) {
+            entity.riding.floor = targetFloor;
+            entity.riding.hex = { q: hex.q, r: hex.r };
+            entity.riding.destination = null;
+        }
+    }
+
+    window.groupMoveMode = false;
+    window.groupLeader = null;
+    window.leaderPath = null;
+    window.clearHighlights();
+    if (window.snapVisuals) window.snapVisuals();
+    if (window.drawMap) window.drawMap();
+    if (window.renderEntities) window.renderEntities();
+    window.showMessage(group.length > 1 ? "The party uses the stairs." : player.name + " uses the stairs.");
+    return true;
+}
+window.useStairFromClick = useStairFromClick;
 
 function tick() {
     if (window.isPausedForReaction) {
@@ -2799,7 +2856,6 @@ function tick() {
     window._wasInCombat = inCombat;
     window.isInCombat = inCombat; // Expose globally for UI
 
-    checkStairTransitions();
 
     // PERIODIC UI REFRESH (Out of combat)
     if (!inCombat && window.updateActionButtons) {
@@ -5831,6 +5887,30 @@ function handleClick(e){
     // and the pendingInteractHex arrival hook in autoMoveProcess) rather than
     // silently just moving onto it without ever interacting.
     const doorObj = window.tileObjects && window.tileObjects[`${clickedHex.q},${clickedHex.r}`];
+
+    // Stairs are explicit click interactions. Merely walking onto a stair
+    // cannot change floors, which prevents the old up/down oscillation.
+    const stairObj = window.getTileObjectAtFloor
+        ? window.getTileObjectAtFloor(clickedHex.q, clickedHex.r, player.floor || 0)
+        : null;
+    if (stairObj && (stairObj.type === 'stair_up' || stairObj.type === 'stair_down')) {
+        if (window.useStairFromClick(clickedHex.q, clickedHex.r, player)) return;
+        if (!window.isInCombat) {
+            if (window.groupMoveMode) {
+                const fullPath = window.findPath(player.hex, clickedHex, undefined, player.riding || player, true);
+                window.leaderPath = fullPath ? fullPath.map(h => h.q + ',' + h.r) : [];
+                window.groupLeader = player;
+                assignGroupMoveDestinations(player, clickedHex);
+                window.showMessage("The party moves to the stairs.");
+            } else {
+                player.destination = clickedHex;
+                window.showMessage(player.name + " moves to the stairs.");
+            }
+            finalizePlayerAction(player, actionHandled);
+        }
+        return;
+    }
+
     const interactableTypes = ['door_open', 'door_closed', 'signpost', 'journal', 'ore_node', 'timber_tree', 'stone_deposit', 'fruit_tree', 'herb_patch', 'fishing_spot', 'corpse', 'evidence', 'building_plot', 'player_bed', 'fireplace', 'table'];
     if (doorObj && interactableTypes.includes(doorObj.type)) {
         if (window.distance(player.hex, clickedHex) <= 1) {
