@@ -8,6 +8,7 @@
 (() => {
     'use strict';
 
+    const BUILD = '20261005-unified-humanoid-renderer-v1';
     const VALID_FACINGS = new Set(['up', 'down', 'left', 'right']);
     const HUMAN_RENDER_ASPECT = 0.48;
     const previousHex = new WeakMap();
@@ -48,7 +49,7 @@
     }
 
     function rendererDebugText() {
-        const lines = ['HEX-CRPG RENDERER DEBUG', ''];
+        const lines = ['HEX-CRPG RENDERER DEBUG', '  renderer: ' + (window.__humanoidRendererBuild || '?'), '  clothing: ' + (window.__clothingRendererBuild || '?'), '  hot-path shirt override: ' + (window.__renderHotPathCacheBuild || 'none'), '  footwear renderer: ' + (window.__footwearSystemBuild || 'none'), ''];
         if (!rendererDebugHistory.length) {
             lines.push('No direct compositor calls captured yet.');
             return lines.join('\\n');
@@ -143,6 +144,8 @@
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',installRendererDebugPanel,{once:true});
     else installRendererDebugPanel();
+
+    window.__humanoidRendererBuild = BUILD;
 
     // Completed map sprites are built lazily. We deliberately do not prebuild a
     // fixed set for the player: every character/facing gets a composite only when
@@ -949,7 +952,7 @@
                 ? !!drawVisibleFit(ctx, bodySource, bounds, bodyTarget || {x:0,y:0,w:1,h:1})
                 : drawCropped(ctx, bodySource, layout.bodyCrop, layout.bodyDest, bounds);
             if (bodyDrawn) layerOrder.push('body');
-            for (const slot of ['underwear','bra','pants','shirt']) {
+            for (const slot of ['underwear','bra','pants','shirt','shoes']) {
                 const expected = entity.displayClothes !== false
                     && !!entity.equipped?.[slot]
                     && equipmentSlotVisible(entity, slot);
