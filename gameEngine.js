@@ -2281,11 +2281,19 @@ function renderEntities() {
       // Enemy humanoids with sprite config are drawn the same way as player characters
       const hasEnemySpriteCfg = !isSentientAlly && e.race && e.gender && CHAR_CONFIG[`${e.race}_${e.gender}`];
       if ((isSentientAlly || hasEnemySpriteCfg) && !e.customImage) {
-          // Always enter the character-render path even if the visual asset
-          // manager has not finished loading (or has failed). The renderer's
-          // diagnostic must remain reachable in exactly the situation where
-          // gameVisuals is missing.
-          window.drawPlayerCharacter(window.mapCtx, e, x, y, z, flyOff);
+          // Map rendering goes directly to the authoritative humanoid compositor.
+          // Initiative portraits already do this, but routing the map through the
+          // legacy drawPlayerCharacter wrapper made it possible for the map and
+          // portrait surfaces to take different paths depending on script timing.
+          // Keep the legacy renderer only as a temporary visual fallback while a
+          // direct composite is still loading.
+          const directRendered = window.drawHumanoidCharacter?.(
+              window.mapCtx, e, x, y, z, flyOff, null, null, 'map'
+          );
+          if (!directRendered) {
+              const legacy = window.drawPlayerCharacter?.__legacyDrawPlayerCharacter;
+              if (typeof legacy === 'function') legacy.call(window, window.mapCtx, e, x, y, z, flyOff);
+          }
       } else if ((e instanceof window.Enemy || e.customImage) && window.gameVisuals) {
                           // Directional NPC art is requested only when this NPC actually
                           // reaches the visible entity-render path. Building an NPC roster
