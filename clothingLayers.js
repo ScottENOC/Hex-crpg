@@ -1,7 +1,7 @@
 // Explicit garment layers: one authored image per colourable part.
 (() => {
   'use strict';
-  const BUILD=window.PRESENTATION_BUILD||'20261005-unified-clothing-v1';
+  const BUILD=window.PRESENTATION_BUILD||'20261005-unified-clothing-v2';
   window.__clothingRendererBuild=BUILD;
   const slots=['underwear','bra','pants','shirt','shoes'];
   const preloadSlots=['shirt','pants','shoes','bra','underwear'];
@@ -103,19 +103,23 @@
     ensureDefaultOutfit(e,{player:e?.side==='player'});
     const itemId=e?.equipped?.[slot],s=itemId&&spec(itemId);
     if(!s||s.slot!==slot){record({itemId:itemId||null,reason:'no-valid-spec',drawn:false});lastDrawDiagnostics=diagnostics;window.__clothingRendererLastDrawDiagnostics=diagnostics;return false;}
-    let drew=false;
+    let allLayersDrawn=true;
     for(const l of s.layers){
       const src=sourceForLayer(l,v),img=load(src);
       const ready=!!img?.complete&&!!img.naturalWidth&&!!img.naturalHeight;
       const detail={itemId,layerId:l.id,source:src||null,status:src?(window.assetManager?.status?.(src)||'unrequested'):'missing-source',imageComplete:!!img?.complete,naturalWidth:img?.naturalWidth||0,naturalHeight:img?.naturalHeight||0,tinted:l.tint,drawn:false,reason:ready?'not-drawn-yet':'image-not-ready'};
-      if(!ready){diagnostics.push(detail);continue;}
+      if(!ready){allLayersDrawn=false;diagnostics.push(detail);continue;}
       const rendered=l.tint?tint(img,colour(e,itemId,l),l):img,target=clothingTarget(slot,itemId,v),trim=l.sourceTone?toneBounds(img):opaqueBounds(img);
       if(target||l.geometry) detail.drawn=!!drawFittedGarment(ctx,rendered,trim,target||{x:0,y:0,w:1,h:1},bounds,slot,e,itemId,v,s,img,l.geometry);
       else{ctx.drawImage(rendered,bounds.left,bounds.top,bounds.width,bounds.height);detail.drawn=true;}
       detail.reason=detail.drawn?'drawn':'drawFittedGarment-failed';
-      diagnostics.push(detail); drew=detail.drawn||drew;
+      if(!detail.drawn) allLayersDrawn=false;
+      diagnostics.push(detail);
     }
-    lastDrawDiagnostics=diagnostics;window.__clothingRendererLastDrawDiagnostics=diagnostics;return drew;
+    // A multi-layer garment is atomic. Drawing one half of a two-tone garment
+    // must never make the clothing slot look "ready", otherwise the humanoid
+    // compositor can cache a visibly partial composite as complete.
+    lastDrawDiagnostics=diagnostics;window.__clothingRendererLastDrawDiagnostics=diagnostics;return allLayersDrawn;
   }
   function install(){registerBuiltinItems();const p=window.player;if(p)ensureDefaultOutfit(p,{player:true});for(const e of window.entities||[])ensureDefaultOutfit(e,{player:e?.side==='player'});}
   const timer=setInterval(()=>{if(registerBuiltinItems()){install();clearInterval(timer);}},50);setInterval(()=>{for(const e of window.entities||[])ensureDefaultOutfit(e,{player:e?.side==='player'});if(window.player)ensureDefaultOutfit(window.player,{player:true});},1000);if(document.readyState==='complete')install();else window.addEventListener('load',install,{once:true});
