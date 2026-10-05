@@ -240,8 +240,11 @@
         rendererAssetRedrawQueued = true;
         const flush = () => {
             rendererAssetRedrawQueued = false;
-            window.drawMap?.();
-            window.renderEntities?.();
+            // drawMap() already invokes renderEntities() in the normal map
+            // pipeline, so do not call both here. This keeps one asset-ready event
+            // to one map/entity pass.
+            if (window.drawMap) window.drawMap();
+            else window.renderEntities?.();
             queuePortraitRefresh();
             if (document.getElementById('appearance-preview-canvas')) {
                 requestAnimationFrame(() => window.updateAppearancePreview?.());
