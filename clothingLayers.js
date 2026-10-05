@@ -1,7 +1,7 @@
 // Explicit garment layers: one authored image per colourable part.
 (() => {
   'use strict';
-  const BUILD=window.PRESENTATION_BUILD||'20261005-unified-clothing-v2';
+  const BUILD='20261005-unified-clothing-v2';
   window.__clothingRendererBuild=BUILD;
   const slots=['underwear','bra','pants','shirt','shoes'];
   const preloadSlots=['shirt','pants','shoes','bra','underwear'];
