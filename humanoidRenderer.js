@@ -121,7 +121,8 @@
             const hair = compactHairStatus(item);
             const status = item.result === 'painted' ? '✓' :
                 item.result === 'cache-hit' ? 'cache✓' : '✗';
-            const parts = ['#' + (index + 1), face + '/' + view, status];
+            const surface = item.surface === 'portrait' ? 'P' : 'M';
+            const parts = ['#' + (index + 1), surface, face + '/' + view, status];
             if (layers) parts.push(layers);
             if (hair) parts.push(hair);
             lines.push(parts.join('  '));
@@ -1197,7 +1198,7 @@
         }
     }
 
-    function drawHumanoidCharacter(ctx, entity, x, y, z=1, flyOff=0, explicitBounds=null, explicitFacing=null) {
+    function drawHumanoidCharacter(ctx, entity, x, y, z=1, flyOff=0, explicitBounds=null, explicitFacing=null, renderSurface='map') {
         if (!canDirectRender(entity)) return false;
         const rig = CHARACTER_RIGS[keyFor(entity)];
         const hs = window.hexSize || 1;
@@ -1212,6 +1213,7 @@
             entityName:entity.name || entity.id || null,
             race:entity.race || null,
             gender:entity.gender || null,
+            surface:renderSurface,
             requestedFacing:explicitFacing || null,
             entityFacing:entity.facing || null,
             facing,
@@ -1224,9 +1226,12 @@
         const cached = cacheGet(key);
         if (cached) {
             pendingCompositeRequests.delete(key);
+            window.__humanoidRendererLastComplete = true;
+            window.__humanoidRendererLastDraw = {entity,key,view:facingToView(facing),facing,bounds:{...bounds},timestamp:Date.now(),fromCache:true};
             ctx.drawImage(cached, bounds.left, bounds.top, bounds.width, bounds.height);
             rendererDebugRecord({
                 entityName:entity.name || entity.id || null, race:entity.race || null, gender:entity.gender || null,
+                surface:renderSurface,
                 requestedFacing:explicitFacing || null, entityFacing:entity.facing || null,
                 facing, view:facingToView(facing), key, result:'cache-hit',
             });
@@ -1285,6 +1290,7 @@
         if (!rendered) {
             rendererDebugRecord({
                 entityName:entity.name || entity.id || null, race:entity.race || null, gender:entity.gender || null,
+                surface:renderSurface,
                 requestedFacing:explicitFacing || null, entityFacing:entity.facing || null,
                 facing, view:facingToView(facing), key, result:'renderer-returned-false',
             });
@@ -1301,6 +1307,7 @@
         if (!complete) {
             rendererDebugRecord({
                 entityName:entity.name || entity.id || null, race:entity.race || null, gender:entity.gender || null,
+                surface:renderSurface,
                 requestedFacing:explicitFacing || null, entityFacing:entity.facing || null,
                 facing, view:facingToView(facing), key, result:'incomplete',
             });
@@ -1316,6 +1323,7 @@
         ctx.drawImage(canvas, bounds.left, bounds.top, bounds.width, bounds.height);
         rendererDebugRecord({
             entityName:entity.name || entity.id || null, race:entity.race || null, gender:entity.gender || null,
+            surface:renderSurface,
             requestedFacing:explicitFacing || null, entityFacing:entity.facing || null,
             facing, view:facingToView(facing), key, result:'painted',
         });
@@ -1426,7 +1434,8 @@
             const rendered = drawHumanoidCharacter(
                 ctx, entity, 0, 0, 1, 0,
                 {left:(100-width)/2,top:4,width,height},
-                portraitFacing
+                portraitFacing,
+                'portrait'
             );
             // A portrait is authoritative only when the COMPLETE compositor
             // stack was drawn. Never expose a body-only/hair-only/intermediate
