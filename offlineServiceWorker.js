@@ -2,7 +2,7 @@
 // Atomic, integrity-checked local game cache for the development branch.
 'use strict';
 
-const SW_VERSION = '16';
+const SW_VERSION = '17';
 const META_CACHE = `hex-game-meta-v${SW_VERSION}`;
 const GAME_CACHE_PREFIX = `hex-game-v${SW_VERSION}-`;
 const ACTIVE_CACHE_NAME = `hex-game-v${SW_VERSION}-active`;
