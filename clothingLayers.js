@@ -30,6 +30,7 @@
     underwear_briefs:twoToneGarment('underwear',{front:'images/equipment/clothing/briefs_female_front.png',side:'images/equipment/clothing/briefs_female_side.png',back:'images/equipment/clothing/briefs_female_back.png'},'Main','Trim'),
     underwear_briefs_gstring:twoToneGarment('underwear',{front:'images/equipment/clothing/briefs_gstring_front.png',side:'images/equipment/clothing/briefs_gstring_side.png',back:'images/equipment/clothing/briefs_gstring_back.png'},'Main','Trim'),
     underwear_bra:twoToneGarment('bra',{front:'images/equipment/clothing/bra_front.png',side:'images/equipment/clothing/bra_side.png',back:'images/equipment/clothing/bra_back.png'},'Main','Trim'),
+    underwear_bra_halter:twoToneGarment('bra',{front:'images/equipment/clothing/bra_halter_front.png',side:'images/equipment/clothing/bra_halter_side.png',back:'images/equipment/clothing/bra_halter_back.png'},'Main','Trim'),
     underwear_bra_plunge:twoToneGarment('bra',{front:'images/equipment/clothing/bra_plunge_front.png',side:'images/equipment/clothing/bra_plunge_side.png',back:'images/equipment/clothing/bra_plunge_back.png'},'Main','Trim'),
     underwear_bra_strapless:twoToneGarment('bra',{front:'images/equipment/clothing/bra_strapless_front.png',side:'images/equipment/clothing/bra_strapless_side.png',back:'images/equipment/clothing/bra_strapless_back.png'},'Main','Trim'),
     boots:footwearViews({front:'images/equipment/clothing/boots_front.png',side:'images/equipment/clothing/boots_side.png',back:'images/equipment/clothing/boots_back.png'})
