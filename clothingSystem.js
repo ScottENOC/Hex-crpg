@@ -50,7 +50,6 @@
   load('equipmentAppearance.js','equipment-appearance');
   load('clothingInventoryUI.js','clothing-inventory-ui');
   load('iosEquipmentTouchFix.js','ios-equipment-touch-fix');
-  load('footwearSystem.js','footwear-system');
   load('seasonalClothing.js','seasonal-clothing');
   load('skirtClothing.js','skirt-clothing');
   load('pantsVariantFixes.js','pants-variant-fixes');
