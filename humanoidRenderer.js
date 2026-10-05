@@ -35,7 +35,7 @@
     const rendererDebugHistory = [];
     const RENDERER_DEBUG_HISTORY_LIMIT = 6;
     const rendererDebugSummary = {
-        attempts:0, painted:0, cacheHits:0, pending:0, failures:0, incomplete:0,
+        attempts:0, painted:0, cacheHits:0, pending:0, failures:0, incomplete:0, mapBranches:0, mapCalls:0,
     };
     let rendererDebugPanel = null;
 
@@ -81,7 +81,8 @@
                 ' | built ' + rendererDebugSummary.painted +
                 ' | cache ' + rendererDebugSummary.cacheHits +
                 ' | incomplete ' + rendererDebugSummary.incomplete +
-                ' | failed ' + rendererDebugSummary.failures,
+                ' | failed ' + rendererDebugSummary.failures +
+                ' | map ' + rendererDebugSummary.mapBranches + '/' + rendererDebugSummary.mapCalls,
             '',
             'RECENT (last ' + RENDERER_DEBUG_HISTORY_LIMIT + ')',
         ];
@@ -527,6 +528,23 @@
 
     function canDirectRender(entity) {
         return !!CHARACTER_RIGS[keyFor(entity)] && !entity?.customImage;
+    }
+
+    function recordMapHumanoidBoundary(entity) {
+        rendererDebugSummary.mapBranches++;
+        const canRender = canDirectRender(entity);
+        if (canRender) rendererDebugSummary.mapCalls++;
+        window.__humanoidRendererLastMapBoundary = {
+            entityName: entity?.name || entity?.id || null,
+            race: entity?.race || null,
+            gender: entity?.gender || null,
+            customImage: !!entity?.customImage,
+            facing: VALID_FACINGS.has(entity?.facing) ? entity.facing : 'down',
+            view: facingToView(VALID_FACINGS.has(entity?.facing) ? entity.facing : 'down'),
+            canDirectRender: canRender,
+            timestamp: Date.now(),
+        };
+        return canRender;
     }
 
     function facingToView(facing) {
@@ -1544,6 +1562,7 @@
     window.drawDirectionalCharacterBase = (ctx,entity,bounds,facing='down') => drawDirectionalHumanoidInBounds(ctx,entity,bounds,facing);
     window.drawHumanFemaleDirectionalBase = window.drawDirectionalCharacterBase;
     window.drawHumanoidCharacter = drawHumanoidCharacter;
+    window.__recordHumanoidMapBoundary = recordMapHumanoidBoundary;
     window.clearHumanoidSpriteCache = clearHumanoidSpriteCache;
     window.humanoidSpriteCacheStats = {
         get size() { return [...humanoidSpriteCache.values()].reduce((n, group) => n + group.size, 0); },
