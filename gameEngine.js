@@ -2281,6 +2281,10 @@ function renderEntities() {
       // Enemy humanoids with sprite config are drawn the same way as player characters
       const hasEnemySpriteCfg = !isSentientAlly && e.race && e.gender && CHAR_CONFIG[`${e.race}_${e.gender}`];
       if ((isSentientAlly || hasEnemySpriteCfg) && !e.customImage) {
+          // Record the map-side gate before entering the compositor. This tells us
+          // whether the map is actually reaching the direct renderer, separately
+          // from whether the compositor can render this race/gender.
+          window.__recordHumanoidMapBoundary?.(e);
           // Map rendering goes directly to the authoritative humanoid compositor.
           // Initiative portraits already do this, but routing the map through the
           // legacy drawPlayerCharacter wrapper made it possible for the map and
