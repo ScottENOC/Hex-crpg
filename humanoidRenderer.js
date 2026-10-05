@@ -122,7 +122,9 @@
             const status = item.result === 'painted' ? '✓' :
                 item.result === 'cache-hit' ? 'cache✓' : '✗';
             const surface = item.surface === 'portrait' ? 'P' : 'M';
+            const composite = item.compositeId ? 'C' + item.compositeId : '';
             const parts = ['#' + (index + 1), surface, face + '/' + view, status];
+            if (composite) parts.push(composite);
             if (layers) parts.push(layers);
             if (hair) parts.push(hair);
             lines.push(parts.join('  '));
@@ -1187,15 +1189,14 @@
         let group = humanoidSpriteCache.get(appearanceKey);
         if (!group) group = new Map();
         group.delete(facing);
-        group.set(facing, {
-            canvas,
-            compositeId: nextHumanoidCompositeId++,
-        });
+        const entry = {canvas, compositeId: nextHumanoidCompositeId++};
+        group.set(facing, entry);
         humanoidSpriteCache.delete(appearanceKey);
         humanoidSpriteCache.set(appearanceKey, group);
         while (humanoidSpriteCache.size > MAX_HUMANOID_CACHED_CHARACTERS) {
             humanoidSpriteCache.delete(humanoidSpriteCache.keys().next().value);
         }
+        return entry;
     }
 
     function clearHumanoidSpriteCache() {
@@ -1341,8 +1342,7 @@
         }
 
         pendingCompositeRequests.delete(key);
-        cachePut(appearanceKey, facing, canvas);
-        const cachedComposite = cacheGet(appearanceKey, facing);
+        const cachedComposite = cachePut(appearanceKey, facing, canvas);
         ctx.drawImage(canvas, bounds.left, bounds.top, bounds.width, bounds.height);
         rendererDebugRecord({
             entityName:entity.name || entity.id || null, race:entity.race || null, gender:entity.gender || null,
