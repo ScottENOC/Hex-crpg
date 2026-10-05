@@ -8,7 +8,7 @@
 (() => {
     'use strict';
 
-    const BUILD = '20261005-unified-humanoid-renderer-v3';
+    const BUILD = '20261005-unified-humanoid-renderer-v4';
     const VALID_FACINGS = new Set(['up', 'down', 'left', 'right']);
     const HUMAN_RENDER_ASPECT = 0.48;
     const previousHex = new WeakMap();
@@ -228,6 +228,28 @@
     let creatorLegacy = null;
     let portraitObserver = null;
     let portraitQueued = false;
+    let rendererAssetRedrawQueued = false;
+
+    // Asset-ready callbacks can arrive together when a new facing requests a
+    // body, hair and several clothing layers at once. Coalesce those callbacks
+    // into one browser-frame redraw; otherwise each ready asset can synchronously
+    // kick drawMap + renderEntities again and make a new-facing request look like
+    // an iPhone freeze.
+    function queueRendererAssetRedraw() {
+        if (rendererAssetRedrawQueued) return;
+        rendererAssetRedrawQueued = true;
+        const flush = () => {
+            rendererAssetRedrawQueued = false;
+            window.drawMap?.();
+            window.renderEntities?.();
+            queuePortraitRefresh();
+            if (document.getElementById('appearance-preview-canvas')) {
+                requestAnimationFrame(() => window.updateAppearancePreview?.());
+            }
+        };
+        if (window.requestAnimationFrame) window.requestAnimationFrame(flush);
+        else setTimeout(flush, 0);
+    }
 
     // All five playable races and both body presentations are compositor-owned.
     // bodyAssetMode is diagnostic metadata: it makes temporary art fallbacks explicit
@@ -531,12 +553,7 @@
             rendererPendingLoads.add(canonical);
             window.assetManager.whenReady(canonical).then(() => {
                 rendererPendingLoads.delete(canonical);
-                window.drawMap?.();
-                window.renderEntities?.();
-                queuePortraitRefresh();
-                if (document.getElementById('appearance-preview-canvas')) {
-                    requestAnimationFrame(() => window.updateAppearancePreview?.());
-                }
+                queueRendererAssetRedraw();
             }).catch((error) => {
                 rendererPendingLoads.delete(canonical);
                 console.warn('Humanoid renderer art failed to load:', canonical, error);
