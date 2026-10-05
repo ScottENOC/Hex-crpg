@@ -1127,6 +1127,7 @@
                         h:0.47,
                     });
                 if (hairDrawn) layerOrder.push('hair');
+                if (!hairDrawn) compositionComplete = false;
                 window.__humanoidRendererLastHair = {
                     style:hairStyle,
                     view,
