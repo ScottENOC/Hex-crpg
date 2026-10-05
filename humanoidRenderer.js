@@ -50,38 +50,64 @@
     }
 
     function rendererDebugText() {
-        const lines = ['HEX-CRPG RENDERER DEBUG', '  renderer: ' + (window.__humanoidRendererBuild || '?'), '  clothing: ' + (window.__clothingRendererBuild || '?'), '  hot-path shirt override: ' + (window.__renderHotPathCacheBuild || 'none'), '  footwear renderer: ' + (window.__footwearSystemBuild || 'none'), ''];
+        const lines = [
+            'HEX RENDER',
+            'build: ' + (window.__humanoidRendererBuild || '?'),
+            'clothes: ' + (window.__clothingRendererBuild || '?'),
+            '',
+        ];
         if (!rendererDebugHistory.length) {
-            lines.push('No direct compositor calls captured yet.');
+            lines.push('No renders yet.');
             return lines.join('\\n');
         }
+
+        const compactLayerStatus = (item) => {
+            const bySlot = new Map();
+            for (const d of (item.layerDiagnostics || [])) {
+                const slot = d.slot || d.layerId || '?';
+                const ready = !!d.imageComplete && !!d.naturalWidth && !!d.naturalHeight;
+                const ok = !!d.drawn;
+                bySlot.set(slot, ok ? '✓' : (ready ? '✗' : '…'));
+            }
+            const order = ['bra','shirt','pants','shoes','underwear'];
+            return order.filter(slot => bySlot.has(slot))
+                .map(slot => slot + bySlot.get(slot))
+                .concat([...bySlot.entries()]
+                    .filter(([slot]) => !order.includes(slot))
+                    .map(([slot,status]) => slot + status))
+                .join(' ');
+        };
+
+        const compactHairStatus = (item) => {
+            const h = item.hairDiagnostics;
+            if (!h) return '';
+            const ready = !!h.imageComplete && !!h.naturalWidth && !!h.naturalHeight;
+            return 'hair' + (h.drawn ? '✓' : (ready ? '✗' : '…'));
+        };
+
         for (const [index, item] of rendererDebugHistory.entries()) {
-            lines.push('#' + (index + 1) + ' ' + item.time);
-            lines.push('  entity: ' + (item.entityName || '?') + ' | ' + (item.race || '?') + '_' + (item.gender || '?'));
-            lines.push('  requested: ' + (item.requestedFacing || 'none') +
-                ' | entity.facing: ' + (item.entityFacing || 'none') +
-                ' | resolved: ' + (item.facing || 'none') +
-                ' | view: ' + (item.view || 'none'));
-            lines.push('  result: ' + (item.result || 'unknown'));
-            if (item.key) lines.push('  cache key: ' + item.key);
-            if (item.layerDiagnostics?.length) {
-                lines.push('  layers:');
-                for (const d of item.layerDiagnostics) {
-                    lines.push('    ' + d.slot + '/' + (d.layerId || 'base') +
-                        ' expected=' + (!!d.expected) +
-                        ' ready=' + (!!d.imageComplete && !!d.naturalWidth && !!d.naturalHeight) +
-                        ' drawn=' + (!!d.drawn) +
-                        ' reason=' + (d.reason || '?') +
-                        ' src=' + (d.source || '?'));
-                }
+            const face = item.facing || '?';
+            const view = item.view || '?';
+            const layers = compactLayerStatus(item);
+            const hair = compactHairStatus(item);
+            const parts = [
+                '#' + (index + 1),
+                face + '/' + view,
+                item.result === 'painted' ? '✓' :
+                    item.result === 'cache-hit' ? 'cache✓' :
+                    item.result === 'started' ? '…' : '✗',
+            ];
+            if (layers) parts.push(layers);
+            if (hair) parts.push(hair);
+            lines.push(parts.join('  '));
+
+            if (item.result !== 'painted' && item.result !== 'cache-hit' && item.result !== 'started') {
+                const failed = (item.layerDiagnostics || [])
+                    .filter(d => d.expected && !d.drawn)
+                    .map(d => d.slot + (d.reason ? ':' + d.reason : ''));
+                if (failed.length) lines.push('  FAIL: ' + failed.join(', '));
+                else if (item.result) lines.push('  FAIL: ' + item.result);
             }
-            if (item.hairDiagnostics) {
-                const h = item.hairDiagnostics;
-                lines.push('  hair: expected=' + (!!h.expected) +
-                    ' ready=' + (!!h.imageComplete && !!h.naturalWidth && !!h.naturalHeight) +
-                    ' drawn=' + (!!h.drawn) + ' src=' + (h.source || '?'));
-            }
-            lines.push('');
         }
         return lines.join('\\n');
     }
