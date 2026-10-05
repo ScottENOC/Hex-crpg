@@ -8,7 +8,7 @@
 (() => {
     'use strict';
 
-    const BUILD = '20261005-unified-humanoid-renderer-v6';
+    const BUILD = '20261005-unified-humanoid-renderer-v7';
     const VALID_FACINGS = new Set(['up', 'down', 'left', 'right']);
     const HUMAN_RENDER_ASPECT = 0.48;
     const previousHex = new WeakMap();
@@ -1441,11 +1441,14 @@
             const height = canvas.height*.90;
             const width = height*HUMAN_RENDER_ASPECT;
             const rendered = drawDirectionalHumanoidInBounds(ctx, preview, {left:(canvas.width-width)/2,top:(canvas.height-height)/2,width,height}, 'down');
-            // Never turn a temporarily-unready direct sprite into an empty
-            // preview. The legacy preview is a safe visual fallback while the
-            // directional body finishes decoding; the ready callback above will
-            // replace it as soon as the direct asset is available.
-            if (!rendered) return creatorLegacy.apply(this, arguments);
+            // Creator previews are atomic too: a body with only one half of a
+            // two-tone garment, or without a required hair layer, is never
+            // shown as a finished preview. Leave the canvas blank until the
+            // asset-ready redraw produces a complete stack.
+            if (!rendered || !window.__humanoidRendererLastComplete) {
+                ctx.clearRect(0,0,canvas.width,canvas.height);
+                return;
+            }
         };
         wrapped.__directHumanoidPreview = true;
         wrapped.__legacyPreview = creatorLegacy;
