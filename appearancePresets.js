@@ -146,7 +146,7 @@
         }
     }
 
-    registerCharacterAppearancePreset('scenario2_wren', {
+    registerCharacterAppearancePreset('scenario2_wren_v2', {
         bodyType:'average',
         hair:{ style:'braid', hue:218, saturation:71, value:56 },
         skin:{ naturalSlider:50 },
