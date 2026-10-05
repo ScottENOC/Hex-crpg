@@ -139,48 +139,6 @@
         return canvas;
     }
 
-    function installSimpleShirtRenderer() {
-        const system = root.clothingSystem;
-        if (!system?.drawSlot || system.drawSlot.__simpleCachedShirts) return !!system?.drawSlot?.__simpleCachedShirts;
-        const originalDrawSlot = system.drawSlot;
-
-        const cachedDrawSlot = function(ctx, entity, slot, view, bounds) {
-            if (slot !== 'shirt') return originalDrawSlot.apply(this, arguments);
-            if (!ctx || !entity || !bounds || entity.displayClothes === false) return false;
-            if (root.equipmentAppearanceSystem?.isSlotVisible?.(entity, slot) === false) return false;
-
-            system.migrateLegacyEquipment?.(entity);
-            system.ensureDefaultOutfit?.(entity, { player: entity.side === 'player' });
-            const itemId = entity.equipped?.shirt;
-            const spec = itemId && system.getItemSpec?.(itemId);
-            if (!spec || spec.slot !== 'shirt') return false;
-
-            const width = Math.max(1, Math.ceil(bounds.width));
-            const height = Math.max(1, Math.ceil(bounds.height));
-            const key = [
-                resolvedView(view), itemId, width, height,
-                colourSignature(system, entity, itemId, spec),
-                spec.fitMode || 'stretch'
-            ].join('::');
-
-            let composite = shirtCompositeCache.get(key);
-            if (!composite) {
-                composite = buildSimpleShirt(system, entity, itemId, spec, view, width, height);
-                if (!composite) return false; // source still loading; normal redraw fires on load
-                // Draw a partial composite this frame, but never cache it.
-                if (composite.__complete) cachePut(key, composite);
-            }
-            ctx.drawImage(composite, bounds.left, bounds.top, bounds.width, bounds.height);
-            return true;
-        };
-
-        cachedDrawSlot.__simpleCachedShirts = true;
-        cachedDrawSlot.__originalDrawSlot = originalDrawSlot;
-        system.drawSlot = cachedDrawSlot;
-        root.clearShirtRenderCache = () => shirtCompositeCache.clear();
-        return true;
-    }
-
     // ----- Initiative tracker -------------------------------------------------
     const turnEntityKeys = new WeakMap();
     let turnEntitySerial = 0;
@@ -326,9 +284,7 @@
     }
 
     function installAll() {
-        const shirts = installSimpleShirtRenderer();
-        const turns = installStableTurnIndicator();
-        return shirts && turns;
+        return installStableTurnIndicator();
     }
 
     function beginInstall() {
@@ -340,6 +296,7 @@
     }
 
     root.RENDER_HOT_PATH_CACHE_BUILD = BUILD;
+    root.__renderHotPathCacheBuild = BUILD;
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => setTimeout(beginInstall, 0), { once: true });
     } else {
