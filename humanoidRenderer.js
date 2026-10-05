@@ -8,7 +8,7 @@
 (() => {
     'use strict';
 
-    const BUILD = '20261005-unified-humanoid-renderer-v2';
+    const BUILD = '20261005-unified-humanoid-renderer-v3';
     const VALID_FACINGS = new Set(['up', 'down', 'left', 'right']);
     const HUMAN_RENDER_ASPECT = 0.48;
     const previousHex = new WeakMap();
@@ -205,8 +205,13 @@
     // fixed set for the player: every character/facing gets a composite only when
     // the map actually asks for it. The cache is bounded so NPC-heavy fights cannot
     // turn a useful optimisation into another source of iOS canvas memory pressure.
+    // Cache composites in character groups: one appearance can retain up to four
+    // directional views, and map + initiative always share the same view canvas.
+    // 48 total entries therefore means up to 12 character appearances resident.
     const humanoidSpriteCache = new Map();
-    const MAX_HUMANOID_SPRITE_CACHE = 48;
+    const MAX_HUMANOID_SPRITE_VIEWS = 4;
+    const MAX_HUMANOID_CACHED_CHARACTERS = 12;
+    let nextHumanoidCompositeId = 1;
     // Build cached composites at 2x their map display resolution. The previous
     // cache stored each sprite at its final on-map pixel size, so a small
     // character could be permanently reduced to a small bitmap and then
@@ -1154,25 +1159,41 @@
         }
     }
 
-    function spriteCacheKey(entity, facing) {
-        // One completed appearance per character appearance + facing. Zoom and
-        // hex size only affect the final draw scale, not the cached artwork.
-        return [safeAppearanceKey(entity), facing].join('::');
+    function appearanceCacheKey(entity) {
+        return safeAppearanceKey(entity);
     }
 
-    function cacheGet(key) {
-        const value = humanoidSpriteCache.get(key);
+    function spriteCacheKey(entity, facing) {
+        // The composite identity is appearance + facing. The actual cache is
+        // grouped by appearance so all four views of a character stay together.
+        return [appearanceCacheKey(entity), facing].join('::');
+    }
+
+    function cacheGet(appearanceKey, facing) {
+        const group = humanoidSpriteCache.get(appearanceKey);
+        const value = group?.get(facing);
         if (!value) return null;
-        humanoidSpriteCache.delete(key);
-        humanoidSpriteCache.set(key, value); // LRU touch.
+        // Touch the character group and the individual view. Map and portrait
+        // deliberately receive the exact same cached canvas object.
+        humanoidSpriteCache.delete(appearanceKey);
+        humanoidSpriteCache.set(appearanceKey, group);
+        group.delete(facing);
+        group.set(facing, value);
         humanoidSpriteCacheHits++;
         return value;
     }
 
-    function cachePut(key, canvas) {
-        humanoidSpriteCache.delete(key);
-        humanoidSpriteCache.set(key, canvas);
-        while (humanoidSpriteCache.size > MAX_HUMANOID_SPRITE_CACHE) {
+    function cachePut(appearanceKey, facing, canvas) {
+        let group = humanoidSpriteCache.get(appearanceKey);
+        if (!group) group = new Map();
+        group.delete(facing);
+        group.set(facing, {
+            canvas,
+            compositeId: nextHumanoidCompositeId++,
+        });
+        humanoidSpriteCache.delete(appearanceKey);
+        humanoidSpriteCache.set(appearanceKey, group);
+        while (humanoidSpriteCache.size > MAX_HUMANOID_CACHED_CHARACTERS) {
             humanoidSpriteCache.delete(humanoidSpriteCache.keys().next().value);
         }
     }
@@ -1208,6 +1229,7 @@
         const visualW = legacyH * HUMAN_RENDER_ASPECT;
         const bounds = explicitBounds || {left:x-visualW/2,top:legacyTop,width:visualW,height:legacyH};
         const facing = explicitFacing || (VALID_FACINGS.has(entity.facing) ? entity.facing : 'down');
+        const appearanceKey = appearanceCacheKey(entity);
         const key = spriteCacheKey(entity, facing);
         rendererDebugRecord({
             entityName:entity.name || entity.id || null,
@@ -1223,17 +1245,17 @@
         });
         abandonStaleCompositeRequests(entity, facing, key);
 
-        const cached = cacheGet(key);
+        const cached = cacheGet(appearanceKey, facing);
         if (cached) {
             pendingCompositeRequests.delete(key);
             window.__humanoidRendererLastComplete = true;
             window.__humanoidRendererLastDraw = {entity,key,view:facingToView(facing),facing,bounds:{...bounds},timestamp:Date.now(),fromCache:true};
-            ctx.drawImage(cached, bounds.left, bounds.top, bounds.width, bounds.height);
+            ctx.drawImage(cached.canvas, bounds.left, bounds.top, bounds.width, bounds.height);
             rendererDebugRecord({
                 entityName:entity.name || entity.id || null, race:entity.race || null, gender:entity.gender || null,
                 surface:renderSurface,
                 requestedFacing:explicitFacing || null, entityFacing:entity.facing || null,
-                facing, view:facingToView(facing), key, result:'cache-hit',
+                facing, view:facingToView(facing), key, compositeId:cached.compositeId, result:'cache-hit',
             });
             return true;
         }
@@ -1319,13 +1341,14 @@
         }
 
         pendingCompositeRequests.delete(key);
-        cachePut(key, canvas);
+        cachePut(appearanceKey, facing, canvas);
+        const cachedComposite = cacheGet(appearanceKey, facing);
         ctx.drawImage(canvas, bounds.left, bounds.top, bounds.width, bounds.height);
         rendererDebugRecord({
             entityName:entity.name || entity.id || null, race:entity.race || null, gender:entity.gender || null,
             surface:renderSurface,
             requestedFacing:explicitFacing || null, entityFacing:entity.facing || null,
-            facing, view:facingToView(facing), key, result:'painted',
+            facing, view:facingToView(facing), key, compositeId:cachedComposite?.compositeId || null, result:'painted',
         });
         return true;
     }
@@ -1503,15 +1526,20 @@
     window.drawHumanoidCharacter = drawHumanoidCharacter;
     window.clearHumanoidSpriteCache = clearHumanoidSpriteCache;
     window.humanoidSpriteCacheStats = {
-        get size() { return humanoidSpriteCache.size; },
+        get size() { return [...humanoidSpriteCache.values()].reduce((n, group) => n + group.size, 0); },
         get builds() { return humanoidSpriteCacheBuilds; },
         get hits() { return humanoidSpriteCacheHits; },
-        max: MAX_HUMANOID_SPRITE_CACHE,
+        max: MAX_HUMANOID_CACHED_CHARACTERS * MAX_HUMANOID_SPRITE_VIEWS,
+        maxCharacters: MAX_HUMANOID_CACHED_CHARACTERS,
+        viewsPerCharacter: MAX_HUMANOID_SPRITE_VIEWS,
     };
-    window.getHumanoidSpriteCacheDetails = () => [...humanoidSpriteCache.keys()].map(key => {
-        const parts = key.split('::');
-        return { facing: parts[parts.length - 1] || 'unknown' };
-    });
+    window.getHumanoidSpriteCacheDetails = () => [...humanoidSpriteCache.entries()].flatMap(([appearanceKey, group]) =>
+        [...group.entries()].map(([facing, entry]) => ({
+            appearanceKey,
+            facing,
+            compositeId:entry.compositeId,
+        }))
+    );
     window.drawDirectionalHumanoidInBounds = drawDirectionalHumanoidInBounds;
     window.refreshDirectionalTurnPortraits = renderTurnPortraits;
     window.__humanoidRendererReady = true;
