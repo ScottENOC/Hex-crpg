@@ -8,7 +8,7 @@
 (() => {
     'use strict';
 
-    const BUILD = '20261005-unified-humanoid-renderer-v5';
+    const BUILD = '20261005-unified-humanoid-renderer-v6';
     const VALID_FACINGS = new Set(['up', 'down', 'left', 'right']);
     const HUMAN_RENDER_ASPECT = 0.48;
     const previousHex = new WeakMap();
