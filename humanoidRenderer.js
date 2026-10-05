@@ -8,7 +8,7 @@
 (() => {
     'use strict';
 
-    const BUILD = '20261005-unified-humanoid-renderer-v7';
+    const BUILD = '20261005-unified-humanoid-renderer-v8';
     const VALID_FACINGS = new Set(['up', 'down', 'left', 'right']);
     const HUMAN_RENDER_ASPECT = 0.48;
     const previousHex = new WeakMap();
@@ -215,12 +215,12 @@
     const MAX_HUMANOID_SPRITE_VIEWS = 4;
     const MAX_HUMANOID_CACHED_CHARACTERS = 12;
     let nextHumanoidCompositeId = 1;
-    // Build cached composites at 2x their map display resolution. The previous
+    // Build cached composites at 3x their map display resolution. The previous
     // cache stored each sprite at its final on-map pixel size, so a small
     // character could be permanently reduced to a small bitmap and then
     // enlarged by the map renderer. Other/legacy characters did not go through
     // this cache, making the direct-compositor player look noticeably softer.
-    const HUMANOID_CACHE_SCALE = 2;
+    const HUMANOID_CACHE_SCALE = 3;
     let humanoidSpriteCacheBuilds = 0;
     let humanoidSpriteCacheHits = 0;
 
