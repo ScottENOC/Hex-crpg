@@ -77,7 +77,8 @@
             'build: ' + (window.__humanoidRendererBuild || '?') +
                 '  clothes: ' + (window.__clothingRendererBuild || '?'),
             'summary: ' + rendererDebugSummary.attempts +
-                ' attempts | painted ' + rendererDebugSummary.painted +
+                ' attempts | drawn ' + (rendererDebugSummary.painted + rendererDebugSummary.cacheHits) +
+                ' | built ' + rendererDebugSummary.painted +
                 ' | cache ' + rendererDebugSummary.cacheHits +
                 ' | incomplete ' + rendererDebugSummary.incomplete +
                 ' | failed ' + rendererDebugSummary.failures,
