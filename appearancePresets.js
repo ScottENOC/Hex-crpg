@@ -45,33 +45,6 @@
         return match ? presets[match.id] : null;
     }
 
-    // Trousers already use the same authored green source art as the colourable
-    // garments. Preserve the legacy `base` layer ID as Main (so old saves keep
-    // their stored trouser colour) and expose the lighter source region as Trim.
-    function ensureTwoToneTrousers() {
-        const garments = window.clothingSystem?.builtinGarments;
-        const current = garments?.pants_trousers;
-        if (!garments || !current) return false;
-        if (current.layers?.some(layer => layer.id === 'light')) return true;
-        const path = 'images/equipment/clothing/pants_trousers.png';
-        garments.pants_trousers = {
-            slot:'pants',
-            layers:[
-                {
-                    id:'base', label:'Main', sourceTone:'darkGreen',
-                    defaultColor:{hue:110,saturation:55,value:62,opacity:1},
-                    views:{front:path,side:path,back:path},
-                },
-                {
-                    id:'light', label:'Trim', sourceTone:'lightGreen',
-                    defaultColor:{hue:110,saturation:45,value:72,opacity:1},
-                    views:{front:path,side:path,back:path},
-                },
-            ],
-        };
-        return true;
-    }
-
     function applyClothing(entity, clothing) {
         if (!clothing || !entity) return;
         entity.equipped = entity.equipped || {};
@@ -105,7 +78,6 @@
 
     function applyCharacterAppearancePreset(entity, presetOrId = null, context = {}) {
         if (!entity) return entity;
-        ensureTwoToneTrousers();
         const preset = resolvePreset(entity, presetOrId, context);
         if (!preset) return entity;
         if (entity.appearancePresetApplied === preset.id && !context.force) return entity;
@@ -211,7 +183,6 @@
     }, { name:'Wren Talbot', campaign:'2', race:'human', gender:'female' });
 
     function install() {
-        ensureTwoToneTrousers();
         installWrappers();
         window.characterAppearancePresets = presets;
         window.registerCharacterAppearancePreset = registerCharacterAppearancePreset;
@@ -224,14 +195,5 @@
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once:true });
     else install();
 
-    // clothingSystem.js is injected dynamically by characterCreation.js. Usually
-    // it is ready before DOMContentLoaded, but retry the harmless trouser-spec
-    // upgrade briefly so slow mobile asset/script loading cannot miss it.
-    let tries = 0;
-    const clothingTimer = setInterval(() => {
-        tries++;
-        if (ensureTwoToneTrousers() || tries >= 100) clearInterval(clothingTimer);
-    }, 50);
 
-    window.CHARACTER_APPEARANCE_PRESETS_BUILD = BUILD;
 })();
