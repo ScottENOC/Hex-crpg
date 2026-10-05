@@ -67,7 +67,7 @@
             };
             const result={
                 shirt:measure(sourceRegion.y,sourceRegion.y+sourceRegion.h*.5)*destinationWidthFraction,
-                pants:measure(sourceRegion.y+sourceRegion.h*.5,sourceRegion.y+sourceRegion.h)*destinationWidthFraction,
+                pants:measure(sourceRegion.y+sourceRegion.h*.45,sourceRegion.y+sourceRegion.h*.68)*destinationWidthFraction,
             };
             byView.set(key,result);
             return result;
