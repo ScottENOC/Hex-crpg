@@ -707,7 +707,7 @@
         const asymmetricPath = view === 'side' && facing === 'left'
             ? hairSet?.sideLeft
             : view === 'back'
-                ? hairSet?.backRight || hairSet?.back
+                ? hairSet?.back
                 : hairSet?.[view];
         const path = asymmetricPath || hairSet?.[view] || hairSet?.front;
         const source = path ? loadImage(path) : null;
@@ -1110,7 +1110,7 @@
             if (armourDrawn) layerOrder.push('armour');
             if (armourExpected && !armourDrawn) compositionComplete = false;
             if (typeof window.drawFacialHairLayer === 'function' && window.drawFacialHairLayer(ctx,entity,view,bounds)) layerOrder.push('facialHair');
-            if (!hasHelmet && sourceHair && !imageReady(sourceHair)) compositionComplete = false;
+            if (!hasHelmet && (!hairImage || !imageReady(hairImage))) compositionComplete = false;
             if (!hasHelmet && imageReady(hairImage)) {
                 const tightDirectional = !!hairSelection.asymmetric && view !== 'front';
                 const tightDest = tightDirectional
@@ -1168,7 +1168,7 @@
             view,
             source:sourceHairPath||null,
             status:sourceHairPath?(window.assetManager?.status?.(sourceHairPath)||'unrequested'):'missing-source',
-            imageComplete:!!sourceHair?.complete,
+            imageComplete:!!hairImage?.complete,
             naturalWidth:sourceHair?.naturalWidth||0,
             naturalHeight:sourceHair?.naturalHeight||0,
             drawn:layerOrder.includes('hair'),
