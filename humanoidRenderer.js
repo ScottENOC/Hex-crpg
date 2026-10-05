@@ -8,7 +8,7 @@
 (() => {
     'use strict';
 
-    const BUILD = '20261005-unified-humanoid-renderer-v1';
+    const BUILD = '20261005-unified-humanoid-renderer-v2';
     const VALID_FACINGS = new Set(['up', 'down', 'left', 'right']);
     const HUMAN_RENDER_ASPECT = 0.48;
     const previousHex = new WeakMap();
@@ -17,6 +17,7 @@
     // Keep one HTMLImageElement per source so a failed request/retry cannot leave
     // one race's private copy broken while another copy of the same file succeeds.
     const rendererPendingLoads = new Set();
+    const mirroredHairSources = new WeakMap();
     let activeSourcePaths = null;
     // Failed composites are remembered per appearance/facing rather than
     // globally blocking every other humanoid. A broken front view must not
@@ -207,7 +208,9 @@
                 braid: {
                     front:'images/characters/human_female/hair_braid_front.png',
                     side:'images/characters/human_female/hair_braid_side.png',
+                    sideLeft:'images/characters/human_female/hair_braid_side_left.png',
                     back:'images/characters/human_female/hair_braid_back.png',
+                    backRight:'images/characters/human_female/hair_braid_back_right.png',
                 },
                 curly: {
                     front:'images/characters/human_female/hair_curly_front.png',
@@ -583,6 +586,43 @@
             : source;
     }
 
+    // Asymmetry is an input to the normal compositor, not a second renderer.
+    function mirroredHairSource(image) {
+        if (!imageReady(image)) return null;
+        if (mirroredHairSources.has(image)) return mirroredHairSources.get(image);
+        const w = image.naturalWidth || image.width;
+        const h = image.naturalHeight || image.height;
+        if (!w || !h) return null;
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const mirrorCtx = canvas.getContext('2d');
+        if (!mirrorCtx) return null;
+        mirrorCtx.translate(w, 0);
+        mirrorCtx.scale(-1, 1);
+        mirrorCtx.drawImage(image, 0, 0);
+        mirroredHairSources.set(image, canvas);
+        return canvas;
+    }
+
+    function resolveDirectionalHair(entity, hairSet, view, facing) {
+        const asymmetricPath = view === 'side' && facing === 'left'
+            ? hairSet?.sideLeft
+            : view === 'back'
+                ? hairSet?.backRight || hairSet?.back
+                : hairSet?.[view];
+        const path = asymmetricPath || hairSet?.[view] || hairSet?.front;
+        const source = path ? loadImage(path) : null;
+        const recoloured = resolvedHairImage(entity, source);
+        const needsMirror = view === 'side' && facing === 'left' && !!hairSet?.sideLeft;
+        return {
+            path: path || null,
+            source,
+            image: needsMirror ? mirroredHairSource(recoloured) : recoloured,
+            asymmetric: needsMirror || (view === 'back' && !!hairSet?.backRight),
+        };
+    }
+
     function alphaTrim(image) {
         if (!image) return null;
         if (trimCache.has(image)) return trimCache.get(image);
@@ -901,10 +941,11 @@
         const layout = DIRECTIONAL_LAYOUT[view];
         const hairStyle = entity.hairStyle || 'brown_1';
         const hairSet = set?.hair?.[hairStyle] || set?.hair?.brown_1;
-        const sourceHairPath = hairSet?.[view] || set?.hair?.brown_1?.[view];
-        const sourceHair = sourceHairPath ? loadImage(sourceHairPath) : null;
+        const hairSelection = resolveDirectionalHair(entity, hairSet || {}, view, facing);
+        const sourceHairPath = hairSelection.path;
+        const sourceHair = hairSelection.source;
         const bodyImage = resolvedBodyImage(entity, sourceBody);
-        const hairImage = resolvedHairImage(entity, sourceHair);
+        const hairImage = hairSelection.image;
         const hasHelmet = !!entity.equipped?.helmet && equipmentSlotVisible(entity,'helmet');
         window.clothingSystem?.migrateLegacyEquipment?.(entity);
         const mirror = facing === 'left';
@@ -973,7 +1014,7 @@
             if (typeof window.drawFacialHairLayer === 'function' && window.drawFacialHairLayer(ctx,entity,view,bounds)) layerOrder.push('facialHair');
             if (!hasHelmet && sourceHair && !imageReady(sourceHair)) compositionComplete = false;
             if (!hasHelmet && imageReady(hairImage)) {
-                const tightDirectional = hairStyle === 'braid' && view !== 'front';
+                const tightDirectional = !!hairSelection.asymmetric && view !== 'front';
                 const tightDest = tightDirectional
                     ? tightDirectionalHairDestination(sourceHair, view, hairSet?.front)
                     : null;
