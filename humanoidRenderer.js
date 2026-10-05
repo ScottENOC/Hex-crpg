@@ -13,6 +13,83 @@
     const HUMAN_RENDER_ASPECT = 0.48;
     const previousHex = new WeakMap();
     const trimCache = new WeakMap();
+    const bodyClothingWidthCache = new WeakMap();
+
+    // Measure the authored body's visible width separately in its upper and
+    // lower halves. Clothing uses the body as the ruler: shirts match the upper
+    // body width and pants match the lower body width. This deliberately measures
+    // the whole opaque silhouette, including arms, rather than trying to infer
+    // "torso" versus "sleeve" pixels.
+    function bodyClothingWidthFractions(image, view, useVisibleFit, bodyTarget) {
+        if (!imageReady(image)) return null;
+        let byView = bodyClothingWidthCache.get(image);
+        if (!byView) { byView = new Map(); bodyClothingWidthCache.set(image, byView); }
+        const key = view + '|' + (useVisibleFit ? 'visible' : 'crop') + '|' +
+            JSON.stringify(bodyTarget || null);
+        if (byView.has(key)) return byView.get(key);
+
+        const layout = DIRECTIONAL_LAYOUT[view];
+        const trim = useVisibleFit ? alphaTrim(image) : null;
+        const iw = image.naturalWidth || image.width || 1;
+        const ih = image.naturalHeight || image.height || 1;
+        let sourceRegion;
+        let destinationWidthFraction;
+        if (useVisibleFit) {
+            if (!trim?.trimWidth || !trim.trimHeight) return null;
+            sourceRegion = {x:trim.trimLeft,y:trim.trimTop,w:trim.trimWidth,h:trim.trimHeight};
+            destinationWidthFraction = Number(bodyTarget?.w ?? 1);
+        } else {
+            const crop = layout?.bodyCrop;
+            const dest = layout?.bodyDest;
+            if (!crop?.w || !crop.h || !dest?.w) return null;
+            sourceRegion = {x:crop.x*iw,y:crop.y*ih,w:crop.w*iw,h:crop.h*ih};
+            destinationWidthFraction = dest.w;
+        }
+
+        try {
+            const canvas=document.createElement('canvas');
+            canvas.width=iw; canvas.height=ih;
+            const x=canvas.getContext('2d',{willReadFrequently:true});
+            x.drawImage(image,0,0);
+            const pixels=x.getImageData(0,0,iw,ih).data;
+            const measure=(y0,y1)=>{
+                let left=iw,right=-1;
+                const top=Math.max(0,Math.floor(y0)),bottom=Math.min(ih,Math.ceil(y1));
+                for(let y=top;y<bottom;y++){
+                    for(let xx=Math.max(0,Math.floor(sourceRegion.x));
+                        xx<Math.min(iw,Math.ceil(sourceRegion.x+sourceRegion.w));xx++){
+                        if(pixels[(y*iw+xx)*4+3]<8) continue;
+                        if(xx<left)left=xx;
+                        if(xx>right)right=xx;
+                    }
+                }
+                return right>=left ? (right-left+1)/sourceRegion.w : 0;
+            };
+            const result={
+                shirt:measure(sourceRegion.y,sourceRegion.y+sourceRegion.h*.5)*destinationWidthFraction,
+                pants:measure(sourceRegion.y+sourceRegion.h*.5,sourceRegion.y+sourceRegion.h)*destinationWidthFraction,
+            };
+            byView.set(key,result);
+            return result;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function clothingFitReference(image, view, bounds, useVisibleFit, bodyTarget) {
+        const fractions=bodyClothingWidthFractions(image,view,useVisibleFit,bodyTarget);
+        if (!fractions) return null;
+        // Two authored pixels of breathing room is enough to stop a shirt/pants
+        // silhouette from looking pinched. Because cached composites are rendered
+        // at a higher resolution, this padding is applied after converting the
+        // measured body width into the current compositor's pixel space.
+        const padding=2;
+        return {
+            shirtWidthPx:Math.max(1,fractions.shirt*bounds.width)+padding,
+            pantsWidthPx:Math.max(1,fractions.pants*bounds.width)+padding,
+            boundsWidthPx:bounds.width,
+        };
+    }
     // Several humanoid rigs intentionally share the same authored hair paths.
     // Keep one HTMLImageElement per source so a failed request/retry cannot leave
     // one race's private copy broken while another copy of the same file succeeds.
@@ -1090,12 +1167,16 @@
             const bodyDrawn = useVisibleBodyFit
                 ? !!drawVisibleFit(ctx, bodySource, bounds, bodyTarget || {x:0,y:0,w:1,h:1})
                 : drawCropped(ctx, bodySource, layout.bodyCrop, layout.bodyDest, bounds);
+            const clothingFit = clothingFitReference(
+                bodySource, view, bounds, useVisibleBodyFit,
+                bodyTarget || {x:0,y:0,w:1,h:1}
+            );
             if (bodyDrawn) layerOrder.push('body');
             for (const slot of ['underwear','bra','pants','shirt','shoes']) {
                 const expected = entity.displayClothes !== false
                     && !!entity.equipped?.[slot]
                     && equipmentSlotVisible(entity, slot);
-                const drawn = window.clothingSystem?.drawSlot?.(ctx, entity, slot, view, bounds) || false;
+                const drawn = window.clothingSystem?.drawSlot?.(ctx, entity, slot, view, bounds, clothingFit) || false;
                 const slotDiagnostics = Array.isArray(window.__clothingRendererLastDrawDiagnostics)
                     ? window.__clothingRendererLastDrawDiagnostics.map(item => ({...item, expected}))
                     : [{slot,view,itemId:entity.equipped?.[slot]||null,expected,drawn,reason:'no-slot-diagnostics'}];
