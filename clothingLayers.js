@@ -16,7 +16,7 @@
   const twoToneGarment=(slot,views,labelDark,labelLight)=>({slot,layers:[{id:'dark',label:labelDark,defaultColor:{hue:110,saturation:60,value:42,opacity:1},views,sourceTone:'darkGreen'},{id:'light',label:labelLight,defaultColor:{hue:110,saturation:45,value:72,opacity:1},views,sourceTone:'lightGreen'}]});
   const twoToneTopViews=views=>twoToneGarment('shirt',views,'Main','Trim');
   const DEFAULT_SHOE_COLOR={hue:110,saturation:55,value:62,opacity:1},PLAYER_SHOE_COLOR={hue:28,saturation:68,value:32,opacity:1};
-  const footwearViews=views=>({slot:'shoes',layers:[{id:'base',label:'Shoes',defaultColor:{...DEFAULT_SHOE_COLOR},views,geometry:{type:'splitFeet',bottom:1.006,height:.22,frontSpread:.24,backSpread:.24,maxWidth:.25,sideMaxWidth:.34,scale:1.30,outwardShift:.40}}]});
+  const footwearViews=views=>({slot:'shoes',layers:[{id:'base',label:'Shoes',defaultColor:{...DEFAULT_SHOE_COLOR},views,geometry:{type:'splitSymmetric',bottom:1.006,height:.22,frontSpread:.24,backSpread:.24,maxWidth:.25,sideMaxWidth:.34,scale:1.30,outwardShift:.40}}]});
   const GARMENTS={
     top_blouse:twoToneTopViews({front:'images/equipment/clothing/top_blouse_front.png',side:'images/equipment/clothing/top_blouse_side.png',back:'images/equipment/clothing/top_blouse_back.png'}),
     top_dress:twoToneTopViews({front:'images/equipment/clothing/top_dress_front.png',side:'images/equipment/clothing/top_dress_side.png',back:'images/equipment/clothing/top_dress_back.png'}),
@@ -70,10 +70,10 @@
   function tint(img,c,l=null){if(!img?.complete||!img.naturalWidth)return img;const tone=l?.sourceTone||'all',opacity=Math.max(0,Math.min(1,Number(c.opacity??1))),key=`${img.src}|${c.hue}|${c.saturation}|${c.value}|${opacity}|${tone}`;if(tinted.has(key))return tinted.get(key);const target=hsvHsl(c),out=document.createElement('canvas');out.width=img.naturalWidth;out.height=img.naturalHeight;const x=out.getContext('2d',{willReadFrequently:true});x.drawImage(img,0,0);const d=x.getImageData(0,0,out.width,out.height),p=d.data;for(let i=0;i<p.length;i+=4){if(!p[i+3])continue;if(l?.sourceTone&&!pixelMatchesTone(p[i],p[i+1],p[i+2],p[i+3],l.sourceTone)){p[i+3]=0;continue;}const lum=(Math.max(p[i],p[i+1],p[i+2])+Math.min(p[i],p[i+1],p[i+2]))/510,lightness=Math.max(.02,Math.min(.98,target.lightness+(lum-.5)*.78)),rgb=hslRgb(target.hue,target.saturation,lightness);p[i]=rgb[0];p[i+1]=rgb[1];p[i+2]=rgb[2];p[i+3]=Math.round(p[i+3]*opacity);}x.putImageData(d,0,0);tinted.set(key,out);return out;}
   function opaqueBounds(img){if(opaqueBoundsCache.has(img))return opaqueBoundsCache.get(img);const w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;let result={x:0,y:0,w,h};try{const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(img,0,0);const p=x.getImageData(0,0,w,h).data;let left=w,top=h,right=-1,bottom=-1;for(let yy=0;yy<h;yy++)for(let xx=0;xx<w;xx++)if(p[(yy*w+xx)*4+3]>=8){if(xx<left)left=xx;if(xx>right)right=xx;if(yy<top)top=yy;if(yy>bottom)bottom=yy;}if(right>=left&&bottom>=top)result={x:left,y:top,w:right-left+1,h:bottom-top+1};}catch(_){}opaqueBoundsCache.set(img,result);return result;}
   function toneBounds(img){if(toneBoundsCache.has(img))return toneBoundsCache.get(img);const w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;let result=opaqueBounds(img);try{const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(img,0,0);const p=x.getImageData(0,0,w,h).data;let left=w,top=h,right=-1,bottom=-1;for(let yy=0;yy<h;yy++)for(let xx=0;xx<w;xx++){const i=(yy*w+xx)*4,r=p[i],g=p[i+1],b=p[i+2],a=p[i+3];if(pixelMatchesTone(r,g,b,a,'darkGreen')||pixelMatchesTone(r,g,b,a,'lightGreen')){if(xx<left)left=xx;if(xx>right)right=xx;if(yy<top)top=yy;if(yy>bottom)bottom=yy;}}if(right>=left&&bottom>=top)result={x:left,y:top,w:right-left+1,h:bottom-top+1};}catch(_){}toneBoundsCache.set(img,result);return result;}
-  function clothingTarget(slot,itemId,v){const resolved=view(v),set=CLOTHING_TARGETS[resolved]||CLOTHING_TARGETS.front;if(slot==='shirt'){if(itemId==='top_dress')return set.dress;if(itemId==='top_shirt_f'){const w=set.shirt.w*1.32;return{...set.shirt,x:set.shirt.x-(w-set.shirt.w)/2,w};}return set.shirt;}if(slot==='pants'){const rise=set.pants.h*.02;return{...set.pants,y:set.pants.y-rise};}if(slot==='bra')return set.bra;if(slot==='underwear')return set.underwear;return null;}
+  function clothingTarget(slot,itemId,v,fitReference){const resolved=view(v),set=CLOTHING_TARGETS[resolved]||CLOTHING_TARGETS.front;if(slot==='shirt'){let target;if(itemId==='top_dress')target=set.dress;else if(itemId==='top_shirt_f'){const w=set.shirt.w*1.32;target={...set.shirt,x:set.shirt.x-(w-set.shirt.w)/2,w};}else target=set.shirt;if(fitReference?.shirtWidthPx>0&&target!==set.dress){const w=fitReference.shirtWidthPx/Math.max(1,fitReference.boundsWidthPx||1);target={...target,w,x:target.x+(target.w-w)/2};}return target;}if(slot==='pants'){const rise=set.pants.h*.02;let target={...set.pants,y:set.pants.y-rise};if(fitReference?.pantsWidthPx>0){const w=fitReference.pantsWidthPx/Math.max(1,fitReference.boundsWidthPx||1);target={...target,w,x:target.x+(target.w-w)/2};}return target;}if(slot==='bra')return set.bra;if(slot==='underwear')return set.underwear;return null;}
   function drawFittedGarment(ctx,source,trim,target,bounds,slot,entity,itemId,v,garmentSpec,geometrySource,geometry=null){
     if(!trim?.w||!trim?.h)return false;
-    if(geometry?.type==='splitFeet'){
+    if(geometry?.type==='splitSymmetric'){
       const w=source.naturalWidth||source.width,h=source.naturalHeight||source.height,full=opaqueBounds(source),mid=full.x+full.w/2; let halves=null;
       try{const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(source,0,0);const p=x.getImageData(0,0,w,h).data;const scan=(x0,x1)=>{let l=x1,t=h,r=-1,b=-1;for(let yy=full.y;yy<full.y+full.h;yy++)for(let xx=x0;xx<x1;xx++){if(p[(yy*w+xx)*4+3]<8)continue;if(xx<l)l=xx;if(xx>r)r=xx;if(yy<t)t=yy;if(yy>b)b=yy;}return r>=l&&b>=t?{x:l,y:t,w:r-l+1,h:b-t+1}:null;};halves={left:scan(full.x,Math.floor(mid)),right:scan(Math.ceil(mid),full.x+full.w)};}catch(_){}
       const bottom=bounds.top+Number(geometry.bottom??1)*bounds.height,maxH=Number(geometry.height??.22)*bounds.height,scale=Math.max(0,Number(geometry.scale??1))||1;
@@ -81,7 +81,7 @@
       const draw=(src,cx,maxW)=>{if(!src)return;const size=contained(src,maxW);ctx.drawImage(source,src.x,src.y,src.w,src.h,cx-size.w/2,bottom-size.h,size.w,size.h);};
       if(view(v)==='side'){draw(full,bounds.left+bounds.width/2,Number(geometry.sideMaxWidth??.34)*bounds.width);return true;}
       if(!halves?.left||!halves?.right){draw(full,bounds.left+bounds.width/2,bounds.width*.55);return true;}
-      const resolved=view(v),spread=Number(resolved==='back'?geometry.backSpread:geometry.frontSpread)||.24,centre=bounds.left+bounds.width/2,halfSpread=spread*bounds.width/2,outward=Math.max(0,Number(geometry.outwardShift??.4)),maxW=Number(geometry.maxWidth??.25)*bounds.width,ls=contained(halves.left,maxW),rs=contained(halves.right,maxW);
+      const resolved=view(v),spread=Number(resolved==='back'?geometry.backSpread:geometry.spread)||.24,centre=bounds.left+bounds.width/2,halfSpread=spread*bounds.width/2,outward=Math.max(0,Number(geometry.outwardShift??.4)),maxW=Number(geometry.maxWidth??.25)*bounds.width,ls=contained(halves.left,maxW),rs=contained(halves.right,maxW);
       draw(halves.left,centre-halfSpread-outward*ls.w,maxW);draw(halves.right,centre+halfSpread+outward*rs.w,maxW);return true;
     }
     const targetX=bounds.left+target.x*bounds.width,targetY=bounds.top+target.y*bounds.height,targetW=target.w*bounds.width,targetH=target.h*bounds.height;
@@ -96,7 +96,7 @@
     ctx.drawImage(source,trim.x,trim.y,trim.w,trim.h,dx,dy,dw,dh);
     return true;
   }
-  function drawSlot(ctx,e,slot,v,bounds){
+  function drawSlot(ctx,e,slot,v,bounds,fitReference=null){
     migrate(e);
     const diagnostics=[];
     const record=(detail)=>diagnostics.push({slot,view:view(v),...detail});
@@ -111,7 +111,7 @@
       const ready=!!img?.complete&&!!img.naturalWidth&&!!img.naturalHeight;
       const detail={itemId,layerId:l.id,source:src||null,status:src?(window.assetManager?.status?.(src)||'unrequested'):'missing-source',imageComplete:!!img?.complete,naturalWidth:img?.naturalWidth||0,naturalHeight:img?.naturalHeight||0,tinted:l.tint,drawn:false,reason:ready?'not-drawn-yet':'image-not-ready'};
       if(!ready){allLayersDrawn=false;diagnostics.push(detail);continue;}
-      const rendered=l.tint?tint(img,colour(e,itemId,l),l):img,target=clothingTarget(slot,itemId,v),trim=l.sourceTone?toneBounds(img):opaqueBounds(img);
+      const rendered=l.tint?tint(img,colour(e,itemId,l),l):img,target=clothingTarget(slot,itemId,v,fitReference),trim=l.sourceTone?toneBounds(img):opaqueBounds(img);
       if(target||l.geometry) detail.drawn=!!drawFittedGarment(ctx,rendered,trim,target||{x:0,y:0,w:1,h:1},bounds,slot,e,itemId,v,s,img,l.geometry);
       else{ctx.drawImage(rendered,bounds.left,bounds.top,bounds.width,bounds.height);detail.drawn=true;}
       detail.reason=detail.drawn?'drawn':'drawFittedGarment-failed';
