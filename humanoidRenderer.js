@@ -1272,7 +1272,7 @@
                 hairStyle:entity.hairStyle, hairHue:entity.hairHue,
                 hairLightMult:entity.hairLightMult, hairSatMult:entity.hairSatMult,
                 skinHue:entity.skinHue, skinSaturation:entity.skinSaturation, skinLightness:entity.skinLightness,
-                equipped:entity.equipped, clothingColors:entity.clothingColors,
+                equipped:entity.equipped, equippedInstances:entity.equippedInstances, clothingColors:entity.clothingColors,
                 displayArmour:entity.displayArmour, displayClothes:entity.displayClothes,
                 goldGear:entity.goldGear, equipmentAppearance:entity.equipmentAppearance,
             });
