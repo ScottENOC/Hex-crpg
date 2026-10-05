@@ -29,8 +29,14 @@
     // Temporary on-device renderer diagnostics. This is intentionally kept outside
     // the performance report so we can inspect the exact facing/layer decision that
     // caused a composite to be rejected without turning every frame into log spam.
+    // Keep renderer debug deliberately tiny. The panel is a troubleshooting
+    // instrument, not a session log: retain only the most recent completed
+    // attempts plus compact lifetime counters.
     const rendererDebugHistory = [];
-    const RENDERER_DEBUG_HISTORY_LIMIT = 40;
+    const RENDERER_DEBUG_HISTORY_LIMIT = 6;
+    const rendererDebugSummary = {
+        attempts:0, painted:0, cacheHits:0, pending:0, failures:0, incomplete:0,
+    };
     let rendererDebugPanel = null;
 
     function rendererDebugRecord(entry) {
@@ -44,6 +50,22 @@
                 ? {...window.__humanoidRendererLastHairDiagnostics}
                 : null,
         };
+
+        // "started" is an internal trace point. Keep it out of the visible
+        // history unless the attempt never produces a final result.
+        if (entry.result === 'started') {
+            rendererDebugSummary.attempts++;
+            rendererDebugSummary.pending++;
+            return;
+        }
+
+        if (entry.result === 'painted') rendererDebugSummary.painted++;
+        else if (entry.result === 'cache-hit') rendererDebugSummary.cacheHits++;
+        else if (entry.result === 'incomplete') rendererDebugSummary.incomplete++;
+        else rendererDebugSummary.failures++;
+
+        rendererDebugSummary.pending = Math.max(0, rendererDebugSummary.pending - 1);
+
         rendererDebugHistory.push(snapshot);
         while (rendererDebugHistory.length > RENDERER_DEBUG_HISTORY_LIMIT) rendererDebugHistory.shift();
         rendererDebugRefresh();
@@ -52,9 +74,15 @@
     function rendererDebugText() {
         const lines = [
             'HEX RENDER',
-            'build: ' + (window.__humanoidRendererBuild || '?'),
-            'clothes: ' + (window.__clothingRendererBuild || '?'),
+            'build: ' + (window.__humanoidRendererBuild || '?') +
+                '  clothes: ' + (window.__clothingRendererBuild || '?'),
+            'summary: ' + rendererDebugSummary.attempts +
+                ' attempts | painted ' + rendererDebugSummary.painted +
+                ' | cache ' + rendererDebugSummary.cacheHits +
+                ' | incomplete ' + rendererDebugSummary.incomplete +
+                ' | failed ' + rendererDebugSummary.failures,
             '',
+            'RECENT (last ' + RENDERER_DEBUG_HISTORY_LIMIT + ')',
         ];
         if (!rendererDebugHistory.length) {
             lines.push('No renders yet.');
@@ -90,21 +118,18 @@
             const view = item.view || '?';
             const layers = compactLayerStatus(item);
             const hair = compactHairStatus(item);
-            const parts = [
-                '#' + (index + 1),
-                face + '/' + view,
-                item.result === 'painted' ? '✓' :
-                    item.result === 'cache-hit' ? 'cache✓' :
-                    item.result === 'started' ? '…' : '✗',
-            ];
+            const status = item.result === 'painted' ? '✓' :
+                item.result === 'cache-hit' ? 'cache✓' : '✗';
+            const parts = ['#' + (index + 1), face + '/' + view, status];
             if (layers) parts.push(layers);
             if (hair) parts.push(hair);
             lines.push(parts.join('  '));
 
-            if (item.result !== 'painted' && item.result !== 'cache-hit' && item.result !== 'started') {
+            if (item.result !== 'painted' && item.result !== 'cache-hit') {
                 const failed = (item.layerDiagnostics || [])
                     .filter(d => d.expected && !d.drawn)
-                    .map(d => d.slot + (d.reason ? ':' + d.reason : ''));
+                    .map(d => d.slot + (d.reason ? ':' + d.reason : ''))
+                    .slice(0, 3);
                 if (failed.length) lines.push('  FAIL: ' + failed.join(', '));
                 else if (item.result) lines.push('  FAIL: ' + item.result);
             }
