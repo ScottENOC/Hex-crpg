@@ -54,6 +54,16 @@
       description: 'A long fitted lace dress.', clothingFitMode: 'dressSplit', waistFraction: 0.42,
       files: { front: 'shirt_dress_lace_front.png', side: 'shirt_dress_lace_side.png', back: 'shirt_dress_lace_back.png' },
     },
+    monk_trousers: {
+      name: 'Monk Trousers', slot: 'pants', buyPrice: 26, weight: 0.55, fashionTier: 'everyday',
+      description: 'Loose wrapped trousers suited to travel and quiet work.',
+      files: { front: 'monk_trousers_front.png', side: 'monk_trousers_front.png', back: 'monk_trousers_back.png' },
+    },
+    monk_wrap: {
+      name: 'Monk Wraps', slot: 'pants', buyPrice: 28, weight: 0.5, fashionTier: 'everyday',
+      description: 'A wrapped lower garment with a simple, practical cut.',
+      files: { front: 'monk_wrap_front.png', side: 'monk_wrap_side.png', back: 'monk_wrap_back.png' },
+    },
     pants_fitted_shorts: {
       name: 'Fitted Shorts', slot: 'pants', buyPrice: 22, weight: 0.3, fashionTier: 'everyday',
       description: 'Close-fitting short trousers.',
