@@ -65,10 +65,26 @@
                 }
                 return right>=left ? (right-left+1)/sourceRegion.w : 0;
             };
-            const result={
+            const current={
                 shirt:measure(sourceRegion.y,sourceRegion.y+sourceRegion.h*.5)*destinationWidthFraction,
                 pants:measure(sourceRegion.y+sourceRegion.h*.45,sourceRegion.y+sourceRegion.h*.68)*destinationWidthFraction,
             };
+            // Pants are ordinary garments, not directional silhouettes. In particular,
+            // a narrower authored back body must not make every pair of trousers shrink
+            // when the character turns around. Use the front body's lower-body width as
+            // the canonical ruler for back-view pants while leaving side-view pants
+            // legitimately narrower.
+            let result=current;
+            if(view==='back' && typeof image.src==='string' && image.src){
+                const frontSrc=image.src.replace(/_(?:back|side)(\\.[^./]+)$/,'_front$1');
+                if(frontSrc!==image.src){
+                    const frontImage=loadImage(frontSrc);
+                    if(imageReady(frontImage)){
+                        const frontFractions=bodyClothingWidthFractions(frontImage,'front',useVisibleFit,bodyTarget);
+                        if(frontFractions?.pants>0) result={...current,pants:frontFractions.pants};
+                    }
+                }
+            }
             byView.set(key,result);
             return result;
         } catch (_) {
