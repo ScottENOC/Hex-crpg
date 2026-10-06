@@ -6,7 +6,7 @@
   'use strict';
   const BUILD='20260929-skirt-clothing-v1';
   const SKIRT_ID='pants_skirt';
-  const AUTO_LOWER=new Set(['pants_trousers','pants_shorts',SKIRT_ID]);
+  const AUTO_LOWER=new Set(['pants_breeches','pants_shorts',SKIRT_ID]);
   const images=new Map();
   const trimCache=new WeakMap();
   const rowProfileCache=new WeakMap();
@@ -160,7 +160,7 @@
     return Math.cos(((doy-165)/360)*Math.PI*2)+Math.cos(((hour()-14)/24)*Math.PI*2)*.12;
   }
   function skirtThreshold(e){const u=(hash(`${seed(e)}|skirt-preference`)%10001)/10000;return .55+u*1.30;}
-  function preferredNonSkirt(e){return window.seasonalClothing?.choosePants?.(e)||'pants_trousers';}
+  function preferredNonSkirt(e){return window.seasonalClothing?.choosePants?.(e)||'pants_breeches';}
   function chooseLower(e){
     const daily=(((hash(`${seed(e)}|skirt-weather|${day()}`)%10001)/10000)-.5)*.12;
     return seasonalWarmth()+daily>=skirtThreshold(e)?SKIRT_ID:preferredNonSkirt(e);
