@@ -5,7 +5,7 @@
   'use strict';
   const BUILD=window.PRESENTATION_BUILD||'20260930-seasonal-clothing-v3';
   const SHORTS_ID='pants_shorts';
-  const TROUSERS_ID='pants_trousers';
+  const TROUSERS_ID='pants_breeches';
   const AUTO_PANTS=new Set([SHORTS_ID,TROUSERS_ID]);
   const SHORTS_HEIGHT_MULT=.48;
   const SHORTS_DEFAULT={hue:28,saturation:55,value:62,opacity:1};
