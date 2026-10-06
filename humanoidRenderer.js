@@ -8,7 +8,7 @@
 (() => {
     'use strict';
 
-    const BUILD = '20261005-unified-humanoid-renderer-v8';
+    const BUILD = '20261007-unified-humanoid-renderer-v9';
     const VALID_FACINGS = new Set(['up', 'down', 'left', 'right']);
     const HUMAN_RENDER_ASPECT = 0.48;
     const previousHex = new WeakMap();
@@ -69,22 +69,7 @@
                 shirt:measure(sourceRegion.y,sourceRegion.y+sourceRegion.h*.5)*destinationWidthFraction,
                 pants:measure(sourceRegion.y+sourceRegion.h*.45,sourceRegion.y+sourceRegion.h*.68)*destinationWidthFraction,
             };
-            // Pants are ordinary garments, not directional silhouettes. In particular,
-            // a narrower authored back body must not make every pair of trousers shrink
-            // when the character turns around. Use the front body's lower-body width as
-            // the canonical ruler for back-view pants while leaving side-view pants
-            // legitimately narrower.
             let result=current;
-            if(view==='back' && typeof image.src==='string' && image.src){
-                const frontSrc=image.src.replace(/_(?:back|side)(\\.[^./]+)$/,'_front$1');
-                if(frontSrc!==image.src){
-                    const frontImage=loadImage(frontSrc);
-                    if(imageReady(frontImage)){
-                        const frontFractions=bodyClothingWidthFractions(frontImage,'front',useVisibleFit,bodyTarget);
-                        if(frontFractions?.pants>0) result={...current,pants:frontFractions.pants};
-                    }
-                }
-            }
             byView.set(key,result);
             return result;
         } catch (_) {
@@ -104,6 +89,72 @@
             shirtWidthPx:Math.max(1,fractions.shirt*bounds.width)+padding,
             pantsWidthPx:Math.max(1,fractions.pants*bounds.width)+padding,
             boundsWidthPx:bounds.width,
+        };
+    }
+
+    // Normalise the authored back silhouette against the front silhouette. This
+    // fixes the body at the source rather than teaching individual garments about
+    // a back-view exception.
+    function bodyHorizontalNormalisation(image, view, bodyTarget, useVisibleFit) {
+        if (view !== 'back' || !imageReady(image)) return 1;
+        const source = image.src || '';
+        const frontSrc = source.replace(/_(?:back|side)(\\.[^./]+)$/,'_front$1');
+        if (!frontSrc || frontSrc === source) return 1;
+        const frontImage = loadImage(frontSrc);
+        if (!imageReady(frontImage)) return 1;
+        const measure = (candidate, candidateView) => {
+            const iw=candidate.naturalWidth || candidate.width || 1;
+            const ih=candidate.naturalHeight || candidate.height || 1;
+            const layout=DIRECTIONAL_LAYOUT[candidateView];
+            let region, destW;
+            if (useVisibleFit) {
+                const trim=alphaTrim(candidate);
+                if (!trim?.trimWidth || !trim.trimHeight) return 0;
+                region={x:trim.trimLeft,y:trim.trimTop,w:trim.trimWidth,h:trim.trimHeight};
+                destW=Number(bodyTarget?.w ?? 1);
+            } else {
+                const crop=layout?.bodyCrop, dest=layout?.bodyDest;
+                if (!crop?.w || !dest?.w) return 0;
+                region={x:crop.x*iw,y:crop.y*ih,w:crop.w*iw,h:crop.h*ih};
+                destW=dest.w;
+            }
+            try {
+                const canvas=document.createElement('canvas');
+                canvas.width=iw; canvas.height=ih;
+                const x=canvas.getContext('2d',{willReadFrequently:true});
+                if (!x) return 0;
+                x.drawImage(candidate,0,0);
+                const pixels=x.getImageData(0,0,iw,ih).data;
+                let left=iw,right=-1;
+                const top=Math.max(0,Math.floor(region.y));
+                const bottom=Math.min(ih,Math.ceil(region.y+region.h));
+                for(let y=top;y<bottom;y++){
+                    for(let xx=Math.max(0,Math.floor(region.x));xx<Math.min(iw,Math.ceil(region.x+region.w));xx++){
+                        if(pixels[(y*iw+xx)*4+3]<8) continue;
+                        if(xx<left) left=xx;
+                        if(xx>right) right=xx;
+                    }
+                }
+                return right>=left ? ((right-left+1)/region.w)*destW : 0;
+            } catch (_) {
+                return 0;
+            }
+        };
+        const backWidth=measure(image,'back');
+        const frontWidth=measure(frontImage,'front');
+        if (!(backWidth>0) || !(frontWidth>0)) return 1;
+        return Math.max(.85,Math.min(1.35,frontWidth/backWidth));
+    }
+
+    function normalisedBodyBounds(bounds, image, view, bodyTarget, useVisibleFit) {
+        const scale=bodyHorizontalNormalisation(image,view,bodyTarget,useVisibleFit);
+        if (scale===1) return bounds;
+        const width=bounds.width*scale;
+        return {
+            left:bounds.left+(bounds.width-width)/2,
+            top:bounds.top,
+            width,
+            height:bounds.height,
         };
     }
     // Several humanoid rigs intentionally share the same authored hair paths.
@@ -999,7 +1050,7 @@
         if (trace.length > 120) trace.splice(0, trace.length - 120);
     }
 
-    function drawHeldItem(ctx, entity, view, bounds, slot, expectedLayer='any') {
+    function drawHeldItem(ctx, entity, view, visualBounds, slot, expectedLayer='any') {
         const equipmentSlot = slot === 'main' ? 'weapon' : 'offhand';
         if (!equipmentSlotVisible(entity, equipmentSlot)) return false;
         const spec = slotSpec(entity, slot, view);
@@ -1061,7 +1112,7 @@
         return true;
     }
 
-    function drawHelmet(ctx, entity, view, bounds) {
+    function drawHelmet(ctx, entity, view, visualBounds) {
         const image = helmetImage(entity, view);
         if (!imageReady(image)) return false;
         const anchorPoint = tunedAnchor(entity, view, 'helmetAnchor');
@@ -1118,7 +1169,7 @@
         return {dx,dy,width:outerW,height:outerH,target:{left:targetLeft,top:targetTop,width:targetWidth,height:targetHeight},shapeProfile:{...profile}};
     }
 
-    function drawArmour(ctx, entity, view, bounds) {
+    function drawArmour(ctx, entity, view, visualBounds) {
         const image = armourImage(entity, view);
         if (!imageReady(image)) return false;
         const baseTarget = ARMOUR_TARGETS[view] || ARMOUR_TARGETS.front;
@@ -1213,16 +1264,19 @@
 
             const bodySource = imageReady(bodyImage) ? bodyImage : sourceBody;
             const bodyTarget = BODY_VISIBLE_TARGETS[key]?.[view];
+            const useVisibleBodyFit = !!bodyTarget || CHARACTER_RIGS[key]?.bodyRender === 'visible-fit';
+            const visualBounds = normalisedBodyBounds(
+                bounds, bodySource, view, bodyTarget || {x:0,y:0,w:1,h:1}, useVisibleBodyFit
+            );
             // Human directional sheets retain their measured crop. Rigs whose
             // source framing differs (and temporary one-view fallbacks) alpha-trim
             // then fit the visible body to the compositor bounds instead of forcing
             // them through human-specific crop coordinates.
-            const useVisibleBodyFit = !!bodyTarget || CHARACTER_RIGS[key]?.bodyRender === 'visible-fit';
             const bodyDrawn = useVisibleBodyFit
-                ? !!drawVisibleFit(ctx, bodySource, bounds, bodyTarget || {x:0,y:0,w:1,h:1})
-                : drawCropped(ctx, bodySource, layout.bodyCrop, layout.bodyDest, bounds);
+                ? !!drawVisibleFit(ctx, bodySource, visualBounds, bodyTarget || {x:0,y:0,w:1,h:1})
+                : drawCropped(ctx, bodySource, layout.bodyCrop, layout.bodyDest, visualBounds);
             const clothingFit = clothingFitReference(
-                bodySource, view, bounds, useVisibleBodyFit,
+                bodySource, view, visualBounds, useVisibleBodyFit,
                 bodyTarget || {x:0,y:0,w:1,h:1}
             );
             if (bodyDrawn) layerOrder.push('body');
@@ -1230,7 +1284,7 @@
                 const expected = entity.displayClothes !== false
                     && !!entity.equipped?.[slot]
                     && equipmentSlotVisible(entity, slot);
-                const drawn = window.clothingSystem?.drawSlot?.(ctx, entity, slot, view, bounds, clothingFit) || false;
+                const drawn = window.clothingSystem?.drawSlot?.(ctx, entity, slot, view, visualBounds, clothingFit) || false;
                 const slotDiagnostics = Array.isArray(window.__clothingRendererLastDrawDiagnostics)
                     ? window.__clothingRendererLastDrawDiagnostics.map(item => ({...item, expected}))
                     : [{slot,view,itemId:entity.equipped?.[slot]||null,expected,drawn,reason:'no-slot-diagnostics'}];
@@ -1244,7 +1298,7 @@
             const armourDrawn = armourExpected ? drawArmour(ctx, entity, view, bounds) : false;
             if (armourDrawn) layerOrder.push('armour');
             if (armourExpected && !armourDrawn) compositionComplete = false;
-            if (typeof window.drawFacialHairLayer === 'function' && window.drawFacialHairLayer(ctx,entity,view,bounds)) layerOrder.push('facialHair');
+            if (typeof window.drawFacialHairLayer === 'function' && window.drawFacialHairLayer(ctx,entity,view,visualBounds)) layerOrder.push('facialHair');
             if (!hasHelmet && (!hairImage || !imageReady(hairImage))) compositionComplete = false;
             if (!hasHelmet && imageReady(hairImage)) {
                 const tightDirectional = !!hairSelection.asymmetric && view !== 'front';
@@ -1254,10 +1308,10 @@
                 const hairCrop = tightDest ? {x:0,y:0,w:1,h:1} : layout.hairCrop;
                 const hairDest = tightDest || layout.hairDest;
                 const hairDrawn = tightDest
-                    ? drawCropped(ctx, hairImage, hairCrop, hairDest, bounds)
-                    : drawVisibleFit(ctx, hairImage, bounds, {
+                    ? drawCropped(ctx, hairImage, hairCrop, hairDest, visualBounds)
+                    : drawVisibleFit(ctx, hairImage, visualBounds, {
                         x:hairDest.x,
-                        y:-0.10,
+                        y:-0.015,
                         w:hairDest.w,
                         h:0.47,
                     });
