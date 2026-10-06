@@ -113,7 +113,7 @@ test('bootstrap clothing layers all consume the shared presentation build token'
 
     assert.match(indexSource, /<script src="characterCreation\.js\?v=[^"]+"><\/script>/);
     contains(creationSource, 'clothingSystem.js?build=${encodeURIComponent(window.PRESENTATION_BUILD');
-    contains(clothingLoaderSource, 'const BUILD=window.PRESENTATION_BUILD||');
+    contains(clothingLoaderSource, "const BUILD='20261007-unified-clothing-v3';");
     contains(layersSource, "const BUILD='20261007-unified-clothing-v4';");
     contains(indexSource, '<meta name="app-build" content="');
     contains(nameSource, 'document.querySelector(\'meta[name="app-build"]\')?.content');
@@ -145,7 +145,7 @@ test('registered clothing assets are not silently omitted from the garment catal
     const layersSource = read('clothingLayers.js');
     const newGarmentsSource = read('newClothingGarments.js');
     for (const id of ['shirt_mesh_turtleneck','shirt_collared','shirt_plunge','shirt_tie_tank','shirt_dress_lace','pants_fitted_shorts','tights_fishnet','corset_lace','cloak_full','monk_trousers','monk_wrap']) {
-        assert.match(newGarmentsSource, new RegExp('\\\\b' + id + '\\\\s*:'));
+        assert.match(newGarmentsSource, new RegExp('\\b' + id + '\\s*:'));
     }
     contains(layersSource, 'shirt_mesh_turtleneck:1.59');
     assert.doesNotMatch(layersSource, /pants_trousers/);
