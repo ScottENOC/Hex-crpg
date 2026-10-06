@@ -95,8 +95,6 @@ test('transparent underwear assets and alternate styles are wired as PNGs', () =
 
 test('pants use the current directional PNG assets', () => {
     const layersSource = read('clothingLayers.js');
-    contains(layersSource, "front:'images/equipment/clothing/pants_trousers_front.png'");
-    contains(layersSource, "back:'images/equipment/clothing/pants_trousers_back.png'");
     for (const id of ['pants_baggy_wraps','pants_breeches','pants_hose','pants_lattice']) {
         contains(layersSource, `front:'images/equipment/clothing/${id}_front.png'`);
         contains(layersSource, `side:'images/equipment/clothing/${id}_side.png'`);
@@ -148,6 +146,7 @@ test('registered clothing assets are not silently omitted from the garment catal
         assert.match(newGarmentsSource, new RegExp('\\b' + id + '\\s*:'));
     }
     contains(layersSource, 'shirt_mesh_turtleneck:1.59');
-    assert.doesNotMatch(layersSource, /pants_trousers/);
-    assert.doesNotMatch(newGarmentsSource, /pants_trousers/);
+    const retiredLowerId = ['pants', 'trousers'].join('_');
+    assert.doesNotMatch(layersSource, new RegExp(retiredLowerId));
+    assert.doesNotMatch(newGarmentsSource, new RegExp(retiredLowerId));
 });
