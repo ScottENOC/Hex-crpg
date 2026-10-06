@@ -299,7 +299,7 @@
     if (!system || typeof current !== 'function') return false;
     if (current.__contentSafetyDraw) return true;
 
-    const wrapped = function contentSafetyDrawSlot(ctx, entity, slot, view, bounds) {
+    const wrapped = function contentSafetyDrawSlot(ctx, entity, slot, view, bounds, fitReference) {
       if (isAdultContentEnabled() || entity?.__contentSafetyRenderProxy || !BASE_COVERAGE_SLOTS.includes(slot)) {
         return current.apply(this, arguments);
       }
@@ -309,7 +309,7 @@
       const mustForce = plan.forceOpaque.has(slot) || plan.forceVisible.has(slot);
       if (!mustForce && plannedItem === entity?.equipped?.[slot]) return current.apply(this, arguments);
       const proxy = cloneForSafeSlot(entity, slot, plannedItem, plan.forceOpaque.has(slot));
-      return current.call(this, ctx, proxy, slot, view, bounds);
+      return current.call(this, ctx, proxy, slot, view, bounds, fitReference);
     };
     wrapped.__contentSafetyDraw = true;
     wrapped.__contentSafetyPrevious = current;
