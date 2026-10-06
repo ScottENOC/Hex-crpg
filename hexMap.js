@@ -319,6 +319,13 @@ function renderTerrainPass(visibleAndExplored, imgOk, viewerFloor) {
       const zoomedSize = hexSize * window.cameraZoom;
       if (isCutaway) mapCtx.globalAlpha = 0.45;
 
+      // Paint the real terrain colour before any artwork. Terrain images and
+      // props are overlays; the ground must never become the canvas's
+      // transparent/black background if an image has transparency or is
+      // temporarily unavailable. This is particularly important beneath
+      // rocks, trees and other wilderness artwork.
+      drawHex(x, y, hexSize, { stroke: "#555", fill: terrain.color });
+
       // SPECIAL: Arena/Lobby Floor Randomization
       if ((window.currentCampaign === "1" || window.isInArena) && terrain.name === 'Cave Floor') {
           const noise = Math.abs(Math.sin(q * 12.9898 + r * 78.233));
