@@ -165,11 +165,15 @@
         const hipX = screenHipX(facing, entry.hip);
         const x = bounds.left + bounds.width * hipX;
         const y = bounds.top + bounds.height * (isSword ? .545 : .555);
-        const length = bounds.height * (isSword ? .335 : .205);
-        const sheathWidth = Math.max(1.4, bounds.width * (isSword ? .050 : .043));
-        const handleLength = bounds.height * (isSword ? .105 : .080);
-        const handleWidth = Math.max(1.2, sheathWidth * .72);
-        const guardWidth = Math.max(3, bounds.width * (isSword ? .105 : .075));
+        // These are intentionally compact. The old sheath was drawn at roughly
+        // one third of the body height, which made it read as a second weapon
+        // rather than a believable carried scabbard.
+        const scale = .65;
+        const length = bounds.height * (isSword ? .335 : .205) * scale;
+        const sheathWidth = Math.max(1.0, bounds.width * (isSword ? .050 : .043) * scale);
+        const handleLength = bounds.height * (isSword ? .105 : .080) * scale;
+        const handleWidth = Math.max(0.9, sheathWidth * .72);
+        const guardWidth = Math.max(2, bounds.width * (isSword ? .105 : .075) * scale);
         const angle = hipX < .5 ? .18 : -.18;
         const leather = 'hsl(28 48% 22%)';
         const leatherHighlight = 'hsl(30 38% 31%)';
@@ -273,13 +277,12 @@
         return drawn;
     }
 
-    function drawRealtimeHipLayer(ctx, entity, plan) {
-        const last = window.__humanoidRendererLastDraw;
-        if (!last?.bounds || last.entity !== entity || !plan.length) return false;
+    function drawRealtimeHipLayer(ctx, entity, bounds, plan) {
+        if (!bounds || !plan.length) return false;
         const facing = ['up','down','left','right'].includes(entity.facing) ? entity.facing : 'down';
         let drawn = false;
         for (const entry of plan) {
-            if (entry.placement === 'hip') drawn = drawScabbard(ctx, entity, last.bounds, facing, entry) || drawn;
+            if (entry.placement === 'hip') drawn = drawScabbard(ctx, entity, bounds, facing, entry) || drawn;
         }
         window.__humanoidRendererLastSheathPlan = plan.filter(entry => entry.placement === 'hip').map(entry => ({...entry}));
         window.__humanoidRendererLastCarryPlan = plan.map(entry => ({...entry}));
@@ -323,7 +326,13 @@
                         : bounds;
                     if (renderedBounds) drawBackCarryLayer(ctx, entity, renderedBounds, plan);
                 }
-                drawRealtimeHipLayer(ctx, entity, plan);
+                // Use the bounds calculated for this render invocation.
+                // The renderer's last-draw record may come from an earlier
+                // cache hit at a different zoom, which made scabbards appear
+                // to slide or resize independently of their character.
+                const finalBounds = window.__humanoidRendererLastDraw?.entity === entity
+                    ? window.__humanoidRendererLastDraw.bounds : bounds;
+                drawRealtimeHipLayer(ctx, entity, finalBounds || bounds, plan);
             }
             return rendered;
         };
