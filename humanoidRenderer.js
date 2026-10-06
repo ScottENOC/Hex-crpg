@@ -977,6 +977,12 @@
         return {x:bounds.left+p.x*bounds.width,y:bounds.top+p.y*bounds.height};
     }
 
+    function traceWeaponRender(detail) {
+        const trace = window.__weaponRenderTrace || (window.__weaponRenderTrace = []);
+        trace.push({...detail, timestamp:Date.now()});
+        if (trace.length > 120) trace.splice(0, trace.length - 120);
+    }
+
     function drawHeldItem(ctx, entity, view, bounds, slot, expectedLayer='any') {
         const equipmentSlot = slot === 'main' ? 'weapon' : 'offhand';
         if (!equipmentSlotVisible(entity, equipmentSlot)) return false;
@@ -1035,6 +1041,7 @@
         } else {
             ctx.drawImage(image, anchor.x - grip.x*drawWidth, itemY, drawWidth, drawHeight);
         }
+        if (spec.kind !== 'shield') traceWeaponRender({source:'humanoid-held',kind:spec.kind,itemId:spec.itemId,slot,view,boundsHeight:bounds.height,drawWidth,drawHeight,bodyRatio:drawHeight/Math.max(1,bounds.height),imageWidth:image.naturalWidth||image.width||0,imageHeight:image.naturalHeight||image.height||0});
         return true;
     }
 
