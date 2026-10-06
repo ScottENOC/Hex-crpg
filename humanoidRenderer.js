@@ -111,6 +111,22 @@
     // attempts plus compact lifetime counters.
     const rendererDebugHistory = [];
     const RENDERER_DEBUG_HISTORY_LIMIT = 6;
+    const humanoidFlashTrace = [];
+    const HUMANOID_FLASH_TRACE_LIMIT = 80;
+
+    function recordHumanoidFlashTrace(event, entity = null, extra = {}) {
+        const trace = {
+            t: performance.now(),
+            time: new Date().toISOString(),
+            event,
+            name: entity?.name || entity?.id || '(unknown)',
+            facing: entity?.facing || extra.facing || null,
+            ...extra,
+        };
+        humanoidFlashTrace.push(trace);
+        while (humanoidFlashTrace.length > HUMANOID_FLASH_TRACE_LIMIT) humanoidFlashTrace.shift();
+        return trace;
+    }
     const rendererDebugSummary = {
         attempts:0, painted:0, cacheHits:0, pending:0, failures:0, incomplete:0, mapBranches:0, mapCalls:0,
     };
@@ -244,7 +260,7 @@
             b.addEventListener('click',fn); bar.appendChild(b); return b;
         };
         button('Refresh',rendererDebugRefresh);
-        button('Clear',()=>{rendererDebugHistory.length=0;rendererDebugRefresh();});
+        button('Clear',()=>{rendererDebugHistory.length=0;humanoidFlashTrace.length=0;rendererDebugRefresh();});
         button('Copy',async()=>{
             const text=rendererDebugText();
             try {
@@ -611,6 +627,10 @@
 
     function recordMapHumanoidBoundary(entity) {
         rendererDebugSummary.mapBranches++;
+        recordHumanoidFlashTrace('map-boundary', entity, {
+            canDirectRender: canDirectRender(entity),
+            customImage: !!entity?.customImage,
+        });
         const canRender = canDirectRender(entity);
         if (canRender) rendererDebugSummary.mapCalls++;
         window.__humanoidRendererLastMapBoundary = {
@@ -1368,6 +1388,7 @@
         });
         abandonStaleCompositeRequests(entity, facing, key);
 
+        recordHumanoidFlashTrace('render-start', entity, { appearanceKey, key, facing, surface: renderSurface });
         const cached = cacheGet(appearanceKey, facing);
         if (cached) {
             pendingCompositeRequests.delete(key);
@@ -1380,6 +1401,7 @@
                 requestedFacing:explicitFacing || null, entityFacing:entity.facing || null,
                 facing, view:facingToView(facing), key, compositeId:cached.compositeId, result:'cache-hit',
             });
+            recordHumanoidFlashTrace('cache-hit', entity, { appearanceKey, key, facing, compositeId:cached.compositeId, surface:renderSurface });
             return true;
         }
 
@@ -1397,10 +1419,14 @@
                     window.assetManager?.status?.(src) !== 'ready'
                 );
                 if (stillWaiting && previous) {
+                    recordHumanoidFlashTrace('pending-last-good', entity, { appearanceKey, key, facing, surface:renderSurface, sources:pending.sources.map(src => src + '=' + String(window.assetManager?.status?.(src) || 'unavailable')) });
                     ctx.drawImage(previous.canvas, bounds.left, bounds.top, bounds.width, bounds.height);
                     return true;
                 }
-                if (stillWaiting) return false;
+                if (stillWaiting) {
+                    recordHumanoidFlashTrace('pending-no-last-good', entity, { appearanceKey, key, facing, surface:renderSurface, sources:pending.sources.map(src => src + '=' + String(window.assetManager?.status?.(src) || 'unavailable')) });
+                    return false;
+                }
                 pendingCompositeRequests.delete(key);
             }
         }
@@ -1437,6 +1463,7 @@
             }
         }
         if (!rendered) {
+            recordHumanoidFlashTrace('renderer-false', entity, { appearanceKey, key, facing, surface:renderSurface, sources:[...sources].map(src => src + '=' + String(window.assetManager?.status?.(src) || 'unavailable')), lastComplete:!!window.__humanoidRendererLastComplete });
             rendererDebugRecord({
                 entityName:entity.name || entity.id || null, race:entity.race || null, gender:entity.gender || null,
                 surface:renderSurface,
@@ -1449,9 +1476,11 @@
             pendingCompositeRequests.set(key, {entity, facing, sources:failureSources, retryAfter});
             const previous = humanoidLastGoodCache.get(entity)?.get(facing);
             if (previous) {
+                recordHumanoidFlashTrace('fallback-last-good', entity, { appearanceKey, key, facing, surface:renderSurface });
                 ctx.drawImage(previous.canvas, bounds.left, bounds.top, bounds.width, bounds.height);
                 return true;
             }
+            recordHumanoidFlashTrace('return-false', entity, { appearanceKey, key, facing, surface:renderSurface });
             return false;
         }
 
@@ -1459,6 +1488,7 @@
         // body/clothing/hair stack while another required layer is still loading.
         const complete = !!window.__humanoidRendererLastComplete;
         if (!complete) {
+            recordHumanoidFlashTrace('incomplete', entity, { appearanceKey, key, facing, surface:renderSurface, sources:[...sources].map(src => src + '=' + String(window.assetManager?.status?.(src) || 'unavailable')), layerDiagnostics:window.__humanoidRendererLastLayerDiagnostics || [] });
             rendererDebugRecord({
                 entityName:entity.name || entity.id || null, race:entity.race || null, gender:entity.gender || null,
                 surface:renderSurface,
@@ -1471,9 +1501,11 @@
             pendingCompositeRequests.set(key, {entity, facing, sources:failureSources, retryAfter});
             const previous = humanoidLastGoodCache.get(entity)?.get(facing);
             if (previous) {
+                recordHumanoidFlashTrace('incomplete-last-good', entity, { appearanceKey, key, facing, surface:renderSurface });
                 ctx.drawImage(previous.canvas, bounds.left, bounds.top, bounds.width, bounds.height);
                 return true;
             }
+            recordHumanoidFlashTrace('incomplete-no-last-good', entity, { appearanceKey, key, facing, surface:renderSurface });
             return false;
         }
 
@@ -1492,6 +1524,7 @@
             requestedFacing:explicitFacing || null, entityFacing:entity.facing || null,
             facing, view:facingToView(facing), key, compositeId:cachedComposite?.compositeId || null, result:'painted',
         });
+        recordHumanoidFlashTrace('painted', entity, { appearanceKey, key, facing, compositeId:cachedComposite?.compositeId || null, surface:renderSurface });
         return true;
     }
 
@@ -1502,6 +1535,7 @@
         legacyDrawPlayerCharacter = current;
         const direct = function(ctx, entity, x, y, z, flyOff) {
             if (drawHumanoidCharacter(ctx, entity, x, y, z, flyOff)) return;
+            recordHumanoidFlashTrace('legacy-fallback', entity, { surface:'map', reason:'direct-render-returned-false' });
             return legacyDrawPlayerCharacter.apply(this, arguments);
         };
         direct.__directHumanoidCompositor = true;
@@ -1670,6 +1704,11 @@
     window.drawHumanFemaleDirectionalBase = window.drawDirectionalCharacterBase;
     window.drawHumanoidCharacter = drawHumanoidCharacter;
     window.__recordHumanoidMapBoundary = recordMapHumanoidBoundary;
+    window.getHumanoidFlashTrace = () => humanoidFlashTrace.map(item => ({...item}));
+    window.clearHumanoidFlashTrace = () => {
+        humanoidFlashTrace.length = 0;
+        rendererDebugRefresh();
+    };
     window.clearHumanoidSpriteCache = clearHumanoidSpriteCache;
     window.humanoidSpriteCacheStats = {
         get size() { return [...humanoidSpriteCache.values()].reduce((n, group) => n + group.size, 0); },
