@@ -232,6 +232,15 @@
                 else if (item.result) lines.push('  FAIL: ' + item.result);
             }
         }
+        if (humanoidFlashTrace.length) {
+            lines.push('', 'TRACE (last 12)');
+            for (const item of humanoidFlashTrace.slice(-12)) {
+                const ms = String(Math.round(item.t)).padStart(7, ' ');
+                const name = String(item.name || '?').slice(0, 12);
+                const extra = item.sources ? ' ' + item.sources.slice(0, 3).join(',') : '';
+                lines.push(ms + '  ' + String(item.event).padEnd(21, ' ') + ' ' + name + extra);
+            }
+        }
         return lines.join('\\n');
     }
 
