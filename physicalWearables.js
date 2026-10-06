@@ -15,5 +15,9 @@ function installAppearanceHooks(){const cs=window.clothingSystem,ea=window.equip
 function equip(instanceId){const p=window.player;if(!p)return;reconcile(p);const inst=list(p).find(x=>x.instanceId===instanceId);if(!inst)return;const id=inst.itemId,slot=slotFor(id);window.equipItem?.(id);if(base(p.equipped?.[slot])===id){p.equippedInstances=p.equippedInstances||{};p.equippedInstances[slot]=inst;window.pantsVariantFixes?.syncPhysicalShapes?.(p);window.syncPlayerEntity?.();window.showInventoryScreen?.();window.renderEntities?.();}}
 function installUI(){if(window.unequipItem&&!window.unequipItem.__physicalWearables){const old=window.unequipItem;const wrapped=function(slot){const r=old.apply(this,arguments);if(window.player&&!window.player.equipped?.[slot]&&window.player.equippedInstances)delete window.player.equippedInstances[slot];return r;};wrapped.__physicalWearables=true;window.unequipItem=wrapped;}}
 function sync(){const all=[...(window.party||[]),...(window.entities||[])];if(window.player&&!all.includes(window.player))all.push(window.player);for(const e of all){reconcile(e);window.pantsVariantFixes?.syncPhysicalShapes?.(e);}installAppearanceHooks();installUI();}
-window.physicalWearables={reconcile,list,current,equip};window.physicalEquipment=window.physicalWearables;setInterval(sync,100);window.addEventListener('load',sync,{once:true});
+window.physicalWearables={reconcile,list,current,equip,sync};window.physicalEquipment=window.physicalWearables;
+// Equipment identities are state, not a polling concern. Seed current actors once;
+// later equipment/appearance access reconciles the affected actor.
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',sync,{once:true});
+else sync();
 })();
