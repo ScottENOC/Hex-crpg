@@ -266,9 +266,13 @@ function getTerrainAtFloor(q, r, floor) {
     const f = b && b.floors[floor];
     if (!f) return getTerrainAt(q, r);
     const t = f.terrain[`${q},${r}`];
-    if (!t) return getTerrainAt(q, r);
+    if (!t) {
+        // Non-ground floors are sealed layers. Never expose passable ground
+        // terrain through an unpainted edge of an upper/lower floor.
+        return terrainTypes.wall;
+    }
     const typeKey = t.toLowerCase().replace(' ', '_');
-    return terrainTypes[typeKey] || getTerrainAt(q, r);
+    return terrainTypes[typeKey] || terrainTypes.wall;
 }
 
 function setTerrainAtFloor(q, r, floor, typeName) {
