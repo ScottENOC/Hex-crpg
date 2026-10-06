@@ -156,7 +156,7 @@
             if (resolution === 'silverhart_claim') return { targetFaction:'silverhart_kingdom', fact:'player_claimed_to_work_with_silverhart', certainty:1 };
         }
         if (incident.type === 'stranded_merchant') {
-            if (resolution === 'escorted') return { targetFaction:'silverhart_kingdom', fact:'player_helped_stranded_merchant', certainty:1 };
+            if (resolution === 'escorted' || resolution === 'repaired') return { targetFaction:'silverhart_kingdom', fact:'player_helped_stranded_merchant', certainty:1 };
             if (resolution === 'silverhart_route_warning') return { targetFaction:'silverhart_kingdom', fact:'player_warned_of_vulnerable_route', certainty:2 };
         }
         if (incident.type === 'lost_child' && (resolution === 'reunited' || resolution === 'safe_road')) {
@@ -177,7 +177,7 @@
         actor.lastOutcome = incident.resolution || null;
         actor.resolvedAt = incident.resolvedAt ?? now();
         actor.destination = inferDestination(incident);
-        if (['reunited','safe_road','escorted','helped','silverhart_claim','silverhart_route_warning'].includes(incident.resolution)) {
+        if (['reunited','safe_road','escorted','repaired','helped','silverhart_claim','silverhart_route_warning'].includes(incident.resolution)) {
             actor.state = 'travelling_to_destination';
         } else {
             actor.state = 'departed';
@@ -257,6 +257,7 @@
     function recognitionText(actor) {
         if (!actor) return 'The traveller gives you a cautious nod.';
         if (actor.lastOutcome === 'escorted') return `${actor.name} recognises you immediately. “I made it after all. I said I owed you, and I meant it.”`;
+        if (actor.lastOutcome === 'repaired') return `${actor.name} recognises you and knocks twice on the repaired pack-frame. “Still holding. Better than the original joint, if I'm honest.”`;
         if (actor.lastOutcome === 'helped') return `${actor.name} touches the old bandage at their leg. “You got me off that road alive. I haven't forgotten.”`;
         if (actor.lastOutcome === 'reunited' || actor.lastOutcome === 'safe_road') return `${actor.name} beams when they see you. “I found them. I got home.”`;
         if (actor.lastOutcome === 'robbed') return `${actor.name} goes still when they recognise you. Whatever happens next, they remember exactly who left them on that road.`;
