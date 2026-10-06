@@ -289,6 +289,8 @@
     // directional views, and map + initiative always share the same view canvas.
     // 48 total entries therefore means up to 12 character appearances resident.
     const humanoidSpriteCache = new Map();
+    // Keep the last successful composite visible while a changed appearance is rebuilt.
+    const humanoidLastGoodCache = new WeakMap();
     const MAX_HUMANOID_SPRITE_VIEWS = 4;
     const MAX_HUMANOID_CACHED_CHARACTERS = 12;
     let nextHumanoidCompositeId = 1;
@@ -1387,14 +1389,18 @@
         const pending = pendingCompositeRequests.get(key);
         if (pending) {
             const stillWanted = facing === pending.facing;
-            const stillWaiting = pending.sources.some(src =>
-                window.assetManager?.status?.(src) !== 'ready'
-            );
             if (!stillWanted) {
                 pendingCompositeRequests.delete(key);
-            } else if (stillWaiting || performance.now() < pending.retryAfter) {
-                return true;
             } else {
+                const previous = humanoidLastGoodCache.get(entity)?.get(facing);
+                const stillWaiting = pending.sources.some(src =>
+                    window.assetManager?.status?.(src) !== 'ready'
+                );
+                if (stillWaiting && previous) {
+                    ctx.drawImage(previous.canvas, bounds.left, bounds.top, bounds.width, bounds.height);
+                    return true;
+                }
+                if (stillWaiting) return false;
                 pendingCompositeRequests.delete(key);
             }
         }
@@ -1441,7 +1447,12 @@
             const retryAfter = performance.now() + COMPOSITE_RETRY_DELAY_MS;
             window.performanceAssetTraceApi?.compositeEnd?.(key, false, 'renderer returned false', {requestedSources:failureSources,failureSource:failureSources.map(src => src+'='+String(window.assetManager?.status?.(src) || 'unavailable')),retryAfterMs:COMPOSITE_RETRY_DELAY_MS});
             pendingCompositeRequests.set(key, {entity, facing, sources:failureSources, retryAfter});
-            return true;
+            const previous = humanoidLastGoodCache.get(entity)?.get(facing);
+            if (previous) {
+                ctx.drawImage(previous.canvas, bounds.left, bounds.top, bounds.width, bounds.height);
+                return true;
+            }
+            return false;
         }
 
         // Character composition is atomic: never display or cache a partial
@@ -1458,11 +1469,22 @@
             const retryAfter = performance.now() + COMPOSITE_RETRY_DELAY_MS;
             window.performanceAssetTraceApi?.compositeEnd?.(key, false, 'required layer not ready', {requestedSources:failureSources,failureSource:failureSources.map(src => src+'='+String(window.assetManager?.status?.(src) || 'unavailable')),layerOrder:window.__humanoidRendererLastLayerOrder || [],layerDiagnostics:window.__humanoidRendererLastLayerDiagnostics || [],hairDiagnostics:window.__humanoidRendererLastHairDiagnostics || null,complete:!!window.__humanoidRendererLastComplete,retryAfterMs:COMPOSITE_RETRY_DELAY_MS});
             pendingCompositeRequests.set(key, {entity, facing, sources:failureSources, retryAfter});
-            return true;
+            const previous = humanoidLastGoodCache.get(entity)?.get(facing);
+            if (previous) {
+                ctx.drawImage(previous.canvas, bounds.left, bounds.top, bounds.width, bounds.height);
+                return true;
+            }
+            return false;
         }
 
         pendingCompositeRequests.delete(key);
         const cachedComposite = cachePut(appearanceKey, facing, canvas);
+        let previousByFacing = humanoidLastGoodCache.get(entity);
+        if (!previousByFacing) {
+            previousByFacing = new Map();
+            humanoidLastGoodCache.set(entity, previousByFacing);
+        }
+        previousByFacing.set(facing, cachedComposite);
         ctx.drawImage(canvas, bounds.left, bounds.top, bounds.width, bounds.height);
         rendererDebugRecord({
             entityName:entity.name || entity.id || null, race:entity.race || null, gender:entity.gender || null,
