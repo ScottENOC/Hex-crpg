@@ -159,6 +159,12 @@
         return hip === 'left' ? .69 : .31;
     }
 
+    function traceCarryWeapon(detail) {
+        const trace = window.__weaponRenderTrace || (window.__weaponRenderTrace = []);
+        trace.push({...detail, timestamp:Date.now()});
+        if (trace.length > 120) trace.splice(0, trace.length - 120);
+    }
+
     function drawScabbard(ctx, entity, bounds, facing, entry) {
         if (!ctx || !bounds || !entry) return false;
         const isSword = entry.kind === 'sword';
@@ -224,6 +230,7 @@
         ctx.fill();
 
         ctx.restore();
+        traceCarryWeapon({source:'realtime-scabbard',kind:entry.kind,itemId:entry.itemId,placement:entry.placement,facing,boundsHeight:bounds.height,drawWidth:Math.max(guardWidth,sheathWidth),drawHeight:length+handleLength,bodyRatio:(length+handleLength)/Math.max(1,bounds.height),sheathLength:length,handleLength});
         return true;
     }
 
@@ -265,6 +272,7 @@
         ctx.rotate(angle);
         ctx.drawImage(image, -size / 2, -size / 2, size, size);
         ctx.restore();
+        traceCarryWeapon({source:'realtime-back-carry',kind:entry.kind,itemId:entry.itemId,placement:entry.placement,boundsHeight:bounds.height,drawWidth:size,drawHeight:size,bodyRatio:size/Math.max(1,bounds.height),imageWidth:image.naturalWidth||image.width||0,imageHeight:image.naturalHeight||image.height||0});
         return true;
     }
 
