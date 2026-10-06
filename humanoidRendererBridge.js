@@ -326,13 +326,11 @@
                         : bounds;
                     if (renderedBounds) drawBackCarryLayer(ctx, entity, renderedBounds, plan);
                 }
-                // Use the bounds calculated for this render invocation.
-                // The renderer's last-draw record may come from an earlier
-                // cache hit at a different zoom, which made scabbards appear
-                // to slide or resize independently of their character.
-                const finalBounds = window.__humanoidRendererLastDraw?.entity === entity
-                    ? window.__humanoidRendererLastDraw.bounds : bounds;
-                drawRealtimeHipLayer(ctx, entity, finalBounds || bounds, plan);
+                // Always use the bounds calculated for this invocation.
+                // The renderer's last-draw record can be stale after a cache
+                // hit at another zoom level, which made scabbards slide or
+                // resize independently of their character.
+                drawRealtimeHipLayer(ctx, entity, bounds, plan);
             }
             return rendered;
         };
