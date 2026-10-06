@@ -136,9 +136,9 @@
     if (!cs?.__smallSlotExpansionDrawExtra) return false;
     if (cs.drawSlot?.__newClothingGeometryFix) { corsetGeometryInstalled = true; return true; }
     const previous = cs.drawSlot.bind(cs);
-    const wrapped = function drawSlotWithFlexibleGeometry(ctx, entity, slot, view, bounds) {
+    const wrapped = function drawSlotWithFlexibleGeometry(ctx, entity, slot, view, bounds, fitReference) {
       if (slot !== 'bra' || window.equipmentAppearanceSystem?.isSlotVisible?.(entity, slot) === false) {
-        return previous(ctx, entity, slot, view, bounds);
+        return previous(ctx, entity, slot, view, bounds, fitReference);
       }
       const itemId = window.getEquipmentBaseId?.(entity?.equipped?.[slot]) || entity?.equipped?.[slot];
       const item = window.items?.[itemId];
@@ -158,7 +158,7 @@
       visibility[geometry] = true;
       let drew = false;
       try {
-        drew = !!previous(ctx, entity, geometry, view, bounds);
+        drew = !!previous(ctx, entity, geometry, view, bounds, fitReference);
       } finally {
         entity.equipped[geometry] = oldGeometryItem;
         entity.equipped.topOuter = oldTopOuter;
