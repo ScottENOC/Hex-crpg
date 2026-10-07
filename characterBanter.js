@@ -207,7 +207,51 @@ window.characterBanterLines = [
         condition: () => { const c = getCompanionOrMount(); return !!c && c.name === 'Unicorn' && !isInCityRegion(); },
         lines: [{ speaker: 'Unicorn', mood: 'serene', text: "*walks with an unhurried, deliberate grace, utterly at ease among the trees*" }]
     }
-];
+
+    {
+        id: 'mirabel_disguise_self_first_experiment',
+        once: true,
+        condition: () => {
+            const m = window.party?.find(p => p.name === 'Mirabel Quill');
+            return !!m && !!(m.skills?.learn_disguise_self || m.skills?.disguise_self ||
+                (Array.isArray(m.unlockedBaseSpells) && m.unlockedBaseSpells.includes('disguise_self')));
+        },
+        lines: [
+            { speaker: 'Mirabel Quill', mood: 'delighted', text: "I have Disguise Self now. I have also discovered that the party contains several people whose faces would be extremely useful for science." },
+            { speaker: 'Wren Talbot', mood: 'suspicious', text: "That sentence is why I am checking my pockets." },
+            { speaker: 'Mirabel Quill', mood: 'innocent', text: "Your caution is touching. And completely justified." }
+        ]
+    },
+    {
+        id: 'mirabel_disguise_self_impersonation',
+        cooldownSeconds: 18 * 3600,
+        condition: () => {
+            const m = window.party?.find(p => p.name === 'Mirabel Quill');
+            return !!m && !!(m.skills?.learn_disguise_self || m.skills?.disguise_self) &&
+                window.party?.some(p => p.name === 'Ser Aldric Thorne');
+        },
+        lines: [
+            { speaker: 'Mirabel Quill', mood: 'mischievous', text: "I could impersonate Aldric for an entire conversation before anyone noticed." },
+            { speaker: 'Ser Aldric Thorne', mood: 'dry', text: "You would notice first." },
+            { speaker: 'Mirabel Quill', mood: 'pleased', text: "Exactly. That is what makes it a good experiment." }
+        ]
+    },
+    {
+        id: 'mirabel_disguise_self_flirting',
+        cooldownSeconds: 24 * 3600,
+        condition: () => {
+            const m = window.party?.find(p => p.name === 'Mirabel Quill');
+            const a = window.getCompanionAffinity?.(m) || m?.playerAffinity || {};
+            return !!m && !!(m.skills?.learn_disguise_self || m.skills?.disguise_self) &&
+                Number(a.attraction || 0) >= 40 && window.party?.length > 2;
+        },
+        lines: [
+            { speaker: 'Mirabel Quill', mood: 'playful', text: "There is a fascinating social experiment available to anyone with enough imagination and insufficient supervision." },
+            { speaker: 'Wren Talbot', mood: 'wary', text: "If this is about wearing my face again, the answer is no." },
+            { speaker: 'Mirabel Quill', mood: 'innocent', text: "I hadn't said anything." }
+        ]
+    },
+]; 
 
 // Real-time cadence (checked roughly every 5 seconds of accumulated wilderness
 // clock, not every tick) since this is flavor, not something that needs
