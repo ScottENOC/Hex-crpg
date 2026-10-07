@@ -1059,6 +1059,21 @@ function showSpellScreen() {
     window.updateSpellPreview();
 }
 
+function setDisguiseSelfMode(mode) {
+    window.disguiseSelfDraft = window.disguiseSelfDraft || {};
+    window.disguiseSelfDraft.mode = mode === 'known' ? 'known' : 'custom';
+    window.updateSpellPreview();
+}
+window.setDisguiseSelfMode = setDisguiseSelfMode;
+
+function setDisguiseSelfCharacter(name) {
+    window.disguiseSelfDraft = window.disguiseSelfDraft || {};
+    window.disguiseSelfDraft.mode = 'known';
+    window.disguiseSelfDraft.character = name || '';
+    window.renderSpellStats();
+}
+window.setDisguiseSelfCharacter = setDisguiseSelfCharacter;
+
 function updateSpellPreview() {
     const player = window.player;
     const baseSelect = document.getElementById("spell-base-select");
@@ -1068,34 +1083,64 @@ function updateSpellPreview() {
     const options = player.unlockedCastingOptions[base.school] || {};
     let html = '';
     if (baseId === 'disguise_self') {
+        const known = window.getDisguiseSelfKnownCharacters?.(player) || [];
+        window.disguiseSelfDraft = window.disguiseSelfDraft || {};
+        if (!window.disguiseSelfDraft.mode) window.disguiseSelfDraft.mode = known.length ? 'known' : 'custom';
+        if (!known.some(entry => entry.name === window.disguiseSelfDraft.character)) {
+            window.disguiseSelfDraft.character = known[0]?.name || '';
+        }
+
+        const mode = window.disguiseSelfDraft.mode;
+        const knownOptions = known.length
+            ? known.map(entry => `<option value="${entry.name}" ${entry.name === window.disguiseSelfDraft.character ? 'selected' : ''}>${entry.name}</option>`).join('')
+            : '<option value="">No encountered characters yet</option>';
+
         html += `
             <div class="form-group">
-                <label>Apparent gender:</label>
-                <select id="disguise-gender" onchange="window.renderSpellStats()">
-                    <option value="female">Female</option>
-                    <option value="male">Male</option>
+                <label>Disguise mode:</label>
+                <select id="disguise-mode" onchange="window.setDisguiseSelfMode(this.value)">
+                    <option value="known" ${mode === 'known' ? 'selected' : ''} ${known.length ? '' : 'disabled'}>Encountered character</option>
+                    <option value="custom" ${mode === 'custom' ? 'selected' : ''}>Custom appearance</option>
                 </select>
             </div>
-            <div class="form-group">
-                <label>Build:</label>
-                <select id="disguise-body" onchange="window.renderSpellStats()">
-                    <option value="average">Average</option>
-                    <option value="broad">Broad</option>
-                </select>
+            <div id="disguise-known-options" style="display:${mode === 'known' ? 'block' : 'none'};">
+                <div class="form-group">
+                    <label>Character encountered:</label>
+                    <select id="disguise-character" onchange="window.setDisguiseSelfCharacter(this.value)">
+                        ${knownOptions}
+                    </select>
+                    ${known.length ? '' : '<div style="font-size:0.8em;color:#aaa;margin-top:4px;">Talk to a humanoid character to add them to this list.</div>'}
+                </div>
             </div>
-            <div class="form-group">
-                <label>Hair:</label>
-                <select id="disguise-hair" onchange="window.renderSpellStats()">
-                    <option value="brown_1">Traditional short</option>
-                    <option value="braid">Braid</option>
-                    <option value="curly">Curly</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Hair colour hue: <input id="disguise-hue" type="number" min="0" max="359" value="25" onchange="window.renderSpellStats()"></label>
-            </div>
-            <div class="form-group">
-                <label>Skin tone: <input id="disguise-skin" type="number" min="0" max="100" value="45" onchange="window.renderSpellStats()"></label>
+            <div id="disguise-custom-options" style="display:${mode === 'custom' ? 'block' : 'none'};">
+                <div class="form-group">
+                    <label>Apparent gender:</label>
+                    <select id="disguise-gender" onchange="window.renderSpellStats()">
+                        <option value="female">Female</option>
+                        <option value="male">Male</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Build:</label>
+                    <select id="disguise-body" onchange="window.renderSpellStats()">
+                        <option value="average">Average</option>
+                        <option value="broad">Broad</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Hair:</label>
+                    <select id="disguise-hair" onchange="window.renderSpellStats()">
+                        <option value="brown_1">Traditional short</option>
+                        <option value="braid">Braid</option>
+                        <option value="curly">Curly</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Hair colour hue: <input id="disguise-hue" type="number" min="0" max="359" value="25" onchange="window.renderSpellStats()"></label>
+                </div>
+                <div class="form-group">
+                    <label>Skin tone: <input id="disguise-skin" type="number" min="0" max="100" value="45" onchange="window.renderSpellStats()"></label>
+                </div>
             </div>
         `;
     } else if (base.type === 'summon') {
@@ -1256,17 +1301,25 @@ function renderSpellStats() {
     let defaultName = base.name;
     let disguiseProfile = null;
     if (baseId === 'disguise_self') {
-        disguiseProfile = {
-            appearance: {
-                gender: document.getElementById('disguise-gender')?.value || 'female',
-                bodyType: document.getElementById('disguise-body')?.value || 'average',
-                hairStyle: document.getElementById('disguise-hair')?.value || 'brown_1',
-                hairHue: Number(document.getElementById('disguise-hue')?.value || 25),
-                hairSaturation: 70,
-                hairValue: 55,
-                skinToneSlider: Number(document.getElementById('disguise-skin')?.value || 45)
-            }
-        };
+        const draft = window.disguiseSelfDraft || {};
+        if (draft.mode === 'known' && draft.character) {
+            disguiseProfile = window.getDisguiseSelfProfile?.(draft.character, player) || null;
+            if (disguiseProfile) defaultName = `Disguise Self: ${draft.character}`;
+        }
+
+        if (!disguiseProfile) {
+            disguiseProfile = {
+                appearance: {
+                    gender: document.getElementById('disguise-gender')?.value || 'female',
+                    bodyType: document.getElementById('disguise-body')?.value || 'average',
+                    hairStyle: document.getElementById('disguise-hair')?.value || 'brown_1',
+                    hairHue: Number(document.getElementById('disguise-hue')?.value || 25),
+                    hairSaturation: 70,
+                    hairValue: 55,
+                    skinToneSlider: Number(document.getElementById('disguise-skin')?.value || 45)
+                }
+            };
+        }
     }
     const animalId = document.getElementById("spell-animal-select") ? document.getElementById("spell-animal-select").value : null;
     if (base.type === 'summon' && animalId) {
