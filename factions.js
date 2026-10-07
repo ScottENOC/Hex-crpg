@@ -104,14 +104,16 @@ function playerIdentityMasked() {
     const anchor = mainEntity?.hex || window.player?.hex;
     if (!anchor || typeof window.distance !== 'function') return false;
 
-    // The acting character must actually be disguised.
-    if (!main.disguiseSelf) return false;
+    // The acting character's entity is authoritative: Disguise Self is applied
+    // to the live entity, not merely to the saved party data.
+    if (!mainEntity?.disguiseSelf && !main.disguiseSelf) return false;
 
     for (const member of party) {
         if (!member) continue;
-        if (member.disguiseSelf) continue;
 
         const entity = (window.entities || []).find(e => e && e.name === member.name && e.side === 'player');
+        if (entity?.disguiseSelf || member.disguiseSelf) continue;
+
         // No active entity means the companion is benched/off-map, so they
         // cannot identify the party at this scene.
         if (!entity?.hex) continue;
