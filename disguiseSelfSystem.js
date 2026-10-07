@@ -3,7 +3,7 @@
 // visual overlay when the character has the Disguised Equipment skill.
 (() => {
     'use strict';
-    const BUILD = '20261008-disguise-self-v1';
+    const BUILD = '20261008-disguise-self-v2';
 
     function hasSkill(entity) {
         return !!(entity?.skills?.disguise_equipment);
