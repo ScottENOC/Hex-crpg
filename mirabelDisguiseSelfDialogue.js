@@ -44,22 +44,23 @@
         return window.tryCastSpell(caster, spell, caster, caster.hex, true);
     }
 
-    function as(target) {
-        const m = mirabel();
-        if (!m || !target) return false;
-        return castAppearance(m, target);
+    function castAppearanceDisguise(caster, target) {
+        if (!caster || !target || typeof window.tryCastSpell !== 'function') return false;
+        const spell = {
+            name: 'Disguise Self',
+            baseId: 'disguise_self',
+            type: 'buff',
+            manaCost: 8,
+            coreManaCost: 8,
+            tpCost: 10,
+            range: 1,
+            disguiseProfile: { appearance: appearanceOf(target) }
+        };
+        return window.tryCastSpell(caster, spell, caster, caster.hex, true);
     }
 
-    function clearEntity(entity) {
-        if (!entity) return false;
-        const active = (window.activeSpells || []).find(s =>
-            s.baseId === 'disguise_self' && s.targetEntityId === entity.id
-        );
-        if (active && typeof window.cancelSpell === 'function') {
-            window.cancelSpell(active.spellInstanceId);
-            return true;
-        }
-        return !!window.disguiseSelfSystem?.clear?.(entity);
+    function as(target) {
+        return castAppearanceDisguise(mirabel(), target);
     }
 
     function clear() {
