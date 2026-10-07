@@ -1067,7 +1067,38 @@ function updateSpellPreview() {
     const base = window.baseSpells[baseId];
     const options = player.unlockedCastingOptions[base.school] || {};
     let html = '';
-    if (base.type === 'summon') {
+    if (baseId === 'disguise_self') {
+        html += `
+            <div class="form-group">
+                <label>Apparent gender:</label>
+                <select id="disguise-gender" onchange="window.renderSpellStats()">
+                    <option value="female">Female</option>
+                    <option value="male">Male</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Build:</label>
+                <select id="disguise-body" onchange="window.renderSpellStats()">
+                    <option value="average">Average</option>
+                    <option value="broad">Broad</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Hair:</label>
+                <select id="disguise-hair" onchange="window.renderSpellStats()">
+                    <option value="brown_1">Traditional short</option>
+                    <option value="braid">Braid</option>
+                    <option value="curly">Curly</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Hair colour hue: <input id="disguise-hue" type="number" min="0" max="359" value="25" onchange="window.renderSpellStats()"></label>
+            </div>
+            <div class="form-group">
+                <label>Skin tone: <input id="disguise-skin" type="number" min="0" max="100" value="45" onchange="window.renderSpellStats()"></label>
+            </div>
+        `;
+    } else if (base.type === 'summon') {
         let optionsHtml = '';
         base.summons.forEach(animalId => {
             if (animalId === 'boar' && (!player.skills?.learn_boar_summon)) return;
@@ -1223,6 +1254,20 @@ function renderSpellStats() {
     let extraTargets = targetBonus;
 
     let defaultName = base.name;
+    let disguiseProfile = null;
+    if (baseId === 'disguise_self') {
+        disguiseProfile = {
+            appearance: {
+                gender: document.getElementById('disguise-gender')?.value || 'female',
+                bodyType: document.getElementById('disguise-body')?.value || 'average',
+                hairStyle: document.getElementById('disguise-hair')?.value || 'brown_1',
+                hairHue: Number(document.getElementById('disguise-hue')?.value || 25),
+                hairSaturation: 70,
+                hairValue: 55,
+                skinToneSlider: Number(document.getElementById('disguise-skin')?.value || 45)
+            }
+        };
+    }
     const animalId = document.getElementById("spell-animal-select") ? document.getElementById("spell-animal-select").value : null;
     if (base.type === 'summon' && animalId) {
         const animalName = window.monsterTemplates[animalId].name;
@@ -1288,7 +1333,7 @@ function renderSpellStats() {
         if (display) display.innerHTML = statsHtml;
     }
 
-    window.currentSpellCalc = { name: defaultName, school: base.school, manaCost, coreManaCost, tpCost, magnitude, range, radius, extraTargets, type: effectiveType, baseId, animalId, calmMode, debuffType: base.debuffType, subtle, touch };
+    window.currentSpellCalc = { name: defaultName, school: base.school, manaCost, coreManaCost, tpCost, magnitude, range, radius, extraTargets, type: effectiveType, baseId, animalId, calmMode, debuffType: base.debuffType, subtle, touch, disguiseProfile };
 }
 
 function createSpell() {
@@ -2691,7 +2736,8 @@ function highlightValidTargets(caster, spell) {
                 const dist = window.distance(caster.hex, e.hex);
                 if (dist <= range) {
                     let valid = false;
-                    if (type === 'damage') valid = (e.side !== caster.side && e.side !== 'neutral');
+                    if (spell.baseId === 'disguise_self') valid = (e === caster);
+                    else if (type === 'damage') valid = (e.side !== caster.side && e.side !== 'neutral');
                     else if (type === 'buff' && spell.baseId === 'wild_fury') valid = (e === caster || e === caster.animalCompanion);
                     else if (type === 'heal' || type === 'buff') valid = (e.side === caster.side);
                     else if (type === 'dispel') valid = true;
