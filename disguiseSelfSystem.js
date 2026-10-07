@@ -44,6 +44,26 @@
         return true;
     }
 
+    const renderEntities = new WeakMap();
+
+    function getRenderEntity(entity) {
+        const appearance = getVisualAppearance(entity);
+        if (!appearance) return entity;
+        let proxy = renderEntities.get(entity);
+        if (!proxy) {
+            proxy = Object.assign({}, entity, { equipped: {...(entity.equipped || {})} });
+            renderEntities.set(entity, proxy);
+        }
+        Object.assign(proxy, entity);
+        proxy.equipped = {...(entity.equipped || {})};
+        Object.assign(proxy, appearance);
+        const t = Math.max(0, Math.min(100, Number(appearance.skinToneSlider ?? 45))) / 100;
+        proxy.skinHue = 18;
+        proxy.skinSaturation = 58 - (t * 20);
+        proxy.skinLightness = 76 - (t * 31);
+        return proxy;
+    }
+
     function getVisualAppearance(entity) {
         return entity?.disguiseSelf?.appearance || null;
     }
@@ -60,7 +80,7 @@
         return d.clothingColours[layerId] || d.clothingColours.base || fallback;
     }
 
-    window.disguiseSelfSystem = { BUILD, apply, clear, getVisualAppearance, getVisualEquipment, getClothingColour };
+    window.disguiseSelfSystem = { BUILD, apply, clear, getVisualAppearance, getVisualEquipment, getClothingColour, getRenderEntity };
     window.getDisguiseVisualEquipment = getVisualEquipment;
     window.getDisguiseVisualAppearance = getVisualAppearance;
     window.getDisguiseVisualClothingColour = getClothingColour;
