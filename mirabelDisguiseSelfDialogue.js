@@ -1,92 +1,57 @@
-// mirabelDisguiseSelfDialogue.js
-// Mirabel Quill's Disguise Self companion dialogue: playful impersonation,
-// party pranks, and consensual romantic role-play. Mechanical spell logic
-// remains in disguiseSelfSystem.js; this file only chooses and applies
-// appearance profiles through that public API.
+// Mirabel's Disguise Self flavour and private role-play menu.
+// Dialogue ownership stays in campaign2Dialogue.js; this module only supplies
+// the reusable actions so it cannot replace or wrap the game's dialogue engine.
 (() => {
     'use strict';
 
-    const BUILD = '20261008-mirabel-disguise-self-v1';
-    const MIRABEL_NAME = 'Mirabel Quill';
-    const PERSONAL_DIALOGUE_ID = 'companion_mirabel_quill';
+    const BUILD = '20261008-mirabel-disguise-self-v2';
 
-    const party = () => Array.isArray(window.party) ? window.party : [];
-    const protagonist = () => party()[0] || window.player || null;
-    const mirabel = () => party().find((member, index) => index > 0 && member?.name === MIRABEL_NAME) || null;
+    function party() { return Array.isArray(window.party) ? window.party : []; }
+    function player() { return party()[0] || window.player || null; }
+    function mirabel() { return party().find((p, i) => i > 0 && p?.name === 'Mirabel Quill') || null; }
 
-    function hasSpell(entity) {
-        if (!entity) return false;
-        const skills = entity.skills || {};
-        const unlocked = entity.unlockedBaseSpells || entity.knownSpells || entity.spellsKnown || [];
-        return !!(
-            skills.learn_disguise_self ||
-            skills.disguise_self ||
-            skills.disguise_self?.rank ||
-            (Array.isArray(unlocked) && unlocked.includes('disguise_self'))
-        );
-    }
-
-    function systemReady() {
-        return !!window.disguiseSelfSystem &&
-            typeof window.disguiseSelfSystem.apply === 'function' &&
-            typeof window.disguiseSelfSystem.clear === 'function';
+    function knowsSpell(entity) {
+        return !!(entity?.skills?.learn_disguise_self ||
+            entity?.skills?.disguise_self ||
+            window.hasSpellUnlocked?.(entity, 'disguise_self'));
     }
 
     function appearanceOf(target) {
         const a = target?.appearance || {};
         return {
-            gender: target?.gender || target?.bodyPresentation || a.gender || 'female',
+            gender: target?.gender || a.gender || 'female',
             bodyType: target?.bodyType || a.bodyType || 'average',
             hairStyle: target?.hairStyle || a.hairStyle || 'brown_1',
             hairHue: Number(target?.hairHue ?? a.hairHue ?? 25),
             hairSaturation: Number(target?.hairSaturation ?? a.hairSaturation ?? 70),
             hairValue: Number(target?.hairValue ?? a.hairValue ?? 55),
-            skinToneSlider: Number(target?.skinToneSlider ?? a.skinToneSlider ?? 45),
+            skinToneSlider: Number(target?.skinToneSlider ?? a.skinToneSlider ?? 45)
         };
     }
 
-    function disguiseAs(caster, target) {
-        if (!caster || !target || !systemReady()) return false;
-        window.disguiseSelfSystem.apply(caster, { appearance: appearanceOf(target) });
-        return true;
+    function as(target) {
+        const m = mirabel();
+        if (!m || !target || !window.disguiseSelfSystem?.apply) return false;
+        return window.disguiseSelfSystem.apply(m, { appearance: appearanceOf(target) });
     }
 
-    function clearDisguise(caster) {
-        if (!caster || !systemReady()) return false;
-        window.disguiseSelfSystem.clear(caster);
-        return true;
-    }
-
-    function partyTarget(name) {
-        return party().find(member => member?.name === name) || null;
-    }
-
-    function activePartyTargets() {
-        return party().filter(member => member && member !== protagonist());
+    function clear() {
+        const m = mirabel();
+        return !!m && !!window.disguiseSelfSystem?.clear?.(m);
     }
 
     function relationshipState() {
         const m = mirabel();
-        if (!m) return null;
-        if (typeof window.getCompanionRomanceState === 'function') {
-            return window.getCompanionRomanceState(m);
-        }
-        const affinity = window.getCompanionAffinity?.(m) || m.playerAffinity || {};
-        return {
-            affinity,
-            agreement: m.playerRelationship?.romanceAgreement || null,
-        };
+        return m ? window.getCompanionRomanceState?.(m) : null;
     }
 
-    function inRelationship() {
+    function isRomantic() {
         const state = relationshipState();
-        const agreementState = state?.agreement?.state;
-        if (['dating', 'committed', 'strained'].includes(agreementState)) return true;
-        return ['dating', 'committed', 'strained'].includes(state?.affinity?.romanceState);
+        return ['dating', 'committed', 'strained'].includes(state?.agreement?.state);
     }
 
-    function playerHasSpell() {
-        return hasSpell(protagonist());
+    function partyTargets() {
+        return party().filter((p, i) => i > 0 && p?.name !== 'Mirabel Quill');
     }
 
     function show(text, options) {
@@ -97,181 +62,118 @@
     }
 
     function prankMenu() {
-        const m = mirabel();
-        if (!m) return false;
-        const targets = activePartyTargets();
-        const options = targets.slice(0, 5).map(target => ({
+        const targets = partyTargets();
+        const options = targets.map(target => ({
             label: `“I want to be ${target.name}.”`,
             action: () => {
-                if (!disguiseAs(m, target)) {
-                    show('Mirabel taps her fingers together. “I can do the theory. The spell itself appears to be having an administrative crisis.”', [
-                        { label: 'We will try again later.', action: () => {} },
-                    ]);
-                    return;
-                }
+                as(target);
                 show(
-                    `Mirabel studies her new face in an imaginary mirror. “${target.name}.” She adopts their mannerisms for a moment, then grins. “Oh, this is going to be irresponsible.”`,
+                    `Mirabel becomes ${target.name}, looks down at herself, and immediately adopts a wildly exaggerated version of their mannerisms. “Perfect. I am going to be unbearable.”`,
                     [
-                        { label: '“Go on, then.”', action: () => {} },
-                        { label: '“Maybe do not traumatise them.”', action: () => show('“No promises. I am a scholar. Experimentation is practically a civic duty.”', [{ label: 'Right.', action: () => {} }]) },
+                        { label: '“Please do not cause a diplomatic incident.”', action: () => {} },
+                        { label: '“Go on, then.”', action: () => show('“Finally, someone who respects scholarship.”', [{ label: 'Right.', action: () => {} }]) }
                     ]
                 );
-            },
+            }
         }));
         options.push({
             label: '“Be me.”',
             action: () => {
-                if (!disguiseAs(m, protagonist())) return;
-                show('Mirabel becomes an almost perfect version of you, then immediately ruins the effect by giving herself an exaggeratedly thoughtful expression. “Oh dear. I understand why everyone listens to you now.”', [
-                    { label: '“You are enjoying this.”', action: () => show('“Immensely.”', [{ label: 'I can tell.', action: () => {} }]) },
+                as(player());
+                show('Mirabel takes your appearance and gives you an exaggeratedly serious stare. “Oh. I see why everyone keeps asking you to make decisions.”', [
+                    { label: '“You are enjoying this.”', action: () => show('“Immensely.”', [{ label: 'I can tell.', action: () => {} }]) }
                 ]);
-            },
+            }
         });
-        options.push({ label: '“Never mind.”', action: () => {} });
-        return show('Mirabel’s eyes light up. “Choose someone. Anyone. I have a spell and absolutely no professional reason not to misuse it.”', options);
+        options.push({ label: 'Back.', action: () => openDisguiseMenu() });
+        return show('“Choose a victim,” Mirabel says brightly. “I mean subject. A very important distinction.”', options);
     }
 
-    function flirtPrankMenu() {
-        const targets = activePartyTargets();
-        const options = targets.slice(0, 5).map(target => ({
-            label: `Impersonate ${target.name} and flirt with someone.`,
+    function flirtMenu() {
+        const targets = partyTargets();
+        const options = targets.map(target => ({
+            label: `Pretend to be ${target.name}.`,
             action: () => {
-                if (!disguiseAs(mirabel(), target)) return;
+                as(target);
                 show(
-                    `Mirabel slips into ${target.name}’s appearance and gives you a look that is unmistakably Mirabel’s despite the borrowed face. “Now imagine I walk into camp and start flirting with everyone in their voice.”`,
+                    `Wearing ${target.name}'s face, Mirabel gives you an unmistakably Mirabel-ish smile. “Imagine I walk into camp like this and start flirting with people in their voice.”`,
                     [
-                        { label: '“You absolutely would.”', action: () => show('“Obviously. The important question is whether I can keep a straight face.”', [{ label: 'You cannot.', action: () => {} }]) },
-                        { label: '“Please do not start a diplomatic incident.”', action: () => {} },
+                        { label: '“You would.”', action: () => show('“Of course I would. The experiment practically conducts itself.”', [{ label: 'Naturally.', action: () => {} }]) },
+                        { label: '“You are a menace.”', action: () => {} }
                     ]
                 );
-            },
+            }
         }));
         options.push({ label: 'Back.', action: () => openDisguiseMenu() });
-        return show('“There is a particular joy,” Mirabel says, “in saying something outrageous while wearing somebody else’s face.”', options);
+        return show('“There is a particular joy in saying something outrageous while wearing somebody else’s face.”', options);
     }
 
-    function romanticRoleplayMenu() {
+    function privateRoleplayMenu() {
+        if (!isRomantic()) return false;
         const m = mirabel();
-        if (!m || !inRelationship()) return false;
-        const both = playerHasSpell() && hasSpell(m);
-        const targets = activePartyTargets().filter(x => x.name !== MIRABEL_NAME);
-
-        const options = [];
-        options.push({
-            label: '“You could pretend to be someone we both know.”',
-            action: () => {
-                const choices = targets.slice(0, 5).map(target => ({
-                    label: `Mirabel as ${target.name}`,
-                    action: () => {
-                        if (!disguiseAs(m, target)) return;
-                        show(
-                            `Mirabel takes ${target.name}’s appearance, then looks back at you with her own mischievous smile. “All right. For tonight, I am someone else. The rest can stay between us.”`,
-                            [
-                                { label: '“That is exactly the point.”', action: () => {} },
-                                { label: '“You are enjoying the experiment.”', action: () => show('“I am a wizard. Of course I am.”', [{ label: 'Fair.', action: () => {} }]) },
-                            ]
-                        );
-                    },
-                }));
-                choices.push({ label: 'Back.', action: () => romanticRoleplayMenu() });
-                show('“Someone we both know,” Mirabel says. “Someone neither of us has to explain. A little theatre, a little trust, and no need to take the disguise seriously.”', choices);
+        const p = player();
+        const both = knowsSpell(m) && knowsSpell(p);
+        const targets = partyTargets();
+        const options = [
+            {
+                label: '“You could impersonate someone we both know.”',
+                action: () => {
+                    const choices = targets.map(target => ({
+                        label: `Mirabel as ${target.name}`,
+                        action: () => {
+                            as(target);
+                            show(`Mirabel takes ${target.name}'s appearance, then smiles in a way only Mirabel could. “All right. The rest stays between us.”`, [
+                                { label: '“That is the idea.”', action: () => {} }
+                            ]);
+                        }
+                    }));
+                    choices.push({ label: 'Back.', action: () => privateRoleplayMenu() });
+                    show('“A little theatre, a little trust,” Mirabel says. “No pretending that the disguise changes who we are.”', choices);
+                }
             },
-        });
-        options.push({
-            label: '“You could impersonate me.”',
-            action: () => {
-                if (!disguiseAs(m, protagonist())) return;
-                show('Mirabel becomes you and studies your expression. “Interesting. I think I have finally discovered how you manage to look so unbearably confident.”', [
-                    { label: '“And?”', action: () => show('“I am not telling you. I intend to use the advantage.”', [{ label: 'Naturally.', action: () => {} }]) },
-                ]);
-            },
-        });
+            {
+                label: '“You could impersonate me.”',
+                action: () => {
+                    as(p);
+                    show('Mirabel becomes you and studies her borrowed expression. “Interesting. I understand your face considerably better than I expected.”', [
+                        { label: '“And?”', action: () => show('“I am keeping my conclusions to myself.”', [{ label: 'Fair.', action: () => {} }]) }
+                    ]);
+                }
+            }
+        ];
         if (both) {
             options.push({
-                label: '“Or I could impersonate you.”',
+                label: '“I could impersonate you.”',
                 action: () => {
-                    if (!disguiseAs(protagonist(), m)) return;
-                    show('Mirabel goes quiet for a beat, then laughs. “Oh. That is much more interesting when it is you wearing my face.”', [
-                        { label: '“You suggested it.”', action: () => show('“I know. I am delighted by my own terrible ideas.”', [{ label: 'As you should be.', action: () => {} }]) },
+                    window.disguiseSelfSystem.apply(p, { appearance: appearanceOf(m) });
+                    show('Mirabel stares at you wearing her face, then bursts out laughing. “Oh. That is much more interesting when you do it.”', [
+                        { label: '“You suggested it.”', action: () => show('“I know. I am delighted with myself.”', [{ label: 'As usual.', action: () => {} }]) }
                     ]);
-                },
+                }
             });
             options.push({
                 label: '“We could both choose someone else.”',
-                action: () => show('Mirabel’s grin turns wicked. “Now that is a proper experiment. Two people, two disguises, one very private game of mistaken identity.”', [
-                    { label: '“Strictly private.”', action: () => {} },
-                ]),
+                action: () => show('Mirabel grins. “Two disguises, two borrowed identities, and one very private game of mistaken identity. Now that is an experiment.”', [
+                    { label: '“Private.”', action: () => {} }
+                ])
             });
         }
-        options.push({ label: '“Maybe another time.”', action: () => {} });
+        options.push({ label: 'Back.', action: () => openDisguiseMenu() });
         return show('Mirabel lowers her voice. “If we are going to play with identity, we might as well admit that it can be fun when we both know exactly what game we are playing.”', options);
     }
 
     function openDisguiseMenu() {
-        const m = mirabel();
-        if (!m || !hasSpell(m)) return false;
+        if (!mirabel() || !knowsSpell(mirabel())) return false;
         const options = [
             { label: '“Try a prank.”', action: () => prankMenu() },
-            { label: '“Flirt while disguised as someone else.”', action: () => flirtPrankMenu() },
+            { label: '“Flirt while disguised as someone else.”', action: () => flirtMenu() }
         ];
-        if (inRelationship()) {
-            options.push({ label: '“What about using it for private role-play?”', action: () => romanticRoleplayMenu() });
-        }
-        options.push({
-            label: '“Drop the disguise.”',
-            action: () => {
-                clearDisguise(m);
-                show('Mirabel lets her borrowed appearance fall away. “Back to being myself. For now.”', [{ label: 'Probably wise.', action: () => {} }]);
-            },
-        });
+        if (isRomantic()) options.push({ label: '“What about private role-play?”', action: () => privateRoleplayMenu() });
+        options.push({ label: '“Drop the disguise.”', action: () => { clear(); show('Mirabel lets the borrowed appearance fall away. “Back to being myself. For now.”', [{ label: 'Probably wise.', action: () => {} }]); } });
         options.push({ label: 'Never mind.', action: () => {} });
-        return show('“Disguise Self,” Mirabel says. “A spell for infiltration, impersonation, and — if one has imagination — vastly more interesting experiments.”', options);
+        return show('“Disguise Self,” Mirabel says. “A spell for infiltration, impersonation, and vastly more interesting experiments.”', options);
     }
 
-    function install() {
-        const trees = window.npcDialogueTrees;
-        if (!trees || typeof window.showDialogue !== 'function') return false;
-        const m = mirabel();
-        if (!m || !hasSpell(m)) return false;
-
-        const existing = trees[PERSONAL_DIALOGUE_ID];
-        if (existing?.__mirabelDisguiseSelf) return true;
-
-        const tree = function(npc) {
-            const companion = mirabel() || npc;
-            const options = [];
-            if (hasSpell(companion)) {
-                options.push({ label: 'About Disguise Self…', action: () => openDisguiseMenu() });
-            }
-            if (typeof existing === 'function') {
-                options.push({ label: 'Other business.', action: () => existing.call(this, npc) });
-            } else {
-                options.push({ label: 'Never mind.', action: () => {} });
-            }
-            window.showDialogue(companion, '“Mm? You have my attention. Most of it.”', options);
-        };
-        tree.__mirabelDisguiseSelf = true;
-        tree.__previousMirabelDialogue = existing;
-        trees[PERSONAL_DIALOGUE_ID] = tree;
-        m.dialogueId = PERSONAL_DIALOGUE_ID;
-        return true;
-    }
-
-    function refresh() {
-        install();
-    }
-
-    window.mirabelDisguiseSelfDialogue = {
-        build: BUILD,
-        refresh,
-        openDisguiseMenu,
-        romanticRoleplayMenu,
-    };
-
-    refresh();
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', refresh, { once: true });
-    }
-    setInterval(refresh, 1000);
+    window.mirabelDisguiseSelfDialogue = { build: BUILD, openDisguiseMenu, privateRoleplayMenu };
     window.MIRABEL_DISGUISE_SELF_BUILD = BUILD;
 })();
