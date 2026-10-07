@@ -2030,6 +2030,27 @@ Object.assign(skills, {
     }
 });
 
+Object.assign(skills, {
+    'learn_disguise_self': {
+        name: 'Learn Disguise Self',
+        description: 'Unlocks the Disguise Self arcane spell.',
+        tree: 'arcane',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedBaseSpells) player.unlockedBaseSpells = [];
+            if (!player.unlockedBaseSpells.includes('disguise_self')) player.unlockedBaseSpells.push('disguise_self');
+        }
+    },
+    'disguise_equipment': {
+        name: 'Disguised Equipment',
+        description: 'Lets Disguise Self alter the visual identity of compatible worn equipment for +12 mana. It cannot turn one weapon type into another.',
+        tree: 'arcane',
+        maxRanks: 1,
+        prereq: 'learn_disguise_self',
+        apply: () => {}
+    }
+});
+
 window.skills = skills;
 
 // Either the druid or elf pickup of Knowledge: Nature (mutually exclusive
