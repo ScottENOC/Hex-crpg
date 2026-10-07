@@ -3237,7 +3237,7 @@ window.npcDialogueTrees = {
                                 { label: "“If you want me to, yes.”", action: () => {
                                     state.stage = 1;
                                     const appearance = {...player, gender:'male'};
-                                    window.disguiseSelfSystem?.apply(player, { appearance });
+                                    window.tryCastSpell?.(player, { name:'Disguise Self', baseId:'disguise_self', type:'buff', manaCost:8, coreManaCost:8, tpCost:10, range:1, disguiseProfile:{ appearance } }, player, player.hex, true);
                                     window.showDialogue(npc, "Wren watches the change in silence. “Right. I needed to know what I felt when I looked at you like this.”", [
                                         { label: "“And?”", action: () => {
                                             state.stage = 2;
