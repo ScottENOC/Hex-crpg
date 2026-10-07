@@ -8175,6 +8175,7 @@ function cancelSpell(instanceId) {
     if (spellIdx === -1) return;
 
     const spell = window.activeSpells[spellIdx];
+    if (spell.baseId === 'disguise_self') window.disguiseSelfSystem?.clear?.(window.entities?.find(e => e.id === spell.targetEntityId));
     // Remove entity if it was a summon
     if (spell.entityId) {
         const ent = window.entities.find(e => e.id === spell.entityId);
@@ -9339,6 +9340,31 @@ window.tryShove = tryShove;
 
 function resolveSpell(caster, spell, target, clickedHex) {
     let actionHandled = false;
+    if (spell.baseId === 'disguise_self') {
+        if (target !== caster) {
+            window.showMessage('Disguise Self can only target its caster.');
+            return false;
+        }
+        if (!window.disguiseSelfSystem?.apply) {
+            window.showMessage('The disguise spell is unavailable.');
+            return false;
+        }
+        const previous = (window.activeSpells || []).find(s => s.casterName === caster.name && s.baseId === 'disguise_self');
+        if (previous) window.cancelSpell(previous.spellInstanceId);
+        window.disguiseSelfSystem.apply(caster, spell.disguiseProfile || {});
+        const instanceId = Date.now() + Math.random();
+        window.activeSpells.push({
+            spellInstanceId: instanceId,
+            name: spell.name,
+            baseId: 'disguise_self',
+            casterName: caster.name,
+            targetEntityId: caster.id,
+            coreManaCost: spell.coreManaCost || spell.manaCost
+        });
+        window.showMessage(caster.name + ' assumes the chosen disguise.');
+        window.updateActiveSpellsUI?.();
+        return true;
+    }
     if (spell.type === 'summon') {
         // Defensive guard (the UI dropdown already hides this option
         // otherwise, see updateSpellPreview in ui.js) — a unicorn can only
