@@ -113,7 +113,11 @@
         if (!entry) return null;
         return {
             appearance: { ...(entry.appearance || {}) },
-            visualEquipment: entry.visualEquipment ? { ...entry.visualEquipment } : null
+            visualEquipment: entry.visualEquipment ? { ...entry.visualEquipment } : null,
+            targetName: entry.name,
+            targetTitle: entry.targetTitle || null,
+            targetFactionId: entry.targetFactionId || null,
+            targetDialogueId: entry.targetDialogueId || null
         };
     }
 
