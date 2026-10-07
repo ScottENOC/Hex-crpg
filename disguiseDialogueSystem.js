@@ -8,7 +8,13 @@
     const BUILD = '20261008-disguise-dialogue-risk-v1';
     let rawShowDialogue = null;
 
-    function player() { return window.party?.[0] || window.player || null; }
+    function player() {
+        const mainName = window.party?.[0]?.name;
+        return (window.entities || []).find(e => e && e.side === 'player' && e.name === mainName)
+            || window.player
+            || window.party?.[0]
+            || null;
+    }
     function disguise() { return player()?.disguiseSelf || null; }
     function activeTarget() {
         const d = disguise();
