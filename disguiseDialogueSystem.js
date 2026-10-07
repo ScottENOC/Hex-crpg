@@ -6,6 +6,7 @@
     'use strict';
 
     const BUILD = '20261008-disguise-dialogue-risk-v1';
+    let rawShowDialogue = null;
 
     function player() { return window.party?.[0] || window.player || null; }
     function disguise() { return player()?.disguiseSelf || null; }
@@ -155,7 +156,7 @@
             action: () => {
                 markDiscovered(npc, d);
                 window.disguiseSelfSystem?.clear?.(player());
-                window.showDialogue(npc,
+                rawShowDialogue?.(npc,
                     'The disguise falls away. ' + npc.name + ''s expression hardens. "So it really was Disguise Self."',
                     [
                         { label: '"I was trying to get through without hurting anyone."', action: () => {} },
@@ -164,7 +165,7 @@
             }
         });
 
-        window.showDialogue(npc,
+        rawShowDialogue?.(npc,
             actualTargetHere
                 ? 'Something is very wrong. ' + d.targetName + ' is here — and so are you wearing their face.'
                 : '"You look exactly like ' + d.targetName + '." ' + npc.name + ' studies you carefully. "That proves remarkably little. Disguise Self is real, and I know it when I see it."',
@@ -178,7 +179,7 @@
 
             if (success) {
                 markPassed(npc, d);
-                window.showDialogue(npc,
+                rawShowDialogue?.(npc,
                     response === 'escort'
                         ? 'The guard beside you gives a crisp nod. ' + npc.name + ' relaxes — the whole scene suddenly makes more sense.'
                         : 'For a long moment ' + npc.name + ' watches you. Then the suspicion eases. "Very well. If you are ' + d.targetName + ', you have business here."',
@@ -191,7 +192,7 @@
             const escortText = royalGuardEscortCount()
                 ? 'Your guards make the moment more convincing, but not convincing enough.'
                 : 'Without an escort, there is nowhere for the story to hide.';
-            window.showDialogue(npc,
+            rawShowDialogue?.(npc,
                 'The answer lands badly. ' + npc.name + ''s hand moves toward their weapon. ' + escortText,
                 [
                     {
@@ -200,9 +201,9 @@
                             const secondRoll = Math.floor(Math.random() * 100) + 1;
                             if (secondRoll <= 35 + bonus) {
                                 questReaction('authority_success', npc, d);
-                                window.showDialogue(npc, 'The hesitation is enough. "All right. Go on — but I will be watching you."', originalArgs[2] || []);
+                                rawShowDialogue?.(npc, 'The hesitation is enough. "All right. Go on — but I will be watching you."', originalArgs[2] || []);
                             } else {
-                                window.showDialogue(npc, '"You are not who you claim to be. Guards!"', [{ label: 'Retreat.', action: () => {} }]);
+                                rawShowDialogue?.(npc, '"You are not who you claim to be. Guards!"', [{ label: 'Retreat.', action: () => {} }]);
                             }
                         }
                     },
@@ -210,7 +211,7 @@
                         label: 'Drop the disguise.',
                         action: () => {
                             window.disguiseSelfSystem?.clear?.(player());
-                            window.showDialogue(npc, '"At least you had the sense to stop before this became a fight."', originalArgs[2] || []);
+                            rawShowDialogue?.(npc, '"At least you had the sense to stop before this became a fight."', originalArgs[2] || []);
                         }
                     }
                 ]);
@@ -259,12 +260,12 @@
                             const chance = Math.max(15, Math.min(90, 65 + (100 - score) / 3 + royalGuardEscortCount() * 5));
                             if (roll <= chance) {
                                 questReaction('authority_success', npc, d);
-                                window.showDialogue(npc, 'You invoke ' + d.targetName + ''s authority. ' + npc.name + ' reluctantly steps aside.', [
+                                rawShowDialogue?.(npc, 'You invoke ' + d.targetName + ''s authority. ' + npc.name + ' reluctantly steps aside.', [
                                     { label: 'Proceed.', action: () => {} }
                                 ]);
                             } else {
                                 markDiscovered(npc, d);
-                                window.showDialogue(npc, 'The authority play goes too far. ' + npc.name + ' starts asking questions you cannot safely answer.', [
+                                rawShowDialogue?.(npc, 'The authority play goes too far. ' + npc.name + ' starts asking questions you cannot safely answer.', [
                                     { label: 'Back away.', action: () => {} }
                                 ]);
                             }
