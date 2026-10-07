@@ -29,15 +29,41 @@
         };
     }
 
+    function castAppearance(caster, target) {
+        if (!caster || !target || typeof window.tryCastSpell !== 'function') return false;
+        const spell = {
+            name: 'Disguise Self',
+            baseId: 'disguise_self',
+            type: 'buff',
+            manaCost: 8,
+            coreManaCost: 8,
+            tpCost: 10,
+            range: 1,
+            disguiseProfile: { appearance: appearanceOf(target) }
+        };
+        return window.tryCastSpell(caster, spell, caster, caster.hex, true);
+    }
+
     function as(target) {
         const m = mirabel();
-        if (!m || !target || !window.disguiseSelfSystem?.apply) return false;
-        return window.disguiseSelfSystem.apply(m, { appearance: appearanceOf(target) });
+        if (!m || !target) return false;
+        return castAppearance(m, target);
+    }
+
+    function clearEntity(entity) {
+        if (!entity) return false;
+        const active = (window.activeSpells || []).find(s =>
+            s.baseId === 'disguise_self' && s.targetEntityId === entity.id
+        );
+        if (active && typeof window.cancelSpell === 'function') {
+            window.cancelSpell(active.spellInstanceId);
+            return true;
+        }
+        return !!window.disguiseSelfSystem?.clear?.(entity);
     }
 
     function clear() {
-        const m = mirabel();
-        return !!m && !!window.disguiseSelfSystem?.clear?.(m);
+        return clearEntity(mirabel());
     }
 
     function relationshipState() {
@@ -145,7 +171,7 @@
             options.push({
                 label: '“I could impersonate you.”',
                 action: () => {
-                    window.disguiseSelfSystem.apply(p, { appearance: appearanceOf(m) });
+                    castAppearance(p, m);
                     show('Mirabel stares at you wearing her face, then bursts out laughing. “Oh. That is much more interesting when you do it.”', [
                         { label: '“You suggested it.”', action: () => show('“I know. I am delighted with myself.”', [{ label: 'As usual.', action: () => {} }]) }
                     ]);
