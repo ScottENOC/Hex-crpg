@@ -3222,6 +3222,43 @@ window.npcDialogueTrees = {
         const attitude = window.companionAttitude?.['Wren Talbot'] ?? 50;
         const isElf = window.partyHasRace && window.partyHasRace('elf');
         const options = [];
+        const playerIsFemale = player?.gender === 'female';
+        const knowsDisguiseSelf = !!(window.hasSpellUnlocked?.(player, 'disguise_self') || player?.skills?.learn_disguise_self || player?.skills?.disguise_self);
+        if (playerIsFemale && knowsDisguiseSelf) {
+            options.push({
+                label: "Wren, what do you think of Disguise Self?",
+                action: () => {
+                    window.disguiseSelfWrenState = window.disguiseSelfWrenState || { stage: 0 };
+                    const state = window.disguiseSelfWrenState;
+                    if (state.stage === 0) {
+                        window.showDialogue(npc,
+                            "I've been thinking about that spell of yours. Not the useful bits — the face-changing bit. Would you… try it as a man? For me?",
+                            [
+                                { label: "“If you want me to, yes.”", action: () => {
+                                    state.stage = 1;
+                                    const appearance = {...player, gender:'male'};
+                                    window.disguiseSelfSystem?.apply(player, { appearance });
+                                    window.showDialogue(npc, "Wren watches the change in silence. “Right. I needed to know what I felt when I looked at you like this.”", [
+                                        { label: "“And?”", action: () => {
+                                            state.stage = 2;
+                                            window.showDialogue(npc, "“And I think I finally understand the problem. I care about you. The shape I kept trying to force that feeling into was the wrong question.”", [{ label: "“You don't have to force anything.”", action: () => {} }]);
+                                        }}
+                                    ]);
+                                }},
+                                { label: "“Why?”", action: () => window.showDialogue(npc, "“Because I trust you enough to ask. And because I would rather know what I actually feel than keep guessing.”", [{ label: "“All right. We can try.”", action: () => {} }]) },
+                                { label: "“Maybe another time.”", action: () => {} }
+                            ]
+                        );
+                    } else {
+                        window.showDialogue(npc,
+                            "“I think I'm all right now,” Wren says. “The spell didn't solve anything. It just stopped me asking the wrong question. I don't need you to stay disguised for me.”",
+                            [{ label: "“Good.”", action: () => {} }]
+                        );
+                    }
+                }
+            });
+        }
+
         options.push({
             label: "How are you holding up?",
             action: () => {
@@ -3272,42 +3309,6 @@ window.npcDialogueTrees = {
         options.push({ label: "Never mind.", action: () => {} });
         window.showDialogue(npc, "Mm? You have my attention. Most of it.", options);
     },
-        const playerIsFemale = player?.gender === 'female';
-        const knowsDisguiseSelf = !!(window.hasSpellUnlocked?.(player, 'disguise_self') || player?.skills?.learn_disguise_self || player?.skills?.disguise_self);
-        if (playerIsFemale && knowsDisguiseSelf) {
-            options.push({
-                label: "Wren, what do you think of Disguise Self?",
-                action: () => {
-                    window.disguiseSelfWrenState = window.disguiseSelfWrenState || { stage: 0 };
-                    const state = window.disguiseSelfWrenState;
-                    if (state.stage === 0) {
-                        window.showDialogue(npc,
-                            "I've been thinking about that spell of yours. Not the useful bits — the face-changing bit. Would you… try it as a man? For me?",
-                            [
-                                { label: "“If you want me to, yes.”", action: () => {
-                                    state.stage = 1;
-                                    const appearance = {...player, gender:'male'};
-                                    window.disguiseSelfSystem?.apply(player, { appearance });
-                                    window.showDialogue(npc, "Wren watches the change in silence. “Right. I needed to know what I felt when I looked at you like this.”", [
-                                        { label: "“And?”", action: () => {
-                                            state.stage = 2;
-                                            window.showDialogue(npc, "“And I think I finally understand the problem. I care about you. The shape I kept trying to force that feeling into was the wrong question.”", [{ label: "“You don't have to force anything.”", action: () => {} }]);
-                                        }}
-                                    ]);
-                                }},
-                                { label: "“Why?”", action: () => window.showDialogue(npc, "“Because I trust you enough to ask. And because I would rather know what I actually feel than keep guessing.”", [{ label: "“All right. We can try.”", action: () => {} }]) },
-                                { label: "“Maybe another time.”", action: () => {} }
-                            ]
-                        );
-                    } else {
-                        window.showDialogue(npc,
-                            "“I think I'm all right now,” Wren says. “The spell didn't solve anything. It just stopped me asking the wrong question. I don't need you to stay disguised for me.”",
-                            [{ label: "“Good.”", action: () => {} }]
-                        );
-                    }
-                }
-            });
-        }
     companion_ser_aldric: (npc) => {
         const player = window.party[0];
         const attitude = window.companionAttitude?.['Ser Aldric'] ?? 60;
