@@ -9274,6 +9274,7 @@ function startArenaFight() {
 }
 
 function talkToNPC(npc) {
+    window.recordDisguiseSelfEncounter?.(npc);
     console.log("Talking to NPC:", npc.name);
     if (npc.dialogueId && window.npcDialogueTrees && window.npcDialogueTrees[npc.dialogueId]) {
         window.npcDialogueTrees[npc.dialogueId](npc);
