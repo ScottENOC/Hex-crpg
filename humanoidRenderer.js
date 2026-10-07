@@ -1450,6 +1450,8 @@
 
     function drawHumanoidCharacter(ctx, entity, x, y, z=1, flyOff=0, explicitBounds=null, explicitFacing=null, renderSurface='map') {
         if (!canDirectRender(entity)) return false;
+        const physicalEntity = entity;
+        entity = window.disguiseSelfSystem?.getRenderEntity?.(entity) || entity;
         const rig = CHARACTER_RIGS[keyFor(entity)];
         const hs = window.hexSize || 1;
         const legacyW = rig.bodyW * hs * z;
