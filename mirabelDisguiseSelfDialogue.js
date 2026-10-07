@@ -4,7 +4,7 @@
 (() => {
     'use strict';
 
-    const BUILD = '20261008-mirabel-disguise-self-v2';
+    const BUILD = '20261008-mirabel-disguise-self-v3';
 
     function party() { return Array.isArray(window.party) ? window.party : []; }
     function player() { return party()[0] || window.player || null; }
