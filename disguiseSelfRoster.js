@@ -130,4 +130,22 @@
     window.getDisguiseSelfKnownCharacters = list;
     window.getDisguiseSelfProfile = profileFor;
     window.DISGUISE_SELF_ROSTER_BUILD = BUILD;
+
+    function installDialogueEncounterHook() {
+        if (window.__disguiseSelfDialogueEncounterHook || typeof window.showDialogue !== 'function') return;
+        const original = window.showDialogue;
+        window.showDialogue = function(speaker) {
+            record(speaker);
+            return original.apply(this, arguments);
+        };
+        window.__disguiseSelfDialogueEncounterHook = true;
+    }
+
+    if (typeof document !== 'undefined') {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', installDialogueEncounterHook, { once: true });
+        } else {
+            installDialogueEncounterHook();
+        }
+    }
 })();
