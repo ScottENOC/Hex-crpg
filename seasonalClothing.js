@@ -53,7 +53,7 @@
       if(slot!=='pants'||e?.equipped?.pants!==SHORTS_ID) return baseDraw(ctx,e,slot,v,bounds,fitReference);
       const resolved=(v==='up'||v==='back')?'back':(v==='left'||v==='right'||v==='side')?'side':'front';
       const target=cs.clothingTargets?.[resolved]?.pants||cs.clothingTargets?.front?.pants;
-      if(!target) return baseDraw(ctx,e,slot,v,bounds);
+      if(!target) return baseDraw(ctx,e,slot,v,bounds,fitReference);
       const oldH=target.h;
       target.h=oldH*SHORTS_HEIGHT_MULT;
       try{return baseDraw(ctx,e,slot,v,bounds,fitReference);}finally{target.h=oldH;}

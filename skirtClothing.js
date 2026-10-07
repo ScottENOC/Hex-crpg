@@ -140,16 +140,16 @@
     const cs=window.clothingSystem;
     if(!cs||cs.__skirtDrawPatched||typeof cs.drawSlot!=='function') return false;
     const base=cs.drawSlot;
-    cs.drawSlot=function(ctx,e,slot,v,bounds){
+    cs.drawSlot=function(ctx,e,slot,v,bounds,fitReference){
       if(slot==='pants'&&e?.equipped?.pants===SKIRT_ID) return drawSkirt(ctx,e,v,bounds);
       // This is the one audited exception to the project convention that side
       // clothing art faces right. Flip its source once here; humanoidRenderer
       // still mirrors the whole stack normally when the character faces left.
       if(slot==='underwear'&&e?.equipped?.underwear==='underwear_briefs_gstring'&&v==='side'){
         const cx=bounds.left+bounds.width/2;ctx.save();ctx.translate(cx,0);ctx.scale(-1,1);ctx.translate(-cx,0);
-        try{return base(ctx,e,slot,v,bounds);}finally{ctx.restore();}
+        try{return base(ctx,e,slot,v,bounds,fitReference);}finally{ctx.restore();}
       }
-      return base(ctx,e,slot,v,bounds);
+      return base(ctx,e,slot,v,bounds,fitReference);
     };
     cs.__skirtDrawPatched=true;
     return true;
