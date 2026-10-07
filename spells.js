@@ -134,6 +134,15 @@ const baseSpells = {
         excludeTags: ['fey', 'dragon'],
         ongoing: true
     },
+    'disguise_self': {
+        name: 'Disguise Self',
+        school: 'arcane',
+        baseMana: 8,
+        baseRange: 1,
+        type: 'buff',
+        ongoing: true,
+        selfTarget: true
+    },
     'temporal_rift': {
         name: 'Temporal Rift',
         school: 'arcane',
