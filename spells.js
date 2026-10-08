@@ -150,6 +150,14 @@ const baseSpells = {
         baseRange: 8,
         type: 'timeskip'
     },
+    'divination': {
+        name: 'Divination',
+        school: 'divine',
+        baseMana: 12,
+        baseRange: 1,
+        type: 'divination',
+        selfTarget: true
+    },
     'feather_fall': {
         name: 'Feather Fall',
         school: 'arcane',
