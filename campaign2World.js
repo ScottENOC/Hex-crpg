@@ -4780,6 +4780,19 @@ function buildNorthwatchFort(turnHex) {
     window.campaign2NorthwatchCenter = center;
     window.campaign2NorthwatchFortRegion = fortRegion;
     window.campaign2NorthwatchGateHex = gateHex;
+
+    // Parkour route: a scout's report is hidden on the rampart. It gives the
+    // player an alternate way to discover/start The Northwatch Line without
+    // first finding Quartermaster Rurik Voss. The wall is already climbable;
+    // the only requirement is reaching this particular wall-top hex.
+    const rampartReportHex = fortRegion.wallHexes.find(h => window.distance(h, gateHex) > 8) || fortRegion.wallHexes[0];
+    if (rampartReportHex) {
+        window.tileObjects[`${rampartReportHex.q},${rampartReportHex.r}`] = {
+            type: 'parkour_discovery', discoveryId: 'northwatch_rampart_report',
+            lightRadius: 0,
+            message: 'You find a scout report wedged into the rampart.'
+        };
+    }
     window.campaign2NorthwatchKeepRegion = keepRegion;
     window.campaign2NorthwatchKeepGaps = keepRegion.gapHexes;
 
