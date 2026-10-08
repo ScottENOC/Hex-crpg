@@ -114,6 +114,7 @@ const SIMPLE_PERSISTED_FIELDS = [
     { key: 'indoorLightMult', default: 1.0 },
     { key: 'worldSeconds', default: 0 },
     { key: 'activeSpells', default: [] },
+    { key: 'divinationState', default: { nextId: 1, active: [] } },
     { key: 'interiorRegions', default: [] },
     { key: 'hollowmereEventFired', default: false },
     { key: 'hollowmereFightTriggered', default: false },
