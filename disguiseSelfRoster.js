@@ -5,7 +5,22 @@
 (() => {
     'use strict';
 
-    const BUILD = '20261008-disguise-self-roster-v1';
+    const BUILD = '20261008-disguise-self-roster-v2';
+
+    const ROLE_RULES = [
+        { id: 'royal_guard', label: 'Royal Guard', test: e => /royal guard/i.test(String(e.title || '')) },
+        { id: 'royal_wall_guard', label: 'Royal Wall Guard', test: e => /wall guard/i.test(String(e.name || '')) || /wall guard/i.test(String(e.title || '')) },
+        { id: 'ironbond_factor', label: 'Ironbond Factor', test: e => /ironbond factor/i.test(String(e.title || '')) },
+        { id: 'ironbond_enforcer', label: 'Ironbond Enforcer', test: e => /ironbond enforcer/i.test(String(e.title || '')) },
+        { id: 'ironbond_watchman', label: 'Ironbond Watchman', test: e => /ironbond watchman/i.test(String(e.title || '')) },
+        { id: 'baron_steward', label: "Baron's Steward", test: e => /baron's steward/i.test(String(e.title || '')) },
+        { id: 'town_guard', label: 'Town Guard', test: e => /town guard|captain of the watch/i.test(String(e.title || '')) },
+        { id: 'miner', label: 'Miner', test: e => /^miner$/i.test(String(e.title || '')) },
+        { id: 'hunter', label: 'Hunter', test: e => /^hunter$/i.test(String(e.title || '')) },
+        { id: 'orc_guard', label: 'Orc Guard', test: e => /orc guard|stronghold guard/i.test(String(e.title || '')) },
+        { id: 'goblin_warrior', label: 'Goblin Warrior', test: e => /goblin warrior/i.test(String(e.title || '')) }
+    ];
+    function roleOf(entity) { return ROLE_RULES.find(rule => rule.test(entity)) || null; }
     const STATE_KEY = 'disguiseSelfKnownCharacters';
 
     const HUMANOID_RACES = new Set([
@@ -77,6 +92,11 @@
             name: String(entity.name),
             race: entity.race || entity.appearance?.race || null,
             gender: entity.gender || entity.appearance?.gender || null,
+            title: entity.title || null,
+            factionId: entity.factionId || null,
+            dialogueId: entity.dialogueId || null,
+            role: roleOf(entity)?.id || null,
+            roleLabel: roleOf(entity)?.label || null,
             appearance: appearanceOf(entity),
             visualEquipment: equipmentOf(entity),
             encounteredAt: Date.now()
@@ -115,9 +135,12 @@
             appearance: { ...(entry.appearance || {}) },
             visualEquipment: entry.visualEquipment ? { ...entry.visualEquipment } : null,
             targetName: entry.name,
-            targetTitle: entry.targetTitle || null,
-            targetFactionId: entry.targetFactionId || null,
-            targetDialogueId: entry.targetDialogueId || null
+            targetTitle: entry.title || null,
+            targetFactionId: entry.factionId || null,
+            targetDialogueId: entry.dialogueId || null,
+            targetRace: entry.race || null,
+            role: entry.role || null,
+            roleLabel: entry.roleLabel || null
         };
     }
 
@@ -128,7 +151,9 @@
         list,
         find,
         profileFor,
-        isHumanoid
+        isHumanoid,
+        roleOf,
+        ROLE_RULES
     };
     window.recordDisguiseSelfEncounter = record;
     window.getDisguiseSelfKnownCharacters = list;
