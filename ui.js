@@ -1101,9 +1101,9 @@ function updateSpellPreview() {
                 })
                 .map(entry => {
                     const label = entry.roleLabel
-                        ? \`${entry.roleLabel} — ${entry.name}\`
-                        : (entry.title ? \`${entry.title} — ${entry.name}\` : entry.name);
-                    return \`<option value="${entry.name}" ${entry.name === window.disguiseSelfDraft.character ? 'selected' : ''}>${label}</option>\`;
+                        ? `${entry.roleLabel} — ${entry.name}`
+                        : (entry.title ? `${entry.title} — ${entry.name}` : entry.name);
+                    return `<option value="${entry.name}" ${entry.name === window.disguiseSelfDraft.character ? 'selected' : ''}>${label}</option>`;
                 }).join('')
             : '<option value="">No encountered characters yet</option>';
 
