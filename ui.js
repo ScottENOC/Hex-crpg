@@ -1092,7 +1092,19 @@ function updateSpellPreview() {
 
         const mode = window.disguiseSelfDraft.mode;
         const knownOptions = known.length
-            ? known.map(entry => `<option value="${entry.name}" ${entry.name === window.disguiseSelfDraft.character ? 'selected' : ''}>${entry.name}</option>`).join('')
+            ? known
+                .slice()
+                .sort((a, b) => {
+                    const ar = a.roleLabel || 'Other';
+                    const br = b.roleLabel || 'Other';
+                    return ar.localeCompare(br) || String(a.name).localeCompare(String(b.name));
+                })
+                .map(entry => {
+                    const label = entry.roleLabel
+                        ? \`${entry.roleLabel} — ${entry.name}\`
+                        : (entry.title ? \`${entry.title} — ${entry.name}\` : entry.name);
+                    return \`<option value="${entry.name}" ${entry.name === window.disguiseSelfDraft.character ? 'selected' : ''}>${label}</option>\`;
+                }).join('')
             : '<option value="">No encountered characters yet</option>';
 
         html += `
@@ -1105,7 +1117,7 @@ function updateSpellPreview() {
             </div>
             <div id="disguise-known-options" style="display:${mode === 'known' ? 'block' : 'none'};">
                 <div class="form-group">
-                    <label>Character encountered:</label>
+                    <label>Character / role:</label>
                     <select id="disguise-character" onchange="window.setDisguiseSelfCharacter(this.value)">
                         ${knownOptions}
                     </select>
