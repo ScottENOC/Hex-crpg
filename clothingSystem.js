@@ -2,7 +2,7 @@
 // Compatibility loader for the explicit garment-layer model.
 (() => {
   'use strict';
-  const BUILD=window.PRESENTATION_BUILD||'20261005-unified-clothing-v1';
+  const BUILD='20261007-unified-clothing-v3';
   const RETIRED_GARMENTS=new Set(['fine_tunic','noble_doublet','scholars_robe','traveler_garb','top_masc_toggle','top_masc_buttoned','top_masc_lacework']);
 
   function load(src,key){

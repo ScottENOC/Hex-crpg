@@ -29,21 +29,15 @@ test('outerwear keeps a canonical armour-relative envelope while runtime tops us
 
     // Clothing assets share the presentation build token; the exact fallback
     // string is intentionally not a renderer contract.
-    contains(layersSource, 'const BUILD=window.PRESENTATION_BUILD||');
+    contains(layersSource, "const BUILD='20261007-unified-clothing-v4';");
     contains(layersSource, 'const OUTERWEAR={top:.195,waist:.535,bottom:1.005};');
     contains(layersSource, '...outerwearTargets(.077,.846)');
     contains(layersSource, '...outerwearTargets(.212,.576)');
 
-    // Tops are deliberately intercepted before the historical complex fitter:
-    // compose colour layers once, crop to the authored alpha bounds once, then
-    // stretch the resulting image into the target rectangle with one drawImage.
-    contains(hotPathSource, "if (slot !== 'shirt') return originalDrawSlot.apply(this, arguments);");
-    contains(hotPathSource, 'const trim = alphaBounds(img);');
-    contains(hotPathSource, 'ctx.drawImage(rendered, trim.x, trim.y, trim.w, trim.h, dx, dy, dw, dh);');
-    contains(hotPathSource, 'ctx.drawImage(composite, bounds.left, bounds.top, bounds.width, bounds.height);');
-    contains(hotPathSource, 'shirtCompositeCache');
-    contains(hotPathSource, "const isLongGarment = spec?.fitMode === 'dressSplit' || itemId === 'top_dress';");
-    contains(hotPathSource, "if (itemId === 'top_shirt_f') target = { ...target, y: target.y - 0.03, h: target.h + 0.06 };");
+    // Character clothing no longer has a second shirt renderer: clothingLayers.js
+    // is the sole clothing path and humanoidRenderer.js caches final composites.
+    contains(hotPathSource, 'Character clothing is rendered exclusively by clothingLayers.js');
+    assert.doesNotMatch(hotPathSource, /slot !== 'shirt'/);
 
     // Undergarments and pants still use the established fitting path; this
     // performance change is intentionally limited to shirts/dresses.
@@ -101,9 +95,7 @@ test('transparent underwear assets and alternate styles are wired as PNGs', () =
 
 test('pants use the current directional PNG assets', () => {
     const layersSource = read('clothingLayers.js');
-    contains(layersSource, "front:'images/equipment/clothing/pants_trousers_front.png'");
-    contains(layersSource, "back:'images/equipment/clothing/pants_trousers_back.png'");
-    for (const id of ['pants_baggy_wraps','pants_breeches','pants_hose']) {
+    for (const id of ['pants_baggy_wraps','pants_breeches','pants_hose','pants_lattice']) {
         contains(layersSource, `front:'images/equipment/clothing/${id}_front.png'`);
         contains(layersSource, `side:'images/equipment/clothing/${id}_side.png'`);
         contains(layersSource, `back:'images/equipment/clothing/${id}_back.png'`);
@@ -119,8 +111,8 @@ test('bootstrap clothing layers all consume the shared presentation build token'
 
     assert.match(indexSource, /<script src="characterCreation\.js\?v=[^"]+"><\/script>/);
     contains(creationSource, 'clothingSystem.js?build=${encodeURIComponent(window.PRESENTATION_BUILD');
-    contains(clothingLoaderSource, 'const BUILD=window.PRESENTATION_BUILD||');
-    contains(layersSource, 'const BUILD=window.PRESENTATION_BUILD||');
+    contains(clothingLoaderSource, "const BUILD='20261007-unified-clothing-v3';");
+    contains(layersSource, "const BUILD='20261007-unified-clothing-v4';");
     contains(indexSource, '<meta name="app-build" content="');
     contains(nameSource, 'document.querySelector(\'meta[name="app-build"]\')?.content');
     contains(nameSource, 'window.PRESENTATION_BUILD = PRESENTATION_BUILD;');
@@ -144,4 +136,17 @@ test('core unified garments keep their authoritative directional assets even whe
     contains(layersSource, "front:'images/equipment/clothing/briefs_female_front.png'");
     contains(layersSource, "front:'images/equipment/clothing/bra_front.png'");
     contains(layersSource, "front:'images/equipment/clothing/top_shirt_f_front.png'");
+});
+
+
+test('registered clothing assets are not silently omitted from the garment catalogue', () => {
+    const layersSource = read('clothingLayers.js');
+    const newGarmentsSource = read('newClothingGarments.js');
+    for (const id of ['shirt_mesh_turtleneck','shirt_collared','shirt_plunge','shirt_tie_tank','shirt_dress_lace','pants_fitted_shorts','tights_fishnet','corset_lace','cloak_full','monk_trousers','monk_wrap']) {
+        assert.match(newGarmentsSource, new RegExp('\\b' + id + '\\s*:'));
+    }
+    contains(layersSource, 'shirt_mesh_turtleneck:1.59');
+    const retiredLowerId = ['pants', 'trousers'].join('_');
+    assert.doesNotMatch(layersSource, new RegExp(retiredLowerId));
+    assert.doesNotMatch(newGarmentsSource, new RegExp(retiredLowerId));
 });

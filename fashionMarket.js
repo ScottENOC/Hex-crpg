@@ -102,12 +102,15 @@
   function grantStyledItem(itemId,appearance,designName,provenance){
     const p=primary();if(!p)return false;p.inventory=p.inventory||[];p.inventory.push(itemId);
     const members=(window.party&&window.party.length)?window.party:[p];
+    let primaryInstance=null;
     for(const member of members){
       member.physicalEquipment=Array.isArray(member.physicalEquipment)?member.physicalEquipment:[];
-      member.physicalEquipment.push(makeInstance(itemId,appearance,designName,provenance));
+      const instance=makeInstance(itemId,appearance,designName,provenance);
+      member.physicalEquipment.push(instance);
+      if(member===p)primaryInstance=instance;
       window.physicalEquipment?.reconcile?.(member);
     }
-    window.syncPlayerEntity?.();window.renderEntities?.();return true;
+    window.syncPlayerEntity?.();window.renderEntities?.();return primaryInstance||true;
   }
   function buyStock(vendor,stockId,kind){
     const p=primary(),s=state();if(!p||!s)return;const bucket=s.stock[vendor],idx=bucket?.entries?.findIndex(x=>x.stockId===stockId)??-1;if(idx<0)return;const entry=bucket.entries[idx];
@@ -141,9 +144,9 @@
   function commissionLead(kind,itemId){if(kind==='armor'){const r=Number(window.items?.[itemId]?.reduction||0);return(r>=3?48:r>=2?36:24)*3600;}const n=(window.items?.[itemId]?.name||'').toLowerCase();if(n.includes('brief')||n.includes('bra')||n.includes('g-string'))return 4*3600;if(n.includes('dress')||n.includes('robe')||n.includes('doublet'))return 18*3600;return 10*3600;}
   function commissionPrice(kind,itemId,appearance){let price=Math.round(basePrice(itemId)*1.55)+(kind==='armor'?35:15);if(kind==='garment'){for(const c of Object.values(appearance.clothing||{}))if((c.opacity??1)<.8)price+=Math.round((.8-c.opacity)*50);}else{for(const c of Object.values(appearance.armour||{}))if(c.unlocked&&c.__metal)price+=Math.max(300,Math.round(basePrice(itemId)*3.5));}return price;}
   function placeCommission(kind,itemId,appearance,designName){const p=primary(),s=state();if(!p||!s)return;const price=commissionPrice(kind,itemId,appearance),lead=commissionLead(kind,itemId);if((p.gold||0)<price){window.showMessage?.(`You need ${price} gold.`);return;}p.gold-=price;const id=s.nextCommission++;s.commissions.push({id,kind,itemId,appearance:clone(appearance),designName:designName||'Bespoke',price,placedAt:Number(window.worldSeconds)||0,readyAt:(Number(window.worldSeconds)||0)+lead,collected:false,notified:false});closeModal('silverhart-fashion-modal');window.showMessage?.(`Commission placed for ${window.items[itemId]?.name||itemId}. Ready in ${hourText(lead)}.`);}
-  function openDesigner(kind){ensurePrecisePicker(()=>openDesignerReady(kind));}
-  function openDesignerReady(kind){
-    closeModal('silverhart-fashion-modal');const p=modal(kind==='garment'?'Commission a bespoke garment':'Commission bespoke armour'),editor=document.createElement('div');editor.className='sf-editor';const ids=kind==='garment'?garmentIds():armourIds(),sel=document.createElement('select');for(const id of ids){const o=document.createElement('option');o.value=id;o.textContent=window.items[id]?.name||id;sel.appendChild(o);}editor.appendChild(sel);const design=document.createElement('input');design.type='text';design.maxLength=32;design.placeholder='Optional design name';editor.appendChild(design);const controls=document.createElement('div');editor.appendChild(controls);const summary=document.createElement('div');summary.className='sf-price';editor.appendChild(summary);const note=document.createElement('div');note.className='sf-note';editor.appendChild(note);const actions=document.createElement('div');actions.className='sf-actions';const order=document.createElement('button');order.textContent='Place commission';const cancel=document.createElement('button');cancel.textContent='Cancel';cancel.onclick=()=>closeModal('silverhart-fashion-modal');actions.append(order,cancel);editor.appendChild(actions);p.appendChild(editor);
+  function openDesigner(kind,free=false){ensurePrecisePicker(()=>openDesignerReady(kind,free));}
+  function openDesignerReady(kind,free=false){
+    closeModal('silverhart-fashion-modal');const p=modal(free?'Dev colour editor':(kind==='garment'?'Commission a bespoke garment':'Commission bespoke armour')),editor=document.createElement('div');editor.className='sf-editor';const ids=kind==='garment'?garmentIds():armourIds(),sel=document.createElement('select');for(const id of ids){const o=document.createElement('option');o.value=id;o.textContent=window.items[id]?.name||id;sel.appendChild(o);}editor.appendChild(sel);const design=document.createElement('input');design.type='text';design.maxLength=32;design.placeholder='Optional design name';editor.appendChild(design);const controls=document.createElement('div');editor.appendChild(controls);const summary=document.createElement('div');summary.className='sf-price';editor.appendChild(summary);const note=document.createElement('div');note.className='sf-note';editor.appendChild(note);const actions=document.createElement('div');actions.className='sf-actions';const order=document.createElement('button');order.textContent=free?'Apply colour':'Place commission';const cancel=document.createElement('button');cancel.textContent='Cancel';cancel.onclick=()=>closeModal('silverhart-fashion-modal');actions.append(order,cancel);editor.appendChild(actions);p.appendChild(editor);
     let appearance={};
     const rebuild=()=>{
       controls.innerHTML='';const id=sel.value;
@@ -160,7 +163,7 @@
       refresh();
     };
     const refresh=()=>{const id=sel.value,price=commissionPrice(kind,id,appearance),lead=commissionLead(kind,id);summary.textContent=`${price} gold · ready in about ${hourText(lead)}`;note.textContent=kind==='garment'?'Bespoke colour and transparency are included in the tailoring price.':'Leather and cloth colours are included. Deliberately coloured metal is specialist work and adds several hundred gold.';};
-    sel.onchange=rebuild;order.onclick=()=>placeCommission(kind,sel.value,appearance,design.value.trim()||'Bespoke');rebuild();
+    sel.onchange=rebuild;order.onclick=()=>{const name=design.value.trim()||'Dev colour';if(free){const instance=grantStyledItem(sel.value,appearance,name,'dev-colour-editor');if(instance&&kind==='garment'){const p=primary(),slot=window.clothingSystem?.getItemSpec?.(sel.value)?.slot;if(p&&slot){p.equipped=p.equipped||{};p.equipped[slot]=sel.value;p.equippedInstances=p.equippedInstances||{};p.equippedInstances[slot]=instance;p.clothingColors=p.clothingColors||{};p.clothingColors[sel.value]=JSON.parse(JSON.stringify(appearance.clothing||{}));window.physicalEquipment?.reconcile?.(p);}}window.syncPlayerEntity?.();window.renderEntities?.();closeModal('silverhart-fashion-modal');window.showMessage?.(`Added and equipped ${window.items[sel.value]?.name||sel.value} — ${name}.`);}else placeCommission(kind,sel.value,appearance,name);};rebuild();
   }
   function commissions(kind){return(state()?.commissions||[]).filter(c=>c.kind===kind&&!c.collected);}
   function collectCommission(id){const s=state(),c=s?.commissions?.find(x=>x.id===id&&!x.collected);if(!c)return;if((Number(window.worldSeconds)||0)<c.readyAt){window.showMessage?.(`Not ready yet — about ${hourText(c.readyAt-(Number(window.worldSeconds)||0))} remaining.`);return;}grantStyledItem(c.itemId,c.appearance,c.designName,`silverhart-bespoke-${c.kind}`);c.collected=true;window.showMessage?.(`Collected ${window.items[c.itemId]?.name||c.itemId} — ${c.designName}.`);openCommissions(c.kind);}

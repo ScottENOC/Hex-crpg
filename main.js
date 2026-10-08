@@ -228,6 +228,21 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         } else if (btnId === "cheat-all-equip-btn") {
             window.addAllEquipment();
+            const openDevColourEditor = () => window.silverhartFashion?.openDesigner?.('garment', true);
+            if (window.silverhartFashion?.openDesigner) {
+                openDevColourEditor();
+            } else {
+                const existing = document.querySelector('script[data-dev-fashion-market]');
+                if (existing) existing.addEventListener('load', openDevColourEditor, { once: true });
+                else {
+                    const script = document.createElement('script');
+                    script.src = 'fashionMarket.js?v=20260930-silverhart-fashion-v1';
+                    script.async = false;
+                    script.dataset.devFashionMarket = 'true';
+                    script.addEventListener('load', openDevColourEditor, { once: true });
+                    document.head.appendChild(script);
+                }
+            }
         } else if (btnId === "cheat-fly-btn") {
             window.toggleFlyCheat();
         } else if (btnId === "cheat-max-skills-btn") {

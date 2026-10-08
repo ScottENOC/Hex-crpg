@@ -3222,6 +3222,43 @@ window.npcDialogueTrees = {
         const attitude = window.companionAttitude?.['Wren Talbot'] ?? 50;
         const isElf = window.partyHasRace && window.partyHasRace('elf');
         const options = [];
+        const playerIsFemale = player?.gender === 'female';
+        const knowsDisguiseSelf = !!(window.hasSpellUnlocked?.(player, 'disguise_self') || player?.skills?.learn_disguise_self || player?.skills?.disguise_self);
+        if (playerIsFemale && knowsDisguiseSelf) {
+            options.push({
+                label: "Wren, what do you think of Disguise Self?",
+                action: () => {
+                    window.disguiseSelfWrenState = window.disguiseSelfWrenState || { stage: 0 };
+                    const state = window.disguiseSelfWrenState;
+                    if (state.stage === 0) {
+                        window.showDialogue(npc,
+                            "I've been thinking about that spell of yours. Not the useful bits — the face-changing bit. Would you… try it as a man? For me?",
+                            [
+                                { label: "“If you want me to, yes.”", action: () => {
+                                    state.stage = 1;
+                                    const appearance = {...player, gender:'male'};
+                                    window.tryCastSpell?.(player, { name:'Disguise Self', baseId:'disguise_self', type:'buff', manaCost:8, coreManaCost:8, tpCost:10, range:1, disguiseProfile:{ appearance } }, player, player.hex, true);
+                                    window.showDialogue(npc, "Wren watches the change in silence. “Right. I needed to know what I felt when I looked at you like this.”", [
+                                        { label: "“And?”", action: () => {
+                                            state.stage = 2;
+                                            window.showDialogue(npc, "“And I think I finally understand the problem. I care about you. The shape I kept trying to force that feeling into was the wrong question.”", [{ label: "“You don't have to force anything.”", action: () => {} }]);
+                                        }}
+                                    ]);
+                                }},
+                                { label: "“Why?”", action: () => window.showDialogue(npc, "“Because I trust you enough to ask. And because I would rather know what I actually feel than keep guessing.”", [{ label: "“All right. We can try.”", action: () => {} }]) },
+                                { label: "“Maybe another time.”", action: () => {} }
+                            ]
+                        );
+                    } else {
+                        window.showDialogue(npc,
+                            "“I think I'm all right now,” Wren says. “The spell didn't solve anything. It just stopped me asking the wrong question. I don't need you to stay disguised for me.”",
+                            [{ label: "“Good.”", action: () => {} }]
+                        );
+                    }
+                }
+            });
+        }
+
         options.push({
             label: "How are you holding up?",
             action: () => {
@@ -3251,6 +3288,26 @@ window.npcDialogueTrees = {
         }
         options.push({ label: "Never mind.", action: () => {} });
         window.showDialogue(npc, "What's on your mind?", options);
+    },
+    companion_mirabel_quill: (npc) => {
+        const player = window.party?.[0];
+        const knows = !!(window.hasSpellUnlocked?.(npc, 'disguise_self') || npc?.skills?.learn_disguise_self || npc?.skills?.disguise_self);
+        const options = [];
+        options.push({
+            label: "What are you working on?",
+            action: () => window.showDialogue(npc,
+                "Several things at once. One of them is a theory about whether identity is a property of the person, the face, or simply the story everyone else tells themselves.",
+                [{ label: "That sounds dangerous.", action: () => window.showDialogue(npc, "Only if I stop taking notes.", [{ label: "Fair enough.", action: () => {} }]) }]
+            )
+        });
+        if (knows && window.mirabelDisguiseSelfDialogue) {
+            options.push({
+                label: "About Disguise Self…",
+                action: () => window.mirabelDisguiseSelfDialogue.openDisguiseMenu()
+            });
+        }
+        options.push({ label: "Never mind.", action: () => {} });
+        window.showDialogue(npc, "Mm? You have my attention. Most of it.", options);
     },
     companion_ser_aldric: (npc) => {
         const player = window.party[0];
@@ -5184,6 +5241,7 @@ function recruitMirabel() {
         companion.hp += bonus; companion.maxHp += bonus;
     }
     companion.createdSpells = [{ name: 'Firebolt', baseId: 'firebolt', school: 'arcane', type: 'damage', manaCost: 5, tpCost: 10, magnitude: 5, range: 8 }];
+    companion.dialogueId = 'companion_mirabel_quill';
     finishRecruiting(companion, placeholder);
 }
 window.recruitMirabel = recruitMirabel;

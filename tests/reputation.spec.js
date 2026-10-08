@@ -18,6 +18,54 @@ test.describe('reputation math (factions.js)', () => {
         expect(result.differentRace).toBe(0);
     });
 
+    test('reputation is not attributed when the whole nearby party is disguised', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            window.party = [
+                { name: 'Hero', disguiseSelf: { spell: 'disguise_self' } },
+                { name: 'Nearby Ally' },
+            ];
+            window.entities = [
+                { name: 'Hero', side: 'player', hex: { q: 0, r: 0 } },
+                { name: 'Nearby Ally', side: 'player', hex: { q: 2, r: 0 } },
+            ];
+            const target = { knowledge: 0, standing: 0 };
+            window.adjustReputation(target, 20, 20);
+            return { masked: window.isPlayerIdentityMasked(), target };
+        });
+        expect(result.masked).toBe(false);
+        expect(result.target.standing).toBe(20);
+
+        const maskedResult = await page.evaluate(() => {
+            window.party[1].disguiseSelf = { spell: 'disguise_self' };
+            const target = { knowledge: 0, standing: 0 };
+            window.adjustReputation(target, 20, 20);
+            return { masked: window.isPlayerIdentityMasked(), target };
+        });
+        expect(maskedResult.masked).toBe(true);
+        expect(maskedResult.target.standing).toBe(0);
+        expect(maskedResult.target.knowledge).toBe(0);
+    });
+
+    test('an unmasked companion more than three hexes away does not expose the party identity', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            window.party = [
+                { name: 'Hero', disguiseSelf: { spell: 'disguise_self' } },
+                { name: 'Distant Ally' },
+                { name: 'Benched Ally' },
+            ];
+            window.entities = [
+                { name: 'Hero', side: 'player', hex: { q: 0, r: 0 } },
+                { name: 'Distant Ally', side: 'player', hex: { q: 4, r: 0 } },
+            ];
+            const target = { knowledge: 0, standing: 0 };
+            window.adjustReputation(target, 10, 10);
+            return { masked: window.isPlayerIdentityMasked(), target };
+        });
+        expect(result.masked).toBe(true);
+        expect(result.target.standing).toBe(0);
+        expect(result.target.knowledge).toBe(0);
+    });
+
     test('adjustReputation applies full-strength swings at knowledge=0', async ({ page }) => {
         const result = await page.evaluate(() => {
             const target = { knowledge: 0, standing: 0 };
@@ -131,5 +179,44 @@ test.describe('reputation math (factions.js)', () => {
         // in the *rate* of climb (a thriving tick gains more than a
         // struggling one), even though both are now net-positive overall.
         expect(result.thrivingDelta).toBeGreaterThan(result.strugglingDelta);
+    });
+});
+
+
+test.describe('apparent race social gates', () => {
+    test('a specific goblin disguise is treated as goblin socially without changing real race', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            window.party = [{ name: 'Hero', race: 'human' }];
+            window.entities = [{
+                name: 'Hero', side: 'player', race: 'human', hex: { q: 0, r: 0 },
+                disguiseSelf: { targetName: 'Skarn', targetRace: 'goblin', appearance: {} }
+            }];
+            return {
+                socialRace: window.getPlayerSocialRace(),
+                goblin: window.isPlayerGoblin(),
+                greenskin: window.isPlayerGreenskin(),
+                realRace: window.party[0].race
+            };
+        });
+        expect(result.socialRace).toBe('goblin');
+        expect(result.goblin).toBe(true);
+        expect(result.greenskin).toBe(true);
+        expect(result.realRace).toBe('human');
+    });
+
+    test('an ordinary custom disguise does not invent a race', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            window.party = [{ name: 'Hero', race: 'human' }];
+            window.entities = [{
+                name: 'Hero', side: 'player', race: 'human', hex: { q: 0, r: 0 },
+                disguiseSelf: { appearance: { gender: 'male' } }
+            }];
+            return {
+                socialRace: window.getPlayerSocialRace(),
+                goblin: window.isPlayerGoblin(),
+                realRace: window.party[0].race
+            };
+        });
+        return result;
     });
 });

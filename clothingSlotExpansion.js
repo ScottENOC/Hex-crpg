@@ -98,7 +98,7 @@
     };
 
     const originalDrawSlot = cs.drawSlot.bind(cs);
-    function drawExtraSlot(ctx, entity, slot, view, bounds) {
+    function drawExtraSlot(ctx, entity, slot, view, bounds, fitReference) {
       const itemId = entity?.equipped?.[slot];
       if (!itemId) return false;
       if (window.equipmentAppearanceSystem?.isSlotVisible?.(entity, slot) === false) return false;
@@ -122,7 +122,7 @@
       entity.equipped[geometry] = itemId;
       visibility[geometry] = true;
       try {
-        return !!originalDrawSlot(ctx, entity, geometry, view, bounds);
+        return !!originalDrawSlot(ctx, entity, geometry, view, bounds, fitReference);
       } finally {
         entity.equipped[geometry] = previousEquipped;
         if (previousItemSlot === undefined) delete item.clothingSlot;
@@ -134,13 +134,13 @@
       }
     }
 
-    cs.drawSlot = function expandedDrawSlot(ctx, entity, slot, view, bounds) {
-      if (EXTRA_SLOTS.includes(slot)) return drawExtraSlot(ctx, entity, slot, view, bounds);
-      let drew = !!originalDrawSlot(ctx, entity, slot, view, bounds);
+    cs.drawSlot = function expandedDrawSlot(ctx, entity, slot, view, bounds, fitReference) {
+      if (EXTRA_SLOTS.includes(slot)) return drawExtraSlot(ctx, entity, slot, view, bounds, fitReference);
+      let drew = !!originalDrawSlot(ctx, entity, slot, view, bounds, fitReference);
       // The current compositor asks for the four legacy clothing slots. Interleave
       // the two new under-armour layers at those existing draw points.
-      if (slot === 'bra') drew = drawExtraSlot(ctx, entity, 'tights', view, bounds) || drew;
-      if (slot === 'shirt') drew = drawExtraSlot(ctx, entity, 'topOuter', view, bounds) || drew;
+      if (slot === 'bra') drew = drawExtraSlot(ctx, entity, 'tights', view, bounds, fitReference) || drew;
+      if (slot === 'shirt') drew = drawExtraSlot(ctx, entity, 'topOuter', view, bounds, fitReference) || drew;
       return drew;
     };
     cs.__smallSlotExpansionDrawExtra = drawExtraSlot;

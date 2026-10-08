@@ -5,7 +5,7 @@
   'use strict';
   const BUILD=window.PRESENTATION_BUILD||'20260930-seasonal-clothing-v3';
   const SHORTS_ID='pants_shorts';
-  const TROUSERS_ID='pants_trousers';
+  const TROUSERS_ID='pants_breeches';
   const AUTO_PANTS=new Set([SHORTS_ID,TROUSERS_ID]);
   const SHORTS_HEIGHT_MULT=.48;
   const SHORTS_DEFAULT={hue:28,saturation:55,value:62,opacity:1};
@@ -49,14 +49,14 @@
     const cs=window.clothingSystem;
     if(!cs||cs.__seasonalShortsFitPatched||typeof cs.drawSlot!=='function') return false;
     const baseDraw=cs.drawSlot;
-    cs.drawSlot=function(ctx,e,slot,v,bounds){
-      if(slot!=='pants'||e?.equipped?.pants!==SHORTS_ID) return baseDraw(ctx,e,slot,v,bounds);
+    cs.drawSlot=function(ctx,e,slot,v,bounds,fitReference){
+      if(slot!=='pants'||e?.equipped?.pants!==SHORTS_ID) return baseDraw(ctx,e,slot,v,bounds,fitReference);
       const resolved=(v==='up'||v==='back')?'back':(v==='left'||v==='right'||v==='side')?'side':'front';
       const target=cs.clothingTargets?.[resolved]?.pants||cs.clothingTargets?.front?.pants;
-      if(!target) return baseDraw(ctx,e,slot,v,bounds);
+      if(!target) return baseDraw(ctx,e,slot,v,bounds,fitReference);
       const oldH=target.h;
       target.h=oldH*SHORTS_HEIGHT_MULT;
-      try{return baseDraw(ctx,e,slot,v,bounds);}finally{target.h=oldH;}
+      try{return baseDraw(ctx,e,slot,v,bounds,fitReference);}finally{target.h=oldH;}
     };
     cs.__seasonalShortsFitPatched=true;
     return true;

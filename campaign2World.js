@@ -227,7 +227,10 @@ function carveFloorRoom(building, floorN, centerQ, centerR, halfW, halfH, doorHe
             floorHexes.push({ q: centerQ + dq, r: centerR + dr + shift });
         }
     }
-    wallRingAroundFloor(floorHexes).forEach(h => { f.terrain[`${h.q},${h.r}`] = wallType; });
+    const wallHexes = wallRingAroundFloor(floorHexes);
+    expandMultiStoryBuildingBounds(building, floorHexes);
+    expandMultiStoryBuildingBounds(building, wallHexes);
+    wallHexes.forEach(h => { f.terrain[`${h.q},${h.r}`] = wallType; });
     floorHexes.forEach(h => { f.terrain[`${h.q},${h.r}`] = floorType; });
     if (doorHex) {
         f.terrain[`${doorHex.q},${doorHex.r}`] = floorType;
@@ -1012,13 +1015,26 @@ function buildOrcStronghold(roadEnd) {
 // window.setTerrainAt corridor lines used everywhere else in this file
 // (e.g. the gate's own surface approach below), just written into a
 // building's floors[N] dict via setTerrainAtFloor instead of the global map.
+function expandMultiStoryBuildingBounds(building, hexes) {
+    if (!hexes || !hexes.length) return;
+    for (const h of hexes) {
+        building.minQ = Math.min(building.minQ, h.q);
+        building.maxQ = Math.max(building.maxQ, h.q);
+        building.minR = Math.min(building.minR, h.r);
+        building.maxR = Math.max(building.maxR, h.r);
+    }
+}
+
 function paintFloorCorridor(building, floorN, from, to, floorType) {
     const r = from.r;
     const step = to.q > from.q ? 1 : -1;
-    for (let q = from.q; q !== to.q; q += step) window.setTerrainAtFloor(q, r, floorN, floorType);
+    const painted = [];
+    for (let q = from.q; q !== to.q; q += step) painted.push({ q, r });
     const qStep = to.r > from.r ? 1 : -1;
-    for (let rr = from.r; rr !== to.r; rr += qStep) window.setTerrainAtFloor(to.q, rr, floorN, floorType);
-    window.setTerrainAtFloor(to.q, to.r, floorN, floorType);
+    for (let rr = from.r; rr !== to.r; rr += qStep) painted.push({ q: to.q, r: rr });
+    painted.push({ q: to.q, r: to.r });
+    expandMultiStoryBuildingBounds(building, painted);
+    for (const h of painted) window.setTerrainAtFloor(h.q, h.r, floorN, floorType);
 }
 
 // Kragmoor, the Deepholds' one city-and-mine: a real Moria-style hold, now

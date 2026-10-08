@@ -87,11 +87,55 @@ function seedStanding(race, playerRace) {
     return 0;
 }
 
+// Reputation is attached to the player's known identity. Disguise Self can
+// break that attribution: if every active party member who is physically near
+// the player is disguised, then a reputation change caused by the current
+// action cannot safely be attributed to the real party. Benched companions and
+// active companions more than 3 hexes away do not expose the party's identity.
+// This is deliberately an attribution gate, not a "disguise makes you immune"
+// flag: quest/world consequences still happen, and a later witness can still
+// learn about the action.
+function playerIdentityMasked() {
+    const party = Array.isArray(window.party) ? window.party : [];
+    const main = party[0];
+    if (!main) return false;
+
+    const mainEntity = (window.entities || []).find(e => e && e.name === main.name && e.side === 'player');
+    const anchor = mainEntity?.hex || window.player?.hex;
+    if (!anchor || typeof window.distance !== 'function') return false;
+
+    // The acting character's entity is authoritative: Disguise Self is applied
+    // to the live entity, not merely to the saved party data.
+    if (!mainEntity?.disguiseSelf && !main.disguiseSelf) return false;
+
+    for (const member of party) {
+        if (!member) continue;
+
+        const entity = (window.entities || []).find(e => e && e.name === member.name && e.side === 'player');
+        if (entity?.disguiseSelf || member.disguiseSelf) continue;
+
+        // No active entity means the companion is benched/off-map, so they
+        // cannot identify the party at this scene.
+        if (!entity?.hex) continue;
+
+        // An unmasked companion close enough to be seen/recognised identifies
+        // the group. Three hexes matches the normal social interaction radius.
+        if (window.distance(anchor, entity.hex) <= 3) return false;
+    }
+
+    return true;
+}
+
+// Public predicate so other consequence systems can make the same
+// attribution decision without duplicating the party-distance logic.
+window.isPlayerIdentityMasked = playerIdentityMasked;
+
 // dampening: 1.0 at knowledge=0 (full-strength first impressions), down to a
 // 0.3 floor at knowledge=100 (well-known relationships are hard to shift, but
 // never inert).
 function adjustReputation(target, standingDelta, knowledgeDelta) {
     if (!target) return;
+    if (playerIdentityMasked()) return;
     const dampening = 1 - (target.knowledge / 100) * 0.7;
     target.standing = Math.max(-100, Math.min(100, target.standing + standingDelta * dampening));
     target.knowledge = Math.max(0, Math.min(100, target.knowledge + (knowledgeDelta || 0)));
@@ -183,15 +227,25 @@ window.isGoblinAligned = function() {
 // actually earned Elder Marta's vouching (resolveGoblinSpyForHumans,
 // campaign2Dialogue.js) — the goblin-side mirror of a human player earning
 // the tribe's trust via diplomacy.
+window.getPlayerSocialRace = function() {
+    const mainName = window.party?.[0]?.name;
+    const live = (window.entities || []).find(e => e && e.side === 'player' && e.name === mainName);
+    const disguise = live?.disguiseSelf || window.party?.[0]?.disguiseSelf;
+    // A specific-person disguise can borrow that person's race. Custom
+    // appearance disguises have no race claim and therefore don't change
+    // race-gated social treatment.
+    return disguise?.targetRace || window.party?.[0]?.race || null;
+};
 window.isPlayerGoblin = function() {
-    return !!(window.party && window.party[0] && window.party[0].race === 'goblin');
+    return window.getPlayerSocialRace?.() === 'goblin';
 };
 // An orc player gets the exact same "outsider on sight, redeemable through
 // Prove Your Worth" treatment as a goblin player (see marta_wynfield/
-// silverhart_queen, campaign2Dialogue.js) — isPlayerGreenskin is the shared
-// predicate those checks use instead of isPlayerGoblin alone.
+// silverhart_queen, campaign2Dialogue.js). Disguise Self now changes the
+// apparent race used by these social gates without changing the underlying
+// character race or seeded faction standing.
 window.isPlayerOrc = function() {
-    return !!(window.party && window.party[0] && window.party[0].race === 'orc');
+    return window.getPlayerSocialRace?.() === 'orc';
 };
 window.isPlayerGreenskin = function() {
     return window.isPlayerGoblin() || window.isPlayerOrc();

@@ -140,4 +140,34 @@ test.describe('building integrity audit: every interior region has a full wall, 
         });
         expect(result).toEqual([]);
     });
+    test('every non-ground floor is sealed against outdoor/ground terrain', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            const buildings = window.multiStoryBuildings || [];
+            const failures = [];
+            const dirs = [{q:1,r:0},{q:-1,r:0},{q:0,r:1},{q:0,r:-1},{q:1,r:-1},{q:-1,r:1}];
+            buildings.forEach((building, buildingIndex) => {
+                Object.keys(building.floors || {}).forEach(floorKey => {
+                    const floor = Number(floorKey);
+                    if (!floor) return;
+                    const terrainMap = building.floors[floor].terrain || {};
+                    Object.keys(terrainMap).forEach(key => {
+                        const parts=key.split(',').map(Number), q=parts[0], r=parts[1];
+                        const actual=window.getTerrainAtFloor(q,r,floor);
+                        if (!actual || ['Grass','Forest','Mountain','Sand','Swamp','Dirt','Path','Foliage','Water'].includes(actual.name)) failures.push({type:'outdoor-floor',buildingIndex,floor,q,r,terrain:actual&&actual.name});
+                    });
+                    Object.keys(terrainMap).forEach(key => {
+                        const parts=key.split(',').map(Number), q=parts[0], r=parts[1];
+                        const terrain=window.getTerrainAtFloor(q,r,floor);
+                        if (!terrain || terrain.impassable) return;
+                        dirs.forEach(d => {
+                            const nq=q+d.q, nr=r+d.r, neighbor=window.getTerrainAtFloor(nq,nr,floor);
+                            if ((!neighbor || !neighbor.impassable) && terrainMap[nq+','+nr] === undefined) failures.push({type:'unsealed-edge',buildingIndex,floor,q,r,neighborQ:nq,neighborR:nr,terrain:neighbor&&neighbor.name});
+                        });
+                    });
+                });
+            });
+            return failures;
+        });
+        expect(result).toEqual([]);
+    });
 });

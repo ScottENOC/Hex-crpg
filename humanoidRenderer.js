@@ -8,11 +8,155 @@
 (() => {
     'use strict';
 
-    const BUILD = '20261005-unified-humanoid-renderer-v7';
+    const BUILD = '20261007-unified-humanoid-renderer-v9';
     const VALID_FACINGS = new Set(['up', 'down', 'left', 'right']);
     const HUMAN_RENDER_ASPECT = 0.48;
     const previousHex = new WeakMap();
     const trimCache = new WeakMap();
+    const bodyClothingWidthCache = new WeakMap();
+
+    // Measure the authored body's visible width separately in its upper and
+    // lower halves. Clothing uses the body as the ruler: shirts match the upper
+    // body width and pants match the lower body width. This deliberately measures
+    // the whole opaque silhouette, including arms, rather than trying to infer
+    // "torso" versus "sleeve" pixels.
+    function bodyClothingWidthFractions(image, view, useVisibleFit, bodyTarget) {
+        if (!imageReady(image)) return null;
+        let byView = bodyClothingWidthCache.get(image);
+        if (!byView) { byView = new Map(); bodyClothingWidthCache.set(image, byView); }
+        const key = view + '|' + (useVisibleFit ? 'visible' : 'crop') + '|' +
+            JSON.stringify(bodyTarget || null);
+        if (byView.has(key)) return byView.get(key);
+
+        const layout = DIRECTIONAL_LAYOUT[view];
+        const trim = useVisibleFit ? alphaTrim(image) : null;
+        const iw = image.naturalWidth || image.width || 1;
+        const ih = image.naturalHeight || image.height || 1;
+        let sourceRegion;
+        let destinationWidthFraction;
+        if (useVisibleFit) {
+            if (!trim?.trimWidth || !trim.trimHeight) return null;
+            sourceRegion = {x:trim.trimLeft,y:trim.trimTop,w:trim.trimWidth,h:trim.trimHeight};
+            destinationWidthFraction = Number(bodyTarget?.w ?? 1);
+        } else {
+            const crop = layout?.bodyCrop;
+            const dest = layout?.bodyDest;
+            if (!crop?.w || !crop.h || !dest?.w) return null;
+            sourceRegion = {x:crop.x*iw,y:crop.y*ih,w:crop.w*iw,h:crop.h*ih};
+            destinationWidthFraction = dest.w;
+        }
+
+        try {
+            const canvas=document.createElement('canvas');
+            canvas.width=iw; canvas.height=ih;
+            const x=canvas.getContext('2d',{willReadFrequently:true});
+            x.drawImage(image,0,0);
+            const pixels=x.getImageData(0,0,iw,ih).data;
+            const measure=(y0,y1)=>{
+                let left=iw,right=-1;
+                const top=Math.max(0,Math.floor(y0)),bottom=Math.min(ih,Math.ceil(y1));
+                for(let y=top;y<bottom;y++){
+                    for(let xx=Math.max(0,Math.floor(sourceRegion.x));
+                        xx<Math.min(iw,Math.ceil(sourceRegion.x+sourceRegion.w));xx++){
+                        if(pixels[(y*iw+xx)*4+3]<8) continue;
+                        if(xx<left)left=xx;
+                        if(xx>right)right=xx;
+                    }
+                }
+                return right>=left ? (right-left+1)/sourceRegion.w : 0;
+            };
+            const current={
+                shirt:measure(sourceRegion.y,sourceRegion.y+sourceRegion.h*.5)*destinationWidthFraction,
+                pants:measure(sourceRegion.y+sourceRegion.h*.45,sourceRegion.y+sourceRegion.h*.68)*destinationWidthFraction,
+            };
+            let result=current;
+            byView.set(key,result);
+            return result;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function clothingFitReference(image, view, bounds, useVisibleFit, bodyTarget) {
+        const fractions=bodyClothingWidthFractions(image,view,useVisibleFit,bodyTarget);
+        if (!fractions) return null;
+        // Two authored pixels of breathing room is enough to stop a shirt/pants
+        // silhouette from looking pinched. Because cached composites are rendered
+        // at a higher resolution, this padding is applied after converting the
+        // measured body width into the current compositor's pixel space.
+        const padding=2;
+        return {
+            shirtWidthPx:Math.max(1,fractions.shirt*bounds.width)+padding,
+            pantsWidthPx:Math.max(1,fractions.pants*bounds.width)+padding,
+            boundsWidthPx:bounds.width,
+        };
+    }
+
+    // Normalise the authored back silhouette against the front silhouette. This
+    // fixes the body at the source rather than teaching individual garments about
+    // a back-view exception.
+    function bodyHorizontalNormalisation(image, view, bodyTarget, useVisibleFit) {
+        if (view !== 'back' || !imageReady(image)) return 1;
+        const source = image.src || '';
+        const frontSrc = source.replace(/_(?:back|side)(\\.[^./]+)$/,'_front$1');
+        if (!frontSrc || frontSrc === source) return 1;
+        const frontImage = loadImage(frontSrc);
+        if (!imageReady(frontImage)) return 1;
+        const measure = (candidate, candidateView) => {
+            const iw=candidate.naturalWidth || candidate.width || 1;
+            const ih=candidate.naturalHeight || candidate.height || 1;
+            const layout=DIRECTIONAL_LAYOUT[candidateView];
+            let region, destW;
+            if (useVisibleFit) {
+                const trim=alphaTrim(candidate);
+                if (!trim?.trimWidth || !trim.trimHeight) return 0;
+                region={x:trim.trimLeft,y:trim.trimTop,w:trim.trimWidth,h:trim.trimHeight};
+                destW=Number(bodyTarget?.w ?? 1);
+            } else {
+                const crop=layout?.bodyCrop, dest=layout?.bodyDest;
+                if (!crop?.w || !dest?.w) return 0;
+                region={x:crop.x*iw,y:crop.y*ih,w:crop.w*iw,h:crop.h*ih};
+                destW=dest.w;
+            }
+            try {
+                const canvas=document.createElement('canvas');
+                canvas.width=iw; canvas.height=ih;
+                const x=canvas.getContext('2d',{willReadFrequently:true});
+                if (!x) return 0;
+                x.drawImage(candidate,0,0);
+                const pixels=x.getImageData(0,0,iw,ih).data;
+                let left=iw,right=-1;
+                const top=Math.max(0,Math.floor(region.y));
+                const bottom=Math.min(ih,Math.ceil(region.y+region.h));
+                for(let y=top;y<bottom;y++){
+                    for(let xx=Math.max(0,Math.floor(region.x));xx<Math.min(iw,Math.ceil(region.x+region.w));xx++){
+                        if(pixels[(y*iw+xx)*4+3]<8) continue;
+                        if(xx<left) left=xx;
+                        if(xx>right) right=xx;
+                    }
+                }
+                return right>=left ? ((right-left+1)/region.w)*destW : 0;
+            } catch (_) {
+                return 0;
+            }
+        };
+        const backWidth=measure(image,'back');
+        const frontWidth=measure(frontImage,'front');
+        if (!(backWidth>0) || !(frontWidth>0)) return 1;
+        return Math.max(.85,Math.min(1.35,frontWidth/backWidth));
+    }
+
+    function normalisedBodyBounds(bounds, image, view, bodyTarget, useVisibleFit) {
+        const scale=bodyHorizontalNormalisation(image,view,bodyTarget,useVisibleFit);
+        if (scale===1) return bounds;
+        const width=bounds.width*scale;
+        return {
+            left:bounds.left+(bounds.width-width)/2,
+            top:bounds.top,
+            width,
+            height:bounds.height,
+        };
+    }
     // Several humanoid rigs intentionally share the same authored hair paths.
     // Keep one HTMLImageElement per source so a failed request/retry cannot leave
     // one race's private copy broken while another copy of the same file succeeds.
@@ -34,6 +178,22 @@
     // attempts plus compact lifetime counters.
     const rendererDebugHistory = [];
     const RENDERER_DEBUG_HISTORY_LIMIT = 6;
+    const humanoidFlashTrace = [];
+    const HUMANOID_FLASH_TRACE_LIMIT = 80;
+
+    function recordHumanoidFlashTrace(event, entity = null, extra = {}) {
+        const trace = {
+            t: performance.now(),
+            time: new Date().toISOString(),
+            event,
+            name: entity?.name || entity?.id || '(unknown)',
+            facing: entity?.facing || extra.facing || null,
+            ...extra,
+        };
+        humanoidFlashTrace.push(trace);
+        while (humanoidFlashTrace.length > HUMANOID_FLASH_TRACE_LIMIT) humanoidFlashTrace.shift();
+        return trace;
+    }
     const rendererDebugSummary = {
         attempts:0, painted:0, cacheHits:0, pending:0, failures:0, incomplete:0, mapBranches:0, mapCalls:0,
     };
@@ -139,6 +299,15 @@
                 else if (item.result) lines.push('  FAIL: ' + item.result);
             }
         }
+        if (humanoidFlashTrace.length) {
+            lines.push('', 'TRACE (last 12)');
+            for (const item of humanoidFlashTrace.slice(-12)) {
+                const ms = String(Math.round(item.t)).padStart(7, ' ');
+                const name = String(item.name || '?').slice(0, 12);
+                const extra = item.sources ? ' ' + item.sources.slice(0, 3).join(',') : '';
+                lines.push(ms + '  ' + String(item.event).padEnd(21, ' ') + ' ' + name + extra);
+            }
+        }
         return lines.join('\\n');
     }
 
@@ -167,7 +336,7 @@
             b.addEventListener('click',fn); bar.appendChild(b); return b;
         };
         button('Refresh',rendererDebugRefresh);
-        button('Clear',()=>{rendererDebugHistory.length=0;rendererDebugRefresh();});
+        button('Clear',()=>{rendererDebugHistory.length=0;humanoidFlashTrace.length=0;rendererDebugRefresh();});
         button('Copy',async()=>{
             const text=rendererDebugText();
             try {
@@ -212,15 +381,17 @@
     // directional views, and map + initiative always share the same view canvas.
     // 48 total entries therefore means up to 12 character appearances resident.
     const humanoidSpriteCache = new Map();
+    // Keep the last successful composite visible while a changed appearance is rebuilt.
+    const humanoidLastGoodCache = new WeakMap();
     const MAX_HUMANOID_SPRITE_VIEWS = 4;
     const MAX_HUMANOID_CACHED_CHARACTERS = 12;
     let nextHumanoidCompositeId = 1;
-    // Build cached composites at 2x their map display resolution. The previous
+    // Build cached composites at 3x their map display resolution. The previous
     // cache stored each sprite at its final on-map pixel size, so a small
     // character could be permanently reduced to a small bitmap and then
     // enlarged by the map renderer. Other/legacy characters did not go through
     // this cache, making the direct-compositor player look noticeably softer.
-    const HUMANOID_CACHE_SCALE = 2;
+    const HUMANOID_CACHE_SCALE = 3;
     let humanoidSpriteCacheBuilds = 0;
     let humanoidSpriteCacheHits = 0;
 
@@ -532,6 +703,10 @@
 
     function recordMapHumanoidBoundary(entity) {
         rendererDebugSummary.mapBranches++;
+        recordHumanoidFlashTrace('map-boundary', entity, {
+            canDirectRender: canDirectRender(entity),
+            customImage: !!entity?.customImage,
+        });
         const canRender = canDirectRender(entity);
         if (canRender) rendererDebugSummary.mapCalls++;
         window.__humanoidRendererLastMapBoundary = {
@@ -869,7 +1044,13 @@
         return {x:bounds.left+p.x*bounds.width,y:bounds.top+p.y*bounds.height};
     }
 
-    function drawHeldItem(ctx, entity, view, bounds, slot, expectedLayer='any') {
+    function traceWeaponRender(detail) {
+        const trace = window.__weaponRenderTrace || (window.__weaponRenderTrace = []);
+        trace.push({...detail, timestamp:Date.now()});
+        if (trace.length > 120) trace.splice(0, trace.length - 120);
+    }
+
+    function drawHeldItem(ctx, entity, view, visualBounds, slot, expectedLayer='any') {
         const equipmentSlot = slot === 'main' ? 'weapon' : 'offhand';
         if (!equipmentSlotVisible(entity, equipmentSlot)) return false;
         const spec = slotSpec(entity, slot, view);
@@ -927,10 +1108,11 @@
         } else {
             ctx.drawImage(image, anchor.x - grip.x*drawWidth, itemY, drawWidth, drawHeight);
         }
+        if (spec.kind !== 'shield') traceWeaponRender({source:'humanoid-held',kind:spec.kind,itemId:spec.itemId,slot,view,boundsHeight:bounds.height,drawWidth,drawHeight,bodyRatio:drawHeight/Math.max(1,bounds.height),imageWidth:image.naturalWidth||image.width||0,imageHeight:image.naturalHeight||image.height||0});
         return true;
     }
 
-    function drawHelmet(ctx, entity, view, bounds) {
+    function drawHelmet(ctx, entity, view, visualBounds) {
         const image = helmetImage(entity, view);
         if (!imageReady(image)) return false;
         const anchorPoint = tunedAnchor(entity, view, 'helmetAnchor');
@@ -987,7 +1169,7 @@
         return {dx,dy,width:outerW,height:outerH,target:{left:targetLeft,top:targetTop,width:targetWidth,height:targetHeight},shapeProfile:{...profile}};
     }
 
-    function drawArmour(ctx, entity, view, bounds) {
+    function drawArmour(ctx, entity, view, visualBounds) {
         const image = armourImage(entity, view);
         if (!imageReady(image)) return false;
         const baseTarget = ARMOUR_TARGETS[view] || ARMOUR_TARGETS.front;
@@ -1082,20 +1264,27 @@
 
             const bodySource = imageReady(bodyImage) ? bodyImage : sourceBody;
             const bodyTarget = BODY_VISIBLE_TARGETS[key]?.[view];
+            const useVisibleBodyFit = !!bodyTarget || CHARACTER_RIGS[key]?.bodyRender === 'visible-fit';
+            const visualBounds = normalisedBodyBounds(
+                bounds, bodySource, view, bodyTarget || {x:0,y:0,w:1,h:1}, useVisibleBodyFit
+            );
             // Human directional sheets retain their measured crop. Rigs whose
             // source framing differs (and temporary one-view fallbacks) alpha-trim
             // then fit the visible body to the compositor bounds instead of forcing
             // them through human-specific crop coordinates.
-            const useVisibleBodyFit = !!bodyTarget || CHARACTER_RIGS[key]?.bodyRender === 'visible-fit';
             const bodyDrawn = useVisibleBodyFit
-                ? !!drawVisibleFit(ctx, bodySource, bounds, bodyTarget || {x:0,y:0,w:1,h:1})
-                : drawCropped(ctx, bodySource, layout.bodyCrop, layout.bodyDest, bounds);
+                ? !!drawVisibleFit(ctx, bodySource, visualBounds, bodyTarget || {x:0,y:0,w:1,h:1})
+                : drawCropped(ctx, bodySource, layout.bodyCrop, layout.bodyDest, visualBounds);
+            const clothingFit = clothingFitReference(
+                bodySource, view, visualBounds, useVisibleBodyFit,
+                bodyTarget || {x:0,y:0,w:1,h:1}
+            );
             if (bodyDrawn) layerOrder.push('body');
             for (const slot of ['underwear','bra','pants','shirt','shoes']) {
                 const expected = entity.displayClothes !== false
                     && !!entity.equipped?.[slot]
                     && equipmentSlotVisible(entity, slot);
-                const drawn = window.clothingSystem?.drawSlot?.(ctx, entity, slot, view, bounds) || false;
+                const drawn = window.clothingSystem?.drawSlot?.(ctx, entity, slot, view, visualBounds, clothingFit) || false;
                 const slotDiagnostics = Array.isArray(window.__clothingRendererLastDrawDiagnostics)
                     ? window.__clothingRendererLastDrawDiagnostics.map(item => ({...item, expected}))
                     : [{slot,view,itemId:entity.equipped?.[slot]||null,expected,drawn,reason:'no-slot-diagnostics'}];
@@ -1109,7 +1298,7 @@
             const armourDrawn = armourExpected ? drawArmour(ctx, entity, view, bounds) : false;
             if (armourDrawn) layerOrder.push('armour');
             if (armourExpected && !armourDrawn) compositionComplete = false;
-            if (typeof window.drawFacialHairLayer === 'function' && window.drawFacialHairLayer(ctx,entity,view,bounds)) layerOrder.push('facialHair');
+            if (typeof window.drawFacialHairLayer === 'function' && window.drawFacialHairLayer(ctx,entity,view,visualBounds)) layerOrder.push('facialHair');
             if (!hasHelmet && (!hairImage || !imageReady(hairImage))) compositionComplete = false;
             if (!hasHelmet && imageReady(hairImage)) {
                 const tightDirectional = !!hairSelection.asymmetric && view !== 'front';
@@ -1119,10 +1308,10 @@
                 const hairCrop = tightDest ? {x:0,y:0,w:1,h:1} : layout.hairCrop;
                 const hairDest = tightDest || layout.hairDest;
                 const hairDrawn = tightDest
-                    ? drawCropped(ctx, hairImage, hairCrop, hairDest, bounds)
-                    : drawVisibleFit(ctx, hairImage, bounds, {
+                    ? drawCropped(ctx, hairImage, hairCrop, hairDest, visualBounds)
+                    : drawVisibleFit(ctx, hairImage, visualBounds, {
                         x:hairDest.x,
-                        y:-0.10,
+                        y:-0.015,
                         w:hairDest.w,
                         h:0.47,
                     });
@@ -1191,7 +1380,7 @@
                 hairStyle:entity.hairStyle, hairHue:entity.hairHue,
                 hairLightMult:entity.hairLightMult, hairSatMult:entity.hairSatMult,
                 skinHue:entity.skinHue, skinSaturation:entity.skinSaturation, skinLightness:entity.skinLightness,
-                equipped:entity.equipped, clothingColors:entity.clothingColors,
+                equipped:entity.equipped, equippedInstances:entity.equippedInstances, clothingColors:entity.clothingColors,
                 displayArmour:entity.displayArmour, displayClothes:entity.displayClothes,
                 goldGear:entity.goldGear, equipmentAppearance:entity.equipmentAppearance,
             });
@@ -1261,6 +1450,8 @@
 
     function drawHumanoidCharacter(ctx, entity, x, y, z=1, flyOff=0, explicitBounds=null, explicitFacing=null, renderSurface='map') {
         if (!canDirectRender(entity)) return false;
+        const physicalEntity = entity;
+        entity = window.disguiseSelfSystem?.getRenderEntity?.(entity) || entity;
         const rig = CHARACTER_RIGS[keyFor(entity)];
         const hs = window.hexSize || 1;
         const legacyW = rig.bodyW * hs * z;
@@ -1285,6 +1476,7 @@
         });
         abandonStaleCompositeRequests(entity, facing, key);
 
+        recordHumanoidFlashTrace('render-start', entity, { appearanceKey, key, facing, surface: renderSurface });
         const cached = cacheGet(appearanceKey, facing);
         if (cached) {
             pendingCompositeRequests.delete(key);
@@ -1297,6 +1489,7 @@
                 requestedFacing:explicitFacing || null, entityFacing:entity.facing || null,
                 facing, view:facingToView(facing), key, compositeId:cached.compositeId, result:'cache-hit',
             });
+            recordHumanoidFlashTrace('cache-hit', entity, { appearanceKey, key, facing, compositeId:cached.compositeId, surface:renderSurface });
             return true;
         }
 
@@ -1306,14 +1499,22 @@
         const pending = pendingCompositeRequests.get(key);
         if (pending) {
             const stillWanted = facing === pending.facing;
-            const stillWaiting = pending.sources.some(src =>
-                window.assetManager?.status?.(src) !== 'ready'
-            );
             if (!stillWanted) {
                 pendingCompositeRequests.delete(key);
-            } else if (stillWaiting || performance.now() < pending.retryAfter) {
-                return true;
             } else {
+                const previous = humanoidLastGoodCache.get(entity)?.get(facing);
+                const stillWaiting = pending.sources.some(src =>
+                    window.assetManager?.status?.(src) !== 'ready'
+                );
+                if (stillWaiting && previous) {
+                    recordHumanoidFlashTrace('pending-last-good', entity, { appearanceKey, key, facing, surface:renderSurface, sources:pending.sources.map(src => src + '=' + String(window.assetManager?.status?.(src) || 'unavailable')) });
+                    ctx.drawImage(previous.canvas, bounds.left, bounds.top, bounds.width, bounds.height);
+                    return true;
+                }
+                if (stillWaiting) {
+                    recordHumanoidFlashTrace('pending-no-last-good', entity, { appearanceKey, key, facing, surface:renderSurface, sources:pending.sources.map(src => src + '=' + String(window.assetManager?.status?.(src) || 'unavailable')) });
+                    return false;
+                }
                 pendingCompositeRequests.delete(key);
             }
         }
@@ -1350,6 +1551,7 @@
             }
         }
         if (!rendered) {
+            recordHumanoidFlashTrace('renderer-false', entity, { appearanceKey, key, facing, surface:renderSurface, sources:[...sources].map(src => src + '=' + String(window.assetManager?.status?.(src) || 'unavailable')), lastComplete:!!window.__humanoidRendererLastComplete });
             rendererDebugRecord({
                 entityName:entity.name || entity.id || null, race:entity.race || null, gender:entity.gender || null,
                 surface:renderSurface,
@@ -1360,13 +1562,21 @@
             const retryAfter = performance.now() + COMPOSITE_RETRY_DELAY_MS;
             window.performanceAssetTraceApi?.compositeEnd?.(key, false, 'renderer returned false', {requestedSources:failureSources,failureSource:failureSources.map(src => src+'='+String(window.assetManager?.status?.(src) || 'unavailable')),retryAfterMs:COMPOSITE_RETRY_DELAY_MS});
             pendingCompositeRequests.set(key, {entity, facing, sources:failureSources, retryAfter});
-            return true;
+            const previous = humanoidLastGoodCache.get(entity)?.get(facing);
+            if (previous) {
+                recordHumanoidFlashTrace('fallback-last-good', entity, { appearanceKey, key, facing, surface:renderSurface });
+                ctx.drawImage(previous.canvas, bounds.left, bounds.top, bounds.width, bounds.height);
+                return true;
+            }
+            recordHumanoidFlashTrace('return-false', entity, { appearanceKey, key, facing, surface:renderSurface });
+            return false;
         }
 
         // Character composition is atomic: never display or cache a partial
         // body/clothing/hair stack while another required layer is still loading.
         const complete = !!window.__humanoidRendererLastComplete;
         if (!complete) {
+            recordHumanoidFlashTrace('incomplete', entity, { appearanceKey, key, facing, surface:renderSurface, sources:[...sources].map(src => src + '=' + String(window.assetManager?.status?.(src) || 'unavailable')), layerDiagnostics:window.__humanoidRendererLastLayerDiagnostics || [] });
             rendererDebugRecord({
                 entityName:entity.name || entity.id || null, race:entity.race || null, gender:entity.gender || null,
                 surface:renderSurface,
@@ -1377,11 +1587,24 @@
             const retryAfter = performance.now() + COMPOSITE_RETRY_DELAY_MS;
             window.performanceAssetTraceApi?.compositeEnd?.(key, false, 'required layer not ready', {requestedSources:failureSources,failureSource:failureSources.map(src => src+'='+String(window.assetManager?.status?.(src) || 'unavailable')),layerOrder:window.__humanoidRendererLastLayerOrder || [],layerDiagnostics:window.__humanoidRendererLastLayerDiagnostics || [],hairDiagnostics:window.__humanoidRendererLastHairDiagnostics || null,complete:!!window.__humanoidRendererLastComplete,retryAfterMs:COMPOSITE_RETRY_DELAY_MS});
             pendingCompositeRequests.set(key, {entity, facing, sources:failureSources, retryAfter});
-            return true;
+            const previous = humanoidLastGoodCache.get(entity)?.get(facing);
+            if (previous) {
+                recordHumanoidFlashTrace('incomplete-last-good', entity, { appearanceKey, key, facing, surface:renderSurface });
+                ctx.drawImage(previous.canvas, bounds.left, bounds.top, bounds.width, bounds.height);
+                return true;
+            }
+            recordHumanoidFlashTrace('incomplete-no-last-good', entity, { appearanceKey, key, facing, surface:renderSurface });
+            return false;
         }
 
         pendingCompositeRequests.delete(key);
         const cachedComposite = cachePut(appearanceKey, facing, canvas);
+        let previousByFacing = humanoidLastGoodCache.get(entity);
+        if (!previousByFacing) {
+            previousByFacing = new Map();
+            humanoidLastGoodCache.set(entity, previousByFacing);
+        }
+        previousByFacing.set(facing, cachedComposite);
         ctx.drawImage(canvas, bounds.left, bounds.top, bounds.width, bounds.height);
         rendererDebugRecord({
             entityName:entity.name || entity.id || null, race:entity.race || null, gender:entity.gender || null,
@@ -1389,6 +1612,7 @@
             requestedFacing:explicitFacing || null, entityFacing:entity.facing || null,
             facing, view:facingToView(facing), key, compositeId:cachedComposite?.compositeId || null, result:'painted',
         });
+        recordHumanoidFlashTrace('painted', entity, { appearanceKey, key, facing, compositeId:cachedComposite?.compositeId || null, surface:renderSurface });
         return true;
     }
 
@@ -1399,6 +1623,7 @@
         legacyDrawPlayerCharacter = current;
         const direct = function(ctx, entity, x, y, z, flyOff) {
             if (drawHumanoidCharacter(ctx, entity, x, y, z, flyOff)) return;
+            recordHumanoidFlashTrace('legacy-fallback', entity, { surface:'map', reason:'direct-render-returned-false' });
             return legacyDrawPlayerCharacter.apply(this, arguments);
         };
         direct.__directHumanoidCompositor = true;
@@ -1567,6 +1792,11 @@
     window.drawHumanFemaleDirectionalBase = window.drawDirectionalCharacterBase;
     window.drawHumanoidCharacter = drawHumanoidCharacter;
     window.__recordHumanoidMapBoundary = recordMapHumanoidBoundary;
+    window.getHumanoidFlashTrace = () => humanoidFlashTrace.map(item => ({...item}));
+    window.clearHumanoidFlashTrace = () => {
+        humanoidFlashTrace.length = 0;
+        rendererDebugRefresh();
+    };
     window.clearHumanoidSpriteCache = clearHumanoidSpriteCache;
     window.humanoidSpriteCacheStats = {
         get size() { return [...humanoidSpriteCache.values()].reduce((n, group) => n + group.size, 0); },

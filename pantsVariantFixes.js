@@ -58,15 +58,15 @@
     const cs=window.clothingSystem;
     if(installed||!cs?.__skirtDrawPatched||!cs?.__seasonalShortsFitPatched||typeof cs.drawSlot!=='function')return false;
     const base=cs.drawSlot;
-    cs.drawSlot=function(ctx,e,slot,v,bounds){
+    cs.drawSlot=function(ctx,e,slot,v,bounds,fitReference){
       if(slot==='pants'){
         syncPhysicalShapes(e);
         if(e?.equipped?.pants===SKIRT_ID){
           const narrower={...bounds,left:bounds.left+bounds.width*(1-SKIRT_WIDTH_SCALE)/2,width:bounds.width*SKIRT_WIDTH_SCALE};
-          return base(ctx,e,slot,v,narrower);
+          return base(ctx,e,slot,v,narrower,fitReference);
         }
       }
-      return base(ctx,e,slot,v,bounds);
+      return base(ctx,e,slot,v,bounds,fitReference);
     };
     cs.__pantsVariantFixes=true;
     installed=true;
