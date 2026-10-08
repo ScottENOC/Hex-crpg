@@ -8422,12 +8422,12 @@ function tryShove(shover, target) {
     }
 
     const shovingOff = !!targetTerrain.elevated && !newTerrain.elevated;
+    const fromHex = { ...target.hex };
     target.hex = newHex;
     spendTP(shover, 5);
     window.playerAction = null;
 
     if (shovingOff) {
-        const fromHex = { ...target.hex };
         if (target.climbing) target.climbing = null;
         resolveFall(target, {
             fromHex,
@@ -8437,7 +8437,7 @@ function tryShove(shover, target) {
             landingFloor: targetFloor,
             attacker: shover
         });
-    }    } else {
+    } else {
         window.showMessage(`${shover.name} shoves ${target.name}.`);
     }
     return true;
