@@ -3283,6 +3283,8 @@ function isCombatDormant(e, partyHexes) {
 }
 
 function runTickInternal(isSleepCycle = false, skipUI = false, tickMultiplier = 1.0) {
+    window.divinationSystem?.tick?.();
+    (window.entities || []).filter(e => e.alive && e.side === 'player' && !e.rider).forEach(e => window.divinationSystem?.tryFulfilNearPlayer?.(e));
     if (window.multiplayer && window.multiplayer.roomCode && !window.multiplayer.isHost) {
         return;
     }
