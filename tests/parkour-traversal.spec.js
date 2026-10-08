@@ -16,11 +16,17 @@ test.describe('monk parkour traversal', () => {
             };
             const ground = { elevated: false, climbRisk: false, name: 'Grass' };
             const wall = { elevated: true, climbRisk: true, name: 'Climbable Wall' };
+            const roof = { elevated: true, climbRisk: false, name: 'Roof' };
+            const balcony = { elevated: true, climbRisk: false, name: 'Balcony' };
 
             return {
                 canParkour: window.hasParkour(monk),
                 up: window.getParkourTraversalCost(ground, wall, monk),
                 down: window.getParkourTraversalCost(wall, ground, monk),
+                roofUp: window.getParkourTraversalCost(ground, roof, monk),
+                roofDown: window.getParkourTraversalCost(roof, ground, monk),
+                balconyUp: window.getParkourTraversalCost(ground, balcony, monk),
+                balconyDown: window.getParkourTraversalCost(balcony, ground, monk),
                 blockedByArmor: window.hasParkour({
                     skills: { parkour: 1 },
                     equipped: { armor: 'test_armor' }
@@ -35,6 +41,10 @@ test.describe('monk parkour traversal', () => {
         expect(result.canParkour).toBe(true);
         expect(result.up).toBe(20);
         expect(result.down).toBe(5);
+        expect(result.roofUp).toBe(20);
+        expect(result.roofDown).toBe(10);
+        expect(result.balconyUp).toBe(20);
+        expect(result.balconyDown).toBe(10);
         expect(result.blockedByArmor).toBe(false);
         expect(result.blockedByShield).toBe(false);
     });
