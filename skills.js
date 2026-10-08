@@ -330,6 +330,14 @@ const skills = {
         maxRanks: 1,
         apply: (player) => {}
     },
+    'parkour': {
+        name: 'Parkour',
+        description: 'Passive: While unarmoured and carrying no shield, vault fences and rapidly mantle climbable walls and palisades without entering a multi-turn climb. Wall-top movement remains normal-cost.',
+        tree: 'monk',
+        maxRanks: 1,
+        prereq: 'agile_climber',
+        apply: (player) => {}
+    },
     'disarm': {
         name: 'Disarm',
         description: 'Active: Attempt to disarm an opponent (50% base chance). (5 TP)',
