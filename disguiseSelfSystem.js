@@ -3,7 +3,7 @@
 // visual overlay when the character has the Disguised Equipment skill.
 (() => {
     'use strict';
-    const BUILD = '20261008-disguise-self-v2';
+    const BUILD = '20261008-disguise-self-v3';
 
     function hasSkill(entity) {
         return !!(entity?.skills?.disguise_equipment);
@@ -27,6 +27,11 @@
         entity.disguiseSelf = {
             spell: 'disguise_self',
             appearance,
+            targetName: profile?.targetName || null,
+            targetTitle: profile?.targetTitle || null,
+            targetFactionId: profile?.targetFactionId || null,
+            targetDialogueId: profile?.targetDialogueId || null,
+            targetRace: profile?.targetRace || null,
             visualEquipment: profile?.visualEquipment ? {...profile.visualEquipment} : null,
             clothingColours: profile?.clothingColours ? {...profile.clothingColours} : null,
             equipmentSkill: hasSkill(entity)
