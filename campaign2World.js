@@ -4552,9 +4552,23 @@ function buildReddale(roadEnd) {
             && window.getTerrainAt(h.q, h.r).name !== 'Water');
     if (guildParkourHex) {
         window.setTerrainAt(guildParkourHex.q, guildParkourHex.r, 'Climbable Wall');
-        window.tileObjects[`${guildParkourHex.q},${guildParkourHex.r}`] = {
-            type: 'parkour_discovery', discoveryId: 'reddale_guild_ledge', lightRadius: 0
-        };
+        // Extend the existing climb into a small elevated roof terrace.
+        const guildRoofHex = window.getNeighbors(guildParkourHex.q, guildParkourHex.r)
+            .find(h => !guildRegion.floorHexes.some(f => f.q === h.q && f.r === h.r)
+                && !guildRegion.wallHexes.some(w => w.q === h.q && w.r === h.r)
+                && window.getTerrainAt(h.q, h.r).name !== 'Water'
+                && h.q !== guildWallAnchor.q);
+        if (guildRoofHex) {
+            window.setTerrainAt(guildRoofHex.q, guildRoofHex.r, 'Roof');
+            window.tileObjects[guildRoofHex.q + ',' + guildRoofHex.r] = {
+                type: 'parkour_discovery', discoveryId: 'reddale_guild_ledge', lightRadius: 0,
+                message: 'From the roofline you can see the guarded back hall below.'
+            };
+        } else {
+            window.tileObjects[guildParkourHex.q + ',' + guildParkourHex.r] = {
+                type: 'parkour_discovery', discoveryId: 'reddale_guild_ledge', lightRadius: 0
+            };
+        }
     }
 
     const manorCenter = { q: roadEnd.q + 8, r: roadEnd.r - 10 };
