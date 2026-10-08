@@ -752,13 +752,22 @@ function playerMoveProcess(player, path) {
             const landingTerrain = window.getTerrainAtFloor(nextHex.q, nextHex.r, movedFromFloor);
             const isDropFromElevated = movedFromFloor === 0 && movedFromTerrain?.elevated &&
                 !movedFromTerrain?.climbRisk && !landingTerrain?.elevated;
-            if (isDropFromUpperFloor || isDropFromElevated) {
+            if (isDropFromUpperFloor) {
+                // Let the resolver choose the nearest lower occupied layer:
+                // floor 2 can fall onto floor 1 if that hex exists, otherwise
+                // it continues to ground level.
+                resolveFall(player, {
+                    fromHex: nextHex,
+                    fromFloor: movedFromFloor,
+                    fromTerrain: movedFromTerrain
+                });
+            } else if (isDropFromElevated) {
                 resolveFall(player, {
                     fromHex: movedFromHex,
                     fromFloor: movedFromFloor,
                     fromTerrain: movedFromTerrain,
                     landingHex: nextHex,
-                    landingFloor: movedFromFloor > 0 ? 0 : movedFromFloor
+                    landingFloor: movedFromFloor
                 });
             }
             window.drawMap();
@@ -8421,7 +8430,8 @@ function tryShove(shover, target) {
         return true;
     }
 
-    const shovingOff = !!targetTerrain.elevated && !newTerrain.elevated;
+    const leavesUpperFloor = targetFloor > 0 && !hasFloorTerrainAt(newHex.q, newHex.r, targetFloor);
+    const shovingOff = (!!targetTerrain.elevated && !newTerrain.elevated) || leavesUpperFloor;
     const fromHex = { ...target.hex };
     target.hex = newHex;
     spendTP(shover, 5);
@@ -8429,14 +8439,23 @@ function tryShove(shover, target) {
 
     if (shovingOff) {
         if (target.climbing) target.climbing = null;
-        resolveFall(target, {
-            fromHex,
-            fromFloor: targetFloor,
-            fromTerrain: targetTerrain,
-            landingHex: newHex,
-            landingFloor: targetFloor,
-            attacker: shover
-        });
+        if (leavesUpperFloor) {
+            resolveFall(target, {
+                fromHex: newHex,
+                fromFloor: targetFloor,
+                fromTerrain: targetTerrain,
+                attacker: shover
+            });
+        } else {
+            resolveFall(target, {
+                fromHex,
+                fromFloor: targetFloor,
+                fromTerrain: targetTerrain,
+                landingHex: newHex,
+                landingFloor: targetFloor,
+                attacker: shover
+            });
+        }
     } else {
         window.showMessage(`${shover.name} shoves ${target.name}.`);
     }
