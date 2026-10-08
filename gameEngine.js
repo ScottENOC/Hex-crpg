@@ -3198,6 +3198,13 @@ function processRealTimeStep(entity, overage = 0) {
             entity._pathCache = fullPath;
             entity._pathCacheDest = { q: dest.q, r: dest.r };
             nextHex = fullPath[1];
+        } else if (entity.side === 'player' && window.movementDiagnosticEnabled) {
+            window.movementDiagnosticState = window.movementDiagnosticState || {};
+            const now = performance.now();
+            if (!window.movementDiagnosticState.lastPathFailure || now - window.movementDiagnosticState.lastPathFailure > 1000) {
+                window.movementDiagnosticState.lastPathFailure = now;
+                window.showMessage(`MOVE DIAG: tick active but no path from ${entity.hex.q},${entity.hex.r} to ${dest.q},${dest.r}`);
+            }
         }
     }
 
@@ -3225,6 +3232,11 @@ function processRealTimeStep(entity, overage = 0) {
         entity.startR = entity.hex.r;
 
         entity.hex = nextHex;
+        if (entity.side === 'player' && window.movementDiagnosticEnabled) {
+            window.movementDiagnosticState = window.movementDiagnosticState || {};
+            window.movementDiagnosticState.lastStep = performance.now();
+            window.showMessage(`MOVE DIAG: STEP to ${nextHex.q},${nextHex.r}; TP=${Math.floor(entity.timePoints)}`);
+        }
         spendTP(entity, stepCost);
 
         // Advance the cached path so its head is again the current hex; if the
@@ -5894,6 +5906,11 @@ function snapVisuals() {
     });
 }
 
+// TEMPORARY MOVEMENT DIAGNOSTIC: visible on iPhone so movement failures can be
+// distinguished between input, group-mode state, tick execution, and pathfinding.
+window.movementDiagnosticEnabled = true;
+window.movementDiagnosticState = window.movementDiagnosticState || {};
+
 function handleClick(e){
     // ABORT if we were dragging the camera
     if (window.totalDragDistance > 10) return;
@@ -6352,6 +6369,14 @@ function handleClick(e){
         window.showMessage("That's out of range this turn.");
     } else {
         // NO ACTION/MOVE ACTIVE: Set Destination for Auto-Move
+        if (window.movementDiagnosticEnabled) {
+            window.movementDiagnosticState = window.movementDiagnosticState || {};
+            window.movementDiagnosticState.lastTap = performance.now();
+            window.movementDiagnosticState.lastDestination = { q: clickedHex.q, r: clickedHex.r };
+            window.movementDiagnosticState.groupMoveModeAtTap = !!window.groupMoveMode;
+            window.movementDiagnosticState.combatAtTap = !!window.isInCombat;
+            window.showMessage(`MOVE DIAG: tap received; group=${!!window.groupMoveMode}, combat=${!!window.isInCombat}, target=${clickedHex.q},${clickedHex.r}`);
+        }
         if (window.groupMoveMode) {
             const leader = player;
             const moveEntity = leader.riding || leader;
