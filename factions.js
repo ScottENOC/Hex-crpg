@@ -227,15 +227,25 @@ window.isGoblinAligned = function() {
 // actually earned Elder Marta's vouching (resolveGoblinSpyForHumans,
 // campaign2Dialogue.js) — the goblin-side mirror of a human player earning
 // the tribe's trust via diplomacy.
+window.getPlayerSocialRace = function() {
+    const mainName = window.party?.[0]?.name;
+    const live = (window.entities || []).find(e => e && e.side === 'player' && e.name === mainName);
+    const disguise = live?.disguiseSelf || window.party?.[0]?.disguiseSelf;
+    // A specific-person disguise can borrow that person's race. Custom
+    // appearance disguises have no race claim and therefore don't change
+    // race-gated social treatment.
+    return disguise?.targetRace || window.party?.[0]?.race || null;
+};
 window.isPlayerGoblin = function() {
-    return !!(window.party && window.party[0] && window.party[0].race === 'goblin');
+    return window.getPlayerSocialRace?.() === 'goblin';
 };
 // An orc player gets the exact same "outsider on sight, redeemable through
 // Prove Your Worth" treatment as a goblin player (see marta_wynfield/
-// silverhart_queen, campaign2Dialogue.js) — isPlayerGreenskin is the shared
-// predicate those checks use instead of isPlayerGoblin alone.
+// silverhart_queen, campaign2Dialogue.js). Disguise Self now changes the
+// apparent race used by these social gates without changing the underlying
+// character race or seeded faction standing.
 window.isPlayerOrc = function() {
-    return !!(window.party && window.party[0] && window.party[0].race === 'orc');
+    return window.getPlayerSocialRace?.() === 'orc';
 };
 window.isPlayerGreenskin = function() {
     return window.isPlayerGoblin() || window.isPlayerOrc();
