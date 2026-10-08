@@ -1304,7 +1304,10 @@ function renderSpellStats() {
         const draft = window.disguiseSelfDraft || {};
         if (draft.mode === 'known' && draft.character) {
             disguiseProfile = window.getDisguiseSelfProfile?.(draft.character, player) || null;
-            if (disguiseProfile) defaultName = `Disguise Self: ${draft.character}`;
+            if (disguiseProfile) {
+                disguiseProfile.targetRace = disguiseProfile.race || disguiseProfile.targetRace || null;
+                defaultName = `Disguise Self: ${draft.character}`;
+            }
         }
 
         if (!disguiseProfile) {
