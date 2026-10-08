@@ -6,6 +6,10 @@ test.describe('monk parkour traversal', () => {
         await createCharacter(page);
 
         const result = await page.evaluate(() => {
+            window.items = {
+                test_armor: { id: 'test_armor', type: 'armor' },
+                test_shield: { id: 'test_shield', type: 'shield' }
+            };
             const monk = {
                 skills: { agile_climber: 1, parkour: 1 },
                 equipped: {}
@@ -19,11 +23,11 @@ test.describe('monk parkour traversal', () => {
                 down: window.getParkourTraversalCost(wall, ground, monk),
                 blockedByArmor: window.hasParkour({
                     skills: { parkour: 1 },
-                    equipped: { armor: 'some_armor' }
+                    equipped: { armor: 'test_armor' }
                 }),
                 blockedByShield: window.hasParkour({
                     skills: { parkour: 1 },
-                    equipped: { offhand: 'some_shield' }
+                    equipped: { offhand: 'test_shield' }
                 })
             };
         });
