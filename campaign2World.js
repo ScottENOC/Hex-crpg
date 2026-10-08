@@ -5288,6 +5288,14 @@ function buildRidgeholdFort(roadEnd) {
 
     window.campaign2RidgeholdCenter = center;
     window.campaign2RidgeholdFortRegion = fortRegion;
+    // Small authored Easter egg: only a character who can reach the rampart
+    // can discover the little carved knight hidden behind a loose stone.
+    const ridgeholdNestHex = fortRegion.wallHexes.find(h => window.distance(h, gateHex) > 8) || fortRegion.wallHexes[0];
+    if (ridgeholdNestHex) {
+        window.tileObjects[`${ridgeholdNestHex.q},${ridgeholdNestHex.r}`] = {
+            type: 'parkour_discovery', discoveryId: 'ridgehold_rampart_nest', lightRadius: 0
+        };
+    }
 
     // Picks the river back up from Northwatch's moat (campaign2NorthwatchMoatExit,
     // buildNorthwatchFort) and continues it on past Ridgehold's far side, so
