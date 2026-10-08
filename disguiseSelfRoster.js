@@ -8,8 +8,8 @@
     const BUILD = '20261008-disguise-self-roster-v2';
 
     const ROLE_RULES = [
-        { id: 'royal_guard', label: 'Royal Guard', test: e => /royal guard/i.test(String(e.title || '')) },
         { id: 'royal_wall_guard', label: 'Royal Wall Guard', test: e => /wall guard/i.test(String(e.name || '')) || /wall guard/i.test(String(e.title || '')) },
+        { id: 'royal_guard', label: 'Royal Guard', test: e => /royal guard/i.test(String(e.title || '')) },
         { id: 'ironbond_factor', label: 'Ironbond Factor', test: e => /ironbond factor/i.test(String(e.title || '')) },
         { id: 'ironbond_enforcer', label: 'Ironbond Enforcer', test: e => /ironbond enforcer/i.test(String(e.title || '')) },
         { id: 'ironbond_watchman', label: 'Ironbond Watchman', test: e => /ironbond watchman/i.test(String(e.title || '')) },
