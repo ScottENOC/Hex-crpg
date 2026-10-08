@@ -266,7 +266,7 @@
                             const chance = Math.max(15, Math.min(90, 65 + (100 - score) / 3 + royalGuardEscortCount() * 5));
                             if (roll <= chance) {
                                 questReaction('authority_success', npc, d);
-                                rawShowDialogue?.(npc, 'You invoke ' + d.targetName + "'s authority. ' + npc.name + ' reluctantly steps aside.', [
+                                rawShowDialogue?.(npc, "You invoke " + d.targetName + "'s authority. " + npc.name + " reluctantly steps aside.", [
                                     { label: 'Proceed.', action: () => {} }
                                 ]);
                             } else {
