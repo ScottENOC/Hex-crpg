@@ -3670,6 +3670,25 @@ function interactWithTileObject(q, r, player) {
     if (doorObj.type === 'herb_patch' && window.harvestHerbPatch) { window.harvestHerbPatch(q, r); return; }
     if (doorObj.type === 'fishing_spot' && window.harvestFishingSpot) { window.harvestFishingSpot(q, r); return; }
     if (doorObj.type === 'corpse' && window.harvestCorpse) { window.harvestCorpse(q, r); return; }
+    // Parkour-only discoveries deliberately live on elevated/awkward hexes rather
+    // than behind a generic Perception check. Reaching the object is the test.
+    if (doorObj.type === 'parkour_discovery') {
+        if (!hasParkour(player)) {
+            window.showMessage(doorObj.blockedMessage || 'There is no safe way to reach that from here.');
+            return;
+        }
+        if (doorObj.discovered) {
+            window.showMessage(doorObj.emptyMessage || 'You have already searched this spot.');
+            return;
+        }
+        doorObj.discovered = true;
+        if (window.resolveParkourDiscovery) {
+            window.resolveParkourDiscovery(doorObj.discoveryId, q, r, player);
+        } else {
+            window.showMessage(doorObj.message || 'You find something tucked away here.');
+        }
+        return;
+    }
     if (doorObj.type === 'evidence' && window.searchEvidence) { window.searchEvidence(q, r, player?.floor || 0); return; }
     if (doorObj.type === 'secret_passage' && window.searchSecretPassage) { window.searchSecretPassage(q, r, player?.floor || 0); return; }
     if (doorObj.type === 'tunnel_junction' && window.openTunnelJunction) { window.openTunnelJunction(player); return; }
