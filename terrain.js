@@ -74,6 +74,11 @@ const terrainTypes = {
     // already use) but, unlike Pedestal, doesn't block LOS and is never a
     // lava hex — the safe spot to retreat to when the floor floods.
     'high_ground': { name: 'High Ground', color: '#a99873', moveCostMult: 1.3, hitBonus: 10, dodgeBonus: 5, stealthBonus: 0, elevated: true },
+    // Authored elevated destinations for parkour routes. These are already on
+    // the upper surface, so movement across them is ordinary same-elevation
+    // movement; Parkour handles the deliberate mantle/drop transitions.
+    'roof': { name: 'Roof', color: '#8b7355', moveCostMult: 1.2, hitBonus: 10, dodgeBonus: 10, stealthBonus: 20, elevated: true },
+    'balcony': { name: 'Balcony', color: '#9b8060', moveCostMult: 1.0, hitBonus: 8, dodgeBonus: 8, stealthBonus: 15, elevated: true },
 };
 
 window.mapItems = {}; // Key format: "q,r", Value: array of item IDs
