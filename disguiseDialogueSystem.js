@@ -163,7 +163,7 @@
                 markDiscovered(npc, d);
                 window.disguiseSelfSystem?.clear?.(player());
                 rawShowDialogue?.(npc,
-                    'The disguise falls away. ' + npc.name + ''s expression hardens. "So it really was Disguise Self."',
+                    "The disguise falls away. " + npc.name + "'s expression hardens. \"So it really was Disguise Self.\"",
                     [
                         { label: '"I was trying to get through without hurting anyone."', action: () => {} },
                         { label: '"I should have been honest."', action: () => {} }
@@ -199,7 +199,7 @@
                 ? 'Your guards make the moment more convincing, but not convincing enough.'
                 : 'Without an escort, there is nowhere for the story to hide.';
             rawShowDialogue?.(npc,
-                'The answer lands badly. ' + npc.name + ''s hand moves toward their weapon. ' + escortText,
+                    "The answer lands badly. " + npc.name + "'s hand moves toward their weapon. " + escortText,
                 [
                     {
                         label: 'Keep bluffing.',
