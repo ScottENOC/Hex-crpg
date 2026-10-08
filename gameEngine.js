@@ -9355,6 +9355,18 @@ window.tryShove = tryShove;
 
 function resolveSpell(caster, spell, target, clickedHex) {
     let actionHandled = false;
+    if (spell.baseId === 'divination') {
+        if (target !== caster) {
+            window.showMessage('Divination can only target its caster.');
+            return false;
+        }
+        if (!window.divinationSystem?.cast) {
+            window.showMessage('The divine vision is unavailable.');
+            return false;
+        }
+        window.divinationSystem.cast(caster);
+        return true;
+    }
     if (spell.baseId === 'disguise_self') {
         if (target !== caster) {
             window.showMessage('Disguise Self can only target its caster.');
