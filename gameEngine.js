@@ -2030,6 +2030,14 @@ function renderEntities() {
               window.mapCtx.drawImage(window.gameVisuals.hut, x - size/2, y - size/2, size, size);
           } else if (obj.type === 'hut_large' && window.gameVisuals.hut_large?.complete) {
               window.mapCtx.drawImage(window.gameVisuals.hut_large, x - size/2, y - size/2, size, size);
+          } else if (obj.type === 'parkour_discovery' && window.gameVisuals.journal?.complete) {
+              // Small authored discoveries reuse the journal art. Keep them
+              // subtle: the real gating is reaching the elevated hex.
+              const oldAlpha = window.mapCtx.globalAlpha;
+              window.mapCtx.globalAlpha = obj.discovered ? 0.25 : 0.72;
+              const discoverySize = size * 0.72;
+              window.mapCtx.drawImage(window.gameVisuals.journal, x - discoverySize/2, y - discoverySize/2, discoverySize, discoverySize);
+              window.mapCtx.globalAlpha = oldAlpha;
           } else if (obj.type === 'journal' && obj.readId === 'phylactery_altar' && window.gameVisuals.altar_unholy?.complete) {
               // The necromancer's ritual altar reuses the journal
               // click-to-read plumbing, but shouldn't look like a letter.
