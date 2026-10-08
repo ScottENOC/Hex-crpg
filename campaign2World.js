@@ -4591,9 +4591,23 @@ function buildReddale(roadEnd) {
             && window.getTerrainAt(h.q, h.r).name !== 'Water');
     if (manorParkourHex) {
         window.setTerrainAt(manorParkourHex.q, manorParkourHex.r, 'Climbable Wall');
-        window.tileObjects[`${manorParkourHex.q},${manorParkourHex.r}`] = {
-            type: 'parkour_discovery', discoveryId: 'reddale_manor_ledge', lightRadius: 0
-        };
+        // Extend the climb into a small elevated eaves/roof surface.
+        const manorRoofHex = window.getNeighbors(manorParkourHex.q, manorParkourHex.r)
+            .find(h => !manorRegion.floorHexes.some(f => f.q === h.q && f.r === h.r)
+                && !manorRegion.wallHexes.some(w => w.q === h.q && w.r === h.r)
+                && window.getTerrainAt(h.q, h.r).name !== 'Water'
+                && h.q !== manorWallAnchor.q);
+        if (manorRoofHex) {
+            window.setTerrainAt(manorRoofHex.q, manorRoofHex.r, 'Roof');
+            window.tileObjects[manorRoofHex.q + ',' + manorRoofHex.r] = {
+                type: 'parkour_discovery', discoveryId: 'reddale_manor_ledge', lightRadius: 0,
+                message: 'From the roofline the manor courtyard is laid out below.'
+            };
+        } else {
+            window.tileObjects[manorParkourHex.q + ',' + manorParkourHex.r] = {
+                type: 'parkour_discovery', discoveryId: 'reddale_manor_ledge', lightRadius: 0
+            };
+        }
     }
 
     if (window.campaign2ReddaleGuildmaster) {
