@@ -4543,6 +4543,15 @@ function buildReddale(roadEnd) {
     const guildEvidenceHex = { q: guildCenter.q + 1, r: guildCenter.r - 1 };
     window.tileObjects[`${guildEvidenceHex.q},${guildEvidenceHex.r}`] = { type: 'evidence', evidenceKey: 'guild_ledgers' };
     window.campaign2GuildEvidenceHex = guildEvidenceHex;
+    // Parkour alternative to the guarded back hall: one section of the guildhouse
+    // outer wall is climbable, with the ledge becoming the evidence route.
+    const guildParkourHex = guildRegion.wallHexes.find(h => h.q === guildCenter.q + 2) || guildRegion.wallHexes[0];
+    if (guildParkourHex) {
+        window.setTerrainAt(guildParkourHex.q, guildParkourHex.r, 'Climbable Wall');
+        window.tileObjects[`${guildParkourHex.q},${guildParkourHex.r}`] = {
+            type: 'parkour_discovery', discoveryId: 'reddale_guild_ledge', lightRadius: 0
+        };
+    }
 
     const manorCenter = { q: roadEnd.q + 8, r: roadEnd.r - 10 };
     const manorDoor = { q: manorCenter.q - 3, r: manorCenter.r };
@@ -4555,6 +4564,15 @@ function buildReddale(roadEnd) {
     const manorEvidenceHex = { q: manorCenter.q + 1, r: manorCenter.r - 1 };
     window.tileObjects[`${manorEvidenceHex.q},${manorEvidenceHex.r}`] = { type: 'evidence', evidenceKey: 'baron_tariffs' };
     window.campaign2ManorEvidenceHex = manorEvidenceHex;
+    // Same idea on the Baron's manor: a climbable eaves route lets a Monk
+    // reach the tariff records without entering through the steward's watched halls.
+    const manorParkourHex = manorRegion.wallHexes.find(h => h.q === manorCenter.q + 2) || manorRegion.wallHexes[0];
+    if (manorParkourHex) {
+        window.setTerrainAt(manorParkourHex.q, manorParkourHex.r, 'Climbable Wall');
+        window.tileObjects[`${manorParkourHex.q},${manorParkourHex.r}`] = {
+            type: 'parkour_discovery', discoveryId: 'reddale_manor_ledge', lightRadius: 0
+        };
+    }
 
     if (window.campaign2ReddaleGuildmaster) {
         window.entities.push(window.buildNPC({ ...window.campaign2ReddaleGuildmaster, hex: { q: guildCenter.q, r: guildCenter.r + 1 } }));
