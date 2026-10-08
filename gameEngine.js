@@ -4050,7 +4050,9 @@ function getMoveCostMult(q, r, entity) {
     }
     const obj = window.tileObjects && window.tileObjects[`${q},${r}`];
     if (obj && (obj.type === 'fence_h' || obj.type === 'fence_v')) {
-        mult *= 1.6;
+        // Parkour turns the existing fence obstacle into a vault rather than
+        // making the monk pay the ordinary "scramble over it" surcharge.
+        mult *= hasParkour(entity) ? 1 : 1.6;
     }
     // Cover fire (above): a flat +4 TP surcharge folded into the multiplier
     // since every call site already does `baseCost(5) * mult` — +4/5 = 0.8
