@@ -9624,8 +9624,9 @@ function resolveSpell(caster, spell, target, clickedHex) {
             hitChance -= 15;
         }
 
-        const roll = Math.floor(Math.random() * 100);
-        let hit = !spell.needsHitCheck || (target && roll < hitChance);
+        const foretoldHit = spell.type === 'damage' && target && target.side !== caster.side && window.divinationSystem?.consumeTrueStrike?.(caster);
+        const roll = foretoldHit ? 0 : Math.floor(Math.random() * 100);
+        let hit = !spell.needsHitCheck || (target && (foretoldHit || roll < hitChance));
 
         if (spell.needsHitCheck && target) {
             window.showMessage(`${caster.name} casts ${spell.name} at ${target.name}: ${hit ? 'HIT' : 'MISS'} (Roll: ${roll} vs Need: <${hitChance})`);
