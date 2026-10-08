@@ -4652,6 +4652,68 @@ function carveHexKeep(centerQ, centerR, radius, floorType, wallType) {
     };
 }
 
+// Authored rewards/discoveries for the new traversal surfaces. These are deliberately
+// small and specific: Parkour is valuable because the world has things worth
+// reaching, not because every climb becomes a loot pinata.
+window.resolveParkourDiscovery = function(discoveryId, q, r, player) {
+    if (discoveryId === 'northwatch_rampart_report') {
+        const existing = (window.questLog || []).find(q => q.id === 'border_war');
+        if (existing?.status === 'completed') {
+            window.showMessage('The old rampart report is faded, but the fort still bears the marks of the siege.');
+            return;
+        }
+        if (!existing) {
+            window.questLog = window.questLog || [];
+            window.questLog.push({
+                id: 'border_war', title: 'The Northwatch Line', giver: 'A hidden scout report',
+                status: 'active', description: 'Follow the hidden report to Northwatch Fort and learn what is battering the wall.',
+                resolution: null, discoveredByParkour: true
+            });
+            window.showMessage('You find a scout report wedged into the rampart: Northwatch is under attack. You now know where to go.');
+        } else {
+            window.showMessage('The hidden report confirms what you already suspected about Northwatch.');
+        }
+        return;
+    }
+
+    if (discoveryId === 'reddale_guild_ledge') {
+        const mission = window.activeStealthMission;
+        if (mission?.evidenceKey === 'guild_ledgers') {
+            if (mission.itemId && window.player?.inventory) window.player.inventory.push(mission.itemId);
+            window.activeStealthMission = null;
+            window.showMessage('From the guildhouse ledge you recover the ledgers without entering through the guarded back hall.');
+            if (mission.onSuccess) mission.onSuccess();
+        } else {
+            window.showMessage('A loose ledger page is wedged beneath the eaves. Nothing useful enough to risk disturbing the building for.');
+        }
+        return;
+    }
+
+    if (discoveryId === 'reddale_manor_ledge') {
+        const mission = window.activeStealthMission;
+        if (mission?.evidenceKey === 'baron_tariffs') {
+            if (mission.itemId && window.player?.inventory) window.player.inventory.push(mission.itemId);
+            window.activeStealthMission = null;
+            window.showMessage('You lift the tariff records from the manor ledge, bypassing the steward and the back halls entirely.');
+            if (mission.onSuccess) mission.onSuccess();
+        } else {
+            window.showMessage('There are fresh boot marks near the manor eaves. Someone uses this route — but there is nothing here worth taking yet.');
+        }
+        return;
+    }
+
+    if (discoveryId === 'ridgehold_rampart_nest') {
+        window.parkourEasterEggs = window.parkourEasterEggs || {};
+        if (!window.parkourEasterEggs.ridgehold_rampart_nest) {
+            window.parkourEasterEggs.ridgehold_rampart_nest = true;
+            window.showMessage('Behind a loose stone you find a tiny carved wooden knight and a note: "For the guard who can reach this."');
+        } else {
+            window.showMessage('The little carved knight is still tucked safely behind the stone.');
+        }
+        return;
+    }
+};
+
 // Northwatch Fort: the Border War's active front. A 6-pointed star fort
 // (see carveStarFort above) — a core plus 6 outward archer-platform wedges,
 // ringed by Climbable Wall (costly-but-possible, see the elevated-terrain
