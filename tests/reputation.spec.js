@@ -181,3 +181,42 @@ test.describe('reputation math (factions.js)', () => {
         expect(result.thrivingDelta).toBeGreaterThan(result.strugglingDelta);
     });
 });
+
+
+test.describe('apparent race social gates', () => {
+    test('a specific goblin disguise is treated as goblin socially without changing real race', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            window.party = [{ name: 'Hero', race: 'human' }];
+            window.entities = [{
+                name: 'Hero', side: 'player', race: 'human', hex: { q: 0, r: 0 },
+                disguiseSelf: { targetName: 'Skarn', targetRace: 'goblin', appearance: {} }
+            }];
+            return {
+                socialRace: window.getPlayerSocialRace(),
+                goblin: window.isPlayerGoblin(),
+                greenskin: window.isPlayerGreenskin(),
+                realRace: window.party[0].race
+            };
+        });
+        expect(result.socialRace).toBe('goblin');
+        expect(result.goblin).toBe(true);
+        expect(result.greenskin).toBe(true);
+        expect(result.realRace).toBe('human');
+    });
+
+    test('an ordinary custom disguise does not invent a race', async ({ page }) => {
+        const result = await page.evaluate(() => {
+            window.party = [{ name: 'Hero', race: 'human' }];
+            window.entities = [{
+                name: 'Hero', side: 'player', race: 'human', hex: { q: 0, r: 0 },
+                disguiseSelf: { appearance: { gender: 'male' } }
+            }];
+            return {
+                socialRace: window.getPlayerSocialRace(),
+                goblin: window.isPlayerGoblin(),
+                realRace: window.party[0].race
+            };
+        });
+        return result;
+    });
+});
