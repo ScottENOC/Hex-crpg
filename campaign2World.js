@@ -4485,6 +4485,26 @@ function buildReddale(roadEnd) {
     for (let r = roadEnd.r + 1; r < innDoor.r; r++) window.setTerrainAt(roadEnd.q, r, 'Path');
     window.campaign2ReddaleInnCenter = innCenter;
 
+    // A small upper balcony overlooking the road. This is deliberately an
+    // exterior route rather than a second floor: climb the short wall,
+    // step onto the balcony, then use the controlled-drop rule to return.
+    const innBalconyWall = innRegion.wallHexes.find(h => h.q === innCenter.q + 2) || innRegion.wallHexes[0];
+    const innBalconyApproach = innBalconyWall && window.getNeighbors(innBalconyWall.q, innBalconyWall.r)
+        .find(h => !innRegion.floorHexes.some(f => f.q === h.q && f.r === h.r)
+            && !innRegion.wallHexes.some(w => w.q === h.q && w.r === h.r)
+            && window.getTerrainAt(h.q, h.r).name !== 'Water'
+            && window.getTerrainAt(h.q, h.r).name !== 'Path');
+    if (innBalconyApproach) {
+        window.setTerrainAt(innBalconyApproach.q, innBalconyApproach.r, 'Climbable Wall');
+        const innBalcony = window.getNeighbors(innBalconyApproach.q, innBalconyApproach.r)
+            .find(h => !innRegion.floorHexes.some(f => f.q === h.q && f.r === h.r)
+                && !innRegion.wallHexes.some(w => w.q === h.q && w.r === h.r)
+                && window.getTerrainAt(h.q, h.r).name !== 'Water'
+                && window.getTerrainAt(h.q, h.r).name !== 'Path'
+                && h.q !== innBalconyWall.q);
+        if (innBalcony) window.setTerrainAt(innBalcony.q, innBalcony.r, 'Balcony');
+    }
+
     // A muster point just outside the guardhouse door, roughly where a
     // road-bound patrol would start from — used by the missing-watch quest
     // below to place the search site a stretch further out.
