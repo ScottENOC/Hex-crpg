@@ -3970,8 +3970,13 @@ function getParkourTraversalCost(fromTerrain, toTerrain, entity) {
     if (!hasParkour(entity) || !fromTerrain || !toTerrain) return null;
     const up = !!toTerrain.elevated && !fromTerrain.elevated;
     const down = !!fromTerrain.elevated && !toTerrain.elevated;
-    if (up && (toTerrain.climbRisk || toTerrain.name === 'Palisade Wall')) return 20;
-    if (down && fromTerrain.climbRisk) return 5;
+    // Parkour can mantle onto authored roofs/balconies as well as the existing
+    // climbable walls. It remains deliberately limited to these explicit
+    // elevated destinations rather than making every high-ground tile a jump.
+    if (up && (toTerrain.climbRisk || toTerrain.name === 'Palisade Wall' || toTerrain.name === 'Roof' || toTerrain.name === 'Balcony')) return 20;
+    // Controlled descent from a roof/balcony is slower than simply walking
+    // off a rampart: the monk is choosing a landing rather than falling.
+    if (down && (fromTerrain.climbRisk || fromTerrain.name === 'Roof' || fromTerrain.name === 'Balcony')) return 10;
     return null;
 }
 window.getParkourTraversalCost = getParkourTraversalCost;
