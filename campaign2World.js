@@ -4545,7 +4545,11 @@ function buildReddale(roadEnd) {
     window.campaign2GuildEvidenceHex = guildEvidenceHex;
     // Parkour alternative to the guarded back hall: one section of the guildhouse
     // outer wall is climbable, with the ledge becoming the evidence route.
-    const guildParkourHex = guildRegion.wallHexes.find(h => h.q === guildCenter.q + 2) || guildRegion.wallHexes[0];
+    const guildWallAnchor = guildRegion.wallHexes.find(h => h.q === guildCenter.q + 2) || guildRegion.wallHexes[0];
+    const guildParkourHex = guildWallAnchor && window.getNeighbors(guildWallAnchor.q, guildWallAnchor.r)
+        .find(h => !guildRegion.floorHexes.some(f => f.q === h.q && f.r === h.r)
+            && !guildRegion.wallHexes.some(w => w.q === h.q && w.r === h.r)
+            && window.getTerrainAt(h.q, h.r).name !== 'Water');
     if (guildParkourHex) {
         window.setTerrainAt(guildParkourHex.q, guildParkourHex.r, 'Climbable Wall');
         window.tileObjects[`${guildParkourHex.q},${guildParkourHex.r}`] = {
@@ -4566,7 +4570,11 @@ function buildReddale(roadEnd) {
     window.campaign2ManorEvidenceHex = manorEvidenceHex;
     // Same idea on the Baron's manor: a climbable eaves route lets a Monk
     // reach the tariff records without entering through the steward's watched halls.
-    const manorParkourHex = manorRegion.wallHexes.find(h => h.q === manorCenter.q + 2) || manorRegion.wallHexes[0];
+    const manorWallAnchor = manorRegion.wallHexes.find(h => h.q === manorCenter.q + 2) || manorRegion.wallHexes[0];
+    const manorParkourHex = manorWallAnchor && window.getNeighbors(manorWallAnchor.q, manorWallAnchor.r)
+        .find(h => !manorRegion.floorHexes.some(f => f.q === h.q && f.r === h.r)
+            && !manorRegion.wallHexes.some(w => w.q === h.q && w.r === h.r)
+            && window.getTerrainAt(h.q, h.r).name !== 'Water');
     if (manorParkourHex) {
         window.setTerrainAt(manorParkourHex.q, manorParkourHex.r, 'Climbable Wall');
         window.tileObjects[`${manorParkourHex.q},${manorParkourHex.r}`] = {
