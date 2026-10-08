@@ -224,7 +224,6 @@
             }
         }
         return true;
-    }
 
     function maybeChallenge(npc, args) {
         const d = activeTarget();
