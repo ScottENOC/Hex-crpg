@@ -586,6 +586,90 @@ function syncBackToPlayer(entity) {
     }
 }
 
+// FALL RESOLUTION: every ordinary vertical drop resolves through this shared path.
+// One floor is treated as roughly one 10-foot fall increment (1d6), matching
+// the familiar tabletop model while keeping Hex's world-height abstraction.
+function hasFloorTerrainAt(q, r, floor) {
+    if (!floor) return true;
+    const b = window.getMultiStoryBuildingAt?.({ q, r });
+    return !!(b && b.floors?.[floor] && b.floors[floor].terrain?.[q + ',' + r] !== undefined);
+}
+function getFloorTerrain(q, r, floor) {
+    return window.getTerrainAtFloor ? window.getTerrainAtFloor(q, r, floor) : window.getTerrainAt(q, r);
+}
+function getVerticalLevel(floor, terrain) {
+    return (floor || 0) + (terrain?.elevated ? 1 : 0);
+}
+function findFallLanding(hex, fromFloor, fromTerrain) {
+    const sourceFloor = fromFloor || 0;
+    const sourceLevel = getVerticalLevel(sourceFloor, fromTerrain);
+    const candidates = [];
+    if (sourceFloor > 0) {
+        for (let f = sourceFloor - 1; f >= 0; f--) {
+            if (f === 0 || hasFloorTerrainAt(hex.q, hex.r, f)) candidates.push(f);
+        }
+    } else if (sourceFloor < 0) {
+        const b = window.getMultiStoryBuildingAt?.(hex);
+        const lower = b ? Object.keys(b.floors || {}).map(Number).filter(f => f < sourceFloor).sort((a,b) => b-a) : [];
+        candidates.push(...lower);
+    } else if (fromTerrain?.elevated) {
+        candidates.push(0);
+    }
+    for (const floor of candidates) {
+        const terrain = getFloorTerrain(hex.q, hex.r, floor);
+        if (!terrain?.impassable) {
+            const landingLevel = getVerticalLevel(floor, terrain);
+            if (landingLevel < sourceLevel) return { floor, hex: { ...hex }, terrain, height: sourceLevel - landingLevel };
+        }
+    }
+    return null;
+}
+function rollFallDamage(dice) {
+    let total = 0;
+    for (let i = 0; i < dice; i++) total += 1 + Math.floor(Math.random() * 6);
+    return total;
+}
+function resolveFall(entity, options = {}) {
+    if (!entity || entity.isFlying) return { fell: false };
+    const fromFloor = options.fromFloor !== undefined ? options.fromFloor : (entity.floor || 0);
+    const fromHex = options.fromHex || { ...entity.hex };
+    const fromTerrain = options.fromTerrain || getFloorTerrain(fromHex.q, fromHex.r, fromFloor);
+    let landing = null;
+    if (options.landingHex) {
+        const landingFloor = options.landingFloor !== undefined ? options.landingFloor : fromFloor;
+        const terrain = getFloorTerrain(options.landingHex.q, options.landingHex.r, landingFloor);
+        const sourceLevel = getVerticalLevel(fromFloor, fromTerrain);
+        const landingLevel = getVerticalLevel(landingFloor, terrain);
+        if (landingLevel < sourceLevel) landing = { floor: landingFloor, hex: { ...options.landingHex }, terrain, height: sourceLevel - landingLevel };
+    } else {
+        landing = findFallLanding(fromHex, fromFloor, fromTerrain);
+    }
+    if (!landing || landing.height <= 0) return { fell: false };
+    const feather = (window.activeSpells || []).find(s => s.baseId === 'feather_fall' && s.targetEntityId === entity.id);
+    entity.hex = landing.hex;
+    entity.floor = landing.floor;
+    entity.destination = null;
+    if (entity.riding) { entity.riding.hex = { ...landing.hex }; entity.riding.floor = landing.floor; entity.riding.destination = null; }
+    if (entity.climbing) entity.climbing = null;
+    if (feather) {
+        window.activeSpells.splice(window.activeSpells.indexOf(feather), 1);
+        window.showMessage(entity.name + ' drifts safely down ' + landing.height + ' level' + (landing.height === 1 ? '' : 's') + '.');
+        window.updateTurnIndicator?.();
+        syncBackToPlayer(entity);
+        return { fell: true, prevented: true, damage: 0, height: landing.height, landing };
+    }
+    const dice = Math.min(20, Math.max(1, Math.floor(landing.height)));
+    const damage = rollFallDamage(dice);
+    entity.hp -= damage;
+    syncBackToPlayer(entity);
+    if (window.spawnFloatingText) window.spawnFloatingText(entity.hex, '-' + damage, '#ff4d4d');
+    window.showMessage(entity.name + ' falls ' + landing.height + ' level' + (landing.height === 1 ? '' : 's') + ' and takes ' + damage + ' fall damage (' + dice + 'd6).');
+    if (entity.hp <= 0 && entity.alive) handleLethalDamage(entity, options.attacker || null);
+    window.updateTurnIndicator?.();
+    return { fell: true, prevented: false, damage, height: landing.height, landing };
+}
+window.resolveFall = resolveFall;
+
 function playerMoveProcess(player, path) {
     if (!path || path.length === 0) {
         finalizePlayerAction(player, true);
@@ -601,7 +685,8 @@ function playerMoveProcess(player, path) {
     // MULTI-HEX / WALL FIT CHECK
     const nextHex = path[0];
     const occupant = getEntityAtHex(nextHex.q, nextHex.r);
-    const targetTerrain = window.getTerrainAt(nextHex.q, nextHex.r);
+    const playerFloor = player.floor || 0;
+    const targetTerrain = window.getTerrainAtFloor(nextHex.q, nextHex.r, playerFloor);
     
     // TASK 2: Knowledge-based blocking
     const isVisible = window.isVisibleToPlayer(nextHex);
@@ -657,8 +742,25 @@ function playerMoveProcess(player, path) {
             window.showMessage(`Halted inside ${occupant.name}'s hex! Shunted back.`);
             player.hex = previousHex;
         } else {
+            const movedFromHex = { ...previousHex };
+            const movedFromFloor = playerFloor;
+            const movedFromTerrain = window.getTerrainAtFloor(movedFromHex.q, movedFromHex.r, movedFromFloor);
             player.hex = nextHex;
             if (player.riding) player.riding.hex = { q: nextHex.q, r: nextHex.r };
+            const targetExistsOnCurrentFloor = hasFloorTerrainAt(nextHex.q, nextHex.r, movedFromFloor);
+            const isDropFromUpperFloor = movedFromFloor > 0 && !targetExistsOnCurrentFloor;
+            const landingTerrain = window.getTerrainAtFloor(nextHex.q, nextHex.r, movedFromFloor);
+            const isDropFromElevated = movedFromFloor === 0 && movedFromTerrain?.elevated &&
+                !movedFromTerrain?.climbRisk && !landingTerrain?.elevated;
+            if (isDropFromUpperFloor || isDropFromElevated) {
+                resolveFall(player, {
+                    fromHex: movedFromHex,
+                    fromFloor: movedFromFloor,
+                    fromTerrain: movedFromTerrain,
+                    landingHex: nextHex,
+                    landingFloor: movedFromFloor > 0 ? 0 : movedFromFloor
+                });
+            }
             window.drawMap();
             window.renderEntities();
         }
@@ -686,8 +788,8 @@ function playerMoveProcess(player, path) {
         // clamp defensively anyway (matches updatePlayerUI's own highlight
         // BFS, which already does the same for the highlighted-range case).
         baseMoveCost = Math.max(1, baseMoveCost);
-        const previousTerrain = window.getTerrainAt(previousHex.q, previousHex.r);
-        const terrain = window.getTerrainAt(player.hex.q, player.hex.r);
+        const previousTerrain = window.getTerrainAtFloor(previousHex.q, previousHex.r, playerFloor);
+        const terrain = window.getTerrainAtFloor(player.hex.q, player.hex.r, playerFloor);
         
         let terrainMult = window.getMoveCostMult(player.hex.q, player.hex.r, moveEntity);
         if (terrain.name === 'Foliage' && (moveEntity.skills?.elf_foliage_expertise || moveEntity.skills?.druid_foliage_expertise)) {
@@ -6906,21 +7008,18 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   // function causes — attacker is still the one who landed the hit that
   // caused the fall, so the kill/XP attribution is correct for free.
   if (target.climbing) {
-      const featherFall = (window.activeSpells || []).some(
-          s => s.baseId === 'feather_fall' && s.targetEntityId === target.id
-      );
       if (Math.random() < 0.5) {
-          sharedMessage(featherFall
-              ? target.name + ' loses their grip — but Feather Fall catches them!'
-              : target.name + ' loses their grip and falls!');
-          target.hex = { ...target.climbing.fromHex };
+          const climbFrom = { ...target.climbing.fromHex };
+          const climbFloor = target.floor || 0;
           target.climbing = null;
-          if (featherFall) {
-              sharedMessage(target.name + ' drifts safely to the ground.');
-          } else {
-              target.hp -= 5; syncBackToPlayer(target);
-              if (window.spawnFloatingText) window.spawnFloatingText(target.hex, '-5', '#ff4d4d');
-          }
+          resolveFall(target, {
+              fromHex: target.hex,
+              fromFloor: climbFloor,
+              fromTerrain: window.getTerrainAtFloor(target.hex.q, target.hex.r, climbFloor),
+              landingHex: climbFrom,
+              landingFloor: climbFloor,
+              attacker
+          });
       } else {
           sharedMessage(target.name + ' clings on despite the blow!');
       }
@@ -8274,8 +8373,10 @@ function tryShove(shover, target) {
         return false;
     }
 
-    const attackerTerrain = window.getTerrainAt(shover.hex.q, shover.hex.r);
-    const targetTerrain = window.getTerrainAt(target.hex.q, target.hex.r);
+    const shoverFloor = shover.floor || 0;
+    const targetFloor = target.floor || 0;
+    const attackerTerrain = window.getTerrainAtFloor(shover.hex.q, shover.hex.r, shoverFloor);
+    const targetTerrain = window.getTerrainAtFloor(target.hex.q, target.hex.r, targetFloor);
     const hitChance = 50 + shover.toHitMelee + attackerTerrain.hitBonus - (target.passiveDodge + targetTerrain.dodgeBonus);
     const roll = Math.floor(Math.random() * 100);
     if (roll >= hitChance) {
@@ -8311,7 +8412,7 @@ function tryShove(shover, target) {
     // climb, gated behind the multi-turn climbing status above). Knocking
     // them *off* elevated terrain, though, is exactly what a shove should be
     // able to do — gravity does the rest, at the cost of fall damage below.
-    const newTerrain = window.getTerrainAt(newHex.q, newHex.r);
+    const newTerrain = window.getTerrainAtFloor(newHex.q, newHex.r, targetFloor);
     const shovingUp = !!newTerrain.elevated && !targetTerrain.elevated;
     if (newTerrain.impassable || shovingUp) {
         window.showMessage(`${target.name} braces against the wall — the shove can't force them up it.`);
@@ -8326,23 +8427,17 @@ function tryShove(shover, target) {
     window.playerAction = null;
 
     if (shovingOff) {
-        // Feather Fall changes the consequence of being knocked from the wall,
-        // not the shove itself.
-        const featherFall = (window.activeSpells || []).some(
-            s => s.baseId === 'feather_fall' && s.targetEntityId === target.id
-        );
+        const fromHex = { ...target.hex };
         if (target.climbing) target.climbing = null;
-        if (featherFall) {
-            window.showMessage(shover.name + ' shoves ' + target.name + ' off the wall — Feather Fall catches them before they hit the ground.');
-        } else {
-            const fallDmg = 8 + Math.floor(Math.random() * 8);
-            target.hp -= fallDmg;
-            syncBackToPlayer(target);
-            if (window.spawnFloatingText) window.spawnFloatingText(target.hex, '-' + fallDmg, '#ff4d4d');
-            window.showMessage(shover.name + ' shoves ' + target.name + ' off the wall! They hit the ground hard. (-' + fallDmg + ')');
-            if (target.hp <= 0 && target.alive) handleLethalDamage(target, shover);
-        }
-    } else {
+        resolveFall(target, {
+            fromHex,
+            fromFloor: targetFloor,
+            fromTerrain: targetTerrain,
+            landingHex: newHex,
+            landingFloor: targetFloor,
+            attacker: shover
+        });
+    }    } else {
         window.showMessage(`${shover.name} shoves ${target.name}.`);
     }
     return true;
