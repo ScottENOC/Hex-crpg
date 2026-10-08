@@ -6904,14 +6904,23 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   // function causes — attacker is still the one who landed the hit that
   // caused the fall, so the kill/XP attribution is correct for free.
   if (target.climbing) {
+      const featherFall = (window.activeSpells || []).some(
+          s => s.baseId === 'feather_fall' && s.targetEntityId === target.id
+      );
       if (Math.random() < 0.5) {
-          sharedMessage(`${target.name} loses their grip and falls!`);
+          sharedMessage(featherFall
+              ? target.name + ' loses their grip — but Feather Fall catches them!'
+              : target.name + ' loses their grip and falls!');
           target.hex = { ...target.climbing.fromHex };
           target.climbing = null;
-          target.hp -= 5; syncBackToPlayer(target);
-          if (window.spawnFloatingText) window.spawnFloatingText(target.hex, `-5`, '#ff4d4d');
+          if (featherFall) {
+              sharedMessage(target.name + ' drifts safely to the ground.');
+          } else {
+              target.hp -= 5; syncBackToPlayer(target);
+              if (window.spawnFloatingText) window.spawnFloatingText(target.hex, '-5', '#ff4d4d');
+          }
       } else {
-          sharedMessage(`${target.name} clings on despite the blow!`);
+          sharedMessage(target.name + ' clings on despite the blow!');
       }
   }
 
@@ -8315,17 +8324,22 @@ function tryShove(shover, target) {
     window.playerAction = null;
 
     if (shovingOff) {
-        // A climb in progress is abandoned the instant the climber leaves
-        // the wall involuntarily — same "knocked off mid-climb" idea the
-        // climbing status comment already calls out (see climbTransition
-        // above), just triggered by a shove instead of running out of TP.
+        // Feather Fall changes the consequence of being knocked from the wall,
+        // not the shove itself.
+        const featherFall = (window.activeSpells || []).some(
+            s => s.baseId === 'feather_fall' && s.targetEntityId === target.id
+        );
         if (target.climbing) target.climbing = null;
-        const fallDmg = 8 + Math.floor(Math.random() * 8); // 8-15, a real hit but rarely lethal on its own
-        target.hp -= fallDmg;
-        syncBackToPlayer(target);
-        if (window.spawnFloatingText) window.spawnFloatingText(target.hex, `-${fallDmg}`, '#ff4d4d');
-        window.showMessage(`${shover.name} shoves ${target.name} off the wall! They hit the ground hard. (-${fallDmg})`);
-        if (target.hp <= 0 && target.alive) handleLethalDamage(target, shover);
+        if (featherFall) {
+            window.showMessage(shover.name + ' shoves ' + target.name + ' off the wall — Feather Fall catches them before they hit the ground.');
+        } else {
+            const fallDmg = 8 + Math.floor(Math.random() * 8);
+            target.hp -= fallDmg;
+            syncBackToPlayer(target);
+            if (window.spawnFloatingText) window.spawnFloatingText(target.hex, '-' + fallDmg, '#ff4d4d');
+            window.showMessage(shover.name + ' shoves ' + target.name + ' off the wall! They hit the ground hard. (-' + fallDmg + ')');
+            if (target.hp <= 0 && target.alive) handleLethalDamage(target, shover);
+        }
     } else {
         window.showMessage(`${shover.name} shoves ${target.name}.`);
     }
@@ -9363,6 +9377,33 @@ function resolveSpell(caster, spell, target, clickedHex) {
             coreManaCost: spell.coreManaCost || spell.manaCost
         });
         window.showMessage(caster.name + ' assumes the chosen disguise.');
+        window.updateActiveSpellsUI?.();
+        return true;
+    }
+
+    // FEATHER FALL: self-only protection checked at the moment a character
+    // is actually knocked from a height. It uses the normal timed active-spell
+    // machinery so it naturally expires.
+    if (spell.baseId === 'feather_fall') {
+        if (target !== caster) {
+            window.showMessage('Feather Fall can only target its caster.');
+            return false;
+        }
+        const previous = (window.activeSpells || []).find(
+            s => s.targetEntityId === caster.id && s.baseId === 'feather_fall'
+        );
+        if (previous) window.cancelSpell(previous.spellInstanceId);
+        const instanceId = Date.now() + Math.random();
+        window.activeSpells.push({
+            spellInstanceId: instanceId,
+            name: spell.name,
+            baseId: 'feather_fall',
+            casterName: caster.name,
+            targetEntityId: caster.id,
+            coreManaCost: spell.coreManaCost || spell.manaCost,
+            ticksRemaining: spell.durationTicks || 30
+        });
+        window.showMessage(caster.name + ' is surrounded by a weightless magical current.');
         window.updateActiveSpellsUI?.();
         return true;
     }
