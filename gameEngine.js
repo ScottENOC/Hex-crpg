@@ -727,6 +727,13 @@ function playerMoveProcess(player, path) {
 
         let stepCost = Math.max(1, baseMoveCost * (player.isFlying ? 1 : terrainMult));
 
+        // PARKOUR: a trained monk can turn the existing wall-climbing model
+        // into a short, deliberate traversal. Unlike ordinary climbing this
+        // never leaves the character hanging on the wall for several turns.
+        const parkourCost = getParkourTraversalCost(previousTerrain, terrain, moveEntity);
+        const parkourTransition = !player.isFlying && parkourCost !== null && !throughOpenGate;
+        if (parkourTransition) stepCost = parkourCost;
+
         // WALL CLIMB: entering climbRisk terrain from non-climbRisk terrain
         // commits the climber to a multi-turn climb — scaling a real castle
         // wall bare-handed should be serious work, well beyond one turn's
@@ -739,7 +746,8 @@ function playerMoveProcess(player, path) {
         // scripted-status handling below, which spends everything above the
         // 80 end-of-turn threshold each turn (not 1 at a time) until it's
         // paid off or they're knocked off.
-        const climbTransition = !player.isFlying && terrain.climbRisk && !previousTerrain.climbRisk && !throughOpenGate;
+        const climbTransition = !player.isFlying && !parkourTransition &&
+            terrain.climbRisk && !previousTerrain.climbRisk && !throughOpenGate;
         if (climbTransition) {
             // A ladder propped against this exact wall hex (Northwatch's
             // notches, campaign2World.js) makes climbing up it as much
@@ -3915,6 +3923,32 @@ function getClimbCostMult(entity) {
 }
 window.getClimbCostMult = getClimbCostMult;
 
+// PARKOUR: monks who have Parkour and are unarmoured/no-shield can treat
+// climbable wall and palisade transitions as deliberate short traversals
+// instead of entering the normal multi-turn climbing state. This is layered
+// on top of the existing climbRisk system: ordinary characters still use the
+// existing slow climb, and truly impassable Wall/Keep Wall terrain remains
+// completely impassable. Once on the elevated surface, movement along it is
+// already handled as ordinary same-elevation movement.
+function hasParkour(entity) {
+    if (!entity?.skills?.parkour) return false;
+    const equipped = entity.equipped || {};
+    const armor = equipped.armor ? window.items?.[equipped.armor] : null;
+    const offhand = equipped.offhand ? window.items?.[equipped.offhand] : null;
+    return !armor && (!offhand || offhand.type !== 'shield');
+}
+window.hasParkour = hasParkour;
+
+function getParkourTraversalCost(fromTerrain, toTerrain, entity) {
+    if (!hasParkour(entity) || !fromTerrain || !toTerrain) return null;
+    const up = !!toTerrain.elevated && !fromTerrain.elevated;
+    const down = !!fromTerrain.elevated && !toTerrain.elevated;
+    if (up && (toTerrain.climbRisk || toTerrain.name === 'Palisade Wall')) return 20;
+    if (down && fromTerrain.climbRisk) return 5;
+    return null;
+}
+window.getParkourTraversalCost = getParkourTraversalCost;
+
 // A gate hex (Northwatch's, campaign2World.js) stays 'Climbable Wall'
 // terrain permanently, open or closed, so wall-top continuity is never
 // broken — ground-level passability comes from this door state instead of
@@ -4035,7 +4069,7 @@ function getMoveCostMult(q, r, entity) {
         // gets no benefit from it.
         const hasLadder = obj && obj.type === 'ladder' && entity?.hex && obj.interiorHex &&
             entity.hex.q === obj.interiorHex.q && entity.hex.r === obj.interiorHex.r;
-        const canClimb = entity?.skills?.agile_climber;
+        const canClimb = entity?.skills?.agile_climber || hasParkour(entity);
         mult = (hasLadder || canClimb) ? 2 : terrain.moveCostMult;
     }
     // ENCUMBRANCE: the whole party shares one carry-capacity pool (see
