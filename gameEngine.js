@@ -3976,7 +3976,8 @@ function getParkourTraversalCost(fromTerrain, toTerrain, entity) {
     if (up && (toTerrain.climbRisk || toTerrain.name === 'Palisade Wall' || toTerrain.name === 'Roof' || toTerrain.name === 'Balcony')) return 20;
     // Controlled descent from a roof/balcony is slower than simply walking
     // off a rampart: the monk is choosing a landing rather than falling.
-    if (down && (fromTerrain.climbRisk || fromTerrain.name === 'Roof' || fromTerrain.name === 'Balcony')) return 10;
+    if (down && fromTerrain.climbRisk) return 5;
+    if (down && (fromTerrain.name === 'Roof' || fromTerrain.name === 'Balcony')) return 10;
     return null;
 }
 window.getParkourTraversalCost = getParkourTraversalCost;
