@@ -1288,7 +1288,25 @@ function syncGroupMoveButton() {
 }
 window.syncGroupMoveButton = syncGroupMoveButton;
 
+// Keep the real-time loop recoverable when a PWA reload/update leaves a stale
+// interval handle behind. Every game start deliberately replaces the old timer.
+function ensureGameTickLoop(forceRestart = false) {
+    if (forceRestart && window.tickInterval) {
+        clearInterval(window.tickInterval);
+        window.tickInterval = null;
+    }
+    if (window.tickInterval) return;
+    window.tickInterval = window.setInterval(() => {
+        window.movementDiagnosticState = window.movementDiagnosticState || {};
+        window.movementDiagnosticState.timerCallbackCount =
+            (window.movementDiagnosticState.timerCallbackCount || 0) + 1;
+        tick();
+    }, 10);
+}
+window.ensureGameTickLoop = ensureGameTickLoop;
+
 function startGameCore(isLoading = false) {
+    ensureGameTickLoop(true);
   window.gamePhase = 'WAITING';
 
   // Exploration should start in party-follow mode: one tap moves the whole
@@ -1481,7 +1499,7 @@ function startGameCore(isLoading = false) {
       }
       document.addEventListener("keydown", window.handleMovement);
       if (window.installMapClickHandler) window.installMapClickHandler();
-      if (!window.tickInterval) window.tickInterval = setInterval(tick, 10);
+      ensureGameTickLoop();
       return;
   }
 
@@ -1491,7 +1509,7 @@ function startGameCore(isLoading = false) {
       setupArenaLobby();
       document.addEventListener("keydown", window.handleMovement);
       if (window.installMapClickHandler) window.installMapClickHandler();
-      if (!window.tickInterval) window.tickInterval = setInterval(tick, 10);
+      ensureGameTickLoop();
       const fp = window.entities.find(e => e.side === 'player' && !e.rider);
       if (fp && window.centerCameraOn) window.centerCameraOn(fp.hex);
       return;
@@ -1501,7 +1519,7 @@ function startGameCore(isLoading = false) {
       window.setupVillageScene();
       document.addEventListener("keydown", window.handleMovement);
       if (window.installMapClickHandler) window.installMapClickHandler();
-      if (!window.tickInterval) window.tickInterval = setInterval(tick, 10);
+      ensureGameTickLoop();
       const fp = window.entities.find(e => e.side === 'player' && !e.rider);
       if (fp && window.centerCameraOn) window.centerCameraOn(fp.hex);
       return;
@@ -1511,7 +1529,7 @@ function startGameCore(isLoading = false) {
       setupSpriteTestScenario();
       document.addEventListener("keydown", window.handleMovement);
       if (window.installMapClickHandler) window.installMapClickHandler();
-      if (!window.tickInterval) window.tickInterval = setInterval(tick, 10);
+      ensureGameTickLoop();
       if (window.centerCameraOn) window.centerCameraOn(window.SPRITE_TEST_ORIGIN);
       return;
   }
@@ -1576,7 +1594,7 @@ function startGameCore(isLoading = false) {
   window.mapCanvas.addEventListener("touchend", () => { if (touchHoldTimer) { clearTimeout(touchHoldTimer); touchHoldTimer = null; } });
   window.mapCanvas.addEventListener("touchmove", () => { if (touchHoldTimer) { clearTimeout(touchHoldTimer); touchHoldTimer = null; } }, { passive: true });
 
-  if (!window.tickInterval) window.tickInterval = setInterval(tick, 10);
+  ensureGameTickLoop();
 }
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
