@@ -63,9 +63,6 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
         ['spriteRigging.js','spriteRigging'],
         ['scenario5ArmourLab.js','scenario5ArmourLab'],
         ['renderPerfTuning.js','renderPerfTuning'],
-        // Preserve 10 ms combat ticks, but coalesce expensive real-time
-        // exploration simulation to a phone-friendly cadence.
-        ['realtimeTickCadence.js','realtimeTickCadence'],
         ['raceSkinPalettes.js','raceSkinPalettes'],
         // The bridge owns real-time held/sheathed weapon presentation and the
         // stable tactical binding. Load it before readiness decorates that path.
