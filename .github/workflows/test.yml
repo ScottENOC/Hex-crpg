@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Check JavaScript syntax
+        run: npm run check:syntax
+
       - name: Validate PNG assets
         run: npm run validate:png
 
