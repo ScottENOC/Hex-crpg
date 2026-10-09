@@ -1306,14 +1306,22 @@
                     ? tightDirectionalHairDestination(sourceHair, view, hairSet?.front)
                     : null;
                 const hairCrop = tightDest ? {x:0,y:0,w:1,h:1} : layout.hairCrop;
-                const hairDest = tightDest || layout.hairDest;
+                const baseHairDest = tightDest || layout.hairDest;
+                // Reduce all rendered hair assets uniformly by 15%, keeping the
+                // destination centred so front, side and back views stay aligned.
+                const hairDest = {
+                    x:baseHairDest.x + baseHairDest.w * 0.075,
+                    y:baseHairDest.y + baseHairDest.h * 0.075,
+                    w:baseHairDest.w * 0.85,
+                    h:baseHairDest.h * 0.85,
+                };
                 const hairDrawn = tightDest
                     ? drawCropped(ctx, hairImage, hairCrop, hairDest, visualBounds)
                     : drawVisibleFit(ctx, hairImage, visualBounds, {
                         x:hairDest.x,
-                        y:-0.015,
+                        y:-0.015 + 0.47 * 0.075,
                         w:hairDest.w,
-                        h:0.47,
+                        h:0.47 * 0.85,
                     });
                 if (hairDrawn) layerOrder.push('hair');
                 if (!hairDrawn) compositionComplete = false;
