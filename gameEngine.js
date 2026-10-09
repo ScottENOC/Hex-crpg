@@ -1280,17 +1280,21 @@ function setupSpriteTestScenario() {
 }
 window.setupSpriteTestScenario = setupSpriteTestScenario;
 
+function syncGroupMoveButton() {
+  const button = document.getElementById('move-group-btn');
+  if (!button) return;
+  button.innerText = `Move Group: ${window.groupMoveMode ? 'ON' : 'OFF'}`;
+  button.style.backgroundColor = window.groupMoveMode ? '#ff9800' : '#795548';
+}
+window.syncGroupMoveButton = syncGroupMoveButton;
+
 function startGameCore(isLoading = false) {
   window.gamePhase = 'WAITING';
 
   // Exploration should start in party-follow mode: one tap moves the whole
   // party in formation unless the player explicitly turns group movement off.
   window.groupMoveMode = true;
-  const groupMoveButton = document.getElementById('move-group-btn');
-  if (groupMoveButton) {
-      groupMoveButton.innerText = 'Move Group: ON';
-      groupMoveButton.style.backgroundColor = '#ff9800';
-  }
+  syncGroupMoveButton();
   window.playerWorldPos = { x: 220, y: 200 };
   window.activeSpells = window.activeSpells || [];
 
@@ -2827,6 +2831,7 @@ function useStairFromClick(q, r, player) {
     }
 
     window.groupMoveMode = false;
+        syncGroupMoveButton();
     window.groupLeader = null;
     window.leaderPath = null;
     window.clearHighlights();
@@ -5819,6 +5824,7 @@ function wakeUp(entity) {
         // above; clearing the mode/leader/path state here too means there's
         // nothing left for any leftover reference to that state to act on.
         window.groupMoveMode = false;
+        syncGroupMoveButton();
         window.groupLeader = null;
         window.leaderPath = null;
 
@@ -8855,6 +8861,7 @@ function startArenaFight() {
         e.destination = null; // Fix: Stop old movement orders
     });
     window.groupMoveMode = false;
+        syncGroupMoveButton();
     window.groupLeader = null;
     window.leaderPath = null;
 
