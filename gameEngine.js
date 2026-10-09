@@ -1526,7 +1526,9 @@ function startGameCore(isLoading = false) {
       document.addEventListener("keydown", window.handleMovement);
       if (window.installMapClickHandler) window.installMapClickHandler();
       ensureGameTickLoop();
-      const fp = window.entities.find(e => e.side === 'player' && !e.rider);
+      const mainCharacterName = window.party?.[0]?.name;
+       const fp = window.entities.find(e => e.side === 'player' && !e.rider && e.name === mainCharacterName)
+           || window.entities.find(e => e.side === 'player' && !e.rider);
       if (fp && window.centerCameraOn) window.centerCameraOn(fp.hex);
       return;
   }
@@ -1536,7 +1538,9 @@ function startGameCore(isLoading = false) {
       document.addEventListener("keydown", window.handleMovement);
       if (window.installMapClickHandler) window.installMapClickHandler();
       ensureGameTickLoop();
-      const fp = window.entities.find(e => e.side === 'player' && !e.rider);
+      const mainCharacterName = window.party?.[0]?.name;
+       const fp = window.entities.find(e => e.side === 'player' && !e.rider && e.name === mainCharacterName)
+           || window.entities.find(e => e.side === 'player' && !e.rider);
       if (fp && window.centerCameraOn) window.centerCameraOn(fp.hex);
       return;
   }
