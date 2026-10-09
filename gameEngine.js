@@ -1282,6 +1282,15 @@ window.setupSpriteTestScenario = setupSpriteTestScenario;
 
 function startGameCore(isLoading = false) {
   window.gamePhase = 'WAITING';
+
+  // Exploration should start in party-follow mode: one tap moves the whole
+  // party in formation unless the player explicitly turns group movement off.
+  window.groupMoveMode = true;
+  const groupMoveButton = document.getElementById('move-group-btn');
+  if (groupMoveButton) {
+      groupMoveButton.innerText = 'Move Group: ON';
+      groupMoveButton.style.backgroundColor = '#ff9800';
+  }
   window.playerWorldPos = { x: 220, y: 200 };
   window.activeSpells = window.activeSpells || [];
 
@@ -2830,6 +2839,26 @@ function useStairFromClick(q, r, player) {
 window.useStairFromClick = useStairFromClick;
 
 function tick() {
+    // One-shot visible probe after a movement tap. This runs before the
+    // pause/game-over early returns, so a missing STEP/no-path message can
+    // be distinguished from a tick loop that is paused or not processing the
+    // player's destination at all.
+    const moveDiag = window.movementDiagnosticState;
+    if (window.movementDiagnosticEnabled && moveDiag?.lastTap
+        && !moveDiag.tickProbeShown && performance.now() - moveDiag.lastTap > 1000) {
+        moveDiag.tickProbeShown = true;
+        const mainPlayer = window.entities?.find(e => e.side === 'player' && !e.rider
+            && (!window.party?.[0]?.name || e.name === window.party[0].name));
+        const d = mainPlayer?.destination;
+        window.showMessage(
+            'MOVE DIAG: tick reached; paused=' + !!window.isPausedForReaction
+            + ', gameOver=' + !!window.gameOver
+            + ', destination=' + (d ? d.q + ',' + d.r : 'none')
+            + ', combat=' + !!window.isInCombat
+            + ', player=' + (mainPlayer ? mainPlayer.name : 'not found')
+        );
+    }
+
     if (window.isPausedForReaction) {
         // Safety valve: if something left isPausedForReaction stuck true
         // without a modal actually open (a bug in some reaction sub-flow),
@@ -6372,6 +6401,7 @@ function handleClick(e){
         if (window.movementDiagnosticEnabled) {
             window.movementDiagnosticState = window.movementDiagnosticState || {};
             window.movementDiagnosticState.lastTap = performance.now();
+            window.movementDiagnosticState.tickProbeShown = false;
             window.movementDiagnosticState.lastDestination = { q: clickedHex.q, r: clickedHex.r };
             window.movementDiagnosticState.groupMoveModeAtTap = !!window.groupMoveMode;
             window.movementDiagnosticState.combatAtTap = !!window.isInCombat;
