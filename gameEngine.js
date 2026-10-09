@@ -5987,7 +5987,7 @@ function snapVisuals() {
 
 // TEMPORARY MOVEMENT DIAGNOSTIC: visible on iPhone so movement failures can be
 // distinguished between input, group-mode state, tick execution, and pathfinding.
-window.movementDiagnosticEnabled = true;
+window.movementDiagnosticEnabled = false;
 window.movementDiagnosticState = window.movementDiagnosticState || {};
 
 // Persistent on-screen probe: showMessage() can be overwritten by normal
