@@ -1298,9 +1298,15 @@ function ensureGameTickLoop(forceRestart = false) {
     if (window.tickInterval) return;
     window.tickInterval = window.setInterval(() => {
         window.movementDiagnosticState = window.movementDiagnosticState || {};
-        window.movementDiagnosticState.timerCallbackCount =
-            (window.movementDiagnosticState.timerCallbackCount || 0) + 1;
-        tick();
+        const diag = window.movementDiagnosticState;
+        diag.timerCallbackCount = (diag.timerCallbackCount || 0) + 1;
+        try {
+            tick();
+        } catch (error) {
+            diag.tickError = String(error && (error.stack || error.message) || error);
+            window.updateMovementDiagnosticPanel?.('MOVE DIAG: tick threw: ' + diag.tickError);
+            console.error('Movement tick failed', error);
+        }
     }, 10);
 }
 window.ensureGameTickLoop = ensureGameTickLoop;
@@ -6470,7 +6476,13 @@ function handleClick(e){
             window.movementDiagnosticState.lastDestination = { q: clickedHex.q, r: clickedHex.r };
             window.movementDiagnosticState.groupMoveModeAtTap = !!window.groupMoveMode;
             window.movementDiagnosticState.combatAtTap = !!window.isInCombat;
-            const tapReport = `MOVE DIAG: tap received; group=${!!window.groupMoveMode}, combat=${!!window.isInCombat}, target=${clickedHex.q},${clickedHex.r}; tickCount=${window.movementDiagnosticState.tickCount || 0}`;
+            // A movement tap is also a recovery point for a dead/stale timer.
+            // Restart only when neither the tick nor timer callback has ever run.
+            if (!(window.movementDiagnosticState.tickCount || 0)
+                && !(window.movementDiagnosticState.timerCallbackCount || 0)) {
+                window.ensureGameTickLoop?.(true);
+            }
+            const tapReport = `MOVE DIAG: tap received; group=${!!window.groupMoveMode}, combat=${!!window.isInCombat}, target=${clickedHex.q},${clickedHex.r}; ticks=${window.movementDiagnosticState.tickCount || 0}; callbacks=${window.movementDiagnosticState.timerCallbackCount || 0}; timer=${String(window.tickInterval)}; visibility=${document.visibilityState}; error=${window.movementDiagnosticState.tickError || 'none'}`;
             window.updateMovementDiagnosticPanel?.(tapReport);
             window.showMessage(tapReport);
         }
