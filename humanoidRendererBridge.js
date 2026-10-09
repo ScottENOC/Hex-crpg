@@ -174,7 +174,8 @@
         // These are intentionally compact. The old sheath was drawn at roughly
         // one third of the body height, which made it read as a second weapon
         // rather than a believable carried scabbard.
-        const scale = .65;
+        // Enlarge sheathed swords uniformly without changing dagger sizing.
+        const scale = .65 * (isSword ? 1.15 : 1);
         const length = bounds.height * (isSword ? .335 : .205) * scale;
         const sheathWidth = Math.max(1.0, bounds.width * (isSword ? .050 : .043) * scale);
         const handleLength = bounds.height * (isSword ? .105 : .080) * scale;
