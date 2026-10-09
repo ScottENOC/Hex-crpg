@@ -2850,7 +2850,7 @@ function tick() {
     window.movementDiagnosticState.tickCount = (window.movementDiagnosticState.tickCount || 0) + 1;
     const diagState = window.movementDiagnosticState;
     if (window.movementDiagnosticEnabled && diagState.lastTap
-        && diagState.tickCount % 25 === 0) {
+        && !diagState.tickProbeShown && diagState.tickCount % 25 === 0) {
         window.updateMovementDiagnosticPanel?.(
             'MOVE DIAG: tick loop running; ticks=' + diagState.tickCount
             + '; paused=' + !!window.isPausedForReaction
@@ -3253,7 +3253,9 @@ function processRealTimeStep(entity, overage = 0) {
             const now = performance.now();
             if (!window.movementDiagnosticState.lastPathFailure || now - window.movementDiagnosticState.lastPathFailure > 1000) {
                 window.movementDiagnosticState.lastPathFailure = now;
-                window.showMessage(`MOVE DIAG: tick active but no path from ${entity.hex.q},${entity.hex.r} to ${dest.q},${dest.r}`);
+                const pathReport = `MOVE DIAG: tick active but no path from ${entity.hex.q},${entity.hex.r} to ${dest.q},${dest.r}`;
+                window.updateMovementDiagnosticPanel?.(pathReport);
+                window.showMessage(pathReport);
             }
         }
     }
@@ -3285,7 +3287,9 @@ function processRealTimeStep(entity, overage = 0) {
         if (entity.side === 'player' && window.movementDiagnosticEnabled) {
             window.movementDiagnosticState = window.movementDiagnosticState || {};
             window.movementDiagnosticState.lastStep = performance.now();
-            window.showMessage(`MOVE DIAG: STEP to ${nextHex.q},${nextHex.r}; TP=${Math.floor(entity.timePoints)}`);
+            const stepReport = `MOVE DIAG: STEP to ${nextHex.q},${nextHex.r}; TP=${Math.floor(entity.timePoints)}`;
+            window.updateMovementDiagnosticPanel?.(stepReport);
+            window.showMessage(stepReport);
         }
         spendTP(entity, stepCost);
 
