@@ -180,7 +180,6 @@
 
         const defaults = defaultForGender(genderSelect.value);
         // Build is independent of identity/body presentation: always start at Average.
-        const buildSelect = document.getElementById('body-type-select');
         if (buildSelect) buildSelect.value = 'average';
         if (bodySelect && !bodySelect.dataset.identityInitialised) {
             bodySelect.value = defaults.bodyPresentation;
