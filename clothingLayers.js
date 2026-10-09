@@ -85,7 +85,8 @@
       const resolved=view(v),spread=Number(resolved==='back'?geometry.backSpread:geometry.spread)||.24,centre=bounds.left+bounds.width/2,halfSpread=spread*bounds.width/2,outward=Math.max(0,Number(geometry.outwardShift??.4)),maxW=Number(geometry.maxWidth??.25)*bounds.width,ls=contained(halves.left,maxW),rs=contained(halves.right,maxW);
       draw(halves.left,centre-halfSpread-outward*ls.w,maxW);draw(halves.right,centre+halfSpread+outward*rs.w,maxW);return true;
     }
-    const targetX=bounds.left+target.x*bounds.width,targetY=bounds.top+target.y*bounds.height,targetW=target.w*bounds.width,targetH=target.h*bounds.height;
+    // Pants are centred against the humanoid rig, not the garment's authored x offset. This keeps slit/open-panel trousers aligned even when a fit rule or legacy target supplies a stale x value.
+     const targetW=target.w*bounds.width,targetH=target.h*bounds.height,targetX=slot==='pants'?bounds.left+(bounds.width-targetW)/2:bounds.left+target.x*bounds.width,targetY=bounds.top+target.y*bounds.height;
     if(slot==='shirt'||slot==='pants'){
       ctx.drawImage(source,trim.x,trim.y,trim.w,trim.h,targetX,targetY,targetW,targetH);
       return true;
