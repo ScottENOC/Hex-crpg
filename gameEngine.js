@@ -2844,6 +2844,22 @@ function useStairFromClick(q, r, player) {
 window.useStairFromClick = useStairFromClick;
 
 function tick() {
+    // Heartbeat is updated before any early return so the persistent panel can
+    // distinguish a running tick loop from a paused/game-over simulation.
+    window.movementDiagnosticState = window.movementDiagnosticState || {};
+    window.movementDiagnosticState.tickCount = (window.movementDiagnosticState.tickCount || 0) + 1;
+    const diagState = window.movementDiagnosticState;
+    if (window.movementDiagnosticEnabled && diagState.lastTap
+        && diagState.tickCount % 25 === 0) {
+        window.updateMovementDiagnosticPanel?.(
+            'MOVE DIAG: tick loop running; ticks=' + diagState.tickCount
+            + '; paused=' + !!window.isPausedForReaction
+            + '; gameOver=' + !!window.gameOver
+            + '; destination=' + (diagState.lastDestination
+                ? diagState.lastDestination.q + ',' + diagState.lastDestination.r : 'none')
+        );
+    }
+
     // One-shot visible probe after a movement tap. This runs before the
     // pause/game-over early returns, so a missing STEP/no-path message can
     // be distinguished from a tick loop that is paused or not processing the
@@ -2855,13 +2871,13 @@ function tick() {
         const mainPlayer = window.entities?.find(e => e.side === 'player' && !e.rider
             && (!window.party?.[0]?.name || e.name === window.party[0].name));
         const d = mainPlayer?.destination;
-        window.showMessage(
-            'MOVE DIAG: tick reached; paused=' + !!window.isPausedForReaction
+        const tickReport = 'MOVE DIAG: tick reached; paused=' + !!window.isPausedForReaction
             + ', gameOver=' + !!window.gameOver
             + ', destination=' + (d ? d.q + ',' + d.r : 'none')
             + ', combat=' + !!window.isInCombat
-            + ', player=' + (mainPlayer ? mainPlayer.name : 'not found')
-        );
+            + ', player=' + (mainPlayer ? mainPlayer.name : 'not found');
+        window.updateMovementDiagnosticPanel?.(tickReport);
+        window.showMessage(tickReport);
     }
 
     if (window.isPausedForReaction) {
@@ -5946,6 +5962,27 @@ function snapVisuals() {
 window.movementDiagnosticEnabled = true;
 window.movementDiagnosticState = window.movementDiagnosticState || {};
 
+// Persistent on-screen probe: showMessage() can be overwritten by normal
+// game messages, so movement diagnosis must remain visible on iPhone/PWA.
+window.updateMovementDiagnosticPanel = function (message) {
+    if (!window.movementDiagnosticEnabled) return;
+    let panel = document.getElementById('movement-diagnostic-panel');
+    if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'movement-diagnostic-panel';
+        Object.assign(panel.style, {
+            position: 'fixed', left: '6px', right: '6px', bottom: '6px',
+            zIndex: '2147483647', padding: '8px 10px',
+            background: 'rgba(20, 20, 20, 0.94)', color: '#fff176',
+            border: '1px solid #fff176', borderRadius: '6px',
+            font: '12px/1.35 monospace', whiteSpace: 'normal',
+            overflowWrap: 'anywhere', pointerEvents: 'none'
+        });
+        document.body.appendChild(panel);
+    }
+    panel.textContent = message;
+};
+
 function handleClick(e){
     // ABORT if we were dragging the camera
     if (window.totalDragDistance > 10) return;
@@ -6411,7 +6448,9 @@ function handleClick(e){
             window.movementDiagnosticState.lastDestination = { q: clickedHex.q, r: clickedHex.r };
             window.movementDiagnosticState.groupMoveModeAtTap = !!window.groupMoveMode;
             window.movementDiagnosticState.combatAtTap = !!window.isInCombat;
-            window.showMessage(`MOVE DIAG: tap received; group=${!!window.groupMoveMode}, combat=${!!window.isInCombat}, target=${clickedHex.q},${clickedHex.r}`);
+            const tapReport = `MOVE DIAG: tap received; group=${!!window.groupMoveMode}, combat=${!!window.isInCombat}, target=${clickedHex.q},${clickedHex.r}; tickCount=${window.movementDiagnosticState.tickCount || 0}`;
+            window.updateMovementDiagnosticPanel?.(tapReport);
+            window.showMessage(tapReport);
         }
         if (window.groupMoveMode) {
             const leader = player;
