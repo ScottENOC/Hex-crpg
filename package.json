@@ -8,6 +8,7 @@
     "socket.io": "^4.7.2"
   },
   "scripts": {
+    "check:syntax": "node scripts/check-js-syntax.mjs",
     "start": "node server.js",
     "validate:png": "node scripts/validate-png-assets.mjs",
     "test": "playwright test",

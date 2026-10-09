@@ -206,7 +206,7 @@ window.characterBanterLines = [
         cooldownSeconds: 5 * 3600,
         condition: () => { const c = getCompanionOrMount(); return !!c && c.name === 'Unicorn' && !isInCityRegion(); },
         lines: [{ speaker: 'Unicorn', mood: 'serene', text: "*walks with an unhurried, deliberate grace, utterly at ease among the trees*" }]
-    }
+    },
 
     {
         id: 'mirabel_disguise_self_first_experiment',

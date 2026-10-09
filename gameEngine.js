@@ -1288,8 +1288,9 @@ function syncGroupMoveButton() {
 }
 window.syncGroupMoveButton = syncGroupMoveButton;
 
-// Keep the real-time loop recoverable when a PWA reload/update leaves a stale
-// interval handle behind. Every game start deliberately replaces the old timer.
+// The game engine owns the only tick timer. Exploration is coalesced to about
+// 55 Hz on mobile; combat retains the legacy 10 ms driver cadence.
+let lastExplorationTickAt = -Infinity;
 function ensureGameTickLoop(forceRestart = false) {
     if (forceRestart && window.tickInterval) {
         clearInterval(window.tickInterval);
@@ -1297,14 +1298,23 @@ function ensureGameTickLoop(forceRestart = false) {
     }
     if (window.tickInterval) return;
     window.tickInterval = window.setInterval(() => {
-        window.movementDiagnosticState = window.movementDiagnosticState || {};
-        const diag = window.movementDiagnosticState;
-        diag.timerCallbackCount = (diag.timerCallbackCount || 0) + 1;
+        if (!window.isInCombat) {
+            const now = performance.now();
+            if (now - lastExplorationTickAt < 18) return;
+            lastExplorationTickAt = now;
+        }
+        const diagnosticsEnabled = !!window.movementDiagnosticEnabled;
+        const diag = diagnosticsEnabled
+            ? (window.movementDiagnosticState = window.movementDiagnosticState || {})
+            : null;
+        if (diag) diag.timerCallbackCount = (diag.timerCallbackCount || 0) + 1;
         try {
             tick();
         } catch (error) {
-            diag.tickError = String(error && (error.stack || error.message) || error);
-            window.updateMovementDiagnosticPanel?.('MOVE DIAG: tick threw: ' + diag.tickError);
+            if (diag) {
+                diag.tickError = String(error && (error.stack || error.message) || error);
+                window.updateMovementDiagnosticPanel?.('MOVE DIAG: tick threw: ' + diag.tickError);
+            }
             console.error('Movement tick failed', error);
         }
     }, 10);
@@ -2868,12 +2878,12 @@ function useStairFromClick(q, r, player) {
 window.useStairFromClick = useStairFromClick;
 
 function tick() {
-    // Heartbeat is updated before any early return so the persistent panel can
-    // distinguish a running tick loop from a paused/game-over simulation.
-    window.movementDiagnosticState = window.movementDiagnosticState || {};
-    window.movementDiagnosticState.tickCount = (window.movementDiagnosticState.tickCount || 0) + 1;
-    const diagState = window.movementDiagnosticState;
-    if (window.movementDiagnosticEnabled && diagState.lastTap
+    // Keep diagnostic bookkeeping entirely off the hot path unless explicitly enabled.
+    const diagState = window.movementDiagnosticEnabled
+        ? (window.movementDiagnosticState = window.movementDiagnosticState || {})
+        : null;
+    if (diagState) diagState.tickCount = (diagState.tickCount || 0) + 1;
+    if (diagState && diagState.lastTap
         && !diagState.tickProbeShown && diagState.tickCount % 25 === 0) {
         window.updateMovementDiagnosticPanel?.(
             'MOVE DIAG: tick loop running; ticks=' + diagState.tickCount
@@ -2888,8 +2898,8 @@ function tick() {
     // pause/game-over early returns, so a missing STEP/no-path message can
     // be distinguished from a tick loop that is paused or not processing the
     // player's destination at all.
-    const moveDiag = window.movementDiagnosticState;
-    if (window.movementDiagnosticEnabled && moveDiag?.lastTap
+    const moveDiag = diagState;
+    if (moveDiag && moveDiag.lastTap
         && !moveDiag.tickProbeShown && performance.now() - moveDiag.lastTap > 1000) {
         moveDiag.tickProbeShown = true;
         const mainPlayer = window.entities?.find(e => e.side === 'player' && !e.rider
