@@ -1706,10 +1706,9 @@
             if (!canDirectRender(entity)) return;
             const portrait = item.querySelector('.turn-indicator-portrait');
             if (!portrait) return;
-            // Direct-rendered humanoids now have one authoritative portrait canvas.
-            // Remove every old layered portrait image so legacy body/hair/clothing
-            // sprites cannot sit behind or over the complete compositor result.
-            portrait.querySelectorAll('img.portrait-layer').forEach(img => img.remove());
+            // Keep the existing portrait visible while the direct compositor's
+            // front-facing assets are loading. Only replace legacy layers after a
+            // complete canvas has actually been rendered successfully.
             let canvas = portrait.querySelector('canvas[data-direct-humanoid-canvas="true"]');
             if (!canvas) {
                 canvas = document.createElement('canvas');
@@ -1739,6 +1738,11 @@
             // stack was drawn. Never expose a body-only/hair-only/intermediate
             // canvas while another required layer is still loading.
             const complete = !!window.__humanoidRendererLastComplete;
+            if (complete) {
+                // Swap atomically: legacy images remain as a fallback until the
+                // same front-view humanoid composite used by map sprites is ready.
+                portrait.querySelectorAll('img.portrait-layer').forEach(img => img.remove());
+            }
             portrait.classList.toggle('direct-humanoid-ready', complete);
             canvas.style.display = complete ? 'block' : 'none';
             if (complete) canvas.dataset.directHumanoid='true';
