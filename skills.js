@@ -2039,6 +2039,26 @@ Object.assign(skills, {
 });
 
 Object.assign(skills, {
+    'learn_divination': {
+        name: 'Learn Divination',
+        description: 'Unlocks Divination: receive a reliable, deliberately vague glimpse of a real future event. Some prophecies can become self-fulfilling.',
+        tree: 'divine',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedBaseSpells) player.unlockedBaseSpells = [];
+            if (!player.unlockedBaseSpells.includes('divination')) player.unlockedBaseSpells.push('divination');
+        }
+    },
+    'learn_feather_fall': {
+        name: 'Learn Feather Fall',
+        description: 'Unlocks Feather Fall: briefly protects you from the consequences of falling from height.',
+        tree: 'arcane',
+        maxRanks: 1,
+        apply: (player) => {
+            if (!player.unlockedBaseSpells) player.unlockedBaseSpells = [];
+            if (!player.unlockedBaseSpells.includes('feather_fall')) player.unlockedBaseSpells.push('feather_fall');
+        }
+    },
     'learn_disguise_self': {
         name: 'Learn Disguise Self',
         description: 'Unlocks the Disguise Self arcane spell.',
