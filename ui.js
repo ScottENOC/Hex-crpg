@@ -1004,7 +1004,7 @@ function updateActionButtons() {
                 button.disabled = isCasting || (player.timePoints < spell.tpCost);
                 button.onclick = () => {
                     window.playerAction = { type: 'spell', index: index, targets: [] };
-                    const targetStr = spell.selfTarget ? "Click yourself to receive the vision." : ((spell.extraTargets || 0) > 0 ? `Select up to ${1 + spell.extraTargets} targets.` : "Click a target.");
+                    const targetStr = spell.baseId === "divination" ? "Click yourself to receive the vision." : (spell.selfTarget ? "Click yourself to cast this spell." : ((spell.extraTargets || 0) > 0 ? `Select up to ${1 + spell.extraTargets} targets.` : "Click a target."));
                     window.showMessage(`Spell ready: ${spell.name}. ${targetStr} Range (${spell.range}).`);
                     updateActionButtons();
                 };
