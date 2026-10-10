@@ -653,6 +653,7 @@ function resolveFall(entity, options = {}) {
     if (entity.climbing) entity.climbing = null;
     if (feather) {
         window.activeSpells.splice(window.activeSpells.indexOf(feather), 1);
+        window.updateActiveSpellsUI?.();
         window.showMessage(entity.name + ' drifts safely down ' + landing.height + ' level' + (landing.height === 1 ? '' : 's') + '.');
         window.updateTurnIndicator?.();
         syncBackToPlayer(entity);
@@ -9822,7 +9823,7 @@ function resolveSpell(caster, spell, target, clickedHex) {
             hitChance -= 15;
         }
 
-        const foretoldHit = spell.type === 'damage' && target && target.side !== caster.side && window.divinationSystem?.consumeTrueStrike?.(caster);
+        const foretoldHit = spell.type === 'damage' && target && target.side !== caster.side && !target.noAttack && window.divinationSystem?.consumeTrueStrike?.(caster);
         const roll = foretoldHit ? 0 : Math.floor(Math.random() * 100);
         let hit = !spell.needsHitCheck || (target && (foretoldHit || roll < hitChance));
 
