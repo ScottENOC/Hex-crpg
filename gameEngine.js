@@ -685,7 +685,8 @@ function playerMoveProcess(player, path) {
     // MULTI-HEX / WALL FIT CHECK
     const nextHex = path[0];
     const occupant = getEntityAtHex(nextHex.q, nextHex.r);
-    const targetTerrain = window.getTerrainAt(nextHex.q, nextHex.r);
+    const playerFloor = player.floor || 0;
+    const targetTerrain = window.getTerrainAtFloor(nextHex.q, nextHex.r, playerFloor);
     
     // TASK 2: Knowledge-based blocking
     const isVisible = window.isVisibleToPlayer(nextHex);
@@ -741,8 +742,24 @@ function playerMoveProcess(player, path) {
             window.showMessage(`Halted inside ${occupant.name}'s hex! Shunted back.`);
             player.hex = previousHex;
         } else {
+            const movedFromHex = { ...previousHex };
+            const movedFromFloor = playerFloor;
+            const movedFromTerrain = window.getTerrainAtFloor(movedFromHex.q, movedFromHex.r, movedFromFloor);
             player.hex = nextHex;
             if (player.riding) player.riding.hex = { q: nextHex.q, r: nextHex.r };
+            const targetExistsOnCurrentFloor = hasFloorTerrainAt(nextHex.q, nextHex.r, movedFromFloor);
+            const isDropFromUpperFloor = movedFromFloor > 0 && !targetExistsOnCurrentFloor;
+            const landingTerrain = window.getTerrainAtFloor(nextHex.q, nextHex.r, movedFromFloor);
+            const isDropFromElevated = movedFromFloor === 0 && movedFromTerrain?.elevated &&
+                !movedFromTerrain?.climbRisk && !landingTerrain?.elevated;
+            if (isDropFromUpperFloor) {
+                resolveFall(player, { fromHex: nextHex, fromFloor: movedFromFloor, fromTerrain: movedFromTerrain });
+            } else if (isDropFromElevated) {
+                resolveFall(player, {
+                    fromHex: movedFromHex, fromFloor: movedFromFloor, fromTerrain: movedFromTerrain,
+                    landingHex: nextHex, landingFloor: movedFromFloor
+                });
+            }
             window.drawMap();
             window.renderEntities();
         }
@@ -770,8 +787,8 @@ function playerMoveProcess(player, path) {
         // clamp defensively anyway (matches updatePlayerUI's own highlight
         // BFS, which already does the same for the highlighted-range case).
         baseMoveCost = Math.max(1, baseMoveCost);
-        const previousTerrain = window.getTerrainAt(previousHex.q, previousHex.r);
-        const terrain = window.getTerrainAt(player.hex.q, player.hex.r);
+        const previousTerrain = window.getTerrainAtFloor(previousHex.q, previousHex.r, playerFloor);
+        const terrain = window.getTerrainAtFloor(player.hex.q, player.hex.r, playerFloor);
         
         let terrainMult = window.getMoveCostMult(player.hex.q, player.hex.r, moveEntity);
         if (terrain.name === 'Foliage' && (moveEntity.skills?.elf_foliage_expertise || moveEntity.skills?.druid_foliage_expertise)) {
@@ -8466,8 +8483,10 @@ function tryShove(shover, target) {
         return false;
     }
 
-    const attackerTerrain = window.getTerrainAt(shover.hex.q, shover.hex.r);
-    const targetTerrain = window.getTerrainAt(target.hex.q, target.hex.r);
+    const shoverFloor = shover.floor || 0;
+    const targetFloor = target.floor || 0;
+    const attackerTerrain = window.getTerrainAtFloor(shover.hex.q, shover.hex.r, shoverFloor);
+    const targetTerrain = window.getTerrainAtFloor(target.hex.q, target.hex.r, targetFloor);
     const hitChance = 50 + shover.toHitMelee + attackerTerrain.hitBonus - (target.passiveDodge + targetTerrain.dodgeBonus);
     const roll = Math.floor(Math.random() * 100);
     if (roll >= hitChance) {
@@ -8503,7 +8522,7 @@ function tryShove(shover, target) {
     // climb, gated behind the multi-turn climbing status above). Knocking
     // them *off* elevated terrain, though, is exactly what a shove should be
     // able to do — gravity does the rest, at the cost of fall damage below.
-    const newTerrain = window.getTerrainAt(newHex.q, newHex.r);
+    const newTerrain = window.getTerrainAtFloor(newHex.q, newHex.r, targetFloor);
     const shovingUp = !!newTerrain.elevated && !targetTerrain.elevated;
     if (newTerrain.impassable || shovingUp) {
         window.showMessage(`${target.name} braces against the wall — the shove can't force them up it.`);
@@ -8512,23 +8531,23 @@ function tryShove(shover, target) {
         return true;
     }
 
-    const shovingOff = !!targetTerrain.elevated && !newTerrain.elevated;
+    const leavesUpperFloor = targetFloor > 0 && !hasFloorTerrainAt(newHex.q, newHex.r, targetFloor);
+    const shovingOff = (!!targetTerrain.elevated && !newTerrain.elevated) || leavesUpperFloor;
+    const fromHex = { ...target.hex };
     target.hex = newHex;
     spendTP(shover, 5);
     window.playerAction = null;
 
     if (shovingOff) {
-        // A climb in progress is abandoned the instant the climber leaves
-        // the wall involuntarily — same "knocked off mid-climb" idea the
-        // climbing status comment already calls out (see climbTransition
-        // above), just triggered by a shove instead of running out of TP.
         if (target.climbing) target.climbing = null;
-        const fallDmg = 8 + Math.floor(Math.random() * 8); // 8-15, a real hit but rarely lethal on its own
-        target.hp -= fallDmg;
-        syncBackToPlayer(target);
-        if (window.spawnFloatingText) window.spawnFloatingText(target.hex, `-${fallDmg}`, '#ff4d4d');
-        window.showMessage(`${shover.name} shoves ${target.name} off the wall! They hit the ground hard. (-${fallDmg})`);
-        if (target.hp <= 0 && target.alive) handleLethalDamage(target, shover);
+        if (leavesUpperFloor) {
+            resolveFall(target, { fromHex: newHex, fromFloor: targetFloor, fromTerrain: targetTerrain, attacker: shover });
+        } else {
+            resolveFall(target, {
+                fromHex, fromFloor: targetFloor, fromTerrain: targetTerrain,
+                landingHex: newHex, landingFloor: targetFloor, attacker: shover
+            });
+        }
     } else {
         window.showMessage(`${shover.name} shoves ${target.name}.`);
     }
