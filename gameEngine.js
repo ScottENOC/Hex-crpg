@@ -3444,8 +3444,6 @@ function isCombatDormant(e, partyHexes) {
 }
 
 function runTickInternal(isSleepCycle = false, skipUI = false, tickMultiplier = 1.0) {
-    window.divinationSystem?.tick?.();
-    (window.entities || []).filter(e => e.alive && e.side === 'player' && !e.rider).forEach(e => window.divinationSystem?.tryFulfilNearPlayer?.(e));
     if (window.multiplayer && window.multiplayer.roomCode && !window.multiplayer.isHost) {
         return;
     }
@@ -9558,18 +9556,6 @@ window.tryShove = tryShove;
 
 function resolveSpell(caster, spell, target, clickedHex) {
     let actionHandled = false;
-    if (spell.baseId === 'divination') {
-        if (target !== caster) {
-            window.showMessage('Divination can only target its caster.');
-            return false;
-        }
-        if (!window.divinationSystem?.cast) {
-            window.showMessage('The divine vision is unavailable.');
-            return false;
-        }
-        window.divinationSystem.cast(caster);
-        return true;
-    }
     if (spell.baseId === 'disguise_self') {
         if (target !== caster) {
             window.showMessage('Disguise Self can only target its caster.');
@@ -9823,9 +9809,8 @@ function resolveSpell(caster, spell, target, clickedHex) {
             hitChance -= 15;
         }
 
-        const foretoldHit = spell.type === 'damage' && target && target.side !== caster.side && !target.noAttack && window.divinationSystem?.consumeTrueStrike?.(caster);
-        const roll = foretoldHit ? 0 : Math.floor(Math.random() * 100);
-        let hit = !spell.needsHitCheck || (target && (foretoldHit || roll < hitChance));
+        const roll = Math.floor(Math.random() * 100);
+        let hit = !spell.needsHitCheck || (target && roll < hitChance);
 
         if (spell.needsHitCheck && target) {
             window.showMessage(`${caster.name} casts ${spell.name} at ${target.name}: ${hit ? 'HIT' : 'MISS'} (Roll: ${roll} vs Need: <${hitChance})`);

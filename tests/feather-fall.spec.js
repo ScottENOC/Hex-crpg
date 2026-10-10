@@ -1,24 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { createCharacter } = require('./helpers.js');
 
-test.describe('Divination and Feather Fall integration', () => {
-    test('Divination creates a real prophecy and consumes a foretold strike once', async ({ page }) => {
-        await createCharacter(page);
-        const result = await page.evaluate(() => {
-            window.tileObjects = {};
-            window.mapItems = {};
-            const caster = window.entities.find(e => e.alive && e.side === 'player' && !e.rider);
-            const prophecy = window.divinationSystem.cast(caster);
-            const firstUse = window.divinationSystem.consumeTrueStrike(caster);
-            const secondUse = window.divinationSystem.consumeTrueStrike(caster);
-            return { kind: prophecy.kind, text: prophecy.text, firstUse, secondUse };
-        });
-        expect(result.kind).toBe('true_strike');
-        expect(result.text).toContain('next time you strike');
-        expect(result.firstUse).toBe(true);
-        expect(result.secondUse).toBe(false);
-    });
-
+test.describe('Feather Fall integration', () => {
     test('Feather Fall prevents damage and is consumed by a resolved fall', async ({ page }) => {
         await createCharacter(page);
         const result = await page.evaluate(() => {
