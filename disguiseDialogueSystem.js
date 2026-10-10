@@ -5,7 +5,7 @@
 (() => {
     'use strict';
 
-    const BUILD = '20261008-disguise-dialogue-risk-v1';
+    const BUILD = '20261010-disguise-dialogue-risk-v2';
     let rawShowDialogue = null;
 
     function player() {
@@ -244,6 +244,10 @@
     function install() {
         if (window.__disguiseDialogueRiskInstalled || typeof window.showDialogue !== 'function') return;
         const original = window.showDialogue;
+        // Keep a reference to the real dialogue renderer before wrapping it.
+        // Challenge/response branches must bypass this wrapper to avoid recursively
+        // challenging the same NPC, but still need to display their dialogue.
+        rawShowDialogue = original.bind(window);
 
         window.showDialogue = function(npc, message, options) {
             const d = activeTarget();
