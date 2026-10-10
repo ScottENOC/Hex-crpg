@@ -1427,6 +1427,10 @@
         group.delete(facing);
         const entry = {canvas, compositeId: nextHumanoidCompositeId++};
         group.set(facing, entry);
+        // Initiative portraits consume the map-sized front composite; notify them
+        // only after that canonical cached image exists, never by building a
+        // portrait-sized composite of their own.
+        if (facing === 'down') queuePortraitRefresh();
         humanoidSpriteCache.delete(appearanceKey);
         humanoidSpriteCache.set(appearanceKey, group);
         while (humanoidSpriteCache.size > MAX_HUMANOID_CACHED_CHARACTERS) {
@@ -1706,47 +1710,48 @@
             if (!canDirectRender(entity)) return;
             const portrait = item.querySelector('.turn-indicator-portrait');
             if (!portrait) return;
-            // Keep the existing portrait visible while the direct compositor's
-            // front-facing assets are loading. Only replace legacy layers after a
-            // complete canvas has actually been rendered successfully.
+
+            // A portrait is only a small presentation of the map's canonical
+            // front-facing sprite. Do not invoke the compositor here: doing so
+            // lets the 100px portrait canvas become the cached source, and can
+            // produce different clothing/hair results from the map renderer.
+            const renderEntity = window.disguiseSelfSystem?.getRenderEntity?.(entity) || entity;
+            const cached = cacheGet(appearanceCacheKey(renderEntity), 'down');
+            if (!cached?.canvas) {
+                // Leave the existing portrait/fallback in place until the map
+                // renderer has produced the front-facing composite at map scale.
+                portrait.classList.remove('direct-humanoid-ready');
+                const canvas = portrait.querySelector('canvas[data-direct-humanoid-canvas="true"]');
+                if (canvas) {
+                    canvas.style.display = 'none';
+                    delete canvas.dataset.directHumanoid;
+                }
+                return;
+            }
+
             let canvas = portrait.querySelector('canvas[data-direct-humanoid-canvas="true"]');
             if (!canvas) {
                 canvas = document.createElement('canvas');
-                canvas.width=100; canvas.height=100;
-                canvas.dataset.directHumanoidCanvas='true';
+                canvas.width = 100;
+                canvas.height = 100;
+                canvas.dataset.directHumanoidCanvas = 'true';
                 canvas.classList.add('portrait-layer');
-                canvas.style.cssText='width:100%;height:100%;left:0;top:0;';
+                canvas.style.cssText = 'width:100%;height:100%;left:0;top:0;';
                 portrait.insertBefore(canvas, portrait.firstChild);
             }
             const ctx = canvas.getContext('2d');
-            ctx.clearRect(0,0,100,100);
-            const height=92,width=height*HUMAN_RENDER_ASPECT;
-            // Initiative portraits are deliberately always front-facing,
-            // regardless of the entity's current map facing.
-            const portraitFacing = 'down';
-            window.__humanoidRendererLastComplete = false;
-            // Initiative portraits use the exact same cached compositor as the
-            // map. This prevents the portrait from briefly showing a naked body,
-            // an independently-scaled hair layer, or any other intermediate stack.
-            const rendered = drawHumanoidCharacter(
-                ctx, entity, 0, 0, 1, 0,
-                {left:(100-width)/2,top:4,width,height},
-                portraitFacing,
-                'portrait'
-            );
-            // A portrait is authoritative only when the COMPLETE compositor
-            // stack was drawn. Never expose a body-only/hair-only/intermediate
-            // canvas while another required layer is still loading.
-            const complete = !!window.__humanoidRendererLastComplete;
-            if (complete) {
-                // Swap atomically: legacy images remain as a fallback until the
-                // same front-view humanoid composite used by map sprites is ready.
-                portrait.querySelectorAll('img.portrait-layer').forEach(img => img.remove());
-            }
-            portrait.classList.toggle('direct-humanoid-ready', complete);
-            canvas.style.display = complete ? 'block' : 'none';
-            if (complete) canvas.dataset.directHumanoid='true';
-            else delete canvas.dataset.directHumanoid;
+            if (!ctx) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const height = 92;
+            const width = height * HUMAN_RENDER_ASPECT;
+            ctx.drawImage(cached.canvas, (100-width)/2, 4, width, height);
+
+            // Keep the old image stack until the exact cached composite has been
+            // drawn, then swap atomically. Clothes and hair are baked into it.
+            portrait.querySelectorAll('img.portrait-layer').forEach(img => img.remove());
+            portrait.classList.add('direct-humanoid-ready');
+            canvas.style.display = 'block';
+            canvas.dataset.directHumanoid = 'true';
         });
     }
 
