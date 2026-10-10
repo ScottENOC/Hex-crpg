@@ -149,6 +149,25 @@ const baseSpells = {
         baseMana: 20,
         baseRange: 8,
         type: 'timeskip'
+    },
+    'divination': {
+        name: 'Divination',
+        school: 'divine',
+        baseMana: 12,
+        baseRange: 1,
+        type: 'divination',
+        selfTarget: true
+    },
+    'feather_fall': {
+        name: 'Feather Fall',
+        school: 'arcane',
+        baseMana: 6,
+        baseRange: 1,
+        type: 'buff',
+        ongoing: true,
+        selfTarget: true,
+        durationTicks: 30,
+        debuffType: 'feather_fall'
     }
 };
 
