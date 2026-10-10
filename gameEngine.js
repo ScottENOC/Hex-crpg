@@ -586,6 +586,90 @@ function syncBackToPlayer(entity) {
     }
 }
 
+// FALL RESOLUTION: every ordinary vertical drop resolves through this shared path.
+// One floor is treated as roughly one 10-foot fall increment (1d6), matching
+// the familiar tabletop model while keeping Hex's world-height abstraction.
+function hasFloorTerrainAt(q, r, floor) {
+    if (!floor) return true;
+    const b = window.getMultiStoryBuildingAt?.({ q, r });
+    return !!(b && b.floors?.[floor] && b.floors[floor].terrain?.[q + ',' + r] !== undefined);
+}
+function getFloorTerrain(q, r, floor) {
+    return window.getTerrainAtFloor ? window.getTerrainAtFloor(q, r, floor) : window.getTerrainAt(q, r);
+}
+function getVerticalLevel(floor, terrain) {
+    return (floor || 0) + (terrain?.elevated ? 1 : 0);
+}
+function findFallLanding(hex, fromFloor, fromTerrain) {
+    const sourceFloor = fromFloor || 0;
+    const sourceLevel = getVerticalLevel(sourceFloor, fromTerrain);
+    const candidates = [];
+    if (sourceFloor > 0) {
+        for (let f = sourceFloor - 1; f >= 0; f--) {
+            if (f === 0 || hasFloorTerrainAt(hex.q, hex.r, f)) candidates.push(f);
+        }
+    } else if (sourceFloor < 0) {
+        const b = window.getMultiStoryBuildingAt?.(hex);
+        const lower = b ? Object.keys(b.floors || {}).map(Number).filter(f => f < sourceFloor).sort((a,b) => b-a) : [];
+        candidates.push(...lower);
+    } else if (fromTerrain?.elevated) {
+        candidates.push(0);
+    }
+    for (const floor of candidates) {
+        const terrain = getFloorTerrain(hex.q, hex.r, floor);
+        if (!terrain?.impassable) {
+            const landingLevel = getVerticalLevel(floor, terrain);
+            if (landingLevel < sourceLevel) return { floor, hex: { ...hex }, terrain, height: sourceLevel - landingLevel };
+        }
+    }
+    return null;
+}
+function rollFallDamage(dice) {
+    let total = 0;
+    for (let i = 0; i < dice; i++) total += 1 + Math.floor(Math.random() * 6);
+    return total;
+}
+function resolveFall(entity, options = {}) {
+    if (!entity || entity.isFlying) return { fell: false };
+    const fromFloor = options.fromFloor !== undefined ? options.fromFloor : (entity.floor || 0);
+    const fromHex = options.fromHex || { ...entity.hex };
+    const fromTerrain = options.fromTerrain || getFloorTerrain(fromHex.q, fromHex.r, fromFloor);
+    let landing = null;
+    if (options.landingHex) {
+        const landingFloor = options.landingFloor !== undefined ? options.landingFloor : fromFloor;
+        const terrain = getFloorTerrain(options.landingHex.q, options.landingHex.r, landingFloor);
+        const sourceLevel = getVerticalLevel(fromFloor, fromTerrain);
+        const landingLevel = getVerticalLevel(landingFloor, terrain);
+        if (landingLevel < sourceLevel) landing = { floor: landingFloor, hex: { ...options.landingHex }, terrain, height: sourceLevel - landingLevel };
+    } else {
+        landing = findFallLanding(fromHex, fromFloor, fromTerrain);
+    }
+    if (!landing || landing.height <= 0) return { fell: false };
+    const feather = (window.activeSpells || []).find(s => s.baseId === 'feather_fall' && s.targetEntityId === entity.id);
+    entity.hex = landing.hex;
+    entity.floor = landing.floor;
+    entity.destination = null;
+    if (entity.riding) { entity.riding.hex = { ...landing.hex }; entity.riding.floor = landing.floor; entity.riding.destination = null; }
+    if (entity.climbing) entity.climbing = null;
+    if (feather) {
+        window.activeSpells.splice(window.activeSpells.indexOf(feather), 1);
+        window.showMessage(entity.name + ' drifts safely down ' + landing.height + ' level' + (landing.height === 1 ? '' : 's') + '.');
+        window.updateTurnIndicator?.();
+        syncBackToPlayer(entity);
+        return { fell: true, prevented: true, damage: 0, height: landing.height, landing };
+    }
+    const dice = Math.min(20, Math.max(1, Math.floor(landing.height)));
+    const damage = rollFallDamage(dice);
+    entity.hp -= damage;
+    syncBackToPlayer(entity);
+    if (window.spawnFloatingText) window.spawnFloatingText(entity.hex, '-' + damage, '#ff4d4d');
+    window.showMessage(entity.name + ' falls ' + landing.height + ' level' + (landing.height === 1 ? '' : 's') + ' and takes ' + damage + ' fall damage (' + dice + 'd6).');
+    if (entity.hp <= 0 && entity.alive) handleLethalDamage(entity, options.attacker || null);
+    window.updateTurnIndicator?.();
+    return { fell: true, prevented: false, damage, height: landing.height, landing };
+}
+window.resolveFall = resolveFall;
+
 function playerMoveProcess(player, path) {
     if (!path || path.length === 0) {
         finalizePlayerAction(player, true);
@@ -3342,6 +3426,8 @@ function isCombatDormant(e, partyHexes) {
 }
 
 function runTickInternal(isSleepCycle = false, skipUI = false, tickMultiplier = 1.0) {
+    window.divinationSystem?.tick?.();
+    (window.entities || []).filter(e => e.alive && e.side === 'player' && !e.rider).forEach(e => window.divinationSystem?.tryFulfilNearPlayer?.(e));
     if (window.multiplayer && window.multiplayer.roomCode && !window.multiplayer.isHost) {
         return;
     }
@@ -7018,13 +7104,19 @@ function resolveAttack(attacker, target, isFeint, isOffhand = false, missCallbac
   // caused the fall, so the kill/XP attribution is correct for free.
   if (target.climbing) {
       if (Math.random() < 0.5) {
-          sharedMessage(`${target.name} loses their grip and falls!`);
-          target.hex = { ...target.climbing.fromHex };
+          const climbFrom = { ...target.climbing.fromHex };
+          const climbFloor = target.floor || 0;
           target.climbing = null;
-          target.hp -= 5; syncBackToPlayer(target);
-          if (window.spawnFloatingText) window.spawnFloatingText(target.hex, `-5`, '#ff4d4d');
+          resolveFall(target, {
+              fromHex: target.hex,
+              fromFloor: climbFloor,
+              fromTerrain: window.getTerrainAtFloor(target.hex.q, target.hex.r, climbFloor),
+              landingHex: climbFrom,
+              landingFloor: climbFloor,
+              attacker
+          });
       } else {
-          sharedMessage(`${target.name} clings on despite the blow!`);
+          sharedMessage(target.name + ' clings on despite the blow!');
       }
   }
 
@@ -9446,6 +9538,18 @@ window.tryShove = tryShove;
 
 function resolveSpell(caster, spell, target, clickedHex) {
     let actionHandled = false;
+    if (spell.baseId === 'divination') {
+        if (target !== caster) {
+            window.showMessage('Divination can only target its caster.');
+            return false;
+        }
+        if (!window.divinationSystem?.cast) {
+            window.showMessage('The divine vision is unavailable.');
+            return false;
+        }
+        window.divinationSystem.cast(caster);
+        return true;
+    }
     if (spell.baseId === 'disguise_self') {
         if (target !== caster) {
             window.showMessage('Disguise Self can only target its caster.');
@@ -9468,6 +9572,29 @@ function resolveSpell(caster, spell, target, clickedHex) {
             coreManaCost: spell.coreManaCost || spell.manaCost
         });
         window.showMessage(caster.name + ' assumes the chosen disguise.');
+        window.updateActiveSpellsUI?.();
+        return true;
+    }
+    if (spell.baseId === 'feather_fall') {
+        if (target !== caster) {
+            window.showMessage('Feather Fall can only target its caster.');
+            return false;
+        }
+        const previous = (window.activeSpells || []).find(
+            entry => entry.targetEntityId === caster.id && entry.baseId === 'feather_fall'
+        );
+        if (previous) window.cancelSpell(previous.spellInstanceId);
+        const instanceId = Date.now() + Math.random();
+        window.activeSpells.push({
+            spellInstanceId: instanceId,
+            name: spell.name,
+            baseId: 'feather_fall',
+            casterName: caster.name,
+            targetEntityId: caster.id,
+            coreManaCost: spell.coreManaCost || spell.manaCost,
+            ticksRemaining: spell.durationTicks || 30
+        });
+        window.showMessage(caster.name + ' is surrounded by a weightless magical current.');
         window.updateActiveSpellsUI?.();
         return true;
     }
@@ -9676,8 +9803,9 @@ function resolveSpell(caster, spell, target, clickedHex) {
             hitChance -= 15;
         }
 
-        const roll = Math.floor(Math.random() * 100);
-        let hit = !spell.needsHitCheck || (target && roll < hitChance);
+        const foretoldHit = spell.type === 'damage' && target && target.side !== caster.side && window.divinationSystem?.consumeTrueStrike?.(caster);
+        const roll = foretoldHit ? 0 : Math.floor(Math.random() * 100);
+        let hit = !spell.needsHitCheck || (target && (foretoldHit || roll < hitChance));
 
         if (spell.needsHitCheck && target) {
             window.showMessage(`${caster.name} casts ${spell.name} at ${target.name}: ${hit ? 'HIT' : 'MISS'} (Roll: ${roll} vs Need: <${hitChance})`);
