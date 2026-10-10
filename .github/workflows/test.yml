@@ -55,7 +55,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run development smoke and startup integrity tests
-        run: npx playwright test tests/smoke.spec.js tests/startup-integrity.spec.js tests/parkour-traversal.spec.js tests/disguise-self-dialogue-risk.spec.js
+        run: npx playwright test tests/smoke.spec.js tests/startup-integrity.spec.js tests/parkour-traversal.spec.js tests/disguise-self-dialogue-risk.spec.js tests/divination-feather-fall.spec.js
 
       - name: Upload Playwright smoke failures
         if: failure()
