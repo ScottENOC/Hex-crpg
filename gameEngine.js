@@ -1303,18 +1303,9 @@ function ensureGameTickLoop(forceRestart = false) {
             if (now - lastExplorationTickAt < 18) return;
             lastExplorationTickAt = now;
         }
-        const diagnosticsEnabled = !!window.movementDiagnosticEnabled;
-        const diag = diagnosticsEnabled
-            ? (window.movementDiagnosticState = window.movementDiagnosticState || {})
-            : null;
-        if (diag) diag.timerCallbackCount = (diag.timerCallbackCount || 0) + 1;
         try {
             tick();
         } catch (error) {
-            if (diag) {
-                diag.tickError = String(error && (error.stack || error.message) || error);
-                window.updateMovementDiagnosticPanel?.('MOVE DIAG: tick threw: ' + diag.tickError);
-            }
             console.error('Movement tick failed', error);
         }
     }, 10);
@@ -2882,42 +2873,6 @@ function useStairFromClick(q, r, player) {
 window.useStairFromClick = useStairFromClick;
 
 function tick() {
-    // Keep diagnostic bookkeeping entirely off the hot path unless explicitly enabled.
-    const diagState = window.movementDiagnosticEnabled
-        ? (window.movementDiagnosticState = window.movementDiagnosticState || {})
-        : null;
-    if (diagState) diagState.tickCount = (diagState.tickCount || 0) + 1;
-    if (diagState && diagState.lastTap
-        && !diagState.tickProbeShown && diagState.tickCount % 25 === 0) {
-        window.updateMovementDiagnosticPanel?.(
-            'MOVE DIAG: tick loop running; ticks=' + diagState.tickCount
-            + '; paused=' + !!window.isPausedForReaction
-            + '; gameOver=' + !!window.gameOver
-            + '; destination=' + (diagState.lastDestination
-                ? diagState.lastDestination.q + ',' + diagState.lastDestination.r : 'none')
-        );
-    }
-
-    // One-shot visible probe after a movement tap. This runs before the
-    // pause/game-over early returns, so a missing STEP/no-path message can
-    // be distinguished from a tick loop that is paused or not processing the
-    // player's destination at all.
-    const moveDiag = diagState;
-    if (moveDiag && moveDiag.lastTap
-        && !moveDiag.tickProbeShown && performance.now() - moveDiag.lastTap > 1000) {
-        moveDiag.tickProbeShown = true;
-        const mainPlayer = window.entities?.find(e => e.side === 'player' && !e.rider
-            && (!window.party?.[0]?.name || e.name === window.party[0].name));
-        const d = mainPlayer?.destination;
-        const tickReport = 'MOVE DIAG: tick reached; paused=' + !!window.isPausedForReaction
-            + ', gameOver=' + !!window.gameOver
-            + ', destination=' + (d ? d.q + ',' + d.r : 'none')
-            + ', combat=' + !!window.isInCombat
-            + ', player=' + (mainPlayer ? mainPlayer.name : 'not found');
-        window.updateMovementDiagnosticPanel?.(tickReport);
-        window.showMessage(tickReport);
-    }
-
     if (window.isPausedForReaction) {
         // Safety valve: if something left isPausedForReaction stuck true
         // without a modal actually open (a bug in some reaction sub-flow),
@@ -3286,15 +3241,6 @@ function processRealTimeStep(entity, overage = 0) {
             entity._pathCache = fullPath;
             entity._pathCacheDest = { q: dest.q, r: dest.r };
             nextHex = fullPath[1];
-        } else if (entity.side === 'player' && window.movementDiagnosticEnabled) {
-            window.movementDiagnosticState = window.movementDiagnosticState || {};
-            const now = performance.now();
-            if (!window.movementDiagnosticState.lastPathFailure || now - window.movementDiagnosticState.lastPathFailure > 1000) {
-                window.movementDiagnosticState.lastPathFailure = now;
-                const pathReport = `MOVE DIAG: tick active but no path from ${entity.hex.q},${entity.hex.r} to ${dest.q},${dest.r}`;
-                window.updateMovementDiagnosticPanel?.(pathReport);
-                window.showMessage(pathReport);
-            }
         }
     }
 
@@ -3322,13 +3268,6 @@ function processRealTimeStep(entity, overage = 0) {
         entity.startR = entity.hex.r;
 
         entity.hex = nextHex;
-        if (entity.side === 'player' && window.movementDiagnosticEnabled) {
-            window.movementDiagnosticState = window.movementDiagnosticState || {};
-            window.movementDiagnosticState.lastStep = performance.now();
-            const stepReport = `MOVE DIAG: STEP to ${nextHex.q},${nextHex.r}; TP=${Math.floor(entity.timePoints)}`;
-            window.updateMovementDiagnosticPanel?.(stepReport);
-            window.showMessage(stepReport);
-        }
         spendTP(entity, stepCost);
 
         // Advance the cached path so its head is again the current hex; if the
@@ -5999,32 +5938,6 @@ function snapVisuals() {
     });
 }
 
-// TEMPORARY MOVEMENT DIAGNOSTIC: visible on iPhone so movement failures can be
-// distinguished between input, group-mode state, tick execution, and pathfinding.
-window.movementDiagnosticEnabled = false;
-window.movementDiagnosticState = window.movementDiagnosticState || {};
-
-// Persistent on-screen probe: showMessage() can be overwritten by normal
-// game messages, so movement diagnosis must remain visible on iPhone/PWA.
-window.updateMovementDiagnosticPanel = function (message) {
-    if (!window.movementDiagnosticEnabled) return;
-    let panel = document.getElementById('movement-diagnostic-panel');
-    if (!panel) {
-        panel = document.createElement('div');
-        panel.id = 'movement-diagnostic-panel';
-        Object.assign(panel.style, {
-            position: 'fixed', left: '6px', right: '6px', bottom: '6px',
-            zIndex: '2147483647', padding: '8px 10px',
-            background: 'rgba(20, 20, 20, 0.94)', color: '#fff176',
-            border: '1px solid #fff176', borderRadius: '6px',
-            font: '12px/1.35 monospace', whiteSpace: 'normal',
-            overflowWrap: 'anywhere', pointerEvents: 'none'
-        });
-        document.body.appendChild(panel);
-    }
-    panel.textContent = message;
-};
-
 function handleClick(e){
     // ABORT if we were dragging the camera
     if (window.totalDragDistance > 10) return;
@@ -6483,23 +6396,6 @@ function handleClick(e){
         window.showMessage("That's out of range this turn.");
     } else {
         // NO ACTION/MOVE ACTIVE: Set Destination for Auto-Move
-        if (window.movementDiagnosticEnabled) {
-            window.movementDiagnosticState = window.movementDiagnosticState || {};
-            window.movementDiagnosticState.lastTap = performance.now();
-            window.movementDiagnosticState.tickProbeShown = false;
-            window.movementDiagnosticState.lastDestination = { q: clickedHex.q, r: clickedHex.r };
-            window.movementDiagnosticState.groupMoveModeAtTap = !!window.groupMoveMode;
-            window.movementDiagnosticState.combatAtTap = !!window.isInCombat;
-            // A movement tap is also a recovery point for a dead/stale timer.
-            // Restart only when neither the tick nor timer callback has ever run.
-            if (!(window.movementDiagnosticState.tickCount || 0)
-                && !(window.movementDiagnosticState.timerCallbackCount || 0)) {
-                window.ensureGameTickLoop?.(true);
-            }
-            const tapReport = `MOVE DIAG: tap received; group=${!!window.groupMoveMode}, combat=${!!window.isInCombat}, target=${clickedHex.q},${clickedHex.r}; ticks=${window.movementDiagnosticState.tickCount || 0}; callbacks=${window.movementDiagnosticState.timerCallbackCount || 0}; timer=${String(window.tickInterval)}; visibility=${document.visibilityState}; error=${window.movementDiagnosticState.tickError || 'none'}`;
-            window.updateMovementDiagnosticPanel?.(tapReport);
-            window.showMessage(tapReport);
-        }
         if (window.groupMoveMode) {
             const leader = player;
             const moveEntity = leader.riding || leader;
@@ -8138,8 +8034,6 @@ function checkCombatEnd() {
     // over, since a disengaged-but-technically-alive entity would go on
     // blocking this check forever.
     const aliveEnemies = window.entities.filter(e => e.side === 'enemy' && e.alive && !e.fled && !e.disengaged);
-    console.log(`[ARENA] checkCombatEnd â€” isInArena=${window.isInArena} aliveEnemies=${aliveEnemies.length} totalEntities=${window.entities.length}`);
-    if (aliveEnemies.length > 0) console.log('[ARENA] checkCombatEnd: enemies still alive, no transition');
     if (!window.entities.some(e => e.side === 'enemy' && e.alive && !e.fled && !e.disengaged)) {
         // Ambush is over — armor protection applies again.
         window.entities.forEach(e => { if (e.caughtOffGuard) e.caughtOffGuard = false; });
@@ -8589,21 +8483,17 @@ window.tryAttack = tryAttack;
 window.cancelSpell = cancelSpell;
 
 function setupArenaLobby() {
-    console.log(`[ARENA] setupArenaLobby called â€” isInArena=${window.isInArena}`);
-    console.trace('[ARENA] setupArenaLobby call stack');
     window.gamePhase = 'WAITING';
     if (window.stopAllMusic) window.stopAllMusic(0.8);
 
     // If we are already in the arena (multiplayer sync), don't reset the map
     if (window.isInArena) {
-        console.log('[ARENA] setupArenaLobby: isInArena=true, redrawing only (no lobby reset)');
         window.drawMap();
         window.renderEntities();
         window.showCharacter();
         if (window.snapVisuals) window.snapVisuals();
         return;
     }
-    console.log(`[ARENA] setupArenaLobby: resetting to lobby. entities=${JSON.stringify(window.entities.map(e=>({name:e.name,side:e.side,alive:e.alive})))}`);
 
 
     // Keep existing player entities (horses, summons) instead of just party data
@@ -8906,7 +8796,6 @@ function tickArenaScenario() {
 window.tickArenaScenario = tickArenaScenario;
 
 function startArenaFight() {
-    console.log('[ARENA] startArenaFight called');
     window.triggerAmbientDialogue('arena_fight_start');
     window.playSting('teleportSting');
     window.isInArena = true;
@@ -9459,8 +9348,6 @@ function startArenaFight() {
     }
 
     const spawnedEnemies = window.entities.filter(e => e.side === 'enemy' && e.alive);
-    console.log(`[ARENA] startArenaFight: spawned ${spawnedEnemies.length} enemies: ${spawnedEnemies.map(e=>e.name).join(', ')}`);
-    console.log(`[ARENA] startArenaFight: total entities=${window.entities.length}`);
 
     // AUDIO: Play music based on immediate visibility
     const anyEnemySeen = window.entities.some(e => e.alive && e.side === 'enemy' && window.isVisibleToPlayer(e.hex));
