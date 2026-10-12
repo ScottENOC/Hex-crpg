@@ -155,7 +155,8 @@ function carveBuilding(centerQ, centerR, halfW, halfH, doorHex, floorType) {
             floorHexes.push({ q: centerQ + dq, r: centerR + dr + shift });
         }
     }
-    wallRingAroundFloor(floorHexes).forEach(h => window.setTerrainAt(h.q, h.r, 'Wall'));
+    const wallHexes = wallRingAroundFloor(floorHexes);
+    wallHexes.forEach(h => window.setTerrainAt(h.q, h.r, 'Wall'));
     floorHexes.forEach(h => window.setTerrainAt(h.q, h.r, floorType));
     window.setTerrainAt(doorHex.q, doorHex.r, floorType);
     window.tileObjects[`${doorHex.q},${doorHex.r}`] = { type: 'door_open', lightRadius: 0 };
@@ -166,7 +167,8 @@ function carveBuilding(centerQ, centerR, halfW, halfH, doorHex, floorType) {
         minQ: centerQ - halfW + 1, maxQ: centerQ + halfW - 1,
         minR: centerR - halfH + 1 - maxShift, maxR: centerR + halfH - 1 + maxShift,
         lightMult: 0.3,
-        doorHex: { q: doorHex.q, r: doorHex.r }
+        doorHex: { q: doorHex.q, r: doorHex.r },
+        floorHexes, wallHexes, floorType
     };
 }
 
