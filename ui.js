@@ -1871,158 +1871,23 @@ function updateTurnIndicator() {
         // Named bosses built on race:'human'/'elf'/'dwarf' (see the boss-spawn
         // code in gameEngine.js) go through the same layered portrait as
         // real party members, not just side:'player' entities.
-        if ((entity.side === 'player' || entity.race) && entity.name !== 'Wolf' && entity.name !== 'Horse') {
-                            if (entity.race === 'human') {
-                                const sizePct = entity.gender === 'male' ? 90 : 80;
-                                const offsetPct = (100 - sizePct) / 2;
-                                const applyHumanScaling = (img) => {
-                                    img.style.width = `${sizePct}%`;
-                                    img.style.height = `${sizePct}%`;
-                                    img.style.left = `${offsetPct}%`;
-                                    img.style.top = `${offsetPct}%`;
-                                };
-                                const baseImg = window.assetManager.createDOMImage();
-                                window.assetManager.bind(baseImg, entity.gender === 'male' ? 'images/characters/human_male/body_front.png' : 'images/characters/human_female/body_front.png', {priority:-20});
-                                baseImg.classList.add('portrait-layer');
-                                applyHumanScaling(baseImg); portraitDiv.appendChild(baseImg);
-
-                                if (entity.gender !== 'male') {
-                                    const hairImg = window.assetManager.createDOMImage();
-                                    window.assetManager.bind(hairImg, 'images/characters/human_female/hair_brown_1_front.png', {priority:-20}); hairImg.classList.add('portrait-layer');
-                                    applyHumanScaling(hairImg); hairImg.style.marginTop = "-3px"; portraitDiv.appendChild(hairImg);
-                                } else {
-                                    const hairImg = window.assetManager.createDOMImage();
-                                    window.assetManager.bind(hairImg, 'images/characters/human_female/hair_brown_1_front.png', {priority:-20}); hairImg.classList.add('portrait-layer');
-                                    // 40% smaller than 45% = 27%. Higher by 25% height = 2.5% top
-                                    hairImg.style.width = '27%';
-                                    hairImg.style.height = '27%';
-                                    hairImg.style.left = '36.5%';
-                                    hairImg.style.top = '2.5%';
-                                    portraitDiv.appendChild(hairImg);
-                                }
-
-                                if (entity.equipped && entity.equipped.helmet === 'nasal_helm') {
-                                    const helmImg = window.assetManager.createDOMImage();
-                                    window.assetManager.bind(helmImg, 'images/equipment/helmets/nasal_helm.png', {priority:-20}); helmImg.classList.add('portrait-layer');
-                                    applyHumanScaling(helmImg); portraitDiv.appendChild(helmImg);
-                                }
-
-                                if (entity.equipped && entity.equipped.armor) {
-                                    const armorImg = window.assetManager.createDOMImage();
-                                    const aid = entity.equipped.armor;
-                                    if (aid === 'light_armor') window.assetManager.bind(armorImg, 'images/equipment/armour/human/light.png', {priority:-20});
-                                    else if (aid === 'medium_armor') window.assetManager.bind(armorImg, 'images/equipment/armour/human/medium.png', {priority:-20});
-                                    else if (aid === 'heavy_armor') window.assetManager.bind(armorImg, 'images/equipment/armour/human/heavy.png', {priority:-20});
-                                    armorImg.classList.add('portrait-layer'); applyHumanScaling(armorImg);
-                                    portraitDiv.appendChild(armorImg);
-                                }
-                            } else {
-                                const baseImg = window.assetManager.createDOMImage();
-                                let scalingFactor = 1.0;
-                                if (entity.race === 'elf') {
-                                    window.assetManager.bind(baseImg, entity.gender === 'male' ? 'images/characters/legacy/elf_male/body.png' : 'images/characters/elf_female/body_front.png', {priority:-20});
-                                } else if (entity.race === 'dwarf') {
-                                    window.assetManager.bind(baseImg, entity.gender === 'male' ? 'images/characters/legacy/dwarf_male/body.png' : 'images/characters/legacy/dwarf_female/body.png', {priority:-20});
-                                    scalingFactor = 0.8;
-                                } else if (entity.race === 'orc') {
-                                    // No dedicated layered orc body art — reuse the
-                                    // same flat orc.png the monster template uses
-                                    // (gameEngine.js's drawPlayerCharacter does the
-                                    // same for the main map) rather than falling
-                                    // through to the elf portrait below.
-                                    window.assetManager.bind(baseImg, 'images/characters/creatures/orc.png', {priority:-20});
-                                } else {
-                                    window.assetManager.bind(baseImg, 'images/characters/legacy/elf_male/body.png', {priority:-20});
-                                }
-                                baseImg.classList.add('portrait-layer');
-                                if (scalingFactor !== 1.0) {
-                                    baseImg.style.width = `${100 * scalingFactor}%`;
-                                    baseImg.style.height = `${100 * scalingFactor}%`;
-                                    baseImg.style.left = `${(100 - 100 * scalingFactor) / 2}%`;
-                                    baseImg.style.top = `${(100 - 100 * scalingFactor) / 2}%`;
-                                }
-                                portraitDiv.appendChild(baseImg);
-
-                                // HAIR OVERLAYS
-                                if (entity.race === 'elf') {
-                                    const hairImg = window.assetManager.createDOMImage();
-                                    if (entity.gender === 'female') window.assetManager.bind(hairImg, 'images/characters/human_female/hair_brown_1_front.png', {priority:-20});
-                                    else if (entity.gender === 'male') window.assetManager.bind(hairImg, 'images/characters/legacy/elf_male/hair.png', {priority:-20});
-
-                                    if (hairImg.dataset.assetManagerPath) {
-                                        hairImg.classList.add('portrait-layer');
-                                        if (scalingFactor !== 1.0) {
-                                            hairImg.style.width = `${100 * scalingFactor}%`;
-                                            hairImg.style.height = `${100 * scalingFactor}%`;
-                                            hairImg.style.left = `${(100 - 100 * scalingFactor) / 2}%`;
-                                            hairImg.style.top = `${(100 - 100 * scalingFactor) / 2}%`;
-                                        }
-                                        portraitDiv.appendChild(hairImg);
-                                    }
-                                } else if (entity.race === 'dwarf') {
-                                    const hairImg = window.assetManager.createDOMImage();
-                                    if (entity.gender === 'male') {
-                                        window.assetManager.bind(hairImg, 'images/characters/legacy/dwarf_male/hair.png', {priority:-20});
-                                        hairImg.classList.add('portrait-layer');
-                                        hairImg.style.width = `${100 * scalingFactor}%`;
-                                        hairImg.style.height = `${100 * scalingFactor}%`;
-                                        hairImg.style.left = `${(100 - 100 * scalingFactor) / 2}%`;
-                                        hairImg.style.top = `${(100 - 100 * scalingFactor) / 2}%`;
-                                    } else if (entity.gender === 'female') {
-                                        window.assetManager.bind(hairImg, 'images/characters/legacy/dwarf_female/hair.png', {priority:-20});
-                                        hairImg.classList.add('portrait-layer');
-                                        // 31.25% scale (25% bigger than previous 25% scale)
-                                        // Dwarf scalingFactor is 0.8. 0.8 * 0.3125 = 0.25 (25%).
-                                        hairImg.style.width = '25%';
-                                        hairImg.style.height = '25%';
-                                        hairImg.style.left = '37.5%'; // Centered
-                                        hairImg.style.top = '40%';  // Dropped down by 25% height
-                                    }
-
-                                    if (hairImg.dataset.assetManagerPath) {
-                                        portraitDiv.appendChild(hairImg);
-                                    }
-                                }
-
-                                if (entity.equipped && entity.equipped.armor) {                    const armorImg = window.assetManager.createDOMImage();
-                    const aid = entity.equipped.armor;
-                    if (aid === 'light_armor') window.assetManager.bind(armorImg, 'images/equipment/armour/human/light.png', {priority:-20});
-                    else if (aid === 'medium_armor') window.assetManager.bind(armorImg, 'images/equipment/armour/human/medium.png', {priority:-20});
-                    else if (aid === 'heavy_armor') window.assetManager.bind(armorImg, 'images/equipment/armour/human/heavy.png', {priority:-20});
-                    armorImg.classList.add('portrait-layer');
-                    if (scalingFactor !== 1.0) {
-                        armorImg.style.width = `${100 * scalingFactor}%`;
-                        armorImg.style.height = `${100 * scalingFactor}%`;
-                        armorImg.style.left = `${(100 - 100 * scalingFactor) / 2}%`;
-                        armorImg.style.top = `${(100 - 100 * scalingFactor) / 2}%`;
-                    }
-                    portraitDiv.appendChild(armorImg);
-                }
-            }
-            // SHIELD LAYER (Universal)
-            if (entity.equipped && entity.equipped.offhand && window.items[entity.equipped.offhand].type === 'shield') {
-                const shieldImg = window.assetManager.createDOMImage();
-                window.assetManager.bind(shieldImg, 'images/equipment/shields/round.png', {priority:-20});
-                shieldImg.classList.add('portrait-layer');
-                // The shield is a hand-held item, not another full-body
-                // layer — sizing it like the body/armor layers made it
-                // balloon to cover almost the whole portrait (previously
-                // only guarded for race === 'human', so every other race —
-                // elf, dwarf, orc — kept the un-scaled, portrait-filling
-                // default). Scale it down the same way drawPlayerCharacter's
-                // shieldSizeMult does relative to the body, and nudge it
-                // toward the off-hand instead of dead-center, for every race.
-                const bodySizePct = entity.race === 'dwarf' ? 80 : (entity.gender === 'male' ? 90 : 80);
-                const bodyOffsetPct = (100 - bodySizePct) / 2;
-                const shieldPct = bodySizePct * 0.42;
-                shieldImg.style.width = `${shieldPct}%`;
-                shieldImg.style.height = `${shieldPct}%`;
-                shieldImg.style.left = `${bodyOffsetPct + bodySizePct * 0.08}%`;
-                shieldImg.style.top = `${bodyOffsetPct + bodySizePct * 0.20}%`;
-                portraitDiv.appendChild(shieldImg);
-            }
+        // Humanoid initiative portraits contain no independent art layers. The
+        // renderer observer fills this canvas with the exact cached front-facing
+        // composite used by the main map, including the character's current hair,
+        // clothes, armour, and held equipment. Until that cache entry exists,
+        // leave it blank rather than showing a misleading hand-built portrait.
+        const usesCanonicalHumanoidSprite = !!window.CHAR_CONFIG?.[`${entity.race}_${entity.gender}`]
+            && typeof window.drawHumanoidCharacter === 'function'
+            && entity.name !== 'Wolf' && entity.name !== 'Horse';
+        if (usesCanonicalHumanoidSprite) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 100;
+            canvas.height = 100;
+            canvas.dataset.directHumanoidCanvas = 'true';
+            canvas.classList.add('portrait-layer');
+            canvas.style.cssText = 'width:100%;height:100%;left:0;top:0;';
+            portraitDiv.appendChild(canvas);
         } else {
-            const img = window.assetManager.createDOMImage();
             // Renamed bosses (Grishnak, Krog, etc.) carry spriteBase (their
             // underlying monster type) since e.name no longer matches a
             // generic monster name once the boss-spawn code renames them.
