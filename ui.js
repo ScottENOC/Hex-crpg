@@ -1888,6 +1888,7 @@ function updateTurnIndicator() {
             canvas.style.cssText = 'width:100%;height:100%;left:0;top:0;';
             portraitDiv.appendChild(canvas);
         } else {
+            const img = window.assetManager.createDOMImage();
             // Renamed bosses (Grishnak, Krog, etc.) carry spriteBase (their
             // underlying monster type) since e.name no longer matches a
             // generic monster name once the boss-spawn code renames them.
