@@ -3488,8 +3488,8 @@ function resolveShakedown(branch) {
     // them on pointless cross-map pathfinds. Distance to Dray's wait hex
     // keeps this to the actual tavern enforcers.
     const enforcers = window.entities.filter(e => e.factionId === 'ironbond_company' && e !== dray && dray && window.distance(e.hex, dray.hex) <= 10);
-    const ironbond = window.factions.ironbond_company;
-    const silverhart = window.factions.silverhart_kingdom;
+    const ironbond = window.factions?.ironbond_company;
+    const silverhart = window.factions?.silverhart_kingdom;
     const elder = window.regionalNPCs?.elder;
     const baron = window.regionalNPCs?.baron;
 
@@ -3509,14 +3509,14 @@ function resolveShakedown(branch) {
         window.cascadeReputation(authorityChain, -10, 10);
         patrons.forEach(p => window.adjustReputation(p.reputation, -5, 5));
         window.adjustReputation(ironbond, 5, 5);
-        window.adjustMerchantInfluence(ironbond, 'silverhart_kingdom', 1);
+        window.adjustMerchantInfluence?.(ironbond, 'silverhart_kingdom', 1);
         window.showMessage("Garrick pays up, shoulders slumped. The soldiers leave with their due.");
         exitSoldiersPeacefully(dray, enforcers);
     } else if (branch === 'encourage_pay') {
         window.cascadeReputation(authorityChain, 5, 15);
         patrons.forEach(p => window.adjustReputation(p.reputation, 0, 10));
         window.adjustReputation(ironbond, 15, 15);
-        window.adjustMerchantInfluence(ironbond, 'silverhart_kingdom', 2);
+        window.adjustMerchantInfluence?.(ironbond, 'silverhart_kingdom', 2);
         if (window.setIronbondArcSide) window.setIronbondArcSide('ironbond');
         window.showMessage("You back the demand with a hard stare. The soldiers take their due and leave without further trouble.");
         exitSoldiersPeacefully(dray, enforcers);
@@ -3531,7 +3531,7 @@ function resolveShakedown(branch) {
         window.cascadeReputation(authorityChain, 25, 20);
         patrons.forEach(p => window.adjustReputation(p.reputation, 20, 20));
         window.adjustReputation(ironbond, -35, 25);
-        window.adjustMerchantInfluence(ironbond, 'silverhart_kingdom', -2);
+        window.adjustMerchantInfluence?.(ironbond, 'silverhart_kingdom', -2);
         if (window.setIronbondArcSide) window.setIronbondArcSide('crown');
         window.showMessage("Steel rings out! Garrick grabs his club — this is happening.");
 
