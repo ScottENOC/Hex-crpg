@@ -8,7 +8,7 @@
 (() => {
     'use strict';
 
-    const BUILD = '20261010-unified-humanoid-renderer-v10';
+    const BUILD = '20261012-held-item-bounds-fix-v11';
     const VALID_FACINGS = new Set(['up', 'down', 'left', 'right']);
     const HUMAN_RENDER_ASPECT = 0.48;
     const previousHex = new WeakMap();
@@ -1050,7 +1050,7 @@
         if (trace.length > 120) trace.splice(0, trace.length - 120);
     }
 
-    function drawHeldItem(ctx, entity, view, visualBounds, slot, expectedLayer='any') {
+    function drawHeldItem(ctx, entity, view, bounds, slot, expectedLayer='any') {
         const equipmentSlot = slot === 'main' ? 'weapon' : 'offhand';
         if (!equipmentSlotVisible(entity, equipmentSlot)) return false;
         const spec = slotSpec(entity, slot, view);
@@ -1112,7 +1112,7 @@
         return true;
     }
 
-    function drawHelmet(ctx, entity, view, visualBounds) {
+    function drawHelmet(ctx, entity, view, bounds) {
         const image = helmetImage(entity, view);
         if (!imageReady(image)) return false;
         const anchorPoint = tunedAnchor(entity, view, 'helmetAnchor');
@@ -1169,7 +1169,7 @@
         return {dx,dy,width:outerW,height:outerH,target:{left:targetLeft,top:targetTop,width:targetWidth,height:targetHeight},shapeProfile:{...profile}};
     }
 
-    function drawArmour(ctx, entity, view, visualBounds) {
+    function drawArmour(ctx, entity, view, bounds) {
         const image = armourImage(entity, view);
         if (!imageReady(image)) return false;
         const baseTarget = ARMOUR_TARGETS[view] || ARMOUR_TARGETS.front;
